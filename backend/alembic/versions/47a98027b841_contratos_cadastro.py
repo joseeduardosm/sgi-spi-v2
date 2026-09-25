@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para criar as tabelas de cadastro do módulo de contratos (empresas, contratos, itens, equipe e documentos).
 """módulo de contratos: empresas, prepostos, contratos, itens, equipe e documentos (MVP 1)
 
 Revision ID: 47a98027b841

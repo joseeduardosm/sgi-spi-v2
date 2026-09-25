@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir o formato dos dados de checklists, formulários e competências.
 """Schemas da execução: checklists, formulários de avaliação, modelos globais e competências."""
 
 import uuid

@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de prorrogação da vigência, parecer e termo aditivo.
 """Prorrogação da vigência (tela 4): rascunho, parecer opcional, ciências opcionais, registro e desfazer."""
 
 import hashlib

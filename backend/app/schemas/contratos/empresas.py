@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir o formato dos dados de empresas contratadas e prepostos.
 """Schemas de empresas contratadas e prepostos."""
 
 import uuid

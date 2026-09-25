@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para autenticar usuários pelo LDAP e, como contingência, pela conta local.
 """Autenticação: diretório LDAP ativo primeiro; conta local como contingência."""
 
 import logging

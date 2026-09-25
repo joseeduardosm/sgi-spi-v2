@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir a tabela de auditoria das operações e do histórico por campo.
 """Registro de auditoria das operações administrativas e do histórico por campo."""
 
 from datetime import datetime

@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de login, sessão e perfil do próprio usuário.
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 

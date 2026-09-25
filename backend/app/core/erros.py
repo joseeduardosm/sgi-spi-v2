@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para padronizar os erros da API no formato {"detalhe", "codigo"} com código de correlação.
 """Erros da API em pt-BR: corpo padronizado {"detalhe": ..., "codigo": ...}."""
 
 import logging

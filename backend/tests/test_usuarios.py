@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar o cadastro e a consulta de usuários.
+
 from datetime import timedelta
 
 from sqlalchemy import select

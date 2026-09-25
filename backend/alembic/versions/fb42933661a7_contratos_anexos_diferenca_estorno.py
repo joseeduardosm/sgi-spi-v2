@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para vincular anexos aos contratos e registrar competências de diferença de reajuste e estornos de NE.
 """contratos: vínculo dos anexos, competência de diferença de reajuste e estorno na NE
 
 - `anexos.contrato_id`: contrato dono do arquivo (a exclusão do contrato descarta todos os arquivos dele).

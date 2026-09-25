@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas do painel e dos relatórios gerenciais de contratos.
 """Relatórios gerenciais da carteira (`/api/contratos/relatorios`), restritos ao SuperRoot."""
 
 import uuid

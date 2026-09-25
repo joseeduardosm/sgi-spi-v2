@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de empresas contratadas e prepostos.
 """Rotas de empresas contratadas e prepostos (`/api/contratos/empresas`)."""
 
 import uuid

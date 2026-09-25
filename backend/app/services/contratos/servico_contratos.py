@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de cadastro, edição, equipe, documentos e histórico do contrato.
 """Contratos: carteira, cadastro, edição, equipe, documentos importantes e histórico por campo."""
 
 import uuid

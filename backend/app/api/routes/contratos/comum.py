@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para compartilhar dependências e a conversão de erros entre as rotas do módulo de contratos.
 """Dependências e conversão de erros compartilhadas pelas rotas do módulo de contratos."""
 
 from collections.abc import Iterator

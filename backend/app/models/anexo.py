@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir a tabela com os metadados dos arquivos anexados.
 """Metadados dos arquivos anexados. O conteúdo fica em disco (ver `servico_anexos`)."""
 
 import uuid

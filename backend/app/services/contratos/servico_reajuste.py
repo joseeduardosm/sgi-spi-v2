@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de reajuste de preços, memória e apostilamento.
 """Reajuste de preços (tela 6): abertura, evidência do índice, memória, apostilamento e conclusão.
 
 Regras: um reajuste em elaboração por vez; cada vigência é reajustada uma vez. Competências já

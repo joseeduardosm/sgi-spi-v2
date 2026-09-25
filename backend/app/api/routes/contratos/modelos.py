@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas dos modelos globais de checklist e de formulário.
 """Modelos globais de checklist e de formulário (`/api/contratos/modelos`)."""
 
 import uuid

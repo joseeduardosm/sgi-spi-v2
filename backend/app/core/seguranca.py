@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para gerar e conferir hashes de senha (bcrypt) e emitir e validar tokens JWT.
 """Hash de senhas (bcrypt) e emissão/validação de tokens JWT."""
 
 from datetime import UTC, datetime, timedelta

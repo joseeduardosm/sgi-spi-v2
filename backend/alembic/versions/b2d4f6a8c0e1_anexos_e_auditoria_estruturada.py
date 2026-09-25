@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para criar a tabela de anexos e estruturar a auditoria para o histórico por campo.
 """anexos em disco e auditoria estruturada (histórico por campo)
 
 Cria a tabela `anexos` (metadados dos PDFs guardados em disco) e acrescenta à `auditoria` a

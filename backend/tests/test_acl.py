@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar as regras do controle de acesso (ACL).
+
 from sqlalchemy import select
 
 from app.core.banco import FabricaSessao

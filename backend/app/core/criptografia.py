@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para cifrar e decifrar segredos recuperáveis, como a senha de bind LDAP.
 """Cifra simétrica (Fernet/AES) para segredos que precisam ser recuperados, como a senha de bind LDAP."""
 
 from cryptography.fernet import Fernet, InvalidToken

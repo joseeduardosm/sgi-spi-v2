@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir as tabelas de empresas contratadas e prepostos.
 """Empresas contratadas e seus prepostos (contatos da empresa, não usuários do portal)."""
 
 import uuid

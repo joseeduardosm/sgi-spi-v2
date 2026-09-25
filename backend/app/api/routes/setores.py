@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de cadastro de setores e membros.
+
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 

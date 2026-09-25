@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar a importação dos dados do SGI SPI.
 """Importação do SGI pela tela: só o SuperRoot, senhas conferidas antes, uma execução por vez."""
 
 import os

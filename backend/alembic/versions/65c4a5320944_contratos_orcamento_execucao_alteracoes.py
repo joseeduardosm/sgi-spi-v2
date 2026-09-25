@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para criar as tabelas de orçamento, execução, prorrogação, reajuste e aditamento dos contratos.
 """módulo de contratos: orçamento, execução, avaliação, prorrogação, reajuste, aditamento/supressão e modelos (MVPs 2 a 8)
 
 Revision ID: 65c4a5320944

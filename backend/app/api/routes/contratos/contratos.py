@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas da carteira, do cadastro, do detalhe, dos documentos e do histórico do contrato.
 """Rotas do contrato (`/api/contratos`): carteira, cadastro, detalhe, documentos e histórico."""
 
 import uuid

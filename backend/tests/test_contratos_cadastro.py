@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar empresas, prepostos, cadastro, carteira e documentos do contrato.
 """MVP 1: empresas, prepostos, cadastro, carteira, detalhe, documentos e histórico do contrato."""
 
 from datetime import date

@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para preparar o ambiente dos testes (banco temporário, LDAP simulado e usuários).
+
 import os
 import tempfile
 import uuid

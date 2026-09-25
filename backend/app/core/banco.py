@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para configurar a conexão com o banco (SQLAlchemy) e a sessão usada por requisição.
 """Engine, sessão e classe base do SQLAlchemy."""
 
 from collections.abc import Iterator

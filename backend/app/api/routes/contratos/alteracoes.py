@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de prorrogação, reajuste e aditamento/supressão do contrato.
 """Rotas de prorrogação, reajuste e aditamento/supressão (`/api/contratos/{contrato_id}/…`)."""
 
 import uuid

@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de preenchimento e revalidação do perfil institucional.
 """Regras do perfil institucional: preenchimento obrigatório e revalidação periódica."""
 
 from datetime import UTC, timedelta

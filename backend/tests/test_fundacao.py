@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar anexos, auditoria por campo, correlação de erros e geração de documentos.
 """Fundação do módulo de contratos: anexos, auditoria por campo, correlação de erros e documentos."""
 
 from datetime import date

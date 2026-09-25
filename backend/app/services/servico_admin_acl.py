@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para administrar recursos e regras de ACL.
 """Administração de recursos e regras de ACL (SuperRoot)."""
 
 import re

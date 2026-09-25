@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar login, sessão, perfil e a documentação OpenAPI.
+
 from datetime import UTC, datetime, timedelta
 
 import jwt

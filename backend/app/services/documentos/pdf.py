@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para gerar PDFs com a identidade visual do Governo de SP.
 """Geração de PDFs com a identidade do Governo de SP (brasão e vermelho institucional).
 
 Os documentos são montados com blocos simples (títulos, parágrafos, pares rótulo/valor e

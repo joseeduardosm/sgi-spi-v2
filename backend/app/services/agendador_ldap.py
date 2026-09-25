@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para agendar a sincronização periódica dos usuários do diretório LDAP.
 """Sincronização periódica do diretório LDAP ativo.
 
 Roda numa thread de cada worker do uvicorn; um advisory lock do PostgreSQL garante que só

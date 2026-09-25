@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para marcar cada documento do checklist como obrigatório ou opcional.
 """checklist: documentos obrigatórios ou opcionais
 
 Cada documento do checklist (e a cópia dele na competência) passa a indicar se é obrigatório.

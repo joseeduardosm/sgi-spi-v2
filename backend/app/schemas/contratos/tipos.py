@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para padronizar como valores em dinheiro e quantidades saem nas respostas da API.
 """Tipos decimais das respostas: sempre texto com casas fixas, igual em PostgreSQL e SQLite.
 
 Dinheiro sai com 2 casas ("1234.50"), quantidade com 4 ("2.5000") e fatores/índices com 8.

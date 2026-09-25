@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de checklists, formulários de avaliação e competências de execução.
 """Rotas da execução (`/api/contratos/{contrato_id}/…`): checklists, formulários e competências."""
 
 import re

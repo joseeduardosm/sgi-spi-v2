@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para criar no banco as tabelas de usuários, diretórios LDAP e auditoria.
 """usuarios, diretorios ldap e auditoria
 
 Revision ID: 8f8d17af10d8

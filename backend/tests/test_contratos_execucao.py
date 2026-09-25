@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar previsão, Notas de Empenho, checklists e as etapas da execução.
 """MVPs 2 a 4: previsão, Notas de Empenho, checklists, competências (etapas 1 a 7), avaliação e reabertura."""
 
 from datetime import date

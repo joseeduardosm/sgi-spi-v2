@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de hierarquia, membros e exclusão de setores.
 """Setores: hierarquia institucional, grupos sistêmicos e membros."""
 
 from sqlalchemy import delete, func, select

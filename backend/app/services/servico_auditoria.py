@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para registrar a auditoria das operações e o histórico de alterações por campo.
+
 import logging
 from collections.abc import Mapping
 from datetime import date, datetime

@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para ler a configuração da aplicação das variáveis de ambiente e do backend/.env.
 """Configuração da aplicação, lida de variáveis de ambiente e do arquivo backend/.env."""
 
 from functools import lru_cache

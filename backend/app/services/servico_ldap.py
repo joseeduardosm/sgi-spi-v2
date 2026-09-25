@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de cadastro, teste e sincronização dos diretórios LDAP.
 """Regras de negócio dos diretórios LDAP: cadastro, ativação, teste e sincronização."""
 
 import uuid

@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para concentrar os cálculos de vigência, situação, pró-rata e valores dos contratos.
 """Cálculos do módulo de contratos: datas de vigência, situação e valores.
 
 Funções puras (sem banco), para que carteira, detalhe, previsão e execução usem exatamente a

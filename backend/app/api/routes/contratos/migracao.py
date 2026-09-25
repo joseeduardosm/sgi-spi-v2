@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de importação dos dados do SGI SPI (SuperRoot).
 """Importação do Módulo de Contratos do SGI SPI (`/api/contratos/migracao-sgi`). Restrita ao SuperRoot."""
 
 from fastapi import APIRouter, Depends, status

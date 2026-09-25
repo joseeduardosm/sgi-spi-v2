@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir o formato dos dados de login, sessão e perfil.
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field

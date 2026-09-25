@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir o formato dos dados de entrada e saída das rotas de ACL.
+
 from datetime import datetime
 from typing import Literal
 

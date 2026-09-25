@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir o formato dos dados de entrada e saída de setores.
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator

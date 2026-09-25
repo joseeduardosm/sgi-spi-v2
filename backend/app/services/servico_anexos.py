@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para guardar anexos em disco, validar PDFs e entregar os downloads.
 """Armazenamento de anexos PDF em disco, com metadados na tabela `anexos`.
 
 Regras: somente PDF não vazio (assinatura `%PDF-`), até `ANEXOS_TAMANHO_MAXIMO_MB`, com SHA-256

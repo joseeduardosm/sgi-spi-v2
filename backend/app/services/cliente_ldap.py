@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para conectar e consultar diretórios LDAP/Active Directory.
 """Acesso a diretórios LDAP/Active Directory (biblioteca ldap3).
 
 Fluxo de autenticação:

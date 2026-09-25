@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar as regras decididas na revisão do módulo de contratos.
 """Regras decididas na revisão do módulo de contratos (24/09/2026).
 
 - 30/360 com início no último dia do mês;

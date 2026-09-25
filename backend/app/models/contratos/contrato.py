@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir as tabelas do contrato, itens, equipe e documentos importantes.
 """Contrato, itens financeiros, equipe de gestão/fiscalização e documentos importantes.
 
 Totais (base mensal, valor global, situação) não são gravados: são calculados a partir dos

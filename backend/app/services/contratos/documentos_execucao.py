@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para gerar os PDFs da execução (memória de cálculo, avaliação e consolidado).
 """PDFs da execução: memória de cálculo da medição, relatório de avaliação e documento consolidado."""
 
 from decimal import Decimal

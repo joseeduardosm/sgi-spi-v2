@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de previsão orçamentária e Notas de Empenho.
 """Rotas de previsão orçamentária e Notas de Empenho (`/api/contratos/{contrato_id}/…`)."""
 
 import uuid

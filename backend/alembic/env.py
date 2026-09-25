@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para configurar o Alembic (ferramenta de migrações) para usar o banco e os modelos da aplicação.
+
 from logging.config import fileConfig
 
 from alembic import context

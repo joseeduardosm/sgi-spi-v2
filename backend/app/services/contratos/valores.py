@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para descobrir o preço, a quantidade e o limite vigentes de cada item em cada mês.
 """Preço, quantidade e limite vigentes de cada item em cada mês, considerando o histórico.
 
 - Preço: reajustes concluídos. Antes do primeiro reajuste vale o preço "atual" que ele fotografou;

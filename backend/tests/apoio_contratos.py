@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para oferecer dados e funções de apoio aos testes do módulo de contratos.
 """Apoio aos testes do módulo de contratos: documentos válidos, empresa, contrato e ACL."""
 
 from datetime import date

@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para padronizar as respostas de erro das rotas e a documentação delas no OpenAPI.
 """Respostas de erro padronizadas, reutilizadas pelas rotas e pelo OpenAPI."""
 
 from fastapi import status

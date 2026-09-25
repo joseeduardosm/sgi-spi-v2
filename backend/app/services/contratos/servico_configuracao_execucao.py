@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para gerenciar versões de checklist e de formulário de avaliação e os modelos globais.
 """Configuração da execução: versões de checklist e de formulário de avaliação, e modelos globais."""
 
 import uuid

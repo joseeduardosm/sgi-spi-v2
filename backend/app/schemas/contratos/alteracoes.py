@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir o formato dos dados de prorrogação, reajuste e aditamento/supressão.
 """Schemas de prorrogação, reajuste e aditamento/supressão."""
 
 import uuid

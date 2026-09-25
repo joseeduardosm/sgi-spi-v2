@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir as tabelas de prorrogação, reajuste e aditamento/supressão.
 """Alterações do contrato: prorrogação de vigência, reajuste de preços e aditamento/supressão.
 
 Cada processo em andamento é um rascunho; somente a conclusão aplica o efeito ao contrato.

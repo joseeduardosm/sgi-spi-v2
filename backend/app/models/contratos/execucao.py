@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir as tabelas de checklists, formulários, competências e etapas da execução.
 """Execução mensal: checklists, formulários de avaliação, competências e suas etapas.
 
 Cada competência guarda fotografias (itens e preços, checklist, formulário) do momento em que foi

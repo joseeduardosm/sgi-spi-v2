@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para gerar a exportação consolidada da previsão orçamentária com cenários.
 """Exportação consolidada da Previsão Orçamentária (SuperRoot), com cenários em elaboração.
 
 A base é a previsão mensal de cada contrato. Os cenários somam o efeito dos processos ainda não

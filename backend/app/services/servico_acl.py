@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para calcular o nível de acesso efetivo de um usuário em cada recurso.
 """Cálculo do nível de acesso efetivo (ACL).
 
 Política:

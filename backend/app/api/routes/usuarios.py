@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de cadastro e consulta de usuários.
+
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status

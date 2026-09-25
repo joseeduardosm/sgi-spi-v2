@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para reunir todos os roteadores da API sob o prefixo /api.
+
 from fastapi import APIRouter
 
 from app.api.routes import acl, autenticacao, ldap, saude, setores, usuarios

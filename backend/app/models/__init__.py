@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para importar todos os modelos para que o banco e o Alembic os conheçam.
 # Importa todos os modelos para que Base.metadata os conheça (Alembic e testes).
 from app.models.acl import NivelAcl, RecursoAcl, RegraAcl, acl_regras_setores, acl_regras_usuarios
 from app.models.anexo import Anexo

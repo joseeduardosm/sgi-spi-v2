@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para renomear tabelas, colunas e restrições do banco para o português.
 """nomes de tabelas, colunas, índices e constraints em português
 
 Renomeia (sem recriar) para preservar os dados existentes.

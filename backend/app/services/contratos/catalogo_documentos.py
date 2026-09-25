@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para manter o catálogo fixo dos documentos importantes do contrato.
 """Catálogo fixo dos documentos importantes do contrato (001 a 023).
 
 Os termos aditivos de prorrogação entram depois como 024, 025… (MVP 5). O prefixo compõe o

@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir a tabela de usuários do portal e seus papéis.
 """Usuário do portal: conta local, corporativa (LDAP) ou ambas."""
 
 import uuid

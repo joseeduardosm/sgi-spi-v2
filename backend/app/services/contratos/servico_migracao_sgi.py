@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para importar para este sistema os dados do módulo de contratos do SGI SPI.
 """Importação do Módulo de Contratos do SGI SPI pela tela (botão do SuperRoot em /contratos).
 
 O SuperRoot digita duas senhas: a do usuário do SGI (origem, `MIGRACAO_SGI_*`) e a deste servidor

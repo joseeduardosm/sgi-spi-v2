@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor as rotas de administração dos diretórios LDAP.
+
 import uuid
 
 from fastapi import APIRouter, Depends, Query, Response, status

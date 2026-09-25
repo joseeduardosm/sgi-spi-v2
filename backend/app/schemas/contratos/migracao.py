@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir o formato dos dados da importação do SGI SPI.
 """Importação do Módulo de Contratos do SGI SPI (`/api/contratos/migracao-sgi`)."""
 
 from datetime import datetime

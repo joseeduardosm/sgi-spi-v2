@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de previsão orçamentária e de Notas de Empenho.
 """Previsão orçamentária (mensal, por vigência) e Notas de Empenho."""
 
 import uuid

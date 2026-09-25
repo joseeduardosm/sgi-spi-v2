@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de geração e das etapas 1 a 7 das competências.
 """Competências de execução: geração, etapas 1 a 7, avaliação dos serviços e reabertura.
 
 Etapas: 1 medição → 2 avaliação (se houver formulário) → 3 nota fiscal → 4 CADIN → 5 checklist →

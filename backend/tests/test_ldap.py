@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar a administração e a sincronização dos diretórios LDAP.
+
 import uuid
 
 from sqlalchemy import select

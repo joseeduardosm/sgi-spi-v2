@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para criar no banco as tabelas de setores e de controle de acesso (ACL).
 """setores e acl
 
 Revision ID: 7fb1ed802b9e

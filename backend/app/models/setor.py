@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir as tabelas de setores e de seus membros.
 """Setores: unidades institucionais e grupos sistêmicos. Funcionam como grupos de acesso na ACL."""
 
 from datetime import datetime

@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir os formatos de erro e de resposta compartilhados pela API.
+
 from pydantic import BaseModel, Field
 
 

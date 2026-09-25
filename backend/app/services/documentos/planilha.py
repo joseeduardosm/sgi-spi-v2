@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para gerar planilhas XLSX com formatação brasileira.
 """Geração de planilhas XLSX com cabeçalho institucional e formatos brasileiros."""
 
 from collections.abc import Iterable, Sequence

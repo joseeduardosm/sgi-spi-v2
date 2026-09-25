@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para reunir os modelos (tabelas) do módulo de contratos.
 """Modelos do módulo de contratos (tabelas com prefixo `contratos`)."""
 
 from app.models.contratos.alteracoes import (

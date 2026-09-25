@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para testar prorrogação, reajuste, aditamento/supressão e o painel.
 """MVPs 5 a 7: prorrogação, reajuste e aditamento/supressão."""
 
 from datetime import date

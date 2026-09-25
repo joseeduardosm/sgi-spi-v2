@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir as exceções de regra de negócio do módulo de contratos.
 """Exceções de domínio do módulo de contratos, convertidas em respostas HTTP pelas rotas."""
 
 

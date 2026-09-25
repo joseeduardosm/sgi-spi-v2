@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para expor a rota de verificação de disponibilidade da API.
+
 from fastapi import APIRouter
 
 from app.core.configuracao import obter_configuracao

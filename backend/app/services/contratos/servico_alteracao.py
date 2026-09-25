@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para aplicar as regras de aditamento e supressão de quantidades.
 """Aditamento e supressão de quantidades (tela 7).
 
 Abas em sequência: 1 justificativa técnica → 2 quantitativos (impacto em R$ e %) → 3 memória e

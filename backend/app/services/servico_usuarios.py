@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para consultar usuários e manter a conta administrativa principal.
 """Consulta de usuários, conta administrativa principal e conta de representação LDAP."""
 
 from sqlalchemy import func, select

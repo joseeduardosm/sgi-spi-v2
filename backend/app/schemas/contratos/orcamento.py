@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir o formato dos dados de previsão orçamentária e Notas de Empenho.
 """Schemas da previsão orçamentária e das Notas de Empenho."""
 
 import uuid

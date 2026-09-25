@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir as tabelas de recursos e regras do controle de acesso (ACL).
 """Controle de acesso por recurso (ACL)."""
 
 from datetime import datetime

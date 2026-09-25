@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para fornecer às rotas a sessão do banco, o usuário autenticado e as checagens de papel e ACL.
 """Dependências compartilhadas pelas rotas (banco, autenticação e autorização)."""
 
 from collections.abc import Callable

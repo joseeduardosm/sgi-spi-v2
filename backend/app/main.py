@@ -1,3 +1,6 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para criar a aplicação FastAPI, registrar rotas, middlewares e tratamento de erros.
+
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager

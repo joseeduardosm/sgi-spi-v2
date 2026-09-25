@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para administrar usuários e o próprio perfil.
 """Administração de usuários e manutenção do próprio perfil."""
 
 from sqlalchemy import Select, func, or_, select

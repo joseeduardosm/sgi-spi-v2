@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para montar o painel de contratos (pendências, alertas, execução orçamentária e números).
 """Painel executivo de contratos e exportação consolidada da previsão orçamentária.
 
 O painel responde duas perguntas: "o que eu preciso fazer?" (pendências do usuário) e "onde está o

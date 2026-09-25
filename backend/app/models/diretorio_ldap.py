@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir a tabela de configuração dos diretórios LDAP.
 """Configuração de um diretório LDAP/Active Directory."""
 
 import uuid

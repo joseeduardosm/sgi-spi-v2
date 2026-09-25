@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para validar CNPJ e CPF pelos dígitos verificadores.
 """Validação de documentos brasileiros (CNPJ e CPF) com dígitos verificadores."""
 
 import re

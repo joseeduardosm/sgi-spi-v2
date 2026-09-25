@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para permitir a exclusão em cascata de itens de reajuste/alteração e da seleção de NEs.
 """contratos: exclusão em cascata de itens de reajuste/alteração e da seleção de NEs
 
 Com RESTRICT, excluir um contrato com reajuste, aditamento ou competência paga falhava no

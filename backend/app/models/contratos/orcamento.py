@@ -1,3 +1,5 @@
+# Criado por José Eduardo Santana Martins
+# Este arquivo serve para definir as tabelas de previsão orçamentária e de Notas de Empenho.
 """Previsão orçamentária por vigência e Notas de Empenho (NE) com extrato.
 
 Saldos não são gravados: saldo da NE = valor original − débitos do extrato.

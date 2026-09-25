@@ -1,0 +1,237 @@
+<app-cabecalho-modulo [titulo]="original() ? 'Editar contrato ' + original()!.numero : 'Novo contrato'" [trilha]="[original() ? 'Editar' : 'Novo']" />
+
+@if (carregando()) {
+  <p class="estado-vazio">Carregando…</p>
+} @else {
+  <form (ngSubmit)="salvar()" #formulario="ngForm">
+    <div class="barra-fixa">
+      <span class="dica-formulario" style="margin: 0">Campos com * são obrigatórios.</span>
+      <div class="acoes-formulario">
+        <a class="acao-secundaria" [routerLink]="original() ? ['/contratos', original()!.id] : ['/contratos']">Cancelar</a>
+        <button type="submit" class="acao-primaria" [disabled]="salvando() || formulario.invalid">
+          {{ salvando() ? 'Salvando…' : original() ? 'Salvar alterações' : 'Salvar contrato' }}
+        </button>
+      </div>
+    </div>
+
+    <section class="cartao-dados" aria-labelledby="bloco-dados">
+      <header><h2 id="bloco-dados">Dados do contrato</h2></header>
+      <div class="corpo grade-formulario tres-colunas">
+        <div>
+          <label for="numero">Número do contrato *</label>
+          <input id="numero" name="numero" required pattern="^\d{1,4}/\d{4}$" placeholder="NNN/AAAA" [(ngModel)]="dados.numero" />
+        </div>
+        <div class="ocupa-duas" style="grid-column: span 2">
+          <label for="empresa">Empresa contratada *</label>
+          <select id="empresa" name="empresa" required [(ngModel)]="dados.empresa_id">
+            <option value="" disabled>Selecione</option>
+            @for (e of empresas(); track e.id) {
+              @if (e.ativa || e.id === dados.empresa_id) {
+                <option [value]="e.id">{{ e.razao_social }}{{ e.nome_fantasia ? ' (' + e.nome_fantasia + ')' : '' }}{{ e.ativa ? '' : ' — inativa' }}</option>
+              }
+            }
+          </select>
+        </div>
+        <div>
+          <label for="apelido">Apelido</label>
+          <input id="apelido" name="apelido" maxlength="200" [(ngModel)]="dados.apelido" />
+        </div>
+        <div>
+          <label for="data-inicio">Data inicial *</label>
+          <input id="data-inicio" name="data_inicio" type="date" required [disabled]="datasBloqueadas()" [(ngModel)]="dados.data_inicio" (change)="sugerirNumero()" />
+        </div>
+        <div>
+          <label for="data-final">Data final calculada</label>
+          <input id="data-final" name="data_final" [value]="dataFinal()" disabled />
+        </div>
+        <div>
+          <label for="vigencia-inicial">Vigência inicial (meses) *</label>
+          <input id="vigencia-inicial" name="vigencia_inicial" type="number" min="1" max="600" required [disabled]="datasBloqueadas()" [(ngModel)]="dados.vigencia_inicial_meses" />
+        </div>
+        <div>
+          <label for="vigencia-maxima">Vigência máxima (meses) *</label>
+          <input id="vigencia-maxima" name="vigencia_maxima" type="number" min="1" max="600" required [(ngModel)]="dados.vigencia_maxima_meses" />
+        </div>
+        <div>
+          <label for="periodicidade">Periodicidade de execução *</label>
+          <select id="periodicidade" name="periodicidade" [(ngModel)]="dados.periodicidade_meses">
+            @for (p of periodicidades; track p.valor) { <option [ngValue]="p.valor">{{ p.rotulo }}</option> }
+          </select>
+        </div>
+        <div>
+          <label for="mes-reajuste">Mês de reajuste *</label>
+          <select id="mes-reajuste" name="mes_reajuste" [(ngModel)]="dados.mes_reajuste">
+            @for (m of meses; track $index) { <option [ngValue]="$index + 1">{{ m }}</option> }
+          </select>
+        </div>
+        <div>
+          <label for="situacao-forcada">Situação</label>
+          <select id="situacao-forcada" name="situacao_forcada" [(ngModel)]="dados.situacao_forcada">
+            <option [ngValue]="null">Automática (pelas datas)</option>
+            @for (s of situacoes; track s[0]) { <option [ngValue]="s[0]">{{ s[1] }} (forçada)</option> }
+          </select>
+        </div>
+        <div style="grid-column: 1 / -1">
+          <label for="objeto">Objeto *</label>
+          <textarea id="objeto" name="objeto" required maxlength="4000" [(ngModel)]="dados.objeto"></textarea>
+        </div>
+      </div>
+      @if (datasBloqueadas()) {
+        <p class="dica-formulario" style="margin: -8px 22px 16px">Depois de uma prorrogação, a data inicial e a vigência inicial ficam bloqueadas.</p>
+      }
+    </section>
+
+    <section class="cartao-dados" aria-labelledby="bloco-sei">
+      <header><h2 id="bloco-sei">Processos SEI</h2></header>
+      <div class="corpo grade-formulario">
+        <div><label for="sei-gestao-numero">Número - Gestão *</label><input id="sei-gestao-numero" name="sei_gestao_numero" required maxlength="100" [(ngModel)]="dados.sei_gestao_numero" /></div>
+        <div><label for="sei-gestao-link">Link - Gestão *</label><input id="sei-gestao-link" name="sei_gestao_link" type="url" required pattern="^https?://.+" [(ngModel)]="dados.sei_gestao_link" placeholder="https://" /></div>
+        <div><label for="sei-execucao-numero">Número - Execução *</label><input id="sei-execucao-numero" name="sei_execucao_numero" required maxlength="100" [(ngModel)]="dados.sei_execucao_numero" /></div>
+        <div><label for="sei-execucao-link">Link - Execução *</label><input id="sei-execucao-link" name="sei_execucao_link" type="url" required pattern="^https?://.+" [(ngModel)]="dados.sei_execucao_link" placeholder="https://" /></div>
+      </div>
+    </section>
+
+    <section class="cartao-dados" aria-labelledby="bloco-equipe">
+      <header>
+        <div><h2 id="bloco-equipe">Gestão e fiscalização</h2><small>Opcional. Os seis papéis têm os mesmos poderes dentro do contrato.</small></div>
+      </header>
+      <div class="corpo grade-formulario tres-colunas">
+        @for (p of papeis; track p.papel) {
+          <div>
+            <label [for]="'equipe-' + p.papel">{{ p.rotulo }}</label>
+            <app-seletor-usuarios [idCampo]="'equipe-' + p.papel" [multiplo]="false" [(selecionados)]="equipe[p.papel]" [fonte]="api.opcoesUsuarios" textoAjuda="Pesquisar usuário" />
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="cartao-dados" aria-labelledby="bloco-itens">
+      <header>
+        <div>
+          <h2 id="bloco-itens">Itens financeiros</h2>
+          <small>Arraste as linhas (ou use ↑ ↓) para reordenar.</small>
+        </div>
+        <button type="button" class="acao-primaria" [disabled]="itensBloqueados()" (click)="novoItem()"><span>+</span> Adicionar item</button>
+      </header>
+      @if (itensBloqueados()) {
+        <p class="aviso-bloco" style="margin: 14px 22px">As competências de execução já foram geradas: itens, ordem e vigência só podem ser alterados pelo SuperRoot.</p>
+      }
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao tabela-itens-contrato">
+          <thead>
+            <tr>
+              <th>Item</th><th>Descrição</th><th>Tipo</th><th>Códigos</th>
+              <th class="num">Qtd. mensal</th><th class="num">Qtd. total</th><th class="num">Valor unitário</th><th class="num">Subtotal mensal</th>
+              <th class="coluna-acoes">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (i of itens(); track $index) {
+              <tr [attr.draggable]="!itensBloqueados()" (dragstart)="aoArrastar($index)" (dragover)="$event.preventDefault()" (drop)="aoSoltar($index)">
+                <td>{{ $index + 1 }}</td>
+                <td><strong>{{ i.descricao }}</strong></td>
+                <td>{{ tipoItem(i.tipo) }}<small>{{ i.calcula_pro_rata ? 'Com pró-rata' : 'Sempre integral' }}</small></td>
+                <td class="codigos-item"><small>Classe {{ i.codigo_classe }} · ND {{ i.codigo_natureza_despesa }}</small><small>SIAFÍSICO {{ i.codigo_siafisico }} · CATMAT/CATSER {{ i.codigo_catmat_catser }}</small></td>
+                <td class="num">{{ numero(i.quantidade_mensal) | quantidade }}</td>
+                <td class="num">{{ i.tipo === 'sob_demanda' ? (numero(i.quantidade_total) | quantidade) : '—' }}</td>
+                <td class="num">{{ numero(i.valor_unitario) | moeda }}</td>
+                <td class="num">{{ (i.tipo === 'continuo' ? numero(i.quantidade_mensal) * numero(i.valor_unitario) : null) | moeda }}</td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="button" aria-label="Subir" [disabled]="itensBloqueados() || $first" (click)="mover($index, -1)">↑</button>
+                    <button type="button" aria-label="Descer" [disabled]="itensBloqueados() || $last" (click)="mover($index, 1)">↓</button>
+                    <button type="button" [disabled]="itensBloqueados()" (click)="editarItem($index)">Editar</button>
+                    <button type="button" class="botao-excluir" [disabled]="itensBloqueados()" (click)="removerItem($index)">Excluir</button>
+                  </div>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td class="estado-vazio" colspan="9">Nenhum item cadastrado.</td></tr>
+            }
+          </tbody>
+          @if (itens().length) {
+            <tfoot>
+              <tr>
+                <td colspan="7">Base mensal (itens contínuos)</td>
+                <td class="num">{{ baseMensal() | moeda }}</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td colspan="7">Valor global estimado da vigência <small>contínuos × meses + sob demanda × limite; o valor oficial é calculado mês a mês (pró-rata, reajustes e aditamentos) ao salvar</small></td>
+                <td class="num">{{ valorGlobal() | moeda }}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          }
+        </table>
+      </div>
+    </section>
+  </form>
+}
+
+@if (itemAberto(); as aberto) {
+  <div class="fundo-modal" role="presentation" (click)="fecharItem()"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-item">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">Passo {{ aberto.passo }} de 2</span>
+        <h2 id="titulo-item">{{ aberto.passo === 1 ? 'Identificação do item' : 'Dados financeiros' }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharItem()">×</button>
+    </header>
+    @if (aberto.passo === 1) {
+      <form (ngSubmit)="continuarItem()">
+        <div class="grade-formulario">
+          <div class="ocupa-duas">
+            <label for="item-nome">Nome do item *</label>
+            <input id="item-nome" name="descricao" required maxlength="1000" [(ngModel)]="item.descricao" />
+          </div>
+          <div>
+            <label for="item-tipo">Tipo *</label>
+            <select id="item-tipo" name="tipo" [(ngModel)]="item.tipo"><option value="continuo">Contínuo</option><option value="sob_demanda">Sob demanda</option></select>
+          </div>
+          <div>
+            <label for="item-faturamento">Faturamento *</label>
+            <select id="item-faturamento" name="faturamento" [(ngModel)]="item.calcula_pro_rata">
+              <option [ngValue]="true">Com pró-rata</option><option [ngValue]="false">Sempre integral</option>
+            </select>
+          </div>
+        </div>
+        <p class="dica-formulario">Depois de salvo, o item não muda nome, tipo nem faturamento (para corrigir, exclua e crie outro).</p>
+        <footer>
+          <button type="button" class="acao-secundaria" (click)="fecharItem()">Cancelar</button>
+          <button type="submit" class="acao-primaria" [disabled]="!item.descricao.trim()">Continuar</button>
+        </footer>
+      </form>
+    } @else {
+      <form (ngSubmit)="concluirItem()">
+        <p class="aviso-formulario">{{ item.descricao }} · {{ tipoItem(item.tipo) }} · {{ item.calcula_pro_rata ? 'Com pró-rata' : 'Sempre integral' }}</p>
+        <div class="grade-formulario">
+          <div><label for="item-classe">Classe *</label><input id="item-classe" name="classe" required maxlength="80" [(ngModel)]="item.codigo_classe" /></div>
+          <div><label for="item-nd">Natureza da despesa (ND) *</label><input id="item-nd" name="nd" required maxlength="80" [(ngModel)]="item.codigo_natureza_despesa" /></div>
+          <div><label for="item-siafisico">SIAFÍSICO *</label><input id="item-siafisico" name="siafisico" required maxlength="80" [(ngModel)]="item.codigo_siafisico" /></div>
+          <div><label for="item-catmat">CATMAT/CATSER *</label><input id="item-catmat" name="catmat" required maxlength="80" [(ngModel)]="item.codigo_catmat_catser" /></div>
+          <div>
+            <label for="item-qtd-mensal">Qtd. mensal {{ item.tipo === 'continuo' ? '*' : '(estimativa)' }}</label>
+            <input id="item-qtd-mensal" name="quantidade_mensal" inputmode="decimal" [(ngModel)]="item.quantidade_mensal" placeholder="0" />
+          </div>
+          @if (item.tipo === 'sob_demanda') {
+            <div>
+              <label for="item-qtd-total">Qtd. total da vigência *</label>
+              <input id="item-qtd-total" name="quantidade_total" inputmode="decimal" [(ngModel)]="item.quantidade_total" placeholder="0" />
+            </div>
+          }
+          <div>
+            <label for="item-valor">Valor unitário (R$) *</label>
+            <input id="item-valor" name="valor_unitario" inputmode="decimal" [(ngModel)]="item.valor_unitario" placeholder="0,00" />
+          </div>
+        </div>
+        <footer>
+          @if (!item.salvo) { <button type="button" class="acao-secundaria" (click)="itemAberto.set({ passo: 1, indice: aberto.indice })">Voltar</button> }
+          <button type="button" class="acao-secundaria" (click)="fecharItem()">Cancelar</button>
+          <button type="submit" class="acao-primaria" [disabled]="!itemCompleto()">{{ aberto.indice === null ? 'Adicionar item' : 'Aplicar' }}</button>
+        </footer>
+      </form>
+    }
+  </section>
+}

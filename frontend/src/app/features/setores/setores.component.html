@@ -1,0 +1,113 @@
+<div class="cabecalho-pagina">
+  <div>
+    <p>Início <span>/</span> Setores</p>
+    <h1>Setores</h1>
+    <small>Estrutura institucional e grupos sistêmicos. Setores funcionam como grupos de acesso na ACL.</small>
+  </div>
+</div>
+
+<section class="painel-gestao" aria-labelledby="titulo-setores">
+  <div class="barra-ferramentas">
+    <div>
+      <h2 id="titulo-setores">Estrutura de setores</h2>
+      <p>{{ filtrados().length }} setor(es) encontrado(s).</p>
+    </div>
+    @if (ehAdministrador()) {
+      <button class="acao-primaria" type="button" (click)="abrirFormulario()"><span>+</span> Novo setor</button>
+    }
+  </div>
+
+  <div class="filtros-gestao" role="search">
+    <input type="search" [(ngModel)]="busca" (ngModelChange)="aoPesquisar($event)" aria-label="Pesquisar setores"
+           placeholder="Pesquisar por setor, setor pai ou líder" />
+  </div>
+
+  @if (aviso(); as a) {
+    <p class="aviso-admin" [class.erro]="a.erro" role="status">{{ a.texto }}</p>
+  }
+
+  <div class="tabela-gestao-envoltorio">
+    <table class="tabela-gestao">
+      <thead>
+        <tr>
+          <th>Setor ou grupo</th>
+          <th>Tipo</th>
+          <th>Setor pai</th>
+          <th>Líder</th>
+          <th>Membros</th>
+          <th>Situação</th>
+          @if (ehAdministrador()) { <th class="coluna-acoes">Ações</th> }
+        </tr>
+      </thead>
+      <tbody>
+        @for (s of filtrados(); track s.id) {
+          <tr>
+            <td><strong>{{ s.nome }}</strong><small>ID {{ s.id }}{{ s.total_subordinados ? ' · ' + s.total_subordinados + ' subordinado(s)' : '' }}</small></td>
+            <td><span class="selo-origem" [class.sistemico]="s.sistemico">{{ s.sistemico ? 'Sistêmico' : 'Institucional' }}</span></td>
+            <td>{{ s.setor_pai_nome || 'Raiz' }}</td>
+            <td>{{ s.lider_nome || 'Não definido' }}</td>
+            <td>{{ s.total_membros }}</td>
+            <td><span class="selo-situacao" [class.inativo]="!s.ativo">{{ s.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+            @if (ehAdministrador()) {
+              <td>
+                <div class="acoes-linha">
+                  <button type="button" (click)="abrirFormulario(s)">Editar</button>
+                  <button class="botao-excluir" type="button" (click)="excluir(s)">Excluir</button>
+                </div>
+              </td>
+            }
+          </tr>
+        } @empty {
+          <tr><td class="estado-vazio" [attr.colspan]="ehAdministrador() ? 7 : 6">{{ carregando() ? 'Carregando…' : 'Nenhum setor cadastrado.' }}</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
+
+@if (formularioAberto()) {
+  <div class="fundo-modal" role="presentation" (click)="fecharFormulario()"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-setor">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">Estrutura institucional</span>
+        <h2 id="titulo-formulario-setor">{{ emEdicao() ? 'Editar setor' : 'Novo setor' }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharFormulario()">×</button>
+    </header>
+    <form (ngSubmit)="salvar()" novalidate>
+      <div class="grade-formulario" [formGroup]="formulario">
+        <div class="ocupa-duas">
+          <label for="setor-nome">Nome</label>
+          <input id="setor-nome" formControlName="nome" />
+        </div>
+        <div>
+          <label for="setor-pai">Setor pai</label>
+          <select id="setor-pai" formControlName="setor_pai_id">
+            <option [ngValue]="0">Nenhum (raiz)</option>
+            @for (p of opcoesPai(); track p.id) { <option [ngValue]="p.id">{{ p.nome }}</option> }
+          </select>
+        </div>
+        <div>
+          <label for="setor-lider">Líder</label>
+          <app-seletor-usuarios idCampo="setor-lider" [multiplo]="false" [(selecionados)]="lider" [fonte]="usuarios.opcoes" textoAjuda="Pesquisar líder" />
+        </div>
+        <div class="ocupa-duas">
+          <label for="setor-membros">Membros ({{ membros().length }})</label>
+          <app-seletor-usuarios idCampo="setor-membros" [(selecionados)]="membros" [fonte]="usuarios.opcoes" textoAjuda="Adicionar membro" />
+        </div>
+      </div>
+      <div class="linha-caixas" [formGroup]="formulario">
+        <label><input type="checkbox" formControlName="sistemico" /> Grupo sistêmico (não institucional)</label>
+        <label><input type="checkbox" formControlName="ativo" /> Ativo</label>
+      </div>
+      @if (erroFormulario()) {
+        <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
+      }
+      <footer>
+        <button class="acao-secundaria" type="button" (click)="fecharFormulario()" [disabled]="salvando()">Cancelar</button>
+        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar setor' }}</button>
+      </footer>
+    </form>
+  </section>
+}

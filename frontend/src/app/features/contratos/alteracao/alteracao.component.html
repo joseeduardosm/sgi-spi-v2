@@ -1,0 +1,149 @@
+@if (contrato(); as c) {
+  <app-cabecalho-modulo [titulo]="rotuloTipo" [trilha]="[c.numero, rotuloTipo]" [descricao]="'Contrato ' + c.numero" />
+  <div class="barra-fixa"><a class="acao-secundaria" [routerLink]="['/contratos', c.id]" [queryParams]="{ aba: 'itens' }">← Contrato {{ c.numero }}</a></div>
+
+  @if (painel(); as p) {
+    @if (outroTipo()) {
+      <p class="aviso-bloco">Já existe {{ andamento()!.tipo === 'aditamento' ? 'um aditamento' : 'uma supressão' }} em andamento.
+        <a [routerLink]="['/contratos', c.id, andamento()!.tipo]">Abrir</a>. Só uma alteração pode estar em andamento por vez.</p>
+    } @else if (andamento(); as a) {
+      <section class="cartao-dados" aria-labelledby="titulo-alteracao">
+        <header>
+          <div><h2 id="titulo-alteracao">{{ rotuloTipo }} · {{ a.sequencia_vigencia }}ª vigência · efeito em {{ a.mes_efeito | competencia }}</h2>
+            <small>Vigência {{ a.vigencia_inicio | dataBr }} a {{ a.vigencia_fim | dataBr }} · valor da vigência {{ a.valor_global_original | moeda }}</small></div>
+          @if (p.pode_editar) { <button type="button" class="acao-perigo" (click)="cancelar(a)">Cancelar</button> }
+        </header>
+        <nav class="abas" role="tablist" style="margin: 0 22px">
+          <button type="button" role="tab" [class.ativa]="aba() === 'justificativa'" (click)="aba.set('justificativa')">1. Justificativa</button>
+          <button type="button" role="tab" [class.ativa]="aba() === 'quantitativos'" [disabled]="!a.justificativa" (click)="aba.set('quantitativos')">2. Quantitativos</button>
+          <button type="button" role="tab" [class.ativa]="aba() === 'memoria'" [disabled]="a.situacao === 'rascunho'" (click)="aba.set('memoria')">3. Memória e ciências</button>
+          <button type="button" role="tab" [class.ativa]="aba() === 'formalizacao'" [disabled]="a.ciencias.length < a.ciencias_minimas" (click)="aba.set('formalizacao')">4. Formalização</button>
+        </nav>
+        <div class="corpo">
+          @switch (aba()) {
+            @case ('justificativa') {
+              <p class="dica-formulario" style="margin: 0 0 12px">Justificativa Técnica em PDF, assinada por gestor, fiscais e Ordenador de Despesa.</p>
+              <div class="acoes-cartao esquerda">
+                @if (a.justificativa) { <button type="button" class="link-arquivo" (click)="baixar(a, a.justificativa.anexo_id)">{{ a.justificativa.nome }}</button> }
+                @if (p.pode_editar) {
+                  <app-envio-pdf rotulo="Selecionar justificativa" (selecionado)="arquivos.justificativa = $event" />
+                  <button type="button" class="acao-primaria" [disabled]="!arquivos.justificativa" (click)="enviar(a, 'justificativa')">Anexar</button>
+                }
+              </div>
+            }
+            @case ('quantitativos') {
+              <div class="tabela-gestao-envoltorio">
+                <table class="tabela-gestao">
+                  <thead><tr><th>Item</th><th>Descrição</th><th>Tipo</th><th class="num">Quantidade atual</th><th class="num">Já executado</th><th class="num">Nova quantidade</th><th class="num">Impacto no período</th></tr></thead>
+                  <tbody>
+                    @for (i of a.itens; track i.item_id) {
+                      <tr [class.linha-erro]="abaixoDoExecutado(a, i.item_id)">
+                        <td>{{ i.ordem }}</td><td><strong>{{ i.descricao }}</strong><small>{{ i.tipo === 'continuo' ? 'quantidade mensal' : 'limite da vigência' }}</small></td>
+                        <td>{{ rotulosItem[i.tipo] }}</td>
+                        <td class="num">{{ i.quantidade_original | quantidade }}</td>
+                        <td class="num">{{ i.quantidade_executada | quantidade }}</td>
+                        <td class="num" style="width: 130px"><input class="campo-tabela" inputmode="decimal" [class.invalido]="abaixoDoExecutado(a, i.item_id)" [attr.aria-label]="'Nova quantidade de ' + i.descricao" [disabled]="!p.pode_editar" [(ngModel)]="novas[i.item_id]" /></td>
+                        <td class="num">{{ impacto(a, i.item_id) | moeda }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                  <tfoot><tr><td colspan="6">Impacto total ({{ impactoPercentual(a) | percentual }} · acumulado do tipo {{ a.acumulado_percentual | percentual }})</td><td class="num">{{ impactoTotal(a) | moeda }}</td></tr></tfoot>
+                </table>
+              </div>
+              @if (a.exige_autorizacao) {
+                <div class="aviso-bloco" style="margin-top: 14px">
+                  <strong>Autorização obrigatória:</strong> o acumulado passa de 25%. Anexe a autorização do Ordenador de Despesa.
+                  <div class="acoes-cartao esquerda">
+                    @if (a.autorizacao) { <button type="button" class="link-arquivo" (click)="baixar(a, a.autorizacao.anexo_id)">{{ a.autorizacao.nome }}</button> }
+                    @if (p.pode_editar) {
+                      <app-envio-pdf rotulo="Selecionar autorização" (selecionado)="arquivos.autorizacao = $event" />
+                      <button type="button" class="acao-secundaria" [disabled]="!arquivos.autorizacao" (click)="enviar(a, 'autorizacao')">Anexar</button>
+                    }
+                  </div>
+                </div>
+              }
+              @if (p.pode_editar) {
+                <div class="acoes-cartao"><button type="button" class="acao-primaria" (click)="salvarQuantitativos(a)">Salvar e enviar para ciência</button></div>
+              }
+            }
+            @case ('memoria') {
+              <span class="contador-ciencias" [class.completo]="a.ciencias.length >= a.ciencias_minimas">{{ a.ciencias.length }} de {{ a.ciencias_minimas }} ciências mínimas</span>
+              <ul class="lista-ciencias" style="margin-top: 8px">
+                @for (ci of a.ciencias; track ci.usuario_id) { <li><span>{{ ci.nome }} · {{ papeis[ci.papel] }}</span><small>{{ ci.registrada_em | date: 'dd/MM/yyyy HH:mm' }}</small></li> }
+              </ul>
+              <div class="acoes-cartao">
+                @if (p.integra_equipe && !jaRegistrei()) { <button type="button" class="acao-secundaria" (click)="acao(a, 'ciencia')">Registrar minha ciência</button> }
+                @if (p.pode_editar && a.ciencias.length >= a.ciencias_minimas) {
+                  <button type="button" class="acao-secundaria" (click)="acao(a, 'memoria', 'Gerando a memória…')">Gerar memória (PDF e XLSX)</button>
+                }
+              </div>
+              @if (a.memoria_pdf) {
+                <p class="dica-formulario">Memória: <button type="button" class="link-arquivo" (click)="baixar(a, a.memoria_pdf.anexo_id)">Exportar memória PDF</button>
+                  @if (a.memoria_xlsx) { · <button type="button" class="link-arquivo" (click)="baixar(a, a.memoria_xlsx.anexo_id)">Exportar XLSX</button> }</p>
+              }
+            }
+            @case ('formalizacao') {
+              <p class="secao-formulario" style="margin-top: 0">Ciência e De Acordo da Contratada</p>
+              <div class="acoes-cartao esquerda">
+                @if (a.de_acordo) { <button type="button" class="link-arquivo" (click)="baixar(a, a.de_acordo.anexo_id)">{{ a.de_acordo.nome }}</button> }
+                @if (p.pode_editar) {
+                  <app-envio-pdf rotulo="Selecionar De Acordo (PDF)" (selecionado)="arquivos.de_acordo = $event" />
+                  <button type="button" class="acao-secundaria" [disabled]="!arquivos.de_acordo" (click)="enviar(a, 'de_acordo')">Anexar</button>
+                }
+                @if (a.de_acordo && a.memoria_pdf && p.pode_editar) {
+                  <button type="button" class="acao-secundaria" (click)="acao(a, 'consolidado', 'Gerando o documento consolidado…')">Gerar documento consolidado</button>
+                }
+                @if (a.consolidado) { <button type="button" class="link-arquivo" (click)="baixar(a, a.consolidado.anexo_id)">Baixar consolidado</button> }
+              </div>
+              <p class="secao-formulario">Termo Aditivo assinado</p>
+              <div class="acoes-cartao esquerda">
+                @if (a.termo) { <button type="button" class="link-arquivo" (click)="baixar(a, a.termo.anexo_id)">{{ a.termo.nome }}</button> }
+                @if (p.pode_editar) {
+                  <app-envio-pdf rotulo="Selecionar Termo Aditivo (PDF)" (selecionado)="arquivos.termo = $event" />
+                  <button type="button" class="acao-secundaria" [disabled]="!arquivos.termo" (click)="enviar(a, 'termo')">Anexar</button>
+                }
+              </div>
+              @if (p.pode_editar) {
+                <div class="acoes-cartao">
+                  <button type="button" class="acao-primaria" [disabled]="!a.de_acordo || !a.termo || (a.exige_autorizacao && !a.autorizacao)" (click)="concluir(a)">Concluir e aplicar alteração</button>
+                </div>
+              }
+            }
+          }
+        </div>
+      </section>
+    } @else if (p.pode_editar) {
+      <section class="cartao-dados" aria-labelledby="titulo-iniciar-alteracao">
+        <header><h2 id="titulo-iniciar-alteracao">Iniciar {{ rotuloTipo.toLowerCase() }}</h2></header>
+        <div class="corpo grade-formulario tres-colunas">
+          <div><label for="alteracao-vigencia">Vigência *</label>
+            <select id="alteracao-vigencia" [(ngModel)]="vigencia">
+              @for (v of p.vigencias; track v.sequencia) { <option [ngValue]="v.sequencia">{{ v.sequencia }}ª · {{ v.inicio | dataBr }} a {{ v.fim | dataBr }}</option> }
+            </select></div>
+          <div><label for="alteracao-mes">Mês de efeito *</label><input id="alteracao-mes" type="month" [(ngModel)]="mesEfeito" /></div>
+          <div style="align-self: end; margin-bottom: 16px"><button type="button" class="acao-primaria" [disabled]="!vigencia || !mesEfeito" (click)="abrir()">Continuar</button></div>
+        </div>
+      </section>
+    }
+
+    @if (p.historico.length) {
+      <section class="cartao-dados" aria-labelledby="titulo-historico-alteracao">
+        <header><h2 id="titulo-historico-alteracao">Histórico de aditamentos e supressões</h2></header>
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>Tipo</th><th>Vigência</th><th>Efeito</th><th>Situação</th><th class="num">Impacto</th><th class="num">%</th></tr></thead>
+            <tbody>
+              @for (h of p.historico; track h.id) {
+                <tr><td>{{ h.tipo === 'aditamento' ? 'Aditamento' : 'Supressão' }}</td><td>{{ h.sequencia_vigencia }}ª</td><td>{{ h.mes_efeito | competencia }}</td>
+                  <td><span class="selo-situacao" [class.inativo]="h.situacao === 'cancelada'">{{ h.situacao === 'concluida' ? 'Concluída' : 'Cancelada' }}</span></td>
+                  <td class="num">{{ h.impacto_valor | moeda }}</td><td class="num">{{ h.impacto_percentual | percentual }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+  }
+} @else {
+  <p class="estado-vazio">Carregando…</p>
+}

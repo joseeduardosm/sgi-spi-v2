@@ -1,0 +1,87 @@
+<section class="cartao-dados" aria-labelledby="titulo-checklists">
+  <header>
+    <div><h2 id="titulo-checklists">Checklists</h2><small>Documentos mensais exigidos na etapa 5 de cada competência.</small></div>
+    @if (podeEditar()) { <button type="button" class="acao-primaria" (click)="abrir()"><span>+</span> Criar checklist</button> }
+  </header>
+  <div class="corpo">
+    @for (c of checklists(); track c.id) {
+      <article class="indicador" style="margin-bottom: 12px">
+        <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
+          <strong style="font-size: 14px">v{{ c.versao }} · {{ c.nome }}</strong>
+          <span class="selo-situacao" [class.inativo]="!c.ativo">{{ c.ativo ? 'Ativo' : 'Inativo' }}</span>
+        </div>
+        <ol style="margin: 10px 0; padding-left: 20px; font-size: 12px; color: #3d454e">
+          @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — {{ i.observacao }}</small> }</li> }
+        </ol>
+        <small>Criado por {{ c.criado_por_nome }} em {{ c.criado_em | date: 'dd/MM/yyyy HH:mm' }}{{ c.ativado_em ? ' · ativado em ' + (c.ativado_em | date: 'dd/MM/yyyy HH:mm') : '' }}</small>
+        @if (podeEditar()) {
+          <div class="acoes-cartao esquerda">
+            @if (!c.ativo) {
+              <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(c)">Editar</button>
+              <button type="button" class="acao-primaria acao-pequena" (click)="ativar(c)">Ativar</button>
+              <button type="button" class="acao-perigo acao-pequena" (click)="excluir(c)">Excluir</button>
+            }
+            <button type="button" class="acao-secundaria acao-pequena" (click)="duplicar(c)">Duplicar</button>
+          </div>
+        }
+      </article>
+    } @empty {
+      <p class="estado-vazio">Nenhum checklist cadastrado. Um checklist ativo é necessário para gerar as competências.</p>
+    }
+  </div>
+</section>
+
+@if (aberto()) {
+  <div class="fundo-modal" role="presentation" (click)="aberto.set(false)"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-form-checklist">
+    <header>
+      <div><span class="modal-sobretitulo">{{ emEdicao ? 'Versão v' + emEdicao.versao : 'Nova versão' }}</span><h2 id="titulo-form-checklist">{{ emEdicao ? 'Editar checklist' : 'Criar checklist' }}</h2></div>
+      <button type="button" aria-label="Fechar" (click)="aberto.set(false)">×</button>
+    </header>
+    <form (ngSubmit)="salvar()">
+      <div class="grade-formulario">
+        <div><label for="checklist-nome">Nome do checklist *</label><input id="checklist-nome" name="nome" required maxlength="300" [(ngModel)]="nome" /></div>
+        @if (modelos().length && !emEdicao) {
+          <div>
+            <label for="checklist-modelo">Partir de um modelo global</label>
+            <select id="checklist-modelo" name="modelo" (change)="carregarModelo($any($event.target).value)">
+              <option value="">—</option>
+              @for (m of modelos(); track m.id) { <option [value]="m.id">{{ m.nome }}</option> }
+            </select>
+          </div>
+        }
+        <div><label for="checklist-documento">Novo documento</label><input id="checklist-documento" name="novo" maxlength="500" [(ngModel)]="novoDocumento" (keydown.enter)="$event.preventDefault(); adicionar()" /></div>
+        <div>
+          <label for="checklist-observacao">Observação (opcional)</label>
+          <input id="checklist-observacao" name="observacao" maxlength="1000" [(ngModel)]="novaObservacao" (keydown.enter)="$event.preventDefault(); adicionar()" />
+        </div>
+        <div>
+          <label for="checklist-obrigatorio">Na execução, o documento é</label>
+          <div style="display: flex; gap: 8px">
+            <select id="checklist-obrigatorio" name="obrigatorio" [(ngModel)]="novoObrigatorio">
+              <option [ngValue]="true">Obrigatório</option>
+              <option [ngValue]="false">Opcional</option>
+            </select>
+            <button type="button" class="acao-secundaria" style="height: 42px" (click)="adicionar()">Adicionar</button>
+          </div>
+        </div>
+      </div>
+      <p class="dica-formulario">Obrigatório: precisa ser anexado para concluir o checklist da competência. Opcional: pode ficar sem anexo.</p>
+      <ol style="padding-left: 20px; font-size: 13px">
+        @for (i of itens; track $index) {
+          <li style="margin-bottom: 6px">{{ i.nome }}@if (i.observacao) { <small style="color: #8e99a6"> — {{ i.observacao }}</small> }
+            <select class="campo-tabela" style="width: auto; height: 26px; margin-left: 8px; padding: 0 6px; font-size: 11px; text-align: left"
+                    [name]="'obrigatorio' + $index" [attr.aria-label]="'Tipo do documento ' + i.nome" [(ngModel)]="i.obrigatorio">
+              <option [ngValue]="true">Obrigatório</option>
+              <option [ngValue]="false">Opcional</option>
+            </select>
+            <button type="button" class="link-arquivo" style="margin-left: 8px" (click)="remover($index)">remover</button></li>
+        } @empty { <p class="dica-formulario">Nenhum documento adicionado.</p> }
+      </ol>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="aberto.set(false)">Cancelar</button>
+        <button type="submit" class="acao-primaria" [disabled]="!nome.trim() || !itens.length">Salvar versão inativa</button>
+      </footer>
+    </form>
+  </section>
+}

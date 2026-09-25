@@ -1,0 +1,72 @@
+<div class="fundo-modal" role="presentation" (click)="fechar.emit()"></div>
+<section class="modal-portal modal-largo" style="width: min(900px, calc(100% - 28px))" role="dialog" aria-modal="true" aria-labelledby="titulo-editor-formulario">
+  <header>
+    <div><span class="modal-sobretitulo">Formulário de avaliação</span><h2 id="titulo-editor-formulario">{{ titulo() }}</h2></div>
+    <button type="button" aria-label="Fechar" (click)="fechar.emit()">×</button>
+  </header>
+  <form (ngSubmit)="enviar()">
+    <div class="grade-formulario">
+      <div><label for="formulario-nome">Nome do formulário *</label><input id="formulario-nome" name="nome" required maxlength="300" [(ngModel)]="nome" /></div>
+      @if (modelos().length) {
+        <div>
+          <label for="formulario-modelo">Partir de um modelo global</label>
+          <select id="formulario-modelo" name="modelo" (change)="carregarModelo($any($event.target).value)">
+            <option value="">—</option>
+            @for (m of modelos(); track m.id) { <option [value]="m.id">{{ m.nome }}</option> }
+          </select>
+        </div>
+      }
+    </div>
+
+    <p class="secao-formulario">Escala de notas (ordem crescente)</p>
+    @for (n of definicao.escala; track $index) {
+      <div class="grade-formulario tres-colunas">
+        <div><label [for]="'nota-' + $index">Valor</label><input [id]="'nota-' + $index" [name]="'nota' + $index" inputmode="decimal" [(ngModel)]="n.valor" /></div>
+        <div><label [for]="'legenda-' + $index">Legenda</label><input [id]="'legenda-' + $index" [name]="'legenda' + $index" [(ngModel)]="n.legenda" /></div>
+        <div style="align-self: center"><button type="button" class="link-arquivo" (click)="definicao.escala.splice($index, 1)">remover</button></div>
+      </div>
+    }
+    <button type="button" class="acao-secundaria acao-pequena" (click)="definicao.escala.push({ valor: '', legenda: '' })">+ Nota</button>
+
+    <p class="secao-formulario">Faixas de liberação</p>
+    <p class="dica-formulario" style="margin-top: 0">A nota final é a soma das notas dos grupos. "Notas mínimas no grupo" também aplica a faixa quando algum grupo tiver ao menos essa quantidade de notas mínimas da escala (a "nota 0" da planilha). Entre as faixas que se aplicam, vale a de menor percentual.</p>
+    @for (f of definicao.faixas; track $index) {
+      <div class="grade-formulario" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))">
+        <div><label [for]="'faixa-min-' + $index">Nota mínima</label><input [id]="'faixa-min-' + $index" [name]="'fmin' + $index" inputmode="decimal" [(ngModel)]="f.minimo" /></div>
+        <div><label [for]="'faixa-max-' + $index">Nota máxima (vazio = sem teto)</label><input [id]="'faixa-max-' + $index" [name]="'fmax' + $index" inputmode="decimal" [(ngModel)]="f.maximo" /></div>
+        <div><label [for]="'faixa-pct-' + $index">% do pagamento</label><input [id]="'faixa-pct-' + $index" [name]="'fpct' + $index" inputmode="decimal" [(ngModel)]="f.percentual" /></div>
+        <div><label [for]="'faixa-zero-' + $index">Notas mínimas no grupo (opcional)</label><input [id]="'faixa-zero-' + $index" [name]="'fzero' + $index" type="number" min="1" max="100" step="1" [(ngModel)]="f.notas_zero" /></div>
+        <div style="align-self: center"><button type="button" class="link-arquivo" (click)="definicao.faixas.splice($index, 1)">remover</button></div>
+      </div>
+    }
+    <button type="button" class="acao-secundaria acao-pequena" (click)="definicao.faixas.push({ minimo: '', maximo: null, percentual: '' })">+ Faixa</button>
+
+    <p class="secao-formulario">Grupos e itens (a soma dos pesos de cada grupo deve ser 100%)</p>
+    @for (g of definicao.grupos; track $index; let ig = $index) {
+      <div class="indicador" style="margin-bottom: 12px">
+        <div class="grade-formulario">
+          <div><label [for]="'grupo-' + ig">Grupo</label><input [id]="'grupo-' + ig" [name]="'grupo' + ig" [(ngModel)]="g.nome" /></div>
+          <div style="align-self: center">
+            <span class="contador-ciencias" [class.completo]="somaPesos(ig) === 100">Soma dos pesos: {{ somaPesos(ig) }}%</span>
+            <button type="button" class="link-arquivo" style="margin-left: 10px" (click)="definicao.grupos.splice(ig, 1)">remover grupo</button>
+          </div>
+        </div>
+        @for (i of g.itens; track $index; let ii = $index) {
+          <div class="grade-formulario" style="grid-template-columns: 2fr 2fr 1fr auto">
+            <div><label [for]="'item-' + ig + '-' + ii">Item</label><input [id]="'item-' + ig + '-' + ii" [name]="'item' + ig + '_' + ii" [(ngModel)]="i.nome" /></div>
+            <div><label [for]="'desc-' + ig + '-' + ii">Descrição</label><input [id]="'desc-' + ig + '-' + ii" [name]="'desc' + ig + '_' + ii" [(ngModel)]="i.descricao" /></div>
+            <div><label [for]="'peso-' + ig + '-' + ii">Peso (%)</label><input [id]="'peso-' + ig + '-' + ii" [name]="'peso' + ig + '_' + ii" inputmode="decimal" [(ngModel)]="i.peso" /></div>
+            <div style="align-self: center"><button type="button" class="link-arquivo" (click)="g.itens.splice(ii, 1)">remover</button></div>
+          </div>
+        }
+        <button type="button" class="acao-secundaria acao-pequena" (click)="g.itens.push({ nome: '', descricao: '', peso: '' })">+ Item</button>
+      </div>
+    }
+    <button type="button" class="acao-secundaria acao-pequena" (click)="definicao.grupos.push({ nome: '', itens: [{ nome: '', descricao: '', peso: '100' }] })">+ Grupo</button>
+
+    <footer style="margin-top: 18px">
+      <button type="button" class="acao-secundaria" (click)="fechar.emit()">Cancelar</button>
+      <button type="submit" class="acao-primaria" [disabled]="!valido()">{{ rotuloSalvar() }}</button>
+    </footer>
+  </form>
+</section>

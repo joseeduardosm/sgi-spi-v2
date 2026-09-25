@@ -1,0 +1,55 @@
+.barra-topo {
+  background: #fff;
+  border-bottom: 1px solid #e2e6ea;
+}
+
+.marca {
+  min-height: 70px;
+}
+
+/* Recorte do brasão a partir da imagem institucional */
+.brasao {
+  width: 57px;
+  height: 63px;
+  display: inline-block;
+  flex: none;
+  background-image: url('/assets/imagens/brasao.png');
+  background-repeat: no-repeat;
+  background-size: 360px auto;
+  background-position: center -37px;
+}
+
+.marca-filete {
+  width: 2px;
+  height: 52px;
+  background: var(--spi-vermelho-filete);
+}
+
+.marca-nome {
+  color: #171c23;
+  line-height: 1.15;
+  letter-spacing: 0.015em;
+
+  strong {
+    display: block;
+    font-size: 12px;
+  }
+
+  small {
+    display: block;
+    font-size: 10px;
+    margin-top: 5px;
+  }
+}
+
+@media (max-width: 575px) {
+  .marca-nome strong {
+    font-size: 10px;
+  }
+  .marca-nome small {
+    font-size: 8px;
+  }
+  .brasao {
+    width: 44px;
+  }
+}

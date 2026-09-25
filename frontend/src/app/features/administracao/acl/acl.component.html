@@ -1,0 +1,243 @@
+<div class="cabecalho-pagina">
+  <div>
+    <p>Início <span>/</span> Administração <span>/</span> Controle de acesso</p>
+    <h1>Controle de acesso</h1>
+    <small>ACL por recurso. Sem regras, o recurso fica aberto; a partir da primeira regra, só os contemplados acessam.</small>
+  </div>
+</div>
+
+<div class="abas" role="tablist">
+  <button role="tab" type="button" [class.ativa]="aba() === 'regras'" [attr.aria-selected]="aba() === 'regras'" (click)="aba.set('regras')">Regras</button>
+  <button role="tab" type="button" [class.ativa]="aba() === 'recursos'" [attr.aria-selected]="aba() === 'recursos'" (click)="aba.set('recursos')">Recursos</button>
+  <button role="tab" type="button" [class.ativa]="aba() === 'efetivo'" [attr.aria-selected]="aba() === 'efetivo'" (click)="aba.set('efetivo')">Acesso efetivo</button>
+</div>
+
+@if (aviso(); as a) {
+  <p class="aviso-admin avulso" [class.erro]="a.erro" role="status">{{ a.texto }}</p>
+}
+
+@switch (aba()) {
+  @case ('regras') {
+    <section class="painel-gestao" aria-labelledby="titulo-regras">
+      <div class="barra-ferramentas">
+        <div>
+          <h2 id="titulo-regras">Regras de acesso</h2>
+          <p>Cada regra concede um nível a usuários e/ou setores. Regra direta prevalece sobre a herdada do setor.</p>
+        </div>
+        <button class="acao-primaria" type="button" (click)="abrirRegra()"><span>+</span> Nova regra</button>
+      </div>
+      <div class="filtros-gestao">
+        <select [(ngModel)]="filtroRecurso" (ngModelChange)="filtrarPorRecurso($event)" aria-label="Filtrar por recurso">
+          <option [ngValue]="0">Todos os recursos</option>
+          @for (r of recursos(); track r.id) { <option [ngValue]="r.id">{{ r.nome }}</option> }
+        </select>
+      </div>
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao">
+          <thead>
+            <tr><th>Recurso</th><th>Nível</th><th>Usuários</th><th>Setores</th><th>Atualizada</th><th class="coluna-acoes">Ações</th></tr>
+          </thead>
+          <tbody>
+            @for (regra of regrasVisiveis(); track regra.id) {
+              <tr>
+                <td><strong>{{ regra.recurso_nome }}</strong><small><code>{{ regra.recurso_slug }}</code></small></td>
+                <td><span class="selo-nivel" [attr.data-nivel]="regra.nivel">{{ rotulosNivel[regra.nivel] }}</span></td>
+                <td>
+                  @for (u of regra.usuarios; track u.id) { <span class="etiqueta">{{ u.nome_completo }}</span> } @empty { <small>—</small> }
+                </td>
+                <td>
+                  @for (s of regra.setores; track s.id) { <span class="etiqueta">{{ s.nome }}</span> } @empty { <small>—</small> }
+                </td>
+                <td><small>{{ regra.atualizado_em | date: 'dd/MM/yyyy HH:mm' }}</small></td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="button" (click)="abrirRegra(regra)">Editar</button>
+                    <button class="botao-excluir" type="button" (click)="excluirRegra(regra)">Excluir</button>
+                  </div>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td class="estado-vazio" colspan="6">Nenhuma regra cadastrada. Todos os recursos estão abertos aos usuários autenticados.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  @case ('recursos') {
+    <section class="painel-gestao" aria-labelledby="titulo-recursos">
+      <div class="barra-ferramentas">
+        <div>
+          <h2 id="titulo-recursos">Recursos protegidos</h2>
+          <p>Cada recurso representa um módulo do portal, identificado pelo slug usado no código.</p>
+        </div>
+        <button class="acao-primaria" type="button" (click)="abrirRecurso()"><span>+</span> Novo recurso</button>
+      </div>
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao">
+          <thead>
+            <tr><th>Recurso</th><th>Slug</th><th>URL base</th><th>Política</th><th>Situação</th><th class="coluna-acoes">Ações</th></tr>
+          </thead>
+          <tbody>
+            @for (r of recursos(); track r.id) {
+              <tr>
+                <td><strong>{{ r.nome }}</strong><small>{{ r.descricao }}</small></td>
+                <td><code>{{ r.slug }}</code></td>
+                <td><code>{{ r.url_base || '—' }}</code></td>
+                <td>{{ politica(r) }}</td>
+                <td><span class="selo-situacao" [class.inativo]="!r.ativo">{{ r.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="button" (click)="abrirRecurso(r)">Editar</button>
+                    <button class="botao-excluir" type="button" (click)="excluirRecurso(r)">Excluir</button>
+                  </div>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td class="estado-vazio" colspan="6">Nenhum recurso cadastrado.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  @case ('efetivo') {
+    <section class="painel-gestao" aria-labelledby="titulo-efetivo">
+      <div class="barra-ferramentas">
+        <div>
+          <h2 id="titulo-efetivo">Acesso efetivo por usuário</h2>
+          <p>Nível calculado em cada recurso ativo, considerando regras diretas, setores e o papel SuperRoot.</p>
+        </div>
+      </div>
+      <div class="seletor-efetivo">
+        <app-seletor-usuarios [multiplo]="false" [(selecionados)]="usuarioConsultado" [fonte]="usuarios.opcoes" textoAjuda="Pesquisar usuário" />
+      </div>
+      @if (acessosEfetivos(); as itens) {
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>Recurso</th><th>Slug</th><th>Nível efetivo</th></tr></thead>
+            <tbody>
+              @for (a of itens; track a.recurso_id) {
+                <tr>
+                  <td><strong>{{ a.nome }}</strong></td>
+                  <td><code>{{ a.slug }}</code></td>
+                  <td>
+                    @if (a.nivel) {
+                      <span class="selo-nivel" [attr.data-nivel]="a.nivel">{{ rotulosNivel[a.nivel] }}</span>
+                    } @else {
+                      <span class="selo-situacao inativo">Sem acesso</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+}
+
+@if (regraAberta()) {
+  <div class="fundo-modal" role="presentation" (click)="fecharFormularios()"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-regra">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">Controle de acesso</span>
+        <h2 id="titulo-formulario-regra">{{ regraEmEdicao() ? 'Editar regra' : 'Nova regra' }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharFormularios()">×</button>
+    </header>
+    <form (ngSubmit)="salvarRegra()" novalidate>
+      <div class="grade-formulario" [formGroup]="formularioRegra">
+        <div>
+          <label for="regra-recurso">Recurso</label>
+          <select id="regra-recurso" formControlName="recurso_id">
+            <option [ngValue]="0" disabled>Selecione…</option>
+            @for (r of recursos(); track r.id) { <option [ngValue]="r.id">{{ r.nome }} ({{ r.slug }})</option> }
+          </select>
+        </div>
+        <div>
+          <label for="regra-nivel">Nível de acesso</label>
+          <select id="regra-nivel" formControlName="nivel">
+            @for (n of niveis; track n) { <option [ngValue]="n">{{ rotulosNivel[n] }}</option> }
+          </select>
+        </div>
+      </div>
+      <div class="grade-formulario">
+        <div class="ocupa-duas">
+          <label for="regra-usuarios">Usuários ({{ usuariosDaRegra().length }})</label>
+          <app-seletor-usuarios idCampo="regra-usuarios" [(selecionados)]="usuariosDaRegra" [fonte]="usuarios.opcoes" textoAjuda="Adicionar usuário" />
+        </div>
+        <div class="ocupa-duas">
+          <label for="regra-setores">Setores ({{ setoresDaRegra().size }})</label>
+          <input id="regra-setores" type="search" [(ngModel)]="buscaSetor" (ngModelChange)="termoSetor.set($event.trim())"
+                 [ngModelOptions]="{ standalone: true }" placeholder="Filtrar setores" autocomplete="off" />
+          <div class="lista-selecao">
+            @for (s of opcoesSetor(); track s.id) {
+              <label><input type="checkbox" [checked]="setoresDaRegra().has(s.id)" (change)="alternarSetor(s.id)" /> {{ s.nome }}
+                @if (s.sistemico) { <small>sistêmico</small> }</label>
+            } @empty {
+              <small>Nenhum setor cadastrado.</small>
+            }
+          </div>
+        </div>
+      </div>
+      @if (erroFormulario()) {
+        <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
+      }
+      <footer>
+        <button class="acao-secundaria" type="button" (click)="fecharFormularios()" [disabled]="salvando()">Cancelar</button>
+        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar regra' }}</button>
+      </footer>
+    </form>
+  </section>
+}
+
+@if (recursoAberto()) {
+  <div class="fundo-modal" role="presentation" (click)="fecharFormularios()"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-recurso">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">Controle de acesso</span>
+        <h2 id="titulo-formulario-recurso">{{ recursoEmEdicao() ? 'Editar recurso' : 'Novo recurso' }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharFormularios()">×</button>
+    </header>
+    <form [formGroup]="formularioRecurso" (ngSubmit)="salvarRecurso()" novalidate>
+      <div class="grade-formulario">
+        <div>
+          <label for="recurso-nome">Nome</label>
+          <input id="recurso-nome" formControlName="nome" placeholder="Contratos" />
+        </div>
+        <div>
+          <label for="recurso-slug">Slug técnico</label>
+          <input id="recurso-slug" formControlName="slug" placeholder="contratos" />
+        </div>
+        <div class="ocupa-duas">
+          <label for="recurso-url">URL base</label>
+          <input id="recurso-url" formControlName="url_base" placeholder="/contratos" />
+        </div>
+        <div class="ocupa-duas">
+          <label for="recurso-descricao">Descrição</label>
+          <input id="recurso-descricao" formControlName="descricao" />
+        </div>
+      </div>
+      <div class="linha-caixas">
+        <label><input type="checkbox" formControlName="ativo" /> Ativo (inativo = acesso aberto)</label>
+      </div>
+      @if (recursoEmEdicao()) {
+        <p class="dica-formulario">Atenção: o slug é usado pelo código dos módulos. Alterá-lo desvincula as proteções existentes.</p>
+      }
+      @if (erroFormulario()) {
+        <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
+      }
+      <footer>
+        <button class="acao-secundaria" type="button" (click)="fecharFormularios()" [disabled]="salvando()">Cancelar</button>
+        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar recurso' }}</button>
+      </footer>
+    </form>
+  </section>
+}

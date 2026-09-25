@@ -1,0 +1,135 @@
+@let d = detalhe();
+@let a = avaliacao();
+<section class="cartao-dados" aria-labelledby="titulo-avaliacao">
+  <header>
+    <div><h2 id="titulo-avaliacao">2. Avaliação dos serviços</h2><small>Nota abaixo da máxima exige justificativa (inicial) ou complemento (gestor).</small></div>
+    @if (a.nota_final !== null) {
+      <div class="acoes-formulario">
+        <span class="contador-ciencias completo">Nota final {{ a.nota_final | quantidade }}</span>
+        <span class="contador-ciencias">Pagamento liberado {{ a.percentual_liberado | percentual }}</span>
+      </div>
+    }
+  </header>
+  <div class="corpo">
+    <p class="dica-formulario">Escala: @for (n of a.definicao.escala; track $index) { <b>{{ n.valor }}</b> {{ n.legenda }}{{ $last ? '' : ' · ' }} }</p>
+
+    <p class="secao-formulario">1. Avaliação inicial @if (a.avaliacao_inicial_em) { <small class="dica-formulario" style="display: inline">— salva em {{ a.avaliacao_inicial_em | date: 'dd/MM/yyyy HH:mm' }}</small> }</p>
+    @for (g of a.definicao.grupos; track g.id) {
+      <table class="tabela-gestao" style="margin-bottom: 12px">
+        <thead><tr><th>{{ g.nome }}</th><th class="num">Peso</th><th>Nota</th><th>Justificativa</th></tr></thead>
+        <tbody>
+          @for (i of g.itens; track i.id) {
+            <tr>
+              <td><strong>{{ i.nome }}</strong>@if (i.descricao) { <small>{{ i.descricao }}</small> }</td>
+              <td class="num">{{ i.peso }}%</td>
+              <td style="width: 150px">
+                <select class="campo-tabela" [attr.aria-label]="'Nota inicial de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="iniciais[i.id].nota">
+                  <option value="">—</option>
+                  @for (n of a.definicao.escala; track $index) { <option [value]="'' + +n.valor">{{ n.valor }} · {{ n.legenda }}</option> }
+                </select>
+              </td>
+              <td>
+                <input class="campo-tabela" style="text-align: left" [class.invalido]="abaixo(iniciais[i.id].nota) && !iniciais[i.id].justificativa.trim()"
+                       [attr.aria-label]="'Justificativa de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="iniciais[i.id].justificativa" />
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+    @if (editavel() && !a.concluida_em) {
+      <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!completas(iniciais)" (click)="salvarInicial()">Salvar avaliação inicial</button></div>
+    }
+
+    @if (a.avaliacao_inicial_em) {
+      <p class="secao-formulario">2. Avaliação do gestor @if (a.avaliacao_gestor_em) { <small class="dica-formulario" style="display: inline">— salva em {{ a.avaliacao_gestor_em | date: 'dd/MM/yyyy HH:mm' }}</small> }</p>
+      @for (g of a.definicao.grupos; track g.id) {
+        <table class="tabela-gestao" style="margin-bottom: 12px">
+          <thead><tr><th>{{ g.nome }}</th><th>Nota inicial</th><th>Nota do gestor</th><th>Complemento</th></tr></thead>
+          <tbody>
+            @for (i of g.itens; track i.id) {
+              <tr>
+                <td><strong>{{ i.nome }}</strong></td>
+                <td>{{ iniciais[i.id].nota || '—' }}@if (iniciais[i.id].justificativa) { <small>{{ iniciais[i.id].justificativa }}</small> }</td>
+                <td style="width: 150px">
+                  <select class="campo-tabela" [attr.aria-label]="'Nota do gestor de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="gestor[i.id].nota">
+                    @for (n of a.definicao.escala; track $index) { <option [value]="'' + +n.valor">{{ n.valor }} · {{ n.legenda }}</option> }
+                  </select>
+                </td>
+                <td>
+                  <input class="campo-tabela" style="text-align: left" [class.invalido]="abaixo(gestor[i.id].nota) && !gestor[i.id].justificativa.trim()"
+                         [attr.aria-label]="'Complemento de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="gestor[i.id].justificativa" />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+      <div class="grade-formulario">
+        <div class="ocupa-duas"><label for="complemento-geral">Complemento geral do gestor</label>
+          <textarea id="complemento-geral" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="complemento"></textarea></div>
+      </div>
+      @if (editavel() && !a.concluida_em) {
+        <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!completas(gestor)" (click)="salvarGestor()">Salvar avaliação do gestor</button></div>
+      }
+    }
+
+    @if (a.avaliacao_gestor_em) {
+      <p class="secao-formulario">3. Assinaturas do ateste</p>
+      <div class="grade-formulario tres-colunas">
+        @for (p of papeisAteste; track p.papel) {
+          <div>
+            <label [for]="'ateste-' + p.papel">{{ p.rotulo }}</label>
+            <select [id]="'ateste-' + p.papel" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="assinantes[p.papel]">
+              <option [ngValue]="null">—</option>
+              @for (m of membrosDoPapel(p.papel); track m.usuario_id + m.papel) { <option [ngValue]="m.usuario_id">{{ m.nome }}</option> }
+            </select>
+          </div>
+        }
+      </div>
+      @if (editavel() && !a.concluida_em) {
+        <div class="acoes-cartao"><button type="button" class="acao-secundaria" (click)="salvarAssinaturas()">Salvar assinaturas</button></div>
+      }
+      <ul class="lista-ciencias">
+        @for (s of a.assinaturas; track s.papel) {
+          <li><span>{{ s.nome }} · {{ s.papel === 'gestor' ? 'Gestor' : s.papel === 'fiscal_tecnico' ? 'Fiscal técnico' : 'Fiscal administrativo' }}</span>
+            <small>{{ s.ciencia_em ? 'ciência em ' + (s.ciencia_em | date: 'dd/MM/yyyy HH:mm') : 'ciência pendente' }}</small></li>
+        }
+      </ul>
+      @if (souAssinante() && !a.concluida_em && d.etapa_atual === 'avaliacao') {
+        <div class="acoes-cartao"><button type="button" class="acao-primaria" (click)="cienciaAteste()">Registrar minha ciência no ateste</button></div>
+      }
+    }
+
+    @if (a.assinaturas.length) {
+      <p class="secao-formulario">4. Documento</p>
+      <div class="acoes-cartao esquerda">
+        @if (a.pdf_gerado) { <button type="button" class="link-arquivo" (click)="baixar(a.pdf_gerado.anexo_id)">Baixar PDF gerado</button> }
+        @if (a.pdf_assinado) { <button type="button" class="link-arquivo" (click)="baixar(a.pdf_assinado.anexo_id)">Baixar via assinada</button> }
+      </div>
+      @if (editavel() && !a.concluida_em) {
+        <div class="acoes-cartao esquerda">
+          <button type="button" class="acao-secundaria" (click)="exportarPdf()">Exportar novo PDF</button>
+          @if (a.pdf_gerado) {
+            <app-envio-pdf rotulo="Selecionar via assinada" (selecionado)="escolherAssinada($event)" />
+            <button type="button" class="acao-primaria" [disabled]="!temAssinada()" (click)="enviarAssinada()">Enviar relatório assinado pela contratada</button>
+          }
+        </div>
+      }
+    }
+
+    @if (a.concluida_em) {
+      <p class="aviso-bloco informativo">Avaliação concluída em {{ a.concluida_em | date: 'dd/MM/yyyy HH:mm' }}.</p>
+    }
+    @if (a.reconsideracao) {
+      <p class="dica-formulario">Reconsideração registrada: <button type="button" class="link-arquivo" (click)="baixar(a.reconsideracao.anexo_id)">justificativa da contratada</button></p>
+    }
+    @if (a.concluida_em && a.reconsideracoes === 0 && d.etapa_atual === 'nota_fiscal' && d.pode_editar) {
+      <p class="secao-formulario">5. Reconsideração (uma vez)</p>
+      <div class="acoes-cartao esquerda">
+        <app-envio-pdf rotulo="Selecionar justificativa da contratada" (selecionado)="escolherJustificativa($event)" />
+        <button type="button" class="acao-perigo" [disabled]="!temJustificativa()" (click)="reconsiderar()">Reabrir avaliação</button>
+      </div>
+    }
+  </div>
+</section>

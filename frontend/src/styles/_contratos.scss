@@ -1,0 +1,1080 @@
+/* ==========================================================================
+ * Módulo de contratos. Segue a identidade de styles.scss (painel-gestao, tabela-gestao,
+ * selos e modais) e acrescenta cartões de dados, abas do detalhe, linha do tempo,
+ * barra de etapas e grades numéricas.
+ * ========================================================================== */
+
+/* Cabeçalho comum das telas do módulo: título + atalhos Contratos/Empresas */
+.cabecalho-modulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 22px;
+
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  a.ativo {
+    border-color: var(--spi-vermelho);
+    color: var(--spi-vermelho);
+  }
+}
+
+a.acao-secundaria,
+a.acao-primaria {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.acao-perigo {
+  height: 39px;
+  padding: 0 16px;
+  border: 1px solid #f0c9cd;
+  border-radius: 8px;
+  color: #b3262f;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--spi-vermelho-suave);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.acao-pequena {
+  height: 30px !important;
+  padding: 0 11px !important;
+  font-size: 11px !important;
+}
+
+/* Cartão de dados (detalhe, telas de processo) */
+.cartao-dados {
+  margin-bottom: 18px;
+  border: 1px solid #e8eaec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px #401e2008;
+
+  // O cabeçalho pode vir dentro de um link (cartões clicáveis do painel)
+  > header,
+  > .cabecalho-clicavel > header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 16px 22px;
+    border-bottom: 1px solid #ecedef;
+
+    h2,
+    h3 {
+      margin: 0;
+      color: var(--spi-titulo);
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    small {
+      display: block;
+      margin-top: 3px;
+      color: #8c97a4;
+      font-size: 12px;
+    }
+  }
+
+  > .corpo {
+    padding: 18px 22px;
+  }
+
+  > .tabela-gestao-envoltorio {
+    border-radius: 0 0 12px 12px;
+  }
+}
+
+/* Pares rótulo/valor */
+.grade-dados {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px 22px;
+  margin: 0;
+
+  div {
+    min-width: 0;
+  }
+
+  dt {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 4px;
+    color: #8e99a6;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  dd {
+    margin: 0;
+    color: #32383f;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .ocupa-linha {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Indicadores numéricos (totais, painel) */
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.indicador {
+  padding: 14px 16px;
+  border: 1px solid #e8eaec;
+  border-radius: 10px;
+  background: #fff;
+
+  span {
+    display: block;
+    color: #8e99a6;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  strong {
+    display: block;
+    margin-top: 6px;
+    color: var(--spi-titulo);
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  small {
+    display: block;
+    margin-top: 3px;
+    color: #8e99a6;
+    font-size: 11px;
+  }
+
+  &.destaque strong {
+    color: var(--spi-vermelho);
+  }
+}
+
+/* Selos de situação do contrato e da competência */
+.selo-situacao {
+  &.a_vencer,
+  &.em_andamento,
+  &.amarelo {
+    color: #9a6400;
+    background: #fff4dc;
+  }
+
+  &.encerrado,
+  &.pendente {
+    color: #7e8995;
+    background: #eef0f2;
+  }
+
+  &.suspenso,
+  &.vermelho {
+    color: #a63942;
+    background: var(--spi-vermelho-suave);
+  }
+
+  &.disponivel {
+    color: #3b5b8a;
+    background: #e9f0fb;
+  }
+}
+
+/* Abas do detalhe: rolam na horizontal em telas estreitas */
+/* Muitas abas: quebram em mais de uma linha, para que nenhuma fique escondida */
+.abas.abas-rolagem {
+  flex-wrap: wrap;
+  row-gap: 0;
+
+  button {
+    padding: 10px 12px;
+    white-space: nowrap;
+  }
+}
+
+/* Tabelas numéricas */
+.tabela-gestao {
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  tfoot td {
+    border-top: 2px solid #e3e6e9;
+    color: #32383f;
+    font-weight: 700;
+    background: #fbfbfc;
+  }
+
+  input.campo-tabela,
+  select.campo-tabela {
+    width: 100%;
+    min-width: 72px;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid #e2e5e8;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+    text-align: right;
+
+    &:focus {
+      border-color: #bc3843;
+      outline: 0;
+      box-shadow: 0 0 0 3px #af374112;
+    }
+
+    &.invalido {
+      border-color: #d9534f;
+      background: #fff6f6;
+    }
+  }
+
+  tr.linha-clicavel {
+    cursor: pointer;
+
+    &:hover td {
+      background: #fcf7f7;
+    }
+  }
+
+  tr.linha-erro td {
+    background: #fff6f6;
+  }
+}
+
+/* Campos de formulário fora de modal (telas de processo) */
+.grade-formulario textarea {
+  width: 100%;
+  min-height: 90px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid #e2e5e8;
+  border-radius: 7px;
+  outline: 0;
+  color: #3d454e;
+  background: #fcfcfc;
+  font-size: 13px;
+  resize: vertical;
+
+  &:focus {
+    border-color: #bc3843;
+    box-shadow: 0 0 0 3px #af374112;
+  }
+}
+
+.grade-formulario.tres-colunas {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* Barra superior fixa com o botão principal (cadastro/edição) */
+.barra-fixa {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -6px 0 18px;
+  padding: 12px 0;
+  background: var(--spi-fundo);
+}
+
+/* Linha do tempo da vigência */
+.linha-tempo {
+  position: relative;
+  padding: 48px 50px 60px;
+
+  .trilho {
+    position: relative;
+    height: 6px;
+    border-radius: 3px;
+    background: #eceef1;
+  }
+
+  .decorrido {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #e58b92, var(--spi-vermelho));
+  }
+
+  .mes {
+    position: absolute;
+    top: 1px;
+    width: 1px;
+    height: 4px;
+    background: #cfd4da;
+  }
+
+  .marco {
+    position: absolute;
+    top: -3px;
+    transform: translateX(-50%);
+    text-align: center;
+
+    i {
+      display: block;
+      width: 12px;
+      height: 12px;
+      margin: 0 auto;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: #8e99a6;
+      box-shadow: 0 0 0 1px #cfd4da;
+    }
+
+    span {
+      position: absolute;
+      left: 50%;
+      width: max-content;
+      max-width: 140px;
+      transform: translateX(-50%);
+      color: #5a6673;
+      font-size: 10px;
+      line-height: 1.25;
+      white-space: normal;
+    }
+
+  
+    &.inicio i,
+    &.maximo i {
+      background: #32383f;
+    }
+
+    &.vigencia_atual i,
+    &.hoje i {
+      background: var(--spi-vermelho);
+    }
+
+    &.termo_aditivo i {
+      background: #3b5b8a;
+    }
+
+    &.reajuste i,
+    &.aditamento i,
+    &.supressao i {
+      background: #d59a1a;
+    }
+  }
+}
+
+/* Barra de etapas da competência */
+.barra-etapas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid #e2e4e7;
+    border-radius: 20px;
+    color: #6a7786;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+
+    b {
+      display: inline-grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      color: #fff;
+      background: #b8c0c9;
+      font-size: 11px;
+    }
+
+    &.concluida b {
+      background: #218365;
+    }
+
+    &.atual {
+      border-color: var(--spi-vermelho);
+      color: var(--spi-vermelho);
+
+      b {
+        background: var(--spi-vermelho);
+      }
+    }
+
+    &.selecionada {
+      box-shadow: 0 0 0 3px #af374118;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+/* Lista de ciências */
+.lista-ciencias {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f1f3;
+    color: #3d454e;
+    font-size: 12px;
+
+    small {
+      color: #8e99a6;
+    }
+  }
+}
+
+.contador-ciencias {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  color: #9a6400;
+  background: #fff4dc;
+  font-size: 11px;
+  font-weight: 700;
+
+  &.completo {
+    color: #218365;
+    background: #e9f7f2;
+  }
+}
+
+/* Linha de ações ao pé de um cartão */
+.acoes-cartao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.acoes-cartao.esquerda {
+  justify-content: flex-start;
+}
+
+/* Link de arquivo */
+.link-arquivo {
+  padding: 0;
+  border: 0;
+  color: var(--spi-vermelho);
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Cartão de NE com barra de consumo */
+.barra-consumo {
+  height: 8px;
+  margin: 8px 0 4px;
+  border-radius: 4px;
+  background: #eceef1;
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    background: #33a37f;
+
+    &.amarelo {
+      background: #e0a526;
+    }
+
+    &.vermelho {
+      background: var(--spi-vermelho);
+    }
+  }
+}
+
+/* Aviso em destaque dentro de uma tela */
+.aviso-bloco {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-left: 3px solid #e0a526;
+  border-radius: 6px;
+  color: #6b4b00;
+  background: #fff8e6;
+  font-size: 12px;
+
+  &.informativo {
+    border-left-color: #3b5b8a;
+    color: #2b4468;
+    background: #eef3fb;
+  }
+
+  &.erro {
+    border-left-color: var(--spi-vermelho);
+    color: #7a2129;
+    background: #fcf0f1;
+  }
+
+  ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+  }
+}
+
+/* Histórico de campo (ícone ⟲ ao lado do rótulo) */
+.historico-campo {
+  position: relative;
+  display: inline-flex;
+
+  > button {
+    padding: 0 2px;
+    border: 0;
+    color: #b0b8c2;
+    background: transparent;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+
+    &:hover {
+      color: var(--spi-vermelho);
+    }
+  }
+
+  .janela {
+    position: absolute;
+    z-index: 50;
+    top: 18px;
+    left: 0;
+    width: 320px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 10px 12px;
+    border: 1px solid #e2e5e8;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 12px 30px #18222d22;
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+
+    p {
+      margin: 0 0 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f0f1f3;
+      color: #3d454e;
+      font-size: 12px;
+
+      &:last-child {
+        margin: 0;
+        border: 0;
+      }
+    }
+
+    small {
+      display: block;
+      color: #8e99a6;
+      font-size: 10px;
+    }
+  }
+}
+
+/* Gráfico de barras simples (painel) */
+.grafico-barras {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  align-items: end;
+  gap: 8px;
+  height: 180px;
+  padding: 8px 4px 0;
+
+  .coluna {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    height: 100%;
+  }
+
+  .barra {
+    width: 30%;
+    min-height: 1px;
+    border-radius: 3px 3px 0 0;
+
+    &.previsto {
+      background: #cfd6de;
+    }
+
+    &.medido {
+      background: #e0a526;
+    }
+
+    &.pago {
+      background: var(--spi-vermelho);
+    }
+  }
+}
+
+.eixo-meses {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 8px;
+  padding: 6px 4px 0;
+  color: #8e99a6;
+  font-size: 10px;
+  text-align: center;
+}
+
+.legenda-grafico {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: #5a6673;
+  font-size: 11px;
+
+  i {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 5px;
+    border-radius: 2px;
+    vertical-align: -1px;
+
+    &.previsto {
+      background: #cfd6de;
+    }
+
+    &.medido {
+      background: #e0a526;
+    }
+
+    &.pago {
+      background: var(--spi-vermelho);
+    }
+  }
+}
+
+.lista-painel {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    gap: 12px;
+    padding: 11px 22px;
+    border-top: 1px solid #f0f1f3;
+
+    &:first-child {
+      border-top: 0;
+    }
+  }
+
+  a {
+    color: #32383f;
+    font-size: 12px;
+    text-decoration: none;
+
+    &:hover strong {
+      color: var(--spi-vermelho);
+    }
+  }
+
+  strong {
+    display: block;
+    font-size: 12px;
+  }
+
+  small {
+    color: #8e99a6;
+    font-size: 11px;
+  }
+
+  .marcador {
+    flex: 0 0 8px;
+    height: 8px;
+    margin-top: 5px;
+    border-radius: 50%;
+    background: #e0a526;
+
+    &.alta {
+      background: var(--spi-vermelho);
+    }
+  }
+
+  /* Riscos de um contrato, listados sob o cabeçalho do contrato */
+  .grupo-riscos {
+    flex: 1;
+    min-width: 0;
+
+    ul {
+      margin: 6px 0 0;
+      padding-left: 16px;
+      list-style: disc;
+    }
+
+    ul li {
+      display: list-item;
+      padding: 2px 0;
+      border-top: 0;
+      color: #b07d12;
+
+      &.alta {
+        color: var(--spi-vermelho);
+      }
+    }
+
+    ul a:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.duas-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+@media (max-width: 991px) {
+  .duas-colunas,
+  .grade-formulario.tres-colunas {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Menu ⋮ das linhas da tabela */
+.menu-flutuante {
+  position: absolute;
+  z-index: 40;
+  top: 30px;
+  right: 0;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid #e2e5e8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 30px #18222d22;
+
+  button {
+    display: block;
+    width: 100%;
+    padding: 7px 10px !important;
+    border-radius: 5px;
+    color: #32383f !important;
+    background: transparent !important;
+    text-align: left;
+
+    &:hover {
+      background: var(--spi-vermelho-suave) !important;
+    }
+  }
+}
+
+/* Menu "Relatórios" do cabeçalho do módulo */
+.menu-relatorios {
+  position: relative;
+
+  .menu-flutuante {
+    top: 38px;
+    min-width: 280px;
+  }
+}
+
+/* Tabela de itens do formulário do contrato: códigos agrupados numa coluna */
+.tabela-itens-contrato td small {
+  display: block;
+  color: #6a7786;
+}
+
+.tabela-itens-contrato .codigos-item small {
+  color: #6a7786;
+  white-space: nowrap;
+}
+
+/* Janela "Importar do SGI" */
+.corpo-importacao {
+  padding: 18px 22px 0;
+
+  details {
+    margin: 12px 0 4px;
+    font-size: 12px;
+  }
+
+  summary {
+    cursor: pointer;
+    color: #5a6673;
+    font-weight: 700;
+  }
+}
+
+.resultado-importacao {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px 18px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+
+  li {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f1f3;
+  }
+}
+
+.registro-importacao {
+  max-height: 260px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #d8dee6;
+  background: #1f2730;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+/* Painel: cabeçalhos dos cartões levam às telas dedicadas */
+.cabecalho-clicavel {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+
+  &:hover h2 {
+    color: var(--spi-vermelho);
+  }
+
+  &:hover h2::after {
+    content: " →";
+  }
+}
+
+.ver-todas {
+  display: block;
+  padding: 11px 22px;
+  border-top: 1px solid #f0f1f3;
+  color: var(--spi-vermelho);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+
+  &:hover {
+    background: var(--spi-vermelho-suave);
+  }
+}
+
+/* Telas "Minhas pendências" e "Alertas de risco": uma ocorrência por cartão */
+.filtros-ocorrencias {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+
+  input[type="search"] {
+    flex: 1 1 260px;
+    max-width: 420px;
+  }
+
+  .so-altos {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+}
+
+.chips-tipo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  button {
+    padding: 6px 11px;
+    border: 1px solid #e2e5e8;
+    border-radius: 999px;
+    color: #4a5561;
+    background: #fff;
+    font-size: 12px;
+    cursor: pointer;
+
+    b {
+      margin-left: 4px;
+      color: #8e99a6;
+    }
+
+    &.ativo {
+      border-color: var(--spi-vermelho);
+      color: var(--spi-vermelho);
+      background: var(--spi-vermelho-suave);
+
+      b {
+        color: inherit;
+      }
+    }
+  }
+}
+
+.cartoes-ocorrencia {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.cartao-ocorrencia {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #e8eaec;
+  border-left: 4px solid #e0a526;
+  border-radius: 10px;
+  color: #32383f;
+  background: #fff;
+  box-shadow: 0 4px 16px #401e2008;
+  text-decoration: none;
+  transition: box-shadow 0.15s, transform 0.15s;
+
+  &.alta {
+    border-left-color: var(--spi-vermelho);
+  }
+
+  &:hover,
+  &:focus-visible {
+    box-shadow: 0 10px 24px #401e2018;
+    transform: translateY(-2px);
+
+    .ir {
+      color: var(--spi-vermelho);
+    }
+  }
+
+  strong {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  small {
+    color: #6a7786;
+    font-size: 12px;
+  }
+
+  footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 8px;
+    color: #8e99a6;
+    font-size: 11px;
+  }
+
+  .ir {
+    font-weight: 700;
+    white-space: nowrap;
+  }
+}
+
+.selo-ocorrencia {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #6b4b00;
+  background: #fff8e6;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+
+  .alta & {
+    color: #7a2129;
+    background: #fcf0f1;
+  }
+}
+
+.grupo-ocorrencias {
+  margin-bottom: 22px;
+
+  .cabecalho-grupo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin-bottom: 10px;
+    color: #32383f;
+    text-decoration: none;
+
+    .marcador {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #e0a526;
+
+      &.alta {
+        background: var(--spi-vermelho);
+      }
+    }
+
+    strong {
+      font-size: 14px;
+    }
+
+    small {
+      color: #8e99a6;
+      font-size: 12px;
+    }
+
+    .ir {
+      margin-left: auto;
+      color: #8e99a6;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    &:hover strong,
+    &:hover .ir {
+      color: var(--spi-vermelho);
+    }
+  }
+}

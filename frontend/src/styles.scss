@@ -1,0 +1,714 @@
+/*
+ * Identidade visual do contratos-spi.
+ * Reproduz o padrão do portal em 10.23.3.190 (login) e do SGI SPI em 10.23.1.220 (área autenticada):
+ * Bootstrap 5.3 + variáveis e componentes abaixo.
+ */
+@use 'bootstrap/dist/css/bootstrap.min.css';
+// Módulo de contratos (usa só seletores próprios ou modificadores dos componentes abaixo)
+@use 'styles/contratos';
+
+:root {
+  --spi-fundo: #f6f7f8;
+  --spi-texto: #18222e;
+  --spi-titulo: #17202a;
+  --spi-apagado: #586372;
+  --spi-apagado-2: #667180;
+  --spi-rotulo: #27313d;
+  --spi-borda: #e2e5e8;
+  --spi-borda-campo: #ced5dc;
+  --spi-vermelho: #c82331;
+  --spi-vermelho-escuro: #a91c28;
+  --spi-vermelho-foco: #c62330;
+  --spi-vermelho-destaque: #bd222d;
+  --spi-vermelho-filete: #ee2c35;
+  --spi-vermelho-suave: #fcecee;
+  --spi-rodape: #7b8490;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--spi-fundo);
+  color: var(--spi-texto);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Largura máxima do conteúdo das páginas públicas */
+.largura-portal {
+  max-width: 1300px;
+}
+
+/* Sobretítulo acima do título da página: "── GESTÃO DE CONTRATOS" */
+.sobretitulo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--spi-vermelho-destaque);
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  margin-bottom: 15px;
+}
+
+.sobretitulo-linha {
+  width: 27px;
+  height: 2px;
+  background: #d72c36;
+}
+
+.titulo-pagina {
+  font-size: clamp(2.3rem, 5vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: var(--spi-titulo);
+  margin-bottom: 12px;
+}
+
+.texto-destaque {
+  color: var(--spi-apagado);
+  font-size: 1.05rem;
+  margin-bottom: 33px;
+}
+
+/* Cartão das páginas públicas */
+.cartao-portal {
+  border: 1px solid var(--spi-borda);
+  border-radius: 12px;
+  box-shadow: 0 18px 45px #18222d0f;
+}
+
+.marcador-secao {
+  color: #be2933;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  margin-bottom: 15px;
+}
+
+.titulo-secao {
+  font-size: 1.52rem;
+  font-weight: 800;
+  margin-bottom: 7px;
+  color: var(--spi-titulo);
+}
+
+.introducao-formulario {
+  color: var(--spi-apagado-2);
+  margin-bottom: 28px;
+}
+
+.form-label {
+  color: var(--spi-rotulo);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.form-control {
+  border-color: var(--spi-borda-campo);
+  border-radius: 7px;
+  min-height: 46px;
+
+  &:focus {
+    border-color: var(--spi-vermelho-foco);
+    box-shadow: 0 0 0 0.2rem #c623301f;
+  }
+}
+
+.form-text {
+  font-size: 0.82rem;
+}
+
+/* Botão principal das páginas públicas (vermelho institucional) */
+.botao-acao {
+  background: var(--spi-vermelho);
+  border-color: var(--spi-vermelho);
+  border-radius: 7px;
+  font-weight: 700;
+  min-width: 155px;
+  min-height: 44px;
+
+  &:hover,
+  &:focus,
+  &:active,
+  &:disabled {
+    background: var(--spi-vermelho-escuro) !important;
+    border-color: var(--spi-vermelho-escuro) !important;
+  }
+}
+
+/* Cabeçalho das páginas autenticadas: trilha, título e descrição */
+.cabecalho-pagina {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 26px;
+
+  p {
+    margin: 0 0 10px;
+    color: #98a2ae;
+    font-size: 0.72rem;
+
+    span {
+      margin: 0 7px;
+    }
+  }
+
+  h1 {
+    margin: 0;
+    color: var(--spi-titulo);
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+
+  small {
+    display: block;
+    margin-top: 6px;
+    color: #7c8998;
+    font-size: 0.8rem;
+  }
+}
+
+/* Acessibilidade: reduz movimentos quando o sistema operacional solicita */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+ * Telas administrativas (padrão SGI SPI): painel, tabela, selos e modal.
+ * Reutilizados por Usuários, Setores, ACL, LDAP e demais cadastros.
+ * ========================================================================== */
+.acao-primaria {
+  height: 39px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--spi-vermelho);
+  box-shadow: 0 7px 16px #c8233132;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+
+  span {
+    margin-right: 7px;
+    font-size: 16px;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--spi-vermelho-escuro);
+  }
+}
+
+.acao-secundaria {
+  height: 39px;
+  padding: 0 16px;
+  border: 1px solid #e2e4e7;
+  border-radius: 8px;
+  color: #6a7786;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #f7f8f9;
+  }
+}
+
+.acao-primaria:disabled,
+.acao-secundaria:disabled,
+.acoes-linha button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.painel-gestao {
+  border: 1px solid #e8eaec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px #401e2008;
+  overflow: hidden;
+}
+
+.barra-ferramentas {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  border-bottom: 1px solid #ecedef;
+
+  h2 {
+    margin: 0 0 5px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0;
+    color: #8c97a4;
+    font-size: 12px;
+  }
+}
+
+.filtros-gestao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 24px;
+  border-bottom: 1px solid #ecedef;
+
+  input,
+  select {
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid #e2e5e8;
+    border-radius: 7px;
+    outline: 0;
+    color: #3d454e;
+    background: #fcfcfc;
+    font-size: 13px;
+
+    &:focus {
+      border-color: #bc3843;
+      box-shadow: 0 0 0 3px #af374112;
+    }
+  }
+
+  input {
+    flex: 1 1 320px;
+  }
+}
+
+.aviso-admin {
+  margin: 0;
+  padding: 11px 24px;
+  border-bottom: 1px solid #e8eaec;
+  color: #1f6b53;
+  background: #eef8f4;
+  font-size: 12px;
+
+  &.erro {
+    color: #6f3237;
+    background: #fcf3f4;
+  }
+
+  &.avulso {
+    margin-bottom: 16px;
+    border: 1px solid #d8eee5;
+    border-radius: 8px;
+  }
+}
+
+.tabela-gestao-envoltorio {
+  overflow-x: auto;
+}
+
+.tabela-gestao {
+  width: 100%;
+  border-collapse: collapse;
+
+  th {
+    padding: 13px 15px;
+    color: #808d9b;
+    background: #f9f9fa;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 14px 15px;
+    border-top: 1px solid #eff0f2;
+    color: #5a6673;
+    font-size: 12px;
+    vertical-align: top;
+  }
+
+  td strong {
+    color: #32383f;
+    font-size: 12px;
+  }
+
+  td > small {
+    display: block;
+    margin-top: 4px;
+    color: #8e99a6;
+    font-size: 10px;
+  }
+
+  code {
+    color: #6a7887;
+    font-family: inherit;
+    font-size: 11px;
+  }
+
+  .coluna-acoes {
+    text-align: right;
+  }
+}
+
+.acoes-linha {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+
+  button {
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 5px;
+    color: var(--spi-vermelho);
+    background: var(--spi-vermelho-suave);
+    font-size: 11px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .botao-excluir {
+    color: #c64c55;
+  }
+}
+
+.paginacao-gestao {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 24px;
+  border-top: 1px solid #ecedef;
+  color: #6a7786;
+  font-size: 12px;
+
+  .acao-secundaria {
+    height: 32px;
+  }
+}
+
+.selo-situacao,
+.selo-origem,
+.selo-nivel {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.selo-situacao {
+  color: #218365;
+  background: #e9f7f2;
+
+  &.inativo {
+    color: #7e8995;
+    background: #eef0f2;
+  }
+
+  &.alerta {
+    color: #9a6400;
+    background: #fff4dc;
+  }
+}
+
+.selo-origem {
+  color: #a63942;
+  background: var(--spi-vermelho-suave);
+
+  &.sistemico {
+    color: #3b5b8a;
+    background: #e9f0fb;
+  }
+}
+
+.selo-nivel {
+  color: #3b5b8a;
+  background: #e9f0fb;
+
+  &[data-nivel='MODIFICACAO'] {
+    color: #9a6400;
+    background: #fff4dc;
+  }
+
+  &[data-nivel='CONTROLE_TOTAL'] {
+    color: #a63942;
+    background: var(--spi-vermelho-suave);
+  }
+}
+
+.etiqueta {
+  display: inline-block;
+  margin: 0 4px 4px 0;
+  padding: 3px 8px;
+  border-radius: 10px;
+  color: #3d454e;
+  background: #f1f3f5;
+  font-size: 11px;
+}
+
+.texto-erro,
+.tabela-gestao td strong.texto-erro,
+.tabela-gestao td small.texto-erro {
+  color: #c64d56;
+}
+
+.estado-vazio {
+  padding: 45px !important;
+  text-align: center !important;
+  color: #929daa !important;
+}
+
+.abas {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e3e6e9;
+
+  button {
+    padding: 10px 16px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: #6a7786;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+
+    &.ativa {
+      color: var(--spi-vermelho);
+      border-bottom-color: var(--spi-vermelho);
+    }
+  }
+}
+
+.fundo-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #1a1e2299;
+  backdrop-filter: blur(2px);
+}
+
+.modal-portal {
+  width: min(480px, calc(100% - 28px));
+  max-height: calc(100dvh - 28px);
+  overflow-y: auto;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 210;
+  transform: translate(-50%, -50%);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 30px 80px #181b1f55;
+
+  &.modal-largo {
+    width: min(680px, calc(100% - 28px));
+  }
+
+  > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 23px 25px 18px;
+    border-bottom: 1px solid #ecedef;
+
+    > button {
+      border: 0;
+      color: #7f8b98;
+      background: transparent;
+      font-size: 25px;
+      line-height: 1;
+      cursor: pointer;
+    }
+  }
+
+  .modal-sobretitulo {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--spi-vermelho-destaque);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  h2 {
+    margin: 0;
+    color: #361a1c;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  form {
+    padding: 22px 25px;
+  }
+
+  footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+}
+
+.grade-formulario {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+
+  .ocupa-duas {
+    grid-column: 1 / -1;
+  }
+
+  label {
+    display: block;
+    margin: 0 0 7px;
+    color: #464f5a;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  input,
+  select {
+    width: 100%;
+    height: 42px;
+    margin-bottom: 16px;
+    padding: 0 12px;
+    border: 1px solid #e2e5e8;
+    border-radius: 7px;
+    outline: 0;
+    color: #3d454e;
+    background: #fcfcfc;
+    font-size: 13px;
+
+    &:focus {
+      border-color: #bc3843;
+      box-shadow: 0 0 0 3px #af374112;
+    }
+
+    &.ng-invalid.ng-touched {
+      border-color: #d9534f;
+    }
+
+    &:disabled {
+      color: #8b97a4;
+      background: #f1f2f4;
+    }
+  }
+}
+
+.linha-caixas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 25px;
+  margin: 5px 0 18px;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #5a6673;
+    font-size: 12px;
+  }
+}
+
+.lista-selecao {
+  max-height: 180px;
+  overflow-y: auto;
+  margin: -8px 0 16px;
+  padding: 8px 10px;
+  border: 1px solid #e2e5e8;
+  border-radius: 7px;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    padding: 4px 0;
+    color: #3d454e;
+    font-size: 12px;
+    font-weight: 400;
+
+    small {
+      color: #8e99a6;
+    }
+  }
+
+  input[type='checkbox'] {
+    width: auto;
+    height: auto;
+    margin: 0;
+  }
+}
+
+.aviso-formulario {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  color: #1f6b53;
+  background: #eef8f4;
+  font-size: 12px;
+
+  &.erro {
+    color: #8a2d35;
+    background: #fcf0f1;
+  }
+}
+
+.secao-formulario {
+  margin: 8px 0 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eff0f2;
+  color: #361a1c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.dica-formulario {
+  margin: -8px 0 16px;
+  color: #7c8998;
+  font-size: 12px;
+}
+
+.formulario-perfil {
+  padding: 22px 24px;
+}
+
+.acoes-formulario {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.seletor-efetivo {
+  max-width: 480px;
+  padding: 18px 24px 4px;
+}
+
+@media (max-width: 767px) {
+  .barra-ferramentas {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .grade-formulario {
+    grid-template-columns: 1fr;
+  }
+}
+

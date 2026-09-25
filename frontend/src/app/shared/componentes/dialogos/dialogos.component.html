@@ -1,0 +1,55 @@
+@if (dialogos.confirmacao(); as confirmacao) {
+  <div class="fundo-modal camada-dialogo" role="presentation" (click)="dialogos.responderConfirmacao(false)"></div>
+  <section class="modal-portal camada-dialogo" role="alertdialog" aria-modal="true" aria-labelledby="titulo-confirmacao" aria-describedby="texto-confirmacao">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">Confirmação</span>
+        <h2 id="titulo-confirmacao">{{ confirmacao.titulo }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="dialogos.responderConfirmacao(false)">×</button>
+    </header>
+    <div class="corpo-dialogo">
+      <p id="texto-confirmacao">{{ confirmacao.mensagem }}</p>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="dialogos.responderConfirmacao(false)">Cancelar</button>
+        <button type="button" class="acao-primaria" [disabled]="dialogos.segundosRestantes() > 0" (click)="dialogos.responderConfirmacao(true)">
+          {{ confirmacao.rotuloConfirmar }}
+          @if (dialogos.segundosRestantes() > 0) { <span class="contador">({{ dialogos.segundosRestantes() }})</span> }
+        </button>
+      </footer>
+    </div>
+  </section>
+}
+
+@if (dialogos.erro(); as erro) {
+  <div class="fundo-modal camada-dialogo" role="presentation" (click)="dialogos.fecharErro()"></div>
+  <section class="modal-portal camada-dialogo" role="alertdialog" aria-modal="true" aria-labelledby="titulo-erro" aria-describedby="texto-erro">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">Erro</span>
+        <h2 id="titulo-erro">{{ erro.titulo }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="dialogos.fecharErro()">×</button>
+    </header>
+    <div class="corpo-dialogo">
+      <p id="texto-erro">{{ erro.mensagem }}</p>
+      @if (erro.correlacao) {
+        <p class="correlacao">Código para o suporte: <code>{{ erro.correlacao }}</code></p>
+      }
+      <footer>
+        <button type="button" class="acao-primaria" (click)="dialogos.fecharErro()">Entendi</button>
+      </footer>
+    </div>
+  </section>
+}
+
+@if (dialogos.processando().length) {
+  <div class="fundo-modal camada-processando" role="presentation"></div>
+  <section class="modal-portal camada-processando janela-processando" role="status" aria-live="polite">
+    <span class="indicador" aria-hidden="true"></span>
+    <div>
+      <strong>Executando a solicitação</strong>
+      <p>{{ dialogos.processando()[dialogos.processando().length - 1] }}</p>
+    </div>
+  </section>
+}

@@ -1,0 +1,51 @@
+<div class="cabecalho-pagina">
+  <div>
+    <p>Início <span>/</span> Meu perfil</p>
+    <h1>Meu perfil</h1>
+    <small>Mantenha seu cadastro institucional completo. Ele precisa ser revalidado a cada 30 dias.</small>
+  </div>
+</div>
+
+@if (autenticacao.usuario()?.perfil_restrito) {
+  <div class="alert alert-warning" role="status">
+    <strong>Atualize seu cadastro para continuar usando o sistema.</strong>
+    @if (rotulosPendentes()) {
+      Campos pendentes: {{ rotulosPendentes() }}.
+    } @else {
+      Confirme que seus dados estão corretos (revalidação a cada 30 dias).
+    }
+  </div>
+}
+
+<section class="painel-gestao" aria-labelledby="titulo-perfil">
+  <div class="barra-ferramentas">
+    <div>
+      <h2 id="titulo-perfil">{{ autenticacao.usuario()?.nome_completo }} <small class="text-muted">&#64;{{ autenticacao.usuario()?.login }}</small></h2>
+      <p>
+        @if (perfil()?.perfil_revisado_em) {
+          Última revalidação em {{ perfil()!.perfil_revisado_em | date: 'dd/MM/yyyy HH:mm' }}.
+        } @else {
+          Cadastro ainda não revalidado.
+        }
+        Campos com * são obrigatórios.
+      </p>
+    </div>
+  </div>
+
+  @if (aviso(); as a) {
+    <p class="aviso-admin" [class.erro]="a.erro" role="status">{{ a.texto }}</p>
+  }
+
+  <form class="formulario-perfil" [formGroup]="formulario" (ngSubmit)="salvar()" novalidate>
+    @if (carregando()) {
+      <p class="estado-vazio">Carregando…</p>
+    } @else {
+      <app-campos-perfil [formulario]="formulario" [(gestor)]="gestor" [fonteGestor]="api.opcoesGestor" />
+      <div class="acoes-formulario">
+        <button class="acao-primaria" type="submit" [disabled]="salvando()">
+          {{ salvando() ? 'Salvando…' : 'Confirmar cadastro' }}
+        </button>
+      </div>
+    }
+  </form>
+</section>

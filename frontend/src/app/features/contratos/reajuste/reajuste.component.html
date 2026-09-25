@@ -1,0 +1,125 @@
+@if (contrato(); as c) {
+  <app-cabecalho-modulo titulo="Reajuste" [trilha]="[c.numero, 'Reajuste']" [descricao]="'Contrato ' + c.numero + ' · mês de reajuste previsto: ' + c.mes_reajuste" />
+  <div class="barra-fixa"><a class="acao-secundaria" [routerLink]="['/contratos', c.id]" [queryParams]="{ aba: 'itens' }">← Contrato {{ c.numero }}</a></div>
+
+  @if (painel(); as p) {
+    @if (p.em_andamento; as r) {
+      <section class="cartao-dados" aria-labelledby="titulo-reajuste">
+        <header>
+          <div><h2 id="titulo-reajuste">Reajuste em elaboração</h2>
+            <small>Referência {{ r.mes_referencia | competencia }} · {{ r.sequencia_vigencia }}ª vigência · {{ r.competencias_recalculadas }} competência(s) recalculada(s)</small></div>
+          @if (p.pode_editar) { <button type="button" class="acao-perigo" (click)="cancelar(r)">Cancelar reajuste</button> }
+        </header>
+        <div class="corpo">
+          @if (r.competencias_com_diferenca) {
+            <p class="aviso-bloco informativo">Reajuste retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.mes_referencia | competencia }} mantêm o preço pago. Ao concluir, será gerada uma <strong>competência de diferença de reajuste</strong> com as quantidades medidas × (preço reajustado − preço pago), para pagamento pelo fluxo normal da execução.</p>
+          }
+          <p class="secao-formulario" style="margin-top: 0">1. Evidência do índice</p>
+          <div class="acoes-cartao esquerda">
+            @if (r.evidencia) { <button type="button" class="link-arquivo" (click)="baixar(r, r.evidencia.anexo_id)">{{ r.evidencia.nome }}</button> }
+            @if (p.pode_editar) {
+              <app-envio-pdf rotulo="Selecionar PDF" (selecionado)="evidencia = $event" />
+              <button type="button" class="acao-secundaria" [disabled]="!evidencia" (click)="anexarEvidencia(r)">{{ r.evidencia ? 'Substituir evidência' : 'Anexar' }}</button>
+            }
+          </div>
+        </div>
+        <p class="secao-formulario" style="margin: 0 22px 8px">2. Memória de cálculo</p>
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead>
+              <tr><th>Item</th><th>Descrição</th><th class="num">Qtd. mensal</th><th class="num">Valor unitário atual</th><th class="num">Índice (%)</th>
+                <th class="num">Valor referencial</th><th class="num">Valor reajustado</th><th class="num">Subtotal reajustado</th></tr>
+            </thead>
+            <tbody>
+              @for (i of r.itens; track i.item_id) {
+                <tr>
+                  <td>{{ i.ordem }}</td><td><strong>{{ i.descricao }}</strong></td>
+                  <td class="num">{{ i.quantidade_mensal | quantidade }}</td>
+                  <td class="num">{{ i.valor_unitario_atual | moeda }}</td>
+                  <td class="num" style="width: 110px"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Índice de ' + i.descricao" [disabled]="!p.pode_editar" [(ngModel)]="indices[i.item_id]" placeholder="2 = 2%" /></td>
+                  <td class="num" style="width: 130px"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Valor referencial de ' + i.descricao" [disabled]="!p.pode_editar" [(ngModel)]="referenciais[i.item_id]" placeholder="opcional" /></td>
+                  <td class="num"><strong>{{ i.valor_unitario_reajustado | moeda }}</strong></td>
+                  <td class="num">{{ i.subtotal_reajustado | moeda }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="corpo">
+          <div class="indicadores">
+            <div class="indicador"><span>Base atual</span><strong>{{ r.base_atual | moeda }}</strong></div>
+            <div class="indicador"><span>Nova base mensal</span><strong>{{ r.base_reajustada | moeda }}</strong></div>
+            <div class="indicador"><span>Valor global atual</span><strong>{{ r.valor_global_atual | moeda }}</strong></div>
+            <div class="indicador destaque"><span>Novo valor global</span><strong>{{ r.valor_global_reajustado | moeda }}</strong></div>
+          </div>
+          @if (p.pode_editar) {
+            <div class="acoes-cartao">
+              <button type="button" class="acao-secundaria" (click)="salvarMemoria(r)">Salvar memória</button>
+              <button type="button" class="acao-secundaria" (click)="gerarArquivos(r)">Gerar e baixar PDF e XLSX</button>
+            </div>
+          }
+          @if (r.memorias.length) {
+            <ul class="lista-ciencias">
+              @for (m of r.memorias; track m.versao) {
+                <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span>
+                  <span><button type="button" class="link-arquivo" (click)="baixar(r, m.pdf.anexo_id)">PDF</button> · <button type="button" class="link-arquivo" (click)="baixar(r, m.xlsx.anexo_id)">XLSX</button></span></li>
+              }
+            </ul>
+          }
+          <p class="secao-formulario">3. Apostilamento e conclusão</p>
+          @if (p.pode_editar) {
+            <div class="acoes-cartao esquerda">
+              <app-envio-pdf rotulo="Selecionar apostilamento assinado" (selecionado)="apostilamento = $event" />
+              <button type="button" class="acao-primaria" [disabled]="!apostilamento || !r.evidencia || !r.memorias.length" (click)="concluir(r)">Concluir e aplicar reajuste</button>
+            </div>
+            @if (!r.evidencia || !r.memorias.length) { <p class="dica-formulario">A conclusão exige a evidência do índice e a memória gerada.</p> }
+          }
+        </div>
+      </section>
+    } @else if (p.pode_editar) {
+      <section class="cartao-dados" aria-labelledby="titulo-iniciar">
+        <header><div><h2 id="titulo-iniciar">Iniciar reajuste</h2><small>Um reajuste por vez; cada vigência só pode ser reajustada uma vez.</small></div></header>
+        <div class="corpo">
+          @if (p.vigencias_disponiveis.length) {
+            <div class="grade-formulario tres-colunas">
+              <div><label for="reajuste-mes">Mês de referência (primeiro mês com os novos valores) *</label><input id="reajuste-mes" type="month" [(ngModel)]="mesReferencia" /></div>
+              <div><label for="reajuste-vigencia">Vigência *</label>
+                <select id="reajuste-vigencia" [(ngModel)]="vigencia">
+                  @for (v of p.vigencias_disponiveis; track v.sequencia) { <option [ngValue]="v.sequencia">{{ v.sequencia }}ª · {{ v.inicio | dataBr }} a {{ v.fim | dataBr }}</option> }
+                </select></div>
+              <div style="align-self: end; margin-bottom: 16px"><button type="button" class="acao-primaria" [disabled]="!mesReferencia || !vigencia" (click)="abrir()">Abrir reajuste</button></div>
+            </div>
+          } @else { <p class="estado-vazio">Todas as vigências já foram reajustadas.</p> }
+        </div>
+      </section>
+    }
+
+    @if (p.historico.length) {
+      <section class="cartao-dados" aria-labelledby="titulo-historico-reajuste">
+        <header><h2 id="titulo-historico-reajuste">Histórico</h2></header>
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>Referência</th><th>Vigência</th><th>Situação</th><th class="num">Base</th><th class="num">Valor global</th><th>Arquivos</th></tr></thead>
+            <tbody>
+              @for (r of p.historico; track r.id) {
+                <tr>
+                  <td>{{ r.mes_referencia | competencia }}</td><td>{{ r.sequencia_vigencia }}ª</td>
+                  <td><span class="selo-situacao" [class.inativo]="r.situacao === 'cancelado'">{{ r.situacao === 'concluido' ? 'Concluído' : 'Cancelado' }}</span></td>
+                  <td class="num">{{ r.base_atual | moeda }} → {{ r.base_reajustada | moeda }}</td>
+                  <td class="num">{{ r.valor_global_atual | moeda }} → {{ r.valor_global_reajustado | moeda }}</td>
+                  <td>
+                    @if (r.memorias.at(-1); as m) { <button type="button" class="link-arquivo" (click)="baixar(r, m.pdf.anexo_id)">Memória</button> }
+                    @if (r.apostilamento) { · <button type="button" class="link-arquivo" (click)="baixar(r, r.apostilamento.anexo_id)">Apostilamento</button> }
+                    @if (r.competencia_diferenca) { · <a class="link-arquivo" [routerLink]="['/contratos', id(), 'execucao', r.competencia_diferenca]">Competência de diferença</a> }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+  }
+} @else {
+  <p class="estado-vazio">Carregando…</p>
+}

@@ -1,0 +1,71 @@
+@if (detalhe(); as d) {
+  <app-cabecalho-modulo [titulo]="d.tipo === 'regular' ? 'Competência ' + d.rotulo : d.rotulo" [trilha]="[d.contrato_numero, 'Execução']"
+                        [descricao]="'Contrato ' + d.contrato_numero + ' · período ' + (d.periodo_inicio | dataBr) + ' a ' + (d.periodo_fim | dataBr)" />
+
+  <div class="barra-fixa">
+    <a class="acao-secundaria" [routerLink]="['/contratos', d.contrato_id]" [queryParams]="{ aba: 'execucao' }">← Contrato {{ d.contrato_numero }}</a>
+    <div class="acoes-formulario" style="align-items: center">
+      <span class="selo-situacao" [class]="'selo-situacao ' + d.situacao">{{ situacoes[d.situacao] }}</span>
+      @if (d.notas_selecionadas.length) { <small class="dica-formulario" style="margin: 0">NE: {{ d.notas_selecionadas.map(n => n.numero).join(', ') }}</small> }
+      @if (d.reaberturas_permitidas && etapasAnteriores().length) {
+        <button type="button" class="acao-perigo acao-pequena" (click)="reabrindo.set(true)">Reabrir etapa</button>
+      }
+    </div>
+  </div>
+
+  @if (!d.liberada) {
+    <p class="aviso-bloco informativo">O período desta competência termina em {{ d.periodo_fim | dataBr }}. A medição será liberada após o encerramento.</p>
+  }
+
+  @if (d.tipo === 'diferenca_reajuste') {
+    <p class="aviso-bloco informativo">Competência complementar: paga a diferença de preço do reajuste sobre as quantidades já medidas. As quantidades não podem ser alteradas e não há avaliação.</p>
+  }
+  @for (a of d.avisos; track a) { <p class="aviso-bloco">{{ a }}</p> }
+
+  <nav class="barra-etapas" aria-label="Etapas da competência">
+    @for (e of etapasVisiveis(); track e; let n = $index) {
+      <button type="button" [class.concluida]="concluida(e) || d.etapa_atual === 'concluida'" [class.atual]="d.etapa_atual === e"
+              [class.selecionada]="selecionada() === e" [disabled]="bloqueada(e)" [attr.aria-current]="d.etapa_atual === e ? 'step' : null"
+              (click)="selecionada.set(e)">
+        <b>{{ concluida(e) || d.etapa_atual === 'concluida' ? '✓' : n + 1 }}</b> {{ rotulos[e] }}
+      </button>
+    }
+  </nav>
+
+  @switch (selecionada()) {
+    @case ('medicao') { <app-etapa-medicao [detalhe]="d" [editavel]="editavel('medicao')" (atualizado)="aplicar($event)" /> }
+    @case ('avaliacao') { <app-etapa-avaliacao [detalhe]="d" [editavel]="editavel('avaliacao')" (atualizado)="aplicar($event)" /> }
+    @case ('nota_fiscal') { <app-etapa-nota-fiscal [detalhe]="d" [editavel]="editavel('nota_fiscal')" (atualizado)="aplicar($event)" /> }
+    @case ('cadin') { <app-etapa-cadin [detalhe]="d" [editavel]="editavel('cadin')" (atualizado)="aplicar($event)" /> }
+    @default { <app-etapa-finais [detalhe]="d" [etapa]="selecionada()" [editavel]="editavel(selecionada())" (atualizado)="aplicar($event)" /> }
+  }
+} @else {
+  <p class="estado-vazio">Carregando…</p>
+}
+
+@if (reabrindo()) {
+  <div class="fundo-modal" role="presentation" (click)="reabrindo.set(false)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-reabrir">
+    <header>
+      <div><span class="modal-sobretitulo">SuperRoot ou gestor do contrato</span><h2 id="titulo-reabrir">Reabrir etapa</h2></div>
+      <button type="button" aria-label="Fechar" (click)="reabrindo.set(false)">×</button>
+    </header>
+    <form (ngSubmit)="reabrir()">
+      <p class="dica-formulario" style="margin: 0 0 14px">As conclusões das etapas seguintes são desfeitas. Se a competência já foi paga, cada débito da OB ganha um lançamento de estorno no extrato da NE (o pagamento original continua registrado). Anexos e histórico ficam guardados.</p>
+      <div class="grade-formulario">
+        <div class="ocupa-duas">
+          <label for="reabrir-etapa">Etapa a reabrir *</label>
+          <select id="reabrir-etapa" name="etapa" required [(ngModel)]="etapaReabrir">
+            <option value="" disabled>Selecione</option>
+            @for (e of etapasAnteriores(); track e) { <option [value]="e">{{ rotulos[e] }}</option> }
+          </select>
+        </div>
+        <div class="ocupa-duas"><label for="reabrir-justificativa">Justificativa *</label><textarea id="reabrir-justificativa" name="justificativa" required maxlength="2000" [(ngModel)]="justificativa"></textarea></div>
+      </div>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="reabrindo.set(false)">Cancelar</button>
+        <button type="submit" class="acao-primaria" [disabled]="!etapaReabrir || !justificativa.trim()">Reabrir</button>
+      </footer>
+    </form>
+  </section>
+}

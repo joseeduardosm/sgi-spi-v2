@@ -1,0 +1,87 @@
+<div class="cabecalho-modulo">
+  <div class="cabecalho-pagina" style="margin: 0">
+    <div>
+      <p>Início <span>/</span> Contratos @for (t of trilha(); track $index) { <span>/</span> {{ t }} }</p>
+      <h1>{{ titulo() }}</h1>
+      @if (descricao()) { <small>{{ descricao() }}</small> }
+    </div>
+  </div>
+  <nav aria-label="Atalhos do módulo de contratos">
+    <a class="acao-secundaria" routerLink="/contratos/painel" routerLinkActive="ativo">Painel</a>
+    <a class="acao-secundaria" routerLink="/contratos" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">Contratos</a>
+    <a class="acao-secundaria" routerLink="/contratos/empresas" routerLinkActive="ativo">Empresas</a>
+    @if (superRoot()) { <a class="acao-secundaria" routerLink="/contratos/modelos" routerLinkActive="ativo">Modelos</a> }
+    @if (superRoot()) {
+      <div class="menu-relatorios">
+        <button type="button" class="acao-secundaria" aria-haspopup="menu" [attr.aria-expanded]="menuRelatorios()" (click)="menuRelatorios.set(!menuRelatorios())">Relatórios ▾</button>
+        @if (menuRelatorios()) {
+          <div class="menu-flutuante" role="menu">
+            <button type="button" role="menuitem" (click)="abrirRelatorio('previsao')">Previsão Orçamentária</button>
+            <button type="button" role="menuitem" (click)="abrirRelatorio('notas')">Relatório Executivo de Notas de Empenho</button>
+          </div>
+        }
+      </div>
+    }
+  </nav>
+</div>
+
+@if (janela() === 'previsao') {
+  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-exportar-previsao">
+    <header>
+      <div><span class="modal-sobretitulo">Relatório gerencial</span><h2 id="titulo-exportar-previsao">Exportar Previsão Orçamentária</h2></div>
+      <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button>
+    </header>
+    <form (ngSubmit)="gerarPrevisao()">
+      <div class="grade-formulario">
+        <div>
+          <label for="previsao-exercicio">Exercício</label>
+          <input id="previsao-exercicio" type="number" name="exercicio" min="2000" max="2100" [(ngModel)]="previsao.exercicio" />
+        </div>
+        <div>
+          <label for="previsao-formato">Formato</label>
+          <select id="previsao-formato" name="formato" [(ngModel)]="formato"><option value="xlsx">XLSX</option><option value="pdf">PDF</option></select>
+        </div>
+      </div>
+      <p class="secao-formulario">Seções</p>
+      <div class="linha-caixas">
+        <label><input type="checkbox" name="resumo" [(ngModel)]="previsao.resumo_anual" /> Resumo anual</label>
+        <label><input type="checkbox" name="detalhamento" [(ngModel)]="previsao.detalhamento_mensal" /> Detalhamento mensal</label>
+      </div>
+      <p class="secao-formulario">Incluir cenários</p>
+      <div class="linha-caixas">
+        <label><input type="checkbox" name="reajustes" [(ngModel)]="previsao.cenario_reajustes" /> Reajustes em elaboração</label>
+        <label><input type="checkbox" name="aditamentos" [(ngModel)]="previsao.cenario_aditamentos" /> Aditamentos em elaboração</label>
+        <label><input type="checkbox" name="supressoes" [(ngModel)]="previsao.cenario_supressoes" /> Supressões em elaboração</label>
+        <label><input type="checkbox" name="prorrogacoes" [(ngModel)]="previsao.cenario_prorrogacoes" /> Prorrogações em elaboração</label>
+      </div>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="janela.set(null)">Cancelar</button>
+        <button type="submit" class="acao-primaria" [disabled]="!previsao.resumo_anual && !previsao.detalhamento_mensal">Gerar e baixar</button>
+      </footer>
+    </form>
+  </section>
+}
+
+@if (janela() === 'notas') {
+  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-relatorio-notas">
+    <header>
+      <div><span class="modal-sobretitulo">Relatório gerencial</span><h2 id="titulo-relatorio-notas">Relatório Executivo de Notas de Empenho</h2></div>
+      <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button>
+    </header>
+    <form (ngSubmit)="gerarNotas()">
+      <p class="dica-formulario" style="margin: 0 0 14px">Todas as NEs de todos os contratos, com valor inicial, consumido e saldo.</p>
+      <div class="grade-formulario">
+        <div>
+          <label for="notas-formato">Formato</label>
+          <select id="notas-formato" name="formato" [(ngModel)]="formato"><option value="xlsx">XLSX</option><option value="pdf">PDF</option></select>
+        </div>
+      </div>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="janela.set(null)">Cancelar</button>
+        <button type="submit" class="acao-primaria">Baixar</button>
+      </footer>
+    </form>
+  </section>
+}

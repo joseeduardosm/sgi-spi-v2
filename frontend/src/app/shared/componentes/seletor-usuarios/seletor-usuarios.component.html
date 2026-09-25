@@ -1,0 +1,28 @@
+<div class="seletor">
+  @if (selecionados().length) {
+    <div class="fichas">
+      @for (u of selecionados(); track u.id) {
+        <span class="ficha" [class.inativo]="!u.ativo">
+          {{ u.nome_completo }} @if (u.login) { <small>&#64;{{ u.login }}</small> }
+          <button type="button" [attr.aria-label]="'Remover ' + u.nome_completo" (click)="remover(u)">×</button>
+        </span>
+      }
+    </div>
+  }
+  @if (multiplo() || !selecionados().length) {
+    <input type="search" [id]="idCampo()" [value]="termo" [placeholder]="textoAjuda()" autocomplete="off"
+           (input)="aoDigitar($any($event.target).value)" (focus)="aoFocar()" (keydown.escape)="aberto.set(false)" />
+  }
+  @if (aberto() && (multiplo() || !selecionados().length)) {
+    <ul class="resultados" role="listbox">
+      @for (u of resultados(); track u.id) {
+        <li role="option" tabindex="0" (click)="adicionar(u)" (keydown.enter)="adicionar(u)">
+          <strong>{{ u.nome_completo }}</strong>
+          <small>&#64;{{ u.login }}{{ u.cargo ? ' · ' + u.cargo : '' }}{{ u.ativo ? '' : ' · inativo' }}</small>
+        </li>
+      } @empty {
+        <li class="vazio">{{ carregando() ? 'Pesquisando…' : 'Nenhum usuário encontrado.' }}</li>
+      }
+    </ul>
+  }
+</div>

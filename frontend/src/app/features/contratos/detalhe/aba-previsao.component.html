@@ -1,0 +1,98 @@
+@if (previsao(); as p) {
+  <div class="indicadores">
+    <div class="indicador destaque"><span>Total previsto</span><strong>{{ p.total_previsto | moeda }}</strong><small>Todas as vigências</small></div>
+    @for (v of p.vigencias; track v.sequencia) {
+      <div class="indicador"><span>{{ v.sequencia }}ª vigência</span><strong>{{ v.total_previsto | moeda }}</strong><small>{{ v.inicio | dataBr }} a {{ v.fim | dataBr }}</small></div>
+    }
+  </div>
+
+  @for (v of p.vigencias; track v.sequencia) {
+    @if (v.possui_sob_demanda) {
+      <section class="cartao-dados" [attr.aria-labelledby]="'grade-' + v.sequencia">
+        <header>
+          <div>
+            <h2 [id]="'grade-' + v.sequencia">Apontamentos sob demanda — {{ v.sequencia }}ª vigência ({{ v.inicio | dataBr }} a {{ v.fim | dataBr }})</h2>
+            <small>
+              @if (v.salva) { Selada em {{ v.salva_em?.slice(0, 10) | dataBr }}{{ v.salva_por_nome ? ' por ' + v.salva_por_nome : '' }}. }
+              @else { O saldo de cada item não pode ficar negativo. }
+            </small>
+          </div>
+          <div class="acoes-formulario">
+            @if (v.salva && superRoot() && v.pode_editar) {
+              <button type="button" class="acao-secundaria" (click)="alternarEdicaoSelada(v.sequencia)">{{ editandoSelada().has(v.sequencia) ? 'Cancelar edição' : 'Editar previsão salva' }}</button>
+            }
+            <button type="button" class="acao-secundaria" (click)="exportar(v.sequencia)">Exportar XLSX</button>
+            @if (editavel(v)) {
+              <button type="button" class="acao-primaria" [disabled]="temSaldoNegativo(v)" (click)="salvar(v)">Salvar previsão</button>
+            }
+          </div>
+        </header>
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead>
+              <tr>
+                <th>Item</th><th class="num">Limite da vigência</th>
+                @for (m of v.meses; track m) { <th class="num">{{ m | competencia }}</th> }
+                <th class="num">Saldo total</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (i of v.itens_sob_demanda; track i.item_id) {
+                <tr [class.linha-erro]="saldo(v, i.item_id, i.limite) < 0">
+                  <td><strong>{{ i.ordem }}. {{ i.descricao }}</strong></td>
+                  <td class="num">{{ i.limite | quantidade }}</td>
+                  @for (m of v.meses; track m) {
+                    <td class="num">
+                      @if (editavel(v)) {
+                        <input class="campo-tabela" inputmode="decimal" [attr.aria-label]="i.descricao + ' em ' + (m | competencia)" [(ngModel)]="grades[v.sequencia][i.item_id][m]" />
+                      } @else { {{ i.apontamentos[m] | quantidade }} }
+                    </td>
+                  }
+                  <td class="num"><strong [class.texto-erro]="saldo(v, i.item_id, i.limite) < 0">{{ saldo(v, i.item_id, i.limite) | quantidade }}</strong></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
+    <section class="cartao-dados" [attr.aria-labelledby]="'mensal-' + v.sequencia">
+      <header><h2 [id]="'mensal-' + v.sequencia">Previsão mensal — {{ v.sequencia }}ª vigência</h2></header>
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao">
+          <thead><tr><th>Competência</th><th>Período faturado</th><th class="num">Base mensal</th><th class="num">Valor da competência</th><th class="num">Acumulado</th></tr></thead>
+          <tbody>
+            @for (m of mesesDaVigencia(v.sequencia); track m.competencia) {
+              <tr class="linha-clicavel" (click)="alternarMes(v.sequencia + m.competencia)" [attr.aria-expanded]="expandidos().has(v.sequencia + m.competencia)">
+                <td><strong>{{ expandidos().has(v.sequencia + m.competencia) ? '▾' : '▸' }} {{ m.competencia | competencia }}</strong></td>
+                <td>{{ m.inicio | dataBr }} a {{ m.fim | dataBr }}{{ m.fator !== '1.00000000' ? ' (fração ' + (m.fator | quantidade) + ')' : '' }}</td>
+                <td class="num">{{ m.base_mensal | moeda }}</td>
+                <td class="num">{{ m.valor | moeda }}</td>
+                <td class="num">{{ m.acumulado | moeda }}</td>
+              </tr>
+              @if (expandidos().has(v.sequencia + m.competencia)) {
+                <tr>
+                  <td colspan="5" style="background: #fbfbfc">
+                    <table class="tabela-gestao">
+                      <thead><tr><th>Item</th><th>Tipo</th><th class="num">Quantidade</th><th class="num">Valor unitário</th><th class="num">Fator</th><th class="num">Subtotal</th></tr></thead>
+                      <tbody>
+                        @for (i of m.itens; track i.item_id) {
+                          <tr><td>{{ i.descricao }}</td><td>{{ rotulosTipo[i.tipo] }}</td><td class="num">{{ i.quantidade | quantidade }}</td>
+                            <td class="num">{{ i.valor_unitario | moeda }}</td><td class="num">{{ i.fator | quantidade }}</td><td class="num">{{ i.subtotal | moeda }}</td></tr>
+                        }
+                      </tbody>
+                      <tfoot><tr><td colspan="5">Total da competência</td><td class="num">{{ m.valor | moeda }}</td></tr></tfoot>
+                    </table>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+} @else {
+  <p class="estado-vazio">Carregando…</p>
+}

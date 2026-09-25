@@ -1,0 +1,388 @@
+// Barra lateral no padrão do SGI SPI (10.23.1.220): escura, recolhida em ícones,
+// expande ao passar o mouse ou quando fixada.
+:host {
+  display: block;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 100dvh;
+}
+
+.barra-lateral {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #e6e8eb;
+  background: #18222e;
+  box-shadow: 4px 0 20px #24282d14;
+}
+
+.barra-lateral-marca {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding: 0 18px;
+  border-bottom: 1px solid #ffffff12;
+  position: relative;
+
+  > a {
+    min-width: 38px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #fff;
+    text-decoration: none;
+  }
+}
+
+.barra-lateral-logo {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #fff;
+  flex: none;
+}
+
+// Recorte do brasão em escala reduzida
+.brasao {
+  width: 32px;
+  height: 36px;
+  display: inline-block;
+  background-image: url('/assets/imagens/brasao.png');
+  background-repeat: no-repeat;
+  background-size: 206px auto;
+  background-position: center -21px;
+}
+
+.barra-lateral-marca-texto {
+  width: 130px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  strong {
+    font-size: 16px;
+    letter-spacing: 0.06em;
+  }
+
+  small {
+    margin-top: 2px;
+    color: #bac1c9;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+}
+
+.botao-fixar,
+.botao-fechar-celular {
+  display: none;
+}
+
+.barra-lateral-navegacao {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 18px 11px;
+}
+
+.nav-legenda {
+  height: 21px;
+  margin: 0 10px 8px;
+  color: #8793a0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.nav-legenda-secundaria {
+  margin-top: 18px;
+}
+
+.nav-item {
+  width: 100%;
+  height: 47px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  margin-bottom: 4px;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 9px;
+  color: #c3c9d0;
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: 0.18s;
+
+  &:hover,
+  &:focus-visible {
+    color: #fff;
+    background: #ffffff0d;
+    outline: none;
+  }
+
+  &.ativo {
+    color: #fff;
+    background: var(--spi-vermelho);
+    box-shadow: 0 6px 16px #1d202450;
+  }
+
+  app-icone {
+    width: 20px;
+    min-width: 20px;
+    height: 20px;
+  }
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    opacity: 0;
+  }
+
+  > b {
+    display: none;
+    margin-left: auto;
+    font-size: 14px;
+    font-weight: 400;
+    transition: transform 0.18s;
+  }
+
+  > b:not(.aberto) {
+    transform: rotate(-90deg);
+  }
+}
+
+.nav-submenu {
+  margin: 1px 0 8px 28px;
+  padding: 3px 0 3px 25px;
+  border-left: 1px solid #ffffff1c;
+
+  a,
+  .nav-vazio {
+    width: 100%;
+    display: block;
+    padding: 8px 7px;
+    color: #a8b0ba;
+    font-size: 12px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  a:hover,
+  a:focus-visible,
+  a.ativo {
+    color: #fff;
+    outline: none;
+  }
+
+  a.ativo {
+    font-weight: 700;
+  }
+
+  .nav-vazio {
+    color: #7d8894;
+    font-style: italic;
+    white-space: normal;
+    cursor: default;
+  }
+}
+
+.barra-lateral-rodape {
+  height: 70px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 0 18px;
+  border-top: 1px solid #ffffff12;
+  overflow: hidden;
+  white-space: nowrap;
+
+  > span:last-child {
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+  }
+
+  strong {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 11px;
+  }
+
+  small {
+    margin-top: 3px;
+    color: #96a1ad;
+    font-size: 9px;
+  }
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(140deg, #db3543, #a91c28);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+// Estado expandido (classe aplicada pelo layout autenticado)
+:host-context(.barra-lateral-expandida) {
+  .barra-lateral-marca-texto,
+  .nav-legenda,
+  .nav-item > span,
+  .barra-lateral-rodape > span:last-child {
+    opacity: 1;
+  }
+
+  .nav-item {
+    padding: 0 15px;
+  }
+
+  .nav-item > b {
+    display: inline;
+  }
+
+  .botao-fixar {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    position: absolute;
+    right: 12px;
+    border: 0;
+    border-radius: 7px;
+    color: #b7bec6;
+    background: #ffffff0d;
+    cursor: pointer;
+
+    app-icone {
+      width: 16px;
+      height: 16px;
+    }
+
+    &.fixado {
+      color: #fff;
+      background: #ffffff26;
+    }
+  }
+}
+
+// Telas Full HD com pouca altura útil: compacta apenas a navegação
+@media (min-width: 768px) and (max-height: 950px) {
+  .barra-lateral-marca {
+    height: 60px;
+    padding-inline: 15px;
+  }
+  .barra-lateral-navegacao {
+    padding: 9px 10px;
+  }
+  .nav-legenda {
+    height: 16px;
+    margin: 0 9px 4px;
+    font-size: 8px;
+  }
+  .nav-item {
+    height: 39px;
+    gap: 12px;
+    margin-bottom: 2px;
+    padding-inline: 19px;
+    font-size: 12px;
+
+    app-icone {
+      width: 18px;
+      min-width: 18px;
+      height: 18px;
+    }
+  }
+  :host-context(.barra-lateral-expandida) .nav-item {
+    padding-inline: 13px;
+  }
+  .nav-submenu {
+    margin: 0 0 4px 25px;
+    padding: 1px 0 1px 21px;
+
+    a,
+    .nav-vazio {
+      padding: 5px 6px;
+      font-size: 11px;
+    }
+  }
+  .barra-lateral-rodape {
+    height: 56px;
+    gap: 10px;
+    padding-inline: 17px;
+  }
+  .avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+}
+
+// Celular: gaveta sobreposta, com todos os rótulos visíveis
+@media (max-width: 767px) {
+  :host {
+    width: min(290px, 86vw);
+    position: fixed;
+    left: 0;
+    z-index: 100;
+    transform: translateX(-105%);
+    transition: transform 0.25s;
+  }
+
+  :host-context(.barra-lateral-expandida) {
+    transform: translateX(0);
+  }
+
+  .barra-lateral-marca-texto,
+  .nav-legenda,
+  .nav-item > span,
+  .barra-lateral-rodape > span:last-child {
+    opacity: 1;
+  }
+
+  .nav-item,
+  :host-context(.barra-lateral-expandida) .nav-item {
+    padding: 0 15px;
+  }
+
+  .nav-item > b {
+    display: inline;
+  }
+
+  .botao-fixar,
+  :host-context(.barra-lateral-expandida) .botao-fixar {
+    display: none;
+  }
+
+  .botao-fechar-celular {
+    display: block;
+    position: absolute;
+    right: 14px;
+    border: 0;
+    color: #d6d9dd;
+    background: transparent;
+    font-size: 25px;
+  }
+}

@@ -1,0 +1,80 @@
+<app-cabecalho-modulo [titulo]="empresa()?.razao_social || 'Cadastrar empresa'" [trilha]="['Empresas', empresa() ? 'Detalhe' : 'Nova']" />
+
+<div class="barra-fixa">
+  <a class="acao-secundaria" routerLink="/contratos/empresas">← Voltar à lista</a>
+  @if (empresa() && acesso.pode('contratos', 'CONTROLE_TOTAL')) { <button type="button" class="acao-perigo" (click)="excluir()">Excluir empresa</button> }
+</div>
+
+@if (carregando()) {
+  <p class="estado-vazio">Carregando…</p>
+} @else {
+  <section class="cartao-dados" aria-labelledby="titulo-empresa">
+    <header><h2 id="titulo-empresa">Dados da empresa</h2></header>
+    <form class="corpo" (ngSubmit)="salvar()" #formulario="ngForm">
+      <fieldset class="grade-formulario" [disabled]="!acesso.pode('contratos', 'MODIFICACAO')" style="border: 0; padding: 0; margin: 0">
+        <div><label for="empresa-cnpj">CNPJ *</label><input id="empresa-cnpj" name="cnpj" required maxlength="18" placeholder="00.000.000/0000-00" [(ngModel)]="dados.cnpj" /></div>
+        <div><label for="empresa-razao">Razão social *</label><input id="empresa-razao" name="razao_social" required maxlength="250" [(ngModel)]="dados.razao_social" /></div>
+        <div><label for="empresa-fantasia">Nome fantasia</label><input id="empresa-fantasia" name="nome_fantasia" maxlength="250" [(ngModel)]="dados.nome_fantasia" /></div>
+        <div><label for="empresa-endereco">Endereço</label><input id="empresa-endereco" name="endereco" maxlength="500" [(ngModel)]="dados.endereco" /></div>
+      </fieldset>
+      <div class="linha-caixas"><label><input type="checkbox" name="ativa" [disabled]="!acesso.pode('contratos', 'MODIFICACAO')" [(ngModel)]="dados.ativa" /> Empresa ativa</label></div>
+      @if (acesso.pode('contratos', 'MODIFICACAO')) {
+        <div class="acoes-formulario"><button type="submit" class="acao-primaria" [disabled]="formulario.invalid">{{ empresa() ? 'Salvar alterações' : 'Cadastrar empresa' }}</button></div>
+      }
+    </form>
+  </section>
+
+  @if (empresa(); as e) {
+    @if (e.contratos.length) {
+      <p class="dica-formulario">Contratos: @for (c of e.contratos; track c.id) { <a class="etiqueta" [routerLink]="['/contratos', c.id]">{{ c.numero }}</a> }</p>
+    }
+    <section class="cartao-dados" aria-labelledby="titulo-prepostos">
+      <header><div><h2 id="titulo-prepostos">Prepostos</h2><small>O preposto é um contato da empresa e não um usuário do portal.</small></div></header>
+      @if (acesso.pode('contratos', 'MODIFICACAO')) {
+        <form class="corpo" (ngSubmit)="salvarPreposto()" #formPreposto="ngForm">
+          <div class="grade-formulario tres-colunas">
+            <div><label for="preposto-cpf">CPF *</label><input id="preposto-cpf" name="cpf" required maxlength="14" placeholder="000.000.000-00" [(ngModel)]="preposto.cpf" /></div>
+            <div><label for="preposto-nome">Nome completo *</label><input id="preposto-nome" name="nome" required maxlength="200" [(ngModel)]="preposto.nome" /></div>
+            <div><label for="preposto-telefone">Telefone</label><input id="preposto-telefone" name="telefone" maxlength="30" [(ngModel)]="preposto.telefone" /></div>
+            <div><label for="preposto-email">E-mail</label><input id="preposto-email" name="email" type="email" maxlength="250" [(ngModel)]="preposto.email" /></div>
+            <div><label for="preposto-cargo">Cargo</label><input id="preposto-cargo" name="cargo" maxlength="150" [(ngModel)]="preposto.cargo" /></div>
+          </div>
+          <div class="linha-caixas"><label><input type="checkbox" name="ativo" [(ngModel)]="preposto.ativo" /> Preposto ativo</label></div>
+          <div class="acoes-formulario">
+            <button type="button" class="acao-secundaria" (click)="limparPreposto()">Limpar formulário</button>
+            <button type="submit" class="acao-primaria" [disabled]="formPreposto.invalid">{{ prepostoEmEdicao ? 'Salvar alterações do preposto' : 'Salvar preposto' }}</button>
+          </div>
+        </form>
+      }
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao">
+          <thead><tr><th>Nome</th><th>CPF</th><th>Contato</th><th>Cargo</th><th>Situação</th>@if (acesso.pode('contratos', 'MODIFICACAO')) { <th class="coluna-acoes">Ações</th> }</tr></thead>
+          <tbody>
+            @for (p of e.prepostos; track p.id) {
+              <tr>
+                <td><strong>{{ p.nome }}</strong></td><td>{{ cpf(p.cpf) }}</td>
+                <td>{{ p.email || '—' }}<small>{{ p.telefone }}</small></td><td>{{ p.cargo || '—' }}</td>
+                <td><span class="selo-situacao" [class.inativo]="!p.ativo">{{ p.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+                @if (acesso.pode('contratos', 'MODIFICACAO')) {
+                  <td>
+                    <div class="acoes-linha" style="position: relative">
+                      <button type="button" aria-label="Ações" (click)="alternarMenu($event, p.id)">⋮</button>
+                      @if (menuAberto() === p.id) {
+                        <div class="menu-flutuante" role="menu">
+                          <button type="button" role="menuitem" (click)="editarPreposto($event, p)">Editar</button>
+                          <button type="button" role="menuitem" (click)="excluirPreposto($event, p)">Excluir</button>
+                        </div>
+                      }
+                    </div>
+                  </td>
+                }
+              </tr>
+            } @empty {
+              <tr><td class="estado-vazio" colspan="6">Nenhum preposto cadastrado.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+}

@@ -1,0 +1,38 @@
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8 col-xl-7">
+    <div class="sobretitulo"><span class="sobretitulo-linha"></span> GESTÃO DE CONTRATOS</div>
+    <h1 class="titulo-pagina">Contratos SPI</h1>
+    <p class="texto-destaque">Gestão dos contratos da Secretaria de Parcerias em Investimentos.</p>
+
+    @if (sessao() === 'expirada' && !erro()) {
+      <div class="alert alert-warning" role="status">Sua sessão expirou. Entre novamente para continuar.</div>
+    }
+    @if (erro()) {
+      <div class="alert alert-danger" role="alert">{{ erro() }}</div>
+    }
+
+    <section class="card cartao-portal" aria-labelledby="titulo-login">
+      <div class="card-body p-4 p-md-5">
+        <div class="marcador-secao">01 / AUTENTICAÇÃO</div>
+        <h2 id="titulo-login" class="titulo-secao">Entrar com sua conta</h2>
+        <p class="introducao-formulario">Acesso restrito aos usuários autorizados.</p>
+
+        <form [formGroup]="formulario" (ngSubmit)="enviar()" novalidate>
+          <div class="mb-3">
+            <label for="login" class="form-label">Usuário</label>
+            <input id="login" type="text" class="form-control" formControlName="login"
+                   autocomplete="username" placeholder="Seu usuário" required />
+          </div>
+          <div class="mb-4">
+            <label for="senha" class="form-label">Senha</label>
+            <input id="senha" type="password" class="form-control" formControlName="senha"
+                   autocomplete="current-password" placeholder="Sua senha" required />
+          </div>
+          <button type="submit" class="btn btn-primary botao-acao" [disabled]="enviando()">
+            {{ enviando() ? 'Autenticando...' : 'Entrar' }}
+          </button>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>

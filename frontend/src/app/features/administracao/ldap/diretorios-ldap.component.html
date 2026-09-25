@@ -1,0 +1,142 @@
+<div class="cabecalho-pagina">
+  <div>
+    <p>Início <span>/</span> Administração <span>/</span> Diretórios LDAP</p>
+    <h1>Diretórios LDAP</h1>
+    <small>Autenticação corporativa pelo Active Directory, importação de usuários e saúde da conexão.</small>
+  </div>
+</div>
+
+<section class="painel-gestao" aria-labelledby="titulo-ldap">
+  <div class="barra-ferramentas">
+    <div>
+      <h2 id="titulo-ldap">Diretórios configurados</h2>
+      <p>Configure e monitore a autenticação corporativa. Apenas um diretório pode ficar ativo.</p>
+    </div>
+    <button class="acao-primaria" type="button" (click)="abrirFormulario()"><span>+</span> Novo diretório</button>
+  </div>
+
+  @if (aviso(); as a) {
+    <p class="aviso-admin" [class.erro]="a.erro" role="status">{{ a.texto }}</p>
+  }
+
+  <div class="tabela-gestao-envoltorio">
+    <table class="tabela-gestao">
+      <thead>
+        <tr>
+          <th>Diretório</th>
+          <th>Servidor</th>
+          <th>Base DN</th>
+          <th>Situação</th>
+          <th>Último teste</th>
+          <th>Última sincronização</th>
+          <th class="coluna-acoes">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (d of diretorios(); track d.id) {
+          <tr>
+            <td><strong>{{ d.nome }}</strong><small>{{ d.usar_ssl ? 'LDAPS' : 'LDAP' }} · {{ d.bind_dn }}</small></td>
+            <td><code>{{ d.servidor }}:{{ d.porta }}</code></td>
+            <td><code>{{ d.base_dn }}</code></td>
+            <td><span class="selo-situacao" [class.inativo]="!d.ativo">{{ d.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+            <td>
+              @if (d.ultimo_teste_em) {
+                <strong [class.texto-erro]="d.ultimo_teste_ok === false">
+                  {{ d.ultimo_teste_ok ? 'Saudável' : 'Falhou' }} · {{ d.ultima_latencia_ms }} ms
+                </strong>
+                <small>{{ d.ultimo_teste_em | date: 'dd/MM/yyyy HH:mm' }}</small>
+                @if (d.ultimo_erro) { <small class="texto-erro">{{ d.ultimo_erro }}</small> }
+              } @else {
+                <small>Nunca testado</small>
+              }
+            </td>
+            <td>
+              @if (d.ultima_sincronizacao_em) {
+                <strong [class.texto-erro]="d.ultima_sincronizacao_ok === false">{{ d.ultima_sincronizacao_ok ? 'Concluída' : 'Falhou' }}</strong>
+                <small>{{ d.ultima_sincronizacao_em | date: 'dd/MM/yyyy HH:mm' }}</small>
+                <small [class.texto-erro]="d.ultima_sincronizacao_ok === false">{{ d.ultima_sincronizacao_mensagem }}</small>
+              } @else {
+                <small>Nunca sincronizado</small>
+              }
+            </td>
+            <td>
+              <div class="acoes-linha">
+                <button type="button" (click)="testar(d)" [disabled]="idOcupado() !== null">Testar</button>
+                <button type="button" (click)="sincronizar(d)" [disabled]="idOcupado() !== null">Sincronizar</button>
+                <button type="button" (click)="abrirFormulario(d)" [disabled]="idOcupado() !== null">Editar</button>
+                <button class="botao-excluir" type="button" (click)="excluir(d)" [disabled]="idOcupado() !== null">Excluir</button>
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td class="estado-vazio" colspan="7">{{ carregando() ? 'Carregando…' : 'Nenhum diretório LDAP configurado.' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
+
+@if (formularioAberto()) {
+  <div class="fundo-modal" role="presentation" (click)="fecharFormulario()"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-ldap">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">Autenticação corporativa</span>
+        <h2 id="titulo-formulario-ldap">{{ emEdicao() ? 'Editar diretório LDAP' : 'Novo diretório LDAP' }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharFormulario()">×</button>
+    </header>
+
+    <form [formGroup]="formulario" (ngSubmit)="salvar()" novalidate>
+      <div class="grade-formulario">
+        <div class="ocupa-duas">
+          <label for="ldap-nome">Nome</label>
+          <input id="ldap-nome" formControlName="nome" placeholder="AD01" />
+        </div>
+        <div>
+          <label for="ldap-servidor">Servidor</label>
+          <input id="ldap-servidor" formControlName="servidor" placeholder="10.23.1.20 ou ad.empresa.local" />
+        </div>
+        <div>
+          <label for="ldap-porta">Porta</label>
+          <input id="ldap-porta" type="number" formControlName="porta" />
+        </div>
+        <div class="ocupa-duas">
+          <label for="ldap-base-dn">Base DN</label>
+          <input id="ldap-base-dn" formControlName="base_dn" placeholder="DC=spi,DC=sp,DC=gov,DC=br" />
+        </div>
+        <div>
+          <label for="ldap-bind-dn">Usuário bind</label>
+          <input id="ldap-bind-dn" formControlName="bind_dn" placeholder="SPI\\conta-tecnica" />
+        </div>
+        <div>
+          <label for="ldap-senha-bind">Senha bind</label>
+          <input id="ldap-senha-bind" type="password" formControlName="senha_bind" autocomplete="new-password"
+                 [placeholder]="emEdicao() ? 'Deixe vazia para preservar' : ''" />
+        </div>
+      </div>
+
+      <div class="linha-caixas">
+        <label><input type="checkbox" formControlName="usar_ssl" /> Usar LDAPS (SSL/TLS)</label>
+        <label><input type="checkbox" formControlName="ativo" /> Diretório ativo</label>
+      </div>
+
+      @if (testeFormulario(); as t) {
+        <p class="aviso-formulario" [class.erro]="!t.sucesso" role="status">
+          {{ t.sucesso ? 'Conexão saudável' : 'Falha no teste' }} · {{ t.latencia_ms }} ms — {{ t.mensagem }}
+        </p>
+      }
+      @if (erroFormulario()) {
+        <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
+      }
+
+      <footer>
+        <button class="acao-secundaria" type="button" (click)="testarFormulario()" [disabled]="salvando()">Testar sem salvar</button>
+        <button class="acao-secundaria" type="button" (click)="fecharFormulario()" [disabled]="salvando()">Cancelar</button>
+        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Salvar diretório' }}</button>
+      </footer>
+    </form>
+  </section>
+}

@@ -1,0 +1,112 @@
+@if (contrato(); as c) {
+  <app-cabecalho-modulo titulo="Prorrogação" [trilha]="[c.numero, 'Prorrogação']" [descricao]="'Contrato ' + c.numero" />
+  @if (processo(); as p) {
+    <div class="barra-fixa">
+      <a class="acao-secundaria" [routerLink]="['/contratos', c.id]">← Contrato {{ c.numero }}</a>
+      @if (p.pode_editar) {
+        <div class="acoes-formulario">
+          @if (p.id) { <button type="button" class="acao-perigo" (click)="descartar()">Descartar rascunho</button> }
+          <button type="button" class="acao-secundaria" (click)="salvar()">Salvar rascunho</button>
+          @if (p.relatorio) { <button type="button" class="acao-secundaria" (click)="baixar(p.relatorio.anexo_id)">Baixar parecer</button> }
+          <button type="button" class="acao-primaria" [disabled]="!meses || !assinadaEm || !termo || p.exige_checklist_ativo" (click)="registrar()">Registrar prorrogação</button>
+        </div>
+      }
+    </div>
+
+    @if (p.exige_checklist_ativo) { <p class="aviso-bloco erro">O contrato já tem competências geradas: ative um checklist antes de prorrogar.</p> }
+
+    <section class="cartao-dados" aria-labelledby="titulo-identificacao">
+      <header><h2 id="titulo-identificacao">Identificação do objeto</h2></header>
+      <dl class="corpo grade-dados">
+        <div><dt>Contrato</dt><dd>{{ c.numero }}</dd></div>
+        <div><dt>Contratada</dt><dd>{{ c.empresa.razao_social }}</dd></div>
+        <div><dt>Período de avaliação (vigência atual)</dt><dd>{{ p.vigencia_atual_inicio | dataBr }} a {{ p.vigencia_atual_fim | dataBr }}</dd></div>
+        <div class="ocupa-linha"><dt>Objeto</dt><dd>{{ c.objeto }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="cartao-dados" aria-labelledby="titulo-prazo">
+      <header><div><h2 id="titulo-prazo">1. Prazo</h2><small>Restam {{ p.meses_disponiveis }} mês(es) até a vigência máxima.</small></div></header>
+      <div class="corpo grade-formulario tres-colunas">
+        <div><label for="prorrogacao-meses">Prazo da prorrogação (meses) *</label>
+          <input id="prorrogacao-meses" type="number" min="1" [max]="p.meses_disponiveis" [disabled]="!p.pode_editar" [(ngModel)]="meses" /></div>
+        <div><label>Início da nova vigência</label><input [value]="p.nova_vigencia_inicio | dataBr" disabled /></div>
+        <div><label>Fim da nova vigência</label><input [value]="p.nova_vigencia_fim ? (p.nova_vigencia_fim | dataBr) : 'Salve o rascunho para calcular'" disabled /></div>
+      </div>
+    </section>
+
+    @if (p.itens_sob_demanda.length) {
+      <section class="cartao-dados" aria-labelledby="titulo-sob-demanda">
+        <header>
+          <div><h2 id="titulo-sob-demanda">2. Itens sob demanda (opcional)</h2><small>Nenhum limite pode passar da quantidade original. Para ampliar o objeto, registre aditamento.</small></div>
+          <select aria-label="Regra para itens sob demanda" class="campo-tabela" style="width: auto; height: 36px; padding: 0 10px; border: 1px solid #e2e5e8; border-radius: 7px"
+                  [disabled]="!p.pode_editar" [(ngModel)]="regra" (ngModelChange)="aoMudarRegra()">
+            <option value="saldo_remanescente">Prorrogar com o saldo remanescente</option>
+            <option value="repetir_inicial">Repetir o saldo inicial</option>
+            <option value="manual">Alimentar manualmente</option>
+          </select>
+        </header>
+        @if (!p.meses_nova_vigencia.length) { <p class="dica-formulario" style="margin: 14px 22px">Informe o prazo e salve o rascunho para distribuir os meses da nova vigência.</p> }
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead>
+              <tr><th>Item</th><th class="num">Qtd. original</th><th class="num">Limite da nova vigência</th>
+                @for (m of p.meses_nova_vigencia; track m) { <th class="num">{{ m | competencia }}</th> }<th class="num">Saldo</th></tr>
+            </thead>
+            <tbody>
+              @for (i of p.itens_sob_demanda; track i.item_id) {
+                <tr [class.linha-erro]="saldo(i.item_id) < 0">
+                  <td><strong>{{ i.descricao }}</strong><small>saldo remanescente {{ i.saldo_remanescente | quantidade }}</small></td>
+                  <td class="num">{{ i.quantidade_original | quantidade }}</td>
+                  <td class="num"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Limite de ' + i.descricao" [disabled]="!p.pode_editar || regra !== 'manual'" [(ngModel)]="limites[i.item_id]" /></td>
+                  @for (m of p.meses_nova_vigencia; track m) {
+                    <td class="num"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="i.descricao + ' em ' + (m | competencia)" [disabled]="!p.pode_editar" [(ngModel)]="grade[i.item_id][m]" /></td>
+                  }
+                  <td class="num"><strong [class.texto-erro]="saldo(i.item_id) < 0">{{ saldo(i.item_id) | quantidade }}</strong></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
+    <section class="cartao-dados" aria-labelledby="titulo-parecer">
+      <header><div><h2 id="titulo-parecer">3. Parecer para prorrogação (opcional)</h2>
+        <small>{{ possuiParecer() ? 'O PDF do parecer será emitido com as ciências registradas.' : 'Sem nenhum campo preenchido, a prorrogação é registrada sem relatório.' }}</small></div></header>
+      <div class="corpo">
+        <div class="grade-formulario">
+          @for (campo of campos; track campo.campo) {
+            <div class="ocupa-duas"><label [for]="'parecer-' + campo.campo">{{ campo.rotulo }}</label>
+              <textarea [id]="'parecer-' + campo.campo" [disabled]="!p.pode_editar" [(ngModel)]="parecer[campo.campo]"></textarea></div>
+          }
+        </div>
+        <p class="secao-formulario">Ciências (opcionais)</p>
+        <ul class="lista-ciencias">
+          @for (ci of p.ciencias; track ci.usuario_id) { <li><span>{{ ci.nome }} · {{ papeis[ci.papel] }}</span><small>{{ ci.registrada_em | date: 'dd/MM/yyyy HH:mm' }}</small></li> }
+          @empty { <li><small>Nenhuma ciência registrada.</small></li> }
+        </ul>
+        <div class="acoes-cartao">
+          @if (p.integra_equipe && p.possui_parecer && !jaRegistrei() && !parecerAlterado()) {
+            <button type="button" class="acao-secundaria" (click)="ciencia()">Registrar minha ciência</button>
+          }
+          @if (p.pode_editar && p.possui_parecer && !parecerAlterado()) { <button type="button" class="acao-secundaria" (click)="emitirParecer()">Emitir e baixar parecer</button> }
+        </div>
+        @if (parecerAlterado()) { <p class="dica-formulario">Salve o rascunho para registrar ciências ou emitir o parecer.</p> }
+      </div>
+    </section>
+
+    @if (p.pode_editar) {
+      <section class="cartao-dados" aria-labelledby="titulo-formalizacao">
+        <header><h2 id="titulo-formalizacao">4. Formalização</h2></header>
+        <div class="corpo grade-formulario tres-colunas">
+          <div><label for="ta-data">Data de assinatura do Termo Aditivo *</label><input id="ta-data" type="date" [(ngModel)]="assinadaEm" /></div>
+          <div><label for="ta-numero">Número do Termo Aditivo</label><input id="ta-numero" maxlength="100" [(ngModel)]="numeroTermo" /></div>
+          <div style="align-self: end; margin-bottom: 16px"><app-envio-pdf rotulo="Selecionar Termo Aditivo assinado (PDF)" (selecionado)="termo = $event" /></div>
+        </div>
+      </section>
+    }
+  }
+} @else {
+  <p class="estado-vazio">Carregando…</p>
+}

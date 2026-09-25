@@ -1,0 +1,50 @@
+<a class="link-pular" href="#conteudo-principal">Pular para o conteúdo</a>
+
+<div class="portal" [class.barra-lateral-expandida]="layout.barraExpandida()">
+  @if (layout.menuCelularAberto()) {
+    <button class="fundo-gaveta" type="button" aria-label="Fechar menu" (click)="layout.menuCelularAberto.set(false)"></button>
+  }
+
+  <app-barra-lateral />
+
+  <div class="portal-coluna">
+    <header class="portal-barra-topo">
+      <div class="barra-topo-inicio">
+        <button class="botao-menu" type="button" aria-label="Abrir menu" (click)="layout.menuCelularAberto.set(true)">
+          <span></span><span></span><span></span>
+        </button>
+        <div>
+          <p>Secretaria de Parcerias em Investimentos</p>
+          <strong>{{ tituloPagina() }}</strong>
+        </div>
+      </div>
+
+      @if (autenticacao.usuario(); as usuario) {
+        <div class="menu-usuario">
+          <button class="menu-usuario-gatilho" type="button" (click)="layout.menuUsuarioAberto.set(!layout.menuUsuarioAberto())"
+                  [attr.aria-expanded]="layout.menuUsuarioAberto()" aria-haspopup="menu">
+            <span class="avatar" aria-hidden="true">{{ inicial() }}</span>
+            <span class="menu-usuario-texto"><strong>{{ usuario.nome_completo }}</strong><small>&#64;{{ usuario.login }}</small></span>
+            <b aria-hidden="true">⌄</b>
+          </button>
+          @if (layout.menuUsuarioAberto()) {
+            <div class="menu-usuario-lista" role="menu">
+              <div><strong>{{ usuario.nome_completo }}</strong><small>{{ usuario.papeis.length ? usuario.papeis.join(', ') : 'Usuário' }} · &#64;{{ usuario.login }}</small></div>
+              <button type="button" role="menuitem" (click)="abrirPerfil()"><app-icone nome="usuario" /> Meu perfil</button>
+              <button class="acao-sair" type="button" role="menuitem" (click)="sair()"><app-icone nome="sair" /> Sair</button>
+            </div>
+          }
+        </div>
+      }
+    </header>
+
+    <main class="portal-conteudo" id="conteudo-principal" tabindex="-1">
+      <router-outlet />
+    </main>
+
+    <footer class="portal-rodape">Governo do Estado de São Paulo · Secretaria de Parcerias em Investimentos</footer>
+  </div>
+</div>
+
+<!-- Confirmações, erros e "Executando a solicitação" de todas as telas -->
+<app-dialogos />

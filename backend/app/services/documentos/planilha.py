@@ -1,0 +1,87 @@
+"""Geração de planilhas XLSX com cabeçalho institucional e formatos brasileiros."""
+
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+from io import BytesIO
+from typing import Any
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+
+FORMATO_MOEDA = '"R$" #,##0.00'
+FORMATO_QUANTIDADE = "#,##0.0000"
+FORMATO_PERCENTUAL = "0.00%"
+FORMATO_DATA = "dd/mm/yyyy"
+
+_VERMELHO = "C82331"
+_VERMELHO_SUAVE = "FCECEE"
+
+
+@dataclass
+class Coluna:
+    titulo: str
+    # Formato numérico do Excel (use as constantes FORMATO_*); vazio = texto/geral
+    formato: str = ""
+    largura: float = 16
+
+
+@dataclass
+class Aba:
+    nome: str
+    colunas: Sequence[Coluna]
+    linhas: Iterable[Sequence[Any]]
+    titulo: str = ""
+    rodape: Sequence[Any] | None = None
+    observacoes: list[str] = field(default_factory=list)
+
+
+def _valor(valor: Any) -> Any:
+    # O openpyxl grava Decimal como número; datas continuam datas para permitir filtros no Excel
+    if isinstance(valor, Decimal):
+        return float(valor)
+    if isinstance(valor, date):
+        return valor
+    return valor
+
+
+def gerar_planilha(abas: Sequence[Aba]) -> bytes:
+    """Planilha com uma aba por item de `abas`: título, cabeçalho congelado, formatos e rodapé."""
+    livro = Workbook()
+    livro.remove(livro.active)
+    borda = Border(bottom=Side(style="thin", color=_VERMELHO))
+    for aba in abas:
+        folha = livro.create_sheet(aba.nome[:31])
+        linha = 1
+        if aba.titulo:
+            folha.cell(row=1, column=1, value=aba.titulo).font = Font(bold=True, size=13, color=_VERMELHO)
+            linha = 3
+        for indice, coluna in enumerate(aba.colunas, start=1):
+            celula = folha.cell(row=linha, column=indice, value=coluna.titulo)
+            celula.font = Font(bold=True)
+            celula.fill = PatternFill("solid", fgColor=_VERMELHO_SUAVE)
+            celula.border = borda
+            celula.alignment = Alignment(vertical="center", wrap_text=True)
+            folha.column_dimensions[get_column_letter(indice)].width = coluna.largura
+        folha.freeze_panes = folha.cell(row=linha + 1, column=1)
+        for valores in aba.linhas:
+            linha += 1
+            for indice, (coluna, valor) in enumerate(zip(aba.colunas, valores, strict=False), start=1):
+                celula = folha.cell(row=linha, column=indice, value=_valor(valor))
+                if coluna.formato:
+                    celula.number_format = coluna.formato
+        if aba.rodape:
+            linha += 1
+            for indice, (coluna, valor) in enumerate(zip(aba.colunas, aba.rodape, strict=False), start=1):
+                celula = folha.cell(row=linha, column=indice, value=_valor(valor))
+                celula.font = Font(bold=True)
+                if coluna.formato:
+                    celula.number_format = coluna.formato
+        for observacao in aba.observacoes:
+            linha += 2
+            folha.cell(row=linha, column=1, value=observacao).font = Font(italic=True, color="586372")
+    saida = BytesIO()
+    livro.save(saida)
+    return saida.getvalue()

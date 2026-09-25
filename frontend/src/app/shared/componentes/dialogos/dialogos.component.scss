@@ -1,0 +1,73 @@
+// Acima dos modais das telas (z-index 200/210), para confirmar ações abertas a partir deles
+.fundo-modal.camada-dialogo { z-index: 300; }
+.modal-portal.camada-dialogo { z-index: 310; }
+.fundo-modal.camada-processando { z-index: 400; }
+.modal-portal.camada-processando { z-index: 410; }
+
+.corpo-dialogo {
+  padding: 20px 25px 22px;
+
+  p {
+    margin: 0 0 18px;
+    color: var(--spi-texto);
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-line;
+  }
+}
+
+.contador {
+  margin: 0 0 0 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.correlacao {
+  color: var(--spi-apagado) !important;
+  font-size: 12px !important;
+
+  code {
+    padding: 2px 6px;
+    border-radius: 5px;
+    color: var(--spi-texto);
+    background: #f1f3f5;
+    font-size: 12px;
+  }
+}
+
+.janela-processando {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: min(380px, calc(100% - 28px));
+  padding: 22px 24px;
+
+  strong {
+    color: var(--spi-titulo);
+    font-size: 14px;
+  }
+
+  p {
+    margin: 4px 0 0;
+    color: var(--spi-apagado);
+    font-size: 12px;
+  }
+}
+
+.indicador {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--spi-vermelho-suave);
+  border-top-color: var(--spi-vermelho);
+  border-radius: 50%;
+  animation: girar 0.8s linear infinite;
+}
+
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indicador { animation-duration: 2.4s; }
+}

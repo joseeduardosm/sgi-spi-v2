@@ -1,0 +1,69 @@
+<app-cabecalho-modulo />
+
+<section class="painel-gestao" aria-labelledby="titulo-carteira">
+  <div class="barra-ferramentas">
+    <div>
+      <h2 id="titulo-carteira">Contratos</h2>
+      <p>{{ total() }} contrato(s) encontrado(s).</p>
+    </div>
+    <div class="acoes-formulario">
+      @if (superRoot()) { <app-importacao-sgi (concluida)="carregar(1)" /> }
+      @if (acesso.pode('contratos', 'MODIFICACAO')) {
+        <a class="acao-primaria" routerLink="/contratos/novo"><span>+</span> Novo contrato</a>
+      }
+    </div>
+  </div>
+
+  <form class="filtros-gestao" role="search" (ngSubmit)="carregar(1)">
+    <input type="search" name="busca" [(ngModel)]="busca" (ngModelChange)="aoDigitar()" aria-label="Buscar contratos"
+           placeholder="Buscar por número, empresa, apelido ou objeto" />
+    <button type="submit" class="acao-secundaria">Buscar</button>
+  </form>
+
+  <div class="tabela-gestao-envoltorio">
+    <table class="tabela-gestao">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Empresa / objeto</th>
+          <th>Data início</th>
+          <th>Data fim</th>
+          <th>Situação</th>
+          <th class="num">Base mensal</th>
+          <th class="num">Valor global</th>
+          <th class="coluna-acoes">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (c of itens(); track c.id) {
+          <tr class="linha-clicavel" (click)="abrir(c)">
+            <td><strong>{{ c.numero }}</strong>@if (c.apelido) { <small>{{ c.apelido }}</small> }</td>
+            <td><strong>{{ c.empresa_razao_social }}</strong><small>{{ c.objeto.length > 110 ? c.objeto.slice(0, 110) + '…' : c.objeto }}</small></td>
+            <td>{{ c.data_inicio | dataBr }}</td>
+            <td>{{ c.data_fim | dataBr }}</td>
+            <td><span class="selo-situacao" [class]="'selo-situacao ' + c.situacao">{{ rotulos[c.situacao] }}</span></td>
+            <td class="num">{{ c.base_mensal | moeda }}</td>
+            <td class="num">{{ c.valor_global | moeda }}</td>
+            <td>
+              <div class="acoes-linha" style="position: relative">
+                <button type="button" aria-label="Ações" [attr.aria-expanded]="menuAberto() === c.id" (click)="alternarMenu($event, c.id)">⋮</button>
+                @if (menuAberto() === c.id) {
+                  <div class="menu-flutuante" role="menu">
+                    <button type="button" role="menuitem" (click)="abrir(c)">Visualizar</button>
+                    @if (acesso.pode('contratos', 'CONTROLE_TOTAL')) {
+                      <button type="button" role="menuitem" (click)="excluir($event, c)">Excluir</button>
+                    }
+                  </div>
+                }
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td class="estado-vazio" colspan="8">{{ carregando() ? 'Carregando…' : 'Nenhum contrato encontrado.' }}</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <app-paginacao [pagina]="pagina()" [tamanhoPagina]="tamanhoPagina" [total]="total()" (mudar)="carregar($event)" />
+</section>

@@ -1,0 +1,63 @@
+<aside class="barra-lateral" aria-label="Navegação principal">
+  <div class="barra-lateral-marca">
+    <a routerLink="/" aria-label="Contratos SPI: início">
+      <span class="barra-lateral-logo" aria-hidden="true"><span class="brasao"></span></span>
+      <span class="barra-lateral-marca-texto"><strong>CONTRATOS</strong><small>SPI</small></span>
+    </a>
+    <button class="botao-fixar" type="button" (click)="layout.alternarFixacao()"
+            [attr.aria-label]="layout.barraFixada() ? 'Recolher menu' : 'Manter menu aberto'"
+            [attr.aria-pressed]="layout.barraFixada()" [class.fixado]="layout.barraFixada()">
+      <app-icone nome="alfinete" />
+    </button>
+    <button class="botao-fechar-celular" type="button" aria-label="Fechar menu" (click)="layout.menuCelularAberto.set(false)">×</button>
+  </div>
+
+  <nav class="barra-lateral-navegacao">
+    @for (secao of navegacao.secoes(); track secao.legenda) {
+      <p class="nav-legenda" [class.nav-legenda-secundaria]="!$first">{{ secao.legenda }}</p>
+
+      @for (item of secao.itens; track item.id) {
+        @if (item.filhos) {
+          <button class="nav-item nav-grupo" type="button" (click)="alternarGrupo(item.id)"
+                  [attr.aria-expanded]="estaAberto(item.id)" [attr.aria-controls]="'submenu-' + item.id" [title]="item.rotulo">
+            <app-icone [nome]="item.icone ?? 'grade'" /><span>{{ item.rotulo }}</span><b [class.aberto]="estaAberto(item.id)">⌄</b>
+          </button>
+          @if (estaAberto(item.id) && layout.barraExpandida()) {
+            <div class="nav-submenu" [id]="'submenu-' + item.id">
+              @for (filho of item.filhos; track filho.id) {
+                @if (filho.rota) {
+                  <a [routerLink]="filho.rota" routerLinkActive="ativo" ariaCurrentWhenActive="page"
+                     [routerLinkActiveOptions]="{ exact: !!filho.exata }">{{ filho.rotulo }}</a>
+                } @else {
+                  <a [href]="filho.href" [attr.target]="filho.novaAba ? '_blank' : null" [attr.rel]="filho.novaAba ? 'noopener' : null">
+                    {{ filho.rotulo }} @if (filho.novaAba) { <span aria-label="abre em nova aba">↗</span> }
+                  </a>
+                }
+              } @empty {
+                <span class="nav-vazio">{{ item.textoVazio ?? 'Nenhum item' }}</span>
+              }
+            </div>
+          }
+        } @else if (item.rota) {
+          <a class="nav-item" [routerLink]="item.rota" routerLinkActive="ativo" ariaCurrentWhenActive="page"
+             [routerLinkActiveOptions]="{ exact: !!item.exata }" [title]="item.rotulo">
+            <app-icone [nome]="item.icone ?? 'arquivo'" /><span>{{ item.rotulo }}</span>
+          </a>
+        } @else {
+          <a class="nav-item" [href]="item.href" [attr.target]="item.novaAba ? '_blank' : null"
+             [attr.rel]="item.novaAba ? 'noopener' : null" [title]="item.rotulo">
+            <app-icone [nome]="item.icone ?? 'externo'" /><span>{{ item.rotulo }}</span>
+            @if (item.novaAba) { <b aria-label="abre em nova aba">↗</b> }
+          </a>
+        }
+      }
+    }
+  </nav>
+
+  @if (autenticacao.usuario(); as usuario) {
+    <div class="barra-lateral-rodape">
+      <span class="avatar" aria-hidden="true">{{ inicial() }}</span>
+      <span><strong>{{ usuario.nome_completo }}</strong><small>{{ usuario.papeis.length ? usuario.papeis.join(', ') : 'Usuário' }}</small></span>
+    </div>
+  }
+</aside>

@@ -1,0 +1,155 @@
+<div class="cabecalho-pagina">
+  <div>
+    <p>Início <span>/</span> Usuários</p>
+    <h1>Usuários</h1>
+    <small>Contas locais e corporativas (LDAP), perfis institucionais e privilégios.</small>
+  </div>
+</div>
+
+<section class="painel-gestao" aria-labelledby="titulo-usuarios">
+  <div class="barra-ferramentas">
+    <div>
+      <h2 id="titulo-usuarios">Cadastro de usuários</h2>
+      <p>{{ total() }} usuário(s) encontrado(s).</p>
+    </div>
+    @if (ehAdministrador()) {
+      <button class="acao-primaria" type="button" (click)="abrirFormulario()"><span>+</span> Nova conta local</button>
+    }
+  </div>
+
+  <div class="filtros-gestao" role="search">
+    <input type="search" [(ngModel)]="filtro.busca" (ngModelChange)="aoPesquisar()" aria-label="Pesquisar usuários"
+           placeholder="Pesquisar por nome, login, e-mail, ramal, cargo, departamento ou prédio" />
+    <select [(ngModel)]="filtro.situacao" (ngModelChange)="carregar(1)" aria-label="Situação">
+      <option value="ativos">Ativos</option>
+      <option value="inativos">Inativos</option>
+      <option value="todos">Todos</option>
+    </select>
+    <select [(ngModel)]="filtro.origem" (ngModelChange)="carregar(1)" aria-label="Origem">
+      <option value="">Todas as origens</option>
+      <option value="local">Local</option>
+      <option value="ldap">LDAP</option>
+      <option value="local_ldap">Local + LDAP</option>
+    </select>
+  </div>
+
+  @if (aviso(); as a) {
+    <p class="aviso-admin" [class.erro]="a.erro" role="status">{{ a.texto }}</p>
+  }
+
+  <div class="tabela-gestao-envoltorio">
+    <table class="tabela-gestao">
+      <thead>
+        <tr>
+          <th>Usuário</th>
+          <th>Origem</th>
+          <th>Contato</th>
+          <th>Cargo e departamento</th>
+          <th>Perfil</th>
+          <th>Situação</th>
+          @if (ehAdministrador()) { <th class="coluna-acoes">Ações</th> }
+        </tr>
+      </thead>
+      <tbody>
+        @for (u of itens(); track u.id) {
+          <tr>
+            <td>
+              <strong>{{ u.perfil.nome_completo || u.login }}</strong>
+              <small>&#64;{{ u.login }}{{ u.superusuario ? ' · SuperRoot' : '' }}</small>
+              @if (u.setores.length) { <small>{{ u.setores.join(', ') }}</small> }
+            </td>
+            <td>
+              <span class="selo-origem">{{ rotulosOrigem[u.origem] }}</span>
+              @if (u.diretorio_nome) { <small>{{ u.diretorio_nome }}</small> }
+            </td>
+            <td>
+              {{ u.perfil.email || '—' }}
+              <small>{{ u.perfil.ramal ? 'Ramal ' + u.perfil.ramal : '' }}{{ u.perfil.celular ? ' · ' + u.perfil.celular : '' }}</small>
+            </td>
+            <td>
+              {{ u.perfil.cargo || '—' }}
+              <small>{{ u.perfil.departamento }}{{ u.perfil.andar ? ' · ' + u.perfil.andar + 'º andar' : '' }}{{ u.perfil.predio ? ' · ' + u.perfil.predio : '' }}</small>
+            </td>
+            <td>
+              @if (!u.perfil_completo) {
+                <span class="selo-situacao alerta">Incompleto</span>
+              } @else if (u.revisao_obrigatoria) {
+                <span class="selo-situacao alerta">Revalidar</span>
+              } @else {
+                <span class="selo-situacao">Em dia</span>
+              }
+              @if (u.perfil.perfil_revisado_em) { <small>{{ u.perfil.perfil_revisado_em | date: 'dd/MM/yyyy' }}</small> }
+            </td>
+            <td>
+              <span class="selo-situacao" [class.inativo]="!u.ativo">{{ u.ativo ? 'Ativo' : 'Inativo' }}</span>
+              @if (u.ultimo_acesso_em) { <small>Último acesso {{ u.ultimo_acesso_em | date: 'dd/MM/yyyy HH:mm' }}</small> }
+            </td>
+            @if (ehAdministrador()) {
+              <td>
+                <div class="acoes-linha">
+                  <button type="button" (click)="abrirFormulario(u)">Editar</button>
+                  <button class="botao-excluir" type="button" (click)="excluir(u)">Excluir</button>
+                </div>
+              </td>
+            }
+          </tr>
+        } @empty {
+          <tr><td class="estado-vazio" [attr.colspan]="ehAdministrador() ? 7 : 6">{{ carregando() ? 'Carregando…' : 'Nenhum usuário encontrado.' }}</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (totalPaginas() > 1) {
+    <nav class="paginacao-gestao" aria-label="Paginação">
+      <button type="button" class="acao-secundaria" [disabled]="pagina() === 1" (click)="carregar(pagina() - 1)">Anterior</button>
+      <span>Página {{ pagina() }} de {{ totalPaginas() }}</span>
+      <button type="button" class="acao-secundaria" [disabled]="pagina() === totalPaginas()" (click)="carregar(pagina() + 1)">Próxima</button>
+    </nav>
+  }
+</section>
+
+@if (formularioAberto()) {
+  <div class="fundo-modal" role="presentation" (click)="fecharFormulario()"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-usuario">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">{{ emEdicao() ? rotulosOrigem[emEdicao()!.origem] : 'Conta local' }}</span>
+        <h2 id="titulo-formulario-usuario">{{ emEdicao() ? 'Editar usuário' : 'Nova conta local' }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharFormulario()">×</button>
+    </header>
+
+    <form (ngSubmit)="salvar()" novalidate>
+      <div class="grade-formulario" [formGroup]="conta">
+        <div>
+          <label for="usuario-login">Login</label>
+          <input id="usuario-login" formControlName="login" autocomplete="off" />
+        </div>
+        <div>
+          <label for="usuario-senha">{{ emEdicao() ? 'Nova senha local' : 'Senha' }}</label>
+          <input id="usuario-senha" type="password" formControlName="senha" autocomplete="new-password"
+                 [placeholder]="emEdicao() ? (emEdicao()!.possui_senha_local ? 'Deixe vazia para manter' : 'Sem senha local (conta LDAP)') : 'Mínimo 8 caracteres'" />
+        </div>
+      </div>
+      <div class="linha-caixas" [formGroup]="conta">
+        <label><input type="checkbox" formControlName="ativo" /> Conta ativa</label>
+        <label><input type="checkbox" formControlName="superusuario" /> Administrador do sistema (SuperRoot)</label>
+      </div>
+      @if (emEdicao()?.origem === 'ldap') {
+        <p class="dica-formulario">Conta corporativa: nome, e-mail e situação são atualizados pelo diretório. Definir uma senha local a torna "Local + LDAP" (contingência).</p>
+      }
+
+      <h3 class="secao-formulario">Perfil institucional</h3>
+      <app-campos-perfil [formulario]="perfil" [(gestor)]="gestor" [fonteGestor]="api.opcoes" [marcarObrigatorios]="false" />
+
+      @if (erroFormulario()) {
+        <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
+      }
+      <footer>
+        <button class="acao-secundaria" type="button" (click)="fecharFormulario()" [disabled]="salvando()">Cancelar</button>
+        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar usuário' }}</button>
+      </footer>
+    </form>
+  </section>
+}

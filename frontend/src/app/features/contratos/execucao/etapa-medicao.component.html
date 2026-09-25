@@ -1,0 +1,93 @@
+@let d = detalhe();
+<section class="cartao-dados" aria-labelledby="titulo-medicao">
+  <header>
+    <div><h2 id="titulo-medicao">1. Medição do serviço</h2><small>{{ detalhe().tipo === 'regular' ? 'Prevista: pró-rata 30/360 nos itens com pró-rata; sob demanda pela previsão.' : 'Quantidades já medidas desde o mês de referência do reajuste; valor unitário = preço reajustado − preço pago.' }}</small></div>
+    @if (editavel() && detalhe().tipo === 'regular') { <button type="button" class="acao-secundaria" (click)="usarPrevista()">Usar as quantidades previstas</button> }
+  </header>
+  <div class="tabela-gestao-envoltorio">
+    <table class="tabela-gestao">
+      <thead>
+        <tr><th>Item</th><th>Descrição</th><th class="num">Valor unitário</th><th class="num">Qtd. prevista</th><th class="num">Medição</th><th class="num">Subtotal</th></tr>
+      </thead>
+      <tbody>
+        @for (i of d.itens; track i.id) {
+          <tr>
+            <td>{{ i.ordem }}</td>
+            <td><strong>{{ i.descricao }}</strong><small>{{ i.tipo === 'continuo' ? 'Contínuo' : 'Sob demanda' }}{{ detalhe().tipo === 'regular' && i.tipo === 'continuo' && i.calcula_pro_rata && i.fator_meses !== '1.00000000' ? ' · fração ' + (i.fator_meses | quantidade) : '' }}</small></td>
+            <td class="num">{{ i.valor_unitario | moeda }}</td>
+            <td class="num">{{ i.quantidade_prevista | quantidade }}</td>
+            <td class="num" style="width: 140px">
+              @if (editavel() && detalhe().tipo === 'regular') {
+                <input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Medição de ' + i.descricao" [(ngModel)]="medidas[i.id]" (ngModelChange)="alterado.set(true)" />
+              } @else { {{ i.quantidade_medida | quantidade }} }
+            </td>
+            <td class="num">{{ subtotal(i.id, i.valor_unitario) | moeda }}</td>
+          </tr>
+        }
+      </tbody>
+      <tfoot><tr><td colspan="5">Total medido</td><td class="num">{{ total() | moeda }}</td></tr></tfoot>
+    </table>
+  </div>
+
+  <div class="corpo">
+    <p class="secao-formulario" style="margin-top: 0">Notas de Empenho (ordem de consumo)</p>
+    @if (editavel()) {
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
+        <select class="campo-tabela" style="height: 36px; max-width: 360px; padding: 0 8px; border: 1px solid #e2e5e8; border-radius: 7px" aria-label="Nota de Empenho" [(ngModel)]="notaParaAdicionar">
+          <option value="">Selecione uma NE com saldo</option>
+          @for (n of disponiveis(); track n.id) { <option [value]="n.id">NE {{ n.numero }} — saldo livre {{ n.saldo_livre | moeda }}</option> }
+        </select>
+        <button type="button" class="acao-secundaria acao-pequena" style="height: 36px !important" [disabled]="!notaParaAdicionar" (click)="adicionarNota()">Adicionar NE</button>
+      </div>
+    }
+    <ol class="lista-ciencias" style="padding-left: 0">
+      @for (n of notas(); track n.id; let i = $index) {
+        <li>
+          <span>{{ i + 1 }}ª · NE {{ n.numero }} <small>saldo livre {{ n.saldo_livre | moeda }}@if (n.saldo_livre !== n.saldo) { (saldo {{ n.saldo | moeda }}) }</small></span>
+          @if (editavel()) {
+            <span class="acoes-linha">
+              <button type="button" aria-label="Subir" [disabled]="i === 0" (click)="moverNota(i, -1)">↑</button>
+              <button type="button" aria-label="Descer" [disabled]="i === notas().length - 1" (click)="moverNota(i, 1)">↓</button>
+              <button type="button" class="botao-excluir" (click)="removerNota(i)">Remover</button>
+            </span>
+          }
+        </li>
+      } @empty { <li><small>Nenhuma NE selecionada.</small></li> }
+    </ol>
+    @if (notas().length && saldoNotas() < total()) {
+      <p class="aviso-bloco erro">O saldo livre somado das NEs ({{ saldoNotas() | moeda }}) não cobre o total medido ({{ total() | moeda }}). Saldo livre = saldo − o comprometido por outras competências medidas e ainda não pagas.</p>
+    }
+
+    @if (editavel()) {
+      <div class="acoes-cartao">
+        <button type="button" class="acao-primaria" [disabled]="!notas().length" (click)="salvar()">Salvar medição</button>
+      </div>
+    }
+
+    <p class="secao-formulario">Ciências</p>
+    <span class="contador-ciencias" [class.completo]="d.ciencias.length >= d.ciencias_minimas">{{ d.ciencias.length }} de {{ d.ciencias_minimas }} ciências mínimas</span>
+    <ul class="lista-ciencias" style="margin-top: 8px">
+      @for (c of d.ciencias; track c.usuario_id) {
+        <li><span>{{ c.nome }} · {{ papeis[c.papel] }}</span><small>ciência em {{ c.registrada_em | date: 'dd/MM/yyyy HH:mm:ss' }}</small></li>
+      }
+    </ul>
+    @if (editavel()) {
+      @if (alterado()) { <p class="dica-formulario" style="margin: 8px 0">Salve a medição antes de registrar ciência ou concluir.</p> }
+      <div class="acoes-cartao">
+        @if (d.integra_equipe && !jaRegistrei()) {
+          <button type="button" class="acao-secundaria" [disabled]="alterado() || !d.medicao_concluida_em && !d.itens.length" (click)="ciencia()">Registrar minha ciência</button>
+        }
+        <button type="button" class="acao-primaria" [disabled]="alterado() || d.ciencias.length < d.ciencias_minimas" (click)="concluir()">Concluir medição e gerar relatório</button>
+      </div>
+    }
+
+    @if (d.memorias.length) {
+      <p class="secao-formulario">Memórias emitidas</p>
+      <ul class="lista-ciencias">
+        @for (m of d.memorias; track m.versao) {
+          <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span><button type="button" class="link-arquivo" (click)="baixar(m.arquivo.anexo_id)">Baixar PDF</button></li>
+        }
+      </ul>
+    }
+  </div>
+</section>

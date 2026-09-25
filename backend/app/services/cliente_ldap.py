@@ -24,6 +24,7 @@ from app.models.diretorio_ldap import DiretorioLdap
 
 registro_log = logging.getLogger(__name__)
 
+# Atributos lidos de cada pessoa no AD (nome, e-mail, logins, identificador e situação da conta)
 ATRIBUTOS_USUARIO = [
     "distinguishedName",
     "givenName",
@@ -35,12 +36,14 @@ ATRIBUTOS_USUARIO = [
     "objectGUID",
     "userAccountControl",
 ]
+# Filtro LDAP: só contas de pessoas (exclui computadores e grupos) que tenham login
 FILTRO_PESSOAS = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=*))"
 CONTA_DESATIVADA = 0x2  # bit ACCOUNTDISABLE do userAccountControl
 
 
 @dataclass(frozen=True)
 class IdentidadeLdap:
+    """Dados de uma pessoa lida do AD, já no formato usado pelo portal."""
     login: str
     nome_completo: str
     email: str
@@ -51,6 +54,7 @@ class IdentidadeLdap:
 
 @dataclass(frozen=True)
 class ResultadoTesteLdap:
+    """Resultado de um teste de conexão."""
     sucesso: bool
     latencia_ms: int
     mensagem: str
@@ -58,6 +62,7 @@ class ResultadoTesteLdap:
 
 @dataclass(frozen=True)
 class DiagnosticoLdap:
+    """Resultado da busca de um login (ferramenta de diagnóstico)."""
     encontrado: bool
     entradas: int
     mensagem: str
@@ -83,6 +88,7 @@ class ParametrosDiretorio:
 
     @classmethod
     def do_modelo(cls, diretorio: DiretorioLdap, senha_bind: str | None = None) -> "ParametrosDiretorio":
+        """Monta os parâmetros a partir do diretório salvo, decifrando a senha de bind (ou usando a informada)."""
         if senha_bind is None:
             try:
                 senha_bind = decifrar_segredo(diretorio.senha_bind_cifrada)
@@ -92,8 +98,10 @@ class ParametrosDiretorio:
 
 
 def _conexao_padrao(parametros: ParametrosDiretorio, usuario: str, senha: str) -> Connection:
+    """Cria a conexão real com o servidor (sem abrir ainda); o tempo limite vem da configuração."""
     limite = obter_configuracao().tempo_limite_ldap_segundos
     servidor = Server(parametros.servidor, port=parametros.porta, use_ssl=parametros.usar_ssl, get_info=NONE, connect_timeout=limite)
+    # read_only: o portal nunca escreve no AD; raise_exceptions=False: os erros são tratados pelo código
     return Connection(
         servidor,
         user=usuario,
@@ -113,6 +121,7 @@ fabrica_conexao: Callable[[ParametrosDiretorio, str, str], Connection] = _conexa
 def _conectar(parametros: ParametrosDiretorio, usuario: str, senha: str) -> Connection:
     """Abre a conexão e faz o bind. Lança exceção do ldap3 se a conexão ou o bind falharem."""
     conexao = fabrica_conexao(parametros, usuario, senha)
+    # Código 49 = credenciais inválidas; os demais viram erro genérico de bind
     if not conexao.bind():
         resultado = conexao.result or {}
         conexao.unbind()
@@ -123,6 +132,7 @@ def _conectar(parametros: ParametrosDiretorio, usuario: str, senha: str) -> Conn
 
 
 def _conexao_tecnica(parametros: ParametrosDiretorio) -> Connection:
+    """Conexão autenticada com a conta técnica; qualquer falha vira `ErroLdapIndisponivel`."""
     try:
         return _conectar(parametros, parametros.bind_dn, parametros.senha_bind)
     except excecoes_ldap.LDAPException as erro:
@@ -131,6 +141,7 @@ def _conexao_tecnica(parametros: ParametrosDiretorio) -> Connection:
 
 def descrever_erro(erro: Exception, parametros: ParametrosDiretorio) -> str:
     """Mensagem legível e sem detalhes sensíveis para o administrador."""
+    # A ordem importa: dos erros de rede aos de configuração, e por fim os genéricos
     if isinstance(erro, excecoes_ldap.LDAPSocketOpenError | excecoes_ldap.LDAPSocketReceiveError | excecoes_ldap.LDAPSessionTerminatedByServerError):
         return f"Não foi possível conectar a {parametros.servidor}:{parametros.porta}{' (LDAPS)' if parametros.usar_ssl else ''}."
     if isinstance(erro, excecoes_ldap.LDAPInvalidCredentialsResult | excecoes_ldap.LDAPBindError):
@@ -145,6 +156,7 @@ def descrever_erro(erro: Exception, parametros: ParametrosDiretorio) -> str:
 
 
 def _atributo(entrada: dict, nome: str) -> str | None:
+    """Primeiro valor de um atributo da entrada, como texto, ou None se estiver vazio."""
     valor = entrada.get("attributes", {}).get(nome)
     if isinstance(valor, list):
         valor = valor[0] if valor else None
@@ -154,6 +166,8 @@ def _atributo(entrada: dict, nome: str) -> str | None:
 
 
 def _guid(entrada: dict) -> str | None:
+    """objectGUID da entrada como texto (identificador estável da pessoa no AD)."""
+    # O AD devolve o GUID como 16 bytes em little-endian; `bytes_le` converte corretamente
     bruto = entrada.get("raw_attributes", {}).get("objectGUID")
     if bruto and isinstance(bruto[0], bytes) and len(bruto[0]) == 16:
         return str(uuid.UUID(bytes_le=bruto[0]))  # mesmo formato do System.Guid do .NET
@@ -162,14 +176,17 @@ def _guid(entrada: dict) -> str | None:
 
 
 def _esta_ativa(entrada: dict) -> bool:
+    """Lê o userAccountControl e indica se a conta está habilitada no AD."""
     sinalizadores = _atributo(entrada, "userAccountControl")
     try:
         return not (int(sinalizadores) & CONTA_DESATIVADA) if sinalizadores is not None else True
+    # Valor ilegível: considera ativa (na dúvida, não bloqueia ninguém)
     except ValueError:
         return True
 
 
 def _identidade(entrada: dict, login: str) -> IdentidadeLdap:
+    """Converte uma entrada do AD em `IdentidadeLdap`."""
     nome, sobrenome = _atributo(entrada, "givenName") or "", _atributo(entrada, "sn") or ""
     return IdentidadeLdap(
         login=login,
@@ -188,7 +205,10 @@ def _dominio(base_dn: str) -> str:
 
 
 def _buscar_login(conexao: Connection, base_dn: str, login: str) -> list[dict]:
+    """Procura a pessoa pelo login (até 2 resultados, para detectar duplicidade)."""
+    # Escapa caracteres especiais para evitar injeção no filtro LDAP
     escapado = escape_filter_chars(login)
+    # Com "@" é um userPrincipalName (usuario@dominio); senão, o sAMAccountName
     filtro = f"(userPrincipalName={escapado})" if "@" in login else f"(sAMAccountName={escapado})"
     conexao.search(base_dn, filtro, SUBTREE, attributes=ATRIBUTOS_USUARIO, size_limit=2)
     return [e for e in conexao.response or [] if e.get("type") == "searchResEntry"]
@@ -200,8 +220,10 @@ def testar_conexao(parametros: ParametrosDiretorio) -> ResultadoTesteLdap:
     try:
         conexao = _conectar(parametros, parametros.bind_dn, parametros.senha_bind)
         try:
+            # Busca a própria Base DN (escopo BASE) só para confirmar que ela existe
             if not conexao.search(parametros.base_dn, "(objectClass=*)", BASE, attributes=[]):
                 codigo = conexao.result.get("result")
+                # Código 32 = objeto não encontrado (Base DN errada)
                 if codigo == 32:
                     raise excecoes_ldap.LDAPNoSuchObjectResult()
                 raise excecoes_ldap.LDAPOperationResult(result=codigo, description=conexao.result.get("description"))
@@ -219,6 +241,7 @@ def autenticar(parametros: ParametrosDiretorio, login: str, senha: str) -> Ident
     """
     if not senha:
         return None  # bind com senha vazia é "anônimo" em muitos servidores
+    # 1º: com a conta técnica, localiza a pessoa
     conexao = _conexao_tecnica(parametros)
     try:
         entradas = _buscar_login(conexao, parametros.base_dn, login)
@@ -228,9 +251,12 @@ def autenticar(parametros: ParametrosDiretorio, login: str, senha: str) -> Ident
         conexao.unbind()
     if not entradas:
         return None
+    # Login inexistente ou conta desativada no AD: recusado
     entrada = entradas[0]
     if not _esta_ativa(entrada):
         return None
+    # 2º: tenta o bind com a senha informada em vários formatos de identidade aceitos pelo AD
+    # (DN completo, userPrincipalName, usuario@dominio e DOMINIO\usuario)
     login_encontrado = _atributo(entrada, "sAMAccountName") or login.split("@")[0]
     dominio = _dominio(parametros.base_dn)
     candidatos = [entrada.get("dn"), _atributo(entrada, "userPrincipalName")]
@@ -249,6 +275,7 @@ def autenticar(parametros: ParametrosDiretorio, login: str, senha: str) -> Ident
 def listar_usuarios(parametros: ParametrosDiretorio) -> list[IdentidadeLdap]:
     """Lista as contas de pessoas do diretório (busca paginada). Lança ErroLdapIndisponivel."""
     conexao = _conexao_tecnica(parametros)
+    # Busca paginada (500 por página): o AD limita o número de resultados por consulta
     try:
         identidades: list[IdentidadeLdap] = []
         for entrada in conexao.extend.standard.paged_search(
@@ -259,6 +286,7 @@ def listar_usuarios(parametros: ParametrosDiretorio) -> list[IdentidadeLdap]:
             login = _atributo(entrada, "sAMAccountName")
             if login:
                 identidades.append(_identidade(entrada, login))
+        # Erro no meio da busca paginada invalida a lista inteira (a sincronização não é aplicada)
         if conexao.result and conexao.result.get("result") not in (0, None):
             raise excecoes_ldap.LDAPOperationResult(result=conexao.result["result"], description=conexao.result.get("description"))
         return identidades
@@ -290,6 +318,7 @@ def diagnosticar_login(parametros: ParametrosDiretorio, login: str) -> Diagnosti
 
 
 def _tentar_bind(parametros: ParametrosDiretorio, identidade: str, senha: str) -> bool:
+    """Tenta autenticar com a identidade e a senha; True se o bind der certo."""
     try:
         conexao = _conectar(parametros, identidade, senha)
     except excecoes_ldap.LDAPException:
@@ -300,4 +329,5 @@ def _tentar_bind(parametros: ParametrosDiretorio, identidade: str, senha: str) -
 
 
 def _ms(inicio: float) -> int:
+    """Milissegundos decorridos desde `inicio` (medido com o relógio de alta precisão)."""
     return round((time.perf_counter() - inicio) * 1000)

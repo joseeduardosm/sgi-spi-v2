@@ -41,15 +41,18 @@ class Checklist(Base):
     """Versão do checklist de documentos mensais do contrato (etapa 5)."""
 
     __tablename__ = "contratos_checklists"
+    # Número de versão sequencial por contrato (1, 2, 3...)
     __table_args__ = (UniqueConstraint("contrato_id", "versao"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
     versao: Mapped[int] = mapped_column(Integer)
     nome: Mapped[str] = mapped_column(String(300))
+    # Só uma versão fica ativa por vez; é ela que é copiada para as competências novas
     ativo: Mapped[bool] = mapped_column(Boolean, default=False)
     ativado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    # Nome do autor fotografado (continua legível se o usuário for excluído)
     criado_por_nome: Mapped[str] = mapped_column(String(250))
     # Exclusão lógica (só versões inativas)
     excluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -62,10 +65,12 @@ class Checklist(Base):
 
 
 class ItemChecklist(Base):
+    """Documento exigido no checklist (ex.: "Folha de pagamento", "GFIP")."""
     __tablename__ = "contratos_checklists_itens"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     checklist_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_checklists.id", ondelete="CASCADE"), index=True)
+    # Posição do documento na lista
     ordem: Mapped[int] = mapped_column(Integer)
     nome: Mapped[str] = mapped_column(String(500))
     observacao: Mapped[str] = mapped_column(String(1000), default="")
@@ -83,6 +88,7 @@ class FormularioAvaliacao(Base):
     """
 
     __tablename__ = "contratos_formularios"
+    # Estrutura inteira do formulário guardada em JSON (escala, faixas e grupos de itens)
     __table_args__ = (UniqueConstraint("contrato_id", "versao"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -106,11 +112,13 @@ class ModeloGlobal(Base):
     """
 
     __tablename__ = "contratos_modelos"
+    # Só dois tipos de modelo são aceitos
     __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario')", name="ck_contratos_modelos_tipo"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     tipo: Mapped[str] = mapped_column(String(20), index=True)
     nome: Mapped[str] = mapped_column(String(300))
+    # Conteúdo em JSON, no mesmo formato usado pelo checklist ou pelo formulário do contrato
     conteudo: Mapped[dict[str, Any]] = mapped_column(TipoJson)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
@@ -118,7 +126,14 @@ class ModeloGlobal(Base):
 
 
 class Competencia(Base):
+    """Competência: um período de execução do contrato e o andamento das suas etapas.
+
+    Guarda as datas de cada etapa e os dados da nota fiscal diretamente na linha; os demais
+    registros (itens medidos, NEs, ciências, memórias, CADIN, documentos, avaliação) ficam em
+    tabelas filhas.
+    """
     __tablename__ = "contratos_competencias"
+    # Regras garantidas pelo banco: uma competência por período e tipo, e valores válidos
     __table_args__ = (
         UniqueConstraint("contrato_id", "periodo_inicio", "tipo", name="contratos_competencias_contrato_id_periodo_inicio_tipo_key"),
         CheckConstraint(f"etapa_atual IN ({_lista_sql(ETAPAS)})", name="ck_contratos_competencias_etapa"),
@@ -128,11 +143,14 @@ class Competencia(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    # Vigência a que o período pertence (1 = original; 2+ = prorrogações)
     sequencia_vigencia: Mapped[int] = mapped_column(Integer, default=1)
     # Dia 1 do primeiro mês do período
     competencia: Mapped[date] = mapped_column(Date)
+    # Datas reais do período (podem ser parciais no início e no fim do contrato)
     periodo_inicio: Mapped[date] = mapped_column(Date)
     periodo_fim: Mapped[date] = mapped_column(Date)
+    # Etapa em que a competência está agora (uma das `ETAPAS`)
     etapa_atual: Mapped[str] = mapped_column(String(20), default="medicao")
     tipo: Mapped[str] = mapped_column(String(30), default="regular", server_default="regular")
     # Reajuste que originou a competência de diferença (somente tipo = diferenca_reajuste)
@@ -145,15 +163,19 @@ class Competencia(Base):
     # Etapa 3 — nota fiscal (principal e adicional)
     nf_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     nf_numero: Mapped[str] = mapped_column(String(100), default="")
+    # Data de recebimento da NF: com o prazo de pagamento, define o vencimento
     nf_recebida_em: Mapped[date | None] = mapped_column(Date)
     prazo_pagamento_dias: Mapped[int | None] = mapped_column(Integer)
+    # De onde veio o valor bruto: calculado pela medição ou digitado (manual)
     origem_valor_nf: Mapped[str | None] = mapped_column(String(20))
     nf_valor_bruto: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    # Retenções de tributos na NF principal (IR, INSS, ISS, PIS/PASEP e COFINS)
     nf_retencao_ir: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     nf_retencao_inss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     nf_retencao_iss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     nf_retencao_pis: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     nf_retencao_cofins: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    # NF adicional (opcional), com as mesmas informações
     nf_adicional_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     nf_adicional_numero: Mapped[str] = mapped_column(String(100), default="")
     nf_adicional_valor_bruto: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
@@ -176,6 +198,7 @@ class Competencia(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
+    # Registros filhos da competência (apagados junto com ela)
     contrato: Mapped[Contrato] = relationship(back_populates="competencias")
     itens: Mapped[list["ItemMedicao"]] = relationship(back_populates="competencia", cascade="all, delete-orphan", order_by="ItemMedicao.ordem")
     notas: Mapped[list["SelecaoNotaEmpenho"]] = relationship(
@@ -194,6 +217,7 @@ class Competencia(Base):
         back_populates="competencia", cascade="all, delete-orphan", order_by="DocumentoMensal.ordem"
     )
     avaliacao: Mapped["AvaliacaoCompetencia | None"] = relationship(back_populates="competencia", cascade="all, delete-orphan", uselist=False)
+    # Os anexos têm várias FKs para a mesma tabela `anexos`; `foreign_keys` diz qual coluna usar em cada uma
     nf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_anexo_id])
     nf_adicional_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_adicional_anexo_id])
     consolidado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[consolidado_anexo_id])
@@ -202,8 +226,10 @@ class Competencia(Base):
     @property
     def parte(self) -> int | None:
         """1 ou 2 quando o mês civil se divide entre duas vigências (virada no meio do mês); senão nulo."""
+        # Diferença de reajuste não se divide em partes
         if self.tipo != "regular" or self.contrato is None:
             return None
+        # "Irmãs" = competências regulares do mesmo mês civil, em ordem de início
         irmas = sorted(
             (c for c in self.contrato.competencias if c.tipo == "regular" and c.competencia == self.competencia),
             key=lambda c: c.periodo_inicio,
@@ -232,8 +258,10 @@ class ItemMedicao(Base):
     __table_args__ = (UniqueConstraint("competencia_id", "item_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    # SET NULL: a fotografia continua existindo mesmo se o item for removido do contrato
     competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
     item_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_itens.id", ondelete="SET NULL"), index=True)
+    # Dados do item copiados no momento da geração (a fotografia)
     ordem: Mapped[int] = mapped_column(Integer)
     descricao: Mapped[str] = mapped_column(String(1000))
     tipo: Mapped[str] = mapped_column(String(20))
@@ -252,9 +280,11 @@ class SelecaoNotaEmpenho(Base):
 
     __tablename__ = "contratos_competencias_notas"
 
+    # Chave primária composta: a mesma NE não é escolhida duas vezes na mesma competência
     competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), primary_key=True)
     # A exclusão da NE ligada a competência é barrada pelo serviço; o CASCADE permite excluir o contrato inteiro
     nota_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_notas_empenho.id", ondelete="CASCADE"), primary_key=True, index=True)
+    # Ordem de consumo (1 = primeira a ser debitada)
     ordem: Mapped[int] = mapped_column(Integer)
 
     competencia: Mapped[Competencia] = relationship(back_populates="notas")
@@ -264,11 +294,13 @@ class CienciaMedicao(Base):
     """Ciência de um integrante da equipe na medição (mínimo de 2 pessoas diferentes)."""
 
     __tablename__ = "contratos_competencias_ciencias"
+    # Uma ciência por pessoa em cada competência
     __table_args__ = (UniqueConstraint("competencia_id", "usuario_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
     usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    # Nome e papel na equipe fotografados no momento da ciência
     nome: Mapped[str] = mapped_column(String(250))
     papel: Mapped[str] = mapped_column(String(40))
     registrada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
@@ -286,6 +318,7 @@ class MemoriaMedicao(Base):
     competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
     versao: Mapped[int] = mapped_column(Integer)
     anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    # Hash dos dados que geraram o PDF; se não mudou, não é preciso gerar outra versão
     hash_origem: Mapped[str] = mapped_column(String(64))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
@@ -301,9 +334,11 @@ class ConsultaCadin(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
+    # Com pendência, guarda a descrição e o texto da notificação enviada à contratada
     possui_pendencia: Mapped[bool] = mapped_column(Boolean)
     pendencia: Mapped[str] = mapped_column(String(2000), default="")
     texto_notificacao: Mapped[str] = mapped_column(String(2500), default="")
+    # Certidão consultada (obrigatória) e o e-mail de notificação (só com pendência)
     certidao_anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     email_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
@@ -328,7 +363,9 @@ class DocumentoMensal(Base):
     ordem: Mapped[int] = mapped_column(Integer)
     nome: Mapped[str] = mapped_column(String(500))
     observacao: Mapped[str] = mapped_column(String(1000), default="")
+    # Copiado do item do checklist; os opcionais não bloqueiam a conclusão da etapa
     obrigatorio: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # PDF anexado pelo usuário (vazio enquanto não enviado)
     anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     enviado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
@@ -347,21 +384,28 @@ class AvaliacaoCompetencia(Base):
     __tablename__ = "contratos_competencias_avaliacoes"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    # `unique`: no máximo uma avaliação por competência
     competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), unique=True)
+    # Versão do formulário de origem e a cópia (fotografia) da sua definição
     formulario_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     definicao: Mapped[dict[str, Any]] = mapped_column(TipoJson)
+    # Avaliação inicial, feita por qualquer integrante da equipe
     respostas_iniciais: Mapped[list[Any]] = mapped_column(TipoJson, default=list)
     avaliador_inicial_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     avaliacao_inicial_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Avaliação do gestor, que define a nota final
     respostas_gestor: Mapped[list[Any]] = mapped_column(TipoJson, default=list)
     complemento_gestor: Mapped[str] = mapped_column(String(4000), default="")
     gestor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     avaliacao_gestor_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Quem assina o ateste e quando cada um deu ciência
     assinaturas: Mapped[list[Any]] = mapped_column(TipoJson, default=list)
     assinaturas_definidas_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # PDF gerado pelo sistema e a via assinada devolvida pela contratada
     pdf_gerado_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     pdf_assinado_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # A contratada pode pedir reconsideração uma única vez
     reconsideracoes: Mapped[int] = mapped_column(Integer, default=0)
     reconsideracao_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
 

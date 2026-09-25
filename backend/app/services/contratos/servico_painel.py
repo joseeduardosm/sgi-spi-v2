@@ -31,16 +31,19 @@ from app.services.contratos.servico_orcamento import meses_previstos
 from app.services.contratos.servico_prorrogacao import meses_disponiveis
 
 ZERO = Decimal(0)
+# Nomes das etapas como aparecem nas pendências
 ETAPAS_ROTULO = {
     "medicao": "Medição", "avaliacao": "Avaliação", "nota_fiscal": "Nota fiscal", "cadin": "CADIN", "checklist": "Checklist",
     "consolidado": "Documento consolidado", "ordem_bancaria": "Ordem Bancária",
 }
+# Pagamento que vence em até 5 dias vira alerta de risco médio
 DIAS_VENCENDO = 5
 # Competência encerrada sem medição concluída vira risco depois deste prazo (e risco alto depois do dobro)
 DIAS_ATRASO = 30
 
 
 def carregar_contratos(sessao: Session) -> list[Contrato]:
+    """Todos os contratos com o necessário para o painel (competências, ciências, avaliações e alterações)."""
     return list(
         sessao.scalars(
             select(Contrato).options(
@@ -65,16 +68,19 @@ def _medir_desde(competencia: Competencia) -> date:
 
 
 def _rota_competencia(contrato: Contrato, competencia: Competencia) -> str:
+    """Endereço (rota do Angular) da tela de execução da competência."""
     return f"/contratos/{contrato.id}/execucao/{competencia.identificador}"
 
 
 def _pendencia(contrato: Contrato, tipo: str, descricao: str, rota: str, desde: date | None = None) -> Pendencia:
+    """Monta uma pendência com os dados de identificação do contrato."""
     return Pendencia(tipo=tipo, contrato_id=contrato.id, contrato_numero=contrato.numero, contrato_apelido=contrato.apelido,
                      descricao=descricao, rota=rota, desde=desde)
 
 
 def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: Usuario) -> list[Pendencia]:
     """O que o usuário precisa fazer: só contratos em que ele é criador ou integrante vigente da equipe."""
+    # Contratos com prorrogação e com reajuste em elaboração (uma consulta para cada)
     rascunhos_prorrogacao = set(sessao.scalars(select(ProcessoProrrogacao.contrato_id).where(ProcessoProrrogacao.situacao == "rascunho")))
     reajustes = set(sessao.scalars(select(Reajuste.contrato_id).where(Reajuste.situacao == "rascunho")))
     lista: list[Pendencia] = []
@@ -83,28 +89,34 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
         membro = any(d.usuario_id == usuario.id for d in designacoes_vigentes(contrato))
         if not (membro or contrato.criador_id == usuario.id):
             continue
+        # Contrato ainda sem competências: a tarefa é completar a base e gerar a execução
         if not contrato.competencias and situacao(contrato) != "encerrado":
             faltas = requisitos(contrato).pendencias
             descricao = "Gerar as competências de execução" + (f" — falta: {faltas[0]}" if faltas else "")
             lista.append(_pendencia(contrato, "base_execucao", descricao, f"/contratos/{contrato.id}", contrato.data_inicio))
+        # Competências já encerradas e não concluídas: cada uma gera uma pendência
         for competencia in contrato.competencias:
             if competencia.etapa_atual == "concluida" or referencia <= competencia.periodo_fim:
                 continue
             rota = _rota_competencia(contrato, competencia)
             mes = _nome(competencia)
             etapa = competencia.etapa_atual
+            # Na medição, se falta a ciência do usuário, a pendência é dar ciência
             if etapa == "medicao" and membro and competencia.medicao_iniciada_em and not any(c.usuario_id == usuario.id for c in competencia.ciencias):
                 faltam = max(0, CIENCIAS_MINIMAS - len(competencia.ciencias))
                 lista.append(_pendencia(contrato, "ciencia_medicao", f"{mes}: registrar sua ciência na medição"
                                         + (f" (faltam {faltam})" if faltam else ""), rota, competencia.periodo_fim))
                 continue
+            # Na avaliação, se o usuário foi indicado no ateste e ainda não deu ciência
             avaliacao: AvaliacaoCompetencia | None = competencia.avaliacao
             if etapa == "avaliacao" and avaliacao and any(a["usuario_id"] == usuario.id and not a.get("ciencia_em") for a in avaliacao.assinaturas or []):
                 lista.append(_pendencia(contrato, "ciencia_ateste", f"{mes}: registrar sua ciência no ateste da avaliação", rota, competencia.periodo_fim))
                 continue
+            # Nos demais casos, a pendência é a etapa atual (com o vencimento do pagamento, se já houver NF)
             vencimento = competencia.nf_recebida_em + timedelta(days=competencia.prazo_pagamento_dias) if competencia.nf_recebida_em and competencia.prazo_pagamento_dias else None
             lista.append(_pendencia(contrato, etapa, f"{mes}: {ETAPAS_ROTULO.get(etapa, etapa)}"
                                     + (f" · pagamento vence {vencimento:%d/%m/%Y}" if vencimento else ""), rota, vencimento or competencia.periodo_fim))
+        # Atos em elaboração: prorrogação, reajuste e aditamento/supressão
         if contrato.id in rascunhos_prorrogacao:
             lista.append(_pendencia(contrato, "prorrogacao", "Prorrogação em elaboração", f"/contratos/{contrato.id}/prorrogacao", contrato.data_fim))
         if contrato.id in reajustes:
@@ -118,6 +130,7 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
                 lista.append(_pendencia(contrato, "ciencia_alteracao", f"{nome}: registrar sua ciência", rota))
             else:
                 lista.append(_pendencia(contrato, "alteracao", f"{nome} em elaboração", rota))
+    # As mais urgentes (data mais antiga) primeiro
     return sorted(lista, key=lambda p: (p.desde or date.max, p.contrato_numero))
 
 
@@ -127,14 +140,17 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
     referencia = hoje()
     grupos: list[AlertasContrato] = []
     for contrato in contratos:
+        # Contratos encerrados ou suspensos não geram alertas
         estado = situacao(contrato)
         if estado in ("encerrado", "suspenso"):
             continue
         riscos: list[Risco] = []
 
         def risco(tipo, gravidade, descricao, rota, data=None, valor=None):
+            """Acrescenta um risco à lista do contrato em análise."""
             riscos.append(Risco(tipo=tipo, gravidade=gravidade, descricao=descricao, rota=rota, data=data, valor=valor))
 
+        # Vigência: perto do fim, sem prorrogação iniciada ou já sem prorrogação possível
         dias = (contrato.data_fim - referencia).days
         if estado == "a_vencer":
             if meses_disponiveis(contrato) <= 0:
@@ -143,6 +159,7 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
             elif contrato.id not in rascunhos_prorrogacao:
                 risco("a_vencer_sem_prorrogacao", "alta" if dias <= 60 else "media",
                       f"Vence em {dias} dia(s) e a prorrogação não foi iniciada", f"/contratos/{contrato.id}/prorrogacao", contrato.data_fim)
+        # Reajuste: a partir de 12 meses de contrato, o mês de reajuste deste ano (ou do anterior) precisa ter reajuste aberto
         aniversario = calculos.somar_meses(contrato.data_inicio, 12)
         if referencia >= aniversario:
             mes_reajuste = date(referencia.year, contrato.mes_reajuste, 1)
@@ -166,6 +183,7 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
                       f"Saldo livre das NEs ({_moeda(livre)}) não cobre a competência {proxima.numero_competencia} ({_moeda(necessario)})",
                       f"/contratos/{contrato.id}", proxima.periodo_fim, necessario - livre)
 
+        # Pagamentos: NFs com vencimento passado ou próximo
         abertas = [c for c in contrato.competencias if c.etapa_atual != "concluida"]
         for competencia in abertas:
             if competencia.nf_recebida_em and competencia.prazo_pagamento_dias:
@@ -177,6 +195,7 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
                     risco("pagamento_vencendo", "media", f"Pagamento da competência {competencia.numero_competencia} vence em {vencimento:%d/%m/%Y}",
                           _rota_competencia(contrato, competencia), vencimento)
 
+        # Atrasos: competências encerradas há mais de 30 dias sem medição concluída
         atrasadas = sorted(
             (c for c in abertas if c.medicao_concluida_em is None and (referencia - _medir_desde(c)).days > DIAS_ATRASO),
             key=_medir_desde,
@@ -189,6 +208,7 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
                   f"(a mais antiga, {mais_antiga.numero_competencia}, há {atraso} dias)",
                   _rota_competencia(contrato, mais_antiga), mais_antiga.periodo_fim)
 
+        # Riscos do contrato em ordem de gravidade e data; o contrato herda a gravidade do pior risco
         if riscos:
             ordem = {"alta": 0, "media": 1}
             riscos.sort(key=lambda r: (ordem[r.gravidade], r.data or date.max))
@@ -198,24 +218,31 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
                     empresa=contrato.empresa.razao_social, gravidade=riscos[0].gravidade, riscos=riscos,
                 )
             )
+    # Contratos com riscos altos primeiro; depois, os com mais riscos
     return sorted(grupos, key=lambda g: (0 if g.gravidade == "alta" else 1, -len(g.riscos), g.contrato_numero))
 
 
 def _moeda(valor: Decimal) -> str:
+    """Formata o valor em reais no padrão brasileiro (R$ 1.234,56)."""
     return "R$ " + f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def execucao_orcamentaria(contratos: list[Contrato], exercicio: int) -> ExecucaoOrcamentaria:
+    """Previsto × medido × pago por mês do exercício, e a situação dos empenhos."""
+    # Acumuladores por mês (dia 1); `defaultdict(Decimal)` começa cada mês em zero
     previsto: dict[date, Decimal] = defaultdict(Decimal)
     medido: dict[date, Decimal] = defaultdict(Decimal)
     pago: dict[date, Decimal] = defaultdict(Decimal)
     for contrato in contratos:
+        # Previsto: pela previsão orçamentária
         for mes in meses_previstos(contrato):
             if mes.competencia.year == exercicio:
                 previsto[mes.competencia] += mes.valor
+        # Medido: competências com medição concluída
         for competencia in contrato.competencias:
             if competencia.medicao_concluida_em and competencia.competencia.year == exercicio:
                 medido[competencia.competencia] += total_medido(competencia)
+        # Pago: débitos lançados nas NEs, pelo mês do lançamento (estornos entram como negativos)
         for nota in contrato.notas_empenho:
             for movimento in nota.movimentos:
                 if movimento.criado_em.year == exercicio:
@@ -232,6 +259,7 @@ def execucao_orcamentaria(contratos: list[Contrato], exercicio: int) -> Execucao
 
 
 def numeros(contratos: list[Contrato]) -> NumerosCarteira:
+    """Contagens e somas da carteira (ativos inclui os "a vencer")."""
     estados = {c.id: situacao(c) for c in contratos}
     ativos = [c for c in contratos if estados[c.id] in ("ativo", "a_vencer")]
     valores_totais = [totais(c) for c in ativos]
@@ -243,8 +271,10 @@ def numeros(contratos: list[Contrato]) -> NumerosCarteira:
 
 
 def montar_painel(sessao: Session, usuario: Usuario, exercicio: int | None, empresa_id: uuid.UUID | None, contrato_id: uuid.UUID | None) -> Painel:
+    """Monta o painel inteiro. Os filtros valem para alertas, execução e números, não para as pendências."""
     todos = carregar_contratos(sessao)
     filtrados = [c for c in todos if (empresa_id is None or c.empresa_id == empresa_id) and (contrato_id is None or c.id == contrato_id)]
+    # Opções de empresa do filtro, sem repetição
     empresas = {c.empresa.id: c.empresa.razao_social for c in todos}
     return Painel(
         hoje=hoje(),

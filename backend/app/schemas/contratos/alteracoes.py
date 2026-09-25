@@ -1,6 +1,9 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados de prorrogação, reajuste e aditamento/supressão.
-"""Schemas de prorrogação, reajuste e aditamento/supressão."""
+"""Schemas de prorrogação, reajuste e aditamento/supressão.
+
+Convenção: `Gravacao*`/`Abertura*` = entrada vinda do frontend; `Leitura*`/`Painel*` = saída.
+"""
 
 import uuid
 from datetime import date, datetime
@@ -13,8 +16,12 @@ from app.schemas.contratos.empresas import Texto
 from app.schemas.contratos.execucao import LeituraArquivo, LeituraCiencia
 from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade
 
+# Quantidade de entrada: não negativa, até 4 casas decimais
 Quantidade = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]
+# Como os itens sob demanda são planejados na nova vigência:
+# saldo que sobrou, repetir o limite inicial ou informar manualmente
 RegraSobDemanda = Literal["saldo_remanescente", "repetir_inicial", "manual"]
+# Campos do parecer da prorrogação; se todos estiverem vazios, não há PDF de parecer
 CAMPOS_PARECER = ("avaliacao_geral", "resumo_qualidade", "historico_ocorrencias", "reclamacoes", "atendimento_chamados", "parecer")
 
 
@@ -23,12 +30,14 @@ CAMPOS_PARECER = ("avaliacao_geral", "resumo_qualidade", "historico_ocorrencias"
 # ---------------------------------------------------------------------------------------------
 
 class PlanoItemGravacao(BaseModel):
+    """Planejamento de um item sob demanda na nova vigência (limite e quantidades por mês)."""
     item_id: uuid.UUID
     limite: Quantidade = Field(..., description="Limite na nova vigência (≤ quantidade original).")
     apontamentos: dict[date, Quantidade] = Field(default_factory=dict, description="Quantidade por mês da nova vigência.")
 
 
 class GravacaoProrrogacao(BaseModel):
+    """Corpo do `PUT /prorrogacao` (rascunho). Todos os campos são opcionais até o registro."""
     meses: int | None = Field(None, ge=1, le=600, description="Prazo da prorrogação.")
     regra_sob_demanda: RegraSobDemanda = "saldo_remanescente"
     plano_sob_demanda: list[PlanoItemGravacao] = Field(default_factory=list)
@@ -41,6 +50,7 @@ class GravacaoProrrogacao(BaseModel):
 
 
 class PlanoItemLeitura(BaseModel):
+    """Item sob demanda na tela de prorrogação, com as referências para o usuário decidir o limite."""
     item_id: uuid.UUID
     ordem: int
     descricao: str
@@ -52,6 +62,7 @@ class PlanoItemLeitura(BaseModel):
 
 
 class LeituraProcessoProrrogacao(BaseModel):
+    """Tudo o que a tela de prorrogação precisa para se montar."""
     id: uuid.UUID | None = Field(None, description="Nulo = ainda não há rascunho salvo.")
     vigencia_atual_inicio: date
     vigencia_atual_fim: date
@@ -77,6 +88,7 @@ class LeituraProcessoProrrogacao(BaseModel):
 
 
 class LeituraProrrogacao(BaseModel):
+    """Prorrogação já registrada (histórico)."""
     id: uuid.UUID
     meses: int
     assinada_em: date
@@ -95,21 +107,25 @@ class LeituraProrrogacao(BaseModel):
 # ---------------------------------------------------------------------------------------------
 
 class AberturaReajuste(BaseModel):
+    """Corpo do `POST /reajustes`: qual vigência e a partir de que mês."""
     sequencia_vigencia: int = Field(..., ge=1)
     mes_referencia: date = Field(..., description="Primeiro mês com os novos valores (qualquer dia; gravado como dia 1).")
 
 
 class ItemReajusteGravacao(BaseModel):
+    """Índice aplicado a um item e, opcionalmente, um teto para o novo preço."""
     item_id: uuid.UUID
     indice_percentual: Annotated[Decimal, Field(ge=-100, le=1000, max_digits=18, decimal_places=8)] = Field(..., description="2 = 2%.")
     valor_referencial: Annotated[Decimal | None, Field(None, ge=0, max_digits=18, decimal_places=2)] = Field(None, description="Teto opcional.")
 
 
 class GravacaoMemoriaReajuste(BaseModel):
+    """Corpo do `PUT /reajustes/{id}/memoria`."""
     itens: list[ItemReajusteGravacao]
 
 
 class ItemReajusteLeitura(BaseModel):
+    """Item na tela de reajuste: preço atual, índice e preço reajustado."""
     item_id: uuid.UUID
     ordem: int
     descricao: str
@@ -123,6 +139,7 @@ class ItemReajusteLeitura(BaseModel):
 
 
 class LeituraMemoriaVersao(BaseModel):
+    """Uma versão gerada da memória de cálculo do reajuste (PDF e XLSX)."""
     versao: int
     criada_em: datetime
     pdf: LeituraArquivo
@@ -130,6 +147,7 @@ class LeituraMemoriaVersao(BaseModel):
 
 
 class LeituraReajuste(BaseModel):
+    """Reajuste completo, em elaboração ou já encerrado."""
     id: uuid.UUID
     situacao: Literal["rascunho", "concluido", "cancelado"]
     sequencia_vigencia: int
@@ -156,12 +174,14 @@ class LeituraReajuste(BaseModel):
 
 
 class VigenciaDisponivel(BaseModel):
+    """Vigência que pode ser escolhida ao abrir um reajuste ou alteração."""
     sequencia: int
     inicio: date
     fim: date
 
 
 class PainelReajuste(BaseModel):
+    """Resposta das rotas de reajuste: o que está em andamento, as opções e o histórico."""
     em_andamento: LeituraReajuste | None
     vigencias_disponiveis: list[VigenciaDisponivel] = Field(..., description="Vigências ainda sem reajuste concluído.")
     historico: list[LeituraReajuste]
@@ -173,21 +193,25 @@ class PainelReajuste(BaseModel):
 # ---------------------------------------------------------------------------------------------
 
 class AberturaAlteracao(BaseModel):
+    """Corpo do `POST /alteracoes`: tipo, vigência e mês de efeito."""
     tipo: Literal["aditamento", "supressao"]
     sequencia_vigencia: int = Field(..., ge=1)
     mes_efeito: date = Field(..., description="Primeiro mês com as novas quantidades (gravado como dia 1).")
 
 
 class ItemAlteracaoGravacao(BaseModel):
+    """Nova quantidade de um item na alteração."""
     item_id: uuid.UUID
     quantidade_nova: Quantidade = Field(..., description="Contínuo: nova quantidade mensal; sob demanda: novo limite da vigência.")
 
 
 class GravacaoQuantitativos(BaseModel):
+    """Corpo do `PUT /alteracoes/{id}/quantitativos`."""
     itens: list[ItemAlteracaoGravacao]
 
 
 class ItemAlteracaoLeitura(BaseModel):
+    """Item na tela de alteração, com o impacto em R$ e o alerta de ficar abaixo do executado."""
     item_id: uuid.UUID
     ordem: int
     descricao: str
@@ -201,6 +225,7 @@ class ItemAlteracaoLeitura(BaseModel):
 
 
 class LeituraAlteracao(BaseModel):
+    """Alteração completa, com percentuais, documentos e ciências."""
     id: uuid.UUID
     tipo: Literal["aditamento", "supressao"]
     situacao: Literal["rascunho", "aguardando_ciencias", "concluida", "cancelada"]
@@ -229,6 +254,7 @@ class LeituraAlteracao(BaseModel):
 
 
 class PainelAlteracao(BaseModel):
+    """Resposta das rotas de alteração: a em andamento, as vigências e o histórico."""
     em_andamento: LeituraAlteracao | None
     vigencias: list[VigenciaDisponivel]
     historico: list[LeituraAlteracao]

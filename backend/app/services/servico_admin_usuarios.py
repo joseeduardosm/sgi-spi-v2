@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para administrar usuários e o próprio perfil.
-"""Administração de usuários e manutenção do próprio perfil."""
+"""Administração de usuários e manutenção do próprio perfil.
+
+Regras de proteção: a conta administrativa principal (definida no .env) não pode ser
+desativada, excluída nem perder o SuperRoot, e ninguém pode desativar ou excluir a própria conta.
+"""
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
@@ -16,11 +20,14 @@ from app.services import servico_perfil
 from app.services.servico_auditoria import auditar
 from app.services.servico_usuarios import buscar_por_login
 
+# Campos do perfil institucional copiados entre o schema e o modelo
 CAMPOS_PERFIL = ("nome_completo", "email", "ramal", "celular", "cargo", "departamento", "andar", "predio", "data_nascimento", "gestor_id")
+# Campos pesquisados pela busca livre da listagem de usuários
 CAMPOS_BUSCA = ("login", "nome_completo", "email", "ramal", "celular", "cargo", "departamento", "predio")
 
 
 class UsuarioNaoEncontrado(Exception):
+    """O usuário pedido não existe (vira 404)."""
     pass
 
 
@@ -33,12 +40,15 @@ class ErroRegraUsuario(Exception):
 
 
 def eh_admin_principal(usuario: Usuario) -> bool:
+    """Indica se é a conta administrativa principal (login definido em `LOGIN_ADMIN`)."""
     return usuario.login.lower() == obter_configuracao().login_admin.lower()
 
 
 def _aplicar_busca(consulta: Select, busca: str | None) -> Select:
+    """Acrescenta à consulta o filtro de busca livre (qualquer campo de `CAMPOS_BUSCA` contendo o texto)."""
     if busca and busca.strip():
         termo = f"%{busca.strip().lower()}%"
+        # `or_` combina as condições: basta um dos campos conter o termo
         consulta = consulta.where(or_(*[func.lower(getattr(Usuario, c)).like(termo) for c in CAMPOS_BUSCA]))
     return consulta
 
@@ -46,6 +56,7 @@ def _aplicar_busca(consulta: Select, busca: str | None) -> Select:
 def listar_usuarios(
     sessao: Session, busca: str | None, situacao: str, origem: str | None, pagina: int, tamanho_pagina: int
 ) -> tuple[list[DetalheUsuario], int]:
+    """Lista paginada de usuários e o total (para a paginação da tela)."""
     consulta = _aplicar_busca(select(Usuario), busca)
     if situacao == "ativos":
         consulta = consulta.where(Usuario.ativo.is_(True))
@@ -53,9 +64,11 @@ def listar_usuarios(
         consulta = consulta.where(Usuario.ativo.is_(False))
     if origem:
         consulta = consulta.where(Usuario.origem == origem)
+    # Conta o total antes da paginação, usando a consulta filtrada como subconsulta
     total = sessao.scalar(select(func.count()).select_from(consulta.subquery())) or 0
     usuarios = list(
         sessao.scalars(
+            # Ordena pelo nome (ou pelo login, quando o nome está vazio) e recorta a página pedida
             consulta.order_by(func.lower(func.coalesce(func.nullif(Usuario.nome_completo, ""), Usuario.login)))
             .offset((pagina - 1) * tamanho_pagina)
             .limit(tamanho_pagina)
@@ -65,6 +78,7 @@ def listar_usuarios(
 
 
 def opcoes(sessao: Session, busca: str | None, limite: int = 20, incluir_inativos: bool = False) -> list[OpcaoUsuario]:
+    """Busca curta para campos de seleção (sem paginação, com limite)."""
     consulta = _aplicar_busca(select(Usuario), busca)
     if not incluir_inativos:
         consulta = consulta.where(Usuario.ativo.is_(True))
@@ -73,10 +87,12 @@ def opcoes(sessao: Session, busca: str | None, limite: int = 20, incluir_inativo
 
 
 def para_opcao(u: Usuario) -> OpcaoUsuario:
+    """Converte o usuário na forma reduzida usada nos seletores."""
     return OpcaoUsuario(id=u.id, login=u.login, nome_completo=u.nome_completo or u.login, cargo=u.cargo, ativo=u.ativo)
 
 
 def obter_usuario(sessao: Session, usuario_id: int) -> Usuario:
+    """Usuário pelo id, ou `UsuarioNaoEncontrado`."""
     usuario = sessao.get(Usuario, usuario_id)
     if usuario is None:
         raise UsuarioNaoEncontrado()
@@ -84,21 +100,29 @@ def obter_usuario(sessao: Session, usuario_id: int) -> Usuario:
 
 
 def para_detalhes(sessao: Session, usuarios: list[Usuario]) -> list[DetalheUsuario]:
+    """Monta o detalhe de vários usuários de uma vez, com poucas consultas.
+
+    Em vez de consultar gestor, diretório e setores usuário por usuário (N consultas), busca
+    tudo de uma vez para a lista inteira e monta dicionários de apoio.
+    """
     if not usuarios:
         return []
     ids = [u.id for u in usuarios]
+    # Nomes dos gestores: {id: nome}
     ids_gestores = {u.gestor_id for u in usuarios if u.gestor_id}
     gestores = (
         {g.id: g.nome_completo or g.login for g in sessao.scalars(select(Usuario).where(Usuario.id.in_(ids_gestores)))}
         if ids_gestores
         else {}
     )
+    # Nomes dos diretórios LDAP: {id: nome}
     ids_diretorios = {u.diretorio_id for u in usuarios if u.diretorio_id}
     diretorios = (
         {d.id: d.nome for d in sessao.scalars(select(DiretorioLdap).where(DiretorioLdap.id.in_(ids_diretorios)))}
         if ids_diretorios
         else {}
     )
+    # Setores de cada usuário: {usuario_id: [nomes]}
     setores: dict[int, list[str]] = {}
     for usuario_id, nome in sessao.execute(
         select(MembroSetor.usuario_id, Setor.nome)
@@ -134,10 +158,12 @@ def para_detalhes(sessao: Session, usuarios: list[Usuario]) -> list[DetalheUsuar
 
 
 def para_detalhe(sessao: Session, usuario: Usuario) -> DetalheUsuario:
+    """Detalhe de um único usuário (reaproveita a versão em lote)."""
     return para_detalhes(sessao, [usuario])[0]
 
 
 def _aplicar_perfil(sessao: Session, usuario: Usuario, perfil: DadosPerfil) -> None:
+    """Valida o gestor e copia os campos do perfil para o usuário."""
     if perfil.gestor_id is not None:
         if perfil.gestor_id == usuario.id:
             raise ErroRegraUsuario("O usuário não pode ser gestor de si mesmo.")
@@ -148,6 +174,7 @@ def _aplicar_perfil(sessao: Session, usuario: Usuario, perfil: DadosPerfil) -> N
 
 
 def criar_conta_local(sessao: Session, dados: CriacaoUsuario, autor: str) -> Usuario:
+    """Cria uma conta local com senha em hash bcrypt."""
     if buscar_por_login(sessao, dados.login) is not None:
         raise ErroRegraUsuario("Este login já está cadastrado.", conflito=True)
     usuario = Usuario(
@@ -158,6 +185,7 @@ def criar_conta_local(sessao: Session, dados: CriacaoUsuario, autor: str) -> Usu
         superusuario=dados.superusuario,
     )
     sessao.add(usuario)
+    # flush para obter o id antes de validar o gestor (que não pode ser o próprio usuário)
     sessao.flush()
     _aplicar_perfil(sessao, usuario, dados.perfil)
     auditar(sessao, autor, "usuario.criar", usuario.login, f"id={usuario.id} superusuario={usuario.superusuario}")
@@ -166,11 +194,14 @@ def criar_conta_local(sessao: Session, dados: CriacaoUsuario, autor: str) -> Usu
 
 
 def alterar_usuario(sessao: Session, usuario_id: int, dados: AlteracaoUsuario, autor: Usuario) -> Usuario:
+    """Altera situação, papel, perfil e (opcionalmente) a senha do usuário."""
     usuario = obter_usuario(sessao, usuario_id)
+    # Regras de proteção contra perder o acesso administrativo
     if eh_admin_principal(usuario) and (not dados.ativo or not dados.superusuario):
         raise ErroRegraUsuario("A conta administrativa principal não pode ser desativada nem perder o papel SuperRoot.")
     if usuario.id == autor.id and (not dados.ativo or not dados.superusuario):
         raise ErroRegraUsuario("Você não pode desativar a própria conta nem remover o próprio papel SuperRoot.")
+    # Lista do que mudou, para a linha de auditoria
     alteracoes = []
     if usuario.ativo != dados.ativo:
         alteracoes.append(f"ativo={dados.ativo}")
@@ -192,6 +223,7 @@ def alterar_usuario(sessao: Session, usuario_id: int, dados: AlteracaoUsuario, a
 
 
 def excluir_usuario(sessao: Session, usuario_id: int, autor: Usuario) -> None:
+    """Exclui o usuário, respeitando as regras de proteção."""
     usuario = obter_usuario(sessao, usuario_id)
     if eh_admin_principal(usuario):
         raise ErroRegraUsuario("A conta administrativa principal não pode ser excluída.")

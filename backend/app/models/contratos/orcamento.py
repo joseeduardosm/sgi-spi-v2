@@ -20,17 +20,21 @@ class PrevisaoVigencia(Base):
     """Previsão de uma vigência. Depois de salva fica selada: só o SuperRoot altera."""
 
     __tablename__ = "contratos_previsoes"
+    # Uma previsão por vigência de cada contrato
     __table_args__ = (UniqueConstraint("contrato_id", "sequencia_vigencia"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    # Número da vigência (1 = original; 2, 3... = prorrogações)
     sequencia_vigencia: Mapped[int] = mapped_column(Integer)
+    # Selo: depois de salva, só o SuperRoot pode alterar
     salva: Mapped[bool] = mapped_column(Boolean, default=False)
     salva_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     salva_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     contrato: Mapped[Contrato] = relationship(back_populates="previsoes")
+    # Limites e apontamentos pertencem à previsão e são apagados junto com ela
     limites: Mapped[list["LimitePrevisao"]] = relationship(back_populates="previsao", cascade="all, delete-orphan")
     apontamentos: Mapped[list["ApontamentoPrevisao"]] = relationship(back_populates="previsao", cascade="all, delete-orphan")
 
@@ -44,6 +48,7 @@ class LimitePrevisao(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     previsao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_previsoes.id", ondelete="CASCADE"), index=True)
     item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_itens.id", ondelete="CASCADE"), index=True)
+    # Quantidade máxima do item nesta vigência
     quantidade_total: Mapped[Decimal] = mapped_column(Numeric(18, 4))
 
     previsao: Mapped[PrevisaoVigencia] = relationship(back_populates="limites")
@@ -59,13 +64,19 @@ class ApontamentoPrevisao(Base):
     previsao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_previsoes.id", ondelete="CASCADE"), index=True)
     item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_itens.id", ondelete="CASCADE"), index=True)
     competencia: Mapped[date] = mapped_column(Date)
+    # Quantidade prevista no mês; os itens fixos não têm apontamento (entram pelo valor mensal)
     quantidade: Mapped[Decimal] = mapped_column(Numeric(18, 4))
 
     previsao: Mapped[PrevisaoVigencia] = relationship(back_populates="apontamentos")
 
 
 class NotaEmpenho(Base):
+    """Nota de Empenho: reserva de orçamento que as Ordens Bancárias consomem.
+
+    O saldo não é gravado; é calculado a partir do extrato de movimentos (sempre coerente).
+    """
     __tablename__ = "contratos_notas_empenho"
+    # O número da NE é único dentro do contrato
     __table_args__ = (UniqueConstraint("contrato_id", "numero"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -77,16 +88,19 @@ class NotaEmpenho(Base):
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
     contrato: Mapped[Contrato] = relationship(back_populates="notas_empenho")
+    # Extrato da NE em ordem cronológica
     movimentos: Mapped[list["MovimentoNotaEmpenho"]] = relationship(
         back_populates="nota", cascade="all, delete-orphan", order_by="MovimentoNotaEmpenho.criado_em"
     )
 
     @property
     def consumido(self) -> Decimal:
+        """Total debitado (pagamentos menos estornos)."""
         return sum((m.debito for m in self.movimentos), Decimal(0))
 
     @property
     def saldo(self) -> Decimal:
+        """Quanto ainda pode ser consumido."""
         return self.valor_original - self.consumido
 
 
@@ -99,13 +113,16 @@ class MovimentoNotaEmpenho(Base):
     """
 
     __tablename__ = "contratos_notas_empenho_movimentos"
+    # CHECK no banco garante que só existam os dois tipos de movimento
     __table_args__ = (CheckConstraint("tipo IN ('pagamento', 'estorno')", name="ck_contratos_ne_movimentos_tipo"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     nota_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_notas_empenho.id", ondelete="CASCADE"), index=True)
+    # Competência que originou o lançamento
     competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
     tipo: Mapped[str] = mapped_column(String(40), default="pagamento")
     debito: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    # Motivo do estorno (vazio nos pagamentos)
     justificativa: Mapped[str] = mapped_column(String(2000), default="", server_default="")
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)

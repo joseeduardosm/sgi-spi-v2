@@ -17,6 +17,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+# Identificação da migração: esta revisão e a anterior
 revision: str = "b2d4f6a8c0e1"
 down_revision: str | Sequence[str] | None = "a1c3e5f7b9d2"
 branch_labels: str | Sequence[str] | None = None
@@ -24,6 +25,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """Cria a tabela `anexos` e as colunas estruturadas da auditoria."""
+    # Metadados dos arquivos (o conteúdo fica em disco)
     op.create_table(
         "anexos",
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -40,9 +43,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("chave_armazenamento"),
     )
+    # Índices para buscar anexos por categoria e por hash
     op.create_index("ix_anexos_categoria", "anexos", ["categoria"])
     op.create_index("ix_anexos_sha256", "anexos", ["sha256"])
 
+    # Novas colunas da auditoria e o índice do histórico por registro
     op.add_column("auditoria", sa.Column("autor_id", sa.Integer(), nullable=True))
     op.add_column("auditoria", sa.Column("alvo_tipo", sa.String(length=60), nullable=True))
     op.add_column("auditoria", sa.Column("alvo_id", sa.String(length=64), nullable=True))
@@ -51,6 +56,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Desfaz na ordem inversa: primeiro a auditoria, depois a tabela de anexos."""
     op.drop_index("ix_auditoria_alvo", table_name="auditoria")
     op.drop_column("auditoria", "dados")
     op.drop_column("auditoria", "alvo_id")

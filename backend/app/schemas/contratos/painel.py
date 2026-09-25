@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados do painel de contratos.
-"""Schemas do painel de contratos (`/contratos/painel`)."""
+"""Schemas do painel de contratos (`/contratos/painel`).
+
+O painel tem quatro blocos: minhas pendências (tarefas do usuário), alertas de risco da
+carteira, execução orçamentária do exercício e números da carteira.
+"""
 
 import uuid
 from datetime import date
@@ -10,15 +14,18 @@ from pydantic import BaseModel, Field
 
 from app.schemas.contratos.tipos import ValorMonetario
 
+# Tipos de pendência (cada um aponta para uma etapa ou tela onde o usuário precisa agir)
 TipoPendencia = Literal[
     "medicao", "ciencia_medicao", "avaliacao", "ciencia_ateste", "nota_fiscal", "cadin", "checklist", "consolidado", "ordem_bancaria",
     "prorrogacao", "reajuste", "alteracao", "ciencia_alteracao", "base_execucao",
 ]
+# Tipos de risco verificados em todos os contratos
 TipoRisco = Literal["a_vencer_sem_prorrogacao", "vigencia_maxima", "reajuste_pendente", "empenho_insuficiente", "pagamento_vencido",
                     "pagamento_vencendo", "competencias_atrasadas"]
 
 
 class Pendencia(BaseModel):
+    """Uma tarefa do usuário logado, com o link direto para a tela onde ela é resolvida."""
     tipo: TipoPendencia
     contrato_id: uuid.UUID
     contrato_numero: str
@@ -29,6 +36,7 @@ class Pendencia(BaseModel):
 
 
 class Risco(BaseModel):
+    """Um risco detectado em um contrato."""
     tipo: TipoRisco
     gravidade: Literal["alta", "media"]
     descricao: str
@@ -49,6 +57,7 @@ class AlertasContrato(BaseModel):
 
 
 class MesExecucao(BaseModel):
+    """Valores de um mês do exercício (alimenta o gráfico previsto × medido × pago)."""
     competencia: date
     previsto: ValorMonetario
     medido: ValorMonetario
@@ -56,6 +65,7 @@ class MesExecucao(BaseModel):
 
 
 class ExecucaoOrcamentaria(BaseModel):
+    """Execução orçamentária do exercício: totais por mês e situação dos empenhos."""
     exercicio: int
     meses: list[MesExecucao]
     total_previsto: ValorMonetario
@@ -67,6 +77,7 @@ class ExecucaoOrcamentaria(BaseModel):
 
 
 class NumerosCarteira(BaseModel):
+    """Contagens e somas gerais da carteira de contratos."""
     contratos_ativos: int
     contratos_a_vencer: int
     contratos_encerrados: int
@@ -75,11 +86,13 @@ class NumerosCarteira(BaseModel):
 
 
 class OpcaoFiltro(BaseModel):
+    """Opção de um filtro (empresa ou contrato) no topo do painel."""
     id: uuid.UUID
     rotulo: str
 
 
 class Painel(BaseModel):
+    """Resposta completa do `GET /api/contratos/painel`."""
     hoje: date
     minhas_pendencias: list[Pendencia]
     alertas: list[AlertasContrato] = Field(..., description="Riscos agrupados por contrato, mais graves primeiro.")

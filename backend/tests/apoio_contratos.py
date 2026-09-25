@@ -9,10 +9,12 @@ from fastapi.testclient import TestClient
 from app.schemas.contratos.validadores import _digito
 from app.services.documentos.pdf import DocumentoPdf
 
+# PDF válido de verdade, gerado pelo próprio sistema, para os testes de upload
 PDF = DocumentoPdf("Documento de teste").paragrafo("conteúdo").gerar()
 
 
 def gerar_cnpj(base: str) -> str:
+    """CNPJ válido a partir de uma base (completa com zeros e calcula os dígitos verificadores)."""
     base = base.rjust(12, "0")[:12]
     pesos = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     primeiro = _digito(base, pesos)
@@ -20,12 +22,14 @@ def gerar_cnpj(base: str) -> str:
 
 
 def gerar_cpf(base: str) -> str:
+    """CPF válido a partir de uma base (completa com zeros e calcula os dígitos verificadores)."""
     base = base.rjust(9, "0")[:9]
     primeiro = _digito(base, list(range(10, 1, -1)))
     return base + primeiro + _digito(base + primeiro, list(range(11, 1, -1)))
 
 
 def criar_empresa(cliente: TestClient, cabecalho: dict, base: str = "11222333", razao: str = "ACME Serviços Ltda") -> dict:
+    """Cadastra uma empresa pela API e devolve o JSON da resposta."""
     r = cliente.post(
         "/api/contratos/empresas",
         json={"cnpj": gerar_cnpj(base + "0001"), "razao_social": razao, "nome_fantasia": "ACME", "endereco": "Rua A, 1"},
@@ -36,6 +40,7 @@ def criar_empresa(cliente: TestClient, cabecalho: dict, base: str = "11222333", 
 
 
 def item(descricao: str = "Limpeza", tipo: str = "continuo", **extras) -> dict:
+    """Item de contrato pronto para o cadastro; os argumentos sobrescrevem campos."""
     dados = {
         "descricao": descricao,
         "tipo": tipo,
@@ -53,6 +58,7 @@ def item(descricao: str = "Limpeza", tipo: str = "continuo", **extras) -> dict:
 
 
 def dados_contrato(empresa_id: str, numero: str = "001/2026", **extras) -> dict:
+    """Corpo completo de cadastro de contrato (um item contínuo e um sob demanda)."""
     dados = {
         "numero": numero,
         "empresa_id": empresa_id,
@@ -75,6 +81,7 @@ def dados_contrato(empresa_id: str, numero: str = "001/2026", **extras) -> dict:
 
 
 def criar_contrato(cliente: TestClient, cabecalho: dict, **extras) -> dict:
+    """Cadastra um contrato pela API (criando a empresa, se não for informada) e devolve o detalhe."""
     empresa_id = extras.pop("empresa_id", None) or criar_empresa(cliente, cabecalho)["id"]
     r = cliente.post("/api/contratos", json=dados_contrato(empresa_id, **extras), headers=cabecalho)
     assert r.status_code == 201, r.text

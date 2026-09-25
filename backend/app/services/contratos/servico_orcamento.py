@@ -1,6 +1,12 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para aplicar as regras de previsão orçamentária e de Notas de Empenho.
-"""Previsão orçamentária (mensal, por vigência) e Notas de Empenho."""
+"""Previsão orçamentária (mensal, por vigência) e Notas de Empenho.
+
+- Previsão: quanto o contrato deve custar em cada mês. Itens contínuos entram sozinhos (com
+  pró-rata 30/360 nos meses parciais); itens sob demanda entram pelos apontamentos da equipe.
+- Notas de Empenho (NE): o orçamento reservado. As ordens bancárias debitam as NEs; o saldo é
+  sempre calculado pelo extrato, nunca gravado.
+"""
 
 import uuid
 from collections import defaultdict
@@ -39,6 +45,7 @@ from app.services.documentos.pdf import DocumentoPdf
 from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
 from app.services.servico_auditoria import auditar
 
+# Atalho para Decimal(0), muito usado nas somas
 ZERO = Decimal(0)
 
 
@@ -47,6 +54,7 @@ ZERO = Decimal(0)
 # ---------------------------------------------------------------------------------------------
 
 def apontamentos_da_vigencia(contrato: Contrato, sequencia: int) -> dict[tuple[uuid.UUID, date], Decimal]:
+    """Apontamentos da vigência como dicionário {(item_id, mês): quantidade}."""
     previsao = valores.previsao_da_vigencia(contrato, sequencia)
     return {(a.item_id, a.competencia): a.quantidade for a in previsao.apontamentos} if previsao else {}
 
@@ -60,13 +68,17 @@ def meses_previstos(contrato: Contrato) -> list[MesPrevisao]:
         for periodo in calculos.meses_da_vigencia(vigencia):
             itens: list[ItemMesPrevisao] = []
             base = ZERO
+            # Preço vigente no mês (considera reajustes já aplicados)
             for item in contrato.itens:
                 preco = valores.preco_em(contrato, item, periodo.competencia)
+                # Contínuo: quantidade do mês (considera aditamentos/supressões) com pró-rata, se o item usar
                 if item.tipo == "continuo":
                     quantidade = valores.quantidade_mensal_em(contrato, item, periodo.competencia)
                     fator = periodo.fator if item.calcula_pro_rata else Decimal(1)
+                    # A base mensal ignora o pró-rata: é o valor de um mês cheio
                     base += quantidade * preco
                 else:
+                    # Sob demanda: só entra no mês se houver apontamento
                     quantidade = apontados.get((item.id, periodo.competencia), ZERO)
                     fator = Decimal(1)
                     if quantidade <= 0:
@@ -91,9 +103,11 @@ def meses_previstos(contrato: Contrato) -> list[MesPrevisao]:
 
 
 def montar_previsao(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> Previsao:
+    """Monta a resposta do `GET /previsao`: grade por vigência e a tabela mensal consolidada."""
     contrato = obter_contrato(sessao, contrato_id)
     meses = meses_previstos(contrato)
     editor = pode_editar(sessao, contrato, usuario)
+    # Nomes dos usuários para exibir quem selou cada previsão
     nomes = dict(sessao.execute(select(Usuario.id, func.coalesce(Usuario.nome_completo, Usuario.login))).all())
     sob_demanda = [i for i in contrato.itens if i.tipo == "sob_demanda"]
     lista = []
@@ -118,6 +132,7 @@ def montar_previsao(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -
                 possui_sob_demanda=bool(sob_demanda), salva=salva,
                 salva_em=previsao.salva_em if previsao else None,
                 salva_por_nome=nomes.get(previsao.salva_por_id) if previsao and previsao.salva_por_id else None,
+                # Antes do selo, quem pode editar o contrato grava; depois, só o SuperRoot
                 pode_editar=editor and (not salva or usuario.superusuario),
                 itens_sob_demanda=itens,
                 total_previsto=sum((m.valor for m in meses if m.sequencia_vigencia == vigencia.sequencia), ZERO),
@@ -127,6 +142,7 @@ def montar_previsao(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -
 
 
 def obter_ou_criar_previsao(contrato: Contrato, sequencia: int) -> PrevisaoVigencia:
+    """Previsão da vigência; cria uma nova (não salva) se ainda não existir."""
     previsao = valores.previsao_da_vigencia(contrato, sequencia)
     if previsao is None:
         previsao = PrevisaoVigencia(sequencia_vigencia=sequencia)
@@ -135,6 +151,7 @@ def obter_ou_criar_previsao(contrato: Contrato, sequencia: int) -> PrevisaoVigen
 
 
 def salvar_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int, dados: GravacaoPrevisao, autor: Usuario) -> None:
+    """Grava a grade de apontamentos da vigência e sela a previsão."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     vigencia = next((v for v in vigencias(contrato) if v.sequencia == sequencia), None)
@@ -143,9 +160,11 @@ def salvar_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int, dad
     previsao = obter_ou_criar_previsao(contrato, sequencia)
     if previsao.salva and not autor.superusuario:
         raise ErroRegraContrato("A previsão desta vigência já foi salva e está selada. Somente o SuperRoot pode alterá-la.")
+    # Só itens sob demanda recebem apontamento, e só nos meses da vigência
     itens = {i.id: i for i in contrato.itens if i.tipo == "sob_demanda"}
     competencias = {p.competencia for p in calculos.meses_da_vigencia(vigencia)}
     grade: dict[tuple[uuid.UUID, date], Decimal] = {}
+    # Normaliza para o dia 1 e valida item e mês de cada apontamento
     for apontamento in dados.apontamentos:
         mes = calculos.primeiro_dia(apontamento.competencia)
         if apontamento.item_id not in itens:
@@ -153,6 +172,7 @@ def salvar_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int, dad
         if mes not in competencias:
             raise ErroRegraContrato(f"O mês {mes:%m/%Y} não pertence à {sequencia}ª vigência.")
         grade[(apontamento.item_id, mes)] = apontamento.quantidade
+    # Nenhum item pode ter mais apontado do que o limite da vigência
     for item in itens.values():
         limite = valores.limite_na_vigencia(contrato, item, sequencia)
         apontado = sum((q for (item_id, _), q in grade.items() if item_id == item.id), ZERO)
@@ -160,12 +180,15 @@ def salvar_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int, dad
             raise ErroRegraContrato(
                 f"O item \"{item.descricao}\" ficaria com saldo negativo ({limite - apontado:.4f}). Reduza os apontamentos."
             )
+    # Guarda o "antes" para a auditoria e substitui a grade inteira
     anteriores = {(a.item_id, a.competencia): a.quantidade for a in previsao.apontamentos}
     previsao.apontamentos.clear()
     sessao.flush()
+    # Quantidade zero não é gravada (célula vazia)
     for (item_id, mes), quantidade in grade.items():
         if quantidade > 0:
             previsao.apontamentos.append(ApontamentoPrevisao(item_id=item_id, competencia=mes, quantidade=quantidade))
+    # Sela a previsão; a ação auditada diferencia a primeira gravação da edição de uma selada
     era_salva = previsao.salva
     previsao.salva, previsao.salva_em, previsao.salva_por_id = True, agora_utc(), autor.id
     auditar(
@@ -178,6 +201,7 @@ def salvar_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int, dad
 
 
 def planilha_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int) -> tuple[bytes, str]:
+    """Gera a planilha da previsão de uma vigência: aba mensal e aba de itens por competência."""
     contrato = obter_contrato(sessao, contrato_id)
     if not any(v.sequencia == sequencia for v in vigencias(contrato)):
         raise RegistroNaoEncontrado("Vigência")
@@ -215,6 +239,7 @@ def previsao_salva_em_todas(contrato: Contrato) -> bool:
     """Pré-requisito da execução: cada vigência com item sob demanda precisa de previsão salva."""
     if not any(i.tipo == "sob_demanda" for i in contrato.itens):
         return True
+    # Todas as vigências precisam ter previsão salva (o `:=` guarda a previsão para testar `salva`)
     return all((p := valores.previsao_da_vigencia(contrato, v.sequencia)) and p.salva for v in vigencias(contrato))
 
 
@@ -223,6 +248,7 @@ def previsao_salva_em_todas(contrato: Contrato) -> bool:
 # ---------------------------------------------------------------------------------------------
 
 def carregar_notas(sessao: Session, contrato_id: uuid.UUID) -> list[NotaEmpenho]:
+    """NEs do contrato com o extrato já carregado, em ordem de cadastro."""
     return list(
         sessao.scalars(
             select(NotaEmpenho)
@@ -234,10 +260,13 @@ def carregar_notas(sessao: Session, contrato_id: uuid.UUID) -> list[NotaEmpenho]
 
 
 def faixa_consumo(percentual: Decimal) -> str:
+    """Cor do cartão da NE: verde até 50% consumido, amarelo até 75%, vermelho acima."""
     return "verde" if percentual <= 50 else "amarelo" if percentual <= 75 else "vermelho"
 
 
 def leitura_nota(sessao: Session, nota: NotaEmpenho, comprometido: Decimal = ZERO) -> LeituraNotaEmpenho:
+    """Monta a NE com o extrato (saldo após cada lançamento) e as faixas de consumo."""
+    # Competências e autores dos lançamentos, buscados em lote para o extrato
     ids = [m.competencia_id for m in nota.movimentos]
     competencias = {c.id: c for c in sessao.scalars(select(Competencia).where(Competencia.id.in_(ids)))} if ids else {}
     autores = dict(
@@ -247,7 +276,9 @@ def leitura_nota(sessao: Session, nota: NotaEmpenho, comprometido: Decimal = ZER
             )
         ).all()
     )
+    # Quantas competências escolheram esta NE (se alguma, ela não pode ser excluída)
     vinculada = sessao.scalar(select(func.count()).where(SelecaoNotaEmpenho.nota_id == nota.id)) or 0
+    # Percorre o extrato em ordem, calculando o saldo depois de cada lançamento
     saldo = nota.valor_original
     movimentos = []
     for movimento in nota.movimentos:
@@ -261,6 +292,7 @@ def leitura_nota(sessao: Session, nota: NotaEmpenho, comprometido: Decimal = ZER
                 justificativa=movimento.justificativa or "", autor=autores.get(movimento.criado_por_id),
             )
         )
+    # Percentual consumido (protege contra divisão por zero)
     percentual = calculos.arredondar(nota.consumido * 100 / nota.valor_original) if nota.valor_original else ZERO
     return LeituraNotaEmpenho(
         id=nota.id, numero=nota.numero, valor_original=nota.valor_original, consumido=nota.consumido, saldo=nota.saldo,
@@ -271,6 +303,7 @@ def leitura_nota(sessao: Session, nota: NotaEmpenho, comprometido: Decimal = ZER
 
 
 def listar_notas(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraNotaEmpenho]:
+    """NEs do contrato, com o valor comprometido por medições ainda não pagas."""
     from app.services.contratos.servico_competencias import compromissos  # import tardio: evita ciclo
 
     contrato = obter_contrato(sessao, contrato_id)
@@ -279,6 +312,7 @@ def listar_notas(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraNotaEmp
 
 
 def _numero_em_uso(sessao: Session, contrato_id: uuid.UUID, numero: str, nota_id: uuid.UUID | None) -> bool:
+    """Indica se o número de NE já existe em outra nota do mesmo contrato."""
     existente = sessao.scalar(
         select(NotaEmpenho.id).where(NotaEmpenho.contrato_id == contrato_id, func.lower(NotaEmpenho.numero) == numero.lower())
     )
@@ -286,6 +320,7 @@ def _numero_em_uso(sessao: Session, contrato_id: uuid.UUID, numero: str, nota_id
 
 
 def criar_nota(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoNotaEmpenho, autor: Usuario) -> None:
+    """Cadastra uma NE (número único no contrato)."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     if _numero_em_uso(sessao, contrato.id, dados.numero, None):
@@ -297,6 +332,7 @@ def criar_nota(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoNotaEmpen
 
 
 def _obter_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID) -> NotaEmpenho:
+    """NE pelo id, desde que pertença ao contrato."""
     nota = sessao.get(NotaEmpenho, nota_id)
     if nota is None or nota.contrato_id != contrato_id:
         raise RegistroNaoEncontrado("Nota de Empenho")
@@ -304,6 +340,7 @@ def _obter_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID) -> 
 
 
 def alterar_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, dados: GravacaoNotaEmpenho, autor: Usuario) -> None:
+    """Altera número e valor da NE; o valor não pode ficar abaixo do já consumido."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     nota = _obter_nota(sessao, contrato_id, nota_id)
@@ -319,6 +356,7 @@ def alterar_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, da
 
 
 def excluir_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, autor: Usuario) -> None:
+    """Exclui a NE, desde que nunca tenha sido escolhida nem debitada."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     nota = _obter_nota(sessao, contrato_id, nota_id)
@@ -349,6 +387,8 @@ def relatorio_notas(sessao: Session) -> list[LinhaRelatorioNotas]:
 
 
 def arquivo_relatorio_notas(sessao: Session, formato: str, autor: Usuario) -> tuple[bytes, str, str]:
+    """Gera o relatório de NEs em XLSX ou PDF; devolve (conteúdo, nome do arquivo, tipo MIME)."""
+    # Totais das três colunas de valores
     linhas = relatorio_notas(sessao)
     totais = [sum((getattr(l, c) for l in linhas), ZERO) for c in ("valor_original", "consumido", "saldo")]
     if formato == "xlsx":
@@ -364,6 +404,7 @@ def arquivo_relatorio_notas(sessao: Session, formato: str, autor: Usuario) -> tu
         ])
         tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         return conteudo, "relatorio-notas-empenho.xlsx", tipo
+    # Qualquer outro formato: PDF em paisagem (a tabela é larga)
     documento = DocumentoPdf("Relatório Executivo de Notas de Empenho", f"{len(linhas)} nota(s) de empenho", paisagem=True,
                              autor=autor.nome_completo or autor.login)
     documento.tabela(
@@ -377,16 +418,19 @@ def arquivo_relatorio_notas(sessao: Session, formato: str, autor: Usuario) -> tu
 
 def moeda(valor: Decimal) -> str:
     """R$ no formato brasileiro, para documentos gerados."""
+    # Formata no padrão americano e troca os separadores: 1,234.50 → 1.234,50
     texto = f"{calculos.arredondar(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {texto}"
 
 
 def saldo_notas(notas: list[NotaEmpenho]) -> Decimal:
+    """Soma dos saldos de uma lista de NEs."""
     return sum((n.saldo for n in notas), ZERO)
 
 
 def movimentos_em_ordem(notas: list[NotaEmpenho], debito: Decimal) -> list[tuple[NotaEmpenho, Decimal]] | None:
     """Distribui o débito pelas NEs na ordem escolhida (esgota a 1ª antes da 2ª). Nulo se faltar saldo."""
+    # Tira de cada NE, na ordem, o que ela puder cobrir até zerar o débito
     restante = debito
     lancamentos = []
     for nota in notas:
@@ -400,6 +444,7 @@ def movimentos_em_ordem(notas: list[NotaEmpenho], debito: Decimal) -> list[tuple
 
 
 def notas_por_contrato(sessao: Session) -> dict[uuid.UUID, list[NotaEmpenho]]:
+    """Todas as NEs agrupadas por contrato: {contrato_id: [notas]} (usado pelo painel)."""
     agrupadas: dict[uuid.UUID, list[NotaEmpenho]] = defaultdict(list)
     for nota in sessao.scalars(select(NotaEmpenho).options(selectinload(NotaEmpenho.movimentos))):
         agrupadas[nota.contrato_id].append(nota)

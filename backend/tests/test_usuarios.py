@@ -1,5 +1,6 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para testar o cadastro e a consulta de usuários.
+"""Testes de usuários: cadastro pelo SuperRoot, proteções, listagem e o perfil institucional."""
 
 from datetime import timedelta
 
@@ -11,6 +12,7 @@ from tests.conftest import PERFIL_COMPLETO, cabecalho, criar_usuario
 
 
 def _nova_conta(cliente, admin, login="ana", **extra):
+    """Cria uma conta local pela API (os argumentos sobrescrevem campos do corpo)."""
     corpo = {"login": login, "senha": "senha-forte-1", "perfil": {"nome_completo": "Ana"}, **extra}
     return cliente.post("/api/usuarios", json=corpo, headers=admin)
 
@@ -18,6 +20,7 @@ def _nova_conta(cliente, admin, login="ana", **extra):
 # --- Cadastro pelo SuperRoot -------------------------------------------------
 
 def test_superroot_cria_conta_local(cliente, admin):
+    """O SuperRoot cria uma conta local, que consegue fazer login."""
     r = _nova_conta(cliente, admin)
     assert r.status_code == 201
     corpo = r.json()
@@ -26,6 +29,7 @@ def test_superroot_cria_conta_local(cliente, admin):
 
 
 def test_login_duplicado_409_e_senha_curta_422(cliente, admin):
+    """Login repetido (sem diferenciar maiúsculas) dá 409; senha curta dá 422 em português."""
     _nova_conta(cliente, admin)
     r = _nova_conta(cliente, admin, login="ANA")
     assert r.status_code == 409 and r.json()["codigo"] == "conflito"
@@ -34,6 +38,7 @@ def test_login_duplicado_409_e_senha_curta_422(cliente, admin):
 
 
 def test_edicao_de_dados_privilegios_e_senha(cliente, admin):
+    """Alterar papel, perfil e senha; a nova senha passa a valer no login."""
     uid = _nova_conta(cliente, admin).json()["id"]
     dados = {"ativo": True, "superusuario": True, "senha": "outra-senha-1", "perfil": PERFIL_COMPLETO}
     r = cliente.put(f"/api/usuarios/{uid}", json=dados, headers=admin)
@@ -43,6 +48,7 @@ def test_edicao_de_dados_privilegios_e_senha(cliente, admin):
 
 
 def test_conta_principal_protegida(cliente, admin):
+    """A conta principal (root) não pode ser excluída nem desativada."""
     root_id = cliente.get("/api/autenticacao/sessao", headers=admin).json()["id"]
     r = cliente.delete(f"/api/usuarios/{root_id}", headers=admin)
     assert r.status_code == 400 and "principal" in r.json()["detalhe"] and r.json()["codigo"] == "invalido"
@@ -51,6 +57,7 @@ def test_conta_principal_protegida(cliente, admin):
 
 
 def test_exclusao_e_auditoria(cliente, admin):
+    """A exclusão responde 204 e fica registrada na auditoria."""
     uid = _nova_conta(cliente, admin).json()["id"]
     assert cliente.delete(f"/api/usuarios/{uid}", headers=admin).status_code == 204
     assert cliente.get(f"/api/usuarios/{uid}", headers=admin).status_code == 404
@@ -60,6 +67,7 @@ def test_exclusao_e_auditoria(cliente, admin):
 
 
 def test_gestor_invalido_ou_proprio(cliente, admin):
+    """O gestor imediato não pode ser o próprio usuário nem um id inexistente."""
     uid = _nova_conta(cliente, admin).json()["id"]
     r = cliente.put(f"/api/usuarios/{uid}", json={"ativo": True, "superusuario": False, "perfil": {"gestor_id": uid}}, headers=admin)
     assert r.status_code == 400
@@ -68,6 +76,7 @@ def test_gestor_invalido_ou_proprio(cliente, admin):
 
 
 def test_listagem_pesquisa_e_paginacao(cliente, admin):
+    """A busca procura em vários campos e a paginação devolve o total."""
     for i in range(3):
         criar_usuario(f"usuario{i}", nome_completo=f"Fulano {i}", departamento="Financeiro" if i == 0 else "Contratos")
     r = cliente.get("/api/usuarios", params={"busca": "financeiro"}, headers=admin).json()
@@ -77,6 +86,7 @@ def test_listagem_pesquisa_e_paginacao(cliente, admin):
 
 
 def test_usuario_comum_nao_administra(cliente, admin):
+    """Usuário comum consulta, mas não cria contas (403)."""
     criar_usuario("comum")
     h = cabecalho(cliente, "comum")
     assert cliente.get("/api/usuarios", headers=h).status_code == 200  # recurso aberto: leitura permitida
@@ -87,6 +97,7 @@ def test_usuario_comum_nao_administra(cliente, admin):
 # --- Perfil institucional e revalidação --------------------------------------
 
 def test_perfil_incompleto_restringe_acesso(cliente):
+    """Perfil incompleto: só as rotas do próprio perfil funcionam; as demais respondem 403."""
     criar_usuario("novo", completo=False)
     h = cabecalho(cliente, "novo")
     sessao_atual = cliente.get("/api/autenticacao/sessao", headers=h).json()
@@ -98,6 +109,7 @@ def test_perfil_incompleto_restringe_acesso(cliente):
 
 
 def test_revalidacao_libera_acesso(cliente):
+    """Revalidar com todos os campos obrigatórios libera o acesso."""
     criar_usuario("novo", completo=False)
     h = cabecalho(cliente, "novo")
     r = cliente.put("/api/autenticacao/perfil", json={**PERFIL_COMPLETO, "ramal": ""}, headers=h)
@@ -108,6 +120,8 @@ def test_revalidacao_libera_acesso(cliente):
 
 
 def test_revalidacao_vencida_apos_30_dias(cliente):
+    """Revalidação com mais de 30 dias volta a restringir o acesso."""
+    # Simula uma revalidação feita há 31 dias
     uid = criar_usuario("antigo")
     with FabricaSessao() as sessao:
         sessao.get(Usuario, uid).perfil_revisado_em = agora_utc() - timedelta(days=31)
@@ -118,11 +132,13 @@ def test_revalidacao_vencida_apos_30_dias(cliente):
 
 
 def test_superroot_nao_passa_pela_restricao(cliente, admin):
+    """O SuperRoot nunca fica restrito pelo perfil."""
     assert cliente.get("/api/autenticacao/sessao", headers=admin).json()["perfil_restrito"] is False
     assert cliente.get("/api/usuarios", headers=admin).status_code == 200
 
 
 def test_ldap_nao_possui_senha_local_ate_admin_definir(cliente, admin):
+    """Conta LDAP não tem senha local; ao receber uma, vira `local_ldap`."""
     with FabricaSessao() as sessao:
         usuario = Usuario(login="corp", origem="ldap", nome_completo="Corp")
         sessao.add(usuario)

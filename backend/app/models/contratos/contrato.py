@@ -37,17 +37,23 @@ PAPEIS_EQUIPE = (
     "fiscal_tecnico",
     "fiscal_tecnico_suplente",
 )
+# Periodicidades aceitas para as competências, em meses (mensal, bimestral, trimestral, semestral, anual)
 PERIODICIDADES = (1, 2, 3, 6, 12)
+# Situações possíveis do contrato (normalmente calculadas pelas datas)
 SITUACOES = ("ativo", "a_vencer", "encerrado", "suspenso")
+# "continuo": quantidade fixa todo mês; "sob_demanda": consumo variável até um teto
 TIPOS_ITEM = ("continuo", "sob_demanda")
 
 
 def _lista_sql(valores: tuple) -> str:
+    """Monta a lista usada nos CHECKs do banco a partir das tuplas acima (ex.: `'a', 'b'` ou `1, 2`)."""
     return ", ".join(f"'{v}'" if isinstance(v, str) else str(v) for v in valores)
 
 
 class Contrato(Base):
+    """Contrato administrativo: cabeçalho, prazos, processos SEI e ligações com todo o módulo."""
     __tablename__ = "contratos"
+    # Regras garantidas também pelo próprio banco (e não só pela aplicação)
     __table_args__ = (
         UniqueConstraint("sequencial", "ano"),
         CheckConstraint(f"periodicidade_meses IN ({_lista_sql(PERIODICIDADES)})", name="ck_contratos_periodicidade"),
@@ -63,16 +69,21 @@ class Contrato(Base):
     # Número exibido como NNN/AAAA (ex.: 012/2026)
     sequencial: Mapped[int] = mapped_column(Integer)
     ano: Mapped[int] = mapped_column(Integer)
+    # RESTRICT: não se exclui uma empresa que tenha contratos
     empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_empresas.id", ondelete="RESTRICT"), index=True)
+    # Nome curto para identificar o contrato nas listas, e a descrição completa do objeto
     apelido: Mapped[str] = mapped_column(String(200), default="")
     objeto: Mapped[str] = mapped_column(String(4000))
     data_inicio: Mapped[date] = mapped_column(Date)
     # Fim da vigência atual (avança a cada prorrogação)
     data_fim: Mapped[date] = mapped_column(Date)
+    # Prazo da vigência original e o prazo máximo permitido com as prorrogações, em meses
     vigencia_inicial_meses: Mapped[int] = mapped_column(Integer)
     vigencia_maxima_meses: Mapped[int] = mapped_column(Integer)
     periodicidade_meses: Mapped[int] = mapped_column(Integer, default=1)
+    # Mês do ano em que o contrato pode ser reajustado
     mes_reajuste: Mapped[int] = mapped_column(Integer)
+    # Processos SEI de gestão e de execução (número e link)
     sei_gestao_numero: Mapped[str] = mapped_column(String(100))
     sei_gestao_link: Mapped[str] = mapped_column(String(1000))
     sei_execucao_numero: Mapped[str] = mapped_column(String(100))
@@ -87,6 +98,8 @@ class Contrato(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
+    # Relacionamentos: tudo o que pertence ao contrato é apagado junto com ele (`delete-orphan`).
+    # Os nomes entre aspas são resolvidos depois, quando os outros arquivos de modelos são carregados.
     empresa: Mapped[EmpresaContratada] = relationship()
     itens: Mapped[list["ItemContrato"]] = relationship(
         back_populates="contrato", cascade="all, delete-orphan", order_by="ItemContrato.ordem"
@@ -120,10 +133,12 @@ class Contrato(Base):
 
     @property
     def numero(self) -> str:
+        """Número no formato exibido nas telas (ex.: `012/2026`)."""
         return f"{self.sequencial:03d}/{self.ano:04d}"
 
 
 class ItemContrato(Base):
+    """Item financeiro do contrato (serviço ou material, com quantidade e preço unitário)."""
     __tablename__ = "contratos_itens"
     __table_args__ = (
         CheckConstraint(f"tipo IN ({_lista_sql(TIPOS_ITEM)})", name="ck_contratos_itens_tipo"),
@@ -138,10 +153,12 @@ class ItemContrato(Base):
     tipo: Mapped[str] = mapped_column(String(20))
     # Faturamento: com pró-rata (proporcional em mês parcial) ou sempre integral
     calcula_pro_rata: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Códigos de classificação orçamentária e de catálogo (opcionais)
     codigo_classe: Mapped[str] = mapped_column(String(80), default="")
     codigo_natureza_despesa: Mapped[str] = mapped_column(String(80), default="")
     codigo_siafisico: Mapped[str] = mapped_column(String(80), default="")
     codigo_catmat_catser: Mapped[str] = mapped_column(String(80), default="")
+    # Contínuo: quantidade de todo mês
     quantidade_mensal: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal(0))
     # Sob demanda: teto da vigência inicial. Contínuo: não usado (mensal × meses)
     quantidade_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal(0))
@@ -174,6 +191,7 @@ class DesignacaoEquipe(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     contrato: Mapped[Contrato] = relationship(back_populates="equipe")
+# Documento de um tipo do catálogo por contrato; enviar de novo substitui o anexo
 
 
 class DocumentoContrato(Base):
@@ -185,6 +203,7 @@ class DocumentoContrato(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
     codigo_tipo: Mapped[int] = mapped_column(Integer)
+    # Nome do documento conforme o catálogo (`catalogo_documentos.py`)
     titulo: Mapped[str] = mapped_column(String(300))
     anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="SET NULL"), index=True)
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

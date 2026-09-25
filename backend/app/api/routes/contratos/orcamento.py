@@ -1,6 +1,13 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de previsão orçamentária e Notas de Empenho.
-"""Rotas de previsão orçamentária e Notas de Empenho (`/api/contratos/{contrato_id}/…`)."""
+"""Rotas de previsão orçamentária e Notas de Empenho (`/api/contratos/{contrato_id}/…`).
+
+- Previsão: para cada vigência, os itens "sob demanda" recebem apontamentos mensais de
+  quantidade; os itens fixos entram pelo valor mensal (com pró-rata 30/360 nos meses parciais).
+  Ao salvar, a previsão fica selada e só o SuperRoot pode alterá-la.
+- Notas de Empenho (NE): reservas de orçamento que as ordens bancárias vão consumindo; cada NE
+  tem saldo e extrato de débitos.
+"""
 
 import uuid
 
@@ -16,6 +23,7 @@ from app.services.contratos import servico_orcamento as servico
 
 roteador = APIRouter(prefix="/contratos/{contrato_id}", tags=["Contratos: orçamento"], responses=RESPOSTAS_AUTENTICADAS)
 NAO_ENCONTRADO = resposta_nao_encontrado("Contrato")
+# Tipo MIME das planilhas do Excel (.xlsx)
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -28,6 +36,7 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     responses=NAO_ENCONTRADO,
 )
 def consultar_previsao(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)) -> Previsao:
+    """Monta a previsão de todas as vigências do contrato."""
     with traduzir_erros():
         return servico.montar_previsao(sessao, contrato_id, usuario)
 
@@ -47,6 +56,7 @@ def salvar_previsao(
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ) -> Previsao:
+    """Grava os apontamentos da vigência, sela a previsão e devolve a previsão recalculada."""
     with traduzir_erros(sessao):
         servico.salvar_previsao(sessao, contrato_id, sequencia_vigencia, dados, autor)
         return servico.montar_previsao(sessao, contrato_id, autor)
@@ -59,6 +69,7 @@ def salvar_previsao(
     responses={status.HTTP_200_OK: {"content": {XLSX: {}}, "description": "Planilha."}, **NAO_ENCONTRADO},
 )
 def exportar_previsao(contrato_id: uuid.UUID, sequencia_vigencia: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    """Gera a planilha da vigência em memória e devolve como download."""
     with traduzir_erros():
         conteudo, nome = servico.planilha_previsao(sessao, contrato_id, sequencia_vigencia)
     return Response(conteudo, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{nome}"'})
@@ -72,6 +83,7 @@ def exportar_previsao(contrato_id: uuid.UUID, sequencia_vigencia: int, sessao: S
     responses=NAO_ENCONTRADO,
 )
 def listar_notas(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)) -> list[LeituraNotaEmpenho]:
+    """NEs do contrato com saldo, faixa de consumo (para a cor do cartão) e extrato."""
     with traduzir_erros():
         return servico.listar_notas(sessao, contrato_id)
 
@@ -87,6 +99,7 @@ def listar_notas(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao)
 def criar_nota(
     contrato_id: uuid.UUID, dados: GravacaoNotaEmpenho, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)
 ) -> list[LeituraNotaEmpenho]:
+    """Cadastra a NE e devolve a lista completa."""
     with traduzir_erros(sessao):
         servico.criar_nota(sessao, contrato_id, dados, autor)
         return servico.listar_notas(sessao, contrato_id)
@@ -106,6 +119,7 @@ def alterar_nota(
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ) -> list[LeituraNotaEmpenho]:
+    """Altera a NE; o valor não pode ser menor do que o já debitado."""
     with traduzir_erros(sessao):
         servico.alterar_nota(sessao, contrato_id, nota_id, dados, autor)
         return servico.listar_notas(sessao, contrato_id)
@@ -119,6 +133,7 @@ def alterar_nota(
     responses={**resposta_nao_encontrado("Contrato ou NE"), **INVALIDO, **SEM_VINCULO},
 )
 def excluir_nota(contrato_id: uuid.UUID, nota_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)) -> Response:
+    """Exclui a NE, desde que nunca tenha sido usada."""
     with traduzir_erros(sessao):
         servico.excluir_nota(sessao, contrato_id, nota_id, autor)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

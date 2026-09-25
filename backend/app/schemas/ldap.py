@@ -1,5 +1,9 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados de entrada e saída dos diretórios LDAP.
+"""Formatos de entrada e saída das rotas de diretórios LDAP.
+
+A senha da conta técnica (bind) só entra pela API; nunca é devolvida em nenhuma resposta.
+"""
 
 import uuid
 from datetime import datetime
@@ -8,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BaseDiretorio(BaseModel):
+    """Campos comuns ao cadastro, à alteração e ao teste de um diretório."""
     nome: str = Field(..., min_length=1, max_length=100, description="Nome de identificação do diretório.")
     servidor: str = Field(..., min_length=1, max_length=255, description="Servidor (nome ou IP).")
     porta: int = Field(389, ge=1, le=65535, description="Porta. 389 para LDAP, 636 para LDAPS.")
@@ -19,6 +24,7 @@ class BaseDiretorio(BaseModel):
     @field_validator("nome", "servidor", "base_dn", "bind_dn")
     @classmethod
     def _aparar(cls, valor: str) -> str:
+        """Tira espaços das pontas e recusa valores em branco."""
         valor = valor.strip()
         if not valor:
             raise ValueError("não pode ser vazio")
@@ -26,10 +32,12 @@ class BaseDiretorio(BaseModel):
 
 
 class CriacaoDiretorio(BaseDiretorio):
+    """Cadastro: a senha da conta técnica é obrigatória."""
     senha_bind: str = Field(..., min_length=1, max_length=256, description="Senha da conta técnica. Obrigatória no cadastro.")
 
 
 class AlteracaoDiretorio(BaseDiretorio):
+    """Alteração: a senha é opcional; em branco, mantém a gravada."""
     senha_bind: str | None = Field(None, max_length=256, description="Nova senha da conta técnica. Vazia ou ausente preserva a atual.")
 
 
@@ -40,12 +48,14 @@ class TesteDiretorioNaoSalvo(BaseDiretorio):
 
 
 class SenhaBindTemporaria(BaseModel):
+    """Corpo opcional do teste de um diretório salvo."""
     senha_bind: str | None = Field(None, max_length=256, description="Senha para usar só neste teste. Vazia usa a senha salva.")
 
 
 class LeituraDiretorio(BaseModel):
     """Configuração do diretório. A senha de bind nunca é devolvida."""
 
+    # Permite montar o schema direto a partir do objeto do banco (modelo SQLAlchemy)
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -68,12 +78,14 @@ class LeituraDiretorio(BaseModel):
 
 
 class ResultadoTeste(BaseModel):
+    """Resultado de um teste de conexão."""
     sucesso: bool
     latencia_ms: int = Field(..., description="Tempo de conexão + bind + validação da Base DN, em ms.")
     mensagem: str
 
 
 class ResultadoSincronizacao(BaseModel):
+    """Resumo de uma sincronização de usuários."""
     encontrados: int = Field(..., description="Identidades encontradas no diretório.")
     criados: int = Field(..., description="Contas corporativas criadas.")
     atualizados: int = Field(..., description="Contas existentes atualizadas.")
@@ -83,6 +95,7 @@ class ResultadoSincronizacao(BaseModel):
 
 
 class DiagnosticoLogin(BaseModel):
+    """Resultado da busca de um login no diretório (ferramenta de diagnóstico)."""
     encontrado: bool
     entradas: int
     mensagem: str

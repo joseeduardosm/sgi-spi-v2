@@ -10,6 +10,7 @@ from typing import NamedTuple
 
 
 class TipoDocumento(NamedTuple):
+    """Um tipo de documento: código (001…), título exibido e prefixo do nome do arquivo."""
     codigo: int
     titulo: str
     prefixo: str
@@ -40,12 +41,15 @@ CATALOGO: tuple[TipoDocumento, ...] = (
     TipoDocumento(22, "Ordem de Início dos Serviços/Fornecimento", "ORDEM_INICIO_SERVICOS"),
     TipoDocumento(23, "Termos de Recebimento Provisório e Definitivo", "TERMO_RECEBIMENTO"),
 )
+# Acesso rápido ao tipo pelo código: {1: TipoDocumento(...), ...}
 POR_CODIGO = {tipo.codigo: tipo for tipo in CATALOGO}
 # Prefixo dos termos aditivos de prorrogação (códigos 024 em diante)
 PREFIXO_TERMO_ADITIVO = "TERMO_ADITIVO"
 
 
 def nome_download(codigo: int, sequencial: int, ano: int) -> str:
+    """Nome do arquivo baixado, ex.: `DFD_SPI_012_2026.pdf` ou `TERMO_ADITIVO_024_SPI_012_2026.pdf`."""
+    # Código fora do catálogo = termo aditivo de prorrogação (024 em diante)
     tipo = POR_CODIGO.get(codigo)
     prefixo = tipo.prefixo if tipo else f"{PREFIXO_TERMO_ADITIVO}_{codigo:03d}"
     return f"{prefixo}_SPI_{sequencial:03d}_{ano:04d}.pdf"

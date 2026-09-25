@@ -1,5 +1,11 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de administração dos diretórios LDAP.
+"""Rotas dos diretórios LDAP/Active Directory (`/api/ldap/diretorios`), exclusivas do SuperRoot.
+
+Um diretório guarda como conectar ao AD (servidor, porta, SSL, Base DN e conta técnica de bind).
+Só um fica ativo por vez: é nele que o login corporativo é conferido e dele que os usuários são
+sincronizados para o portal.
+"""
 
 import uuid
 
@@ -34,6 +40,7 @@ NAO_ENCONTRADO = resposta_nao_encontrado("Diretório")
 
 
 def _obter(sessao: Session, diretorio_id: uuid.UUID) -> DiretorioLdap:
+    """Diretório pelo id, ou 404 se não existir (usado no início de várias rotas)."""
     try:
         return servico_ldap.obter_diretorio(sessao, diretorio_id)
     except DiretorioNaoEncontrado:
@@ -41,6 +48,7 @@ def _obter(sessao: Session, diretorio_id: uuid.UUID) -> DiretorioLdap:
 
 
 def _sincronizar_se_ativo(sessao: Session, diretorio: DiretorioLdap, autor: str) -> None:
+    """Sincroniza os usuários logo depois de salvar um diretório ativo."""
     # Diretório ativo já popula os usuários ao ser salvo. Se o AD estiver indisponível,
     # o cadastro permanece válido e a rotina periódica tentará de novo.
     if diretorio.ativo:
@@ -52,6 +60,7 @@ def _sincronizar_se_ativo(sessao: Session, diretorio: DiretorioLdap, autor: str)
 
 @roteador.get("", response_model=list[LeituraDiretorio], summary="Listar diretórios")
 def listar_diretorios(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(super_root)) -> list[DiretorioLdap]:
+    """Todos os diretórios cadastrados (a senha de bind nunca é devolvida)."""
     return servico_ldap.listar_diretorios(sessao)
 
 
@@ -63,6 +72,7 @@ def listar_diretorios(sessao: Session = Depends(obter_sessao), _: Usuario = Depe
     description="Cifra a senha de bind antes de gravar. Se `ativo` for verdadeiro, desativa os demais e sincroniza os usuários.",
 )
 def criar_diretorio(dados: CriacaoDiretorio, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DiretorioLdap:
+    """Cadastra o diretório e, se ativo, já traz os usuários do AD."""
     diretorio = servico_ldap.criar_diretorio(sessao, dados, autor.login)
     _sincronizar_se_ativo(sessao, diretorio, autor.login)
     return diretorio
@@ -75,12 +85,14 @@ def criar_diretorio(dados: CriacaoDiretorio, sessao: Session = Depends(obter_ses
     description="Valida servidor, porta, SSL, credenciais técnicas e Base DN de uma configuração ainda não gravada.",
 )
 def testar_sem_salvar(dados: TesteDiretorioNaoSalvo, _: Usuario = Depends(super_root)) -> ResultadoTeste:
+    """Permite testar os dados do formulário antes de gravar (nada é salvo no banco)."""
     parametros = ParametrosDiretorio(dados.servidor, dados.porta, dados.usar_ssl, dados.base_dn, dados.bind_dn, dados.senha_bind)
     return ResultadoTeste(**servico_ldap.testar_parametros(parametros).__dict__)
 
 
 @roteador.get("/{diretorio_id}", response_model=LeituraDiretorio, summary="Consultar diretório", responses=NAO_ENCONTRADO)
 def consultar_diretorio(diretorio_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(super_root)) -> DiretorioLdap:
+    """Detalhe de um diretório."""
     return _obter(sessao, diretorio_id)
 
 
@@ -94,6 +106,7 @@ def consultar_diretorio(diretorio_id: uuid.UUID, sessao: Session = Depends(obter
 def alterar_diretorio(
     diretorio_id: uuid.UUID, dados: AlteracaoDiretorio, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)
 ) -> DiretorioLdap:
+    """Altera a configuração e, se o diretório estiver ativo, sincroniza de novo."""
     _obter(sessao, diretorio_id)
     diretorio = servico_ldap.alterar_diretorio(sessao, diretorio_id, dados, autor.login)
     _sincronizar_se_ativo(sessao, diretorio, autor.login)
@@ -108,6 +121,7 @@ def alterar_diretorio(
     responses=NAO_ENCONTRADO,
 )
 def excluir_diretorio(diretorio_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> Response:
+    """Exclui o diretório; os usuários vindos dele continuam existindo no portal."""
     _obter(sessao, diretorio_id)
     servico_ldap.excluir_diretorio(sessao, diretorio_id, autor.login)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -126,6 +140,7 @@ def testar_diretorio(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(super_root),
 ) -> ResultadoTeste:
+    """Testa o diretório salvo; opcionalmente com uma senha de bind digitada na hora (não gravada)."""
     _obter(sessao, diretorio_id)
     resultado = servico_ldap.testar_diretorio(sessao, diretorio_id, dados.senha_bind if dados else None)
     return ResultadoTeste(**resultado.__dict__)
@@ -148,10 +163,12 @@ def testar_diretorio(
 def sincronizar_diretorio(
     diretorio_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)
 ) -> ResultadoSincronizacao:
+    """Sincronização manual; devolve quantas contas foram criadas, atualizadas e desativadas."""
     _obter(sessao, diretorio_id)
     try:
         resumo = servico_ldap.sincronizar(sessao, diretorio_id, autor.login)
     except ErroLdapIndisponivel as erro:
+        # 503: o problema é o serviço externo (AD), não os dados enviados
         raise ErroApi(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             f"Não foi possível ler o diretório: {erro} Nenhum usuário foi alterado.",
@@ -173,8 +190,10 @@ def diagnosticar_login(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(super_root),
 ) -> DiagnosticoLogin:
+    """Ajuda a investigar "não consigo entrar": diz se o login existe no AD e quantas entradas o representam."""
     diretorio = _obter(sessao, diretorio_id)
     try:
+        # Monta os parâmetros de conexão; falha se a senha de bind gravada não puder ser decifrada
         parametros = ParametrosDiretorio.do_modelo(diretorio)
     except ErroLdapIndisponivel as erro:
         return DiagnosticoLogin(encontrado=False, entradas=0, mensagem=str(erro))

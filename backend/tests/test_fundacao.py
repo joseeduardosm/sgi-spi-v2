@@ -19,10 +19,12 @@ from app.services.documentos.planilha import FORMATO_MOEDA, Aba, Coluna, gerar_p
 from app.services.servico_anexos import ErroAnexo
 from app.services.servico_auditoria import auditar_alteracoes, diferencas, historico_campos
 
+# PDF mínimo válido, gerado pelo próprio sistema
 PDF_MINIMO = DocumentoPdf("Teste").paragrafo("conteúdo").gerar()
 
 
 def test_guarda_pdf_com_metadados_e_permite_download():
+    """Grava o PDF com hash e tamanho, e o download sai com nome seguro (sem acentos nem barras)."""
     with FabricaSessao() as sessao:
         anexo = servico_anexos.guardar_pdf(sessao, BytesIO(PDF_MINIMO), "Contrato Assinado.pdf", "contrato-documento", None)
         sessao.commit()
@@ -39,6 +41,7 @@ def test_guarda_pdf_com_metadados_e_permite_download():
     [(b"", "vazio"), (b"PK\x03\x04 arquivo zip", "PDF"), (b"%PD", "PDF")],
 )
 def test_recusa_arquivo_que_nao_e_pdf(conteudo, mensagem):
+    """Vazio, ZIP e PDF truncado são recusados, sem deixar arquivo parcial no disco."""
     with FabricaSessao() as sessao, pytest.raises(ErroAnexo, match=mensagem):
         servico_anexos.guardar_pdf(sessao, BytesIO(conteudo), "x.pdf", "teste", None)
     # Nenhum arquivo parcial fica para trás
@@ -46,6 +49,7 @@ def test_recusa_arquivo_que_nao_e_pdf(conteudo, mensagem):
 
 
 def test_recusa_pdf_acima_do_limite(monkeypatch):
+    """Arquivo acima do limite configurado é recusado."""
     monkeypatch.setattr(obter_configuracao(), "anexos_tamanho_maximo_mb", 1)
     grande = b"%PDF-" + b"0" * (1024 * 1024 + 1)
     with FabricaSessao() as sessao, pytest.raises(ErroAnexo, match="limite de 1 MB"):
@@ -53,6 +57,7 @@ def test_recusa_pdf_acima_do_limite(monkeypatch):
 
 
 def test_download_de_anexo_descartado_e_recusado():
+    """Anexo marcado como excluído não pode mais ser baixado."""
     with FabricaSessao() as sessao:
         anexo = servico_anexos.guardar_pdf_gerado(sessao, PDF_MINIMO, "memoria.pdf", "teste", None)
         servico_anexos.descartar(anexo)
@@ -61,6 +66,7 @@ def test_download_de_anexo_descartado_e_recusado():
 
 
 def test_diferencas_consideram_so_campos_alterados():
+    """Só os campos que mudaram entram no "de → para" (datas e decimais convertidos para JSON)."""
     antes = {"apelido": "Limpeza", "valor": Decimal("10.50"), "inicio": date(2026, 1, 1)}
     depois = {"apelido": "Limpeza predial", "valor": Decimal("10.50"), "inicio": date(2026, 2, 1)}
     assert diferencas(antes, depois) == {
@@ -70,6 +76,7 @@ def test_diferencas_consideram_so_campos_alterados():
 
 
 def test_historico_por_campo_do_alvo():
+    """O histórico só traz os registros do alvo pedido."""
     with FabricaSessao() as sessao:
         auditar_alteracoes(sessao, "root", None, "contrato.alterar", "contrato", "abc", "Contrato 001/2026", {"a": 1}, {"a": 2})
         # Sem diferença, nada é registrado
@@ -82,11 +89,14 @@ def test_historico_por_campo_do_alvo():
 
 
 def test_respostas_trazem_codigo_de_correlacao(cliente):
+    """Toda resposta leva o cabeçalho `X-Correlacao` (12 caracteres)."""
     resposta = cliente.get("/api/saude")
     assert len(resposta.headers["X-Correlacao"]) == 12
 
 
 def test_erro_inesperado_responde_500_com_correlacao():
+    """Erro não tratado vira 500 genérico com o código de correlação, sem vazar a mensagem interna."""
+    # Rota temporária que sempre falha, removida no `finally`
     def falhar() -> None:
         raise RuntimeError("detalhe interno que não pode vazar")
 
@@ -103,6 +113,7 @@ def test_erro_inesperado_responde_500_com_correlacao():
 
 
 def test_pdf_institucional_e_mesclagem():
+    """PDF com cabeçalho institucional, várias páginas e texto do usuário escapado; mesclagem soma as páginas."""
     documento = DocumentoPdf("Memória de cálculo", "Contrato 001/2026", autor="Pessoa Teste")
     documento.secao("Itens").tabela(["Item", "Valor"], [["Limpeza <b>", "R$ 1,00"]] * 80, rodape=["Total", "R$ 80,00"])
     conteudo = documento.gerar()
@@ -114,6 +125,7 @@ def test_pdf_institucional_e_mesclagem():
 
 
 def test_planilha_com_formatos():
+    """Planilha com título, formato de moeda e valores numéricos."""
     from openpyxl import load_workbook
 
     conteudo = gerar_planilha(

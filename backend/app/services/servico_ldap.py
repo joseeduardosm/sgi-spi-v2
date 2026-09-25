@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para aplicar as regras de cadastro, teste e sincronização dos diretórios LDAP.
-"""Regras de negócio dos diretórios LDAP: cadastro, ativação, teste e sincronização."""
+"""Regras de negócio dos diretórios LDAP: cadastro, ativação, teste e sincronização.
+
+A conversa de baixo nível com o servidor (conexão, bind, buscas) fica em `cliente_ldap`; aqui
+ficam as decisões: qual diretório está ativo, como a lista do AD vira contas no portal etc.
+"""
 
 import uuid
 from dataclasses import dataclass
@@ -21,11 +25,13 @@ from app.services.servico_usuarios import aplicar_identidade, buscar_por_login
 
 
 class DiretorioNaoEncontrado(Exception):
+    """O diretório pedido não existe (vira 404)."""
     pass
 
 
 @dataclass(frozen=True)
 class ResumoSincronizacao:
+    """Contagens de uma sincronização (devolvidas à tela e gravadas na auditoria)."""
     encontrados: int
     criados: int
     atualizados: int
@@ -35,10 +41,12 @@ class ResumoSincronizacao:
 
 
 def listar_diretorios(sessao: Session) -> list[DiretorioLdap]:
+    """Diretórios em ordem alfabética."""
     return list(sessao.scalars(select(DiretorioLdap).order_by(func.lower(DiretorioLdap.nome))))
 
 
 def obter_diretorio(sessao: Session, diretorio_id: uuid.UUID) -> DiretorioLdap:
+    """Diretório pelo id, ou `DiretorioNaoEncontrado`."""
     diretorio = sessao.get(DiretorioLdap, diretorio_id)
     if diretorio is None:
         raise DiretorioNaoEncontrado()
@@ -46,10 +54,12 @@ def obter_diretorio(sessao: Session, diretorio_id: uuid.UUID) -> DiretorioLdap:
 
 
 def obter_diretorio_ativo(sessao: Session) -> DiretorioLdap | None:
+    """O diretório ativo (no máximo um), ou None se o login corporativo estiver desligado."""
     return sessao.scalar(select(DiretorioLdap).where(DiretorioLdap.ativo.is_(True)))
 
 
 def _desativar_demais(sessao: Session, manter_id: uuid.UUID | None) -> None:
+    """Desativa todos os diretórios ativos, exceto `manter_id` (garante que só um fique ativo)."""
     comando = update(DiretorioLdap).where(DiretorioLdap.ativo.is_(True))
     if manter_id is not None:
         comando = comando.where(DiretorioLdap.id != manter_id)
@@ -58,6 +68,8 @@ def _desativar_demais(sessao: Session, manter_id: uuid.UUID | None) -> None:
 
 
 def criar_diretorio(sessao: Session, dados: CriacaoDiretorio, autor: str) -> DiretorioLdap:
+    """Cadastra o diretório, com a senha de bind cifrada."""
+    # Antes de inserir um ativo, desliga os outros (o banco tem índice único para "só um ativo")
     if dados.ativo:
         _desativar_demais(sessao, None)
     diretorio = DiretorioLdap(
@@ -78,6 +90,7 @@ def criar_diretorio(sessao: Session, dados: CriacaoDiretorio, autor: str) -> Dir
 
 
 def alterar_diretorio(sessao: Session, diretorio_id: uuid.UUID, dados: AlteracaoDiretorio, autor: str) -> DiretorioLdap:
+    """Altera o diretório; senha em branco mantém a atual."""
     diretorio = obter_diretorio(sessao, diretorio_id)
     if dados.ativo:
         _desativar_demais(sessao, diretorio.id)
@@ -91,6 +104,7 @@ def alterar_diretorio(sessao: Session, diretorio_id: uuid.UUID, dados: Alteracao
 
 
 def excluir_diretorio(sessao: Session, diretorio_id: uuid.UUID, autor: str) -> None:
+    """Exclui o diretório (os usuários vindos dele continuam, sem vínculo)."""
     diretorio = obter_diretorio(sessao, diretorio_id)
     auditar(sessao, autor, "ldap.excluir", diretorio.nome, f"id={diretorio.id}")
     sessao.delete(diretorio)
@@ -98,16 +112,20 @@ def excluir_diretorio(sessao: Session, diretorio_id: uuid.UUID, autor: str) -> N
 
 
 def testar_parametros(parametros: ParametrosDiretorio) -> ResultadoTesteLdap:
+    """Testa parâmetros ainda não salvos (nada é gravado)."""
     return cliente_ldap.testar_conexao(parametros)
 
 
 def testar_diretorio(sessao: Session, diretorio_id: uuid.UUID, senha_bind: str | None) -> ResultadoTesteLdap:
     """Testa a configuração salva e registra data, resultado, tempo de resposta e erro."""
     diretorio = obter_diretorio(sessao, diretorio_id)
+    # Uma senha digitada na hora substitui a gravada só neste teste
     try:
         resultado = cliente_ldap.testar_conexao(ParametrosDiretorio.do_modelo(diretorio, senha_bind or None))
     except cliente_ldap.ErroLdapIndisponivel as erro:
+        # Falha antes da conexão (ex.: senha gravada não pode ser decifrada) conta como teste sem sucesso
         resultado = ResultadoTesteLdap(False, 0, str(erro))
+    # Guarda o resultado para exibir na tela de administração
     diretorio.ultimo_teste_em = agora_utc()
     diretorio.ultimo_teste_ok = resultado.sucesso
     diretorio.ultima_latencia_ms = resultado.latencia_ms
@@ -122,6 +140,7 @@ def sincronizar(sessao: Session, diretorio_id: uuid.UUID, autor: str) -> ResumoS
     Uma leitura com falha não altera nenhum usuário.
     """
     diretorio = obter_diretorio(sessao, diretorio_id)
+    # 1º lê tudo do AD; se a leitura falhar, só registra o erro e não mexe em nenhum usuário
     try:
         identidades = cliente_ldap.listar_usuarios(ParametrosDiretorio.do_modelo(diretorio))
     except cliente_ldap.ErroLdapIndisponivel as erro:
@@ -130,6 +149,7 @@ def sincronizar(sessao: Session, diretorio_id: uuid.UUID, autor: str) -> ResumoS
         diretorio.ultima_sincronizacao_mensagem = str(erro)
         sessao.commit()
         raise
+    # 2º aplica a lista lida às contas do portal
     resumo = aplicar_fotografia(sessao, diretorio, identidades)
     diretorio.ultima_sincronizacao_em = resumo.sincronizado_em
     diretorio.ultima_sincronizacao_ok = True
@@ -143,16 +163,20 @@ def sincronizar(sessao: Session, diretorio_id: uuid.UUID, autor: str) -> ResumoS
 
 
 def aplicar_fotografia(sessao: Session, diretorio: DiretorioLdap, identidades: list[IdentidadeLdap]) -> ResumoSincronizacao:
+    """Aplica a lista do AD às contas do portal: cria as novas, atualiza as existentes e desativa as ausentes."""
+    # Conjuntos com o que veio do AD, para saber depois quem sumiu
     agora = agora_utc()
     criados = atualizados = desativados = ignorados = 0
     ids_vistos = {i.id_externo.lower() for i in identidades if i.id_externo}
     logins_vistos = {i.login.lower() for i in identidades}
 
+    # Contas já vinculadas a este diretório, indexadas por identificador externo e por login
     vinculados = list(sessao.scalars(select(Usuario).where(Usuario.diretorio_id == diretorio.id)))
     por_id_externo = {u.id_externo.lower(): u for u in vinculados if u.id_externo}
     por_login = {u.login.lower(): u for u in vinculados}
 
     for identidade in identidades:
+        # Procura a conta pelo identificador externo (mais confiável) e, na falta, pelo login
         usuario = (por_id_externo.get(identidade.id_externo.lower()) if identidade.id_externo else None) or por_login.get(
             identidade.login.lower()
         )
@@ -161,6 +185,7 @@ def aplicar_fotografia(sessao: Session, diretorio: DiretorioLdap, identidades: l
                 # Conta local homônima é preservada: não muda origem nem privilégios numa importação
                 ignorados += 1
                 continue
+            # Pessoa nova no AD: cria a conta corporativa
             usuario = Usuario(login=identidade.login, origem=OrigemUsuario.LDAP, diretorio_id=diretorio.id)
             sessao.add(usuario)
             aplicar_identidade(usuario, identidade)
@@ -169,6 +194,7 @@ def aplicar_fotografia(sessao: Session, diretorio: DiretorioLdap, identidades: l
             por_login[usuario.login.lower()] = usuario
             criados += 1
         else:
+            # Conta existente: atualiza os dados; a situação só acompanha o AD em contas exclusivamente LDAP
             aplicar_identidade(usuario, identidade)
             if usuario.origem == OrigemUsuario.LDAP and not usuario.superusuario:
                 usuario.ativo = identidade.ativo

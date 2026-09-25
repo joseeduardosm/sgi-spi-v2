@@ -1,5 +1,11 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de cadastro de setores e membros.
+"""Rotas de setores (`/api/setores`).
+
+Setores representam a estrutura institucional (com setor pai e líder) e também "grupos
+sistêmicos". Eles servem de grupos de acesso na ACL: uma regra dada a um setor vale para todos
+os membros. Consultar exige ACL `setores` ≥ LEITURA; alterar é exclusivo do SuperRoot.
+"""
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
@@ -15,6 +21,7 @@ from app.services.servico_setores import ErroRegraSetor, SetorNaoEncontrado
 
 roteador = APIRouter(prefix="/setores", tags=["Setores"], responses=RESPOSTAS_AUTENTICADAS)
 
+# Dependências de acesso reutilizadas nas rotas abaixo
 pode_ler = exigir_acl("setores", NivelAcl.LEITURA)
 super_root = exigir_papeis(Papel.SUPER_ROOT)
 NAO_ENCONTRADO = resposta_nao_encontrado("Setor")
@@ -24,11 +31,13 @@ NAO_ENCONTRADO = resposta_nao_encontrado("Setor")
 def listar_setores(
     busca: str | None = Query(None, max_length=100), sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)
 ) -> list[LeituraSetor]:
+    """Todos os setores em ordem alfabética, com contagem de membros e subordinados."""
     return servico.listar_setores(sessao, busca)
 
 
 @roteador.get("/{setor_id}", response_model=DetalheSetor, summary="Consultar setor com membros", responses=NAO_ENCONTRADO)
 def consultar_setor(setor_id: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)) -> DetalheSetor:
+    """Detalhe do setor com a lista de membros."""
     try:
         return servico.detalhar_setor(sessao, setor_id)
     except SetorNaoEncontrado:
@@ -44,6 +53,7 @@ def consultar_setor(setor_id: int, sessao: Session = Depends(obter_sessao), _: U
     responses={**CONFLITO, **INVALIDO},
 )
 def criar_setor(dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalheSetor:
+    """Cria o setor e devolve o detalhe já com os membros informados."""
     try:
         setor = servico.criar_setor(sessao, dados, autor.login)
     except ErroRegraSetor as erro:
@@ -60,6 +70,7 @@ def criar_setor(dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), a
     responses={**NAO_ENCONTRADO, **CONFLITO, **INVALIDO},
 )
 def alterar_setor(setor_id: int, dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalheSetor:
+    """Altera os dados e substitui a lista de membros pela enviada."""
     try:
         servico.alterar_setor(sessao, setor_id, dados, autor.login)
     except SetorNaoEncontrado:
@@ -78,6 +89,7 @@ def alterar_setor(setor_id: int, dados: GravacaoSetor, sessao: Session = Depends
     responses={**NAO_ENCONTRADO, **INVALIDO},
 )
 def excluir_setor(setor_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> Response:
+    """Exclui o setor (o serviço recusa se ele ainda tiver membros ou setores subordinados)."""
     try:
         servico.excluir_setor(sessao, setor_id, autor.login)
     except SetorNaoEncontrado:

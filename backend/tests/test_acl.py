@@ -1,5 +1,8 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para testar as regras do controle de acesso (ACL).
+"""Testes do controle de acesso: recurso aberto × lista positiva, herança por setor,
+prioridade da regra direta, SuperRoot, validações e auditoria.
+"""
 
 from sqlalchemy import select
 
@@ -9,12 +12,14 @@ from tests.conftest import cabecalho, criar_usuario
 
 
 def _recurso(cliente, admin, slug="usuarios", nome="Usuários"):
+    """Cadastra um recurso pela API e devolve o id."""
     r = cliente.post("/api/acl/recursos", json={"nome": nome, "slug": slug}, headers=admin)
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
 
 def _regra(cliente, admin, recurso_id, nivel, usuarios=(), setores=()):
+    """Cadastra uma regra pela API e devolve o id."""
     corpo = {"recurso_id": recurso_id, "nivel": nivel, "usuarios_ids": list(usuarios), "setores_ids": list(setores)}
     r = cliente.post("/api/acl/regras", json=corpo, headers=admin)
     assert r.status_code == 201, r.text
@@ -22,16 +27,19 @@ def _regra(cliente, admin, recurso_id, nivel, usuarios=(), setores=()):
 
 
 def _setor(cliente, admin, nome, membros):
+    """Cadastra um setor com membros pela API e devolve o id."""
     r = cliente.post("/api/setores", json={"nome": nome, "membros_ids": membros}, headers=admin)
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
 
 def _nivel_efetivo(cliente, admin, usuario_id, slug="usuarios"):
+    """Nível efetivo do usuário no recurso, consultado pela rota do SuperRoot."""
     return {a["slug"]: a["nivel"] for a in cliente.get(f"/api/acl/efetivo/{usuario_id}", headers=admin).json()}[slug]
 
 
 def test_recurso_sem_regras_e_aberto(cliente, admin):
+    """Recurso sem regras continua aberto: o usuário tem controle total."""
     criar_usuario("maria")
     _recurso(cliente, admin)
     h = cabecalho(cliente, "maria")
@@ -41,6 +49,7 @@ def test_recurso_sem_regras_e_aberto(cliente, admin):
 
 
 def test_primeira_regra_vira_lista_positiva(cliente, admin):
+    """Com a primeira regra, só quem está nela acessa; os demais recebem 403 `acl_negado`."""
     maria = criar_usuario("maria")
     criar_usuario("joao")
     rid = _recurso(cliente, admin)
@@ -55,6 +64,7 @@ def test_primeira_regra_vira_lista_positiva(cliente, admin):
 
 
 def test_heranca_por_setor_e_prioridade_da_regra_direta(cliente, admin):
+    """Regra por setor vale para os membros, mas a regra direta do usuário prevalece."""
     ana, bia = criar_usuario("ana"), criar_usuario("bia")
     rid = _recurso(cliente, admin)
     sid = _setor(cliente, admin, "Contratos", [ana, bia])
@@ -65,6 +75,7 @@ def test_heranca_por_setor_e_prioridade_da_regra_direta(cliente, admin):
 
 
 def test_maior_nivel_entre_regras_diretas(cliente, admin):
+    """Entre várias regras diretas, vale o maior nível."""
     ana = criar_usuario("ana")
     rid = _recurso(cliente, admin)
     _regra(cliente, admin, rid, "LEITURA", usuarios=[ana])
@@ -73,6 +84,7 @@ def test_maior_nivel_entre_regras_diretas(cliente, admin):
 
 
 def test_recurso_inativo_volta_a_ser_aberto(cliente, admin):
+    """Desativar o recurso libera o acesso de novo."""
     criar_usuario("joao")
     outra = criar_usuario("outra")
     rid = _recurso(cliente, admin)
@@ -83,6 +95,7 @@ def test_recurso_inativo_volta_a_ser_aberto(cliente, admin):
 
 
 def test_superroot_sempre_controle_total(cliente, admin):
+    """O SuperRoot ignora as regras."""
     outra = criar_usuario("outra")
     rid = _recurso(cliente, admin)
     _regra(cliente, admin, rid, "LEITURA", usuarios=[outra])
@@ -91,6 +104,7 @@ def test_superroot_sempre_controle_total(cliente, admin):
 
 
 def test_validacoes_de_recurso_e_regra(cliente, admin):
+    """Slug é normalizado, nome duplicado dá 409, regra vazia dá 400 e nível inválido dá 422."""
     rid = _recurso(cliente, admin, slug="  Meu Módulo! ", nome="Meu módulo")
     with FabricaSessao() as sessao:
         assert sessao.get(RecursoAcl, rid).slug == "meu-m-dulo"
@@ -102,6 +116,7 @@ def test_validacoes_de_recurso_e_regra(cliente, admin):
 
 
 def test_administracao_restrita_e_auditada(cliente, admin):
+    """Usuário comum não administra a ACL, e cada operação fica na auditoria."""
     criar_usuario("maria")
     h = cabecalho(cliente, "maria")
     assert cliente.get("/api/acl/recursos", headers=h).status_code == 403
@@ -115,6 +130,7 @@ def test_administracao_restrita_e_auditada(cliente, admin):
 
 
 def test_setores_regras_de_integridade(cliente, admin):
+    """Setores: nome único, sem ciclos, sem excluir com subordinados ou membros."""
     ana = criar_usuario("ana")
     pai = _setor(cliente, admin, "Secretaria", [])
     filho = cliente.post("/api/setores", json={"nome": "Diretoria", "setor_pai_id": pai, "membros_ids": [ana]}, headers=admin).json()["id"]

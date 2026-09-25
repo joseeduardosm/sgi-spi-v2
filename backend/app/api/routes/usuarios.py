@@ -1,5 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de cadastro e consulta de usuários.
+"""Rotas de usuários (`/api/usuarios`).
+
+Consultar exige ACL `usuarios` ≥ LEITURA; criar, alterar e excluir são exclusivos do SuperRoot.
+As regras ficam em `servico_admin_usuarios`; aqui só se traduzem as exceções em respostas HTTP.
+"""
 
 from typing import Literal
 
@@ -17,6 +22,7 @@ from app.services.servico_admin_usuarios import ErroRegraUsuario, UsuarioNaoEnco
 
 roteador = APIRouter(prefix="/usuarios", tags=["Usuários"], responses=RESPOSTAS_AUTENTICADAS)
 
+# Dependências de acesso reutilizadas nas rotas abaixo
 pode_ler = exigir_acl("usuarios", NivelAcl.LEITURA)
 super_root = exigir_papeis(Papel.SUPER_ROOT)
 NAO_ENCONTRADO = resposta_nao_encontrado("Usuário")
@@ -37,6 +43,7 @@ def listar_usuarios(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(pode_ler),
 ) -> PaginaUsuarios:
+    """Lista paginada no servidor: o serviço devolve a página pedida e o total para a paginação da tela."""
     itens, total = servico.listar_usuarios(sessao, busca, situacao, origem, pagina, tamanho_pagina)
     return PaginaUsuarios(itens=itens, total=total, pagina=pagina, tamanho_pagina=tamanho_pagina)
 
@@ -54,11 +61,13 @@ def listar_opcoes(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(pode_ler),
 ) -> list[OpcaoUsuario]:
+    """Busca rápida para campos de seleção (resposta curta, sem paginação)."""
     return servico.opcoes(sessao, busca, limite, incluir_inativos)
 
 
 @roteador.get("/{usuario_id}", response_model=DetalheUsuario, summary="Consultar usuário", responses=NAO_ENCONTRADO)
 def consultar_usuario(usuario_id: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)) -> DetalheUsuario:
+    """Detalhe de um usuário, com o perfil institucional."""
     try:
         return servico.para_detalhe(sessao, servico.obter_usuario(sessao, usuario_id))
     except UsuarioNaoEncontrado:
@@ -74,9 +83,11 @@ def consultar_usuario(usuario_id: int, sessao: Session = Depends(obter_sessao), 
     responses={**CONFLITO, **INVALIDO},
 )
 def criar_usuario(dados: CriacaoUsuario, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalheUsuario:
+    """Cria uma conta local (as contas do LDAP chegam pela sincronização, não por aqui)."""
     try:
         return servico.para_detalhe(sessao, servico.criar_conta_local(sessao, dados, autor.login))
     except ErroRegraUsuario as erro:
+        # Desfaz qualquer gravação parcial antes de responder o erro
         sessao.rollback()
         raise erro_regra(str(erro), erro.conflito)
 
@@ -94,6 +105,7 @@ def criar_usuario(dados: CriacaoUsuario, sessao: Session = Depends(obter_sessao)
 def alterar_usuario(
     usuario_id: int, dados: AlteracaoUsuario, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)
 ) -> DetalheUsuario:
+    """Altera o usuário; o autor é repassado ao serviço para as regras que protegem a própria conta."""
     try:
         return servico.para_detalhe(sessao, servico.alterar_usuario(sessao, usuario_id, dados, autor))
     except UsuarioNaoEncontrado:
@@ -111,6 +123,7 @@ def alterar_usuario(
     responses={**NAO_ENCONTRADO, **INVALIDO},
 )
 def excluir_usuario(usuario_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> Response:
+    """Exclui o usuário e responde 204 (sem corpo)."""
     try:
         servico.excluir_usuario(sessao, usuario_id, autor)
     except UsuarioNaoEncontrado:

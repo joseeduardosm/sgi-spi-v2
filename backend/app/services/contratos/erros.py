@@ -1,6 +1,11 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir as exceções de regra de negócio do módulo de contratos.
-"""Exceções de domínio do módulo de contratos, convertidas em respostas HTTP pelas rotas."""
+"""Exceções de domínio do módulo de contratos, convertidas em respostas HTTP pelas rotas.
+
+Os serviços não conhecem HTTP: eles só levantam estas exceções com uma mensagem pronta para o
+usuário. A função `traduzir_erros` (em `api/routes/contratos/comum.py`) as transforma em
+404, 400/409 ou 403.
+"""
 
 
 class RegistroNaoEncontrado(Exception):

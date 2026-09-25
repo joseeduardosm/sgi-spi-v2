@@ -13,6 +13,7 @@ from app.services.cliente_ldap import IdentidadeLdap
 
 
 def buscar_por_login(sessao: Session, login: str) -> Usuario | None:
+    """Busca um usuário pelo login, sem diferenciar maiúsculas/minúsculas."""
     return sessao.scalar(select(Usuario).where(func.lower(Usuario.login) == login.lower()))
 
 
@@ -21,6 +22,7 @@ def garantir_conta_admin(sessao: Session) -> Usuario:
 
     O .env é a fonte da senha dessa conta: trocar HASH_SENHA_ADMIN e reiniciar a API troca a senha.
     """
+    # A conta é recriada se não existir; senha, papel e situação sempre vêm do .env
     config = obter_configuracao()
     usuario = buscar_por_login(sessao, config.login_admin)
     if usuario is None:
@@ -37,12 +39,14 @@ def garantir_conta_admin(sessao: Session) -> Usuario:
 
 def buscar_vinculado(sessao: Session, diretorio: DiretorioLdap, identidade: IdentidadeLdap) -> Usuario | None:
     """Localiza a conta vinculada ao diretório pelo identificador externo ou, na falta dele, pelo login."""
+    # O identificador externo (objectGUID) não muda nem quando a pessoa troca de login no AD
     if identidade.id_externo:
         usuario = sessao.scalar(
             select(Usuario).where(Usuario.diretorio_id == diretorio.id, Usuario.id_externo == identidade.id_externo)
         )
         if usuario:
             return usuario
+    # Contas antigas sem identificador externo: procura pelo login
     return sessao.scalar(
         select(Usuario).where(Usuario.diretorio_id == diretorio.id, func.lower(Usuario.login) == identidade.login.lower())
     )
@@ -51,6 +55,7 @@ def buscar_vinculado(sessao: Session, diretorio: DiretorioLdap, identidade: Iden
 def aplicar_identidade(usuario: Usuario, identidade: IdentidadeLdap) -> None:
     """Sincroniza os dados corporativos, preservando o que o diretório não informa."""
     usuario.login = identidade.login
+    # `or`: se o AD não informar o valor, mantém o que já está gravado
     usuario.id_externo = identidade.id_externo or usuario.id_externo
     usuario.dn = identidade.dn or usuario.dn
     if identidade.nome_completo:
@@ -65,19 +70,23 @@ def registrar_login_ldap(sessao: Session, diretorio: DiretorioLdap, identidade: 
     Retorna None quando a identidade não pode assumir a conta local homônima (superusuário),
     caso em que o login segue para a autenticação local.
     """
+    # Já existe uma conta ligada a esta identidade? Se não, verifica se há uma conta local com o mesmo login
     usuario = buscar_vinculado(sessao, diretorio, identidade)
     if usuario is None:
         homonimo = buscar_por_login(sessao, identidade.login)
         if homonimo is not None:
             if homonimo.superusuario:
                 return None  # nunca vincular uma identidade corporativa a um superusuário
+            # Conta local homônima passa a ficar vinculada ao diretório (mantém a senha local, se tiver)
             homonimo.diretorio_id = diretorio.id
             homonimo.origem = OrigemUsuario.LOCAL_LDAP if homonimo.hash_senha else OrigemUsuario.LDAP
             usuario = homonimo
         else:
+            # Primeira entrada dessa pessoa: cria a conta corporativa
             usuario = Usuario(login=identidade.login, origem=OrigemUsuario.LDAP, diretorio_id=diretorio.id)
             sessao.add(usuario)
     aplicar_identidade(usuario, identidade)
+    # A situação (ativa/desativada) acompanha a do AD
     usuario.ativo = identidade.ativo
     usuario.ultimo_acesso_em = agora_utc()
     sessao.commit()

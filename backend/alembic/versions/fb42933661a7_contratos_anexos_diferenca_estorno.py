@@ -18,6 +18,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+# Identificação da migração: esta revisão e a anterior
 revision: str = "fb42933661a7"
 down_revision: str | Sequence[str] | None = "84d049d7fa1a"
 branch_labels: str | Sequence[str] | None = None
@@ -25,9 +26,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """Aplica as três mudanças descritas no cabeçalho."""
+    # 1) Contrato dono de cada anexo
     op.add_column("anexos", sa.Column("contrato_id", sa.Uuid(), nullable=True))
     op.create_index("ix_anexos_contrato_id", "anexos", ["contrato_id"])
 
+    # 2) Tipo da competência: a unicidade passa a considerar o tipo (a de diferença pode repetir o período)
     op.add_column("contratos_competencias", sa.Column("tipo", sa.String(length=30), server_default="regular", nullable=False))
     op.add_column("contratos_competencias", sa.Column("reajuste_id", sa.Uuid(), nullable=True))
     op.drop_constraint("contratos_competencias_contrato_id_periodo_inicio_key", "contratos_competencias", type_="unique")
@@ -40,6 +44,7 @@ def upgrade() -> None:
         "contratos_competencias_reajuste_id_fkey", "contratos_competencias", "contratos_reajustes", ["reajuste_id"], ["id"], ondelete="SET NULL"
     )
 
+    # 3) Estornos no extrato: justificativa, autor e fim da regra de um lançamento por (NE, competência)
     op.add_column("contratos_notas_empenho_movimentos", sa.Column("justificativa", sa.String(length=2000), server_default="", nullable=False))
     op.add_column("contratos_notas_empenho_movimentos", sa.Column("criado_por_id", sa.Integer(), nullable=True))
     op.drop_constraint("contratos_notas_empenho_movimentos_nota_id_competencia_id_key", "contratos_notas_empenho_movimentos", type_="unique")
@@ -51,6 +56,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Desfaz. Estornos e competências de diferença são apagados, pois não cabem no formato antigo."""
     op.drop_constraint("contratos_notas_empenho_movimentos_criado_por_id_fkey", "contratos_notas_empenho_movimentos", type_="foreignkey")
     op.drop_constraint("ck_contratos_ne_movimentos_tipo", "contratos_notas_empenho_movimentos", type_="check")
     op.execute("DELETE FROM contratos_notas_empenho_movimentos WHERE tipo = 'estorno'")

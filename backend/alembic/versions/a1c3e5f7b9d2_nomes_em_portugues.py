@@ -2,7 +2,8 @@
 # Este arquivo serve para renomear tabelas, colunas e restrições do banco para o português.
 """nomes de tabelas, colunas, índices e constraints em português
 
-Renomeia (sem recriar) para preservar os dados existentes.
+Renomeia (sem recriar) para preservar os dados existentes. As duas primeiras migrações criaram
+as tabelas com nomes em inglês; esta traduz tudo para o padrão do projeto (pt-BR).
 
 Revision ID: a1c3e5f7b9d2
 Revises: 7fb1ed802b9e
@@ -14,11 +15,13 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+# Identificação da migração: esta revisão e a anterior
 revision: str = "a1c3e5f7b9d2"
 down_revision: str | Sequence[str] | None = "7fb1ed802b9e"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# Tabelas: nome antigo → nome novo
 TABELAS = {
     "users": "usuarios",
     "ldap_directories": "diretorios_ldap",
@@ -96,6 +99,7 @@ COLUNAS = {
     "acl_regras_setores": {"rule_id": "regra_id", "sector_id": "setor_id"},
 }
 
+# Índices: nome antigo → nome novo
 INDICES = {
     "ix_audit_log_action": "ix_auditoria_acao",
     "ix_audit_log_at": "ix_auditoria_ocorrido_em",
@@ -112,6 +116,7 @@ INDICES = {
     "ix_acl_rule_sectors_sector_id": "ix_acl_regras_setores_setor_id",
 }
 
+# Sequências dos ids inteiros (o PostgreSQL não as renomeia junto com a tabela)
 SEQUENCIAS = {
     "users_id_seq": "usuarios_id_seq",
     "audit_log_id_seq": "auditoria_id_seq",
@@ -123,6 +128,7 @@ SEQUENCIAS = {
 
 def _renomear_constraints(tabelas: list[str]) -> None:
     """Dá às chaves primárias, estrangeiras e únicas o nome padrão do PostgreSQL para as tabelas/colunas atuais."""
+    # Consulta o catálogo do PostgreSQL: cada restrição da tabela e as colunas que ela usa, na ordem
     conexao = op.get_bind()
     for tabela in tabelas:
         linhas = conexao.execute(
@@ -138,6 +144,7 @@ def _renomear_constraints(tabelas: list[str]) -> None:
             ),
             {"tabela": tabela},
         ).all()
+        # Monta o nome padrão: tabela_pkey, tabela_colunas_fkey ou tabela_colunas_key
         for nome_atual, tipo, colunas in linhas:
             novo = {"p": f"{tabela}_pkey", "f": f"{tabela}_{colunas}_fkey", "u": f"{tabela}_{colunas}_key"}[tipo]
             if novo != nome_atual:
@@ -145,6 +152,7 @@ def _renomear_constraints(tabelas: list[str]) -> None:
 
 
 def upgrade() -> None:
+    """Renomeia tabelas, colunas, índices e sequências, e por fim ajusta os nomes das restrições."""
     for antigo, novo in TABELAS.items():
         op.rename_table(antigo, novo)
     for tabela, colunas in COLUNAS.items():
@@ -158,6 +166,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Desfaz tudo na ordem inversa, voltando aos nomes em inglês."""
     for antigo, novo in SEQUENCIAS.items():
         op.execute(f'ALTER SEQUENCE "{novo}" RENAME TO "{antigo}"')
     for antigo, novo in INDICES.items():

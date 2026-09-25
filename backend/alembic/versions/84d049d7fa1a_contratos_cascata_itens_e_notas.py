@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 from alembic import op
 
+# Identificação da migração: esta revisão e a anterior
 revision: str = "84d049d7fa1a"
 down_revision: str | Sequence[str] | None = "65c4a5320944"
 branch_labels: str | Sequence[str] | None = None
@@ -28,6 +29,8 @@ CHAVES = (
 
 
 def _trocar(regra: str) -> None:
+    """Recria cada chave estrangeira da lista com a regra de exclusão informada (CASCADE ou RESTRICT)."""
+    # O PostgreSQL não altera a regra de uma FK existente: é preciso apagar e criar de novo
     for tabela, coluna, referencia in CHAVES:
         nome = f"{tabela}_{coluna}_fkey"
         op.drop_constraint(nome, tabela, type_="foreignkey")
@@ -35,8 +38,10 @@ def _trocar(regra: str) -> None:
 
 
 def upgrade() -> None:
+    """Passa as chaves para CASCADE."""
     _trocar("CASCADE")
 
 
 def downgrade() -> None:
+    """Volta as chaves para RESTRICT."""
     _trocar("RESTRICT")

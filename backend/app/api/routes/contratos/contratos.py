@@ -1,6 +1,12 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas da carteira, do cadastro, do detalhe, dos documentos e do histórico do contrato.
-"""Rotas do contrato (`/api/contratos`): carteira, cadastro, detalhe, documentos e histórico."""
+"""Rotas do contrato (`/api/contratos`): carteira, cadastro, detalhe, documentos e histórico.
+
+Permissões em duas camadas:
+1. ACL `contratos` (leitura, modificação ou controle total), conferida pelas dependências;
+2. vínculo com o contrato (criador, equipe vigente ou SuperRoot), conferido no serviço para as
+   alterações; a falta dele vira 403 `acesso_negado` via `traduzir_erros`.
+"""
 
 import uuid
 
@@ -34,6 +40,7 @@ from app.services.contratos import servico_contratos as servico
 
 roteador = APIRouter(prefix="/contratos", tags=["Contratos"], responses=RESPOSTAS_AUTENTICADAS)
 NAO_ENCONTRADO = resposta_nao_encontrado("Contrato")
+# Documentação da resposta 200 dos downloads de PDF
 PDF = {status.HTTP_200_OK: {"content": {"application/pdf": {}}, "description": "Arquivo PDF."}}
 
 
@@ -51,6 +58,7 @@ def listar_contratos(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(pode_ler),
 ) -> PaginaContratos:
+    """Carteira: lista paginada com busca por número, empresa, apelido ou objeto."""
     return servico.listar_contratos(sessao, busca, pagina, tamanho_pagina)
 
 
@@ -63,6 +71,7 @@ def listar_contratos(
 def proximo_numero(
     ano: int = Query(..., ge=2000, le=9999), sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)
 ) -> ProximoNumero:
+    """Sugere o próximo número livre do ano (o usuário pode trocar; o número é único por ano)."""
     return servico.proximo_numero(sessao, ano)
 
 
@@ -79,12 +88,14 @@ def opcoes_usuarios(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(pode_modificar),
 ) -> list[OpcaoUsuario]:
+    """Usuários para montar a equipe, sem exigir acesso ao módulo Usuários."""
     return servico_admin_usuarios.opcoes(sessao, busca, limite)
 
 
 @roteador.get("/{contrato_id}", response_model=DetalheContrato, summary="Detalhe do contrato", responses=NAO_ENCONTRADO,
               description="Dados, vigências, itens com saldos, equipe vigente e permissões do usuário. Exige ACL `contratos` ≥ LEITURA.")
 def consultar_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)) -> DetalheContrato:
+    """Detalhe completo, incluindo o que o usuário logado pode fazer (as permissões guiam os botões da tela)."""
     with traduzir_erros():
         return servico.detalhar_contrato(sessao, contrato_id, usuario)
 
@@ -98,6 +109,7 @@ def consultar_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_s
     responses={**INVALIDO, **CONFLITO},
 )
 def criar_contrato(dados: GravacaoContrato, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)) -> DetalheContrato:
+    """Cria o contrato; quem cadastra fica registrado como criador e passa a poder editá-lo."""
     with traduzir_erros(sessao):
         contrato = servico.criar_contrato(sessao, dados, autor)
     return servico.detalhar_contrato(sessao, contrato.id, autor)
@@ -114,6 +126,7 @@ def criar_contrato(dados: GravacaoContrato, sessao: Session = Depends(obter_sess
 def alterar_contrato(
     contrato_id: uuid.UUID, dados: GravacaoContrato, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)
 ) -> DetalheContrato:
+    """Altera o contrato com controle de concorrência: se outra pessoa salvou antes (`versao` diferente), responde 409."""
     with traduzir_erros(sessao):
         servico.alterar_contrato(sessao, contrato_id, dados, autor)
     return servico.detalhar_contrato(sessao, contrato_id, autor)
@@ -127,6 +140,7 @@ def alterar_contrato(
     responses=NAO_ENCONTRADO,
 )
 def excluir_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(controle_total)) -> Response:
+    """Exclui o contrato e todos os registros dependentes (itens, competências, anexos...)."""
     with traduzir_erros(sessao):
         servico.excluir_contrato(sessao, contrato_id, autor)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -140,6 +154,7 @@ def excluir_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_ses
     responses=NAO_ENCONTRADO,
 )
 def historico(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)) -> list[AlteracaoCampo]:
+    """Histórico campo a campo, lido da auditoria estruturada."""
     with traduzir_erros():
         return servico.historico(sessao, contrato_id)
 
@@ -152,6 +167,7 @@ def historico(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _
     responses=NAO_ENCONTRADO,
 )
 def listar_documentos(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)) -> list[LeituraDocumento]:
+    """Lista o catálogo de documentos importantes, indicando quais já têm PDF anexado."""
     with traduzir_erros():
         return servico.listar_documentos(sessao, contrato_id)
 
@@ -171,6 +187,8 @@ def enviar_documento(
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ) -> list[LeituraDocumento]:
+    """Recebe o PDF de um documento do catálogo (substitui o anterior) e devolve a lista atualizada."""
+    # `arquivo_pdf` desmembra o upload em (fluxo, nome original) para o serviço de anexos
     with traduzir_erros(sessao):
         servico.enviar_documento(sessao, contrato_id, codigo, *arquivo_pdf(arquivo), autor)
         return servico.listar_documentos(sessao, contrato_id)
@@ -184,5 +202,6 @@ def enviar_documento(
     responses={**PDF, **resposta_nao_encontrado("Documento")},
 )
 def baixar_documento(contrato_id: uuid.UUID, codigo: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    """Baixa o PDF com o nome padronizado do catálogo."""
     with traduzir_erros():
         return servico.documento_para_download(sessao, contrato_id, codigo)

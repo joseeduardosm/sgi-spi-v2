@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados de checklists, formulários e competências.
-"""Schemas da execução: checklists, formulários de avaliação, modelos globais e competências."""
+"""Schemas da execução: checklists, formulários de avaliação, modelos globais e competências.
+
+`DetalheCompetencia` é o maior deles: reúne tudo o que a tela de execução mostra em todas as
+etapas, para que uma única resposta redesenhe a tela inteira.
+"""
 
 import uuid
 from datetime import date, datetime
@@ -12,6 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.schemas.contratos.empresas import Texto, TextoObrigatorio
 from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade
 
+# Etapas da competência (iguais às do modelo) e a situação resumida mostrada na aba Execução
 Etapa = Literal["medicao", "avaliacao", "nota_fiscal", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida"]
 SituacaoCompetencia = Literal["pendente", "disponivel", "em_andamento", "concluida"]
 
@@ -21,17 +26,20 @@ SituacaoCompetencia = Literal["pendente", "disponivel", "em_andamento", "conclui
 # ---------------------------------------------------------------------------------------------
 
 class GravacaoDocumentoChecklist(BaseModel):
+    """Um documento no cadastro de um checklist."""
     nome: TextoObrigatorio = Field(..., max_length=500)
     observacao: Texto = Field("", max_length=1000)
     obrigatorio: bool = Field(True, description="Obrigatório precisa estar anexado para concluir a etapa do checklist; opcional, não.")
 
 
 class GravacaoChecklist(BaseModel):
+    """Corpo para criar ou editar uma versão do checklist (pelo menos um documento)."""
     nome: TextoObrigatorio = Field(..., max_length=300)
     itens: list[GravacaoDocumentoChecklist] = Field(..., min_length=1, description="Documentos mensais, na ordem.")
 
 
 class LeituraDocumentoChecklist(BaseModel):
+    """Documento do checklist como é devolvido pela API."""
     id: uuid.UUID
     ordem: int
     nome: str
@@ -40,6 +48,7 @@ class LeituraDocumentoChecklist(BaseModel):
 
 
 class LeituraChecklist(BaseModel):
+    """Versão do checklist com seus documentos."""
     id: uuid.UUID
     versao: int
     nome: str
@@ -55,11 +64,13 @@ class LeituraChecklist(BaseModel):
 # ---------------------------------------------------------------------------------------------
 
 class NotaEscala(BaseModel):
+    """Uma nota possível da escala (ex.: 0 = "Insatisfatório", 10 = "Ótimo")."""
     valor: Annotated[Decimal, Field(ge=0, le=1000, max_digits=8, decimal_places=2)]
     legenda: TextoObrigatorio = Field(..., max_length=100)
 
 
 class FaixaLiberacao(BaseModel):
+    """Faixa de nota final que define quanto do pagamento é liberado."""
     minimo: Annotated[Decimal, Field(ge=0, max_digits=8, decimal_places=2)]
     maximo: Annotated[Decimal | None, Field(None, ge=0, max_digits=8, decimal_places=2)] = Field(None, description="Nulo = sem teto.")
     percentual: Annotated[Decimal, Field(ge=0, le=100, max_digits=5, decimal_places=2)] = Field(..., description="% do pagamento liberado.")
@@ -71,6 +82,7 @@ class FaixaLiberacao(BaseModel):
 
 
 class ItemFormulario(BaseModel):
+    """Item avaliado dentro de um grupo, com o peso dele no grupo."""
     id: str | None = Field(None, description="Gerado pela API quando vazio.")
     nome: TextoObrigatorio = Field(..., max_length=300)
     descricao: Texto = Field("", max_length=1000)
@@ -78,24 +90,30 @@ class ItemFormulario(BaseModel):
 
 
 class GrupoFormulario(BaseModel):
+    """Grupo de itens do formulário (os pesos dos itens somam 100%)."""
     id: str | None = None
     nome: TextoObrigatorio = Field(..., max_length=300)
     itens: list[ItemFormulario] = Field(..., min_length=1)
 
 
 class DefinicaoFormulario(BaseModel):
+    """Estrutura completa do formulário: escala, faixas e grupos."""
     escala: list[NotaEscala] = Field(..., min_length=2, description="Notas em ordem crescente.")
     faixas: list[FaixaLiberacao] = Field(..., min_length=1)
     grupos: list[GrupoFormulario] = Field(..., min_length=1)
 
     @model_validator(mode="after")
     def _regras(self) -> "DefinicaoFormulario":
+        """Valida a coerência da estrutura inteira (regras que envolvem mais de um campo)."""
+        # A escala precisa ser estritamente crescente (ordenada e sem repetição)
         valores = [n.valor for n in self.escala]
         if valores != sorted(valores) or len(set(valores)) != len(valores):
             raise ValueError("a escala de notas deve estar em ordem crescente, sem repetição")
+        # Cada faixa precisa ter máximo ≥ mínimo (máximo vazio = sem teto)
         for faixa in self.faixas:
             if faixa.maximo is not None and faixa.maximo < faixa.minimo:
                 raise ValueError("em cada faixa, a nota máxima deve ser maior ou igual à mínima")
+        # Em cada grupo, os pesos dos itens precisam somar exatamente 100
         for grupo in self.grupos:
             if sum(i.peso for i in grupo.itens) != 100:
                 raise ValueError(f"a soma dos pesos do grupo \"{grupo.nome}\" deve ser 100%")
@@ -103,11 +121,13 @@ class DefinicaoFormulario(BaseModel):
 
 
 class GravacaoFormulario(BaseModel):
+    """Corpo para criar ou editar uma versão do formulário."""
     nome: TextoObrigatorio = Field(..., max_length=300)
     definicao: DefinicaoFormulario
 
 
 class LeituraFormulario(BaseModel):
+    """Versão do formulário como é devolvida pela API."""
     id: uuid.UUID
     versao: int
     nome: str
@@ -123,6 +143,7 @@ class LeituraFormulario(BaseModel):
 # ---------------------------------------------------------------------------------------------
 
 class GravacaoModelo(BaseModel):
+    """Corpo para criar ou alterar um modelo global. O conteúdo exigido depende do `tipo`."""
     tipo: Literal["checklist", "formulario"]
     nome: TextoObrigatorio = Field(..., max_length=300)
     itens: list[GravacaoDocumentoChecklist] | None = Field(None, description="Obrigatório para `checklist`.")
@@ -131,6 +152,7 @@ class GravacaoModelo(BaseModel):
 
     @model_validator(mode="after")
     def _conteudo(self) -> "GravacaoModelo":
+        """Checklist precisa de documentos; formulário precisa de definição."""
         if self.tipo == "checklist" and not self.itens:
             raise ValueError("o modelo de checklist precisa de ao menos um documento")
         if self.tipo == "formulario" and self.definicao is None:
@@ -139,6 +161,7 @@ class GravacaoModelo(BaseModel):
 
 
 class LeituraModelo(BaseModel):
+    """Modelo global como é devolvido pela API."""
     id: uuid.UUID
     tipo: str
     nome: str
@@ -152,11 +175,13 @@ class LeituraModelo(BaseModel):
 # ---------------------------------------------------------------------------------------------
 
 class Requisitos(BaseModel):
+    """Pré-requisitos para gerar as competências (ex.: checklist ativo, NE cadastrada)."""
     prontos: bool
     pendencias: list[str] = Field(..., description="Motivos que impedem gerar as competências.")
 
 
 class ResumoCompetencia(BaseModel):
+    """Competência na lista da aba Execução."""
     id: uuid.UUID
     competencia: date
     tipo: str = Field("regular", description="`regular` ou `diferenca_reajuste` (complementar, paga a diferença de um reajuste retroativo).")
@@ -173,6 +198,7 @@ class ResumoCompetencia(BaseModel):
 
 
 class GrupoCompetencias(BaseModel):
+    """Competências de uma vigência (a aba Execução agrupa por vigência)."""
     sequencia_vigencia: int
     inicio: date
     fim: date
@@ -180,12 +206,14 @@ class GrupoCompetencias(BaseModel):
 
 
 class PainelExecucao(BaseModel):
+    """Resposta da aba Execução."""
     requisitos: Requisitos
     geradas: bool
     grupos: list[GrupoCompetencias]
 
 
 class LeituraItemMedicao(BaseModel):
+    """Item na medição: previsto (com pró-rata) e medido."""
     id: uuid.UUID
     ordem: int
     descricao: str
@@ -199,6 +227,7 @@ class LeituraItemMedicao(BaseModel):
 
 
 class LeituraCiencia(BaseModel):
+    """Ciência registrada por um integrante."""
     usuario_id: int | None
     nome: str
     papel: str
@@ -206,6 +235,7 @@ class LeituraCiencia(BaseModel):
 
 
 class LeituraArquivo(BaseModel):
+    """Referência a um PDF anexado (para montar o link de download)."""
     anexo_id: uuid.UUID
     nome: str
     tamanho: int
@@ -213,12 +243,14 @@ class LeituraArquivo(BaseModel):
 
 
 class LeituraMemoria(BaseModel):
+    """Uma versão da memória de cálculo da medição."""
     versao: int
     criada_em: datetime
     arquivo: LeituraArquivo
 
 
 class NotaSelecionada(BaseModel):
+    """NE na medição, com o saldo contábil e o saldo ainda livre para novas medições."""
     id: uuid.UUID
     numero: str
     saldo: ValorMonetario = Field(..., description="Saldo contábil da NE (valor original − pagamentos + estornos).")
@@ -226,6 +258,7 @@ class NotaSelecionada(BaseModel):
 
 
 class LeituraNotaFiscal(BaseModel):
+    """Dados de uma nota fiscal registrada (principal ou adicional)."""
     numero: str
     arquivo: LeituraArquivo | None
     valor_bruto: ValorMonetario | None
@@ -238,6 +271,7 @@ class LeituraNotaFiscal(BaseModel):
 
 
 class LeituraConsultaCadin(BaseModel):
+    """Uma consulta ao CADIN (a competência guarda o histórico de todas)."""
     id: uuid.UUID
     possui_pendencia: bool
     pendencia: str
@@ -249,6 +283,7 @@ class LeituraConsultaCadin(BaseModel):
 
 
 class LeituraDocumentoMensal(BaseModel):
+    """Documento do checklist na competência, com o PDF anexado (se houver)."""
     id: uuid.UUID
     ordem: int
     nome: str
@@ -258,12 +293,14 @@ class LeituraDocumentoMensal(BaseModel):
 
 
 class RespostaAvaliacao(BaseModel):
+    """Nota dada a um item do formulário (com justificativa quando abaixo da máxima)."""
     item_id: str
     nota: Annotated[Decimal, Field(ge=0, max_digits=8, decimal_places=2)]
     justificativa: Texto = Field("", max_length=4000)
 
 
 class AssinaturaAteste(BaseModel):
+    """Pessoa indicada para assinar o ateste em um papel, e quando deu ciência."""
     papel: Literal["gestor", "fiscal_administrativo", "fiscal_tecnico"]
     usuario_id: int
     nome: str = ""
@@ -271,6 +308,7 @@ class AssinaturaAteste(BaseModel):
 
 
 class LeituraAvaliacao(BaseModel):
+    """Avaliação da competência (etapa 2)."""
     definicao: dict[str, Any]
     respostas_iniciais: list[RespostaAvaliacao]
     avaliacao_inicial_em: datetime | None
@@ -289,6 +327,7 @@ class LeituraAvaliacao(BaseModel):
 
 
 class DetalheCompetencia(ResumoCompetencia):
+    """Detalhe completo da competência: tudo o que a tela de execução precisa em uma resposta."""
     contrato_id: uuid.UUID
     contrato_numero: str
     etapas: list[Etapa] = Field(..., description="Etapas desta competência, em ordem (sem `avaliacao` se não houver formulário).")
@@ -327,32 +366,39 @@ class DetalheCompetencia(ResumoCompetencia):
 
 
 class ItemMedidoGravacao(BaseModel):
+    """Quantidade medida de um item (até 10 casas decimais, como no sistema de origem)."""
     id: uuid.UUID
     quantidade_medida: Annotated[Decimal, Field(ge=0, max_digits=28, decimal_places=10)]
 
 
 class GravacaoMedicao(BaseModel):
+    """Corpo do `PUT /medicao`."""
     itens: list[ItemMedidoGravacao]
     notas_empenho_ids: list[uuid.UUID] = Field(..., min_length=1, description="NEs em ordem de consumo.")
 
 
 class ConclusaoMedicao(BaseModel):
+    """Corpo do `POST /medicao/concluir`; a seleção de NEs precisa bater com a salva."""
     notas_empenho_ids: list[uuid.UUID] = Field(..., min_length=1, description="Deve ser igual à seleção salva.")
 
 
 class GravacaoAvaliacaoInicial(BaseModel):
+    """Corpo do `PUT /avaliacao/inicial`."""
     respostas: list[RespostaAvaliacao]
 
 
 class GravacaoAvaliacaoGestor(BaseModel):
+    """Corpo do `PUT /avaliacao/gestor`."""
     respostas: list[RespostaAvaliacao]
     complemento: Texto = Field("", max_length=4000)
 
 
 class GravacaoAssinaturas(BaseModel):
+    """Corpo do `PUT /avaliacao/assinaturas`."""
     assinaturas: list[AssinaturaAteste] = Field(..., min_length=1)
 
 
 class Reabertura(BaseModel):
+    """Corpo do `POST /reabrir`: para qual etapa voltar e por quê."""
     etapa: Etapa = Field(..., description="Etapa que volta a ficar aberta (anteriores à atual).")
     justificativa: TextoObrigatorio = Field(..., max_length=2000)

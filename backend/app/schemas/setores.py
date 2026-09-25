@@ -1,5 +1,6 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados de entrada e saída de setores.
+"""Formatos de entrada e saída das rotas de setores."""
 
 from datetime import datetime
 
@@ -9,6 +10,7 @@ from app.schemas.usuarios import OpcaoUsuario
 
 
 class GravacaoSetor(BaseModel):
+    """Dados enviados para criar ou alterar um setor."""
     nome: str = Field(..., min_length=1, max_length=150)
     setor_pai_id: int | None = Field(None, description="Setor pai (hierarquia). Nulo para raiz.")
     lider_id: int | None = Field(None, description="Usuário líder do setor.")
@@ -19,6 +21,7 @@ class GravacaoSetor(BaseModel):
     @field_validator("nome")
     @classmethod
     def _aparar(cls, valor: str) -> str:
+        """Tira espaços das pontas e recusa nome em branco."""
         valor = valor.strip()
         if not valor:
             raise ValueError("não pode ser vazio")
@@ -26,6 +29,7 @@ class GravacaoSetor(BaseModel):
 
 
 class LeituraSetor(BaseModel):
+    """Setor na listagem, com nomes já resolvidos (pai e líder) e contagens para a tabela."""
     id: int
     nome: str
     setor_pai_id: int | None
@@ -41,4 +45,5 @@ class LeituraSetor(BaseModel):
 
 
 class DetalheSetor(LeituraSetor):
+    """Setor com a lista completa de membros (tela de detalhe/edição)."""
     membros: list[OpcaoUsuario]

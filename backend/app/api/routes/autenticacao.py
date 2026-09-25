@@ -1,5 +1,14 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de login, sessão e perfil do próprio usuário.
+"""Rotas de autenticação (`/api/autenticacao`).
+
+- `POST /login`: troca login e senha por um token JWT;
+- `GET /sessao`: quem é o dono do token;
+- `GET/PUT /perfil`: o próprio perfil institucional.
+
+As rotas de sessão e perfil usam `obter_usuario_autenticado` (e não `obter_usuario_atual`) porque
+precisam funcionar mesmo quando o perfil está pendente: é por elas que o usuário regulariza o cadastro.
+"""
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -18,6 +27,7 @@ from app.services.servico_autenticacao import ServicoAutenticacao, para_usuario_
 
 roteador = APIRouter(prefix="/autenticacao", tags=["Autenticação"], responses=VALIDACAO)
 
+# Descrição do 401 para a documentação das rotas que exigem token
 NAO_AUTENTICADO = {status.HTTP_401_UNAUTHORIZED: {"model": RespostaErro, "description": "Token ausente, inválido ou expirado."}}
 
 
@@ -32,6 +42,7 @@ NAO_AUTENTICADO = {status.HTTP_401_UNAUTHORIZED: {"model": RespostaErro, "descri
     responses={status.HTTP_401_UNAUTHORIZED: {"model": RespostaErro, "description": "Usuário ou senha inválidos."}},
 )
 def entrar(dados: RequisicaoLogin, sessao: Session = Depends(obter_sessao)) -> RespostaToken:
+    """Autentica e devolve o token. A mensagem de erro é a mesma para login e senha errados (não revela qual)."""
     servico = ServicoAutenticacao(sessao)
     usuario = servico.autenticar(dados.login, dados.senha)
     if usuario is None:
@@ -50,6 +61,7 @@ def entrar(dados: RequisicaoLogin, sessao: Session = Depends(obter_sessao)) -> R
     responses=NAO_AUTENTICADO,
 )
 def obter_sessao_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) -> UsuarioSessao:
+    """Dados do usuário logado; o frontend chama ao abrir para confirmar que o token ainda vale."""
     return para_usuario_sessao(usuario)
 
 
@@ -61,6 +73,7 @@ def obter_sessao_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) ->
     responses=NAO_AUTENTICADO,
 )
 def obter_meu_perfil(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado)) -> PerfilLeitura:
+    """Perfil institucional do próprio usuário (reaproveita o detalhe completo e devolve só o perfil)."""
     return servico_admin_usuarios.para_detalhe(sessao, usuario).perfil
 
 
@@ -78,6 +91,7 @@ def obter_meu_perfil(sessao: Session = Depends(obter_sessao), usuario: Usuario =
 def revisar_meu_perfil(
     dados: RevisaoPerfil, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado)
 ) -> UsuarioSessao:
+    """Grava o perfil; em caso de regra violada, desfaz a transação e responde 400/409."""
     try:
         return para_usuario_sessao(servico_admin_usuarios.revisar_proprio_perfil(sessao, usuario, dados))
     except ErroRegraUsuario as erro:
@@ -98,4 +112,5 @@ def listar_opcoes_gestor(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(obter_usuario_autenticado),
 ) -> list[OpcaoUsuario]:
+    """Busca de usuários para escolher o gestor imediato, sem exigir acesso ao módulo Usuários."""
     return servico_admin_usuarios.opcoes(sessao, busca, limite)

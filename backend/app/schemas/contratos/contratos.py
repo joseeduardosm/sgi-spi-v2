@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados do cadastro, da carteira e do detalhe do contrato.
-"""Schemas do contrato: cadastro, carteira, detalhe, documentos e histórico por campo."""
+"""Schemas do contrato: cadastro, carteira, detalhe, documentos e histórico por campo.
+
+Convenção de nomes: `Gravacao*` = o que o frontend envia; `Leitura*`, `Resumo*` e `Detalhe*` =
+o que a API devolve.
+"""
 
 import re
 import uuid
@@ -14,6 +18,7 @@ from app.schemas.contratos.empresas import Texto, TextoObrigatorio
 from app.schemas.contratos.tipos import ValorMonetario, ValorQuantidade
 from app.schemas.contratos.empresas import OpcaoEmpresa as EmpresaDoContrato
 
+# Valores aceitos em campos de escolha (o Pydantic recusa qualquer outro com erro 422)
 TipoItem = Literal["continuo", "sob_demanda"]
 Situacao = Literal["ativo", "a_vencer", "encerrado", "suspenso"]
 Papel = Literal[
@@ -24,11 +29,13 @@ Papel = Literal[
     "fiscal_tecnico",
     "fiscal_tecnico_suplente",
 ]
+# Números decimais de entrada: não negativos, com limite de dígitos e de casas decimais
 Quantidade = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]
 Dinheiro = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)]
 
 
 def _link(valor: str) -> str:
+    """Exige que os links dos processos SEI sejam URLs http(s) sem espaços."""
     if not re.match(r"^https?://\S+$", valor):
         raise ValueError("informe um link começando com http:// ou https://")
     return valor
@@ -38,6 +45,7 @@ Link = Annotated[str, AfterValidator(_link)]
 
 
 class GravacaoItem(BaseModel):
+    """Um item do contrato no cadastro/edição."""
     id: uuid.UUID | None = Field(None, description="Nulo = item novo. Itens existentes omitidos da lista são excluídos.")
     descricao: TextoObrigatorio = Field(..., max_length=1000, description="Nome do item. Não muda depois de salvo.")
     tipo: TipoItem = Field(..., description="Não muda depois de salvo.")
@@ -52,10 +60,12 @@ class GravacaoItem(BaseModel):
 
     @model_validator(mode="after")
     def _quantidades(self) -> "GravacaoItem":
+        """Confere as quantidades conforme o tipo do item."""
         if self.tipo == "continuo" and self.quantidade_mensal <= 0:
             raise ValueError("item contínuo exige quantidade mensal maior que zero")
         if self.tipo == "sob_demanda" and self.quantidade_total <= 0:
             raise ValueError("item sob demanda exige quantidade total da vigência maior que zero")
+        # Contínuo não usa quantidade total (ela é calculada: mensal × meses), então zera
         if self.tipo == "continuo":
             self.quantidade_total = Decimal(0)
         return self
@@ -73,6 +83,7 @@ class GravacaoEquipe(BaseModel):
 
 
 class GravacaoContrato(BaseModel):
+    """Corpo do `POST /api/contratos` e do `PUT /api/contratos/{id}`."""
     numero: str = Field(..., pattern=r"^\d{1,4}/\d{4}$", description="NNN/AAAA. Único.", examples=["012/2026"])
     empresa_id: uuid.UUID = Field(..., description="Empresa ativa.")
     apelido: Texto = Field("", max_length=200)
@@ -93,12 +104,14 @@ class GravacaoContrato(BaseModel):
 
     @model_validator(mode="after")
     def _vigencias(self) -> "GravacaoContrato":
+        """A vigência máxima (com prorrogações) não pode ser menor que a inicial."""
         if self.vigencia_maxima_meses < self.vigencia_inicial_meses:
             raise ValueError("a vigência máxima deve ser maior ou igual à vigência inicial")
         return self
 
 
 class LeituraItem(BaseModel):
+    """Item como aparece no detalhe do contrato, já com saldos calculados."""
     id: uuid.UUID
     ordem: int
     descricao: str
@@ -119,6 +132,7 @@ class LeituraItem(BaseModel):
 
 
 class MembroEquipe(BaseModel):
+    """Integrante vigente da equipe em um papel."""
     papel: Papel
     usuario_id: int
     nome: str
@@ -127,6 +141,7 @@ class MembroEquipe(BaseModel):
 
 
 class LeituraVigencia(BaseModel):
+    """Uma vigência do contrato (a original ou uma prorrogação)."""
     sequencia: int = Field(..., description="1 = inicial; 2, 3… = prorrogações.")
     inicio: date
     fim: date
@@ -134,11 +149,13 @@ class LeituraVigencia(BaseModel):
 
 
 class PermissoesContrato(BaseModel):
+    """O que o usuário logado pode fazer neste contrato (a tela mostra ou esconde botões com isso)."""
     pode_editar: bool = Field(..., description="SuperRoot, criador ou integrante vigente da equipe, com ACL ≥ MODIFICACAO.")
     pode_excluir: bool = Field(..., description="ACL `contratos` = CONTROLE_TOTAL.")
 
 
 class ResumoContrato(BaseModel):
+    """Contrato como aparece na carteira."""
     id: uuid.UUID
     numero: str
     apelido: str
@@ -152,6 +169,7 @@ class ResumoContrato(BaseModel):
 
 
 class PaginaContratos(BaseModel):
+    """Uma página da carteira de contratos."""
     itens: list[ResumoContrato]
     total: int
     pagina: int
@@ -159,12 +177,14 @@ class PaginaContratos(BaseModel):
 
 
 class MarcoLinhaTempo(BaseModel):
+    """Um marco da linha do tempo exibida na aba Principal."""
     data: date
     tipo: Literal["inicio", "prazo_inicial", "termo_aditivo", "reajuste", "aditamento", "supressao", "vigencia_atual", "maximo"]
     rotulo: str
 
 
 class DetalheContrato(ResumoContrato):
+    """Detalhe completo do contrato (herda os campos do resumo e acrescenta os demais)."""
     sequencial: int
     ano: int
     empresa: EmpresaDoContrato
@@ -193,12 +213,14 @@ class DetalheContrato(ResumoContrato):
 
 
 class ProximoNumero(BaseModel):
+    """Sugestão de número para um contrato novo."""
     numero: str = Field(..., examples=["013/2026"])
     sequencial: int
     ano: int
 
 
 class LeituraDocumento(BaseModel):
+    """Um documento do catálogo de documentos importantes, anexado ou não."""
     codigo: int
     numero: str = Field(..., description="Código com 3 dígitos (001…).")
     titulo: str
@@ -210,6 +232,7 @@ class LeituraDocumento(BaseModel):
 
 
 class AlteracaoCampo(BaseModel):
+    """Uma alteração de campo registrada na auditoria (de → para)."""
     campo: str = Field(..., description="Nome do campo (ex.: `apelido`, `equipe.gestor`).")
     de: Any
     para: Any

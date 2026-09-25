@@ -1,5 +1,6 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para testar login, sessão, perfil e a documentação OpenAPI.
+"""Testes de login, sessão (token JWT) e da documentação OpenAPI da API."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -9,6 +10,7 @@ from app.core.configuracao import obter_configuracao
 
 
 def test_login_valido(cliente):
+    """Login correto devolve o token e os dados do usuário; o token traz o id no campo `sub`."""
     r = cliente.post("/api/autenticacao/login", json={"login": "root", "senha": "senha-teste"})
     assert r.status_code == 200
     corpo = r.json()
@@ -17,22 +19,26 @@ def test_login_valido(cliente):
     assert corpo["usuario"]["login"] == "root"
     assert corpo["usuario"]["papeis"] == ["SuperRoot"]
     assert corpo["usuario"]["origem"] == "local"
+    # Lê o conteúdo do token sem conferir a assinatura (só para inspecionar)
     conteudo = jwt.decode(corpo["token_acesso"], options={"verify_signature": False})
     assert conteudo["sub"] == str(corpo["usuario"]["id"]) and conteudo["tipo"] == "acesso"
 
 
 def test_login_senha_errada(cliente):
+    """Senha errada responde 401 com a mensagem padrão."""
     r = cliente.post("/api/autenticacao/login", json={"login": "root", "senha": "errada"})
     assert r.status_code == 401
     assert r.json() == {"detalhe": "Usuário ou senha inválidos.", "codigo": "nao_autenticado"}
 
 
 def test_login_usuario_inexistente(cliente):
+    """Login inexistente também responde 401 (sem revelar que o usuário não existe)."""
     r = cliente.post("/api/autenticacao/login", json={"login": "fulano", "senha": "senha-teste"})
     assert r.status_code == 401
 
 
 def test_login_campos_ausentes_em_portugues(cliente):
+    """Campo faltando responde 422 com a mensagem em português."""
     r = cliente.post("/api/autenticacao/login", json={"login": "root"})
     assert r.status_code == 422
     corpo = r.json()
@@ -41,12 +47,14 @@ def test_login_campos_ausentes_em_portugues(cliente):
 
 
 def test_sessao_com_token(cliente, admin):
+    """Token válido dá acesso à sessão."""
     r = cliente.get("/api/autenticacao/sessao", headers=admin)
     assert r.status_code == 200
     assert r.json()["login"] == "root"
 
 
 def test_sessao_sem_token(cliente):
+    """Sem token: 401 com o cabeçalho `WWW-Authenticate: Bearer`."""
     r = cliente.get("/api/autenticacao/sessao")
     assert r.status_code == 401
     assert r.headers["www-authenticate"] == "Bearer"
@@ -54,12 +62,15 @@ def test_sessao_sem_token(cliente):
 
 
 def test_sessao_token_invalido(cliente):
+    """Token mal formado: 401 "Token inválido."."""
     r = cliente.get("/api/autenticacao/sessao", headers={"Authorization": "Bearer abc.def.ghi"})
     assert r.status_code == 401
     assert r.json()["detalhe"] == "Token inválido."
 
 
 def test_sessao_token_expirado(cliente):
+    """Token vencido: 401 "Sessão expirada."."""
+    # Gera um token que expirou há quase 2 horas, com a mesma chave da API
     config = obter_configuracao()
     passado = datetime.now(UTC) - timedelta(hours=2)
     expirado = jwt.encode(
@@ -73,17 +84,20 @@ def test_sessao_token_expirado(cliente):
 
 
 def test_rota_inexistente_em_portugues(cliente):
+    """Rota inexistente responde 404 no formato padrão da API."""
     r = cliente.get("/api/nao-existe")
     assert r.status_code == 404 and r.json()["codigo"] == "nao_encontrado"
 
 
 def test_saude(cliente):
+    """A rota de saúde responde "ok"."""
     r = cliente.get("/api/saude")
     assert r.status_code == 200
     assert r.json()["situacao"] == "ok"
 
 
-# Módulo de contratos (docs/endpoints/contratos-*.md)
+# Caminhos do módulo de contratos que devem aparecer na OpenAPI (documentados em docs/endpoints/contratos-*.md).
+# Ao criar, alterar ou remover uma rota, atualize esta lista e a documentação na mesma alteração.
 CAMINHOS_CONTRATOS = {
     "/api/contratos/empresas",
     "/api/contratos/empresas/opcoes",
@@ -167,6 +181,7 @@ CAMINHOS_CONTRATOS = {
 
 def test_openapi_documenta_endpoints(cliente):
     """Falha quando endpoints mudam: atualize docs/ e esta lista na mesma alteração."""
+    # A lista de caminhos precisa bater exatamente com a especificação gerada
     especificacao = cliente.get("/api/openapi.json").json()
     assert set(especificacao["paths"]) == {
         "/api/saude",
@@ -193,6 +208,7 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/ldap/diretorios/{diretorio_id}/diagnosticar",
         *CAMINHOS_CONTRATOS,
     }
+    # Confere também respostas documentadas, segurança e o nome do schema de validação
     login = especificacao["paths"]["/api/autenticacao/login"]["post"]["responses"]
     assert "401" in login and "422" in login
     assert especificacao["paths"]["/api/autenticacao/sessao"]["get"]["security"] == [{"TokenBearer": []}]

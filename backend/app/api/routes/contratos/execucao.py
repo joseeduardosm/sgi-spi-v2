@@ -1,6 +1,17 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de checklists, formulários de avaliação e competências de execução.
-"""Rotas da execução (`/api/contratos/{contrato_id}/…`): checklists, formulários e competências."""
+"""Rotas da execução (`/api/contratos/{contrato_id}/…`): checklists, formulários e competências.
+
+Visão geral do fluxo mensal:
+- **Checklists** e **formulários de avaliação** são configurados por contrato, em versões. Só uma
+  versão de cada fica ativa; ela é copiada para cada competência gerada.
+- **Competência** é o período de execução (mês civil ou grupo de meses, conforme a periodicidade).
+  Ela passa por etapas em ordem: 1 medição → 2 avaliação → 3 nota fiscal → 4 CADIN →
+  5 checklist → 6 consolidado → 7 ordem bancária (OB), que debita as Notas de Empenho.
+
+Quase todas as rotas de escrita devolvem o detalhe completo da competência já atualizado, para
+a tela se redesenhar sem precisar de uma segunda requisição.
+"""
 
 import re
 import uuid
@@ -35,9 +46,11 @@ from app.services.contratos import servico_competencias as competencias
 from app.services.contratos import servico_configuracao_execucao as configuracao
 
 roteador = APIRouter(prefix="/contratos/{contrato_id}", tags=["Contratos: execução"], responses=RESPOSTAS_AUTENTICADAS)
+# Respostas de erro documentadas em comum pelas rotas de escrita
 NAO_ENCONTRADO = resposta_nao_encontrado("Contrato")
 NAO_ENCONTRADA = resposta_nao_encontrado("Contrato ou competência")
 ESCRITA = {**INVALIDO, **SEM_VINCULO}
+# Tipo reutilizável para campos de dinheiro enviados em formulário multipart (≥ 0, 2 casas)
 Dinheiro = Annotated[Decimal, Form(ge=0, max_digits=18, decimal_places=2)]
 
 
@@ -48,6 +61,7 @@ Dinheiro = Annotated[Decimal, Form(ge=0, max_digits=18, decimal_places=2)]
 @roteador.get("/checklists", response_model=list[LeituraChecklist], summary="Versões do checklist", responses=NAO_ENCONTRADO,
               description="Mais recente primeiro (sem as excluídas). Exige ACL `contratos` ≥ LEITURA.")
 def listar_checklists(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    """Versões do checklist do contrato (a ativa e as inativas)."""
     with traduzir_erros():
         return configuracao.listar_checklists(sessao, contrato_id)
 
@@ -55,6 +69,7 @@ def listar_checklists(contrato_id: uuid.UUID, sessao: Session = Depends(obter_se
 @roteador.post("/checklists", response_model=list[LeituraChecklist], status_code=status.HTTP_201_CREATED, summary="Criar checklist (versão inativa)",
                description="Cria uma versão inativa. Exige poder editar o contrato. Devolve a lista.", responses={**NAO_ENCONTRADO, **ESCRITA})
 def criar_checklist(contrato_id: uuid.UUID, dados: GravacaoChecklist, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Cria uma versão nova, sempre inativa; é preciso ativá-la depois."""
     with traduzir_erros(sessao):
         configuracao.criar_checklist(sessao, contrato_id, dados, autor)
         return configuracao.listar_checklists(sessao, contrato_id)
@@ -64,6 +79,7 @@ def criar_checklist(contrato_id: uuid.UUID, dados: GravacaoChecklist, sessao: Se
               description="Versões ativas não são editadas. Exige poder editar o contrato.", responses={**NAO_ENCONTRADO, **ESCRITA})
 def alterar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, dados: GravacaoChecklist, sessao: Session = Depends(obter_sessao),
                       autor: Usuario = Depends(pode_modificar)):
+    """Edita uma versão inativa (ativas ficam congeladas para não mudar competências em andamento)."""
     with traduzir_erros(sessao):
         configuracao.alterar_checklist(sessao, contrato_id, checklist_id, dados, autor)
         return configuracao.listar_checklists(sessao, contrato_id)
@@ -72,6 +88,7 @@ def alterar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, dados: Gr
 @roteador.post("/checklists/{checklist_id}/duplicar", response_model=list[LeituraChecklist], status_code=status.HTTP_201_CREATED,
                summary="Duplicar checklist", description="Cria nova versão inativa com o mesmo conteúdo.", responses={**NAO_ENCONTRADO, **ESCRITA})
 def duplicar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Copia uma versão (útil para criar a próxima a partir da ativa)."""
     with traduzir_erros(sessao):
         configuracao.duplicar_checklist(sessao, contrato_id, checklist_id, autor)
         return configuracao.listar_checklists(sessao, contrato_id)
@@ -81,6 +98,7 @@ def duplicar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, sessao: 
                description="Desativa as demais versões e aplica esta às competências que ainda não passaram do checklist "
                "(documentos já anexados com o mesmo nome são mantidos).", responses={**NAO_ENCONTRADO, **ESCRITA})
 def ativar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Ativa a versão e a aplica às competências que ainda não chegaram ao checklist."""
     with traduzir_erros(sessao):
         configuracao.ativar_checklist(sessao, contrato_id, checklist_id, autor)
         return configuracao.listar_checklists(sessao, contrato_id)
@@ -89,6 +107,7 @@ def ativar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, sessao: Se
 @roteador.delete("/checklists/{checklist_id}", response_model=list[LeituraChecklist], summary="Excluir checklist inativo",
                  description="Exclusão lógica; versões ativas não são excluídas. Devolve a lista.", responses={**NAO_ENCONTRADO, **ESCRITA})
 def excluir_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Exclusão lógica de uma versão inativa."""
     with traduzir_erros(sessao):
         configuracao.excluir_checklist(sessao, contrato_id, checklist_id, autor)
         return configuracao.listar_checklists(sessao, contrato_id)
@@ -101,6 +120,7 @@ def excluir_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, sessao: S
 @roteador.get("/formularios", response_model=list[LeituraFormulario], summary="Versões do formulário de avaliação", responses=NAO_ENCONTRADO,
               description="Mais recente primeiro. Exige ACL `contratos` ≥ LEITURA.")
 def listar_formularios(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    """Versões do formulário de avaliação do contrato."""
     with traduzir_erros():
         return configuracao.listar_formularios(sessao, contrato_id)
 
@@ -109,6 +129,7 @@ def listar_formularios(contrato_id: uuid.UUID, sessao: Session = Depends(obter_s
                summary="Criar formulário (versão inativa)", description="Escala crescente, faixas de liberação e grupos com pesos somando 100%.",
                responses={**NAO_ENCONTRADO, **ESCRITA})
 def criar_formulario(contrato_id: uuid.UUID, dados: GravacaoFormulario, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Cria um formulário (escala de notas, faixas de % liberado e grupos com pesos)."""
     with traduzir_erros(sessao):
         configuracao.criar_formulario(sessao, contrato_id, dados, autor)
         return configuracao.listar_formularios(sessao, contrato_id)
@@ -118,6 +139,7 @@ def criar_formulario(contrato_id: uuid.UUID, dados: GravacaoFormulario, sessao: 
               description="Versões ativas não são editadas.", responses={**NAO_ENCONTRADO, **ESCRITA})
 def alterar_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, dados: GravacaoFormulario, sessao: Session = Depends(obter_sessao),
                        autor: Usuario = Depends(pode_modificar)):
+    """Edita uma versão inativa do formulário."""
     with traduzir_erros(sessao):
         configuracao.alterar_formulario(sessao, contrato_id, formulario_id, dados, autor)
         return configuracao.listar_formularios(sessao, contrato_id)
@@ -126,6 +148,7 @@ def alterar_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, dados: 
 @roteador.post("/formularios/{formulario_id}/duplicar", response_model=list[LeituraFormulario], status_code=status.HTTP_201_CREATED,
                summary="Duplicar formulário", description="Cria nova versão inativa.", responses={**NAO_ENCONTRADO, **ESCRITA})
 def duplicar_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Copia uma versão do formulário."""
     with traduzir_erros(sessao):
         configuracao.duplicar_formulario(sessao, contrato_id, formulario_id, autor)
         return configuracao.listar_formularios(sessao, contrato_id)
@@ -135,6 +158,7 @@ def duplicar_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, sessao
                description="Desativa as demais versões e aplica esta às competências ainda na medição (sem avaliação iniciada).",
                responses={**NAO_ENCONTRADO, **ESCRITA})
 def ativar_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Ativa o formulário e o aplica às competências cuja avaliação ainda não começou."""
     with traduzir_erros(sessao):
         configuracao.ativar_formulario(sessao, contrato_id, formulario_id, autor)
         return configuracao.listar_formularios(sessao, contrato_id)
@@ -147,6 +171,7 @@ def ativar_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, sessao: 
 @roteador.get("/execucao", response_model=PainelExecucao, summary="Aba Execução", responses=NAO_ENCONTRADO,
               description="Pré-requisitos e competências agrupadas por vigência. Exige ACL `contratos` ≥ LEITURA.")
 def painel_execucao(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    """Aba Execução do contrato: pré-requisitos para gerar competências e a lista delas por vigência."""
     with traduzir_erros():
         return competencias.painel(sessao, contrato_id)
 
@@ -156,6 +181,7 @@ def painel_execucao(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sess
                "Depois disso, itens e ordem só mudam pelo SuperRoot. Pré-requisitos não atendidos → 400 com os motivos.",
                responses={**NAO_ENCONTRADO, **ESCRITA})
 def gerar_competencias(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Gera as competências que faltam (operação idempotente: rodar duas vezes não duplica nada)."""
     with traduzir_erros(sessao):
         competencias.gerar_competencias(sessao, contrato_id, autor)
         return competencias.painel(sessao, contrato_id)
@@ -167,6 +193,8 @@ def gerar_competencias(contrato_id: uuid.UUID, sessao: Session = Depends(obter_s
 def competencia_por_identificador(
     contrato_id: uuid.UUID, identificador: str, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)
 ):
+    """Busca a competência pelo identificador legível usado na URL da tela (ex.: `2026-03`)."""
+    # Recusa formatos inválidos logo aqui, como 404, sem consultar o banco
     if not re.fullmatch(r"\d{4}-\d{2}(-(\d|dif))?", identificador):
         raise ErroApi(status.HTTP_404_NOT_FOUND, "Competência não encontrada.", "nao_encontrado")
     with traduzir_erros():
@@ -177,6 +205,7 @@ def competencia_por_identificador(
 @roteador.get("/competencias/{competencia_id}", response_model=DetalheCompetencia, summary="Detalhe da competência",
               description="Todas as etapas, com o que já foi registrado. Exige ACL `contratos` ≥ LEITURA.", responses=NAO_ENCONTRADA)
 def detalhar_competencia(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)):
+    """Detalhe completo da competência pelo id."""
     with traduzir_erros():
         return competencias.detalhar(sessao, contrato_id, competencia_id, usuario)
 
@@ -186,11 +215,13 @@ def detalhar_competencia(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sess
               responses={status.HTTP_200_OK: {"content": {"application/pdf": {}}}, **resposta_nao_encontrado("Arquivo")})
 def baixar_arquivo(contrato_id: uuid.UUID, competencia_id: uuid.UUID, anexo_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
                    _: Usuario = Depends(pode_ler)):
+    """Baixa qualquer PDF ligado à competência; o serviço confere se o anexo pertence a ela."""
     with traduzir_erros():
         return competencias.arquivo_da_competencia(sessao, contrato_id, competencia_id, anexo_id)
 
 
 def _depois(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, usuario: Usuario) -> DetalheCompetencia:
+    """Atalho usado pelas rotas de escrita para devolver o detalhe atualizado da competência."""
     return competencias.detalhar(sessao, contrato_id, competencia_id, usuario)
 
 
@@ -199,6 +230,7 @@ def _depois(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, 
               "Liberada após o fim do período. Qualquer alteração apaga as ciências já registradas.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def salvar_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoMedicao, sessao: Session = Depends(obter_sessao),
                    autor: Usuario = Depends(pode_modificar)):
+    """Etapa 1: grava as quantidades medidas e as NEs escolhidas; alterar invalida as ciências."""
     with traduzir_erros(sessao):
         competencias.salvar_medicao(sessao, contrato_id, competencia_id, dados, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -207,6 +239,7 @@ def salvar_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Gra
 @roteador.post("/competencias/{competencia_id}/medicao/ciencia", response_model=DetalheCompetencia, summary="Registrar minha ciência na medição",
                description="Somente integrantes vigentes da equipe, uma vez por pessoa. Exige a medição salva.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def ciencia_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 1: registra a ciência do usuário logado (é preciso ao menos duas, de pessoas diferentes)."""
     with traduzir_erros(sessao):
         competencias.registrar_ciencia(sessao, contrato_id, competencia_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -217,6 +250,7 @@ def ciencia_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: S
                "(nova versão só se os dados mudaram), soma o executado nos itens e avança a etapa.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def concluir_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: ConclusaoMedicao, sessao: Session = Depends(obter_sessao),
                      autor: Usuario = Depends(pode_modificar)):
+    """Etapa 1: conclui a medição, gera a memória de cálculo em PDF e libera a etapa seguinte."""
     with traduzir_erros(sessao):
         competencias.concluir_medicao(sessao, contrato_id, competencia_id, dados.notas_empenho_ids, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -229,6 +263,7 @@ def concluir_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: C
               responses={**NAO_ENCONTRADA, **ESCRITA})
 def avaliacao_inicial(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoAvaliacaoInicial, sessao: Session = Depends(obter_sessao),
                       autor: Usuario = Depends(pode_modificar)):
+    """Etapa 2: notas da avaliação inicial feita pela equipe."""
     with traduzir_erros(sessao):
         competencias.salvar_avaliacao_inicial(sessao, contrato_id, competencia_id, dados, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -239,6 +274,7 @@ def avaliacao_inicial(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: 
               responses={**NAO_ENCONTRADA, **ESCRITA})
 def avaliacao_gestor(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoAvaliacaoGestor, sessao: Session = Depends(obter_sessao),
                      autor: Usuario = Depends(pode_modificar)):
+    """Etapa 2: notas do gestor, que definem a nota final e o percentual do pagamento liberado."""
     with traduzir_erros(sessao):
         competencias.salvar_avaliacao_gestor(sessao, contrato_id, competencia_id, dados, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -248,6 +284,7 @@ def avaliacao_gestor(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: G
               description="Um integrante vigente da equipe por papel (gestor, fiscal administrativo, fiscal técnico).", responses={**NAO_ENCONTRADA, **ESCRITA})
 def assinaturas(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoAssinaturas, sessao: Session = Depends(obter_sessao),
                 autor: Usuario = Depends(pode_modificar)):
+    """Etapa 2: define quem assina o ateste (um integrante por papel)."""
     with traduzir_erros(sessao):
         competencias.salvar_assinaturas(sessao, contrato_id, competencia_id, dados, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -256,6 +293,8 @@ def assinaturas(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Gravac
 @roteador.post("/competencias/{competencia_id}/avaliacao/ciencia", response_model=DetalheCompetencia, summary="Registrar minha ciência no ateste",
                description="Somente as pessoas indicadas nas assinaturas.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def ciencia_ateste(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):
+    """Etapa 2: ciência de quem foi indicado para assinar o ateste."""
+    # Aqui basta ACL de leitura: a permissão real é estar entre as pessoas indicadas
     with traduzir_erros(sessao):
         competencias.registrar_ciencia_ateste(sessao, contrato_id, competencia_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -264,6 +303,7 @@ def ciencia_ateste(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Se
 @roteador.post("/competencias/{competencia_id}/avaliacao/pdf", response_model=DetalheCompetencia, summary="Exportar PDF da avaliação",
                description="Exige todas as ciências do ateste.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def pdf_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 2: gera o PDF do relatório de avaliação para a contratada assinar."""
     with traduzir_erros(sessao):
         competencias.gerar_pdf_avaliacao(sessao, contrato_id, competencia_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -274,6 +314,7 @@ def pdf_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Ses
                responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def avaliacao_assinada(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
                        autor: Usuario = Depends(pode_modificar)):
+    """Etapa 2: recebe o relatório assinado pela contratada e conclui a etapa."""
     with traduzir_erros(sessao):
         competencias.enviar_avaliacao_assinada(sessao, contrato_id, competencia_id, *arquivo_pdf(arquivo), autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -284,6 +325,7 @@ def avaliacao_assinada(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquiv
                "só antes da nota fiscal.", responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def reconsideracao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
                    autor: Usuario = Depends(pode_modificar)):
+    """Etapa 2: recebe o pedido de reconsideração da contratada (uma única vez) e reabre a avaliação."""
     with traduzir_erros(sessao):
         competencias.reconsiderar_avaliacao(sessao, contrato_id, competencia_id, *arquivo_pdf(arquivo), autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -322,11 +364,17 @@ def nota_fiscal(
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ):
+    """Etapa 3: registra a nota fiscal (e a nota adicional, se houver) com as retenções.
+
+    A rota recebe `multipart/form-data` porque vem junto com o PDF; por isso cada campo é declarado
+    como `Form` e depois montado aqui em um dicionário no formato que o serviço espera.
+    """
     dados = {
         "numero": numero.strip(), "recebida_em": recebida_em, "prazo_pagamento_dias": prazo_pagamento_dias, "origem_valor": origem_valor,
         "valor_bruto": valor_bruto,
         "retencoes": {"ir": retencao_ir, "inss": retencao_inss, "iss": retencao_iss, "pis": retencao_pis, "cofins": retencao_cofins},
     }
+    # A nota adicional só é considerada se o usuário marcou que ela existe
     if possui_adicional:
         dados["adicional"] = {
             "numero": adicional_numero.strip(), "valor_bruto": adicional_valor_bruto,
@@ -334,6 +382,7 @@ def nota_fiscal(
                           "pis": adicional_retencao_pis, "cofins": adicional_retencao_cofins},
         }
     with traduzir_erros(sessao):
+        # Os PDFs são opcionais na chamada: ao corrigir dados, o usuário pode manter o arquivo já enviado
         competencias.registrar_nota_fiscal(
             sessao, contrato_id, competencia_id, dados, arquivo_pdf(arquivo) if arquivo else None,
             arquivo_pdf(arquivo_adicional) if possui_adicional and arquivo_adicional else None, autor,
@@ -358,6 +407,7 @@ def cadin(
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ):
+    """Etapa 4: registra a consulta ao CADIN. Com pendência, a etapa fica aberta até regularizar."""
     with traduzir_erros(sessao):
         competencias.registrar_cadin(
             sessao, contrato_id, competencia_id, possui_pendencia, pendencia, texto_notificacao, arquivo_pdf(certidao),
@@ -372,6 +422,8 @@ def cadin(
                description="Conclui a etapa quando todos os documentos obrigatórios estão anexados; os opcionais podem ficar sem anexo.",
                responses={**NAO_ENCONTRADA, **ESCRITA})
 def concluir_checklist(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 5: conclui o checklist quando todos os documentos obrigatórios estão anexados."""
+    # Esta rota precisa vir antes de `/checklist/{documento_id}`, senão "concluir" seria lido como id
     with traduzir_erros(sessao):
         competencias.concluir_checklist(sessao, contrato_id, competencia_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -382,6 +434,7 @@ def concluir_checklist(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao
                responses={**resposta_nao_encontrado("Competência ou documento"), **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def documento_mensal(contrato_id: uuid.UUID, competencia_id: uuid.UUID, documento_id: uuid.UUID, arquivo: UploadFile = File(...),
                      sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 5: anexa o PDF de um documento do checklist mensal."""
     with traduzir_erros(sessao):
         competencias.enviar_documento_mensal(sessao, contrato_id, competencia_id, documento_id, *arquivo_pdf(arquivo), autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -391,6 +444,7 @@ def documento_mensal(contrato_id: uuid.UUID, competencia_id: uuid.UUID, document
                description="Resumo executivo + memória, avaliação assinada, notas fiscais, CADIN e checklist em um único PDF. "
                "Pode ser gerado de novo até a OB.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def consolidado(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 6: gera o PDF consolidado com todos os documentos da competência."""
     with traduzir_erros(sessao):
         competencias.gerar_consolidado(sessao, contrato_id, competencia_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -401,6 +455,7 @@ def consolidado(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Sessi
                responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def ordem_bancaria(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
                    autor: Usuario = Depends(pode_modificar)):
+    """Etapa 7: anexa a OB, debita as NEs na ordem escolhida e conclui a competência."""
     with traduzir_erros(sessao):
         competencias.registrar_ordem_bancaria(sessao, contrato_id, competencia_id, *arquivo_pdf(arquivo), autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -412,6 +467,7 @@ def ordem_bancaria(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: U
                "histórico ficam guardados. Permitido ao SuperRoot e ao gestor vigente do contrato.", responses={**NAO_ENCONTRADA, **INVALIDO})
 def reabrir(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Reabertura, sessao: Session = Depends(obter_sessao),
             autor: Usuario = Depends(pode_modificar)):
+    """Volta a competência para uma etapa anterior, com justificativa registrada na auditoria."""
     with traduzir_erros(sessao):
         competencias.reabrir(sessao, contrato_id, competencia_id, dados, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)

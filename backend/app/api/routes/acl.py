@@ -1,5 +1,15 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de controle de acesso (recursos, regras e acessos efetivos).
+"""Rotas do controle de acesso (`/api/acl`).
+
+Conceitos:
+- **recurso**: um módulo protegido, identificado por um slug (ex.: `contratos`);
+- **regra**: concede um nível (LEITURA, MODIFICACAO ou CONTROLE_TOTAL) em um recurso a usuários
+  e/ou setores;
+- **acesso efetivo**: o nível que o usuário tem de fato, somando regras diretas e dos setores.
+
+Só o SuperRoot administra recursos e regras; qualquer usuário consulta os próprios acessos.
+"""
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
@@ -19,6 +29,12 @@ super_root = exigir_papeis(Papel.SUPER_ROOT)
 
 
 def _efetivos(sessao: Session, usuario: Usuario, somente_concedidos: bool) -> list[AcessoEfetivo]:
+    """Nível efetivo do usuário em cada recurso ativo.
+
+    Com `somente_concedidos`, omite os recursos em que o usuário não tem acesso (o frontend só
+    precisa saber o que mostrar); sem ele, lista todos (`nivel` nulo = sem acesso), para a
+    consulta do SuperRoot.
+    """
     return [
         AcessoEfetivo(recurso_id=r.id, nome=r.nome, slug=r.slug, url_base=r.url_base, nivel=nivel)
         for r, nivel in servico_acl.acessos_efetivos(sessao, usuario)
@@ -33,6 +49,7 @@ def _efetivos(sessao: Session, usuario: Usuario, somente_concedidos: bool) -> li
     description="Recursos ativos aos quais o usuário autenticado tem acesso, com o nível efetivo. Usado pelo frontend para ocultar módulos.",
 )
 def listar_meus_acessos(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> list[AcessoEfetivo]:
+    """Acessos do próprio usuário (a barra lateral usa para esconder módulos sem acesso)."""
     return _efetivos(sessao, usuario, somente_concedidos=True)
 
 
@@ -44,6 +61,7 @@ def listar_meus_acessos(sessao: Session = Depends(obter_sessao), usuario: Usuari
     responses=resposta_nao_encontrado("Usuário"),
 )
 def consultar_acesso_efetivo(usuario_id: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(super_root)) -> list[AcessoEfetivo]:
+    """Ferramenta de conferência do SuperRoot: o que um usuário específico consegue acessar."""
     usuario = sessao.get(Usuario, usuario_id)
     if usuario is None:
         raise nao_encontrado("Usuário")
@@ -54,6 +72,7 @@ def consultar_acesso_efetivo(usuario_id: int, sessao: Session = Depends(obter_se
 
 @roteador.get("/recursos", response_model=list[LeituraRecurso], summary="Listar recursos", description="Restrito ao SuperRoot.")
 def listar_recursos(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(super_root)) -> list[LeituraRecurso]:
+    """Todos os recursos cadastrados, com a quantidade de regras de cada um."""
     return servico.listar_recursos(sessao)
 
 
@@ -66,6 +85,7 @@ def listar_recursos(sessao: Session = Depends(obter_sessao), _: Usuario = Depend
     responses={**CONFLITO, **INVALIDO},
 )
 def criar_recurso(dados: GravacaoRecurso, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> LeituraRecurso:
+    """Cadastra um recurso novo (sem regras, ele fica aberto a todos os usuários autenticados)."""
     try:
         recurso = servico.gravar_recurso(sessao, dados, autor.login)
     except ErroRegraAcl as erro:
@@ -82,6 +102,7 @@ def criar_recurso(dados: GravacaoRecurso, sessao: Session = Depends(obter_sessao
     responses={**resposta_nao_encontrado("Recurso"), **CONFLITO, **INVALIDO},
 )
 def alterar_recurso(recurso_id: int, dados: GravacaoRecurso, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> LeituraRecurso:
+    """Altera nome, slug, URL base ou situação do recurso."""
     try:
         servico.gravar_recurso(sessao, dados, autor.login, recurso_id)
     except AclNaoEncontrado:
@@ -100,6 +121,7 @@ def alterar_recurso(recurso_id: int, dados: GravacaoRecurso, sessao: Session = D
     responses=resposta_nao_encontrado("Recurso"),
 )
 def excluir_recurso(recurso_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> Response:
+    """Exclui o recurso e, junto, todas as regras dele."""
     try:
         servico.excluir_recurso(sessao, recurso_id, autor.login)
     except AclNaoEncontrado:
@@ -115,6 +137,7 @@ def listar_regras(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(super_root),
 ) -> list[LeituraRegra]:
+    """Regras cadastradas, opcionalmente só as de um recurso."""
     return servico.listar_regras(sessao, recurso_id)
 
 
@@ -127,6 +150,7 @@ def listar_regras(
     responses=INVALIDO,
 )
 def criar_regra(dados: GravacaoRegra, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> LeituraRegra:
+    """Cria a regra. "Lista positiva": a partir da primeira regra, só quem está contemplado acessa."""
     try:
         return servico.para_leitura_regra(servico.gravar_regra(sessao, dados, autor.login))
     except ErroRegraAcl as erro:
@@ -142,6 +166,7 @@ def criar_regra(dados: GravacaoRegra, sessao: Session = Depends(obter_sessao), a
     responses={**resposta_nao_encontrado("Regra"), **INVALIDO},
 )
 def alterar_regra(regra_id: int, dados: GravacaoRegra, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> LeituraRegra:
+    """Altera nível, usuários e setores da regra (as listas enviadas substituem as atuais)."""
     try:
         return servico.para_leitura_regra(servico.gravar_regra(sessao, dados, autor.login, regra_id))
     except AclNaoEncontrado:
@@ -159,6 +184,7 @@ def alterar_regra(regra_id: int, dados: GravacaoRegra, sessao: Session = Depends
     responses=resposta_nao_encontrado("Regra"),
 )
 def excluir_regra(regra_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> Response:
+    """Exclui a regra (se for a última do recurso, ele volta a ficar aberto)."""
     try:
         servico.excluir_regra(sessao, regra_id, autor.login)
     except AclNaoEncontrado:

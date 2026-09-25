@@ -26,6 +26,7 @@ from app.services.documentos.pdf import DocumentoPdf
 from app.services.documentos.planilha import FORMATO_MOEDA, Aba, Coluna, gerar_planilha
 
 ZERO = Decimal(0)
+# Cenários que podem ser somados à previsão (chave usada na API → título nas colunas)
 CENARIOS = {"reajustes": "Reajustes em elaboração", "aditamentos": "Aditamentos em elaboração",
             "supressoes": "Supressões em elaboração", "prorrogacoes": "Prorrogações em elaboração"}
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -33,19 +34,24 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @dataclass
 class LinhaContrato:
+    """Linha de um contrato no relatório: previsão base e valor de cada cenário, mês a mês."""
     contrato: Contrato
+    # Dicionários que começam em zero para qualquer mês (e, nos cenários, para qualquer cenário)
     base: dict[date, Decimal] = field(default_factory=lambda: defaultdict(Decimal))
     cenarios: dict[str, dict[date, Decimal]] = field(default_factory=lambda: defaultdict(lambda: defaultdict(Decimal)))
 
     def total_mes(self, mes: date, cenarios: set[str]) -> Decimal:
+        """Total do mês: a base mais os cenários escolhidos."""
         return self.base[mes] + sum((self.cenarios[c][mes] for c in cenarios), ZERO)
 
 
 def _meses(exercicio: int) -> list[date]:
+    """Os 12 meses do exercício (dia 1 de cada mês)."""
     return [date(exercicio, m, 1) for m in range(1, 13)]
 
 
 def _cenario_reajustes(linha: LinhaContrato, exercicio: int) -> None:
+    """Cenário de reajuste: diferença de preço dos itens contínuos a partir do mês de referência."""
     contrato = linha.contrato
     for reajuste in (r for r in contrato.reajustes if r.situacao == "rascunho"):
         vigencia = next((v for v in vigencias(contrato) if v.sequencia == reajuste.sequencia_vigencia), None)
@@ -60,6 +66,7 @@ def _cenario_reajustes(linha: LinhaContrato, exercicio: int) -> None:
 
 
 def _cenario_alteracoes(linha: LinhaContrato, exercicio: int) -> None:
+    """Cenário de aditamento/supressão: diferença de quantidade dos itens contínuos a partir do mês de efeito."""
     contrato = linha.contrato
     for alteracao in (a for a in contrato.alteracoes if a.situacao in ("rascunho", "aguardando_ciencias")):
         chave = "aditamentos" if alteracao.tipo == "aditamento" else "supressoes"
@@ -75,10 +82,12 @@ def _cenario_alteracoes(linha: LinhaContrato, exercicio: int) -> None:
 
 
 def _cenario_prorrogacoes(sessao: Session, linha: LinhaContrato, exercicio: int) -> None:
+    """Cenário de prorrogação: todos os meses da nova vigência planejada no rascunho."""
     contrato = linha.contrato
     processo = sessao.scalar(select(ProcessoProrrogacao).where(ProcessoProrrogacao.contrato_id == contrato.id, ProcessoProrrogacao.situacao == "rascunho"))
     if processo is None or not processo.meses:
         return
+    # A nova vigência começa no dia seguinte ao fim atual
     inicio = contrato.data_fim + timedelta(days=1)
     nova = calculos.Vigencia(0, inicio, calculos.calcular_data_fim(inicio, processo.meses))
     plano = {p["item_id"]: p for p in processo.plano_sob_demanda or []}
@@ -87,6 +96,7 @@ def _cenario_prorrogacoes(sessao: Session, linha: LinhaContrato, exercicio: int)
             continue
         for item in contrato.itens:
             preco = valores.preco_em(contrato, item, mes.competencia)
+            # Contínuos: quantidade mensal com pró-rata; sob demanda: apontamentos do plano da prorrogação
             if item.tipo == "continuo":
                 fator = mes.fator if item.calcula_pro_rata else Decimal(1)
                 linha.cenarios["prorrogacoes"][mes.competencia] += item.quantidade_mensal * preco * fator
@@ -96,6 +106,7 @@ def _cenario_prorrogacoes(sessao: Session, linha: LinhaContrato, exercicio: int)
 
 
 def montar(sessao: Session, exercicio: int, cenarios: set[str]) -> list[LinhaContrato]:
+    """Monta uma linha por contrato com valores no exercício (contratos zerados ficam de fora)."""
     linhas = []
     for contrato in sorted(carregar_contratos(sessao), key=lambda c: (c.ano, c.sequencial)):
         linha = LinhaContrato(contrato)
@@ -115,21 +126,26 @@ def montar(sessao: Session, exercicio: int, cenarios: set[str]) -> list[LinhaCon
 
 def exportar(sessao: Session, exercicio: int, formato: str, resumo_anual: bool, detalhamento_mensal: bool, cenarios: set[str],
              autor: Usuario) -> tuple[bytes, str, str]:
+    """Gera o arquivo (XLSX ou PDF) com as seções escolhidas; devolve (conteúdo, nome, tipo MIME)."""
     linhas = montar(sessao, exercicio, cenarios)
     meses = _meses(exercicio)
     escolhidos = [c for c in CENARIOS if c in cenarios]
+    # Resumo anual: por contrato, a previsão, cada cenário e o total
     resumo = [
         [l.contrato.numero, l.contrato.empresa.razao_social, calculos.arredondar(sum(l.base.values(), ZERO)),
          *[calculos.arredondar(sum(l.cenarios[c].values(), ZERO)) for c in escolhidos],
          calculos.arredondar(sum((l.total_mes(m, cenarios) for m in meses), ZERO))]
         for l in linhas
     ]
+    # Detalhamento mensal: por contrato, o total de cada mês
     mensal = [[l.contrato.numero, *[calculos.arredondar(l.total_mes(m, cenarios)) for m in meses]] for l in linhas]
+    # Linhas de totais das duas tabelas
     totais_resumo = ["Total", "", *[sum((r[i] for r in resumo), ZERO) for i in range(2, 3 + len(escolhidos) + 1)]]
     totais_mensal = ["Total", *[sum((r[i] for r in mensal), ZERO) for i in range(1, 13)]]
     titulo = f"Previsão Orçamentária {exercicio}"
     nome = f"previsao-orcamentaria-{exercicio}"
     if formato == "xlsx":
+        # Planilha: uma aba por seção escolhida (sem nenhuma, gera uma aba vazia)
         abas = []
         if resumo_anual:
             abas.append(Aba("Resumo anual", [Coluna("Contrato", largura=12), Coluna("Empresa", largura=40), Coluna("Previsto", FORMATO_MOEDA, 18),
@@ -139,6 +155,7 @@ def exportar(sessao: Session, exercicio: int, formato: str, resumo_anual: bool, 
             abas.append(Aba("Detalhamento mensal", [Coluna("Contrato", largura=12), *[Coluna(f"{m:%m/%Y}", FORMATO_MOEDA, 14) for m in meses]],
                             mensal, titulo=titulo, rodape=totais_mensal))
         return gerar_planilha(abas or [Aba("Resumo anual", [Coluna("Contrato")], [], titulo=titulo)]), f"{nome}.xlsx", XLSX
+    # PDF em paisagem; o detalhamento mensal fica em milhares de reais para caber na página
     documento = DocumentoPdf(titulo, "Cenários: " + (", ".join(CENARIOS[c] for c in escolhidos) or "somente a previsão"), paisagem=True,
                              autor=autor.nome_completo or autor.login)
     if resumo_anual:
@@ -157,4 +174,5 @@ def exportar(sessao: Session, exercicio: int, formato: str, resumo_anual: bool, 
 
 
 def _mil(valor: Decimal) -> str:
+    """Valor em milhares de reais com uma casa decimal (ex.: 12,3 = R$ 12.300)."""
     return f"{valor / 1000:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")

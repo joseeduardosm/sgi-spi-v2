@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field
 
 
 class InicioMigracaoSgi(BaseModel):
+    """Senhas de SSH pedidas na tela para rodar a importação (usadas só durante a execução)."""
     senha_origem: str = Field(..., min_length=1, max_length=256, description="Senha do usuário SSH no SGI (origem). Não é gravada.")
     senha_destino: str = Field(..., min_length=1, max_length=256, description="Senha do usuário SSH neste servidor (destino). Não é gravada.")
 
 
 class EstadoMigracaoSgi(BaseModel):
+    """Andamento da importação, consultado periodicamente pela tela."""
     situacao: Literal["ociosa", "executando", "concluida", "erro"]
     etapa: str | None = Field(None, description="`iniciando`, `extraindo`, `carregando` ou `concluida`.")
     mensagem: str = ""

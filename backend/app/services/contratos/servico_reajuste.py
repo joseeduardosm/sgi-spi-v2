@@ -3,7 +3,8 @@
 """Reajuste de preços (tela 6): abertura, evidência do índice, memória, apostilamento e conclusão.
 
 Regras: um reajuste em elaboração por vez; cada vigência é reajustada uma vez. Competências já
-medidas mantêm os preços antigos (princípio da fotografia).
+medidas mantêm os preços antigos (princípio da fotografia); a diferença de preço delas é paga
+por uma competência complementar ("diferença de reajuste") gerada na conclusão.
 """
 
 import hashlib
@@ -41,14 +42,17 @@ from app.services.servico_auditoria import auditar
 
 ZERO = Decimal(0)
 CEM = Decimal(100)
+# Tipo MIME das planilhas .xlsx
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def _arquivo(anexo: Anexo | None) -> LeituraArquivo | None:
+    """Converte um anexo no formato de leitura da API (ou None)."""
     return LeituraArquivo(anexo_id=anexo.id, nome=anexo.nome_original, tamanho=anexo.tamanho, enviado_em=anexo.criado_em) if anexo else None
 
 
 def _carregar(sessao: Session, contrato: Contrato) -> list[Reajuste]:
+    """Reajustes do contrato com itens e memórias carregados, do mais antigo para o mais recente."""
     return list(
         sessao.scalars(
             select(Reajuste)
@@ -61,6 +65,7 @@ def _carregar(sessao: Session, contrato: Contrato) -> list[Reajuste]:
 
 
 def _vigencia(contrato: Contrato, sequencia: int) -> calculos.Vigencia:
+    """Vigência pelo número, ou `RegistroNaoEncontrado`."""
     vigencia = next((v for v in vigencias(contrato) if v.sequencia == sequencia), None)
     if vigencia is None:
         raise RegistroNaoEncontrado("Vigência")
@@ -75,11 +80,13 @@ def calcular_totais(contrato: Contrato, reajuste: Reajuste) -> None:
     por uma competência complementar ao concluir o reajuste.
     """
     vigencia = _vigencia(contrato, reajuste.sequencia_vigencia)
+    # Base mensal: soma só dos itens contínuos (quantidade mensal × preço)
     base_atual = base_nova = ZERO
     for linha in reajuste.itens:
         if linha.tipo == "continuo":
             base_atual += linha.quantidade_mensal * linha.valor_unitario_atual
             base_nova += linha.quantidade_mensal * linha.valor_unitario_reajustado
+    # Valor global simulado com os novos preços a partir do mês de referência
     novos = {linha.item_id: linha.valor_unitario_reajustado for linha in reajuste.itens}
     atual = valores.valor_global_vigencia(contrato, vigencia)
     reajuste.base_atual, reajuste.base_reajustada = calculos.arredondar(base_atual), calculos.arredondar(base_nova)
@@ -116,6 +123,7 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
     A medição já vem preenchida e segue o fluxo normal: NEs e ciências, nota fiscal, CADIN,
     checklist, consolidado e Ordem Bancária (sem avaliação).
     """
+    # Soma, por item, as quantidades medidas e o valor da diferença (quantidade × (novo − antigo))
     medidas = _competencias_medidas(contrato, reajuste)
     quantidades: dict = {}
     valores_diferenca: dict = {}
@@ -127,6 +135,7 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
             valores_diferenca[linha.item_id] = valores_diferenca.get(linha.item_id, ZERO) + linha.quantidade_medida * (
                 novos[linha.item_id] - linha.valor_unitario
             )
+    # Sem nada medido ou sem diferença a pagar, não há competência complementar
     if not quantidades or calculos.arredondar(sum(valores_diferenca.values(), ZERO)) == 0:
         return None
     itens = {i.id: i for i in contrato.itens}
@@ -135,6 +144,7 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
         periodo_inicio=medidas[0].periodo_inicio, periodo_fim=medidas[-1].periodo_fim,
         sequencia_vigencia=reajuste.sequencia_vigencia, etapa_atual="medicao",
     )
+    # Preço unitário da diferença = valor total da diferença ÷ quantidade total (média ponderada)
     for item_id, total_medido in quantidades.items():
         item = itens[item_id]
         unitario = calculos.arredondar(valores_diferenca[item_id] / total_medido)
@@ -145,6 +155,7 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
                 quantidade_prevista=total_medido, quantidade_medida=total_medido,
             )
         )
+    # A complementar também precisa do checklist mensal
     checklist = checklist_ativo(contrato)
     if checklist:
         copiar_checklist(competencia, checklist)
@@ -153,6 +164,7 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
 
 
 def leitura(contrato: Contrato, reajuste: Reajuste, anexos: dict) -> LeituraReajuste:
+    """Converte o reajuste para o formato de leitura (as contagens de competências só valem em elaboração)."""
     return LeituraReajuste(
         id=reajuste.id, situacao=reajuste.situacao, sequencia_vigencia=reajuste.sequencia_vigencia, vigencia_inicio=reajuste.vigencia_inicio,
         vigencia_fim=reajuste.vigencia_fim, mes_referencia=reajuste.mes_referencia,
@@ -179,10 +191,13 @@ def leitura(contrato: Contrato, reajuste: Reajuste, anexos: dict) -> LeituraReaj
 
 
 def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelReajuste:
+    """Reajuste em elaboração, vigências que ainda podem ser reajustadas e o histórico."""
     contrato = obter_contrato(sessao, contrato_id)
     reajustes = _carregar(sessao, contrato)
+    # Anexos (evidência e apostilamento) de todos os reajustes em uma consulta
     ids = [x for r in reajustes for x in (r.evidencia_anexo_id, r.apostilamento_anexo_id) if x]
     anexos = {a.id: a for a in sessao.scalars(select(Anexo).where(Anexo.id.in_(ids)))}
+    # Vigências já reajustadas não aparecem como opção
     reajustadas = {r.sequencia_vigencia for r in reajustes if r.situacao == "concluido"}
     em_andamento = next((r for r in reajustes if r.situacao == "rascunho"), None)
     return PainelReajuste(
@@ -194,6 +209,7 @@ def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelR
 
 
 def _em_andamento(sessao: Session, contrato: Contrato, reajuste_id: uuid.UUID) -> Reajuste:
+    """Reajuste pelo id, desde que ainda esteja em elaboração."""
     reajuste = next((r for r in _carregar(sessao, contrato) if r.id == reajuste_id), None)
     if reajuste is None:
         raise RegistroNaoEncontrado("Reajuste")
@@ -203,6 +219,7 @@ def _em_andamento(sessao: Session, contrato: Contrato, reajuste_id: uuid.UUID) -
 
 
 def abrir(sessao: Session, contrato_id: uuid.UUID, dados: AberturaReajuste, autor: Usuario) -> None:
+    """Abre um reajuste para a vigência escolhida, fotografando os itens com os preços atuais."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     existentes = _carregar(sessao, contrato)
@@ -211,6 +228,7 @@ def abrir(sessao: Session, contrato_id: uuid.UUID, dados: AberturaReajuste, auto
     if any(r.situacao == "concluido" and r.sequencia_vigencia == dados.sequencia_vigencia for r in existentes):
         raise ErroRegraContrato("Esta vigência já foi reajustada.")
     vigencia = _vigencia(contrato, dados.sequencia_vigencia)
+    # O mês de referência é normalizado para o dia 1 e precisa estar dentro da vigência
     referencia = calculos.primeiro_dia(dados.mes_referencia)
     if not calculos.primeiro_dia(vigencia.inicio) <= referencia <= vigencia.fim:
         raise ErroRegraContrato("O mês de referência precisa estar dentro da vigência escolhida.")
@@ -218,6 +236,7 @@ def abrir(sessao: Session, contrato_id: uuid.UUID, dados: AberturaReajuste, auto
         contrato_id=contrato.id, sequencia_vigencia=vigencia.sequencia, vigencia_inicio=vigencia.inicio, vigencia_fim=vigencia.fim,
         mes_referencia=referencia, criado_por_id=autor.id,
     )
+    # Cada item começa com índice 0 (preço reajustado = preço atual)
     for item in contrato.itens:
         preco = valores.preco_em(contrato, item, referencia)
         reajuste.itens.append(
@@ -235,6 +254,7 @@ def abrir(sessao: Session, contrato_id: uuid.UUID, dados: AberturaReajuste, auto
 
 
 def anexar_evidencia(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
+    """Anexa (ou substitui) o PDF que comprova o índice usado."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
@@ -252,6 +272,7 @@ def reajustar_preco(atual: Decimal, indice: Decimal, referencial: Decimal | None
 
 
 def salvar_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, dados: GravacaoMemoriaReajuste, autor: Usuario) -> None:
+    """Grava índice e teto de cada item, recalcula os novos preços e os totais."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
@@ -273,6 +294,7 @@ def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id:
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
+    # Hash dos dados da memória: se nada mudou desde a última versão, não gera arquivos novos
     origem = hashlib.sha256(json.dumps(
         [[str(i.item_id), str(i.valor_unitario_atual), str(i.indice_percentual), str(i.valor_referencial), str(i.valor_unitario_reajustado)] for i in reajuste.itens]
         + [str(reajuste.mes_referencia)]
@@ -290,6 +312,7 @@ def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id:
 
 
 def _linhas(reajuste: Reajuste) -> list[list]:
+    """Linhas da tabela da memória (usadas no PDF e na planilha)."""
     return [
         [i.ordem, i.descricao, i.quantidade_mensal, i.valor_unitario_atual, i.indice_percentual, i.valor_referencial, i.valor_unitario_reajustado,
          calculos.arredondar(i.quantidade_mensal * i.valor_unitario_reajustado)]
@@ -298,6 +321,7 @@ def _linhas(reajuste: Reajuste) -> list[list]:
 
 
 def _pdf_memoria(contrato: Contrato, reajuste: Reajuste, versao: int, autor: Usuario) -> bytes:
+    """Monta o PDF da memória de cálculo: identificação, itens e totais."""
     documento = DocumentoPdf("Memória de cálculo do reajuste", f"Contrato {contrato.numero} · {reajuste.sequencia_vigencia}ª vigência · versão {versao}",
                              paisagem=True, autor=autor.nome_completo or autor.login)
     documento.secao("Identificação").campos([
@@ -318,6 +342,7 @@ def _pdf_memoria(contrato: Contrato, reajuste: Reajuste, versao: int, autor: Usu
 
 
 def _xlsx_memoria(contrato: Contrato, reajuste: Reajuste) -> bytes:
+    """Monta a planilha da memória de cálculo com as mesmas colunas do PDF."""
     return gerar_planilha([Aba(
         "Reajuste",
         [Coluna("Item", largura=6), Coluna("Descrição", largura=40), Coluna("Qtd. mensal", FORMATO_QUANTIDADE), Coluna("Valor atual", FORMATO_MOEDA),
@@ -334,6 +359,7 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ar
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
+    # Exige a evidência do índice e ao menos uma memória gerada
     if reajuste.evidencia_anexo_id is None:
         raise ErroRegraContrato("Anexe a evidência do índice antes de concluir.")
     if not reajuste.memorias:
@@ -341,18 +367,22 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ar
     anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-reajuste-apostilamento", autor.id, contrato_id=contrato.id)
     sessao.flush()
     reajuste.apostilamento_anexo_id = anexo.id
+    # O preço do cadastro só muda se o reajuste for da vigência atual (a última)
     novos = {i.item_id: i.valor_unitario_reajustado for i in reajuste.itens}
     ultima_vigencia = vigencias(contrato)[-1].sequencia
     for item in contrato.itens:
         if item.id in novos and reajuste.sequencia_vigencia == ultima_vigencia:
             item.valor_unitario = novos[item.id]
+    # Competências ainda não medidas passam a usar o novo preço
     afetadas = _competencias_afetadas(contrato, reajuste)
     for competencia in afetadas:
         for linha in competencia.itens:
             if linha.item_id in novos:
                 linha.valor_unitario = novos[linha.item_id]
+    # O valor global reajustado do contrato também só vale para a vigência atual
     if reajuste.sequencia_vigencia == ultima_vigencia:
         contrato.valor_global_reajustado = reajuste.valor_global_reajustado
+    # Diferença de preço das competências já medidas vira uma competência complementar
     diferenca = gerar_competencia_diferenca(contrato, reajuste, novos)
     reajuste.situacao, reajuste.concluido_em = "concluido", agora_utc()
     contrato.versao += 1
@@ -364,6 +394,7 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ar
 
 
 def cancelar(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, autor: Usuario) -> None:
+    """Cancela o reajuste em elaboração (nada muda no contrato)."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
@@ -373,6 +404,7 @@ def cancelar(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, au
 
 
 def arquivo(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, anexo_id: uuid.UUID):
+    """Baixa um arquivo do reajuste; só aceita anexos que pertencem a ele."""
     contrato = obter_contrato(sessao, contrato_id)
     reajuste = next((r for r in _carregar(sessao, contrato) if r.id == reajuste_id), None)
     if reajuste is None:

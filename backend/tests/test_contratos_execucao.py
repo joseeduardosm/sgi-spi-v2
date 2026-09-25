@@ -11,11 +11,13 @@ from app.services.contratos import calculos
 from tests.apoio_contratos import PDF, criar_contrato, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 
+# Data "de hoje" fixa nos testes: janeiro e fevereiro de 2026 já acabaram; março está em curso
 HOJE = date(2026, 3, 15)
 
 
 @pytest.fixture(autouse=True)
 def _hoje(monkeypatch):
+    """Congela a data de hoje nos serviços (os resultados não dependem do dia em que o teste roda)."""
     monkeypatch.setattr("app.services.contratos.servico_contratos.hoje", lambda: HOJE)
     monkeypatch.setattr("app.services.contratos.servico_competencias.hoje", lambda: HOJE)
 
@@ -30,10 +32,12 @@ def equipe(cliente, admin):
 
 
 def _url(contrato: dict, caminho: str = "") -> str:
+    """URL da API do contrato, com um caminho opcional no fim."""
     return f"/api/contratos/{contrato['id']}{caminho}"
 
 
 def _preparar_execucao(cliente, contrato, h, apontamentos=None):
+    """Cumpre os pré-requisitos da execução: previsão salva, duas NEs e checklist ativo."""
     sob_demanda = contrato["itens"][1]["id"]
     grade = apontamentos if apontamentos is not None else [{"item_id": sob_demanda, "competencia": "2026-01-01", "quantidade": "10"}]
     assert cliente.put(_url(contrato, "/previsao/1"), json={"apontamentos": grade}, headers=h).status_code == 200
@@ -47,6 +51,7 @@ def _preparar_execucao(cliente, contrato, h, apontamentos=None):
 # --- Cálculos ------------------------------------------------------------------------------------
 
 def test_pro_rata_30_360_e_periodos_por_mes_civil():
+    """30/360 (15/01 a 31/01 = 16 dias), meses parciais e períodos bimestrais por mês civil."""
     assert calculos.dias_comerciais(date(2026, 1, 15), date(2026, 1, 31)) == 16
     assert calculos.dias_comerciais(date(2026, 2, 1), date(2026, 2, 28)) == 30
     vigencia = calculos.Vigencia(1, date(2026, 1, 15), date(2027, 1, 14))
@@ -62,6 +67,7 @@ def test_pro_rata_30_360_e_periodos_por_mes_civil():
 # --- MVP 2: previsão e NEs -------------------------------------------------------------------
 
 def test_previsao_sob_demanda_com_saldo_e_selo(cliente, admin, equipe):
+    """Previsão sob demanda: saldo negativo recusado, selo após salvar e só o SuperRoot altera depois."""
     contrato, gestora, _ = equipe
     sob_demanda = contrato["itens"][1]["id"]
     previsao = cliente.get(_url(contrato, "/previsao"), headers=gestora).json()
@@ -86,6 +92,7 @@ def test_previsao_sob_demanda_com_saldo_e_selo(cliente, admin, equipe):
 
 
 def test_notas_de_empenho(cliente, admin, equipe):
+    """NEs: número único (sem diferenciar maiúsculas), valor > 0, alteração, exclusão e relatório do SuperRoot."""
     contrato, gestora, _ = equipe
     r = cliente.post(_url(contrato, "/notas-empenho"), json={"numero": "2026NE1", "valor_original": "100.00"}, headers=gestora)
     assert r.status_code == 201 and r.json()[0]["saldo"] == "100.00" and r.json()[0]["faixa"] == "verde"
@@ -102,6 +109,8 @@ def test_notas_de_empenho(cliente, admin, equipe):
 # --- MVP 3: execução ponta a ponta -------------------------------------------------------------
 
 def test_requisitos_e_geracao_das_competencias(cliente, admin, equipe):
+    """Pré-requisitos, geração idempotente das competências e bloqueio dos itens depois da geração."""
+    # Sem previsão, NEs e checklist, faltam três pré-requisitos
     contrato, gestora, _ = equipe
     painel = cliente.get(_url(contrato, "/execucao"), headers=gestora).json()
     assert not painel["requisitos"]["prontos"] and len(painel["requisitos"]["pendencias"]) == 3
@@ -117,6 +126,7 @@ def test_requisitos_e_geracao_das_competencias(cliente, admin, equipe):
     assert len(cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora).json()["grupos"][0]["competencias"]) == 12
 
     # Itens bloqueados para quem não é SuperRoot
+    # Tenta alterar o preço de um item depois da geração: só o SuperRoot pode
     detalhe = cliente.get(_url(contrato), headers=gestora).json()
     dados = {k: detalhe[k] for k in ("apelido", "objeto", "data_inicio", "vigencia_inicial_meses", "vigencia_maxima_meses", "periodicidade_meses",
                                      "mes_reajuste", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero", "sei_execucao_link", "versao")}
@@ -131,6 +141,7 @@ def test_requisitos_e_geracao_das_competencias(cliente, admin, equipe):
 
 
 def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
+    """Fluxo completo de uma competência (etapas 1, 3, 4, 5, 6 e 7) e a reabertura com estorno."""
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -206,6 +217,7 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
 
 
 def test_nota_de_empenho_sem_saldo_nao_serve_para_a_medicao(cliente, admin, equipe):
+    """NE sem saldo suficiente é recusada na medição; competência futura fica pendente."""
     contrato, gestora, _ = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -221,6 +233,7 @@ def test_nota_de_empenho_sem_saldo_nao_serve_para_a_medicao(cliente, admin, equi
 
 # --- MVP 4: avaliação ---------------------------------------------------------------------------
 
+# Formulário de avaliação usado nos testes: escala 0/5/10 e três faixas de liberação
 FORMULARIO = {
     "nome": "Qualidade",
     "definicao": {
@@ -233,6 +246,8 @@ FORMULARIO = {
 
 
 def test_avaliacao_libera_pagamento_pela_faixa(cliente, admin, equipe):
+    """Etapa 2: justificativas, nota final, % liberado, ateste, PDF e uma única reconsideração."""
+    # Formulário com pesos que não somam 100% é recusado
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     ruim = {**FORMULARIO, "definicao": {**FORMULARIO["definicao"], "grupos": [{"nome": "G", "itens": [{"nome": "A", "peso": "60"}]}]}}
@@ -281,6 +296,7 @@ def test_avaliacao_libera_pagamento_pela_faixa(cliente, admin, equipe):
 
 
 def test_modelos_globais(cliente, admin, equipe):
+    """Só o SuperRoot cria modelos globais; qualquer um com leitura os lista."""
     _, gestora, _ = equipe
     modelo = {"tipo": "checklist", "nome": "Padrão SPI", "itens": [{"nome": "Folha"}, {"nome": "FGTS", "observacao": "Guia"}]}
     assert cliente.post("/api/contratos/modelos", json=modelo, headers=gestora).status_code == 403
@@ -291,6 +307,7 @@ def test_modelos_globais(cliente, admin, equipe):
 
 
 def test_checklist_com_documentos_obrigatorios_e_opcionais(cliente, admin, equipe):
+    """Documentos obrigatórios bloqueiam a conclusão do checklist; os opcionais não."""
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     itens = [{"nome": "Folha de pagamento", "obrigatorio": True}, {"nome": "Relatório fotográfico", "obrigatorio": False}]

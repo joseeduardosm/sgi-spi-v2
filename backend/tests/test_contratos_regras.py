@@ -32,6 +32,7 @@ def test_30_360_com_inicio_no_ultimo_dia_do_mes():
 
 # --- Avaliação: planilha oficial ---------------------------------------------------------------------
 
+# Formulário igual ao da planilha oficial de avaliação: escala 0/1/3, três faixas e três grupos
 PLANILHA = {
     "escala": [{"valor": 0, "legenda": "Péssimo"}, {"valor": 1, "legenda": "Regular"}, {"valor": 3, "legenda": "Bom"}],
     "faixas": [
@@ -51,6 +52,7 @@ PLANILHA = {
 
 
 def _avaliacao(notas: dict[str, int]):
+    """Avaliação falsa (sem banco) só com as notas iniciais informadas."""
     return SimpleNamespace(
         definicao=PLANILHA,
         respostas_iniciais=[{"item_id": k, "nota": str(v)} for k, v in notas.items()],
@@ -59,17 +61,20 @@ def _avaliacao(notas: dict[str, int]):
 
 
 def _liberacao(notas: dict[str, int]) -> tuple[Decimal, Decimal]:
+    """(nota final, % liberado) para um conjunto de notas."""
     avaliacao = _avaliacao(notas)
     nota = nota_final(avaliacao)
     return nota, percentual_da_nota(PLANILHA, nota, maximo_de_notas_minimas_por_grupo(avaliacao))
 
 
 def test_nota_final_e_a_soma_dos_grupos():
+    """Todas as notas "Bom" (3): nota final 9,00 e 100% liberado."""
     todas_bom = {k: 3 for k in "abcdefghij"}
     assert _liberacao(todas_bom) == (Decimal("9.00"), Decimal(100))
 
 
 def test_faixa_pela_nota():
+    """A faixa é escolhida pela nota final."""
     # g1 = 3, g2 = 3, g3 = 1 → 7,00 (≥ 6,75: libera tudo)
     assert _liberacao({**{k: 3 for k in "abcdef"}, **{k: 1 for k in "ghij"}}) == (Decimal("7.00"), Decimal(100))
     # g1 = 3, g2 = 1, g3 = 1 → 5,00 (90%)
@@ -79,6 +84,7 @@ def test_faixa_pela_nota():
 
 
 def test_notas_zero_limitam_a_liberacao_mesmo_com_nota_alta():
+    """Notas mínimas (zero) em um grupo limitam o percentual, mesmo com nota final alta."""
     # Uma nota 0 num grupo: nota 8,40 (faixa de 100%), mas a regra da nota zero limita a 90%
     nota, percentual = _liberacao({**{k: 3 for k in "abcdefghij"}, "c": 0})
     assert nota == Decimal("8.40") and percentual == Decimal(90)
@@ -92,11 +98,13 @@ def test_notas_zero_limitam_a_liberacao_mesmo_com_nota_alta():
 
 
 def test_mes_dividido_entre_vigencias_vira_duas_partes():
+    """Janeiro de 2027 dividido pela prorrogação vira duas competências com identificadores "-1" e "-2"."""
     vigencias = calculos.montar_vigencias(date(2026, 1, 15), date(2027, 1, 14), 12, [(date(2027, 1, 15), date(2028, 1, 14))])
     janeiro = [p for p in calculos.periodos_de_execucao(vigencias, 1) if p.competencia == date(2027, 1, 1)]
     assert [(p.inicio, p.fim, p.sequencia_vigencia) for p in janeiro] == [
         (date(2027, 1, 1), date(2027, 1, 14), 1), (date(2027, 1, 15), date(2027, 1, 31), 2),
     ]
+    # Monta as competências em memória (sem banco) para testar parte, identificador e rótulo
     contrato = Contrato()
     unica = Competencia(tipo="regular", competencia=date(2026, 12, 1), periodo_inicio=date(2026, 12, 1), periodo_fim=date(2026, 12, 31))
     partes = [
@@ -116,6 +124,7 @@ def test_mes_dividido_entre_vigencias_vira_duas_partes():
 
 
 def _medir_e_concluir(cliente, contrato, gestora, fiscal, identificador, notas, quantidades=None):
+    """Salva a medição, registra duas ciências e conclui; devolve (url base da competência, resposta da conclusão)."""
     competencia = cliente.get(_url(contrato, f"/competencias/identificador/{identificador}"), headers=gestora).json()
     base = _url(contrato, f"/competencias/{competencia['id']}")
     itens = [{"id": i["id"], "quantidade_medida": (quantidades or {}).get(i["descricao"], i["quantidade_prevista"])} for i in competencia["itens"]]
@@ -127,6 +136,7 @@ def _medir_e_concluir(cliente, contrato, gestora, fiscal, identificador, notas, 
 
 
 def test_ob_debita_nf_e_nf_adicional_e_saldo_fica_comprometido(cliente, admin, equipe):  # noqa: F811
+    """A OB debita NF + NF adicional nas NEs em ordem, e o saldo fica comprometido até o pagamento."""
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -164,6 +174,7 @@ def test_ob_debita_nf_e_nf_adicional_e_saldo_fica_comprometido(cliente, admin, e
 
 
 def test_nf_que_passa_do_saldo_livre_das_nes_e_recusada(cliente, admin, equipe):  # noqa: F811
+    """NF maior que o saldo livre das NEs escolhidas é recusada."""
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -179,6 +190,7 @@ def test_nf_que_passa_do_saldo_livre_das_nes_e_recusada(cliente, admin, equipe):
 
 
 def test_medicao_sob_demanda_acima_do_limite_avisa_e_bloqueia_conclusao(cliente, admin, equipe):  # noqa: F811
+    """Medir o sob demanda acima do saldo da vigência gera aviso e impede concluir."""
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -193,6 +205,7 @@ def test_medicao_sob_demanda_acima_do_limite_avisa_e_bloqueia_conclusao(cliente,
 
 
 def test_reajuste_retroativo_gera_competencia_de_diferenca(cliente, admin, equipe):  # noqa: F811
+    """Reajuste com mês de referência já medido gera a competência complementar de diferença."""
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)

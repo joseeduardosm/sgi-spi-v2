@@ -1,6 +1,11 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de empresas contratadas e prepostos.
-"""Rotas de empresas contratadas e prepostos (`/api/contratos/empresas`)."""
+"""Rotas de empresas contratadas e prepostos (`/api/contratos/empresas`).
+
+A empresa é a pessoa jurídica contratada (CNPJ). Os prepostos são os representantes indicados
+por ela para tratar do contrato; são apenas contatos, não usuários do portal.
+Consultar exige leitura em `contratos`; cadastrar e alterar, modificação; excluir empresa, controle total.
+"""
 
 import uuid
 from typing import Literal
@@ -41,6 +46,7 @@ def listar_empresas(
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(pode_ler),
 ) -> PaginaEmpresas:
+    """Lista paginada; a busca e a ordenação são feitas no banco, não no navegador."""
     return servico.listar_empresas(sessao, busca, ordenar, direcao, pagina, tamanho_pagina)
 
 
@@ -53,11 +59,13 @@ def listar_empresas(
 def opcoes_empresas(
     incluir_inativas: bool = Query(False), sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)
 ) -> list[OpcaoEmpresa]:
+    """Lista curta (id e nome) para o campo de empresa no cadastro de contrato."""
     return servico.opcoes_empresas(sessao, incluir_inativas)
 
 
 @roteador.get("/{empresa_id}", response_model=DetalheEmpresa, summary="Consultar empresa com prepostos e contratos", responses=NAO_ENCONTRADA)
 def consultar_empresa(empresa_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)) -> DetalheEmpresa:
+    """Detalhe da empresa com os prepostos e os contratos em que aparece."""
     with traduzir_erros():
         return servico.detalhar_empresa(sessao, empresa_id)
 
@@ -71,6 +79,8 @@ def consultar_empresa(empresa_id: uuid.UUID, sessao: Session = Depends(obter_ses
     responses={**CONFLITO},
 )
 def criar_empresa(dados: GravacaoEmpresa, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)) -> DetalheEmpresa:
+    """Cadastra a empresa e devolve o detalhe completo, como a tela espera."""
+    # O bloco `with` só envolve a gravação; a leitura final roda depois do commit implícito
     with traduzir_erros(sessao):
         empresa = servico.criar_empresa(sessao, dados, autor)
     return servico.detalhar_empresa(sessao, empresa.id)
@@ -86,6 +96,7 @@ def criar_empresa(dados: GravacaoEmpresa, sessao: Session = Depends(obter_sessao
 def alterar_empresa(
     empresa_id: uuid.UUID, dados: GravacaoEmpresa, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)
 ) -> DetalheEmpresa:
+    """Altera os dados da empresa e devolve o detalhe atualizado."""
     with traduzir_erros(sessao):
         servico.alterar_empresa(sessao, empresa_id, dados, autor)
     return servico.detalhar_empresa(sessao, empresa_id)
@@ -99,6 +110,7 @@ def alterar_empresa(
     responses={**NAO_ENCONTRADA, **CONFLITO},
 )
 def excluir_empresa(empresa_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(controle_total)) -> Response:
+    """Exclui a empresa; o serviço recusa (409) se ela tiver contratos."""
     with traduzir_erros(sessao):
         servico.excluir_empresa(sessao, empresa_id, autor)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -116,6 +128,7 @@ def excluir_empresa(empresa_id: uuid.UUID, sessao: Session = Depends(obter_sessa
 def criar_preposto(
     empresa_id: uuid.UUID, dados: GravacaoPreposto, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)
 ) -> DetalheEmpresa:
+    """Cadastra um preposto e devolve a empresa inteira, para a tela redesenhar a lista."""
     with traduzir_erros(sessao):
         servico.salvar_preposto(sessao, empresa_id, dados, autor)
     return servico.detalhar_empresa(sessao, empresa_id)
@@ -135,6 +148,7 @@ def alterar_preposto(
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ) -> DetalheEmpresa:
+    """Altera um preposto (o mesmo serviço grava novo ou existente, conforme o `preposto_id`)."""
     with traduzir_erros(sessao):
         servico.salvar_preposto(sessao, empresa_id, dados, autor, preposto_id)
     return servico.detalhar_empresa(sessao, empresa_id)
@@ -150,6 +164,7 @@ def alterar_preposto(
 def excluir_preposto(
     empresa_id: uuid.UUID, preposto_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)
 ) -> Response:
+    """Exclui um preposto."""
     with traduzir_erros(sessao):
         servico.excluir_preposto(sessao, empresa_id, preposto_id, autor)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

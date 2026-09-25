@@ -18,25 +18,32 @@ from app.models.usuario import Usuario
 
 
 def _maior_nivel(niveis: list[str]) -> str | None:
+    """Maior nível da lista (LEITURA < MODIFICACAO < CONTROLE_TOTAL), ou None se a lista estiver vazia."""
     return max(niveis, key=NivelAcl.posicao) if niveis else None
 
 
 def resolver_acesso(sessao: Session, usuario: Usuario, slug: str) -> str | None:
+    """Nível do usuário no recurso identificado pelo `slug` (None = sem acesso)."""
     if usuario.superusuario:
         return NivelAcl.CONTROLE_TOTAL
+    # Procura o recurso ativo pelo slug, sem diferenciar maiúsculas/minúsculas
     recurso = sessao.scalar(
         select(RecursoAcl).where(func.lower(RecursoAcl.slug) == slug.lower(), RecursoAcl.ativo.is_(True))
     )
+    # Recurso não cadastrado ou inativo não restringe nada
     if recurso is None:
         return NivelAcl.CONTROLE_TOTAL
     return _resolver_no_recurso(sessao, usuario.id, recurso.id)
 
 
 def _resolver_no_recurso(sessao: Session, usuario_id: int, recurso_id: int) -> str | None:
+    """Aplica a política de lista positiva a um recurso específico."""
+    # Sem nenhuma regra, o recurso continua aberto
     possui_regras = sessao.scalar(select(func.count(RegraAcl.id)).where(RegraAcl.recurso_id == recurso_id))
     if not possui_regras:
         return NivelAcl.CONTROLE_TOTAL
 
+    # 1º: regras que citam o usuário diretamente
     diretos = list(
         sessao.scalars(
             select(RegraAcl.nivel)
@@ -44,9 +51,11 @@ def _resolver_no_recurso(sessao: Session, usuario_id: int, recurso_id: int) -> s
             .where(RegraAcl.recurso_id == recurso_id, acl_regras_usuarios.c.usuario_id == usuario_id)
         )
     )
+    # Havendo regra direta, ela prevalece sobre as regras dos setores
     if diretos:
         return _maior_nivel(diretos)
 
+    # 2º: regras dadas a setores ativos dos quais o usuário é membro
     herdados = list(
         sessao.scalars(
             select(RegraAcl.nivel)
@@ -56,6 +65,7 @@ def _resolver_no_recurso(sessao: Session, usuario_id: int, recurso_id: int) -> s
             .where(RegraAcl.recurso_id == recurso_id, MembroSetor.usuario_id == usuario_id, Setor.ativo.is_(True))
         )
     )
+    # Sem regra direta nem por setor → None (sem acesso)
     return _maior_nivel(herdados)
 
 

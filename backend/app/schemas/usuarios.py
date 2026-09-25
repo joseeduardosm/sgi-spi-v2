@@ -1,5 +1,6 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados de entrada e saída de usuários.
+"""Formatos de entrada e saída das rotas de usuários e do perfil institucional."""
 
 import re
 from datetime import date, datetime
@@ -8,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.services.servico_perfil import CAMPOS_OBRIGATORIOS
 
+# Validação simples de e-mail: algo@algo.algo, sem espaços
 PADRAO_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -28,11 +30,13 @@ class DadosPerfil(BaseModel):
     @field_validator("nome_completo", "email", "ramal", "celular", "cargo", "departamento", "andar", "predio")
     @classmethod
     def _aparar(cls, valor: str) -> str:
+        """Remove espaços das pontas de todos os campos de texto."""
         return valor.strip()
 
     @field_validator("email")
     @classmethod
     def _validar_email(cls, valor: str) -> str:
+        """Aceita e-mail vazio; se preenchido, precisa ter formato válido."""
         if valor and not PADRAO_EMAIL.match(valor):
             raise ValueError("e-mail inválido")
         return valor
@@ -43,6 +47,7 @@ class RevisaoPerfil(DadosPerfil):
 
     @model_validator(mode="after")
     def _exigir_obrigatorios(self) -> "RevisaoPerfil":
+        """Lista os rótulos dos campos obrigatórios vazios e recusa a revalidação se houver algum."""
         pendentes = [rotulo for campo, rotulo in CAMPOS_OBRIGATORIOS.items() if not getattr(self, campo)]
         if pendentes:
             raise ValueError("Preencha os campos obrigatórios: " + ", ".join(pendentes) + ".")
@@ -50,6 +55,7 @@ class RevisaoPerfil(DadosPerfil):
 
 
 class PerfilLeitura(DadosPerfil):
+    """Perfil devolvido pela API, com o nome do gestor e a data da última revalidação."""
     model_config = ConfigDict(from_attributes=True)
 
     gestor_nome: str | None = Field(None, description="Nome do gestor imediato.")
@@ -57,6 +63,7 @@ class PerfilLeitura(DadosPerfil):
 
 
 class CriacaoUsuario(BaseModel):
+    """Dados para o SuperRoot criar uma conta local."""
     login: str = Field(..., min_length=1, max_length=150, pattern=r"^[A-Za-z0-9._@-]+$", description="Login (letras, números, `.`, `_`, `-`, `@`).")
     senha: str = Field(..., min_length=8, max_length=128, description="Senha local, mínimo 8 caracteres.")
     ativo: bool = True
@@ -65,6 +72,7 @@ class CriacaoUsuario(BaseModel):
 
 
 class AlteracaoUsuario(BaseModel):
+    """Dados para o SuperRoot alterar um usuário (situação, papel, perfil e senha)."""
     senha: str | None = Field(None, max_length=128, description="Nova senha local (mín. 8). Vazia ou ausente mantém a atual.")
     ativo: bool
     superusuario: bool
@@ -73,12 +81,14 @@ class AlteracaoUsuario(BaseModel):
     @field_validator("senha")
     @classmethod
     def _validar_senha(cls, valor: str | None) -> str | None:
+        """Exige ao menos 8 caracteres quando uma nova senha é informada; vazia vira None (mantém a atual)."""
         if valor and len(valor) < 8:
             raise ValueError("a nova senha deve ter ao menos 8 caracteres")
         return valor or None
 
 
 class DetalheUsuario(BaseModel):
+    """Usuário completo para a tela de detalhe e a listagem da administração."""
     id: int
     login: str
     ativo: bool
@@ -97,6 +107,7 @@ class DetalheUsuario(BaseModel):
 
 
 class PaginaUsuarios(BaseModel):
+    """Uma página da listagem de usuários, com o total para a paginação."""
     itens: list[DetalheUsuario]
     total: int = Field(..., description="Total de registros que atendem ao filtro.")
     pagina: int

@@ -15,6 +15,8 @@ from app.services.contratos import calculos
 # --- Cálculos --------------------------------------------------------------------------------
 
 def test_datas_de_vigencia():
+    """Fim da vigência, contagem de meses e montagem das vigências com prorrogação."""
+    # 31/01 + 1 mês = 28/02 (fevereiro mais curto) − 1 dia = 27/02
     assert calculos.calcular_data_fim(date(2026, 1, 1), 12) == date(2026, 12, 31)
     assert calculos.calcular_data_fim(date(2026, 1, 31), 1) == date(2026, 2, 27)
     assert calculos.meses_em(date(2026, 1, 1), date(2026, 12, 31)) == 12
@@ -27,6 +29,7 @@ def test_datas_de_vigencia():
 
 
 def test_situacao_do_contrato():
+    """Ativo, a vencer (≤ 90 dias), encerrado e situação forçada."""
     fim = date(2026, 12, 31)
     assert calculos.calcular_situacao(fim, None, date(2026, 6, 1)) == "ativo"
     assert calculos.calcular_situacao(fim, None, date(2026, 10, 2)) == "a_vencer"
@@ -35,6 +38,7 @@ def test_situacao_do_contrato():
 
 
 def test_valor_global_da_vigencia_atual():
+    """Base mensal e valor global (12 meses do contínuo + limite do sob demanda)."""
     itens = [
         calculos.ItemValor("continuo", Decimal(2), Decimal(0), Decimal("1000")),
         calculos.ItemValor("sob_demanda", Decimal(0), Decimal(100), Decimal("10.50")),
@@ -47,6 +51,7 @@ def test_valor_global_da_vigencia_atual():
 
 
 def test_validadores_de_documentos():
+    """CNPJ e CPF válidos (gerados) e inválidos."""
     assert cnpj_valido(gerar_cnpj("112223330001")) and not cnpj_valido("11222333000100")
     assert cpf_valido(gerar_cpf("123456789")) and not cpf_valido("11111111111")
 
@@ -54,6 +59,7 @@ def test_validadores_de_documentos():
 # --- Empresas e prepostos ---------------------------------------------------------------------
 
 def test_empresa_cnpj_unico_e_validado(cliente, admin):
+    """CNPJ duplicado dá 409; dígito verificador errado dá 422."""
     empresa = criar_empresa(cliente, admin)
     assert len(empresa["cnpj"]) == 14
     repetida = {"cnpj": empresa["cnpj"], "razao_social": "Outra"}
@@ -63,6 +69,7 @@ def test_empresa_cnpj_unico_e_validado(cliente, admin):
 
 
 def test_prepostos_e_busca_em_qualquer_dado(cliente, admin):
+    """Preposto com CPF único na empresa; a busca da empresa encontra pelo nome do preposto."""
     empresa = criar_empresa(cliente, admin)
     criar_empresa(cliente, admin, base="99888777", razao="Outra Empresa SA")
     preposto = {"cpf": gerar_cpf("123456789"), "nome": "Maria Preposta", "email": "maria@acme.com", "cargo": "Gerente"}
@@ -83,6 +90,7 @@ def test_prepostos_e_busca_em_qualquer_dado(cliente, admin):
 
 
 def test_empresa_com_contrato_nao_e_excluida_e_inativa_nao_e_opcao(cliente, admin):
+    """Empresa com contrato não é excluída (409); inativa sai das opções e não pode ser usada."""
     contrato = criar_contrato(cliente, admin)
     empresa_id = contrato["empresa"]["id"]
     assert cliente.delete(f"/api/contratos/empresas/{empresa_id}", headers=admin).status_code == 409
@@ -96,6 +104,7 @@ def test_empresa_com_contrato_nao_e_excluida_e_inativa_nao_e_opcao(cliente, admi
 # --- Contrato -------------------------------------------------------------------------------
 
 def test_cadastro_calcula_data_final_e_valor_global(cliente, admin):
+    """O cadastro calcula data final, base mensal e valor global, e sugere o próximo número."""
     usuario_id = criar_usuario("gestora")
     contrato = criar_contrato(cliente, admin, equipe={"gestor": usuario_id})
     assert contrato["numero"] == "001/2026" and contrato["data_fim"] == "2026-12-31"
@@ -109,6 +118,7 @@ def test_cadastro_calcula_data_final_e_valor_global(cliente, admin):
 
 
 def test_numero_unico_e_regras_de_itens(cliente, admin):
+    """Número repetido (mesmo sem zeros à esquerda) dá 409; itens e vigências inválidos dão 422."""
     contrato = criar_contrato(cliente, admin)
     r = cliente.post("/api/contratos", json=dados_contrato(contrato["empresa"]["id"], "1/2026"), headers=admin)
     assert r.status_code == 409
@@ -119,6 +129,7 @@ def test_numero_unico_e_regras_de_itens(cliente, admin):
 
 
 def test_busca_por_numero_empresa_apelido_e_objeto(cliente, admin):
+    """A carteira encontra por número, apelido, empresa e objeto."""
     contrato = criar_contrato(cliente, admin)
     criar_contrato(cliente, admin, empresa_id=contrato["empresa"]["id"], numero="002/2025", apelido="Vigilância", objeto="Vigilância patrimonial")
     for busca, esperado in [("001/2026", ["001/2026"]), ("vigil", ["002/2025"]), ("acme", ["001/2026", "002/2025"]), ("predial", ["001/2026"])]:
@@ -127,7 +138,9 @@ def test_busca_por_numero_empresa_apelido_e_objeto(cliente, admin):
 
 
 def test_alteracao_com_versao_itens_e_historico(cliente, admin):
+    """Alteração com versão correta; versão antiga dá 409; item salvo não muda nome; histórico registra a mudança."""
     contrato = criar_contrato(cliente, admin)
+    # Reordena os itens (o sob demanda primeiro) e altera o preço do contínuo
     itens = [{**item(), "id": contrato["itens"][1]["id"], **_campos_item(contrato["itens"][1])}, {**item(), "id": contrato["itens"][0]["id"], "valor_unitario": "1100.00"}]
     dados = dados_contrato(contrato["empresa"]["id"], apelido="Limpeza anexo", itens=itens, versao=contrato["versao"])
     r = cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=admin)
@@ -150,10 +163,12 @@ def test_alteracao_com_versao_itens_e_historico(cliente, admin):
 
 
 def _campos_item(lido: dict) -> dict:
+    """Campos imutáveis do item lido + valores do sob demanda, para reenviar o item sem mudanças."""
     return {c: lido[c] for c in ("descricao", "tipo", "calcula_pro_rata")} | {"quantidade_mensal": "0", "quantidade_total": "100", "valor_unitario": "10.50"}
 
 
 def test_equipe_troca_encerra_designacao_anterior(cliente, admin):
+    """Trocar o fiscal encerra a designação anterior e aparece no histórico."""
     a, b = criar_usuario("fiscal-a"), criar_usuario("fiscal-b")
     contrato = criar_contrato(cliente, admin, equipe={"fiscal_tecnico": a})
     dados = dados_contrato(contrato["empresa"]["id"], equipe={"fiscal_tecnico": b}, versao=1,
@@ -167,6 +182,7 @@ def test_equipe_troca_encerra_designacao_anterior(cliente, admin):
 
 
 def test_poderes_iguais_da_equipe_e_bloqueio_de_estranhos(cliente, admin):
+    """Os papéis da equipe têm poderes iguais; estranhos (mesmo com ACL) e leitores não alteram."""
     membro, estranho, leitor = criar_usuario("suplente"), criar_usuario("estranho"), criar_usuario("leitor")
     restringir_contratos(cliente, admin, {membro: "MODIFICACAO", estranho: "MODIFICACAO", leitor: "LEITURA"})
     contrato = criar_contrato(cliente, admin, equipe={"fiscal_tecnico_suplente": membro})
@@ -186,6 +202,7 @@ def test_poderes_iguais_da_equipe_e_bloqueio_de_estranhos(cliente, admin):
 
 
 def test_documentos_importantes(cliente, admin):
+    """Catálogo de 23 documentos, envio, download com nome padronizado e recusas."""
     contrato = criar_contrato(cliente, admin, numero="012/2026")
     documentos = cliente.get(f"/api/contratos/{contrato['id']}/documentos", headers=admin).json()
     assert len(documentos) == 23 and not any(d["anexado"] for d in documentos)

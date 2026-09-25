@@ -1,6 +1,16 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para reunir os modelos (tabelas) do módulo de contratos.
-"""Modelos do módulo de contratos (tabelas com prefixo `contratos`)."""
+"""Modelos do módulo de contratos (tabelas com prefixo `contratos`).
+
+Organização dos arquivos:
+- `empresa.py`: empresas contratadas e prepostos;
+- `contrato.py`: contrato, itens, equipe de gestão/fiscalização e documentos importantes;
+- `orcamento.py`: previsão orçamentária e Notas de Empenho;
+- `execucao.py`: checklists, formulários, competências e tudo o que é registrado nas etapas;
+- `alteracoes.py`: prorrogação, reajuste e aditamento/supressão.
+
+Este arquivo reexporta as classes para que o restante do código importe de um lugar só.
+"""
 
 from app.models.contratos.alteracoes import (
     AlteracaoQuantidade,

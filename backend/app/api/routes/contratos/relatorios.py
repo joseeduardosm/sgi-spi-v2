@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas do painel e dos relatórios gerenciais de contratos.
-"""Relatórios gerenciais da carteira (`/api/contratos/relatorios`), restritos ao SuperRoot."""
+"""Relatórios gerenciais da carteira (`/api/contratos/relatorios`), restritos ao SuperRoot,
+e o painel de contratos (`/api/contratos/painel`), aberto a quem tem leitura no módulo.
+
+Os relatórios são gerados em memória (PDF ou XLSX) e devolvidos como download.
+"""
 
 import uuid
 from typing import Literal
@@ -17,19 +21,23 @@ from app.schemas.contratos.painel import Painel
 from app.services.contratos import servico_orcamento, servico_painel, servico_relatorios
 
 roteador = APIRouter(prefix="/contratos/relatorios", tags=["Contratos: relatórios"], responses=RESPOSTAS_AUTENTICADAS)
+# O painel fica em outro roteador porque o prefixo é `/contratos`, não `/contratos/relatorios`
 roteador_painel = APIRouter(prefix="/contratos", tags=["Contratos: painel"], responses=RESPOSTAS_AUTENTICADAS)
 super_root = exigir_papeis(Papel.SUPER_ROOT)
+# Documentação da resposta 200 de download (PDF ou planilha)
 ARQUIVO = {status.HTTP_200_OK: {"content": {"application/pdf": {}, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}},
                                 "description": "Arquivo PDF ou XLSX."}}
 
 
 def _arquivo(conteudo: bytes, nome: str, tipo: str) -> Response:
+    """Resposta de download: `Content-Disposition: attachment` faz o navegador salvar o arquivo."""
     return Response(conteudo, media_type=tipo, headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 @roteador.get("/notas-empenho", summary="Relatório Executivo de Notas de Empenho",
               description="Todas as NEs de todos os contratos, com valor inicial, consumido e saldo. Restrito ao SuperRoot.", responses=ARQUIVO)
 def relatorio_notas(formato: Literal["xlsx", "pdf"] = Query("xlsx"), sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)):
+    """Relatório de todas as NEs; o serviço devolve (conteúdo, nome do arquivo, tipo MIME)."""
     return _arquivo(*servico_orcamento.arquivo_relatorio_notas(sessao, formato, autor))
 
 
@@ -48,6 +56,8 @@ def previsao_orcamentaria(
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(super_root),
 ):
+    """Exporta a previsão consolidada do exercício, com as seções e os cenários escolhidos."""
+    # Junta num conjunto só os nomes dos cenários marcados como verdadeiros
     cenarios = {nome for nome, ativo in (("reajustes", cenario_reajustes), ("aditamentos", cenario_aditamentos),
                                          ("supressoes", cenario_supressoes), ("prorrogacoes", cenario_prorrogacoes)) if ativo}
     return _arquivo(*servico_relatorios.exportar(sessao, exercicio, formato, resumo_anual, detalhamento_mensal, cenarios, autor))
@@ -64,4 +74,5 @@ def painel(
     sessao: Session = Depends(obter_sessao),
     usuario: Usuario = Depends(pode_ler),
 ) -> Painel:
+    """Monta todos os blocos do painel de uma vez; os cálculos ficam no serviço."""
     return servico_painel.montar_painel(sessao, usuario, exercicio, empresa_id, contrato_id)

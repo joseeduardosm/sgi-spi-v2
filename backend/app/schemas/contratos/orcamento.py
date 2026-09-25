@@ -1,6 +1,9 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados de previsão orçamentária e Notas de Empenho.
-"""Schemas da previsão orçamentária e das Notas de Empenho."""
+"""Schemas da previsão orçamentária e das Notas de Empenho.
+
+Valores em dinheiro e quantidades saem como texto com casas fixas (ver `tipos.py`).
+"""
 
 import uuid
 from datetime import date, datetime
@@ -14,6 +17,7 @@ from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantid
 
 
 class ItemMesPrevisao(BaseModel):
+    """Um item dentro de um mês da previsão, com a conta quantidade × preço × fator."""
     item_id: uuid.UUID
     ordem: int
     descricao: str
@@ -25,6 +29,7 @@ class ItemMesPrevisao(BaseModel):
 
 
 class MesPrevisao(BaseModel):
+    """Um mês da tabela mensal consolidada da previsão."""
     competencia: date = Field(..., description="Dia 1 do mês.")
     sequencia_vigencia: int
     inicio: date = Field(..., description="Primeiro dia faturado no mês.")
@@ -37,6 +42,7 @@ class MesPrevisao(BaseModel):
 
 
 class ItemSobDemandaPrevisao(BaseModel):
+    """Linha da grade de apontamentos de um item sob demanda na vigência."""
     item_id: uuid.UUID
     ordem: int
     descricao: str
@@ -46,6 +52,7 @@ class ItemSobDemandaPrevisao(BaseModel):
 
 
 class VigenciaPrevisao(BaseModel):
+    """Uma vigência na tela de previsão, com a grade e o selo."""
     sequencia: int
     inicio: date
     fim: date
@@ -60,27 +67,32 @@ class VigenciaPrevisao(BaseModel):
 
 
 class Previsao(BaseModel):
+    """Resposta do `GET /previsao`: todas as vigências e a tabela mensal."""
     total_previsto: ValorMonetario = Field(..., description="Soma de todas as vigências.")
     vigencias: list[VigenciaPrevisao]
     meses: list[MesPrevisao]
 
 
 class ApontamentoGravacao(BaseModel):
+    """Uma célula da grade: quantidade prevista de um item em um mês."""
     item_id: uuid.UUID
     competencia: date = Field(..., description="Qualquer dia do mês; gravado como dia 1.")
     quantidade: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]
 
 
 class GravacaoPrevisao(BaseModel):
+    """Corpo do `PUT /previsao/{sequencia}`."""
     apontamentos: list[ApontamentoGravacao] = Field(..., description="Grade completa dos itens sob demanda (substitui a anterior).")
 
 
 class GravacaoNotaEmpenho(BaseModel):
+    """Dados para cadastrar ou alterar uma Nota de Empenho."""
     numero: TextoObrigatorio = Field(..., max_length=30, description="Único no contrato.")
     valor_original: Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=2)]
 
 
 class MovimentoNota(BaseModel):
+    """Uma linha do extrato da NE, com o saldo logo após o lançamento."""
     id: uuid.UUID
     data: datetime
     tipo: Literal["pagamento", "estorno"] = Field(..., description="`pagamento` (débito da OB) ou `estorno` (reabertura de competência paga).")
@@ -94,6 +106,7 @@ class MovimentoNota(BaseModel):
 
 
 class LeituraNotaEmpenho(BaseModel):
+    """NE com saldo, faixa de consumo (cor do cartão) e extrato."""
     id: uuid.UUID
     numero: str
     valor_original: ValorMonetario
@@ -109,6 +122,7 @@ class LeituraNotaEmpenho(BaseModel):
 
 
 class LinhaRelatorioNotas(BaseModel):
+    """Linha do relatório executivo de NEs (todas as notas de todos os contratos)."""
     contrato: str
     empresa: str
     nota: str

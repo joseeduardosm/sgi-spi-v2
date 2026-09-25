@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para expor as rotas de importação dos dados do SGI SPI (SuperRoot).
-"""Importação do Módulo de Contratos do SGI SPI (`/api/contratos/migracao-sgi`). Restrita ao SuperRoot."""
+"""Importação do Módulo de Contratos do SGI SPI (`/api/contratos/migracao-sgi`). Restrita ao SuperRoot.
+
+A importação roda em segundo plano (pode levar minutos por causa dos anexos): o `POST` só confere
+as senhas e dispara o processo; a tela acompanha o andamento consultando o `GET`.
+"""
 
 from fastapi import APIRouter, Depends, status
 
@@ -19,6 +23,7 @@ super_root = exigir_papeis(Papel.SUPER_ROOT)
 @roteador.get("", response_model=EstadoMigracaoSgi, summary="Estado da importação do SGI",
               description="Situação, etapa, resultado e últimas linhas do registro da última importação. Restrito ao SuperRoot.")
 def estado_migracao(_: Usuario = Depends(super_root)):
+    """Estado da última importação (situação, etapa atual, resultado e trecho do registro)."""
     return servico.ler_estado()
 
 
@@ -39,6 +44,7 @@ def estado_migracao(_: Usuario = Depends(super_root)):
     },
 )
 def iniciar_migracao(dados: InicioMigracaoSgi, autor: Usuario = Depends(super_root)):
+    """Valida as senhas e inicia a importação; erros conhecidos do serviço viram 400/409/502."""
     try:
         return servico.iniciar(dados.senha_origem, dados.senha_destino, autor)
     except servico.ErroMigracao as erro:

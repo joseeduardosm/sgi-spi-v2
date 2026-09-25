@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados de empresas contratadas e prepostos.
-"""Schemas de empresas contratadas e prepostos."""
+"""Schemas de empresas contratadas e prepostos.
+
+Os validadores tiram espaços, recusam campos obrigatórios em branco e normalizam CNPJ/CPF
+para só dígitos, conferindo os dígitos verificadores. Tudo antes de o dado chegar ao serviço.
+"""
 
 import uuid
 from datetime import datetime
@@ -12,26 +16,31 @@ from app.schemas.contratos.validadores import normalizar_cnpj, normalizar_cpf
 
 
 def _aparar(valor: object) -> object:
+    """Tira espaços das pontas quando o valor é texto (roda antes da validação de tipo)."""
     return valor.strip() if isinstance(valor, str) else valor
 
 
 def _nao_vazio(valor: str) -> str:
+    """Recusa texto vazio (depois de aparado)."""
     if not valor:
         raise ValueError("não pode ser vazio")
     return valor
 
 
 def _email(valor: str) -> str:
+    """Validação leve de e-mail: exige @ no meio e nenhum espaço. Vazio é aceito."""
     if valor and ("@" not in valor or valor.startswith("@") or valor.endswith("@") or " " in valor):
         raise ValueError("e-mail inválido")
     return valor
 
 
+# Tipos reutilizáveis: texto aparado e texto aparado obrigatório
 Texto = Annotated[str, BeforeValidator(_aparar)]
 TextoObrigatorio = Annotated[str, BeforeValidator(_aparar), AfterValidator(_nao_vazio)]
 
 
 class GravacaoEmpresa(BaseModel):
+    """Dados enviados para cadastrar ou alterar uma empresa."""
     cnpj: Annotated[str, AfterValidator(normalizar_cnpj)] = Field(
         ..., max_length=18, description="CNPJ com ou sem máscara. Gravado só com os 14 dígitos; único.", examples=["12.345.678/0001-95"]
     )
@@ -42,6 +51,7 @@ class GravacaoEmpresa(BaseModel):
 
 
 class GravacaoPreposto(BaseModel):
+    """Dados enviados para cadastrar ou alterar um preposto."""
     cpf: Annotated[str, AfterValidator(normalizar_cpf)] = Field(
         ..., max_length=14, description="CPF com ou sem máscara. Gravado só com os 11 dígitos; único na empresa."
     )
@@ -53,6 +63,7 @@ class GravacaoPreposto(BaseModel):
 
 
 class LeituraPreposto(BaseModel):
+    """Preposto como é devolvido pela API."""
     id: uuid.UUID
     cpf: str = Field(..., description="11 dígitos, sem máscara.")
     nome: str
@@ -63,11 +74,13 @@ class LeituraPreposto(BaseModel):
 
 
 class ContratoDaEmpresa(BaseModel):
+    """Referência curta a um contrato em que a empresa aparece."""
     id: uuid.UUID
     numero: str = Field(..., description="NNN/AAAA")
 
 
 class ResumoEmpresa(BaseModel):
+    """Empresa na listagem, com nomes dos prepostos e números dos contratos."""
     id: uuid.UUID
     cnpj: str = Field(..., description="14 dígitos, sem máscara.")
     razao_social: str
@@ -79,6 +92,7 @@ class ResumoEmpresa(BaseModel):
 
 
 class PaginaEmpresas(BaseModel):
+    """Uma página da listagem de empresas."""
     itens: list[ResumoEmpresa]
     total: int
     pagina: int
@@ -86,6 +100,7 @@ class PaginaEmpresas(BaseModel):
 
 
 class DetalheEmpresa(BaseModel):
+    """Empresa completa, com prepostos e contratos (tela de detalhe)."""
     id: uuid.UUID
     cnpj: str
     razao_social: str

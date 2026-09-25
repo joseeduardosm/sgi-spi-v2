@@ -10,17 +10,20 @@ from tests.apoio_contratos import PDF, criar_contrato, item, restringir_contrato
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
+# Data "de hoje" fixa nos testes
 HOJE = date(2026, 3, 15)
 
 
 @pytest.fixture(autouse=True)
 def _hoje(monkeypatch):
+    """Congela a data de hoje nos serviços."""
     monkeypatch.setattr("app.services.contratos.servico_contratos.hoje", lambda: HOJE)
     monkeypatch.setattr("app.services.contratos.servico_competencias.hoje", lambda: HOJE)
 
 
 @pytest.fixture
 def equipe(cliente, admin):
+    """Contrato (vigência máxima de 24 meses) com gestora e fiscal, e os cabeçalhos de cada um."""
     gestora, fiscal = criar_usuario("gestora"), criar_usuario("fiscal")
     restringir_contratos(cliente, admin, {gestora: "MODIFICACAO", fiscal: "MODIFICACAO"})
     contrato = criar_contrato(cliente, admin, equipe={"gestor": gestora, "fiscal_tecnico": fiscal}, vigencia_maxima_meses=24)
@@ -30,6 +33,7 @@ def equipe(cliente, admin):
 # --- MVP 5: prorrogação ---------------------------------------------------------------------------
 
 def test_prorrogar_so_com_prazo_e_termo_nao_gera_parecer(cliente, admin, equipe):
+    """Prorrogação sem parecer: prazo além do máximo recusado, termo vira documento 024, e o desfazer."""
     contrato, gestora, _ = equipe
     rascunho = cliente.get(_url(contrato, "/prorrogacao"), headers=gestora).json()
     assert rascunho["meses_disponiveis"] == 12 and rascunho["nova_vigencia_inicio"] == "2027-01-01"
@@ -59,6 +63,7 @@ def test_prorrogar_so_com_prazo_e_termo_nao_gera_parecer(cliente, admin, equipe)
 
 
 def test_parecer_emite_pdf_e_edicao_apaga_ciencias(cliente, admin, equipe):
+    """Parecer gera PDF; editar o parecer apaga as ciências já registradas."""
     contrato, gestora, fiscal = equipe
     cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 6, "parecer": "Favorável"}, headers=gestora)
     assert len(cliente.post(_url(contrato, "/prorrogacao/ciencia"), headers=fiscal).json()["ciencias"]) == 1
@@ -73,6 +78,7 @@ def test_parecer_emite_pdf_e_edicao_apaga_ciencias(cliente, admin, equipe):
 
 
 def test_prorrogacao_limita_itens_sob_demanda_ao_original(cliente, admin, equipe):
+    """Na prorrogação, o limite do sob demanda não passa do original; o plano vira a previsão da nova vigência."""
     contrato, gestora, _ = equipe
     item_id = contrato["itens"][1]["id"]
     plano = [{"item_id": item_id, "limite": "150", "apontamentos": {}}]
@@ -91,6 +97,8 @@ def test_prorrogacao_limita_itens_sob_demanda_ao_original(cliente, admin, equipe
 # --- MVP 6: reajuste ------------------------------------------------------------------------------
 
 def test_reajuste_de_5_por_cento_mantem_competencias_medidas(cliente, admin, equipe):
+    """Reajuste de 5%: competências já medidas mantêm o preço; as demais e o cadastro recebem o novo."""
+    # Mede e conclui janeiro antes de abrir o reajuste
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -133,6 +141,8 @@ def test_reajuste_de_5_por_cento_mantem_competencias_medidas(cliente, admin, equ
 # --- MVP 7: aditamento e supressão ------------------------------------------------------------------
 
 def _alteracao(cliente, contrato, h, tipo, novas):
+    """Abre uma alteração, tenta salvar sem justificativa (400), anexa a justificativa e devolve (url, itens)."""
+    # Nova quantidade: a informada para o item (pela descrição) ou a atual
     painel = cliente.post(_url(contrato, "/alteracoes"), json={"tipo": tipo, "sequencia_vigencia": 1, "mes_efeito": "2026-01-01"}, headers=h).json()
     alteracao = painel["em_andamento"]
     url = _url(contrato, f"/alteracoes/{alteracao['id']}")
@@ -143,6 +153,7 @@ def _alteracao(cliente, contrato, h, tipo, novas):
 
 
 def test_acrescimo_de_30_por_cento_exige_autorizacao(cliente, admin, equipe):
+    """Aditamento de 28,74% (acima de 25%) só conclui com a autorização do Ordenador de Despesa."""
     contrato, gestora, fiscal = equipe
     url, itens = _alteracao(cliente, contrato, gestora, "aditamento", {"Limpeza": "2.6"})
     r = cliente.put(f"{url}/quantitativos", json={"itens": itens}, headers=gestora).json()["em_andamento"]
@@ -163,6 +174,7 @@ def test_acrescimo_de_30_por_cento_exige_autorizacao(cliente, admin, equipe):
 
 
 def test_supressao_abaixo_do_executado_e_bloqueada(cliente, admin, equipe):
+    """Supressão abaixo do já executado é recusada; o cancelamento encerra a alteração."""
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -198,12 +210,14 @@ def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkey
     monkeypatch.setattr("app.services.contratos.servico_contratos.hoje", lambda: date(2026, 11, 1))
     monkeypatch.setattr("app.services.contratos.servico_competencias.hoje", lambda: date(2026, 11, 1))
     contrato, gestora, fiscal = equipe
+    # Antes de gerar as competências: a pendência é completar a base; o risco é o vencimento próximo
     painel = cliente.get("/api/contratos/painel", headers=gestora).json()
     assert painel["minhas_pendencias"][0]["tipo"] == "base_execucao"
     riscos = [r["tipo"] for g in painel["alertas"] for r in g["riscos"]]
     assert riscos == ["a_vencer_sem_prorrogacao"] and len(painel["alertas"]) == 1
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    # Depois de gerar: pendências de medição e um risco de atraso agregado por contrato
     painel = cliente.get("/api/contratos/painel", params={"exercicio": 2026}, headers=gestora).json()
     assert any(p["tipo"] == "medicao" and "01/2026" in p["descricao"] for p in painel["minhas_pendencias"])
     atrasos = [r for g in painel["alertas"] for r in g["riscos"] if r["tipo"] == "competencias_atrasadas"]
@@ -217,6 +231,7 @@ def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkey
 
 
 def test_previsao_consolidada_com_cenarios(cliente, admin, equipe):
+    """Exportação consolidada com o cenário de prorrogação; só o SuperRoot exporta."""
     contrato, gestora, _ = equipe
     cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12}, headers=gestora)
     parametros = {"exercicio": 2027, "formato": "xlsx", "cenario_prorrogacoes": "true"}
@@ -227,6 +242,7 @@ def test_previsao_consolidada_com_cenarios(cliente, admin, equipe):
 
     from openpyxl import load_workbook
 
+    # C4 = previsão 2027 (0: o contrato acaba em 2026), D4 = cenário de prorrogação, E4 = total
     folha = load_workbook(BytesIO(r.content))["Resumo anual"]
     assert folha["C4"].value == 0 and folha["D4"].value == 24000 and folha["E4"].value == 24000
     pdf = cliente.get("/api/contratos/relatorios/previsao-orcamentaria", params={**parametros, "formato": "pdf"}, headers=admin)
@@ -234,6 +250,8 @@ def test_previsao_consolidada_com_cenarios(cliente, admin, equipe):
 
 
 def test_aditamento_apos_reajuste_soma_ao_valor_global_e_contrato_completo_pode_ser_excluido(cliente, admin, equipe):
+    """Aditamento após reajuste soma o impacto ao valor global; contrato completo pode ser excluído."""
+    # Janeiro inteiro, da medição à OB
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -255,6 +273,7 @@ def test_aditamento_apos_reajuste_soma_ao_valor_global_e_contrato_completo_pode_
     cliente.post(f"{base}/consolidado", headers=gestora)
     assert cliente.post(f"{base}/ordem-bancaria", files={"arquivo": ("ob.pdf", PDF)}, headers=gestora).json()["situacao"] == "concluida"
 
+    # Reajuste de 10% a partir de fevereiro
     reajuste = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": "2026-02-01"}, headers=gestora).json()["em_andamento"]
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
     cliente.put(f"{url}/memoria", json={"itens": [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]}, headers=gestora)
@@ -263,6 +282,7 @@ def test_aditamento_apos_reajuste_soma_ao_valor_global_e_contrato_completo_pode_
     cliente.post(f"{url}/concluir", files={"arquivo": ("a.pdf", PDF)}, headers=gestora)
     antes = cliente.get(_url(contrato), headers=gestora).json()["valor_global"]
 
+    # Aditamento depois do reajuste
     url, itens = _alteracao(cliente, contrato, gestora, "aditamento", {"Limpeza": "2.2"})
     impacto = cliente.put(f"{url}/quantitativos", json={"itens": itens}, headers=gestora).json()["em_andamento"]["impacto_valor"]
     cliente.post(f"{url}/ciencia", headers=gestora)

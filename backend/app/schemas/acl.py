@@ -1,5 +1,6 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados de entrada e saída das rotas de ACL.
+"""Formatos de entrada e saída das rotas de ACL (recursos, regras e acessos efetivos)."""
 
 from datetime import datetime
 from typing import Literal
@@ -8,10 +9,12 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.usuarios import OpcaoUsuario
 
+# Níveis aceitos; o Literal faz o Pydantic recusar qualquer outro valor com erro 422
 Nivel = Literal["LEITURA", "MODIFICACAO", "CONTROLE_TOTAL"]
 
 
 class GravacaoRecurso(BaseModel):
+    """Dados para cadastrar ou alterar um recurso (módulo) protegido."""
     nome: str = Field(..., min_length=1, max_length=100)
     slug: str = Field(..., min_length=1, max_length=60, description="Identificador técnico usado no código. Normalizado para minúsculas, `a-z0-9_-`.")
     descricao: str = Field("", max_length=2000)
@@ -21,10 +24,12 @@ class GravacaoRecurso(BaseModel):
     @field_validator("nome", "descricao", "url_base")
     @classmethod
     def _aparar(cls, valor: str) -> str:
+        """Remove espaços das pontas dos textos."""
         return valor.strip()
 
 
 class LeituraRecurso(BaseModel):
+    """Recurso como aparece na listagem da administração."""
     id: int
     nome: str
     slug: str
@@ -37,12 +42,14 @@ class LeituraRecurso(BaseModel):
 
 
 class OpcaoSetor(BaseModel):
+    """Setor em forma reduzida, para seletores e para exibir nas regras."""
     id: int
     nome: str
     sistemico: bool = False
 
 
 class GravacaoRegra(BaseModel):
+    """Dados de uma regra: o nível concedido e a quem (usuários e/ou setores)."""
     recurso_id: int
     nivel: Nivel
     usuarios_ids: list[int] = Field(default_factory=list)
@@ -50,6 +57,7 @@ class GravacaoRegra(BaseModel):
 
 
 class LeituraRegra(BaseModel):
+    """Regra com os nomes já resolvidos para exibição."""
     id: int
     recurso_id: int
     recurso_nome: str
@@ -62,6 +70,7 @@ class LeituraRegra(BaseModel):
 
 
 class AcessoEfetivo(BaseModel):
+    """Nível efetivo do usuário em um recurso, somando as regras diretas e as dos seus setores."""
     recurso_id: int
     nome: str
     slug: str

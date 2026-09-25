@@ -30,19 +30,23 @@ from app.core.configuracao import obter_configuracao
 from app.models.usuario import Usuario
 from app.services.servico_auditoria import auditar
 
+# Raiz do projeto (quatro pastas acima deste arquivo) e os scripts que fazem o trabalho pesado
 RAIZ_PROJETO = Path(__file__).resolve().parents[4]
 SCRIPT_EXTRACAO = RAIZ_PROJETO / "scripts" / "extrair-contratos-sgi.py"
 SCRIPT_CARGA = RAIZ_PROJETO / "scripts" / "migrar-contratos-sgi.py"
+# Quantas linhas finais do log são mostradas na tela
 LINHAS_DE_LOG = 40
 
 
 class ErroMigracao(Exception):
+    """Erro conhecido da importação, com o código e o status HTTP que a rota deve devolver."""
     def __init__(self, mensagem: str, codigo: str, status_code: int = 400) -> None:
         super().__init__(mensagem)
         self.codigo, self.status_code = codigo, status_code
 
 
 def _diretorio() -> Path:
+    """Pasta de trabalho da migração, criada se preciso e acessível só ao dono (dados sensíveis)."""
     pasta = Path(obter_configuracao().migracao_diretorio)
     pasta.mkdir(parents=True, exist_ok=True)
     os.chmod(pasta, 0o700)
@@ -50,14 +54,17 @@ def _diretorio() -> Path:
 
 
 def _arquivo_estado() -> Path:
+    """Arquivo JSON com o estado da importação (compartilhado entre os workers da API)."""
     return _diretorio() / "estado.json"
 
 
 def _arquivo_log() -> Path:
+    """Arquivo de log da execução (as últimas linhas aparecem na tela)."""
     return _diretorio() / "execucao.log"
 
 
 def _ler_bruto() -> dict[str, Any]:
+    """Lê o estado gravado; sem arquivo (ou com arquivo inválido), considera "ociosa"."""
     try:
         return json.loads(_arquivo_estado().read_text())
     except (FileNotFoundError, json.JSONDecodeError):
@@ -65,6 +72,7 @@ def _ler_bruto() -> dict[str, Any]:
 
 
 def _gravar_estado(**campos: Any) -> dict[str, Any]:
+    """Mescla os campos no estado e grava de forma atômica (arquivo temporário + troca de nome)."""
     estado = {**_ler_bruto(), **campos}
     temporario = _arquivo_estado().with_suffix(".tmp")
     temporario.write_text(json.dumps(estado, ensure_ascii=False, default=str))
@@ -73,6 +81,7 @@ def _gravar_estado(**campos: Any) -> dict[str, Any]:
 
 
 def _processo_vivo(pid: int | None) -> bool:
+    """Indica se o processo `pid` ainda existe (o sinal 0 só testa, não interrompe o processo)."""
     if not pid:
         return False
     try:
@@ -87,6 +96,7 @@ def ler_estado() -> dict[str, Any]:
     estado = _ler_bruto()
     if estado.get("situacao") == "executando" and not _processo_vivo(estado.get("pid")):
         estado = _gravar_estado(situacao="erro", mensagem="A importação foi interrompida (o serviço foi reiniciado?).", concluida_em=agora_utc())
+    # Anexa as últimas linhas do log e os endereços de origem e destino (só para exibição)
     try:
         estado["log"] = _arquivo_log().read_text(errors="replace").splitlines()[-LINHAS_DE_LOG:]
     except FileNotFoundError:
@@ -98,6 +108,8 @@ def ler_estado() -> dict[str, Any]:
 
 
 def _conectar(host: str, usuario: str, senha: str, rotulo: str) -> paramiko.SSHClient:
+    """Abre uma conexão SSH com senha; erros viram `ErroMigracao` com mensagem clara."""
+    # Aceita a chave do servidor sem perguntar (conexões para servidores internos conhecidos)
     cliente = paramiko.SSHClient()
     cliente.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
@@ -110,10 +122,12 @@ def _conectar(host: str, usuario: str, senha: str, rotulo: str) -> paramiko.SSHC
 
 
 def validar_senhas(senha_origem: str, senha_destino: str) -> None:
+    """Confere as duas senhas por SSH antes de começar (e o sudo na origem)."""
     configuracao = obter_configuracao()
     origem = _conectar(configuracao.migracao_sgi_host, configuracao.migracao_sgi_usuario, senha_origem, "origem")
     try:
         # A extração lê o banco do SGI como postgres: a senha precisa valer também no sudo de lá
+        # `sudo -S -v` lê a senha pela entrada padrão e só valida, sem executar nada
         entrada, saida, _ = origem.exec_command("sudo -S -p '' -v", timeout=15)
         entrada.write(senha_origem + "\n")
         entrada.channel.shutdown_write()
@@ -123,10 +137,12 @@ def validar_senhas(senha_origem: str, senha_destino: str) -> None:
             )
     finally:
         origem.close()
+    # Destino: basta conseguir entrar
     _conectar(configuracao.migracao_local_host, configuracao.migracao_local_usuario, senha_destino, "destino").close()
 
 
 def iniciar(senha_origem: str, senha_destino: str, autor: Usuario) -> dict[str, Any]:
+    """Valida as senhas e dispara a importação em um processo separado; devolve o estado inicial."""
     if ler_estado().get("situacao") == "executando":
         raise ErroMigracao("Já existe uma importação em andamento.", "conflito", 409)
     validar_senhas(senha_origem, senha_destino)
@@ -134,8 +150,10 @@ def iniciar(senha_origem: str, senha_destino: str, autor: Usuario) -> dict[str, 
     _arquivo_log().write_text("")
     _gravar_estado(situacao="executando", etapa="iniciando", mensagem="Iniciando a importação.", iniciada_em=agora_utc(),
                    concluida_em=None, iniciada_por=autor.nome_completo or autor.login, resultado=None, avisos=[], pid=None)
+    # A senha de origem vai só para o ambiente do processo filho (nunca para disco)
     ambiente = {**os.environ, "SGI_SENHA": senha_origem, "SGI_HOST": configuracao.migracao_sgi_host,
                 "SGI_USUARIO": configuracao.migracao_sgi_usuario}
+    # O processo roda este próprio módulo (ver o bloco `__main__` no fim) e continua sozinho, desligado da API
     processo = subprocess.Popen(
         [sys.executable, "-m", "app.services.contratos.servico_migracao_sgi", str(autor.id), autor.login],
         cwd=RAIZ_PROJETO / "backend", env=ambiente, stdin=subprocess.DEVNULL,
@@ -152,6 +170,7 @@ def iniciar(senha_origem: str, senha_destino: str, autor: Usuario) -> dict[str, 
 # --- Processo à parte ----------------------------------------------------------------------------
 
 def _rodar(etapa: str, mensagem: str, comando: list[str], ambiente: dict[str, str]) -> str:
+    """Executa um script da importação, grava a saída no log e devolve o texto; falha vira RuntimeError."""
     _gravar_estado(etapa=etapa, mensagem=mensagem)
     with open(_arquivo_log(), "a") as log:
         log.write(f"==> {mensagem}\n")
@@ -168,14 +187,17 @@ def _rodar(etapa: str, mensagem: str, comando: list[str], ambiente: dict[str, st
 
 
 def executar(autor_id: int, autor_login: str) -> None:
+    """Corpo do processo separado: extrai do SGI, carrega aqui e registra o resultado."""
     ambiente = {**os.environ}
     pacote = _diretorio() / f"pacote-{datetime.now():%Y%m%d-%H%M%S}"
     acao, dados = "contrato.migracao_sgi.falhar", None
     try:
         _rodar("extraindo", "Extraindo os dados do SGI (somente leitura)…", [sys.executable, str(SCRIPT_EXTRACAO), str(pacote)], ambiente)
+        # A senha de origem não é mais necessária depois da extração
         ambiente.pop("SGI_SENHA", None)
         saida = _rodar("carregando", "Carregando e conferindo os dados neste servidor…",
                        [sys.executable, str(SCRIPT_CARGA), str(pacote), "--gravar", "--substituir"], ambiente)
+        # O script de carga imprime uma linha "Carga: {...}" com as quantidades importadas, e linhas "aviso: ..."
         carga = re.search(r"^Carga: (\{.*\})$", saida, re.M)
         resultado = json.loads(carga.group(1)) if carga else None
         avisos = [linha.strip().removeprefix("aviso:").strip() for linha in saida.splitlines() if linha.strip().startswith("aviso:")]
@@ -188,10 +210,12 @@ def executar(autor_id: int, autor_login: str) -> None:
     finally:
         # O pacote tem dados pessoais e documentos contratuais: não fica no disco
         shutil.rmtree(pacote, ignore_errors=True)
+    # Registra na auditoria o sucesso ou a falha
     with FabricaSessao() as sessao:
         auditar(sessao, autor_login, acao, "SGI", autor_id=autor_id, alvo_tipo="migracao", alvo_id="sgi", dados=dados)
         sessao.commit()
 
 
+# Ponto de entrada quando o módulo é executado como processo separado (ver `iniciar`)
 if __name__ == "__main__":
     executar(int(sys.argv[1]), sys.argv[2])

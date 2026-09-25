@@ -1,6 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para gerar os PDFs da execução (memória de cálculo, avaliação e consolidado).
-"""PDFs da execução: memória de cálculo da medição, relatório de avaliação e documento consolidado."""
+"""PDFs da execução: memória de cálculo da medição, relatório de avaliação e documento consolidado.
+
+Também reúne formatadores usados em outros PDFs do módulo (moeda, quantidade, data/hora e nomes
+dos papéis da equipe).
+"""
 
 from decimal import Decimal
 from io import BytesIO
@@ -13,6 +17,7 @@ from app.services import servico_anexos
 from app.services.contratos.calculos import arredondar
 from app.services.documentos.pdf import FUSO_SAO_PAULO, DocumentoPdf, mesclar_pdfs
 
+# Nomes dos papéis da equipe como aparecem nos documentos
 PAPEIS = {
     "gestor": "Gestor",
     "gestor_suplente": "Suplente do gestor",
@@ -24,6 +29,7 @@ PAPEIS = {
 
 
 def moeda(valor: Decimal | None) -> str:
+    """Valor em reais no formato brasileiro (R$ 1.234,56); vazio vira "R$ -"."""
     if valor is None:
         return "R$ -"
     texto = f"{arredondar(Decimal(valor)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -37,10 +43,12 @@ def quantidade(valor: Decimal) -> str:
 
 
 def data_hora(valor) -> str:
+    """Data e hora no horário de Brasília (dd/mm/aaaa hh:mm), ou "—" se vazio."""
     return valor.astimezone(FUSO_SAO_PAULO).strftime("%d/%m/%Y %H:%M") if valor else "—"
 
 
 def _cabecalho_contrato(documento: DocumentoPdf, contrato: Contrato, competencia: Competencia) -> None:
+    """Seção "Identificação" comum aos documentos da competência."""
     documento.secao("Identificação").campos(
         [
             ("Contrato", contrato.numero),
@@ -54,11 +62,13 @@ def _cabecalho_contrato(documento: DocumentoPdf, contrato: Contrato, competencia
 
 
 def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[NotaEmpenho], versao: int, autor: str) -> bytes:
+    """PDF da memória de cálculo: itens medidos, NEs escolhidas e ciências."""
     documento = DocumentoPdf(
         "Memória de cálculo da medição", f"Contrato {contrato.numero} · Competência {competencia.competencia:%m/%Y} · versão {versao}",
         paisagem=True, autor=autor,
     )
     _cabecalho_contrato(documento, contrato, competencia)
+    # Uma linha por item, somando o total medido
     total = Decimal(0)
     linhas = []
     for item in competencia.itens:
@@ -85,13 +95,16 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
 
 
 def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Decimal | None, percentual: Decimal, autor: str) -> bytes:
+    """PDF do relatório de avaliação: notas por grupo, resultado, ateste e linhas de assinatura."""
     avaliacao = competencia.avaliacao
     definicao = avaliacao.definicao
     iniciais = {r["item_id"]: r for r in avaliacao.respostas_iniciais or []}
     gestor = {r["item_id"]: r for r in avaliacao.respostas_gestor or []}
+    # Legenda de cada nota da escala (ex.: "10" → "Ótimo")
     legendas = {str(Decimal(str(n["valor"]))): n["legenda"] for n in definicao["escala"]}
     documento = DocumentoPdf("Relatório de avaliação dos serviços", f"Contrato {contrato.numero} · Competência {competencia.competencia:%m/%Y}", autor=autor)
     _cabecalho_contrato(documento, contrato, competencia)
+    # Uma tabela por grupo do formulário, com a nota inicial e a do gestor lado a lado
     for grupo in definicao["grupos"]:
         linhas = []
         for item in grupo["itens"]:
@@ -124,6 +137,7 @@ def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Deci
 
 def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: dict, autor: str) -> bytes:
     """Resumo executivo seguido de todos os PDFs da competência, na ordem das etapas."""
+    # 1ª parte: o resumo executivo, gerado agora
     resumo = DocumentoPdf("Documento consolidado da competência", f"Contrato {contrato.numero} · Competência {competencia.competencia:%m/%Y}", autor=autor)
     _cabecalho_contrato(resumo, contrato, competencia)
     resumo.secao("Resumo executivo").campos(
@@ -151,6 +165,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         [[str(d.ordem), d.nome, "Obrigatório" if d.obrigatorio else "Opcional", d.arquivo.nome if d.arquivo else "Não anexado"] for d in detalhe.documentos],
         larguras=[0.5, 4, 1.4, 3.6]
     )
+    # 2ª parte: os PDFs anexados, na ordem das etapas (a última memória, avaliação assinada, NFs, CADIN, checklist)
     partes: list[bytes | object] = [resumo.gerar()]
     ordem = []
     if competencia.memorias:
@@ -161,6 +176,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
     for consulta in competencia.consultas_cadin:
         ordem += [consulta.certidao_anexo_id, consulta.email_anexo_id]
     ordem += [d.anexo_id for d in competencia.documentos]
+    # Anexos ausentes ou ilegíveis são pulados
     for anexo_id in ordem:
         anexo: Anexo | None = anexos.get(anexo_id) if anexo_id else None
         if anexo is None:

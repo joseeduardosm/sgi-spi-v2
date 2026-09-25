@@ -1,5 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para registrar a auditoria das operações e o histórico de alterações por campo.
+"""Auditoria: registro de quem fez o quê, quando e em qual registro.
+
+Além da tabela `auditoria` (consultável pelo sistema), cada operação também vai para o log do
+serviço (journalctl), o que ajuda a investigar problemas.
+"""
 
 import logging
 from collections.abc import Mapping
@@ -14,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models.auditoria import RegistroAuditoria
 
+# Logger próprio, para filtrar as linhas de auditoria no journal do systemd
 registro_log = logging.getLogger("contratos_spi.auditoria")
 
 
@@ -34,6 +40,8 @@ def auditar(
     `alvo_tipo`/`alvo_id` identificam o registro de forma estruturada (histórico por campo) e
     `dados` guarda o conteúdo do ato em JSON.
     """
+    # Apenas adiciona à sessão: a linha é gravada junto com a operação auditada, no mesmo commit.
+    # Se a operação falhar e houver rollback, a auditoria também é descartada (fica coerente).
     sessao.add(
         RegistroAuditoria(
             autor=autor,
@@ -51,6 +59,7 @@ def auditar(
 
 def valor_json(valor: Any) -> Any:
     """Converte valores do domínio (Decimal, datas, UUID, enums) para tipos aceitos em JSON."""
+    # Dicionários e listas são convertidos recursivamente, item a item
     if isinstance(valor, Mapping):
         return {str(chave): valor_json(item) for chave, item in valor.items()}
     if isinstance(valor, (list, tuple, set)):
@@ -68,6 +77,7 @@ def valor_json(valor: Any) -> Any:
 
 def diferencas(antes: Mapping[str, Any], depois: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     """Campos cujo valor mudou, no formato {campo: {"de": ..., "para": ...}}."""
+    # Compara depois de converter para JSON, para que Decimal("1.0") e "1.0" sejam considerados iguais
     return {
         campo: {"de": valor_json(antes.get(campo)), "para": valor_json(depois.get(campo))}
         for campo in depois
@@ -87,6 +97,7 @@ def auditar_alteracoes(
     depois: Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
     """Audita somente os campos alterados. Sem diferença, nada é gravado."""
+    # Só grava quando algo realmente mudou (salvar sem alterar nada não polui o histórico)
     campos = diferencas(antes, depois)
     if campos:
         auditar(

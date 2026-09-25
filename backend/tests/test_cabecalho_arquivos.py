@@ -4,10 +4,12 @@
 
 from pathlib import Path
 
+# Pasta backend/ (uma acima de tests/)
 RAIZ = Path(__file__).resolve().parents[1]
 
 
 def test_todo_arquivo_python_tem_cabecalho_padrao():
+    """Percorre todos os .py (fora do .venv) e lista os que não começam com as duas linhas padrão."""
     sem_cabecalho = []
     for arquivo in sorted(RAIZ.rglob("*.py")):
         if ".venv" in arquivo.parts:

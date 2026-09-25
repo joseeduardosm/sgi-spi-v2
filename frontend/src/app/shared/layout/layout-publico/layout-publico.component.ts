@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para montar a moldura das páginas públicas (hoje, só a tela de login).
+
 import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
@@ -30,4 +33,5 @@ import { RodapeComponent } from '../../componentes/rodape/rodape.component';
     }
   `,
 })
+// Sem lógica: estrutura e estilo estão no template acima
 export class LayoutPublicoComponent {}

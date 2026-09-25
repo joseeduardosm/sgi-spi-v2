@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para exibir a página inicial do portal, com a saudação e o aviso de acesso negado.
+
 import { Component, inject, input } from '@angular/core';
 
 import { AutenticacaoService } from '../../core/autenticacao/autenticacao.service';
@@ -21,6 +24,7 @@ import { AutenticacaoService } from '../../core/autenticacao/autenticacao.servic
   `,
 })
 export class InicioComponent {
+  // Serviço de autenticação exposto ao template (para mostrar o nome do usuário)
   protected readonly autenticacao = inject(AutenticacaoService);
   /** Parâmetro de consulta preenchido pelo guardaAcl ao negar acesso. */
   readonly acesso = input<string>();

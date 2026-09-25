@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a tela de setores: lista com pesquisa local e cadastro em janela (modal).
+
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -21,6 +24,7 @@ export class SetoresComponent implements OnInit {
   protected readonly usuarios = inject(UsuariosApiService);
 
   protected readonly ehAdministrador = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
+  // A pesquisa é feita no navegador, sobre a lista já carregada (a quantidade de setores é pequena)
   protected busca = '';
   private readonly termo = signal('');
   protected readonly setores = signal<Setor[]>([]);
@@ -33,6 +37,7 @@ export class SetoresComponent implements OnInit {
   protected readonly carregando = signal(true);
   protected readonly aviso = signal<{ texto: string; erro: boolean } | null>(null);
 
+  // Estado da janela de cadastro; líder e membros vêm dos seletores de usuários
   protected readonly formularioAberto = signal(false);
   protected readonly emEdicao = signal<Setor | null>(null);
   protected readonly salvando = signal(false);
@@ -53,10 +58,12 @@ export class SetoresComponent implements OnInit {
     this.carregar();
   }
 
+  /** Atualiza o termo da pesquisa local. */
   protected aoPesquisar(valor: string): void {
     this.termo.set(valor.trim());
   }
 
+  /** Carrega todos os setores. */
   protected carregar(): void {
     this.carregando.set(true);
     this.api.listar().subscribe({
@@ -71,20 +78,24 @@ export class SetoresComponent implements OnInit {
     });
   }
 
+  /** Abre a janela de cadastro: vazia (novo) ou preenchida (edição). */
   protected abrirFormulario(setor?: Setor): void {
     this.emEdicao.set(setor ?? null);
     this.erroFormulario.set(null);
     this.formulario.reset({ nome: setor?.nome ?? '', setor_pai_id: setor?.setor_pai_id ?? 0, sistemico: setor?.sistemico ?? false, ativo: setor?.ativo ?? true });
+    // O líder vira uma opção do seletor; os membros são buscados no detalhe do setor
     this.lider.set(setor?.lider_id ? [{ id: setor.lider_id, nome_completo: setor.lider_nome ?? '', login: '', cargo: '', ativo: true }] : []);
     this.membros.set([]);
     this.formularioAberto.set(true);
     if (setor) this.api.consultar(setor.id).subscribe((detalhe) => this.membros.set(detalhe.membros));
   }
 
+  /** Fecha a janela, a menos que esteja salvando. */
   protected fecharFormulario(): void {
     if (!this.salvando()) this.formularioAberto.set(false);
   }
 
+  /** Valida e envia a criação ou a alteração do setor. */
   protected salvar(): void {
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
@@ -92,6 +103,7 @@ export class SetoresComponent implements OnInit {
       return;
     }
     const valores = this.formulario.getRawValue();
+    // Setor pai 0 (opção "nenhum") vira null
     const dados = {
       nome: valores.nome.trim(),
       setor_pai_id: Number(valores.setor_pai_id) || null,
@@ -117,6 +129,7 @@ export class SetoresComponent implements OnInit {
     });
   }
 
+  /** Pede confirmação e exclui o setor (a API recusa se ele tiver membros ou subordinados). */
   protected excluir(setor: Setor): void {
     if (!confirm(`Excluir o setor "${setor.nome}"?`)) return;
     this.api.excluir(setor.id).subscribe({
@@ -128,6 +141,7 @@ export class SetoresComponent implements OnInit {
     });
   }
 
+  /** Mensagem da API, se houver, ou a padrão da operação. */
   private mensagem(erro: unknown, padrao: string): string {
     if (erro instanceof HttpErrorResponse && typeof erro.error?.detalhe === 'string') return erro.error.detalhe;
     return padrao;

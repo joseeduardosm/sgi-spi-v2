@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a tela de diretórios LDAP: cadastro, teste de conexão, sincronização e exclusão.
+
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, OnInit, signal } from '@angular/core';
@@ -16,17 +19,20 @@ import { DiretorioLdap, GravacaoDiretorio, ResultadoTeste } from './ldap.models'
 export class DiretoriosLdapComponent implements OnInit {
   private readonly api = inject(LdapApiService);
 
+  // Lista, carregamento e o diretório com ação em andamento (desabilita os botões daquela linha)
   protected readonly diretorios = signal<DiretorioLdap[]>([]);
   protected readonly carregando = signal(true);
   protected readonly idOcupado = signal<string | null>(null);
   protected readonly aviso = signal<{ texto: string; erro: boolean } | null>(null);
 
+  // Estado da janela de cadastro e o resultado do teste feito dentro dela
   protected readonly formularioAberto = signal(false);
   protected readonly emEdicao = signal<DiretorioLdap | null>(null);
   protected readonly salvando = signal(false);
   protected readonly erroFormulario = signal<string | null>(null);
   protected readonly testeFormulario = signal<ResultadoTeste | null>(null);
 
+  // Campos do diretório; a senha bind é obrigatória só no cadastro (ver abrirFormulario)
   protected readonly formulario = inject(NonNullableFormBuilder).group({
     nome: ['', [Validators.required, Validators.maxLength(100)]],
     servidor: ['', [Validators.required, Validators.maxLength(255)]],
@@ -42,6 +48,7 @@ export class DiretoriosLdapComponent implements OnInit {
     this.carregar();
   }
 
+  /** Carrega a lista de diretórios. */
   protected carregar(): void {
     this.carregando.set(true);
     this.api.listar().subscribe({
@@ -56,6 +63,7 @@ export class DiretoriosLdapComponent implements OnInit {
     });
   }
 
+  /** Abre a janela de cadastro; o primeiro diretório já vem marcado como ativo. */
   protected abrirFormulario(diretorio?: DiretorioLdap): void {
     this.emEdicao.set(diretorio ?? null);
     this.erroFormulario.set(null);
@@ -76,10 +84,12 @@ export class DiretoriosLdapComponent implements OnInit {
     this.formularioAberto.set(true);
   }
 
+  /** Fecha a janela, a menos que esteja salvando. */
   protected fecharFormulario(): void {
     if (!this.salvando()) this.formularioAberto.set(false);
   }
 
+  /** Valida e grava o diretório (a API ativa e sincroniza, se marcado como ativo). */
   protected salvar(): void {
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
@@ -115,6 +125,7 @@ export class DiretoriosLdapComponent implements OnInit {
     this.salvando.set(true);
     this.erroFormulario.set(null);
     this.testeFormulario.set(null);
+    // Com senha digitada (ou diretório novo), testa os dados do formulário; senão, testa o diretório salvo
     const requisicao = dados.senha_bind || !atual ? this.api.testarSemSalvar(dados) : this.api.testar(atual.id);
     requisicao.subscribe({
       next: (resultado) => {
@@ -128,6 +139,7 @@ export class DiretoriosLdapComponent implements OnInit {
     });
   }
 
+  /** Testa a conexão de um diretório salvo, a partir da lista. */
   protected testar(diretorio: DiretorioLdap): void {
     this.idOcupado.set(diretorio.id);
     this.api.testar(diretorio.id).subscribe({
@@ -143,6 +155,7 @@ export class DiretoriosLdapComponent implements OnInit {
     });
   }
 
+  /** Sincroniza os usuários do diretório e mostra o resumo. */
   protected sincronizar(diretorio: DiretorioLdap): void {
     this.idOcupado.set(diretorio.id);
     this.mostrarAviso(`Sincronizando ${diretorio.nome}…`, false);
@@ -164,6 +177,7 @@ export class DiretoriosLdapComponent implements OnInit {
     });
   }
 
+  /** Pede confirmação e exclui o diretório. */
   protected excluir(diretorio: DiretorioLdap): void {
     if (!confirm(`Excluir o diretório "${diretorio.nome}"? Os usuários importados continuam cadastrados.`)) return;
     this.idOcupado.set(diretorio.id);
@@ -180,15 +194,18 @@ export class DiretoriosLdapComponent implements OnInit {
     });
   }
 
+  /** Lê o formulário no formato da API: porta como número e senha vazia como null. */
   private dadosDoFormulario(): GravacaoDiretorio {
     const valores = this.formulario.getRawValue();
     return { ...valores, porta: Number(valores.porta), senha_bind: valores.senha_bind || null };
   }
 
+  /** Mostra uma mensagem de sucesso ou de erro no topo da tela. */
   private mostrarAviso(texto: string, erro: boolean): void {
     this.aviso.set({ texto, erro });
   }
 
+  /** Mensagem da API, se houver, ou a padrão da operação. */
   private mensagem(erro: unknown, padrao: string): string {
     if (erro instanceof HttpErrorResponse) {
       if (typeof erro.error?.detalhe === 'string') return erro.error.detalhe;

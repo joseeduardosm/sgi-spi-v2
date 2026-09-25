@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a tela de modelos globais de checklist e de formulário (só SuperRoot).
+
 import { DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -12,6 +15,7 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
 @Component({
   selector: 'app-modelos',
   imports: [FormsModule, DatePipe, CabecalhoModuloComponent, EditorFormularioComponent],
+  // Esc fecha a janela do checklist
   host: { '(document:keydown.escape)': 'checklistAberto.set(false)' },
   template: `
     <app-cabecalho-modulo titulo="Modelos globais" [trilha]="['Modelos']" descricao="Checklists e formulários de avaliação que as equipes copiam para os contratos. As cópias não mudam quando o modelo muda." />
@@ -81,7 +85,9 @@ export class ModelosComponent implements OnInit {
   private readonly api = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
 
+  // As duas colunas da tela (checklists e formulários)
   protected readonly tipos = [{ id: 'checklist' as const, rotulo: 'Checklists' }, { id: 'formulario' as const, rotulo: 'Formulários de avaliação' }];
+  // Modelos carregados e o estado das janelas de edição
   protected readonly modelos = signal<Modelo[]>([]);
   protected readonly checklistAberto = signal(false);
   protected readonly formularioAberto = signal(false);
@@ -90,23 +96,28 @@ export class ModelosComponent implements OnInit {
   protected ativo = true;
   protected itens: { nome: string; observacao: string; obrigatorio: boolean }[] = [];
 
+  /** Carrega todos os modelos (inclusive os inativos) ao abrir a tela. */
   ngOnInit(): void {
     this.carregar();
   }
 
+  /** Busca a lista de modelos na API. */
   private carregar(): void {
     this.api.modelos(undefined, false).subscribe({ next: (m) => this.modelos.set(m), error: (e) => this.dialogos.mostrarErro(e) });
   }
 
+  /** Modelos de um tipo (para cada coluna). */
   protected doTipo(tipo: string): Modelo[] {
     return this.modelos().filter((m) => m.tipo === tipo);
   }
 
+  /** Definição inicial do editor: a do modelo em edição ou uma de exemplo. */
   protected definicaoInicial(): DefinicaoFormulario {
     const c = this.emEdicao?.conteudo;
     return c?.grupos ? { escala: c.escala ?? [], faixas: c.faixas ?? [], grupos: c.grupos } : definicaoVazia();
   }
 
+  /** Abre a janela certa (checklist ou editor de formulário), vazia ou com o modelo escolhido. */
   protected abrir(tipo: 'checklist' | 'formulario', modelo?: Modelo): void {
     this.emEdicao = modelo ?? null;
     this.nome = modelo?.nome ?? '';
@@ -119,6 +130,7 @@ export class ModelosComponent implements OnInit {
     }
   }
 
+  /** Salva o modelo de checklist. */
   protected salvarChecklist(): void {
     const dados = { tipo: 'checklist', nome: this.nome.trim(), ativo: this.ativo, itens: this.itens.map((i) => ({ nome: i.nome.trim(), observacao: i.observacao.trim(), obrigatorio: i.obrigatorio })) };
     this.api.salvarModelo(dados, this.emEdicao?.id).subscribe({
@@ -130,6 +142,7 @@ export class ModelosComponent implements OnInit {
     });
   }
 
+  /** Salva o modelo de formulário com o que veio do editor. */
   protected salvarFormulario(evento: { nome: string; definicao: DefinicaoFormulario }): void {
     this.api.salvarModelo({ tipo: 'formulario', nome: evento.nome, ativo: this.emEdicao?.ativo ?? true, definicao: evento.definicao }, this.emEdicao?.id).subscribe({
       next: () => {
@@ -140,6 +153,7 @@ export class ModelosComponent implements OnInit {
     });
   }
 
+  /** Pede confirmação e exclui o modelo. */
   protected async excluir(modelo: Modelo): Promise<void> {
     const ok = await this.dialogos.confirmar({ titulo: `Excluir o modelo "${modelo.nome}"?`, mensagem: 'As cópias já feitas nos contratos não mudam.', rotuloConfirmar: 'Excluir' });
     if (ok) this.api.excluirModelo(modelo.id).subscribe({ next: () => this.carregar(), error: (e) => this.dialogos.mostrarErro(e) });

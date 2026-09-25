@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar o cadastro e a edição do contrato (dados, processos SEI, equipe e itens financeiros).
+
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -15,11 +18,13 @@ import { DetalheContrato, GravacaoContrato, GravacaoItem, OpcaoEmpresa, Papel, S
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { MESES, PAPEIS, PERIODICIDADES, paraDecimalApi, paraDecimalTela, ROTULOS_SITUACAO, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
 
+/** Item na lista da tela (com a marca de item já salvo). */
 interface ItemEdicao extends GravacaoItem {
   /** Item já salvo: nome, tipo e faturamento não mudam. */
   salvo: boolean;
 }
 
+// Item em branco para a janela de novo item
 const ITEM_VAZIO: ItemEdicao = {
   id: null,
   descricao: '',
@@ -40,6 +45,7 @@ const ITEM_VAZIO: ItemEdicao = {
   selector: 'app-formulario-contrato',
   imports: [FormsModule, RouterLink, CabecalhoModuloComponent, SeletorUsuariosComponent, ...PIPES_FORMATACAO],
   templateUrl: './formulario-contrato.component.html',
+  // Esc fecha a janela do item
   host: { '(document:keydown.escape)': 'fecharItem()' },
 })
 export class FormularioContratoComponent implements OnInit {
@@ -52,21 +58,25 @@ export class FormularioContratoComponent implements OnInit {
   private readonly roteador = inject(Router);
   private readonly autenticacao = inject(AutenticacaoService);
 
+  // Listas fixas para os seletores
   protected readonly papeis = PAPEIS;
   protected readonly periodicidades = PERIODICIDADES;
   protected readonly meses = MESES;
   protected readonly situacoes = Object.entries(ROTULOS_SITUACAO) as [Situacao, string][];
   protected readonly rotulosTipo = ROTULOS_TIPO_ITEM;
 
+  // Estado da tela
   protected readonly carregando = signal(true);
   protected readonly salvando = signal(false);
   protected readonly empresas = signal<OpcaoEmpresa[]>([]);
   protected readonly original = signal<DetalheContrato | null>(null);
+  // Com competências geradas, só o SuperRoot mexe nos itens; com prorrogação, as datas iniciais ficam travadas
   protected readonly execucaoGerada = signal(false);
   protected readonly superRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
   protected readonly itensBloqueados = computed(() => this.execucaoGerada() && !this.superRoot());
   protected readonly datasBloqueadas = computed(() => (this.original()?.vigencias.length ?? 1) > 1);
 
+  // Campos do cabeçalho do contrato (ligados por [(ngModel)])
   protected dados = {
     numero: '',
     empresa_id: '',
@@ -83,6 +93,7 @@ export class FormularioContratoComponent implements OnInit {
     sei_execucao_link: '',
     situacao_forcada: null as Situacao | null,
   };
+  // Um signal por papel da equipe (cada seletor de usuário guarda no máximo uma pessoa)
   protected readonly equipe: Record<Papel, ReturnType<typeof signal<OpcaoUsuario[]>>> = Object.fromEntries(
     PAPEIS.map((p) => [p.papel, signal<OpcaoUsuario[]>([])]),
   ) as Record<Papel, ReturnType<typeof signal<OpcaoUsuario[]>>>;
@@ -91,12 +102,15 @@ export class FormularioContratoComponent implements OnInit {
   // Janela do item (2 passos)
   protected readonly itemAberto = signal<{ passo: 1 | 2; indice: number | null } | null>(null);
   protected item: ItemEdicao = { ...ITEM_VAZIO };
+  // Posição do item sendo arrastado (reordenação por arrastar e soltar)
   private arrastando: number | null = null;
 
+  // Base mensal estimada enquanto o usuário edita os itens
   protected readonly baseMensal = computed(() =>
     this.itens().filter((i) => i.tipo === 'continuo').reduce((t, i) => t + this.numero(i.quantidade_mensal) * this.numero(i.valor_unitario), 0),
   );
 
+  /** Carrega empresas e, na edição, o contrato e a situação da execução (em paralelo). */
   ngOnInit(): void {
     const id = this.id();
     forkJoin({
@@ -118,6 +132,7 @@ export class FormularioContratoComponent implements OnInit {
     });
   }
 
+  /** Preenche o formulário com o contrato carregado (valores no formato brasileiro). */
   private preencher(c: DetalheContrato): void {
     this.original.set(c);
     this.dados = {
@@ -142,27 +157,32 @@ export class FormularioContratoComponent implements OnInit {
     );
   }
 
+  /** No cadastro, sugere o próximo número livre do ano da data inicial. */
   protected sugerirNumero(): void {
     if (this.original()) return;
     const ano = this.dados.data_inicio ? Number(this.dados.data_inicio.slice(0, 4)) : new Date().getFullYear();
     this.api.proximoNumero(ano).subscribe((r) => (this.dados.numero = r.numero));
   }
 
+  /** Data final prevista (início + vigência inicial − 1 dia), calculada em UTC. */
   protected dataFinal(): string {
     if (!this.dados.data_inicio || !this.dados.vigencia_inicial_meses) return '—';
     const [ano, mes, dia] = this.dados.data_inicio.split('-').map(Number);
     const alvo = new Date(Date.UTC(ano, mes - 1 + Number(this.dados.vigencia_inicial_meses), 1));
+    // Último dia do mês de destino: evita datas inválidas como 31/02
     const ultimo = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)).getUTCDate();
     alvo.setUTCDate(Math.min(dia, ultimo));
     alvo.setUTCDate(alvo.getUTCDate() - 1);
     return formatarData(alvo.toISOString().slice(0, 10));
   }
 
+  /** Texto digitado (formato brasileiro) como número; inválido vira 0. */
   protected numero(valor: string | number): number {
     const n = Number(paraDecimalApi(valor));
     return Number.isFinite(n) ? n : 0;
   }
 
+  /** Valor global estimado da vigência atual (contínuos × meses + sob demanda × teto). */
   protected valorGlobal(): number {
     const meses = this.original()?.vigencias.at(-1)?.meses ?? Number(this.dados.vigencia_inicial_meses || 0);
     return this.itens().reduce(
@@ -172,21 +192,25 @@ export class FormularioContratoComponent implements OnInit {
   }
 
   // --- Itens ---
+  /** Abre a janela de item no passo 1 (nome, tipo e faturamento). */
   protected novoItem(): void {
     this.item = { ...ITEM_VAZIO };
     this.itemAberto.set({ passo: 1, indice: null });
   }
 
+  /** Abre um item existente; itens já salvos vão direto ao passo 2 (nome/tipo não mudam). */
   protected editarItem(indice: number): void {
     this.item = { ...this.itens()[indice] };
     this.itemAberto.set({ passo: this.item.salvo ? 2 : 1, indice });
   }
 
+  /** Avança para o passo 2 (códigos, quantidades e preço). */
   protected continuarItem(): void {
     if (!this.item.descricao.trim()) return;
     this.itemAberto.update((a) => (a ? { ...a, passo: 2 } : a));
   }
 
+  /** Confirma o item na lista (novo no fim ou substituindo o editado). A gravação é no "Salvar". */
   protected concluirItem(): void {
     const aberto = this.itemAberto();
     if (!aberto) return;
@@ -197,10 +221,12 @@ export class FormularioContratoComponent implements OnInit {
     this.itemAberto.set(null);
   }
 
+  /** Fecha a janela do item sem aplicar. */
   protected fecharItem(): void {
     this.itemAberto.set(null);
   }
 
+  /** Todos os campos obrigatórios do passo 2 preenchidos. */
   protected itemCompleto(): boolean {
     const i = this.item;
     const codigos = [i.codigo_classe, i.codigo_natureza_despesa, i.codigo_siafisico, i.codigo_catmat_catser].every((c) => c.trim());
@@ -208,6 +234,7 @@ export class FormularioContratoComponent implements OnInit {
     return codigos && quantidades && i.valor_unitario !== '' && this.numero(i.valor_unitario) >= 0;
   }
 
+  /** Remove o item da lista (pede confirmação se ele já estava salvo). */
   protected async removerItem(indice: number): Promise<void> {
     const item = this.itens()[indice];
     if (item.salvo) {
@@ -221,6 +248,7 @@ export class FormularioContratoComponent implements OnInit {
     this.itens.update((l) => l.filter((_, i) => i !== indice));
   }
 
+  /** Sobe ou desce o item na lista (botões ▲/▼). */
   protected mover(indice: number, deslocamento: number): void {
     const destino = indice + deslocamento;
     const lista = [...this.itens()];
@@ -229,10 +257,12 @@ export class FormularioContratoComponent implements OnInit {
     this.itens.set(lista);
   }
 
+  /** Início do arrastar: guarda a posição do item. */
   protected aoArrastar(indice: number): void {
     this.arrastando = indice;
   }
 
+  /** Soltar: tira o item da posição antiga e o insere na nova. */
   protected aoSoltar(indice: number): void {
     if (this.arrastando === null || this.arrastando === indice) return;
     const lista = [...this.itens()];
@@ -242,11 +272,13 @@ export class FormularioContratoComponent implements OnInit {
     this.arrastando = null;
   }
 
+  /** Texto do tipo de item. */
   protected tipoItem(tipo: TipoItem): string {
     return this.rotulosTipo[tipo];
   }
 
   // --- Gravação ---
+  /** Monta o corpo no formato da API e cadastra ou altera o contrato. */
   protected salvar(): void {
     const original = this.original();
     const corpo: GravacaoContrato = {
@@ -256,6 +288,7 @@ export class FormularioContratoComponent implements OnInit {
       periodicidade_meses: Number(this.dados.periodicidade_meses),
       mes_reajuste: Number(this.dados.mes_reajuste),
       situacao_forcada: this.dados.situacao_forcada || null,
+      // Equipe: o id da pessoa escolhida em cada papel (ou null)
       equipe: Object.fromEntries(PAPEIS.map((p) => [p.papel, this.equipe[p.papel]()[0]?.id ?? null])),
       itens: this.itens().map((i) => ({
         id: i.id, descricao: i.descricao.trim(), tipo: i.tipo, calcula_pro_rata: i.calcula_pro_rata, codigo_classe: i.codigo_classe.trim(),
@@ -263,11 +296,13 @@ export class FormularioContratoComponent implements OnInit {
         codigo_catmat_catser: i.codigo_catmat_catser.trim(), quantidade_mensal: paraDecimalApi(i.quantidade_mensal),
         quantidade_total: i.tipo === 'sob_demanda' ? paraDecimalApi(i.quantidade_total) : '0', valor_unitario: paraDecimalApi(i.valor_unitario),
       })),
+      // Na alteração, a versão lida garante que ninguém salvou por cima (senão a API responde 409)
       versao: original?.versao ?? null,
     };
     this.salvando.set(true);
     const requisicao = original ? this.api.alterar(original.id, corpo) : this.api.criar(corpo);
     requisicao.subscribe({
+      // Sucesso: vai para o detalhe do contrato
       next: (contrato) => void this.roteador.navigate(['/contratos', contrato.id]),
       error: (e) => {
         this.salvando.set(false);

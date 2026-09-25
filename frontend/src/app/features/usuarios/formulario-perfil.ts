@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para criar, preencher e ler o formulário do perfil institucional (funções reutilizáveis).
+
 import { FormGroup, NonNullableFormBuilder, Validators } from '@angular/forms';
 
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
@@ -5,6 +8,7 @@ import { CAMPOS_OBRIGATORIOS_PERFIL, DadosPerfil, PerfilLeitura } from './usuari
 
 /** Formulário do perfil institucional, compartilhado por "Meu perfil" e pelo cadastro de usuários. */
 export function criarFormularioPerfil(construtor: NonNullableFormBuilder, exigirObrigatorios: boolean) {
+  // Validação "obrigatório" só nos campos obrigatórios, e só quando a tela exige (em "Meu perfil")
   const obrigatorio = (campo: string) =>
     exigirObrigatorios && CAMPOS_OBRIGATORIOS_PERFIL.includes(campo) ? [Validators.required] : [];
   return construtor.group({
@@ -20,8 +24,10 @@ export function criarFormularioPerfil(construtor: NonNullableFormBuilder, exigir
   });
 }
 
+/** Tipo do formulário criado acima (deduzido automaticamente pelo TypeScript). */
 export type FormularioPerfil = ReturnType<typeof criarFormularioPerfil>;
 
+/** Preenche o formulário com o perfil (ou limpa, se vier vazio). */
 export function preencherFormularioPerfil(formulario: FormularioPerfil, perfil: Partial<PerfilLeitura> | null): void {
   formulario.reset({
     nome_completo: perfil?.nome_completo ?? '',
@@ -36,6 +42,7 @@ export function preencherFormularioPerfil(formulario: FormularioPerfil, perfil: 
   });
 }
 
+/** Lê o formulário no formato da API: data vazia vira null e o gestor vem do seletor. */
 export function dadosDoFormularioPerfil(formulario: FormGroup, gestorId: number | null): DadosPerfil {
   const valores = formulario.getRawValue();
   return { ...valores, data_nascimento: valores.data_nascimento || null, gestor_id: gestorId };

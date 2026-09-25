@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para definir os itens da barra lateral do portal.
+
 import { SecaoNavegacao } from './navegacao.model';
 
 /**
@@ -28,11 +31,13 @@ export const NAVEGACAO: SecaoNavegacao[] = [
     ],
   },
   {
+    // Seção visível só para o SuperRoot
     legenda: 'Administração',
     papeis: ['SuperRoot'],
     itens: [
       { id: 'acl', rotulo: 'Controle de acesso', icone: 'escudo', rota: '/admin/acl' },
       { id: 'ldap', rotulo: 'Diretórios LDAP', icone: 'banco-dados', rota: '/admin/ldap' },
+      // Links externos para a documentação interativa da API (abrem em nova aba)
       {
         id: 'api',
         rotulo: 'Documentação da API',

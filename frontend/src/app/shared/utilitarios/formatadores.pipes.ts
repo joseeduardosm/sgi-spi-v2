@@ -1,8 +1,12 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para disponibilizar nos templates os formatadores brasileiros (moeda, data, quantidade...).
+
 import { Pipe, PipeTransform } from '@angular/core';
 
 import { formatarCompetencia, formatarData, formatarMoeda, formatarPercentual, formatarQuantidade, formatarTamanho } from './formatadores';
 
 /** Pipes de formatação brasileira para os templates (valores da API chegam como texto). */
+// Pipe é uma função usada no HTML com "|", ex.: {{ contrato.valor_global | moeda }}
 
 @Pipe({ name: 'moeda' })
 export class MoedaPipe implements PipeTransform {
@@ -46,4 +50,5 @@ export class TamanhoPipe implements PipeTransform {
   }
 }
 
+// Lista pronta para importar todos os pipes de uma vez nos componentes: imports: [...PIPES_FORMATACAO]
 export const PIPES_FORMATACAO = [MoedaPipe, QuantidadePipe, PercentualPipe, DataBrPipe, CompetenciaPipe, TamanhoPipe] as const;

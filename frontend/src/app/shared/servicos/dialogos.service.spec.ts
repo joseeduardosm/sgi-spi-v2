@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para testar o serviço de diálogos (confirmação, erro e janela de processamento).
+
 import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
@@ -8,6 +11,7 @@ describe('DialogosService', () => {
   let dialogos: DialogosService;
 
   beforeEach(() => {
+    // Relógio falso: permite avançar o tempo da contagem regressiva sem esperar de verdade
     vi.useFakeTimers();
     dialogos = TestBed.inject(DialogosService);
   });
@@ -54,6 +58,7 @@ describe('DialogosService', () => {
   });
 
   it('mantém a janela de processamento enquanto a operação não termina', () => {
+    // Subject: fluxo controlado pelo teste, que decide quando a "operação" emite e termina
     const operacao = new Subject<number>();
     const recebidos: number[] = [];
     dialogos.executar(operacao, 'Gerando PDF…').subscribe((v) => recebidos.push(v));

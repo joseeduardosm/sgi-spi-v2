@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para exibir a página dedicada "Minhas pendências", com busca e filtro por tipo.
+
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -59,12 +62,14 @@ export class MinhasPendenciasComponent implements OnInit {
   private readonly api = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
 
+  // Estado: lista vinda da API, tipo escolhido nos chips e texto da busca
   protected readonly rotulos = ROTULOS_PENDENCIA;
   protected readonly pendencias = signal<Pendencia[]>([]);
   protected readonly carregando = signal(true);
   protected readonly tipo = signal<string | null>(null);
   protected readonly termo = signal('');
 
+  // get/set permitem usar [(ngModel)]="busca" no template guardando o valor num signal
   protected get busca(): string {
     return this.termo();
   }
@@ -73,12 +78,14 @@ export class MinhasPendenciasComponent implements OnInit {
     this.termo.set(valor);
   }
 
+  /** Tipos presentes na lista, com a quantidade de cada um (os chips de filtro). */
   protected readonly tipos = computed(() => {
     const contagem = new Map<string, number>();
     for (const p of this.pendencias()) contagem.set(p.tipo, (contagem.get(p.tipo) ?? 0) + 1);
     return [...contagem].map(([tipo, quantidade]) => ({ tipo, quantidade, rotulo: this.rotulos[tipo] ?? tipo }));
   });
 
+  /** Pendências que passam pelo filtro de tipo e pela busca. */
   protected readonly filtradas = computed(() => {
     const termo = this.termo().trim().toLowerCase();
     return this.pendencias().filter(
@@ -88,6 +95,7 @@ export class MinhasPendenciasComponent implements OnInit {
     );
   });
 
+  /** Carrega o painel (sem filtros) e usa só as pendências do usuário. */
   ngOnInit(): void {
     this.api.painel({}).subscribe({
       next: (p) => {
@@ -101,6 +109,7 @@ export class MinhasPendenciasComponent implements OnInit {
     });
   }
 
+  /** Dias desde a data informada (para "há N dia(s)"). */
   protected dias(desde: string): number {
     return Math.floor((Date.now() - Date.parse(`${desde}T00:00:00`)) / 86_400_000);
   }

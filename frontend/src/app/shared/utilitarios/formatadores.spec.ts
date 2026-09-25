@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para testar os formatadores brasileiros e a validação de PDF.
+
 import { validarPdf } from '../componentes/envio-pdf/envio-pdf.component';
 import {
   formatarCompetencia,
@@ -36,6 +39,7 @@ describe('formatadores', () => {
 });
 
 describe('validarPdf', () => {
+  // Cria um arquivo falso com o nome, tamanho e tipo desejados
   const arquivo = (nome: string, tamanho: number, tipo = 'application/pdf') =>
     new File([new Uint8Array(tamanho)], nome, { type: tipo });
 

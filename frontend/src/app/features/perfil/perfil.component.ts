@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a página "Meu perfil", onde o usuário atualiza e revalida o próprio cadastro.
+
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, OnInit, signal } from '@angular/core';
@@ -22,6 +25,7 @@ export class PerfilComponent implements OnInit {
   protected readonly api = inject(UsuariosApiService);
   private readonly roteador = inject(Router);
 
+  // Formulário do perfil (com os campos obrigatórios exigidos) e estado da tela
   protected readonly formulario = criarFormularioPerfil(inject(NonNullableFormBuilder), true);
   protected readonly gestor = signal<OpcaoUsuario[]>([]);
   protected readonly perfil = signal<PerfilLeitura | null>(null);
@@ -29,10 +33,12 @@ export class PerfilComponent implements OnInit {
   protected readonly salvando = signal(false);
   protected readonly aviso = signal<{ texto: string; erro: boolean } | null>(null);
 
+  /** Nomes legíveis dos campos que ainda faltam preencher (vindos da sessão). */
   protected rotulosPendentes(): string {
     return (this.autenticacao.usuario()?.campos_pendentes ?? []).map((c) => ROTULOS_PERFIL[c] ?? c).join(', ');
   }
 
+  /** Ao abrir a tela, carrega o perfil atual e preenche o formulário. */
   ngOnInit(): void {
     this.api.meuPerfil().subscribe({
       next: (perfil) => {
@@ -48,6 +54,7 @@ export class PerfilComponent implements OnInit {
     });
   }
 
+  /** Grava e revalida o perfil; se era isso que restringia o acesso, libera o portal e volta ao início. */
   protected salvar(): void {
     if (this.formulario.invalid) {
       this.formulario.markAllAsTouched();
@@ -57,9 +64,11 @@ export class PerfilComponent implements OnInit {
     const estavaRestrito = !!this.autenticacao.usuario()?.perfil_restrito;
     this.salvando.set(true);
     this.aviso.set(null);
+    // O gestor vem do seletor de usuários (no máximo um)
     this.api.revisarMeuPerfil(dadosDoFormularioPerfil(this.formulario, this.gestor()[0]?.id ?? null)).subscribe({
       next: (usuario) => {
         this.salvando.set(false);
+        // Atualiza a sessão com o novo usuário (perfil_restrito recalculado pela API)
         this.autenticacao.definirUsuario(usuario);
         this.aviso.set({ texto: 'Cadastro confirmado. A próxima revalidação será em 30 dias.', erro: false });
         this.api.meuPerfil().subscribe((p) => this.perfil.set(p));

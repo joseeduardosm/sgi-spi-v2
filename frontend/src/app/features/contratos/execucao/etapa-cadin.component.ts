@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a etapa 4 (consulta ao CADIN), com o histórico de consultas.
+
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -69,15 +72,18 @@ export class EtapaCadinComponent {
 
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
+  // Campos do formulário (ligados por [(ngModel)]) e os PDFs escolhidos
   protected possuiPendencia = false;
   protected pendencia = '';
   protected textoNotificacao = '';
   protected certidao: File | null = null;
   protected email: File | null = null;
 
+  /** Envia a consulta; em seguida, limpa o formulário para uma nova consulta. */
   protected registrar(): void {
     const d = this.detalhe();
     const campos = { possui_pendencia: this.possuiPendencia, certidao: this.certidao, pendencia: this.pendencia.trim(),
+                     // O e-mail só vai quando há pendência
                      texto_notificacao: this.textoNotificacao.trim(), email: this.possuiPendencia ? this.email : null };
     this.dialogos.executar(this.api.cadin(d.contrato_id, d.id, campos), 'Registrando a consulta…').subscribe({
       next: (novo) => {
@@ -89,6 +95,7 @@ export class EtapaCadinComponent {
     });
   }
 
+  /** Baixa a certidão ou o e-mail de uma consulta. */
   protected baixar(anexoId: string): void {
     const d = this.detalhe();
     this.api.baixar(d.contrato_id, d.id, anexoId).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });

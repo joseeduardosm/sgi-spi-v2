@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para testar o filtro da barra lateral por papel, ACL e perfil pendente.
+
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
@@ -7,6 +10,7 @@ import { Papel, Usuario } from '../modelos/usuario.model';
 import { NavegacaoService } from './navegacao.service';
 
 describe('NavegacaoService', () => {
+  // Usuário e acessos controlados pelos testes, lidos pelos serviços simulados
   const usuario = signal<Usuario | null>(null);
   const concedidos = signal<Set<string>>(new Set());
   const autenticacaoSimulada = {
@@ -15,6 +19,7 @@ describe('NavegacaoService', () => {
   };
   const acessoSimulado = { carregado: signal(true), pode: (slug: string) => concedidos().has(slug) };
 
+  // Lista plana com os rótulos visíveis de todas as seções
   const rotulos = (nav: NavegacaoService) => nav.secoes().flatMap((s) => s.itens.map((i) => i.rotulo));
 
   beforeEach(() => {

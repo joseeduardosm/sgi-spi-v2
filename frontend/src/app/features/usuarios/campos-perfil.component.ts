@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para exibir os campos do perfil institucional, reaproveitados em "Meu perfil" e no cadastro de usuários.
+
 import { Component, input, model } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
@@ -57,12 +60,15 @@ import { FormularioPerfil } from './formulario-perfil';
   `,
 })
 export class CamposPerfilComponent {
+  // O formulário vem de fora (a tela dona dele decide validações e envio); o gestor é de mão dupla
   readonly formulario = input.required<FormularioPerfil>();
   readonly gestor = model<OpcaoUsuario[]>([]);
+  // Função de busca de usuários para o seletor de gestor
   readonly fonteGestor = input.required<(busca: string) => Observable<OpcaoUsuario[]>>();
   /** Exibe a marca "*" nos campos obrigatórios. */
   readonly marcarObrigatorios = input(true);
 
+  /** Asterisco exibido ao lado dos rótulos obrigatórios. */
   get marca(): string {
     return this.marcarObrigatorios() ? '*' : '';
   }

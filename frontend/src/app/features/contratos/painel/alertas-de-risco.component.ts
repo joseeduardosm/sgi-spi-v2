@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para exibir a página dedicada "Alertas de risco" do painel, com filtros e cartões por contrato.
+
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -82,6 +85,7 @@ export class AlertasDeRiscoComponent implements OnInit {
   private readonly rota = inject(ActivatedRoute);
   private readonly roteador = inject(Router);
 
+  // Estado da tela e os filtros (ligados aos seletores por [(ngModel)])
   protected readonly rotulos = ROTULOS_RISCO;
   protected readonly painel = signal<PainelContratos | null>(null);
   protected readonly anoAtual = new Date().getFullYear();
@@ -90,10 +94,13 @@ export class AlertasDeRiscoComponent implements OnInit {
   protected contratoId = '';
   protected soAltos = false;
 
+  // Contadores exibidos na barra superior
   protected readonly totalRiscos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.length, 0) ?? 0);
   protected readonly altos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.filter((r) => r.gravidade === 'alta').length, 0) ?? 0);
+  // Filtros atuais, repassados ao link "← Painel" para manter a mesma seleção
   protected readonly filtrosUrl = signal<Record<string, string | number>>({});
 
+  /** Lê os filtros da URL (vindos do painel) e carrega os alertas. */
   ngOnInit(): void {
     const parametros = this.rota.snapshot.queryParamMap;
     this.exercicio = Number(parametros.get('exercicio')) || this.anoAtual;
@@ -102,12 +109,14 @@ export class AlertasDeRiscoComponent implements OnInit {
     this.carregar();
   }
 
+  /** Aplica os filtros: atualiza a URL (sem criar histórico novo) e recarrega. */
   protected aplicar(): void {
     const filtros = this.filtros();
     void this.roteador.navigate([], { queryParams: filtros, replaceUrl: true });
     this.carregar();
   }
 
+  /** Filtros preenchidos, no formato dos parâmetros da URL. */
   private filtros(): Record<string, string | number> {
     const filtros: Record<string, string | number> = { exercicio: this.exercicio };
     if (this.empresaId) filtros['empresa_id'] = this.empresaId;
@@ -115,6 +124,7 @@ export class AlertasDeRiscoComponent implements OnInit {
     return filtros;
   }
 
+  /** Busca o painel na API com os filtros atuais (os alertas vêm dentro dele). */
   private carregar(): void {
     this.filtrosUrl.set(this.filtros());
     this.api.painel({ exercicio: this.exercicio, empresa_id: this.empresaId, contrato_id: this.contratoId }).subscribe({

@@ -1,9 +1,13 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para baixar arquivos da API e salvá-los no computador do usuário.
+
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 
 /** Nome do arquivo indicado pela API no cabeçalho Content-Disposition. */
 export function nomeDoArquivo(resposta: HttpResponse<Blob>, padrao: string): string {
   const cabecalho = resposta.headers.get('Content-Disposition') ?? '';
+  // Formato com acentos (filename*=UTF-8''...) tem prioridade; senão, o formato simples (filename="...")
   const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(cabecalho);
   if (utf8) return decodeURIComponent(utf8[1]);
   const simples = /filename="?([^";]+)"?/i.exec(cabecalho);
@@ -12,6 +16,7 @@ export function nomeDoArquivo(resposta: HttpResponse<Blob>, padrao: string): str
 
 /** Salva o conteúdo no computador do usuário (download disparado pelo navegador). */
 export function salvarBlob(conteudo: Blob, nome: string): void {
+  // Cria um endereço temporário para o conteúdo em memória e simula o clique num link de download
   const url = URL.createObjectURL(conteudo);
   const link = document.createElement('a');
   link.href = url;
@@ -19,6 +24,7 @@ export function salvarBlob(conteudo: Blob, nome: string): void {
   document.body.appendChild(link);
   link.click();
   link.remove();
+  // Libera a memória do endereço temporário logo depois
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
@@ -27,6 +33,7 @@ export function salvarBlob(conteudo: Blob, nome: string): void {
  * podem ser um simples link <a href>.
  */
 export function baixarArquivo(http: HttpClient, url: string, padrao = 'arquivo'): Observable<HttpResponse<Blob>> {
+  // `observe: 'response'` traz os cabeçalhos (para ler o nome do arquivo); `blob` = conteúdo binário
   return http
     .get(url, { observe: 'response', responseType: 'blob' })
     .pipe(tap((resposta) => salvarBlob(resposta.body ?? new Blob(), nomeDoArquivo(resposta, padrao))));

@@ -1,11 +1,18 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para definir os tipos de dados (interfaces) do módulo de contratos, iguais aos da API.
+
 /**
  * Tipos do módulo de contratos, espelhando os schemas da API (docs/endpoints/contratos-*.md).
  * Valores decimais chegam como texto ("1234.50") para não perder precisão.
  */
 
+/** Valor decimal como texto (ex.: "1234.50"); converter com os formatadores antes de exibir. */
 export type Decimal = string;
+/** Contínuo (quantidade fixa por mês) ou sob demanda (consumo variável até um teto). */
 export type TipoItem = 'continuo' | 'sob_demanda';
+/** Situação do contrato na carteira. */
 export type Situacao = 'ativo' | 'a_vencer' | 'encerrado' | 'suspenso';
+/** Os seis papéis da equipe de gestão e fiscalização (todos com os mesmos poderes). */
 export type Papel =
   | 'gestor'
   | 'gestor_suplente'
@@ -13,9 +20,12 @@ export type Papel =
   | 'fiscal_administrativo_suplente'
   | 'fiscal_tecnico'
   | 'fiscal_tecnico_suplente';
+/** Etapas da competência, na ordem do fluxo. */
 export type Etapa = 'medicao' | 'avaliacao' | 'nota_fiscal' | 'cadin' | 'checklist' | 'consolidado' | 'ordem_bancaria' | 'concluida';
+/** Situação resumida da competência na lista da aba Execução. */
 export type SituacaoCompetencia = 'pendente' | 'disponivel' | 'em_andamento' | 'concluida';
 
+/** Uma página de resultados de uma lista paginada no servidor. */
 export interface Pagina<T> {
   itens: T[];
   total: number;
@@ -23,6 +33,7 @@ export interface Pagina<T> {
   tamanho_pagina: number;
 }
 
+/** Referência a um PDF guardado na API (para exibir o nome e montar o download). */
 export interface Arquivo {
   anexo_id: string;
   nome: string;
@@ -30,6 +41,7 @@ export interface Arquivo {
   enviado_em: string;
 }
 
+/** Ciência registrada por um integrante da equipe. */
 export interface Ciencia {
   usuario_id: number | null;
   nome: string;
@@ -39,11 +51,13 @@ export interface Ciencia {
 
 // --- Empresas ---------------------------------------------------------------------------------
 
+/** Contrato em que a empresa aparece (número NNN/AAAA). */
 export interface ContratoDaEmpresa {
   id: string;
   numero: string;
 }
 
+/** Empresa na listagem. */
 export interface ResumoEmpresa {
   id: string;
   cnpj: string;
@@ -55,6 +69,7 @@ export interface ResumoEmpresa {
   contratos: ContratoDaEmpresa[];
 }
 
+/** Preposto (representante) da empresa. */
 export interface Preposto {
   id: string;
   cpf: string;
@@ -65,12 +80,14 @@ export interface Preposto {
   ativo: boolean;
 }
 
+/** Empresa completa, com os prepostos detalhados. */
 export interface DetalheEmpresa extends Omit<ResumoEmpresa, 'prepostos'> {
   prepostos: Preposto[];
   criado_em: string;
   atualizado_em: string;
 }
 
+/** Empresa em forma reduzida, para o seletor do contrato. */
 export interface OpcaoEmpresa {
   id: string;
   cnpj: string;
@@ -79,6 +96,7 @@ export interface OpcaoEmpresa {
   ativa: boolean;
 }
 
+/** Corpo para cadastrar ou alterar uma empresa. */
 export interface GravacaoEmpresa {
   cnpj: string;
   razao_social: string;
@@ -87,10 +105,12 @@ export interface GravacaoEmpresa {
   ativa: boolean;
 }
 
+/** Corpo para cadastrar ou alterar um preposto (tudo menos o id). */
 export type GravacaoPreposto = Omit<Preposto, 'id'>;
 
 // --- Contrato ---------------------------------------------------------------------------------
 
+/** Contrato na carteira. */
 export interface ResumoContrato {
   id: string;
   numero: string;
@@ -104,6 +124,7 @@ export interface ResumoContrato {
   valor_global: Decimal;
 }
 
+/** Item do contrato, com as quantidades da vigência atual. */
 export interface ItemContrato {
   id: string;
   ordem: number;
@@ -124,6 +145,7 @@ export interface ItemContrato {
   vigencia_meses: number;
 }
 
+/** Integrante vigente da equipe. */
 export interface MembroEquipe {
   papel: Papel;
   usuario_id: number;
@@ -132,6 +154,7 @@ export interface MembroEquipe {
   desde: string | null;
 }
 
+/** Uma vigência (a original ou uma prorrogação). */
 export interface Vigencia {
   sequencia: number;
   inicio: string;
@@ -139,12 +162,14 @@ export interface Vigencia {
   meses: number;
 }
 
+/** Marco da linha do tempo da aba Principal. */
 export interface Marco {
   data: string;
   tipo: 'inicio' | 'prazo_inicial' | 'termo_aditivo' | 'reajuste' | 'aditamento' | 'supressao' | 'vigencia_atual' | 'maximo';
   rotulo: string;
 }
 
+/** Contrato completo, com tudo o que as abas do detalhe exibem. */
 export interface DetalheContrato extends ResumoContrato {
   sequencial: number;
   ano: number;
@@ -167,12 +192,15 @@ export interface DetalheContrato extends ResumoContrato {
   itens: ItemContrato[];
   equipe: MembroEquipe[];
   criador_nome: string | null;
+  // O que o usuário logado pode fazer neste contrato (controla os botões)
   permissoes: { pode_editar: boolean; pode_excluir: boolean };
+  // Controle de concorrência: enviar de volta na alteração
   versao: number;
   criado_em: string;
   atualizado_em: string;
 }
 
+/** Item no cadastro do contrato (id nulo = item novo). */
 export interface GravacaoItem {
   id: string | null;
   descricao: string;
@@ -187,8 +215,10 @@ export interface GravacaoItem {
   valor_unitario: Decimal;
 }
 
+/** Equipe no cadastro: um usuário (id) por papel, ou null. */
 export type GravacaoEquipe = Partial<Record<Papel, number | null>>;
 
+/** Corpo do cadastro/edição do contrato. */
 export interface GravacaoContrato {
   numero: string;
   empresa_id: string;
@@ -209,6 +239,7 @@ export interface GravacaoContrato {
   versao: number | null;
 }
 
+/** Documento importante do catálogo, anexado ou não. */
 export interface DocumentoContrato {
   codigo: number;
   numero: string;
@@ -220,6 +251,7 @@ export interface DocumentoContrato {
   enviado_por_nome: string | null;
 }
 
+/** Uma alteração de campo registrada no histórico. */
 export interface AlteracaoCampo {
   campo: string;
   de: unknown;
@@ -230,6 +262,7 @@ export interface AlteracaoCampo {
 
 // --- Orçamento --------------------------------------------------------------------------------
 
+/** Item dentro de um mês da previsão. */
 export interface ItemMesPrevisao {
   item_id: string;
   ordem: number;
@@ -241,6 +274,7 @@ export interface ItemMesPrevisao {
   subtotal: Decimal;
 }
 
+/** Um mês da tabela da previsão. */
 export interface MesPrevisao {
   competencia: string;
   sequencia_vigencia: number;
@@ -253,6 +287,7 @@ export interface MesPrevisao {
   itens: ItemMesPrevisao[];
 }
 
+/** Item sob demanda na grade de apontamentos (quantidade por mês). */
 export interface ItemSobDemandaPrevisao {
   item_id: string;
   ordem: number;
@@ -262,6 +297,7 @@ export interface ItemSobDemandaPrevisao {
   saldo: Decimal;
 }
 
+/** Uma vigência na tela de previsão (grade, selo e total). */
 export interface VigenciaPrevisao {
   sequencia: number;
   inicio: string;
@@ -276,12 +312,14 @@ export interface VigenciaPrevisao {
   total_previsto: Decimal;
 }
 
+/** Resposta completa da previsão. */
 export interface Previsao {
   total_previsto: Decimal;
   vigencias: VigenciaPrevisao[];
   meses: MesPrevisao[];
 }
 
+/** Lançamento no extrato de uma NE. */
 export interface MovimentoNota {
   id: string;
   data: string;
@@ -295,6 +333,7 @@ export interface MovimentoNota {
   autor: string | null;
 }
 
+/** Nota de Empenho com saldo, reservas e extrato. */
 export interface NotaEmpenho {
   id: string;
   numero: string;
@@ -304,6 +343,7 @@ export interface NotaEmpenho {
   comprometido: Decimal;
   saldo_livre: Decimal;
   percentual_consumido: Decimal;
+  // Cor do cartão conforme o percentual consumido
   faixa: 'verde' | 'amarelo' | 'vermelho';
   vinculada: boolean;
   movimentos: MovimentoNota[];
@@ -312,6 +352,7 @@ export interface NotaEmpenho {
 
 // --- Execução ---------------------------------------------------------------------------------
 
+/** Documento de uma versão do checklist. */
 export interface DocumentoChecklist {
   id: string;
   ordem: number;
@@ -321,6 +362,7 @@ export interface DocumentoChecklist {
   obrigatorio: boolean;
 }
 
+/** Versão do checklist do contrato. */
 export interface Checklist {
   id: string;
   versao: number;
@@ -332,11 +374,13 @@ export interface Checklist {
   ativado_em: string | null;
 }
 
+/** Uma nota possível da escala de avaliação. */
 export interface NotaEscala {
   valor: Decimal;
   legenda: string;
 }
 
+/** Faixa de nota que define o % do pagamento liberado. */
 export interface FaixaLiberacao {
   minimo: Decimal;
   maximo: Decimal | null;
@@ -344,6 +388,7 @@ export interface FaixaLiberacao {
   notas_zero?: number | null;
 }
 
+/** Item avaliado dentro de um grupo do formulário. */
 export interface ItemFormulario {
   id?: string | null;
   nome: string;
@@ -351,18 +396,21 @@ export interface ItemFormulario {
   peso: Decimal;
 }
 
+/** Grupo de itens do formulário (pesos somam 100%). */
 export interface GrupoFormulario {
   id?: string | null;
   nome: string;
   itens: ItemFormulario[];
 }
 
+/** Estrutura completa de um formulário de avaliação. */
 export interface DefinicaoFormulario {
   escala: NotaEscala[];
   faixas: FaixaLiberacao[];
   grupos: GrupoFormulario[];
 }
 
+/** Versão do formulário de avaliação do contrato. */
 export interface Formulario {
   id: string;
   versao: number;
@@ -374,6 +422,7 @@ export interface Formulario {
   ativado_em: string | null;
 }
 
+/** Modelo global de checklist ou formulário (conteúdo conforme o tipo). */
 export interface Modelo {
   id: string;
   tipo: 'checklist' | 'formulario';
@@ -383,6 +432,7 @@ export interface Modelo {
   atualizado_em: string;
 }
 
+/** Competência na lista da aba Execução. */
 export interface ResumoCompetencia {
   id: string;
   competencia: string;
@@ -399,12 +449,14 @@ export interface ResumoCompetencia {
   possui_avaliacao: boolean;
 }
 
+/** Resposta da aba Execução: pré-requisitos e competências por vigência. */
 export interface PainelExecucao {
   requisitos: { prontos: boolean; pendencias: string[] };
   geradas: boolean;
   grupos: { sequencia_vigencia: number; inicio: string; fim: string; competencias: ResumoCompetencia[] }[];
 }
 
+/** Item medido na competência. */
 export interface ItemMedicao {
   id: string;
   ordem: number;
@@ -418,6 +470,7 @@ export interface ItemMedicao {
   subtotal: Decimal;
 }
 
+/** NE escolhida (ou disponível) na medição, com o saldo livre. */
 export interface NotaSelecionada {
   id: string;
   numero: string;
@@ -425,6 +478,7 @@ export interface NotaSelecionada {
   saldo_livre: Decimal;
 }
 
+/** Dados de uma nota fiscal registrada. */
 export interface NotaFiscal {
   numero: string;
   arquivo: Arquivo | null;
@@ -437,12 +491,14 @@ export interface NotaFiscal {
   valor_liquido: Decimal;
 }
 
+/** Nota dada a um item na avaliação. */
 export interface RespostaAvaliacao {
   item_id: string;
   nota: Decimal;
   justificativa: string;
 }
 
+/** Pessoa indicada para assinar o ateste. */
 export interface AssinaturaAteste {
   papel: 'gestor' | 'fiscal_administrativo' | 'fiscal_tecnico';
   usuario_id: number;
@@ -450,6 +506,7 @@ export interface AssinaturaAteste {
   ciencia_em: string | null;
 }
 
+/** Avaliação da competência (etapa 2). */
 export interface Avaliacao {
   definicao: DefinicaoFormulario & { grupos: (GrupoFormulario & { id: string; itens: (ItemFormulario & { id: string })[] })[] };
   respostas_iniciais: RespostaAvaliacao[];
@@ -468,6 +525,7 @@ export interface Avaliacao {
   reconsideracao: Arquivo | null;
 }
 
+/** Consulta ao CADIN (etapa 4). */
 export interface ConsultaCadin {
   id: string;
   possui_pendencia: boolean;
@@ -479,6 +537,7 @@ export interface ConsultaCadin {
   criado_em: string;
 }
 
+/** Documento do checklist mensal na competência (etapa 5). */
 export interface DocumentoMensal {
   id: string;
   ordem: number;
@@ -488,6 +547,7 @@ export interface DocumentoMensal {
   arquivo: Arquivo | null;
 }
 
+/** Competência completa: tudo o que a tela de execução mostra em todas as etapas. */
 export interface DetalheCompetencia extends ResumoCompetencia {
   contrato_id: string;
   contrato_numero: string;
@@ -526,6 +586,7 @@ export interface DetalheCompetencia extends ResumoCompetencia {
 
 // --- Prorrogação, reajuste, aditamento/supressão -----------------------------------------------
 
+/** Plano de um item sob demanda na nova vigência da prorrogação. */
 export interface PlanoItemProrrogacao {
   item_id: string;
   ordem: number;
@@ -537,8 +598,10 @@ export interface PlanoItemProrrogacao {
   saldo: Decimal;
 }
 
+/** Como calcular o limite dos itens sob demanda na prorrogação. */
 export type RegraSobDemanda = 'saldo_remanescente' | 'repetir_inicial' | 'manual';
 
+/** Campos do parecer da prorrogação (todos opcionais). */
 export interface CamposParecer {
   avaliacao_geral: string;
   resumo_qualidade: string;
@@ -548,6 +611,7 @@ export interface CamposParecer {
   parecer: string;
 }
 
+/** Rascunho da prorrogação e os dados para montar a tela. */
 export interface ProcessoProrrogacao extends CamposParecer {
   id: string | null;
   vigencia_atual_inicio: string;
@@ -567,6 +631,7 @@ export interface ProcessoProrrogacao extends CamposParecer {
   integra_equipe: boolean;
 }
 
+/** Prorrogação registrada (histórico). */
 export interface Prorrogacao {
   id: string;
   meses: number;
@@ -581,6 +646,7 @@ export interface Prorrogacao {
   pode_desfazer: boolean;
 }
 
+/** Item no reajuste: preço atual, índice e preço novo. */
 export interface ItemReajuste {
   item_id: string;
   ordem: number;
@@ -594,6 +660,7 @@ export interface ItemReajuste {
   subtotal_reajustado: Decimal;
 }
 
+/** Reajuste em elaboração ou encerrado. */
 export interface Reajuste {
   id: string;
   situacao: 'rascunho' | 'concluido' | 'cancelado';
@@ -616,12 +683,14 @@ export interface Reajuste {
   cancelado_em: string | null;
 }
 
+/** Vigência que pode ser escolhida ao abrir um reajuste ou alteração. */
 export interface VigenciaDisponivel {
   sequencia: number;
   inicio: string;
   fim: string;
 }
 
+/** Resposta das rotas de reajuste. */
 export interface PainelReajuste {
   em_andamento: Reajuste | null;
   vigencias_disponiveis: VigenciaDisponivel[];
@@ -629,6 +698,7 @@ export interface PainelReajuste {
   pode_editar: boolean;
 }
 
+/** Item na alteração de quantidades. */
 export interface ItemAlteracao {
   item_id: string;
   ordem: number;
@@ -642,6 +712,7 @@ export interface ItemAlteracao {
   abaixo_do_executado: boolean;
 }
 
+/** Aditamento ou supressão, com percentuais, documentos e ciências. */
 export interface Alteracao {
   id: string;
   tipo: 'aditamento' | 'supressao';
@@ -670,6 +741,7 @@ export interface Alteracao {
   cancelada_em: string | null;
 }
 
+/** Resposta das rotas de aditamento/supressão. */
 export interface PainelAlteracao {
   em_andamento: Alteracao | null;
   vigencias: VigenciaDisponivel[];
@@ -680,6 +752,7 @@ export interface PainelAlteracao {
 
 // --- Painel -----------------------------------------------------------------------------------
 
+/** Tarefa do usuário logado, com o link para a tela onde é resolvida. */
 export interface Pendencia {
   tipo: string;
   contrato_id: string;
@@ -690,6 +763,7 @@ export interface Pendencia {
   desde: string | null;
 }
 
+/** Risco detectado em um contrato. */
 export interface Risco {
   tipo: string;
   gravidade: 'alta' | 'media';
@@ -700,6 +774,7 @@ export interface Risco {
 }
 
 /** Riscos agrupados por contrato (só riscos; tarefas ficam em "Minhas pendências"). */
+/** Riscos de um contrato, agrupados. */
 export interface AlertasContrato {
   contrato_id: string;
   contrato_numero: string;
@@ -709,10 +784,12 @@ export interface AlertasContrato {
   riscos: Risco[];
 }
 
+/** Resposta completa do painel de contratos. */
 export interface PainelContratos {
   hoje: string;
   minhas_pendencias: Pendencia[];
   alertas: AlertasContrato[];
+  // Execução orçamentária do exercício (gráfico e empenhos)
   execucao: {
     exercicio: number;
     meses: { competencia: string; previsto: Decimal; medido: Decimal; pago: Decimal }[];
@@ -723,6 +800,7 @@ export interface PainelContratos {
     consumido: Decimal;
     saldo_empenho: Decimal;
   };
+  // Números gerais da carteira
   numeros: {
     contratos_ativos: number;
     contratos_a_vencer: number;
@@ -730,12 +808,14 @@ export interface PainelContratos {
     valor_global_ativos: Decimal;
     base_mensal_ativos: Decimal;
   };
+  // Opções dos filtros do topo do painel
   empresas: { id: string; rotulo: string }[];
   contratos: { id: string; rotulo: string }[];
 }
 
 // --- Importação do SGI ------------------------------------------------------------------------
 
+/** Andamento da importação do SGI (a tela consulta periodicamente). */
 export interface EstadoMigracaoSgi {
   situacao: 'ociosa' | 'executando' | 'concluida' | 'erro';
   etapa: string | null;

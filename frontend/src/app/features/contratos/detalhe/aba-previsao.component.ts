@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a aba "Previsão orçamentária": grade dos itens sob demanda e tabela mensal.
+
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -25,6 +28,7 @@ export class AbaPrevisaoComponent implements OnInit {
   protected readonly previsao = signal<Previsao | null>(null);
   /** Grade em edição por vigência: item → mês → quantidade digitada. */
   protected grades: Record<number, Record<string, Record<string, string>>> = {};
+  // Vigências seladas que o SuperRoot destravou para edição, e meses expandidos na tabela
   protected readonly editandoSelada = signal<Set<number>>(new Set());
   protected readonly expandidos = signal<Set<string>>(new Set());
   protected readonly rotulosTipo = ROTULOS_TIPO_ITEM;
@@ -33,6 +37,7 @@ export class AbaPrevisaoComponent implements OnInit {
     this.carregar();
   }
 
+  /** Busca a previsão na API. */
   private carregar(): void {
     this.api.previsao(this.contratoId()).subscribe({
       next: (p) => this.aplicar(p),
@@ -40,6 +45,7 @@ export class AbaPrevisaoComponent implements OnInit {
     });
   }
 
+  /** Guarda a previsão e monta as grades editáveis a partir dos apontamentos salvos. */
   private aplicar(previsao: Previsao): void {
     this.previsao.set(previsao);
     this.grades = {};
@@ -51,23 +57,28 @@ export class AbaPrevisaoComponent implements OnInit {
     this.editandoSelada.set(new Set());
   }
 
+  /** Meses da tabela mensal que pertencem à vigência. */
   protected mesesDaVigencia(sequencia: number) {
     return (this.previsao()?.meses ?? []).filter((m) => m.sequencia_vigencia === sequencia);
   }
 
+  /** A grade pode ser editada: tem permissão e (não está selada ou foi destravada). */
   protected editavel(v: VigenciaPrevisao): boolean {
     return v.pode_editar && (!v.salva || this.editandoSelada().has(v.sequencia));
   }
 
+  /** Saldo do item recalculado enquanto o usuário digita (limite − soma da grade). */
   protected saldo(v: VigenciaPrevisao, itemId: string, limite: string): number {
     const grade = this.grades[v.sequencia]?.[itemId] ?? {};
     return Number(limite) - Object.values(grade).reduce((t, q) => t + (Number(paraDecimalApi(q)) || 0), 0);
   }
 
+  /** Verdadeiro se algum item ficaria com saldo negativo (desabilita o botão Salvar). */
   protected temSaldoNegativo(v: VigenciaPrevisao): boolean {
     return v.itens_sob_demanda.some((i) => this.saldo(v, i.item_id, i.limite) < 0);
   }
 
+  /** Destrava ou trava a edição de uma vigência selada (só para o SuperRoot). */
   protected alternarEdicaoSelada(sequencia: number): void {
     const conjunto = new Set(this.editandoSelada());
     if (conjunto.has(sequencia)) conjunto.delete(sequencia);
@@ -75,6 +86,7 @@ export class AbaPrevisaoComponent implements OnInit {
     this.editandoSelada.set(conjunto);
   }
 
+  /** Salva a grade da vigência; na primeira vez, avisa que a previsão ficará selada. */
   protected async salvar(v: VigenciaPrevisao): Promise<void> {
     if (!v.salva) {
       const ok = await this.dialogos.confirmar({
@@ -85,6 +97,7 @@ export class AbaPrevisaoComponent implements OnInit {
       });
       if (!ok) return;
     }
+    // Converte a grade {item: {mês: quantidade}} na lista de apontamentos esperada pela API
     const apontamentos = Object.entries(this.grades[v.sequencia] ?? {}).flatMap(([item_id, meses]) =>
       Object.entries(meses).map(([competencia, quantidade]) => ({ item_id, competencia, quantidade: paraDecimalApi(quantidade) })),
     );
@@ -94,10 +107,12 @@ export class AbaPrevisaoComponent implements OnInit {
     });
   }
 
+  /** Baixa a planilha da previsão da vigência. */
   protected exportar(sequencia: number): void {
     this.dialogos.executar(this.api.exportarPrevisao(this.contratoId(), sequencia), 'Gerando a planilha…').subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }
 
+  /** Expande ou recolhe os itens de um mês na tabela mensal. */
   protected alternarMes(chave: string): void {
     const conjunto = new Set(this.expandidos());
     if (conjunto.has(chave)) conjunto.delete(chave);

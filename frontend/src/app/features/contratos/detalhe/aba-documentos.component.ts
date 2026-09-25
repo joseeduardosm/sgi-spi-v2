@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para exibir e anexar os documentos importantes do contrato (aba "Documentos Importantes").
+
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
@@ -47,6 +50,7 @@ import { DocumentoContrato } from '../compartilhado/contratos.models';
   `,
 })
 export class AbaDocumentosComponent implements OnInit {
+  // Id do contrato e se o usuário pode anexar (vindos da tela de detalhe)
   readonly contratoId = input.required<string>();
   readonly podeEditar = input(false);
 
@@ -54,10 +58,12 @@ export class AbaDocumentosComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   protected readonly documentos = signal<DocumentoContrato[]>([]);
 
+  /** Carrega o catálogo de documentos ao abrir a aba. */
   ngOnInit(): void {
     this.api.documentos(this.contratoId()).subscribe({ next: (d) => this.documentos.set(d), error: (e) => this.dialogos.mostrarErro(e) });
   }
 
+  /** Envia o PDF escolhido e atualiza a lista com a resposta da API. */
   protected enviar(documento: DocumentoContrato, arquivo: File | null): void {
     if (!arquivo) return;
     this.dialogos.executar(this.api.enviarDocumento(this.contratoId(), documento.codigo, arquivo), 'Enviando o documento…').subscribe({
@@ -66,6 +72,7 @@ export class AbaDocumentosComponent implements OnInit {
     });
   }
 
+  /** Baixa o PDF do documento. */
   protected baixar(documento: DocumentoContrato): void {
     this.api.baixarDocumento(this.contratoId(), documento.codigo).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }

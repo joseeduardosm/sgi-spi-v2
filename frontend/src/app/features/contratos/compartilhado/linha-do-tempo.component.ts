@@ -1,8 +1,12 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para desenhar a linha do tempo do contrato (vigências, termos aditivos, reajustes, hoje e máximo).
+
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { formatarData } from '../../../shared/utilitarios/formatadores';
 import { Marco } from './contratos.models';
 
+/** Marco com a posição calculada no trilho (0 a 100%) e o lugar do rótulo. */
 interface MarcoPosicionado extends Marco {
   posicao: number;
   acima: boolean;
@@ -12,6 +16,7 @@ interface MarcoPosicionado extends Marco {
 
 /** Largura aproximada de um rótulo, em % do trilho: dois marcos mais próximos que isso não dividem a faixa. */
 const LARGURA_ROTULO = 10;
+// Altura, em pixels, de cada faixa de rótulos
 const ALTURA_FAIXA = 30;
 
 /** Linha do tempo da vigência: um traço por mês e os marcos (início, TAs, reajustes, hoje, máximo). */
@@ -34,14 +39,17 @@ const ALTURA_FAIXA = 30;
   `,
 })
 export class LinhaDoTempoComponent {
+  // Marcos vindos do contrato e a data de hoje (para a parte já decorrida)
   readonly marcos = input.required<Marco[]>();
   readonly hoje = input.required<string>();
 
+  // Primeira e última data da linha, em milissegundos (as posições são relativas a elas)
   private readonly limites = computed(() => {
     const datas = this.marcos().map((m) => this.dia(m.data));
     return { inicio: Math.min(...datas), fim: Math.max(...datas) };
   });
 
+  // Posição de cada virada de mês, para desenhar os traços do trilho
   protected readonly meses = computed(() => {
     const { inicio, fim } = this.limites();
     const posicoes: number[] = [];
@@ -55,6 +63,7 @@ export class LinhaDoTempoComponent {
   });
 
   protected readonly marcosPosicionados = computed<MarcoPosicionado[]>(() => {
+    // Acrescenta o marco "Hoje" e descarta os que caem fora da linha
     const todos = [...this.marcos(), { data: this.hoje(), tipo: 'hoje', rotulo: 'Hoje' } as unknown as Marco];
     const ordenados = todos
       .map((m) => ({ ...m, posicao: this.posicao(m.data) }))
@@ -81,15 +90,19 @@ export class LinhaDoTempoComponent {
     return { acima: niveis(true), abaixo: niveis(false) };
   });
 
+  // Constante exposta ao template
   protected readonly ALTURA_FAIXA = ALTURA_FAIXA;
 
+  // Texto alternativo para leitores de tela, com todos os marcos e datas
   protected readonly descricao = computed(() => this.marcos().map((m) => `${m.rotulo}: ${formatarData(m.data)}`).join('; '));
   protected readonly data = formatarData;
 
+  /** Data (AAAA-MM-DD) em milissegundos, sempre em UTC para não sofrer com fuso. */
   private dia(texto: string): number {
     return Date.parse(`${texto}T00:00:00Z`);
   }
 
+  /** Posição da data no trilho, em % com uma casa decimal. */
   protected posicao(texto: string): number {
     const { inicio, fim } = this.limites();
     return fim === inicio ? 0 : Math.round(((this.dia(texto) - inicio) / (fim - inicio)) * 1000) / 10;

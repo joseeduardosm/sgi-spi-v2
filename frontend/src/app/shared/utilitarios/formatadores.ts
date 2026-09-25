@@ -1,26 +1,34 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para formatar valores no padrão brasileiro (R$, quantidades, datas, competências e tamanhos).
+
 /**
  * Formatos brasileiros usados nas telas: R$ com 2 casas, quantidades com até 4 casas,
  * datas dd/mm/aaaa e competências mm/aaaa. A API envia valores decimais como texto
  * (ex.: "1234.50") para não perder precisão; estas funções aceitam texto ou número.
  */
 
+// Formatadores do navegador (Intl) configurados uma vez e reutilizados
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const quantidade = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 const percentual = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+/** Tipos aceitos: número, texto decimal da API ou vazio. */
 type Numerico = number | string | null | undefined;
 
+/** Converte para número; vazio ou texto inválido vira null. */
 function numero(valor: Numerico): number | null {
   if (valor === null || valor === undefined || valor === '') return null;
   const convertido = typeof valor === 'number' ? valor : Number(valor);
   return Number.isFinite(convertido) ? convertido : null;
 }
 
+/** Valor em reais (ex.: "1234.5" → "R$ 1.234,50"). */
 export function formatarMoeda(valor: Numerico, vazio = 'R$ -'): string {
   const n = numero(valor);
   return n === null ? vazio : moeda.format(n);
 }
 
+/** Quantidade com até 4 casas, sem zeros desnecessários (ex.: "2.5000" → "2,5"). */
 export function formatarQuantidade(valor: Numerico, vazio = '—'): string {
   const n = numero(valor);
   return n === null ? vazio : quantidade.format(n);
@@ -46,6 +54,7 @@ export function formatarCompetencia(valor: string | null | undefined, vazio = '�
 
 /** Tamanho de arquivo legível (ex.: 1258291 → "1,2 MB"). */
 export function formatarTamanho(bytes: number | null | undefined): string {
+  // Divide por 1024 até caber na unidade adequada
   if (!bytes) return '0 KB';
   const unidades = ['B', 'KB', 'MB', 'GB'];
   let valor = bytes;

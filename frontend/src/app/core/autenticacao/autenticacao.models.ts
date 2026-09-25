@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para definir os tipos de dados trocados no login e guardados na sessão.
+
 import { Usuario } from '../modelos/usuario.model';
 
 /** Corpo de `POST /api/autenticacao/login`. */
@@ -22,4 +25,5 @@ export interface SessaoAutenticada {
   usuario: Usuario;
 }
 
+/** Por que a sessão terminou: o usuário clicou em "Sair" ou o token venceu. */
 export type MotivoSaida = 'usuario' | 'expirada';

@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a aba "Execução": pré-requisitos, geração das competências e lista por vigência.
+
 import { Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
@@ -63,14 +66,17 @@ export class AbaExecucaoComponent implements OnInit {
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
+  // Resposta da API e textos para situação e etapa
   protected readonly painel = signal<PainelExecucao | null>(null);
   protected readonly situacoes = ROTULOS_SITUACAO_COMPETENCIA;
   protected readonly etapas = ROTULOS_ETAPA;
 
+  /** Carrega pré-requisitos e competências ao abrir a aba. */
   ngOnInit(): void {
     this.api.painel(this.contratoId()).subscribe({ next: (p) => this.painel.set(p), error: (e) => this.dialogos.mostrarErro(e) });
   }
 
+  /** Gera (ou atualiza) as competências depois de conferir os pré-requisitos e confirmar. */
   protected async gerar(painel: PainelExecucao): Promise<void> {
     if (!painel.requisitos.prontos) {
       this.dialogos.avisar('Complete a base do contrato', painel.requisitos.pendencias.join('\n'));
@@ -92,6 +98,7 @@ export class AbaExecucaoComponent implements OnInit {
     });
   }
 
+  /** Abre a tela de execução da competência (URL com o identificador, ex.: 2026-03). */
   protected abrir(competencia: ResumoCompetencia): void {
     void this.roteador.navigate(['/contratos', this.contratoId(), 'execucao', competencia.identificador]);
   }

@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a aba "Formulários de avaliação": versões do formulário e a janela de edição.
+
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -58,22 +61,27 @@ export class AbaFormulariosComponent implements OnInit {
   private readonly contratos = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
 
+  // Versões, modelos globais e o estado da janela do editor
   protected readonly formularios = signal<Formulario[]>([]);
   protected readonly modelos = signal<Modelo[]>([]);
   protected readonly aberto = signal(false);
+  // Função exposta ao template para iniciar um formulário novo com valores de exemplo
   protected readonly definicaoVazia = definicaoVazia;
   protected emEdicao: Formulario | null = null;
 
+  /** Carrega as versões do contrato e os modelos globais de formulário. */
   ngOnInit(): void {
     this.api.formularios(this.contratoId()).subscribe({ next: (f) => this.formularios.set(f), error: (e) => this.dialogos.mostrarErro(e) });
     this.contratos.modelos('formulario').subscribe({ next: (m) => this.modelos.set(m), error: () => this.modelos.set([]) });
   }
 
+  /** Abre o editor: vazio (nova versão) ou com a versão escolhida. */
   protected abrir(formulario?: Formulario): void {
     this.emEdicao = formulario ?? null;
     this.aberto.set(true);
   }
 
+  /** Salva a versão (sempre inativa) com o que veio do editor. */
   protected salvar(evento: { nome: string; definicao: DefinicaoFormulario }): void {
     this.api.salvarFormulario(this.contratoId(), evento, this.emEdicao?.id).subscribe({
       next: (f) => {
@@ -84,6 +92,7 @@ export class AbaFormulariosComponent implements OnInit {
     });
   }
 
+  /** Ativa a versão depois de confirmar. */
   protected async ativar(formulario: Formulario): Promise<void> {
     const ok = await this.dialogos.confirmar({
       titulo: `Ativar o formulário v${formulario.versao}?`,
@@ -94,6 +103,7 @@ export class AbaFormulariosComponent implements OnInit {
     if (ok) this.api.acaoFormulario(this.contratoId(), formulario.id, 'ativar').subscribe({ next: (f) => this.formularios.set(f), error: (e) => this.dialogos.mostrarErro(e) });
   }
 
+  /** Cria uma cópia inativa da versão. */
   protected duplicar(formulario: Formulario): void {
     this.api.acaoFormulario(this.contratoId(), formulario.id, 'duplicar').subscribe({ next: (f) => this.formularios.set(f), error: (e) => this.dialogos.mostrarErro(e) });
   }

@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a aba "Notas de Empenho": cartões com saldo e extrato e a janela de cadastro.
+
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -11,6 +14,7 @@ import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 @Component({
   selector: 'app-aba-notas',
   imports: [FormsModule, ...PIPES_FORMATACAO],
+  // Esc fecha a janela de cadastro
   host: { '(document:keydown.escape)': 'aberto.set(false)' },
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-notas">
@@ -83,16 +87,19 @@ export class AbaNotasComponent implements OnInit {
 
   private readonly api = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
+  // Estado: lista de NEs e a janela de cadastro/edição
   protected readonly notas = signal<NotaEmpenho[]>([]);
   protected readonly aberto = signal(false);
   protected emEdicao: NotaEmpenho | null = null;
   protected numero = '';
   protected valor = '';
 
+  /** Carrega as NEs ao abrir a aba. */
   ngOnInit(): void {
     this.api.notas(this.contratoId()).subscribe({ next: (n) => this.notas.set(n), error: (e) => this.dialogos.mostrarErro(e) });
   }
 
+  /** Abre a janela: vazia (nova NE) ou preenchida (edição). */
   protected abrir(nota?: NotaEmpenho): void {
     this.emEdicao = nota ?? null;
     this.numero = nota?.numero ?? '';
@@ -100,6 +107,7 @@ export class AbaNotasComponent implements OnInit {
     this.aberto.set(true);
   }
 
+  /** Salva a NE (valor convertido do formato brasileiro para o da API). */
   protected salvar(): void {
     this.api.salvarNota(this.contratoId(), { numero: this.numero.trim(), valor_original: paraDecimalApi(this.valor) }, this.emEdicao?.id).subscribe({
       next: (n) => {
@@ -110,6 +118,7 @@ export class AbaNotasComponent implements OnInit {
     });
   }
 
+  /** Pede confirmação e exclui a NE. */
   protected async excluir(nota: NotaEmpenho): Promise<void> {
     const ok = await this.dialogos.confirmar({ titulo: `Excluir a NE ${nota.numero}?`, mensagem: 'A Nota de Empenho será removida do contrato.', rotuloConfirmar: 'Excluir' });
     if (!ok) return;

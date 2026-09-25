@@ -1,5 +1,9 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para desenhar os ícones em SVG usados na barra lateral e nos menus.
+
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
+/** Nomes dos ícones disponíveis; usar um nome fora desta lista dá erro de compilação. */
 export type NomeIcone =
   | 'inicio'
   | 'grade'
@@ -58,5 +62,6 @@ export type NomeIcone =
   `,
 })
 export class IconeComponent {
+  // `input.required`: o nome do ícone é obrigatório em <app-icone nome="...">
   readonly nome = input.required<NomeIcone>();
 }

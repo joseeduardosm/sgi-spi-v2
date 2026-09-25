@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a tela de administração da ACL: regras, recursos e consulta de acesso efetivo.
+
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
@@ -10,6 +13,7 @@ import { Setor, SetoresApiService } from '../../setores/setores-api.service';
 import { UsuariosApiService } from '../../usuarios/usuarios-api.service';
 import { AclApiService, RecursoAcl, RegraAcl } from './acl-api.service';
 
+/** Abas da tela. */
 type Aba = 'regras' | 'recursos' | 'efetivo';
 
 /** Administração de ACL: recursos, regras e consulta de acesso efetivo (SuperRoot). */
@@ -25,11 +29,13 @@ export class AclComponent implements OnInit {
   protected readonly usuarios = inject(UsuariosApiService);
   private readonly construtor = inject(NonNullableFormBuilder);
 
+  // Listas fixas para os seletores de nível
   protected readonly niveis = NIVEIS_ACL;
   protected readonly rotulosNivel = ROTULOS_NIVEL;
   protected readonly aba = signal<Aba>('regras');
   protected readonly aviso = signal<{ texto: string; erro: boolean } | null>(null);
 
+  // Dados carregados e o filtro de regras por recurso
   protected readonly recursos = signal<RecursoAcl[]>([]);
   protected readonly regras = signal<RegraAcl[]>([]);
   protected readonly setores = signal<Setor[]>([]);
@@ -47,6 +53,7 @@ export class AclComponent implements OnInit {
   protected readonly setoresDaRegra = signal<Set<number>>(new Set());
   protected buscaSetor = '';
   protected readonly termoSetor = signal('');
+  // Setores filtrados pelo texto digitado na janela da regra
   protected readonly opcoesSetor = computed(() => {
     const termo = this.termoSetor().toLowerCase();
     return this.setores().filter((s) => !termo || s.nome.toLowerCase().includes(termo));
@@ -75,6 +82,7 @@ export class AclComponent implements OnInit {
   protected readonly acessosEfetivos = signal<AcessoEfetivo[] | null>(null);
 
   constructor() {
+    // Sempre que o usuário consultado muda, busca o acesso efetivo dele
     effect(() => {
       const usuario = this.usuarioConsultado()[0];
       this.acessosEfetivos.set(null);
@@ -82,11 +90,13 @@ export class AclComponent implements OnInit {
     });
   }
 
+  /** Ao abrir a tela: recursos, regras e setores. */
   ngOnInit(): void {
     this.recarregar();
     this.setoresApi.listar().subscribe((s) => this.setores.set(s));
   }
 
+  /** Recarrega recursos e regras (depois de qualquer gravação). */
   protected recarregar(): void {
     this.api.listarRecursos().subscribe({
       next: (r) => this.recursos.set(r),
@@ -98,16 +108,19 @@ export class AclComponent implements OnInit {
     });
   }
 
+  /** Filtra a tabela de regras pelo recurso escolhido (0 = todos). */
   protected filtrarPorRecurso(valor: number): void {
     this.recursoFiltrado.set(Number(valor));
   }
 
+  /** Texto que explica a política atual do recurso (aberto, lista positiva ou inativo). */
   protected politica(r: RecursoAcl): string {
     if (!r.ativo) return 'Inativo: acesso aberto';
     return r.total_regras ? `Lista positiva · ${r.total_regras} regra(s)` : 'Aberto: sem regras';
   }
 
   // --- Regras ---
+  /** Abre a janela da regra: vazia (nova) ou preenchida (edição). */
   protected abrirRegra(regra?: RegraAcl): void {
     this.regraEmEdicao.set(regra ?? null);
     this.erroFormulario.set(null);
@@ -119,6 +132,7 @@ export class AclComponent implements OnInit {
     this.regraAberta.set(true);
   }
 
+  /** Marca ou desmarca um setor na regra. */
   protected alternarSetor(id: number): void {
     this.setoresDaRegra.update((conjunto) => {
       const novo = new Set(conjunto);
@@ -128,6 +142,7 @@ export class AclComponent implements OnInit {
     });
   }
 
+  /** Valida e grava a regra; na primeira regra de um recurso, avisa que ele deixará de ser aberto. */
   protected salvarRegra(): void {
     const valores = this.formularioRegra.getRawValue();
     if (!Number(valores.recurso_id)) return this.erroFormulario.set('Selecione o recurso.');
@@ -141,6 +156,7 @@ export class AclComponent implements OnInit {
     const atual = this.regraEmEdicao();
     const recurso = this.recursos().find((r) => r.id === dados.recurso_id);
     const primeiraRegra = !atual && recurso && recurso.total_regras === 0;
+    // A primeira regra muda a política do recurso para "lista positiva": pede confirmação
     if (
       primeiraRegra &&
       !confirm(`Esta é a primeira regra de "${recurso.nome}". A partir dela, somente os usuários e setores contemplados terão acesso. Continuar?`)
@@ -162,6 +178,7 @@ export class AclComponent implements OnInit {
     });
   }
 
+  /** Pede confirmação e exclui a regra. */
   protected excluirRegra(regra: RegraAcl): void {
     if (!confirm(`Excluir a regra de ${this.rotulosNivel[regra.nivel]} em "${regra.recurso_nome}"?`)) return;
     this.api.excluirRegra(regra.id).subscribe({
@@ -174,6 +191,7 @@ export class AclComponent implements OnInit {
   }
 
   // --- Recursos ---
+  /** Abre a janela do recurso: vazia (novo) ou preenchida (edição). */
   protected abrirRecurso(recurso?: RecursoAcl): void {
     this.recursoEmEdicao.set(recurso ?? null);
     this.erroFormulario.set(null);
@@ -187,6 +205,7 @@ export class AclComponent implements OnInit {
     this.recursoAberto.set(true);
   }
 
+  /** Valida e grava o recurso. */
   protected salvarRecurso(): void {
     if (this.formularioRecurso.invalid) {
       this.formularioRecurso.markAllAsTouched();
@@ -209,6 +228,7 @@ export class AclComponent implements OnInit {
     });
   }
 
+  /** Pede confirmação e exclui o recurso (e suas regras). */
   protected excluirRecurso(recurso: RecursoAcl): void {
     if (!confirm(`Excluir o recurso "${recurso.nome}" e suas ${recurso.total_regras} regra(s)? O módulo volta a ficar aberto.`)) return;
     this.api.excluirRecurso(recurso.id).subscribe({
@@ -220,16 +240,19 @@ export class AclComponent implements OnInit {
     });
   }
 
+  /** Fecha as janelas abertas (Esc), a menos que esteja salvando. */
   protected fecharFormularios(): void {
     if (this.salvando()) return;
     this.regraAberta.set(false);
     this.recursoAberto.set(false);
   }
 
+  /** Mostra a mensagem de erro no aviso da tela. */
   private falhar(erro: unknown, padrao: string): void {
     this.aviso.set({ texto: this.mensagem(erro, padrao), erro: true });
   }
 
+  /** Mensagem da API, se houver, ou a padrão da operação. */
   private mensagem(erro: unknown, padrao: string): string {
     if (erro instanceof HttpErrorResponse && typeof erro.error?.detalhe === 'string') return erro.error.detalhe;
     return padrao;

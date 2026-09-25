@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para definir o formato dos itens e seções da barra lateral.
+
 import { Papel } from '../modelos/usuario.model';
 import { NomeIcone } from '../../shared/componentes/icone/icone.component';
 
@@ -23,6 +26,7 @@ export interface ItemNavegacao {
   textoVazio?: string;
 }
 
+/** Grupo de itens com uma legenda (ex.: "Navegação", "Administração"), opcionalmente restrito a papéis. */
 export interface SecaoNavegacao {
   legenda: string;
   papeis?: Papel[];

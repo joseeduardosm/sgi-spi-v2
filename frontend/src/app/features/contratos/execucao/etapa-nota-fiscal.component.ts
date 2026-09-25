@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar a etapa 3 (nota fiscal): valores, retenções, líquido, vencimento e envio do PDF.
+
 import { Component, inject, input, OnChanges, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -8,6 +11,7 @@ import { DetalheCompetencia, NotaFiscal } from '../compartilhado/contratos.model
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
+// Retenções de tributos exibidas no formulário (a chave compõe o nome do campo na API)
 const RETENCOES = [
   { chave: 'ir', rotulo: 'IR' },
   { chave: 'inss', rotulo: 'INSS' },
@@ -16,6 +20,7 @@ const RETENCOES = [
   { chave: 'cofins', rotulo: 'COFINS' },
 ] as const;
 
+/** Campos editáveis de uma nota fiscal (principal ou adicional). */
 interface CamposNota {
   numero: string;
   valor_bruto: string;
@@ -37,6 +42,7 @@ export class EtapaNotaFiscalComponent implements OnChanges {
   private readonly dialogos = inject(DialogosService);
   protected readonly retencoes = RETENCOES;
 
+  // Campos do formulário (nota principal, adicional, origem do valor, recebimento, prazo e PDFs)
   protected principal: CamposNota = this.vazia();
   protected adicional: CamposNota = this.vazia();
   protected origem: 'medicao' | 'manual' = 'medicao';
@@ -46,10 +52,12 @@ export class EtapaNotaFiscalComponent implements OnChanges {
   protected arquivo: File | null = null;
   protected arquivoAdicional: File | null = null;
 
+  /** Nota em branco. */
   private vazia(): CamposNota {
     return { numero: '', valor_bruto: '', retencoes: Object.fromEntries(RETENCOES.map((r) => [r.chave, ''])) };
   }
 
+  /** Converte uma nota registrada nos campos editáveis (formato brasileiro). */
   private deNota(nota: NotaFiscal | null): CamposNota {
     if (!nota) return this.vazia();
     return {
@@ -59,6 +67,7 @@ export class EtapaNotaFiscalComponent implements OnChanges {
     };
   }
 
+  /** Sempre que a competência muda, preenche o formulário com o que já foi registrado. */
   ngOnChanges(): void {
     const d = this.detalhe();
     this.principal = this.deNota(d.nota_fiscal);
@@ -69,22 +78,27 @@ export class EtapaNotaFiscalComponent implements OnChanges {
     this.prazo = d.prazo_pagamento_dias ?? 30;
   }
 
+  /** Texto digitado (formato brasileiro) como número. */
   protected numero(valor: string): number {
     return Number(paraDecimalApi(valor)) || 0;
   }
 
+  /** Valor bruto: na principal com origem "medição", é o valor autorizado; senão, o digitado. */
   protected bruto(nota: CamposNota, principal: boolean): number {
     return principal && this.origem === 'medicao' ? Number(this.detalhe().valor_autorizado) : this.numero(nota.valor_bruto);
   }
 
+  /** Soma das retenções da nota. */
   protected somaRetencoes(nota: CamposNota): number {
     return Object.values(nota.retencoes).reduce((t, v) => t + this.numero(v), 0);
   }
 
+  /** Valor líquido (bruto − retenções, nunca negativo). */
   protected liquido(nota: CamposNota, principal: boolean): number {
     return Math.max(0, this.bruto(nota, principal) - this.somaRetencoes(nota));
   }
 
+  /** Data de vencimento do pagamento (recebimento + prazo), calculada em UTC para não sofrer com fuso. */
   protected vencimento(): string {
     if (!this.recebidaEm || !this.prazo) return '—';
     const data = new Date(`${this.recebidaEm}T00:00:00Z`);
@@ -97,19 +111,23 @@ export class EtapaNotaFiscalComponent implements OnChanges {
     return this.bruto(this.principal, true) + (this.possuiAdicional ? this.numero(this.adicional.valor_bruto) : 0);
   }
 
+  /** Soma do saldo livre das NEs escolhidas na medição. */
   protected saldoLivreNotas(): number {
     return this.detalhe().notas_selecionadas.reduce((t, n) => t + Number(n.saldo_livre), 0);
   }
 
+  /** Confere todos os campos obrigatórios, as retenções e se as NEs cobrem o total a pagar. */
   protected valido(): boolean {
     const d = this.detalhe();
     const principalOk = !!this.principal.numero.trim() && !!this.recebidaEm && this.prazo >= 1 && this.prazo <= 3650 &&
       (!!this.arquivo || !!d.nota_fiscal?.arquivo) && this.bruto(this.principal, true) > 0 && this.somaRetencoes(this.principal) <= this.bruto(this.principal, true);
     const adicionalOk = !this.possuiAdicional || (!!this.adicional.numero.trim() && this.numero(this.adicional.valor_bruto) > 0 &&
       (!!this.arquivoAdicional || !!d.nota_fiscal_adicional?.arquivo) && this.somaRetencoes(this.adicional) <= this.numero(this.adicional.valor_bruto));
+    // Tolerância de meio centavo para arredondamentos
     return principalOk && adicionalOk && this.totalAPagar() <= this.saldoLivreNotas() + 0.005;
   }
 
+  /** Monta o envio (multipart) com os campos e PDFs e conclui a etapa. */
   protected async concluir(): Promise<void> {
     const ok = await this.dialogos.confirmar({ titulo: 'Concluir a nota fiscal?', mensagem: 'A etapa do CADIN será liberada.', rotuloConfirmar: 'Concluir nota fiscal' });
     if (!ok) return;
@@ -119,7 +137,9 @@ export class EtapaNotaFiscalComponent implements OnChanges {
       valor_bruto: this.origem === 'manual' ? paraDecimalApi(this.principal.valor_bruto) : null, arquivo: this.arquivo,
       possui_adicional: this.possuiAdicional,
     };
+    // Uma retenção por campo: retencao_ir, retencao_inss...
     for (const r of RETENCOES) campos[`retencao_${r.chave}`] = paraDecimalApi(this.principal.retencoes[r.chave]);
+    // Nota adicional: campos com o prefixo "adicional_"
     if (this.possuiAdicional) {
       campos['adicional_numero'] = this.adicional.numero.trim();
       campos['adicional_valor_bruto'] = paraDecimalApi(this.adicional.valor_bruto);
@@ -132,6 +152,7 @@ export class EtapaNotaFiscalComponent implements OnChanges {
     });
   }
 
+  /** Baixa um PDF da competência. */
   protected baixar(anexoId: string): void {
     const d = this.detalhe();
     this.api.baixar(d.contrato_id, d.id, anexoId).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });

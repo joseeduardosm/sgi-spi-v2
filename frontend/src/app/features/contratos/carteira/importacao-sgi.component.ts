@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para oferecer ao SuperRoot a importação dos contratos do SGI SPI, com acompanhamento do andamento.
+
 import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, inject, OnInit, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -6,6 +9,7 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { EstadoMigracaoSgi } from '../compartilhado/contratos.models';
 
+// Textos das etapas informadas pela API
 const ETAPAS: Record<string, string> = {
   iniciando: 'Iniciando',
   extraindo: 'Extraindo os dados do SGI (somente leitura)',
@@ -13,6 +17,7 @@ const ETAPAS: Record<string, string> = {
   concluida: 'Concluída',
 };
 
+// Nomes legíveis das quantidades importadas (as chaves vêm do resultado da API)
 const ROTULOS_RESULTADO: Record<string, string> = {
   empresas: 'Empresas', contratos: 'Contratos', itens: 'Itens', equipe: 'Designações de equipe', documentos: 'Documentos importantes',
   prorrogacoes: 'Prorrogações', notas_empenho: 'Notas de Empenho', competencias: 'Competências', avaliacoes: 'Avaliações',
@@ -26,6 +31,7 @@ const ROTULOS_RESULTADO: Record<string, string> = {
 @Component({
   selector: 'app-importacao-sgi',
   imports: [FormsModule, DatePipe],
+  // Esc tenta fechar a janela (não fecha durante a execução)
   host: { '(document:keydown.escape)': 'fecharSePossivel()' },
   template: `
     <button type="button" class="acao-secundaria" (click)="abrir()">Importar do SGI</button>
@@ -103,24 +109,30 @@ export class ImportacaoSgiComponent implements OnInit {
   /** Emitido quando uma importação termina com sucesso (a carteira recarrega). */
   readonly concluida = output<void>();
 
+  // Serviços; DestroyRef permite executar uma limpeza quando o componente é destruído
   private readonly api = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly destruir = inject(DestroyRef);
 
+  // Estado da janela, da importação e do envio das senhas
   protected readonly aberta = signal(false);
   protected readonly estado = signal<EstadoMigracaoSgi | null>(null);
   protected readonly enviando = signal(false);
   /** Última importação terminada, resumida no formulário. */
   protected readonly ultima = signal<EstadoMigracaoSgi | null>(null);
+  // Função (e não signal) porque só lê o estado atual
   protected readonly executando = () => this.estado()?.situacao === 'executando';
   protected readonly etapas = ETAPAS;
+  // Senhas digitadas (ligadas aos campos por [(ngModel)]); limpas depois do uso
   protected senhaOrigem = '';
   protected senhaDestino = '';
   /** Mostra o formulário mesmo havendo resultado anterior. */
   private formulario = false;
+  // Temporizador da consulta periódica do andamento
   private temporizador: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
+    // Ao sair da tela, para de consultar o andamento
     this.destruir.onDestroy(() => this.pararAcompanhamento());
   }
 
@@ -145,6 +157,7 @@ export class ImportacaoSgiComponent implements OnInit {
     this.consultar();
   }
 
+  /** Volta ao formulário de senhas depois de uma importação terminada. */
   protected novaImportacao(): void {
     this.formulario = true;
     this.estado.update((e) => (e ? { ...e, situacao: 'ociosa' } : e));
@@ -157,6 +170,7 @@ export class ImportacaoSgiComponent implements OnInit {
     this.senhaOrigem = this.senhaDestino = '';
   }
 
+  /** Confirma a substituição dos dados e inicia a importação. */
   protected async iniciar(e: EstadoMigracaoSgi): Promise<void> {
     const ok = await this.dialogos.confirmar({
       titulo: 'Substituir os contratos deste servidor?',
@@ -181,12 +195,14 @@ export class ImportacaoSgiComponent implements OnInit {
     });
   }
 
+  /** Quantidades importadas, com nomes legíveis, para a lista do resultado. */
   protected resultado(e: EstadoMigracaoSgi): { chave: string; rotulo: string; valor: number }[] {
     return Object.entries(e.resultado ?? {})
       .filter(([chave]) => chave in ROTULOS_RESULTADO)
       .map(([chave, valor]) => ({ chave, rotulo: ROTULOS_RESULTADO[chave], valor }));
   }
 
+  /** Consulta o estado atual ao abrir a janela. */
   private consultar(): void {
     this.api.estadoMigracaoSgi().subscribe({
       next: (e) => {
@@ -198,8 +214,10 @@ export class ImportacaoSgiComponent implements OnInit {
     });
   }
 
+  /** Consulta o andamento a cada 3 segundos enquanto a importação estiver executando. */
   private acompanhar(): void {
     this.pararAcompanhamento();
+    // setTimeout (e não setInterval): a próxima consulta só é agendada depois que a anterior respondeu
     this.temporizador = setTimeout(() => {
       this.api.estadoMigracaoSgi().subscribe({
         next: (e) => {
@@ -212,6 +230,7 @@ export class ImportacaoSgiComponent implements OnInit {
     }, 3000);
   }
 
+  /** Cancela a próxima consulta agendada. */
   private pararAcompanhamento(): void {
     if (this.temporizador) clearTimeout(this.temporizador);
     this.temporizador = null;

@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar as etapas 5 (checklist mensal), 6 (documento consolidado) e 7 (Ordem Bancária).
+
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 
@@ -84,14 +87,17 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 })
 export class EtapaFinaisComponent {
   readonly detalhe = input.required<DetalheCompetencia>();
+  // Etapa a exibir (a tela da competência escolhe entre as três)
   readonly etapa = input.required<Etapa>();
   readonly editavel = input(false);
   readonly atualizado = output<DetalheCompetencia>();
 
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
+  // PDF da OB escolhido
   protected ob: File | null = null;
 
+  /** Anexa o PDF de um documento do checklist. */
   protected enviarDocumento(documento: DocumentoMensal, arquivo: File | null): void {
     if (!arquivo) return;
     const d = this.detalhe();
@@ -101,10 +107,12 @@ export class EtapaFinaisComponent {
     });
   }
 
+  /** Quantos documentos obrigatórios ainda estão sem anexo (desabilita "Concluir checklist"). */
   protected obrigatoriosPendentes(d: DetalheCompetencia): number {
     return d.documentos.filter((doc) => doc.obrigatorio && !doc.arquivo).length;
   }
 
+  /** Conclui o checklist; se faltarem opcionais, pede confirmação. */
   protected async concluirChecklist(): Promise<void> {
     const d = this.detalhe();
     const semAnexo = d.documentos.filter((doc) => !doc.arquivo).length;
@@ -122,6 +130,7 @@ export class EtapaFinaisComponent {
     });
   }
 
+  /** Gera o consolidado e já baixa o arquivo. */
   protected gerarConsolidado(): void {
     const d = this.detalhe();
     this.dialogos.executar(this.api.consolidado(d.contrato_id, d.id), 'Gerando o documento consolidado…').subscribe({
@@ -133,6 +142,7 @@ export class EtapaFinaisComponent {
     });
   }
 
+  /** Anexa a OB depois de confirmar: debita as NEs e conclui a competência. */
   protected async enviarOb(): Promise<void> {
     if (!this.ob) return;
     const d = this.detalhe();
@@ -149,6 +159,7 @@ export class EtapaFinaisComponent {
     });
   }
 
+  /** Baixa um PDF da competência. */
   protected baixar(anexoId: string): void {
     const d = this.detalhe();
     this.api.baixar(d.contrato_id, d.id, anexoId).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });

@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para oferecer o botão de escolha de PDF, com validação rápida antes do envio.
+
 import { ChangeDetectionStrategy, Component, ElementRef, input, output, signal, viewChild } from '@angular/core';
 
 import { formatarTamanho } from '../../utilitarios/formatadores';
@@ -11,6 +14,7 @@ export const TAMANHO_MAXIMO_PDF_MB = 25;
  */
 @Component({
   selector: 'app-envio-pdf',
+  // OnPush: o componente só é redesenhado quando os inputs ou signals dele mudam (mais eficiente)
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <input #campo type="file" accept="application/pdf,.pdf" hidden (change)="aoEscolher(campo)" />
@@ -27,16 +31,20 @@ export const TAMANHO_MAXIMO_PDF_MB = 25;
   `,
 })
 export class EnvioPdfComponent {
+  // Entradas (`input`) configuráveis por quem usa o componente e a saída (`output`) com o arquivo escolhido
   readonly rotulo = input('Selecionar documento');
   readonly desabilitado = input(false);
   readonly selecionado = output<File | null>();
 
+  // Estado interno: arquivo aceito, mensagem de erro e referência ao <input type="file"> escondido
   protected readonly arquivo = signal<File | null>(null);
   protected readonly erro = signal<string | null>(null);
   private readonly campo = viewChild<ElementRef<HTMLInputElement>>('campo');
 
+  // Função de formatação exposta ao template
   protected readonly tamanho = formatarTamanho;
 
+  /** Chamado quando o usuário escolhe um arquivo: valida, guarda e avisa quem usa o componente. */
   protected aoEscolher(campo: HTMLInputElement): void {
     const escolhido = campo.files?.[0] ?? null;
     const problema = escolhido ? validarPdf(escolhido) : null;
@@ -56,6 +64,7 @@ export class EnvioPdfComponent {
   }
 }
 
+/** Validação rápida no navegador; devolve a mensagem de erro ou null se o PDF parece válido. */
 export function validarPdf(arquivo: File): string | null {
   if (!/\.pdf$/i.test(arquivo.name) && arquivo.type !== 'application/pdf') return 'Selecione um arquivo PDF.';
   if (arquivo.size === 0) return 'O arquivo está vazio.';

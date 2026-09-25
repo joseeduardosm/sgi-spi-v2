@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para definir os tipos de dados da API de usuários e do perfil institucional.
+
 import { OrigemUsuario } from '../../core/modelos/usuario.model';
 
 /** Contratos de /api/usuarios e /api/autenticacao/perfil (ver docs/endpoints/usuarios.md). */
@@ -14,11 +17,13 @@ export interface DadosPerfil {
   gestor_id: number | null;
 }
 
+/** Perfil devolvido pela API (com o nome do gestor e a data da última revalidação). */
 export interface PerfilLeitura extends DadosPerfil {
   gestor_nome: string | null;
   perfil_revisado_em: string | null;
 }
 
+/** Usuário completo, como aparece na administração. */
 export interface DetalheUsuario {
   id: number;
   login: string;
@@ -37,6 +42,7 @@ export interface DetalheUsuario {
   atualizado_em: string;
 }
 
+/** Uma página da listagem, com o total para a paginação. */
 export interface PaginaUsuarios {
   itens: DetalheUsuario[];
   total: number;
@@ -44,6 +50,7 @@ export interface PaginaUsuarios {
   tamanho_pagina: number;
 }
 
+/** Corpo para criar uma conta local. */
 export interface CriacaoUsuario {
   login: string;
   senha: string;
@@ -52,6 +59,7 @@ export interface CriacaoUsuario {
   perfil: DadosPerfil;
 }
 
+/** Corpo para alterar um usuário (senha nula mantém a atual). */
 export interface AlteracaoUsuario {
   senha: string | null;
   ativo: boolean;
@@ -59,6 +67,7 @@ export interface AlteracaoUsuario {
   perfil: DadosPerfil;
 }
 
+/** Nomes legíveis dos campos do perfil (usados em mensagens de pendência). */
 export const ROTULOS_PERFIL: Record<string, string> = {
   nome_completo: 'Nome completo',
   email: 'E-mail',
@@ -72,4 +81,5 @@ export const ROTULOS_PERFIL: Record<string, string> = {
   gestor_id: 'Gestor imediato',
 };
 
+/** Campos que precisam estar preenchidos para o perfil ficar "em dia". */
 export const CAMPOS_OBRIGATORIOS_PERFIL = ['nome_completo', 'email', 'ramal', 'cargo', 'departamento', 'andar', 'predio'];

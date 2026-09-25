@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar o painel de contratos (pendências, alertas, execução orçamentária e números).
+
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -25,21 +28,26 @@ export class PainelComponent implements OnInit {
   /** Ocorrências mostradas em cada cartão; o restante fica nas telas dedicadas. */
   protected readonly LIMITE = 5;
 
+  // Dados do painel e os filtros do topo
   protected readonly painel = signal<PainelContratos | null>(null);
   protected exercicio = new Date().getFullYear();
   protected empresaId = '';
   protected contratoId = '';
 
+  // Maior valor do gráfico: serve de 100% para a altura das barras
   protected readonly escala = computed(() => {
     const meses = this.painel()?.execucao.meses ?? [];
     return Math.max(1, ...meses.flatMap((m) => [Number(m.previsto), Number(m.medido), Number(m.pago)]));
   });
+  // Quantidade de riscos de gravidade alta (destaque no cartão)
   protected readonly alertasAltos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.filter((r) => r.gravidade === 'alta').length, 0) ?? 0);
+  // Quanto do previsto no exercício já foi pago
   protected readonly percentualPago = computed(() => {
     const e = this.painel()?.execucao;
     return e && Number(e.total_previsto) ? (Number(e.total_pago) * 100) / Number(e.total_previsto) : 0;
   });
 
+  /** Lê os filtros da URL (permite voltar das telas dedicadas com a mesma seleção) e carrega. */
   ngOnInit(): void {
     const parametros = this.rota.snapshot.queryParamMap;
     this.exercicio = Number(parametros.get('exercicio')) || this.exercicio;
@@ -56,6 +64,7 @@ export class PainelComponent implements OnInit {
     return filtros;
   }
 
+  /** Busca o painel na API com os filtros atuais. */
   protected carregar(): void {
     this.api.painel({ exercicio: this.exercicio, empresa_id: this.empresaId, contrato_id: this.contratoId }).subscribe({
       next: (p) => this.painel.set(p),
@@ -63,6 +72,7 @@ export class PainelComponent implements OnInit {
     });
   }
 
+  /** Altura da barra do gráfico, em % da escala. */
   protected altura(valor: string): number {
     return (Number(valor) / this.escala()) * 100;
   }

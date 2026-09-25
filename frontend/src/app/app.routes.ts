@@ -1,10 +1,23 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para definir o mapa de rotas (endereços) da aplicação e quem pode acessar cada uma.
+
 import { Routes } from '@angular/router';
 
 import { guardaAcl, guardaPerfil } from './core/acesso/acesso.guards';
 import { guardaAutenticacao, guardaPapel, guardaVisitante } from './core/autenticacao/autenticacao.guards';
 
+/**
+ * Mapa de rotas do portal.
+ *
+ * - `loadComponent`/`loadChildren` carregam o código da tela só quando ela é aberta (lazy loading),
+ *   deixando a primeira carga mais leve.
+ * - `canActivate` recebe as guardas: funções que decidem se a navegação pode continuar
+ *   (usuário logado, perfil em dia, ACL do módulo, papel SuperRoot).
+ * - `title` é o texto da aba do navegador.
+ */
 export const rotas: Routes = [
   {
+    // Tela de login, dentro do layout público; `guardaVisitante` manda quem já está logado para o início
     path: 'login',
     loadComponent: () =>
       import('./shared/layout/layout-publico/layout-publico.component').then((m) => m.LayoutPublicoComponent),
@@ -37,6 +50,7 @@ export const rotas: Routes = [
         title: 'Meu perfil | Contratos SPI',
         loadComponent: () => import('./features/perfil/perfil.component').then((m) => m.PerfilComponent),
       },
+      // Módulos protegidos pela ACL: `data.acl` informa o slug do recurso conferido por `guardaAcl`
       {
         path: 'usuarios',
         title: 'Usuários | Contratos SPI',
@@ -58,6 +72,7 @@ export const rotas: Routes = [
         data: { acl: 'contratos' },
         loadChildren: () => import('./features/contratos/contratos.routes').then((m) => m.ROTAS_CONTRATOS),
       },
+      // Administração: só para o papel SuperRoot
       {
         path: 'admin/acl',
         title: 'Controle de acesso | Contratos SPI',
@@ -75,5 +90,6 @@ export const rotas: Routes = [
       },
     ],
   },
+  // Qualquer endereço desconhecido volta para o início
   { path: '**', redirectTo: '' },
 ];

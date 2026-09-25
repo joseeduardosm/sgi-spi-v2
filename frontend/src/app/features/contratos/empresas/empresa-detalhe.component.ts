@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para controlar o cadastro e o detalhe de uma empresa contratada e de seus prepostos.
+
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -9,12 +12,14 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { DetalheEmpresa, GravacaoEmpresa, GravacaoPreposto, Preposto } from '../compartilhado/contratos.models';
 import { formatarCnpj, formatarCpf } from '../compartilhado/rotulos';
 
+// Preposto em branco, usado para limpar o formulário
 const PREPOSTO_VAZIO: GravacaoPreposto = { cpf: '', nome: '', telefone: '', email: '', cargo: '', ativo: true };
 
 /** Tela 9: cadastro/detalhe da empresa e seus prepostos. */
 @Component({
   selector: 'app-empresa-detalhe',
   imports: [FormsModule, RouterLink, CabecalhoModuloComponent],
+  // Qualquer clique fora fecha o menu de ações aberto
   host: { '(document:click)': 'menuAberto.set(null)' },
   templateUrl: './empresa-detalhe.component.html',
 })
@@ -27,6 +32,7 @@ export class EmpresaDetalheComponent implements OnInit {
   private readonly roteador = inject(Router);
   protected readonly acesso = inject(AcessoService);
 
+  // Estado: empresa carregada, campos da empresa e do preposto em edição
   protected readonly empresa = signal<DetalheEmpresa | null>(null);
   protected readonly carregando = signal(false);
   protected readonly menuAberto = signal<string | null>(null);
@@ -35,6 +41,7 @@ export class EmpresaDetalheComponent implements OnInit {
   protected prepostoEmEdicao: string | null = null;
   protected readonly cpf = formatarCpf;
 
+  /** Com id na rota, carrega a empresa; sem id, a tela abre vazia para cadastro. */
   ngOnInit(): void {
     const id = this.empresaId();
     if (id) {
@@ -46,12 +53,14 @@ export class EmpresaDetalheComponent implements OnInit {
     }
   }
 
+  /** Guarda a empresa e preenche o formulário (CNPJ com máscara). */
   private aplicar(empresa: DetalheEmpresa): void {
     this.empresa.set(empresa);
     this.dados = { cnpj: formatarCnpj(empresa.cnpj), razao_social: empresa.razao_social, nome_fantasia: empresa.nome_fantasia, endereco: empresa.endereco, ativa: empresa.ativa };
     this.carregando.set(false);
   }
 
+  /** Cadastra ou altera a empresa; no cadastro, troca a URL para a da empresa criada. */
   protected salvar(): void {
     const id = this.empresa()?.id;
     this.api.salvarEmpresa({ ...this.dados }, id).subscribe({
@@ -63,6 +72,7 @@ export class EmpresaDetalheComponent implements OnInit {
     });
   }
 
+  /** Pede confirmação e exclui a empresa. */
   protected async excluir(): Promise<void> {
     const e = this.empresa();
     if (!e) return;
@@ -70,6 +80,7 @@ export class EmpresaDetalheComponent implements OnInit {
     if (ok) this.api.excluirEmpresa(e.id).subscribe({ next: () => void this.roteador.navigate(['/contratos/empresas']), error: (erro) => this.dialogos.mostrarErro(erro) });
   }
 
+  /** Carrega um preposto no formulário para edição. */
   protected editarPreposto(evento: Event, p: Preposto): void {
     evento.stopPropagation();
     this.menuAberto.set(null);
@@ -77,11 +88,13 @@ export class EmpresaDetalheComponent implements OnInit {
     this.preposto = { cpf: formatarCpf(p.cpf), nome: p.nome, telefone: p.telefone, email: p.email, cargo: p.cargo, ativo: p.ativo };
   }
 
+  /** Limpa o formulário do preposto (volta ao modo "novo"). */
   protected limparPreposto(): void {
     this.prepostoEmEdicao = null;
     this.preposto = { ...PREPOSTO_VAZIO };
   }
 
+  /** Cadastra ou altera o preposto; a API devolve a empresa atualizada. */
   protected salvarPreposto(): void {
     const e = this.empresa();
     if (!e) return;
@@ -94,6 +107,7 @@ export class EmpresaDetalheComponent implements OnInit {
     });
   }
 
+  /** Pede confirmação e exclui o preposto, recarregando a empresa. */
   protected async excluirPreposto(evento: Event, p: Preposto): Promise<void> {
     evento.stopPropagation();
     this.menuAberto.set(null);
@@ -103,6 +117,7 @@ export class EmpresaDetalheComponent implements OnInit {
     if (ok) this.api.excluirPreposto(e.id, p.id).subscribe({ next: () => this.api.empresa(e.id).subscribe((x) => this.aplicar(x)), error: (erro) => this.dialogos.mostrarErro(erro) });
   }
 
+  /** Abre ou fecha o menu de ações de um preposto. */
   protected alternarMenu(evento: Event, id: string): void {
     evento.stopPropagation();
     this.menuAberto.set(this.menuAberto() === id ? null : id);

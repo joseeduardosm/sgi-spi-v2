@@ -1,3 +1,6 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para centralizar as chamadas à API de setores e definir seus tipos de dados.
+
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
@@ -21,10 +24,12 @@ export interface Setor {
   atualizado_em: string;
 }
 
+/** Setor com a lista de membros. */
 export interface DetalheSetor extends Setor {
   membros: OpcaoUsuario[];
 }
 
+/** Corpo para criar ou alterar um setor (a lista de membros substitui a atual). */
 export interface GravacaoSetor {
   nome: string;
   setor_pai_id: number | null;
@@ -34,11 +39,13 @@ export interface GravacaoSetor {
   membros_ids: number[];
 }
 
+/** Serviço de acesso à API de setores. */
 @Injectable({ providedIn: 'root' })
 export class SetoresApiService {
   private readonly http = inject(HttpClient);
   private readonly base = `${ambiente.urlApi}/setores`;
 
+  /** Lista de setores (a busca é opcional). */
   listar(busca = ''): Observable<Setor[]> {
     return this.http.get<Setor[]>(this.base, { params: busca ? { busca } : {} });
   }

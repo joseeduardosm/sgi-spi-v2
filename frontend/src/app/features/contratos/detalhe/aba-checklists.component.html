@@ -39,46 +39,77 @@
       <button type="button" aria-label="Fechar" (click)="aberto.set(false)">×</button>
     </header>
     <form (ngSubmit)="salvar()">
+      <!-- 1. Identificação da versão -->
       <div class="grade-formulario">
-        <div><label for="checklist-nome">Nome do checklist *</label><input id="checklist-nome" name="nome" required maxlength="300" [(ngModel)]="nome" /></div>
+        <div [class.ocupa-duas]="!(modelos().length && !emEdicao)">
+          <label for="checklist-nome">Nome do checklist *</label>
+          <input id="checklist-nome" name="nome" required maxlength="300" placeholder="Ex.: Documentos mensais de mão de obra" [(ngModel)]="nome" />
+        </div>
         @if (modelos().length && !emEdicao) {
           <div>
             <label for="checklist-modelo">Partir de um modelo global</label>
             <select id="checklist-modelo" name="modelo" (change)="carregarModelo($any($event.target).value)">
-              <option value="">—</option>
+              <option value="">Começar do zero</option>
               @for (m of modelos(); track m.id) { <option [value]="m.id">{{ m.nome }}</option> }
             </select>
           </div>
         }
-        <div><label for="checklist-documento">Novo documento</label><input id="checklist-documento" name="novo" maxlength="500" [(ngModel)]="novoDocumento" (keydown.enter)="$event.preventDefault(); adicionar()" /></div>
+      </div>
+
+      <!-- 2. Documentos já incluídos, na ordem em que aparecerão na competência -->
+      <p class="secao-formulario">Documentos ({{ itens.length }})</p>
+      <div class="tabela-gestao-envoltorio lista-documentos-checklist">
+        <table class="tabela-gestao">
+          <thead><tr><th>Nº</th><th>Documento</th><th>Na execução</th><th class="coluna-acoes">Ações</th></tr></thead>
+          <tbody>
+            @for (i of itens; track $index) {
+              <tr>
+                <td>{{ $index + 1 }}</td>
+                <td><strong>{{ i.nome }}</strong>@if (i.observacao) { <small>{{ i.observacao }}</small> }</td>
+                <td>
+                  <div class="seletor-segmentado pequeno" role="radiogroup" [attr.aria-label]="'Tipo do documento ' + i.nome">
+                    <button type="button" role="radio" [attr.aria-checked]="i.obrigatorio" [class.ativo]="i.obrigatorio" (click)="i.obrigatorio = true">Obrigatório</button>
+                    <button type="button" role="radio" [attr.aria-checked]="!i.obrigatorio" [class.ativo]="!i.obrigatorio" (click)="i.obrigatorio = false">Opcional</button>
+                  </div>
+                </td>
+                <td>
+                  <div class="acoes-linha">
+                    <button type="button" aria-label="Subir" [disabled]="$first" (click)="mover($index, -1)">↑</button>
+                    <button type="button" aria-label="Descer" [disabled]="$last" (click)="mover($index, 1)">↓</button>
+                    <button type="button" class="botao-excluir" (click)="remover($index)">Remover</button>
+                  </div>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td class="estado-vazio" colspan="4">Nenhum documento ainda. Adicione abaixo{{ modelos().length && !emEdicao ? ' ou parta de um modelo global' : '' }}.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 3. Inclusão de um documento: tudo numa faixa só; Enter também adiciona -->
+      <div class="adicionar-documento">
+        <div>
+          <label for="checklist-documento">Documento</label>
+          <input id="checklist-documento" name="novo" maxlength="500" placeholder="Ex.: Folha de pagamento" [(ngModel)]="novoDocumento" (keydown.enter)="$event.preventDefault(); adicionar()" />
+        </div>
         <div>
           <label for="checklist-observacao">Observação (opcional)</label>
-          <input id="checklist-observacao" name="observacao" maxlength="1000" [(ngModel)]="novaObservacao" (keydown.enter)="$event.preventDefault(); adicionar()" />
+          <input id="checklist-observacao" name="observacao" maxlength="1000" placeholder="Ex.: do mês de referência" [(ngModel)]="novaObservacao" (keydown.enter)="$event.preventDefault(); adicionar()" />
         </div>
         <div>
-          <label for="checklist-obrigatorio">Na execução, o documento é</label>
-          <div style="display: flex; gap: 8px">
-            <select id="checklist-obrigatorio" name="obrigatorio" [(ngModel)]="novoObrigatorio">
-              <option [ngValue]="true">Obrigatório</option>
-              <option [ngValue]="false">Opcional</option>
-            </select>
-            <button type="button" class="acao-secundaria" style="height: 42px" (click)="adicionar()">Adicionar</button>
+          <span class="rotulo-campo" id="rotulo-novo-obrigatorio">Na execução</span>
+          <div class="seletor-segmentado" role="radiogroup" aria-labelledby="rotulo-novo-obrigatorio">
+            <button type="button" role="radio" [attr.aria-checked]="novoObrigatorio" [class.ativo]="novoObrigatorio" (click)="novoObrigatorio = true">Obrigatório</button>
+            <button type="button" role="radio" [attr.aria-checked]="!novoObrigatorio" [class.ativo]="!novoObrigatorio" (click)="novoObrigatorio = false">Opcional</button>
           </div>
         </div>
+        <button type="button" class="acao-secundaria" [disabled]="!novoDocumento.trim()" (click)="adicionar()"><span>+</span> Adicionar</button>
       </div>
       <p class="dica-formulario">Obrigatório: precisa ser anexado para concluir o checklist da competência. Opcional: pode ficar sem anexo.</p>
-      <ol style="padding-left: 20px; font-size: 13px">
-        @for (i of itens; track $index) {
-          <li style="margin-bottom: 6px">{{ i.nome }}@if (i.observacao) { <small style="color: #8e99a6"> — {{ i.observacao }}</small> }
-            <select class="campo-tabela" style="width: auto; height: 26px; margin-left: 8px; padding: 0 6px; font-size: 11px; text-align: left"
-                    [name]="'obrigatorio' + $index" [attr.aria-label]="'Tipo do documento ' + i.nome" [(ngModel)]="i.obrigatorio">
-              <option [ngValue]="true">Obrigatório</option>
-              <option [ngValue]="false">Opcional</option>
-            </select>
-            <button type="button" class="link-arquivo" style="margin-left: 8px" (click)="remover($index)">remover</button></li>
-        } @empty { <p class="dica-formulario">Nenhum documento adicionado.</p> }
-      </ol>
+
       <footer>
+        <small class="dica-formulario resumo-checklist">{{ itens.length }} documento(s) · {{ obrigatorios() }} obrigatório(s)</small>
         <button type="button" class="acao-secundaria" (click)="aberto.set(false)">Cancelar</button>
         <button type="submit" class="acao-primaria" [disabled]="!nome.trim() || !itens.length">Salvar versão inativa</button>
       </footer>

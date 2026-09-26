@@ -154,6 +154,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/contratos/{contrato_id}/historico` | ACL `contratos` ≥ LEITURA | Histórico por campo | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` | `/api/contratos/{contrato_id}/documentos` | ACL `contratos` ≥ LEITURA | Documentos importantes | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `POST` | `/api/contratos/{contrato_id}/documentos/{codigo}` | Pode editar (2) | Anexa documento importante | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
+| `DELETE` | `/api/contratos/{contrato_id}/documentos/{codigo}` | Pode editar (2) | Limpa documento importante (retira o PDF) | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` | `/api/contratos/{contrato_id}/documentos/{codigo}/arquivo` | ACL `contratos` ≥ LEITURA | Baixa documento importante | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` | `/api/contratos/painel` | ACL `contratos` ≥ LEITURA | Painel: pendências, alertas, execução orçamentária | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` | `/api/contratos/relatorios/notas-empenho` | SuperRoot | Relatório Executivo de NEs (XLSX/PDF) | [contratos-painel.md](endpoints/contratos-painel.md) |

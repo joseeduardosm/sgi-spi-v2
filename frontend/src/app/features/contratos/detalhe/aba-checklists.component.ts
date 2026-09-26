@@ -70,6 +70,20 @@ export class AbaChecklistsComponent implements OnInit {
     this.novoObrigatorio = true;
   }
 
+  /** Sobe (−1) ou desce (+1) um documento, trocando-o de lugar com o vizinho (a ordem vale na competência). */
+  protected mover(indice: number, deslocamento: number): void {
+    const destino = indice + deslocamento;
+    if (destino < 0 || destino >= this.itens.length) return;
+    const lista = [...this.itens];
+    [lista[indice], lista[destino]] = [lista[destino], lista[indice]];
+    this.itens = lista;
+  }
+
+  /** Quantos documentos da lista são obrigatórios (resumo no rodapé da janela). */
+  protected obrigatorios(): number {
+    return this.itens.filter((i) => i.obrigatorio).length;
+  }
+
   /** Remove um documento da lista. */
   protected remover(indice: number): void {
     this.itens = this.itens.filter((_, i) => i !== indice);

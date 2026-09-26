@@ -150,6 +150,15 @@ Resposta **`204`**. Remove o contrato e seus dependentes; **todos** os PDFs e ar
 - `403`;
 - `404`.
 
+## `DELETE /api/contratos/{contrato_id}/documentos/{codigo}`
+
+Limpa o documento: retira o PDF anexado e o documento volta a "Não anexado" na lista. O arquivo não é apagado do disco (o anexo é descartado logicamente), e a auditoria registra `contrato.documento.limpar` com o nome e o hash do arquivo. Aceita os códigos 1 a 23: os termos aditivos (024+) só saem desfazendo a prorrogação. Mesma autorização do envio (pode editar o contrato). Resposta `200`: `LeituraDocumento[]` atualizada. Erros:
+- `400 invalido`: código fora do catálogo;
+- `403`;
+- `404`: contrato inexistente ou documento sem anexo.
+
+Na tela, o botão **Limpar** fica ao lado de **Substituir** na aba "Documentos Importantes" e pede confirmação.
+
 ## `GET /api/contratos/{contrato_id}/documentos/{codigo}/arquivo`
 
 O PDF, com o nome `PREFIXO_SPI_NNN_AAAA.pdf` (ex.: `CONTRATO_ASSINADO_SPI_012_2026.pdf`). `404` se não houver anexo.

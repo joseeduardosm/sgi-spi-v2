@@ -91,6 +91,11 @@ export class ContratosApiService {
     return this.http.post<DocumentoContrato[]>(`${this.base}/${id}/documentos/${codigo}`, dados);
   }
 
+  /** Retira o PDF de um documento importante (volta a "Não anexado"); devolve a lista atualizada. */
+  limparDocumento(id: string, codigo: number): Observable<DocumentoContrato[]> {
+    return this.http.delete<DocumentoContrato[]>(`${this.base}/${id}/documentos/${codigo}`);
+  }
+
   /** Baixa o PDF de um documento importante. */
   baixarDocumento(id: string, codigo: number) {
     return baixarArquivo(this.http, `${this.base}/${id}/documentos/${codigo}/arquivo`);

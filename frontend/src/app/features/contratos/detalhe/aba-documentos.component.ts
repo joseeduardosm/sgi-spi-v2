@@ -37,7 +37,10 @@ import { DocumentoContrato } from '../compartilhado/contratos.models';
                 @if (podeEditar()) {
                   <td>
                     @if (d.codigo <= 23) {
-                      <app-envio-pdf [rotulo]="d.anexado ? 'Substituir' : 'Selecionar documento'" (selecionado)="enviar(d, $event)" />
+                      <div class="acoes-documento">
+                        <app-envio-pdf [rotulo]="d.anexado ? 'Substituir' : 'Selecionar documento'" (selecionado)="enviar(d, $event)" />
+                        @if (d.anexado) { <button type="button" class="acao-perigo acao-pequena" (click)="limpar(d)">Limpar</button> }
+                      </div>
                     } @else { <small>Anexado pela prorrogação</small> }
                   </td>
                 }
@@ -69,6 +72,21 @@ export class AbaDocumentosComponent implements OnInit {
     this.dialogos.executar(this.api.enviarDocumento(this.contratoId(), documento.codigo, arquivo), 'Enviando o documento…').subscribe({
       next: (d) => this.documentos.set(d),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível anexar o documento'),
+    });
+  }
+
+  /** Pede confirmação e retira o PDF do documento (ele volta a "Não anexado"). */
+  protected async limpar(documento: DocumentoContrato): Promise<void> {
+    const ok = await this.dialogos.confirmar({
+      titulo: `Limpar "${documento.titulo}"?`,
+      mensagem: 'O PDF deixa de aparecer no contrato e o documento volta a "Não anexado". O arquivo continua guardado no histórico (auditoria).',
+      rotuloConfirmar: 'Limpar documento',
+      segundos: 3,
+    });
+    if (!ok) return;
+    this.api.limparDocumento(this.contratoId(), documento.codigo).subscribe({
+      next: (d) => this.documentos.set(d),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível limpar o documento'),
     });
   }
 

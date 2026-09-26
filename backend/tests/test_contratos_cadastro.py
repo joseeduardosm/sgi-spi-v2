@@ -218,3 +218,9 @@ def test_documentos_importantes(cliente, admin):
     assert r.status_code == 400
     assert cliente.post(f"/api/contratos/{contrato['id']}/documentos/24", files={"arquivo": ("x.pdf", PDF)}, headers=admin).status_code == 400
     assert cliente.get(f"/api/contratos/{contrato['id']}/documentos/1/arquivo", headers=admin).status_code == 404
+    # Limpar: o documento volta a "Não anexado"; limpar de novo ou um termo aditivo não é possível
+    r = cliente.delete(url, headers=admin)
+    assert r.status_code == 200 and not next(d for d in r.json() if d["codigo"] == 12)["anexado"]
+    assert cliente.get(f"{url}/arquivo", headers=admin).status_code == 404
+    assert cliente.delete(url, headers=admin).status_code == 404
+    assert cliente.delete(f"/api/contratos/{contrato['id']}/documentos/24", headers=admin).status_code == 400

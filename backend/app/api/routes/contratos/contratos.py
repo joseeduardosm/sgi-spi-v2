@@ -194,6 +194,23 @@ def enviar_documento(
         return servico.listar_documentos(sessao, contrato_id)
 
 
+@roteador.delete(
+    "/{contrato_id}/documentos/{codigo}",
+    response_model=list[LeituraDocumento],
+    summary="Limpar documento importante",
+    description="Retira o PDF anexado (o documento volta a \"Não anexado\"; o arquivo fica guardado para auditoria). "
+    "Códigos 1 a 23. Somente criador, equipe vigente ou SuperRoot, com ACL ≥ MODIFICACAO. Devolve a lista atualizada.",
+    responses={**resposta_nao_encontrado("Documento"), **INVALIDO, **SEM_VINCULO},
+)
+def limpar_documento(
+    contrato_id: uuid.UUID, codigo: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)
+) -> list[LeituraDocumento]:
+    """Limpa o documento e devolve a lista atualizada."""
+    with traduzir_erros(sessao):
+        servico.limpar_documento(sessao, contrato_id, codigo, autor)
+        return servico.listar_documentos(sessao, contrato_id)
+
+
 @roteador.get(
     "/{contrato_id}/documentos/{codigo}/arquivo",
     response_class=FileResponse,

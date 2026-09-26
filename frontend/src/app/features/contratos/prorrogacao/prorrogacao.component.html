@@ -71,8 +71,21 @@
       </section>
     }
 
+    @if (p.pode_editar) {
+      <section class="cartao-dados" aria-labelledby="titulo-formalizacao">
+        <header><h2 id="titulo-formalizacao">3. Formalização</h2></header>
+        <div class="corpo grade-formulario tres-colunas">
+          <div><label for="ta-data">Data de assinatura do Termo Aditivo *</label><input id="ta-data" type="date" [(ngModel)]="assinadaEm" /></div>
+          <div><label for="ta-numero">Número do Termo Aditivo</label><input id="ta-numero" maxlength="100" [(ngModel)]="numeroTermo" /></div>
+          <div style="align-self: end; margin-bottom: 16px"><app-envio-pdf rotulo="Selecionar Termo Aditivo assinado (PDF)" (selecionado)="termo = $event" /></div>
+        </div>
+      </section>
+    }
+
+
+    <!-- O parecer é opcional e fica por último, depois da formalização -->
     <section class="cartao-dados" aria-labelledby="titulo-parecer">
-      <header><div><h2 id="titulo-parecer">3. Parecer para prorrogação (opcional)</h2>
+      <header><div><h2 id="titulo-parecer">4. Parecer para prorrogação (opcional)</h2>
         <small>{{ possuiParecer() ? 'O PDF do parecer será emitido com as ciências registradas.' : 'Sem nenhum campo preenchido, a prorrogação é registrada sem relatório.' }}</small></div></header>
       <div class="corpo">
         <div class="grade-formulario">
@@ -95,17 +108,6 @@
         @if (parecerAlterado()) { <p class="dica-formulario">Salve o rascunho para registrar ciências ou emitir o parecer.</p> }
       </div>
     </section>
-
-    @if (p.pode_editar) {
-      <section class="cartao-dados" aria-labelledby="titulo-formalizacao">
-        <header><h2 id="titulo-formalizacao">4. Formalização</h2></header>
-        <div class="corpo grade-formulario tres-colunas">
-          <div><label for="ta-data">Data de assinatura do Termo Aditivo *</label><input id="ta-data" type="date" [(ngModel)]="assinadaEm" /></div>
-          <div><label for="ta-numero">Número do Termo Aditivo</label><input id="ta-numero" maxlength="100" [(ngModel)]="numeroTermo" /></div>
-          <div style="align-self: end; margin-bottom: 16px"><app-envio-pdf rotulo="Selecionar Termo Aditivo assinado (PDF)" (selecionado)="termo = $event" /></div>
-        </div>
-      </section>
-    }
   }
 } @else {
   <p class="estado-vazio">Carregando…</p>

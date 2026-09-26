@@ -654,6 +654,30 @@ def enviar_documento(
     sessao.commit()
 
 
+
+def limpar_documento(sessao: Session, contrato_id: uuid.UUID, codigo: int, autor: Usuario) -> None:
+    """Retira o PDF de um documento do catálogo (volta a "Não anexado").
+
+    O arquivo não é apagado do disco: o anexo é descartado logicamente e a auditoria guarda qual era.
+    """
+    # Termos aditivos (024+) pertencem à prorrogação: saem só desfazendo a prorrogação
+    if codigo not in POR_CODIGO:
+        raise ErroRegraContrato("Tipo de documento inválido. Os termos aditivos só saem desfazendo a prorrogação.")
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    documento = next((d for d in contrato.documentos if d.codigo_tipo == codigo), None)
+    if documento is None or documento.anexo is None or documento.anexo.excluido_em is not None:
+        raise RegistroNaoEncontrado("Documento")
+    anexo = documento.anexo
+    servico_anexos.descartar(anexo)
+    auditar(sessao, autor.login, "contrato.documento.limpar", f"Contrato {contrato.numero}", autor_id=autor.id,
+            alvo_tipo="contrato", alvo_id=contrato.id,
+            dados={"codigo": codigo, "titulo": documento.titulo, "arquivo": anexo.nome_original, "sha256": anexo.sha256})
+    # Sem o registro, o documento volta a aparecer como "Não anexado" no catálogo
+    contrato.documentos.remove(documento)
+    sessao.commit()
+
+
 def documento_para_download(sessao: Session, contrato_id: uuid.UUID, codigo: int):
     """Resposta de download do documento, com o nome padronizado."""
     contrato = obter_contrato(sessao, contrato_id)

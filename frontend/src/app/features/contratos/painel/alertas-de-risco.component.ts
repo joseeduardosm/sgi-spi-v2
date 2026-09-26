@@ -11,6 +11,7 @@ import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.comp
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { PainelContratos } from '../compartilhado/contratos.models';
 import { ROTULOS_RISCO } from '../compartilhado/rotulos';
+import { listaExercicios } from './painel.component';
 
 /** Tela dedicada "Alertas de risco": os riscos agrupados por contrato, cada um num cartão que leva à ação. */
 @Component({
@@ -30,7 +31,7 @@ import { ROTULOS_RISCO } from '../compartilhado/rotulos';
     @if (painel(); as p) {
       <form class="filtros-ocorrencias" (ngSubmit)="aplicar()">
         <select name="exercicio" aria-label="Exercício" [(ngModel)]="exercicio" (change)="aplicar()">
-          @for (a of [anoAtual - 2, anoAtual - 1, anoAtual, anoAtual + 1]; track a) { <option [ngValue]="a">Exercício {{ a }}</option> }
+          @for (a of exercicios(); track a) { <option [ngValue]="a">Exercício {{ a }}</option> }
         </select>
         <select name="empresa" aria-label="Empresa" [(ngModel)]="empresaId" (change)="aplicar()">
           <option value="">Todas as empresas</option>
@@ -98,6 +99,8 @@ export class AlertasDeRiscoComponent implements OnInit {
   protected readonly totalRiscos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.length, 0) ?? 0);
   protected readonly altos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.filter((r) => r.gravidade === 'alta').length, 0) ?? 0);
   // Filtros atuais, repassados ao link "← Painel" para manter a mesma seleção
+  // Mesma lista fixa de exercícios do painel
+  protected readonly exercicios = computed(() => listaExercicios(this.painel()?.contratos.map((c) => c.rotulo) ?? [], this.exercicio));
   protected readonly filtrosUrl = signal<Record<string, string | number>>({});
 
   /** Lê os filtros da URL (vindos do painel) e carrega os alertas. */

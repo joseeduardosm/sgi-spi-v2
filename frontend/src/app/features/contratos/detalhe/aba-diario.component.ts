@@ -33,19 +33,22 @@ interface LinhaGlosa {
       <div class="diario-chat" #chat>
         @for (o of diario()?.ocorrencias ?? []; track o.id) {
           <article class="balao-diario" [class.minha]="o.registrada_por_id === usuarioId()" [class.com-glosa]="o.possui_glosa">
+            <!-- Cabeçalho numa linha: autor, papel, data da ocorrência e competência (selos) e hora do registro -->
             <header>
               <strong>{{ o.registrada_por_nome }}</strong>
               @if (o.registrada_por_papel) { <span class="papel">{{ rotuloPapel(o.registrada_por_papel) }}</span> }
-              <time [attr.datetime]="o.criado_em">{{ o.criado_em | date: 'dd/MM/yyyy HH:mm' }}</time>
+              <span class="selo-diario">Ocorrência {{ o.data_ocorrencia | dataBr }}</span>
+              @if (o.competencia_rotulo) { <span class="selo-diario">Competência {{ o.competencia_rotulo }}</span> }
+              <time [attr.datetime]="o.criado_em" title="Registrado em">{{ o.criado_em | date: 'dd/MM/yyyy HH:mm' }}</time>
             </header>
-            <p class="data-ocorrencia">Ocorrência de <b>{{ o.data_ocorrencia | dataBr }}</b>@if (o.competencia_rotulo) { · competência {{ o.competencia_rotulo }} }</p>
             <p class="texto">{{ o.descricao }}</p>
             @if (o.possui_glosa) {
+              <!-- Glosas como chips: item e quantidade, sem ocupar um bloco inteiro -->
               <div class="glosas-balao">
-                <span class="selo-ocorrencia">Glosa</span>
-                <ul>@for (g of o.glosas; track g.item_id) { <li>{{ g.descricao_item }}: <b>{{ g.quantidade | quantidade }}</b></li> }</ul>
-                @if (o.medicao_ja_concluida) { <small class="texto-erro">A medição dessa competência já foi concluída: a glosa só vale se ela for reaberta.</small> }
+                <span class="rotulo-glosa">Glosa</span>
+                @for (g of o.glosas; track g.item_id) { <span class="chip-glosa">{{ g.descricao_item }} · <b>{{ g.quantidade | quantidade }}</b></span> }
               </div>
+              @if (o.medicao_ja_concluida) { <small class="texto-erro">A medição dessa competência já foi concluída: a glosa só vale se ela for reaberta.</small> }
             }
             <footer>
               @if (o.email.enviado_em === null) {
@@ -67,16 +70,20 @@ interface LinhaGlosa {
 
       @if (diario()?.pode_registrar) {
         <form class="diario-formulario" (ngSubmit)="registrar()">
-          <div class="grade-formulario">
+          <p class="secao-formulario">Nova ocorrência</p>
+          <div class="grade-formulario diario-campos">
             <div>
               <label for="diario-data">Data da ocorrência *</label>
               <input id="diario-data" name="data" type="date" required [max]="hoje" [(ngModel)]="data" />
             </div>
-            <fieldset class="grupo-radio">
-              <legend>Esta ocorrência implicará glosa? *</legend>
-              <label><input type="radio" name="glosa" [value]="false" [(ngModel)]="possuiGlosa" /> Não</label>
-              <label><input type="radio" name="glosa" [value]="true" [(ngModel)]="possuiGlosa" (change)="aoMarcarGlosa()" /> Sim</label>
-            </fieldset>
+            <!-- Seletor segmentado Não | Sim (botões, no lugar de rádios desproporcionais) -->
+            <div>
+              <span class="rotulo-campo" id="rotulo-glosa">Esta ocorrência implicará glosa? *</span>
+              <div class="seletor-segmentado" role="radiogroup" aria-labelledby="rotulo-glosa">
+                <button type="button" role="radio" [attr.aria-checked]="!possuiGlosa" [class.ativo]="!possuiGlosa" (click)="possuiGlosa = false">Não</button>
+                <button type="button" role="radio" [attr.aria-checked]="possuiGlosa" [class.ativo]="possuiGlosa" (click)="possuiGlosa = true; aoMarcarGlosa()">Sim</button>
+              </div>
+            </div>
             <div class="ocupa-duas">
               <label for="diario-texto">Ocorrência *</label>
               <textarea id="diario-texto" name="descricao" required maxlength="4000" rows="3" [(ngModel)]="descricao"

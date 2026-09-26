@@ -1129,16 +1129,17 @@ a.acao-primaria {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 560px;
+  /* Acompanha a altura da janela: mais ocorrências visíveis sem rolar a página inteira */
+  max-height: max(360px, calc(100vh - 420px));
   overflow-y: auto;
-  padding: 18px 22px;
+  padding: 14px 18px;
   background: #f7f8fa;
 }
 
 .balao-diario {
   align-self: flex-start;
-  max-width: min(720px, 88%);
-  padding: 12px 14px;
+  max-width: min(980px, 82%);
+  padding: 9px 13px;
   border: 1px solid #e3e6e9;
   border-radius: 4px 14px 14px 14px;
   background: #fff;
@@ -1172,29 +1173,44 @@ a.acao-primaria {
     }
   }
 
-  .data-ocorrencia {
-    margin: 4px 0 6px;
-    color: #5a6673;
-    font-size: 12px;
+  /* Data da ocorrência e competência como selos no cabeçalho */
+  .selo-diario {
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: #eff1f4;
+    color: #4d5966;
+    font-size: 11px;
+    font-weight: 600;
   }
 
   .texto {
-    margin: 0;
+    margin: 5px 0 0;
     font-size: 13px;
     line-height: 1.45;
     white-space: pre-wrap;
   }
 
+  /* Glosas em chips numa linha (quebra se não couber) */
   .glosas-balao {
-    margin-top: 8px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: #fcf0f1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 7px;
     font-size: 12px;
 
-    ul {
-      margin: 6px 0 0;
-      padding-left: 18px;
+    .rotulo-glosa {
+      color: var(--spi-vermelho);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .chip-glosa {
+      padding: 2px 9px;
+      border: 1px solid #f1c9cd;
+      border-radius: 10px;
+      background: #fcf0f1;
     }
   }
 
@@ -1202,7 +1218,7 @@ a.acao-primaria {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 8px;
+    margin-top: 5px;
     color: #8e99a6;
     font-size: 11px;
   }
@@ -1444,4 +1460,113 @@ a.acao-primaria {
     .ocupa-2,
     .ocupa-3 { grid-column: 1 / -1; }
   }
+}
+
+/* Rótulo de um campo que não é <label> (ex.: grupo de botões) */
+.rotulo-campo {
+  display: block;
+  margin: 0 0 7px;
+  color: #464f5a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Seletor segmentado (ex.: Não | Sim): botões lado a lado, com a mesma altura dos campos */
+.seletor-segmentado {
+  display: inline-flex;
+  margin-bottom: 16px;
+  border: 1px solid #e2e5e8;
+  border-radius: 7px;
+  overflow: hidden;
+
+  button {
+    min-width: 76px;
+    height: 42px;
+    padding: 0 18px;
+    border: 0;
+    background: #fff;
+    color: #4d5966;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+
+    & + button { border-left: 1px solid #e2e5e8; }
+
+    &.ativo {
+      background: var(--spi-vermelho);
+      color: #fff;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #bc3843;
+      outline-offset: -2px;
+    }
+  }
+}
+
+/* Variante compacta do seletor segmentado (dentro de tabelas) */
+.seletor-segmentado.pequeno {
+  margin-bottom: 0;
+
+  button {
+    min-width: 0;
+    height: 28px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+}
+
+/* Janela do checklist: faixa "adicionar documento" e lista */
+.adicionar-documento {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) auto auto;
+  gap: 0 12px;
+  align-items: end;
+  margin-top: 14px;
+  padding: 14px 14px 0;
+  border: 1px dashed #e2e5e8;
+  border-radius: 8px;
+  background: #fbfbfc;
+
+  label {
+    display: block;
+    margin: 0 0 7px;
+    color: #464f5a;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  input {
+    width: 100%;
+    height: 42px;
+    margin-bottom: 16px;
+  }
+
+  > button {
+    height: 42px;
+    margin-bottom: 16px;
+  }
+}
+
+.lista-documentos-checklist {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.modal-portal footer .resumo-checklist {
+  margin: 0 auto 0 0;
+}
+
+@media (max-width: 767px) {
+  .adicionar-documento {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Documentos importantes: "Substituir" e "Limpar" lado a lado */
+.acoes-documento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }

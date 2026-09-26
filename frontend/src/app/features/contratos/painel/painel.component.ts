@@ -42,6 +42,12 @@ export class PainelComponent implements OnInit {
   // Quantidade de riscos de gravidade alta (destaque no cartão)
   protected readonly alertasAltos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.filter((r) => r.gravidade === 'alta').length, 0) ?? 0);
   // Quanto do previsto no exercício já foi pago
+  /**
+   * Exercícios oferecidos no seletor: lista fixa (não muda ao escolher), do ano do contrato mais antigo
+   * da carteira (ou 8 anos atrás) até 2 anos à frente, do mais recente para o mais antigo.
+   */
+  protected readonly exercicios = computed(() => listaExercicios(this.painel()?.contratos.map((c) => c.rotulo) ?? [], this.exercicio));
+
   protected readonly percentualPago = computed(() => {
     const e = this.painel()?.execucao;
     return e && Number(e.total_previsto) ? (Number(e.total_pago) * 100) / Number(e.total_previsto) : 0;
@@ -76,4 +82,13 @@ export class PainelComponent implements OnInit {
   protected altura(valor: string): number {
     return (Number(valor) / this.escala()) * 100;
   }
+}
+
+/** Anos do seletor de exercício; o ano do contrato vem do rótulo "NNN/AAAA · ...". Inclui sempre o escolhido. */
+export function listaExercicios(rotulosContratos: string[], escolhido: number): number[] {
+  const atual = new Date().getFullYear();
+  const anos = rotulosContratos.map((r) => Number(/\d{1,4}\/(\d{4})/.exec(r)?.[1])).filter((a) => a > 1990);
+  const inicio = Math.min(atual - 8, escolhido, ...anos);
+  const fim = Math.max(atual + 2, escolhido);
+  return Array.from({ length: fim - inicio + 1 }, (_, i) => fim - i);
 }

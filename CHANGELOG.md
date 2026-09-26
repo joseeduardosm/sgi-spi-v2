@@ -22,7 +22,21 @@ Informe também migrações do banco e endpoints novos ou alterados.
   - coluna opcional "UF" (K) na planilha de importação.
   - Campo `unidade_fornecimento` em `GravacaoItem` e `LeituraItem`. Migração `e5a8c3d1f2b4`.
 
+- **Limpar documento importante:** botão "Limpar" ao lado de "Substituir" na aba Documentos Importantes. O PDF sai do contrato e o documento volta a "Não anexado"; o arquivo fica guardado para auditoria. Endpoint `DELETE /api/contratos/{contrato_id}/documentos/{codigo}` (códigos 1 a 23).
+
 ### Alterado
+- **Diário de bordo mais compacto:**
+  - cabeçalho do balão numa linha, com selos de data e competência;
+  - glosas em chips e balões mais largos;
+  - área do chat acompanhando a altura da janela;
+  - pergunta "Esta ocorrência implicará glosa?" com seletor Não | Sim, no lugar dos rádios desproporcionais.
+- **Janela "Criar/Editar checklist" reorganizada:**
+  - nome e modelo global no topo;
+  - tabela dos documentos, com tipo Obrigatório | Opcional e ações ↑ ↓ remover (agora dá para reordenar);
+  - faixa única para adicionar documento;
+  - resumo de documentos e obrigatórios no rodapé.
+- **Seletor de exercício** do painel e dos alertas com lista fixa (do contrato mais antigo, ou 8 anos atrás, até 2 anos à frente), rolável, que não muda ao escolher.
+- **Prorrogação:** o parecer (opcional) passa a ser a última seção da tela, depois da formalização.
 - **Tela de cadastro/edição do contrato reorganizada** em três grupos:
   - Identificação: empresa, número, apelido e objeto;
   - Vigência: data inicial, vigência, data final calculada, e vigência máxima com a data-limite;

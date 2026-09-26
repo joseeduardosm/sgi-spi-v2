@@ -9,6 +9,7 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { DetalheCompetencia, DocumentoMensal, Etapa } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
 
 /** Etapas 5 (checklist mensal), 6 (documento consolidado) e 7 (Ordem Bancária). */
 @Component({
@@ -20,7 +21,7 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
       @case ('checklist') {
         <section class="cartao-dados" aria-labelledby="titulo-checklist-mensal">
           <header>
-            <div><h2 id="titulo-checklist-mensal">5. Documentos mensais do checklist</h2>
+            <div><h2 id="titulo-checklist-mensal">6. Documentos mensais do checklist</h2>
               <small>Os obrigatórios precisam ser anexados; os opcionais podem ficar sem anexo. Com todos anexados, a etapa conclui sozinha.</small></div>
             @if (editavel()) {
               <button type="button" class="acao-primaria" [disabled]="obrigatoriosPendentes(d) > 0" (click)="concluirChecklist()"
@@ -50,9 +51,14 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
       }
       @case ('consolidado') {
         <section class="cartao-dados" aria-labelledby="titulo-consolidado">
-          <header><h2 id="titulo-consolidado">6. Documento consolidado</h2></header>
+          <header><h2 id="titulo-consolidado">7. Documento consolidado</h2></header>
           <div class="corpo">
-            <p class="dica-formulario" style="margin: 0 0 12px">O sistema reúne medição, notas fiscais, avaliação assinada, histórico do CADIN, checklist e resumo executivo em um único PDF.</p>
+            <p class="dica-formulario" style="margin: 0 0 12px">O sistema reúne medição, notas fiscais, retenção de tributos, avaliação assinada, histórico do CADIN, checklist e resumo executivo em um único PDF.</p>
+            @if (d.etapa_atual !== 'consolidado' && d.etapa_atual !== 'ordem_bancaria' && d.etapa_atual !== 'concluida') {
+              <p class="aviso-bloco">Liberado quando todas as etapas anteriores estiverem concluídas.
+                @if (d.etapas_abertas.length) { Falta concluir: <b>{{ faltando(d) }}</b>. }
+              </p>
+            }
             <div class="acoes-cartao esquerda">
               @if (d.pode_editar && (d.etapa_atual === 'consolidado' || d.etapa_atual === 'ordem_bancaria')) {
                 <button type="button" class="acao-primaria" (click)="gerarConsolidado()">Gerar e baixar documento unificado</button>
@@ -65,7 +71,7 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
       }
       @case ('ordem_bancaria') {
         <section class="cartao-dados" aria-labelledby="titulo-ob">
-          <header><h2 id="titulo-ob">7. Ordem Bancária</h2></header>
+          <header><h2 id="titulo-ob">8. Ordem Bancária</h2></header>
           <div class="corpo">
             @if (d.ordem_bancaria) {
               <p class="aviso-bloco informativo">Competência concluída em {{ d.concluida_em | date: 'dd/MM/yyyy HH:mm' }}. O valor de {{ d.valor_a_pagar | moeda }} (NF + NF adicional) foi debitado nas NEs.</p>
@@ -163,5 +169,10 @@ export class EtapaFinaisComponent {
   protected baixar(anexoId: string): void {
     const d = this.detalhe();
     this.api.baixar(d.contrato_id, d.id, anexoId).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
+  }
+
+  /** Etapas ainda abertas (ex.: retenção, CADIN, checklist) antes do consolidado. */
+  protected faltando(d: DetalheCompetencia): string {
+    return d.etapas_abertas.map((e) => ROTULOS_ETAPA[e]).join(', ');
   }
 }

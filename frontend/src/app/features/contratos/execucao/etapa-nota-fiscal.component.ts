@@ -1,36 +1,20 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para controlar a etapa 3 (nota fiscal): valores, retenções, líquido, vencimento e envio do PDF.
+// Este arquivo serve para controlar a etapa 3 (nota fiscal): envio do PDF e do XML, recebimento e prazo de pagamento.
 
-import { Component, inject, input, OnChanges, output } from '@angular/core';
+import { Component, inject, input, OnChanges, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DatePipe } from '@angular/common';
 
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
-import { DetalheCompetencia, NotaFiscal } from '../compartilhado/contratos.models';
+import { DetalheCompetencia } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
-import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
-// Retenções de tributos exibidas no formulário (a chave compõe o nome do campo na API)
-const RETENCOES = [
-  { chave: 'ir', rotulo: 'IR' },
-  { chave: 'inss', rotulo: 'INSS' },
-  { chave: 'iss', rotulo: 'ISS' },
-  { chave: 'pis', rotulo: 'PIS/PASEP' },
-  { chave: 'cofins', rotulo: 'COFINS' },
-] as const;
-
-/** Campos editáveis de uma nota fiscal (principal ou adicional). */
-interface CamposNota {
-  numero: string;
-  valor_bruto: string;
-  retencoes: Record<string, string>;
-}
-
-/** Etapa 3: nota fiscal principal (e adicional opcional), retenções, líquido e vencimento. */
+/** Etapa 3: a equipe junta a NF (PDF + XML, e a adicional se houver). Os valores vêm do XML; as retenções são conferidas na etapa 4. */
 @Component({
   selector: 'app-etapa-nota-fiscal',
-  imports: [FormsModule, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-nota-fiscal.component.html',
 })
 export class EtapaNotaFiscalComponent implements OnChanges {
@@ -40,62 +24,35 @@ export class EtapaNotaFiscalComponent implements OnChanges {
 
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
-  protected readonly retencoes = RETENCOES;
 
-  // Campos do formulário (nota principal, adicional, origem do valor, recebimento, prazo e PDFs)
-  protected principal: CamposNota = this.vazia();
-  protected adicional: CamposNota = this.vazia();
-  protected origem: 'medicao' | 'manual' = 'medicao';
   protected recebidaEm = '';
   protected prazo = 30;
   protected possuiAdicional = false;
   protected arquivo: File | null = null;
+  protected xml: File | null = null;
   protected arquivoAdicional: File | null = null;
-
-  /** Nota em branco. */
-  private vazia(): CamposNota {
-    return { numero: '', valor_bruto: '', retencoes: Object.fromEntries(RETENCOES.map((r) => [r.chave, ''])) };
-  }
-
-  /** Converte uma nota registrada nos campos editáveis (formato brasileiro). */
-  private deNota(nota: NotaFiscal | null): CamposNota {
-    if (!nota) return this.vazia();
-    return {
-      numero: nota.numero,
-      valor_bruto: paraDecimalTela(nota.valor_bruto),
-      retencoes: Object.fromEntries(RETENCOES.map((r) => [r.chave, paraDecimalTela(nota[`retencao_${r.chave}` as keyof NotaFiscal] as string)])),
-    };
-  }
+  protected xmlAdicional: File | null = null;
+  protected readonly reenviando = signal(false);
 
   /** Sempre que a competência muda, preenche o formulário com o que já foi registrado. */
   ngOnChanges(): void {
     const d = this.detalhe();
-    this.principal = this.deNota(d.nota_fiscal);
-    this.adicional = this.deNota(d.nota_fiscal_adicional);
     this.possuiAdicional = !!d.nota_fiscal_adicional;
-    this.origem = d.origem_valor_nf ?? 'medicao';
     this.recebidaEm = d.nf_recebida_em ?? '';
     this.prazo = d.prazo_pagamento_dias ?? 30;
+    this.arquivo = this.xml = this.arquivoAdicional = this.xmlAdicional = null;
   }
 
-  /** Texto digitado (formato brasileiro) como número. */
-  protected numero(valor: string): number {
-    return Number(paraDecimalApi(valor)) || 0;
-  }
-
-  /** Valor bruto: na principal com origem "medição", é o valor autorizado; senão, o digitado. */
-  protected bruto(nota: CamposNota, principal: boolean): number {
-    return principal && this.origem === 'medicao' ? Number(this.detalhe().valor_autorizado) : this.numero(nota.valor_bruto);
-  }
-
-  /** Soma das retenções da nota. */
-  protected somaRetencoes(nota: CamposNota): number {
-    return Object.values(nota.retencoes).reduce((t, v) => t + this.numero(v), 0);
-  }
-
-  /** Valor líquido (bruto − retenções, nunca negativo). */
-  protected liquido(nota: CamposNota, principal: boolean): number {
-    return Math.max(0, this.bruto(nota, principal) - this.somaRetencoes(nota));
+  /** Guarda o XML escolhido (só .xml). */
+  protected escolherXml(evento: Event, adicional: boolean): void {
+    const arquivo = (evento.target as HTMLInputElement).files?.[0] ?? null;
+    if (arquivo && !arquivo.name.toLowerCase().endsWith('.xml')) {
+      this.dialogos.avisar('Arquivo inválido', 'Selecione o XML da nota fiscal (arquivo .xml).');
+      (evento.target as HTMLInputElement).value = '';
+      return;
+    }
+    if (adicional) this.xmlAdicional = arquivo;
+    else this.xml = arquivo;
   }
 
   /** Data de vencimento do pagamento (recebimento + prazo), calculada em UTC para não sofrer com fuso. */
@@ -106,53 +63,55 @@ export class EtapaNotaFiscalComponent implements OnChanges {
     return data.toISOString().slice(0, 10).split('-').reverse().join('/');
   }
 
-  /** NF + NF adicional (brutos): o que a OB vai debitar nas NEs apontadas na medição. */
-  protected totalAPagar(): number {
-    return this.bruto(this.principal, true) + (this.possuiAdicional ? this.numero(this.adicional.valor_bruto) : 0);
-  }
-
-  /** Soma do saldo livre das NEs escolhidas na medição. */
-  protected saldoLivreNotas(): number {
-    return this.detalhe().notas_selecionadas.reduce((t, n) => t + Number(n.saldo_livre), 0);
-  }
-
-  /** Confere todos os campos obrigatórios, as retenções e se as NEs cobrem o total a pagar. */
+  /** PDF e XML (novos ou já enviados), recebimento e prazo válidos. */
   protected valido(): boolean {
     const d = this.detalhe();
-    const principalOk = !!this.principal.numero.trim() && !!this.recebidaEm && this.prazo >= 1 && this.prazo <= 3650 &&
-      (!!this.arquivo || !!d.nota_fiscal?.arquivo) && this.bruto(this.principal, true) > 0 && this.somaRetencoes(this.principal) <= this.bruto(this.principal, true);
-    const adicionalOk = !this.possuiAdicional || (!!this.adicional.numero.trim() && this.numero(this.adicional.valor_bruto) > 0 &&
-      (!!this.arquivoAdicional || !!d.nota_fiscal_adicional?.arquivo) && this.somaRetencoes(this.adicional) <= this.numero(this.adicional.valor_bruto));
-    // Tolerância de meio centavo para arredondamentos
-    return principalOk && adicionalOk && this.totalAPagar() <= this.saldoLivreNotas() + 0.005;
+    const principal = (!!this.arquivo || !!d.nota_fiscal?.arquivo) && (!!this.xml || !!d.nota_fiscal?.xml);
+    const adicional = !this.possuiAdicional || ((!!this.arquivoAdicional || !!d.nota_fiscal_adicional?.arquivo) &&
+      (!!this.xmlAdicional || !!d.nota_fiscal_adicional?.xml));
+    return principal && adicional && !!this.recebidaEm && this.prazo >= 1 && this.prazo <= 3650;
   }
 
-  /** Monta o envio (multipart) com os campos e PDFs e conclui a etapa. */
+  /** Envia (multipart) os arquivos e as datas; a etapa conclui e o Financeiro é avisado por e-mail. */
   protected async concluir(): Promise<void> {
-    const ok = await this.dialogos.confirmar({ titulo: 'Concluir a nota fiscal?', mensagem: 'A etapa do CADIN será liberada.', rotuloConfirmar: 'Concluir nota fiscal' });
+    const ok = await this.dialogos.confirmar({
+      titulo: 'Juntar a nota fiscal?',
+      mensagem: 'O XML é lido para preencher número, valor e retenções. A retenção de tributos (Financeiro, que recebe um e-mail com cópia para a equipe), o CADIN e o checklist ficam liberados ao mesmo tempo; o documento consolidado só é gerado com os três concluídos.',
+      rotuloConfirmar: 'Juntar nota fiscal',
+    });
     if (!ok) return;
     const d = this.detalhe();
     const campos: Record<string, string | boolean | File | null> = {
-      numero: this.principal.numero.trim(), recebida_em: this.recebidaEm, prazo_pagamento_dias: String(this.prazo), origem_valor: this.origem,
-      valor_bruto: this.origem === 'manual' ? paraDecimalApi(this.principal.valor_bruto) : null, arquivo: this.arquivo,
-      possui_adicional: this.possuiAdicional,
+      recebida_em: this.recebidaEm, prazo_pagamento_dias: String(this.prazo), possui_adicional: this.possuiAdicional,
+      arquivo: this.arquivo, xml: this.xml,
     };
-    // Uma retenção por campo: retencao_ir, retencao_inss...
-    for (const r of RETENCOES) campos[`retencao_${r.chave}`] = paraDecimalApi(this.principal.retencoes[r.chave]);
-    // Nota adicional: campos com o prefixo "adicional_"
     if (this.possuiAdicional) {
-      campos['adicional_numero'] = this.adicional.numero.trim();
-      campos['adicional_valor_bruto'] = paraDecimalApi(this.adicional.valor_bruto);
       campos['arquivo_adicional'] = this.arquivoAdicional;
-      for (const r of RETENCOES) campos[`adicional_retencao_${r.chave}`] = paraDecimalApi(this.adicional.retencoes[r.chave]);
+      campos['xml_adicional'] = this.xmlAdicional;
     }
-    this.dialogos.executar(this.api.notaFiscal(d.contrato_id, d.id, campos), 'Enviando a nota fiscal…').subscribe({
+    this.dialogos.executar(this.api.notaFiscal(d.contrato_id, d.id, campos), 'Lendo o XML e enviando a nota fiscal…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
-      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível concluir a nota fiscal'),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível juntar a nota fiscal'),
     });
   }
 
-  /** Baixa um PDF da competência. */
+  /** Reenvia o e-mail ao Financeiro. */
+  protected reenviarEmail(): void {
+    const d = this.detalhe();
+    this.reenviando.set(true);
+    this.api.reenviarEmail(d.contrato_id, d.id, 'nf').subscribe({
+      next: (novo) => {
+        this.reenviando.set(false);
+        this.atualizado.emit(novo);
+      },
+      error: (e) => {
+        this.reenviando.set(false);
+        this.dialogos.mostrarErro(e, 'Não foi possível reenviar o e-mail');
+      },
+    });
+  }
+
+  /** Baixa um arquivo da competência (PDF ou XML). */
   protected baixar(anexoId: string): void {
     const d = this.detalhe();
     this.api.baixar(d.contrato_id, d.id, anexoId).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });

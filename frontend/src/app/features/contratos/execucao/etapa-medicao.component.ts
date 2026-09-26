@@ -37,6 +37,7 @@ export class EtapaMedicaoComponent implements OnChanges {
   protected notaParaAdicionar = '';
   // Houve alteração não salva (mostra o aviso para salvar)
   protected readonly alterado = signal(false);
+  protected readonly reenviando = signal(false);
 
   /** Sempre que a competência muda (entrada nova), recarrega os campos a partir dela. */
   ngOnChanges(): void {
@@ -66,7 +67,8 @@ export class EtapaMedicaoComponent implements OnChanges {
 
   /** Preenche todas as quantidades com o previsto. */
   protected usarPrevista(): void {
-    for (const i of this.detalhe().itens) this.medidas[i.id] = paraDecimalTela(i.quantidade_prevista);
+    // Preenche com o máximo permitido: o saldo líquido (saldo − glosas)
+    for (const i of this.detalhe().itens) this.medidas[i.id] = paraDecimalTela(i.saldo_liquido);
     this.alterado.set(true);
   }
 
@@ -94,9 +96,40 @@ export class EtapaMedicaoComponent implements OnChanges {
     this.alterado.set(true);
   }
 
+  /** A medição digitada passa do saldo líquido do item? */
+  protected acimaDoSaldo(itemId: string, saldoLiquido: string): boolean {
+    const medida = Number(paraDecimalApi(this.medidas[itemId]));
+    return Number.isFinite(medida) && medida > Number(saldoLiquido) + 1e-9;
+  }
+
+  /** Itens digitados acima do saldo líquido (a API também recusa). */
+  protected excedentes(): string[] {
+    return this.detalhe().itens.filter((i) => this.acimaDoSaldo(i.id, i.saldo_liquido)).map((i) => i.descricao);
+  }
+
+  /** Reenvia o e-mail da medição concluída. */
+  protected reenviarEmail(): void {
+    const d = this.detalhe();
+    this.reenviando.set(true);
+    this.api.reenviarEmailMedicao(d.contrato_id, d.id).subscribe({
+      next: (novo) => {
+        this.reenviando.set(false);
+        this.atualizado.emit(novo);
+      },
+      error: (e) => {
+        this.reenviando.set(false);
+        this.dialogos.mostrarErro(e, 'Não foi possível reenviar o e-mail');
+      },
+    });
+  }
+
   /** Salva a medição; se já houver ciências, avisa que elas serão apagadas. */
   protected async salvar(): Promise<void> {
     const d = this.detalhe();
+    if (this.excedentes().length) {
+      this.dialogos.avisar('Medição acima do saldo líquido', `Ajuste: ${this.excedentes().join(', ')}. Nenhum item pode ser medido acima do saldo líquido (saldo − glosas).`);
+      return;
+    }
     if (d.ciencias.length) {
       const ok = await this.dialogos.confirmar({
         titulo: 'Salvar a medição?',
@@ -123,7 +156,7 @@ export class EtapaMedicaoComponent implements OnChanges {
     const d = this.detalhe();
     const ok = await this.dialogos.confirmar({
       titulo: 'Concluir a medição?',
-      mensagem: 'A medição fica somente leitura, a quantidade medida soma no executado dos itens e a memória de cálculo em PDF é gerada.',
+      mensagem: 'A medição fica somente leitura, a quantidade medida soma no executado dos itens e a memória de cálculo em PDF é gerada. Em seguida, a memória e o diário de bordo do período são enviados por e-mail à equipe e ao preposto, pedindo a nota fiscal em até 48 horas.',
       rotuloConfirmar: 'Concluir medição',
       segundos: 5,
     });

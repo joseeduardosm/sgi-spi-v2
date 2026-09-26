@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.models.setor import MembroSetor, Setor
 from app.models.usuario import Usuario
-from app.schemas.setores import DetalheSetor, GravacaoSetor, LeituraSetor
+from app.schemas.setores import DetalheSetor, GravacaoSetor, LeituraSetor, OpcaoDepartamento
 from app.services.servico_admin_usuarios import para_opcao
 from app.services.servico_auditoria import auditar
 
@@ -71,6 +71,28 @@ def listar_setores(sessao: Session, busca: str | None = None) -> list[LeituraSet
         )
         for s, nome_pai, nome_lider, login_lider, membros, subordinados in sessao.execute(consulta)
     ]
+
+
+def opcoes_departamento(sessao: Session) -> list[OpcaoDepartamento]:
+    """Setores ativos e institucionais (sem os grupos sistêmicos) em ordem hierárquica.
+
+    Cada pai vem antes dos filhos, irmãos em ordem alfabética. Setor cujo pai não entra na lista
+    (inativo ou sistêmico) aparece como raiz.
+    """
+    setores = list(sessao.scalars(select(Setor).where(Setor.ativo.is_(True), Setor.sistemico.is_(False))))
+    ids = {s.id for s in setores}
+    filhos: dict[int | None, list[Setor]] = {}
+    for setor in setores:
+        filhos.setdefault(setor.setor_pai_id if setor.setor_pai_id in ids else None, []).append(setor)
+    opcoes: list[OpcaoDepartamento] = []
+
+    def visitar(pai_id: int | None, nivel: int) -> None:
+        for setor in sorted(filhos.get(pai_id, []), key=lambda s: s.nome.lower()):
+            opcoes.append(OpcaoDepartamento(id=setor.id, nome=setor.nome, nivel=nivel))
+            visitar(setor.id, nivel + 1)
+
+    visitar(None, 0)
+    return opcoes
 
 
 def detalhar_setor(sessao: Session, setor_id: int) -> DetalheSetor:

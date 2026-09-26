@@ -15,11 +15,13 @@ Esta pasta é parte do código-fonte. Ela é a referência para o desenvolviment
 | [endpoints/setores.md](endpoints/setores.md) | `/api/setores/*`: setores e membros |
 | [endpoints/acl.md](endpoints/acl.md) | `/api/acl/*`: recursos, regras e acessos efetivos |
 | [endpoints/ldap.md](endpoints/ldap.md) | `/api/ldap/diretorios/*`: diretórios LDAP |
+| [endpoints/smtp.md](endpoints/smtp.md) | `/api/smtp/servidores/*`: servidores SMTP (envio de e-mail) |
 | [endpoints/sistema.md](endpoints/sistema.md) | `/api/saude` |
 | [endpoints/contratos-empresas.md](endpoints/contratos-empresas.md) | `/api/contratos/empresas/*`: empresas contratadas e prepostos |
 | [endpoints/contratos-cadastro.md](endpoints/contratos-cadastro.md) | `/api/contratos/*`: carteira, cadastro, detalhe, documentos importantes e histórico |
 | [endpoints/contratos-orcamento.md](endpoints/contratos-orcamento.md) | Previsão orçamentária e Notas de Empenho |
 | [endpoints/contratos-execucao.md](endpoints/contratos-execucao.md) | Checklists, formulários de avaliação, competências e etapas 1 a 7 |
+| [endpoints/contratos-diario.md](endpoints/contratos-diario.md) | Diário de bordo: ocorrências, glosas e e-mails à equipe e ao preposto |
 | [endpoints/contratos-alteracoes.md](endpoints/contratos-alteracoes.md) | Prorrogação, reajuste e aditamento/supressão |
 | [endpoints/contratos-painel.md](endpoints/contratos-painel.md) | Painel, relatórios gerenciais e modelos globais |
 | [endpoints/contratos-migracao-sgi.md](endpoints/contratos-migracao-sgi.md) | `/api/contratos/migracao-sgi`: botão "Importar do SGI" (SuperRoot) |

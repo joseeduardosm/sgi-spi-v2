@@ -11,14 +11,17 @@ import { baixarArquivo } from '../../../shared/utilitarios/download';
 import {
   AlteracaoCampo,
   DetalheContrato,
+  DiarioContrato,
   DetalheEmpresa,
   DocumentoContrato,
   EstadoMigracaoSgi,
   GravacaoContrato,
   GravacaoEmpresa,
+  GravacaoOcorrencia,
   GravacaoPreposto,
   Modelo,
   NotaEmpenho,
+  OcorrenciaDiario,
   OpcaoEmpresa,
   Pagina,
   PainelContratos,
@@ -198,6 +201,24 @@ export class ContratosApiService {
   /** Exclui um modelo global. */
   excluirModelo(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/modelos/${id}`);
+  }
+
+  // --- Diário de bordo ---
+  diario(id: string): Observable<DiarioContrato> {
+    return this.http.get<DiarioContrato>(`${this.base}/${id}/diario`);
+  }
+
+  registrarOcorrencia(id: string, dados: GravacaoOcorrencia): Observable<OcorrenciaDiario> {
+    return this.http.post<OcorrenciaDiario>(`${this.base}/${id}/diario`, dados);
+  }
+
+  reenviarOcorrencia(id: string, ocorrenciaId: string): Observable<OcorrenciaDiario> {
+    return this.http.post<OcorrenciaDiario>(`${this.base}/${id}/diario/${ocorrenciaId}/reenviar`, null);
+  }
+
+  diarioPdf(id: string, inicio?: string, fim?: string) {
+    const params = new HttpParams({ fromObject: { ...(inicio ? { inicio } : {}), ...(fim ? { fim } : {}) } });
+    return baixarArquivo(this.http, `${this.base}/${id}/diario/pdf?${params.toString()}`, 'diario_de_bordo.pdf');
   }
 
   // --- Importação do SGI (SuperRoot) ---

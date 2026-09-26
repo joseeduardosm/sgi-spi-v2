@@ -67,21 +67,39 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
         "Memória de cálculo da medição", f"Contrato {contrato.numero} · Competência {competencia.competencia:%m/%Y} · versão {versao}",
         paisagem=True, autor=autor,
     )
+    # Importação local: servico_competencias e servico_diario também importam este módulo
+    from app.services.contratos.servico_competencias import saldos_da_medicao
+    from app.services.contratos.servico_diario import ocorrencias_do_periodo
+
     _cabecalho_contrato(documento, contrato, competencia)
+    saldos = saldos_da_medicao(contrato, competencia)
     # Uma linha por item, somando o total medido
     total = Decimal(0)
     linhas = []
     for item in competencia.itens:
         subtotal = arredondar(item.quantidade_medida * item.valor_unitario)
         total += subtotal
+        saldo = saldos[item.id]
         linhas.append(
             [str(item.ordem), item.descricao, "Contínuo" if item.tipo == "continuo" else "Sob demanda", moeda(item.valor_unitario),
-             quantidade(item.quantidade_prevista), quantidade(item.quantidade_medida), moeda(subtotal)]
+             quantidade(saldo.saldo), quantidade(saldo.glosas), quantidade(saldo.saldo_liquido), quantidade(item.quantidade_medida), moeda(subtotal)]
         )
     documento.secao("Medição do serviço").tabela(
-        ["Item", "Descrição", "Tipo", "Valor unitário", "Qtd. prevista", "Medição", "Subtotal"], linhas,
-        larguras=[0.5, 5, 1.3, 1.5, 1.3, 1.3, 1.6], alinhar_direita=[3, 4, 5, 6], rodape=["", "Total medido", "", "", "", "", moeda(total)],
+        ["Item", "Descrição", "Tipo", "Valor unitário", "Saldo", "Glosas", "Saldo líquido", "Medição", "Subtotal"], linhas,
+        larguras=[0.5, 4.4, 1.2, 1.4, 1.1, 1.1, 1.2, 1.1, 1.5], alinhar_direita=[3, 4, 5, 6, 7, 8],
+        rodape=["", "Total medido", "", "", "", "", "", "", moeda(total)],
     )
+    # Glosas do diário de bordo que valem nesta competência (data no período)
+    glosas = [
+        [f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, o.descricao if len(o.descricao) <= 300 else o.descricao[:297] + "…",
+         g.descricao_item, quantidade(g.quantidade)]
+        for o in (ocorrencias_do_periodo(contrato, competencia.periodo_inicio, competencia.periodo_fim) if competencia.tipo == "regular" else [])
+        for g in o.glosas
+    ]
+    if glosas:
+        documento.secao("Glosas do período (diário de bordo)").tabela(
+            ["Data", "Registrada por", "Ocorrência", "Item", "Quantidade"], glosas, larguras=[1, 2, 5, 3, 1.2], alinhar_direita=[4],
+        )
     documento.secao("Notas de Empenho (ordem de consumo)").tabela(
         ["Ordem", "Nota de Empenho", "Saldo"], [[str(o), n.numero, moeda(n.saldo)] for o, n in enumerate(notas, start=1)],
         larguras=[1, 4, 2], alinhar_direita=[2],
@@ -90,6 +108,87 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
         ["Nome", "Papel", "Ciência em"],
         [[c.nome, PAPEIS.get(c.papel, c.papel), data_hora(c.registrada_em)] for c in competencia.ciencias],
         larguras=[4, 3, 2],
+    )
+    return documento.gerar()
+
+
+def _cnpj(valor: str | None) -> str:
+    d = "".join(c for c in (valor or "") if c.isdigit())
+    return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}" if len(d) == 14 else (d or "não informado")
+
+
+def _data_iso(valor: str | None, formato: str = "%d/%m/%Y") -> str:
+    from datetime import date
+
+    return date.fromisoformat(valor).strftime(formato) if valor else "não informada"
+
+
+def _secao_nota(documento: DocumentoPdf, titulo: str, dados: dict, conferencias: list, retencoes: dict[str, Decimal], bruto: Decimal) -> None:
+    """Nota renderizada a partir do XML, conferências e retenções confirmadas."""
+    emitente, tomador = dados.get("emitente") or {}, dados.get("tomador") or {}
+    documento.secao(titulo).campos(
+        [
+            ("Modelo", dados.get("modelo_rotulo") or "—"),
+            ("Número / série", f"{dados.get('numero') or '—'}" + (f" / {dados['serie']}" if dados.get("serie") else "")),
+            ("Emissão", _data_iso(dados.get("emissao"))),
+            ("Competência", _data_iso(dados.get("competencia"), "%m/%Y")),
+            ("Emitente", f"{emitente.get('razao_social') or '—'} · CNPJ {_cnpj(emitente.get('cnpj'))}"
+             + (f" · IM {emitente['inscricao_municipal']}" if emitente.get("inscricao_municipal") else "")),
+            ("Tomador", f"{tomador.get('razao_social') or '—'} · CNPJ {_cnpj(tomador.get('cnpj'))}"),
+            ("Código do serviço", dados.get("codigo_servico") or "não informado na nota"),
+            ("Situação", dados.get("situacao") or "—"),
+            ("Chave", dados.get("chave") or "—"),
+            ("Valor da nota (bruto)", moeda(bruto)),
+        ]
+    )
+    itens = dados.get("itens") or []
+    if itens:
+        documento.tabela(
+            ["Discriminação (itens)", "Qtd.", "Valor unitário", "Valor"],
+            [[i.get("descricao") or "", quantidade(Decimal(i["quantidade"])) if i.get("quantidade") else "",
+              f"R$ {quantidade(Decimal(i['valor_unitario']))}" if i.get("valor_unitario") else "",
+              moeda(Decimal(i["valor_total"])) if i.get("valor_total") else ""]
+             for i in itens],
+            larguras=[6, 1, 1.6, 1.6], alinhar_direita=[1, 2, 3],
+        )
+    elif dados.get("discriminacao"):
+        documento.paragrafo(f"Discriminação dos serviços: {dados['discriminacao']}")
+    if conferencias:
+        simbolo = {"ok": "Conforme", "alerta": "CONFERIR", "info": "Informativo"}
+        documento.tabela(["Conferência", "Resultado", "Detalhe"], [[c.descricao, simbolo.get(c.situacao, c.situacao), c.detalhe] for c in conferencias],
+                         larguras=[3, 1.4, 6])
+    xml = dados.get("retencoes") or {}
+    rotulos = {"ir": "IR", "inss": "INSS", "iss": "ISS", "pis": "PIS", "cofins": "COFINS", "csll": "CSLL"}
+    total = sum(retencoes.values(), Decimal(0))
+    documento.tabela(
+        ["Tributo", "Valor no XML", "Retenção conferida"],
+        [[rotulos[t], moeda(Decimal(xml.get(t) or "0")), moeda(retencoes[t])] for t in rotulos],
+        larguras=[3, 2, 2], alinhar_direita=[1, 2],
+        rodape=["Líquido a pagar (bruto − retenções)", f"Retenções: {moeda(total)}", moeda(bruto - total)],
+    )
+
+
+def relatorio_retencao(contrato: Contrato, competencia: Competencia, conferencias_principal: list, conferencias_adicional: list, autor: str) -> bytes:
+    """PDF da etapa de retenção: a(s) nota(s) renderizada(s) do XML, conferências, retenções e quem conferiu."""
+    documento = DocumentoPdf(
+        "Retenção de tributos", f"Contrato {contrato.numero} · Competência {competencia.numero_competencia}", autor=autor,
+    )
+    _cabecalho_contrato(documento, contrato, competencia)
+    tributos = ("ir", "inss", "iss", "pis", "cofins", "csll")
+    _secao_nota(documento, "Nota fiscal (dados do XML)", competencia.nf_dados_xml or {}, conferencias_principal,
+                {t: getattr(competencia, f"nf_retencao_{t}") or Decimal(0) for t in tributos}, competencia.nf_valor_bruto or Decimal(0))
+    if competencia.nf_adicional_valor_bruto is not None:
+        _secao_nota(documento, "Nota fiscal adicional (dados do XML)", competencia.nf_adicional_dados_xml or {}, conferencias_adicional,
+                    {t: getattr(competencia, f"nf_adicional_retencao_{t}") or Decimal(0) for t in tributos}, competencia.nf_adicional_valor_bruto)
+    documento.secao("Conferência").campos(
+        [
+            ("Conferido por", competencia.retencao_por_nome or "—"),
+            ("Em", data_hora(competencia.retencao_concluida_em)),
+            ("Discriminação compatível com o objeto", "Sim (confirmado)" if competencia.retencao_discriminacao_conferida else "Não confirmado"),
+            ("Recebimento da NF / vencimento",
+             f"{competencia.nf_recebida_em:%d/%m/%Y}" + (f" · prazo {competencia.prazo_pagamento_dias} dia(s)" if competencia.prazo_pagamento_dias else "")
+             if competencia.nf_recebida_em else "—"),
+        ]
     )
     return documento.gerar()
 
@@ -172,7 +271,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         ordem.append(competencia.memorias[-1].anexo_id)
     if competencia.avaliacao:
         ordem.append(competencia.avaliacao.pdf_assinado_anexo_id)
-    ordem += [competencia.nf_anexo_id, competencia.nf_adicional_anexo_id]
+    ordem += [competencia.nf_anexo_id, competencia.nf_adicional_anexo_id, competencia.retencao_pdf_anexo_id]
     for consulta in competencia.consultas_cadin:
         ordem += [consulta.certidao_anexo_id, consulta.email_anexo_id]
     ordem += [d.anexo_id for d in competencia.documentos]

@@ -17,7 +17,7 @@ from types import SimpleNamespace
 from app.models.contratos import Competencia, Contrato
 from app.services.contratos import calculos
 from app.services.contratos.servico_competencias import maximo_de_notas_minimas_por_grupo, nota_final, percentual_da_nota
-from tests.apoio_contratos import PDF
+from tests.apoio_contratos import PDF, conferir_retencao, juntar_nf
 from tests.test_contratos_execucao import _hoje, _preparar_execucao, _url, equipe  # noqa: F401 (fixtures)
 
 # --- 30/360 -----------------------------------------------------------------------------------------
@@ -158,11 +158,11 @@ def test_ob_debita_nf_e_nf_adicional_e_saldo_fica_comprometido(cliente, admin, e
     assert r.status_code == 400 and "saldo livre" in r.json()["detalhe"]
 
     # NF principal (valor da medição) + NF adicional de 500: a OB debita 2.605 nas mesmas NEs, em ordem
-    nf = {"numero": "10", "recebida_em": "2026-02-05", "prazo_pagamento_dias": "30", "origem_valor": "medicao",
-          "possui_adicional": "true", "adicional_numero": "11", "adicional_valor_bruto": "500.00"}
-    r = cliente.post(f"{base}/nota-fiscal", data=nf, files={"arquivo": ("nf.pdf", PDF), "arquivo_adicional": ("nf2.pdf", PDF)}, headers=gestora)
+    r = juntar_nf(cliente, base, gestora, "2105.00", "10", adicional=("500.00", "11"))
     assert r.status_code == 200, r.text
     assert r.json()["valor_a_pagar"] == "2605.00"
+    assert conferir_retencao(cliente, base, gestora).status_code == 400  # falta a retenção da adicional
+    assert conferir_retencao(cliente, base, gestora, adicional={}).status_code == 200
     cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
     for documento in cliente.get(base, headers=gestora).json()["documentos"]:
         cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
@@ -181,24 +181,26 @@ def test_nf_que_passa_do_saldo_livre_das_nes_e_recusada(cliente, admin, equipe):
     notas = {n["numero"]: n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
     base, r = _medir_e_concluir(cliente, contrato, gestora, fiscal, "2026-01", [notas["2026NE00002"]])
     assert r.status_code == 200
-    nf = {"numero": "10", "recebida_em": "2026-02-05", "prazo_pagamento_dias": "30", "origem_valor": "manual", "valor_bruto": "60000.00"}
-    r = cliente.post(f"{base}/nota-fiscal", data=nf, files={"arquivo": ("nf.pdf", PDF)}, headers=gestora)
+    r = juntar_nf(cliente, base, gestora, "60000.00", "10")
     assert r.status_code == 400 and "saldo" in r.json()["detalhe"]
 
 
 # --- Sob demanda acima do saldo da vigência ----------------------------------------------------------
 
 
-def test_medicao_sob_demanda_acima_do_limite_avisa_e_bloqueia_conclusao(cliente, admin, equipe):  # noqa: F811
-    """Medir o sob demanda acima do saldo da vigência gera aviso e impede concluir."""
+def test_medicao_acima_do_saldo_liquido_e_recusada_ao_salvar(cliente, admin, equipe):  # noqa: F811
+    """Medir acima do saldo líquido (aqui, o saldo do sob demanda na vigência) é recusado já ao salvar."""
     contrato, gestora, fiscal = equipe
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
     notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
-    base, r = _medir_e_concluir(cliente, contrato, gestora, fiscal, "2026-01", notas, {"Material": "150"})
-    assert r.status_code == 400 and "saldo disponível" in r.json()["detalhe"]
-    avisos = cliente.get(base, headers=gestora).json()["avisos"]
-    assert len(avisos) == 1 and "Material" in avisos[0]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    itens = [{"id": i["id"], "quantidade_medida": "150" if i["descricao"] == "Material" else i["quantidade_prevista"]} for i in competencia["itens"]]
+    r = cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=gestora)
+    assert r.status_code == 400 and "saldo líquido" in r.json()["detalhe"] and "Material" in r.json()["detalhe"]
+    material = next(i for i in cliente.get(base, headers=gestora).json()["itens"] if i["descricao"] == "Material")
+    assert (material["saldo"], material["glosas"], material["saldo_liquido"]) == ("100.0000", "0.0000", "100.0000")
 
 
 # --- Reajuste retroativo ------------------------------------------------------------------------------

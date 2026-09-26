@@ -110,7 +110,7 @@ class DocumentoPdf:
 
         def celula(valor: str, indice: int, negrito: bool = False) -> Paragraph:
             estilo = ESTILO_PEQUENO_DIREITA if indice in direita else ESTILO_PEQUENO
-            conteudo = escape(valor or "")
+            conteudo = escape(valor or "").replace("\n", "<br/>")
             return Paragraph(f"<b>{conteudo}</b>" if negrito else conteudo, estilo)
 
         # Cabeçalho em negrito, depois os dados e, por fim, o rodapé (se houver)

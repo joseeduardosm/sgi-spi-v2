@@ -41,7 +41,7 @@ from app.services.contratos.servico_contratos import exigir_edicao, obter_contra
 from app.services.servico_auditoria import auditar, valor_json
 
 # Etapas em que a competência ainda recebe a nova versão do checklist
-ETAPAS_ANTES_DO_CHECKLIST = ("medicao", "avaliacao", "nota_fiscal", "cadin", "checklist")
+ETAPAS_ANTES_DO_CHECKLIST = ("medicao", "avaliacao", "nota_fiscal", "retencao", "cadin", "checklist")
 
 
 def _nome(usuario: Usuario) -> str:
@@ -172,7 +172,7 @@ def ativar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid
         outro.ativo = False
     checklist.ativo, checklist.ativado_em = True, agora_utc()
     # Competências que ainda não passaram da etapa do checklist recebem a nova versão
-    abertas = [c for c in contrato.competencias if c.etapa_atual in ETAPAS_ANTES_DO_CHECKLIST]
+    abertas = [c for c in contrato.competencias if c.etapa_atual in ETAPAS_ANTES_DO_CHECKLIST and c.checklist_concluido_em is None]
     for competencia in abertas:
         copiar_checklist(competencia, checklist)
         sessao.flush()

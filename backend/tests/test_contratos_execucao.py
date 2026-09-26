@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 
 from app.services.contratos import calculos
-from tests.apoio_contratos import PDF, criar_contrato, restringir_contratos
+from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 
 # Data "de hoje" fixa nos testes: janeiro e fevereiro de 2026 já acabaram; março está em curso
@@ -149,7 +149,7 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     ordem_notas = [notas["2026NE00001"], notas["2026NE00002"]]
     competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
     base = _url(contrato, f"/competencias/{competencia['id']}")
-    assert competencia["etapas"] == ["medicao", "nota_fiscal", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida"]
+    assert competencia["etapas"] == ["medicao", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida"]
     assert [i["quantidade_prevista"] for i in competencia["itens"]] == ["2.0000", "10.0000"]
 
     # 1 Medição
@@ -169,16 +169,24 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     assert memoria.content[:5] == b"%PDF-"
     assert cliente.get(_url(contrato), headers=gestora).json()["itens"][1]["quantidade_executada"] == "10.0000"
 
-    # 3 Nota fiscal
-    nf = {"numero": "123", "recebida_em": "2026-02-05", "prazo_pagamento_dias": "30", "origem_valor": "medicao", "retencao_ir": "3000"}
-    r = cliente.post(f"{base}/nota-fiscal", data=nf, files={"arquivo": ("nf.pdf", PDF, "application/pdf")}, headers=gestora)
-    assert r.status_code == 400 and "retenções" in r.json()["detalhe"]
-    nf["retencao_ir"] = "31.58"
-    r = cliente.post(f"{base}/nota-fiscal", data=nf, files={"arquivo": ("nf.pdf", PDF, "application/pdf")}, headers=gestora)
+    # 3 Nota fiscal: PDF + XML; número e valor vêm do XML
+    sem_xml = cliente.post(f"{base}/nota-fiscal", data={"recebida_em": "2026-02-05", "prazo_pagamento_dias": "30"},
+                           files={"arquivo": ("nf.pdf", PDF, "application/pdf")}, headers=gestora)
+    assert sem_xml.status_code == 400 and "XML" in sem_xml.json()["detalhe"]
+    r = juntar_nf(cliente, base, gestora, "2105.00", "123")
     assert r.status_code == 200, r.text
     detalhe = r.json()
-    assert detalhe["nota_fiscal"]["valor_bruto"] == "2105.00" and detalhe["nota_fiscal"]["valor_liquido"] == "2073.42"
-    assert detalhe["vencimento_pagamento"] == "2026-03-07" and detalhe["etapa_atual"] == "cadin"
+    assert detalhe["nota_fiscal"]["numero"] == "123" and detalhe["nota_fiscal"]["valor_bruto"] == "2105.00"
+    assert detalhe["vencimento_pagamento"] == "2026-03-07" and detalhe["etapa_atual"] == "retencao"
+
+    # 4 Retenção de tributos: soma acima do bruto e discriminação não conferida são recusadas
+    assert conferir_retencao(cliente, base, gestora, {"ir": "3000"}).status_code == 400
+    assert conferir_retencao(cliente, base, gestora, {"ir": "31.58"}, discriminacao=False).status_code == 400
+    r = conferir_retencao(cliente, base, gestora, {"ir": "31.58"})
+    assert r.status_code == 200, r.text
+    detalhe = r.json()
+    assert detalhe["nota_fiscal"]["valor_liquido"] == "2073.42" and detalhe["etapa_atual"] == "cadin"
+    assert detalhe["retencao"]["por_nome"] and detalhe["retencao"]["pdf"]
 
     # 4 CADIN: com pendência continua aberta; sem pendência conclui
     r = cliente.post(f"{base}/cadin", data={"possui_pendencia": "true"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
@@ -329,8 +337,8 @@ def test_checklist_com_documentos_obrigatorios_e_opcionais(cliente, admin, equip
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
     cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
-    nf = {"numero": "1", "recebida_em": "2026-02-05", "prazo_pagamento_dias": "30", "origem_valor": "medicao"}
-    cliente.post(f"{base}/nota-fiscal", data=nf, files={"arquivo": ("nf.pdf", PDF)}, headers=gestora)
+    assert juntar_nf(cliente, base, gestora, "2105.00").status_code == 200
+    assert conferir_retencao(cliente, base, gestora).status_code == 200
     detalhe = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).json()
     assert detalhe["etapa_atual"] == "checklist"
     assert [(d["nome"], d["obrigatorio"]) for d in detalhe["documentos"]] == [("Folha de pagamento", True), ("Relatório fotográfico", False)]

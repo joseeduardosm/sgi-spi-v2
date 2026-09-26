@@ -9,6 +9,13 @@ from pydantic import BaseModel, Field, field_validator
 from app.schemas.usuarios import OpcaoUsuario
 
 
+class OpcaoDepartamento(BaseModel):
+    """Setor oferecido no combobox "Departamento" do perfil do usuário."""
+    id: int
+    nome: str = Field(..., description="Nome do setor, gravado como departamento do usuário.")
+    nivel: int = Field(..., description="Profundidade na hierarquia (0 = raiz), para recuar a opção na lista.")
+
+
 class GravacaoSetor(BaseModel):
     """Dados enviados para criar ou alterar um setor."""
     nome: str = Field(..., min_length=1, max_length=150)

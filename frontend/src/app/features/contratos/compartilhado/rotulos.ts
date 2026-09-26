@@ -49,6 +49,7 @@ export const ROTULOS_ETAPA: Record<Etapa, string> = {
   medicao: 'Medição',
   avaliacao: 'Avaliação',
   nota_fiscal: 'Nota fiscal',
+  retencao: 'Retenção de tributos',
   cadin: 'CADIN',
   checklist: 'Checklist',
   consolidado: 'Download',

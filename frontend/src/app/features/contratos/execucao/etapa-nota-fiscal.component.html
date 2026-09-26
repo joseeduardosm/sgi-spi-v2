@@ -1,69 +1,70 @@
 @let d = detalhe();
 <section class="cartao-dados" aria-labelledby="titulo-nf">
   <header>
-    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Total medido {{ d.total_medido | moeda }} · % autorizado pela avaliação {{ d.percentual_autorizado | percentual }} · valor autorizado {{ d.valor_autorizado | moeda }}</small></div>
+    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Junte o PDF e o XML da nota. Os valores são lidos do XML; as retenções são conferidas pelo Financeiro na etapa seguinte. Valor autorizado pela medição: {{ d.valor_autorizado | moeda }}.</small></div>
     @if (d.nf_concluida_em) { <span class="selo-situacao">Concluída</span> }
   </header>
   <div class="corpo">
     <div class="grade-formulario tres-colunas">
-      <div><label for="nf-numero">Número da nota fiscal *</label><input id="nf-numero" maxlength="100" [disabled]="!editavel()" [(ngModel)]="principal.numero" /></div>
       <div><label for="nf-recebida">Recebida pela Administração em *</label><input id="nf-recebida" type="date" [disabled]="!editavel()" [(ngModel)]="recebidaEm" /></div>
       <div><label for="nf-prazo">Prazo para pagamento (dias corridos) *</label><input id="nf-prazo" type="number" min="1" max="3650" [disabled]="!editavel()" [(ngModel)]="prazo" /></div>
-      <div>
-        <label for="nf-origem">Origem do valor *</label>
-        <select id="nf-origem" [disabled]="!editavel()" [(ngModel)]="origem"><option value="medicao">Valor da medição</option><option value="manual">Informar manualmente</option></select>
-      </div>
-      <div>
-        <label for="nf-bruto">Valor bruto da nota (R$)</label>
-        @if (origem === 'manual') { <input id="nf-bruto" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="principal.valor_bruto" /> }
-        @else { <input id="nf-bruto" [value]="d.valor_autorizado | moeda" disabled /> }
-      </div>
       <div><label>Vencimento do pagamento</label><input [value]="vencimento()" disabled /></div>
     </div>
-    <p class="secao-formulario">Retenções</p>
-    <div class="grade-formulario" style="grid-template-columns: repeat(5, 1fr)">
-      @for (r of retencoes; track r.chave) {
-        <div><label [for]="'ret-' + r.chave">{{ r.rotulo }}</label><input [id]="'ret-' + r.chave" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="principal.retencoes[r.chave]" /></div>
+
+    <p class="secao-formulario">Nota fiscal *</p>
+    @if (d.nota_fiscal?.dados_xml; as x) {
+      <p class="dica-formulario" style="margin-top: 0">
+        {{ x.modelo_rotulo }} nº <b>{{ x.numero }}</b> · {{ x.emitente.razao_social }} · valor <b>{{ d.nota_fiscal?.valor_bruto | moeda }}</b>
+      </p>
+    }
+    <div class="acoes-cartao esquerda arquivos-nf">
+      @if (d.nota_fiscal?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">PDF: {{ a.nome }}</button> }
+      @if (d.nota_fiscal?.xml; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">XML: {{ a.nome }}</button> }
+      @if (editavel()) {
+        <app-envio-pdf [rotulo]="d.nota_fiscal?.arquivo ? 'Substituir PDF da nota' : 'Selecionar PDF da nota'" (selecionado)="arquivo = $event" />
+        <label class="acao-secundaria acao-pequena seletor-xml">
+          {{ xml ? 'XML: ' + xml.name : (d.nota_fiscal?.xml ? 'Substituir XML da nota' : 'Selecionar XML da nota') }}
+          <input type="file" accept=".xml,application/xml,text/xml" (change)="escolherXml($event, false)" />
+        </label>
       }
-    </div>
-    @if (somaRetencoes(principal) > bruto(principal, true)) { <p class="aviso-bloco erro">A soma das retenções passa do valor bruto.</p> }
-    <div class="indicadores">
-      <div class="indicador"><span>Valor bruto</span><strong>{{ bruto(principal, true) | moeda }}</strong></div>
-      <div class="indicador"><span>Retenções</span><strong>{{ somaRetencoes(principal) | moeda }}</strong></div>
-      <div class="indicador destaque"><span>Valor líquido</span><strong>{{ liquido(principal, true) | moeda }}</strong></div>
-    </div>
-    <div class="acoes-cartao esquerda">
-      @if (d.nota_fiscal?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">Baixar nota fiscal ({{ a.nome }})</button> }
-      @if (editavel()) { <app-envio-pdf [rotulo]="d.nota_fiscal?.arquivo ? 'Substituir PDF da nota' : 'Selecionar nota fiscal em PDF'" (selecionado)="arquivo = $event" /> }
     </div>
 
     <div class="linha-caixas" style="margin-top: 18px">
       <label><input type="checkbox" [disabled]="!editavel()" [(ngModel)]="possuiAdicional" /> Há nota fiscal adicional</label>
     </div>
     @if (possuiAdicional) {
-      <div class="grade-formulario tres-colunas">
-        <div><label for="nfa-numero">Número da nota adicional *</label><input id="nfa-numero" maxlength="100" [disabled]="!editavel()" [(ngModel)]="adicional.numero" /></div>
-        <div><label for="nfa-bruto">Valor bruto (R$) *</label><input id="nfa-bruto" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="adicional.valor_bruto" /></div>
-        <div><label>Valor líquido</label><input [value]="liquido(adicional, false) | moeda" disabled /></div>
-      </div>
-      <div class="grade-formulario" style="grid-template-columns: repeat(5, 1fr)">
-        @for (r of retencoes; track r.chave) {
-          <div><label [for]="'reta-' + r.chave">{{ r.rotulo }}</label><input [id]="'reta-' + r.chave" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="adicional.retencoes[r.chave]" /></div>
+      @if (d.nota_fiscal_adicional?.dados_xml; as x) {
+        <p class="dica-formulario">{{ x.modelo_rotulo }} nº <b>{{ x.numero }}</b> · valor <b>{{ d.nota_fiscal_adicional?.valor_bruto | moeda }}</b></p>
+      }
+      <div class="acoes-cartao esquerda arquivos-nf">
+        @if (d.nota_fiscal_adicional?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">PDF: {{ a.nome }}</button> }
+        @if (d.nota_fiscal_adicional?.xml; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">XML: {{ a.nome }}</button> }
+        @if (editavel()) {
+          <app-envio-pdf rotulo="Selecionar PDF da nota adicional" (selecionado)="arquivoAdicional = $event" />
+          <label class="acao-secundaria acao-pequena seletor-xml">
+            {{ xmlAdicional ? 'XML: ' + xmlAdicional.name : 'Selecionar XML da nota adicional' }}
+            <input type="file" accept=".xml,application/xml,text/xml" (change)="escolherXml($event, true)" />
+          </label>
         }
-      </div>
-      <div class="acoes-cartao esquerda">
-        @if (d.nota_fiscal_adicional?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">Baixar nota adicional</button> }
-        @if (editavel()) { <app-envio-pdf rotulo="Selecionar nota adicional em PDF" (selecionado)="arquivoAdicional = $event" /> }
       </div>
     }
 
     @if (editavel()) {
-      @if (totalAPagar() > saldoLivreNotas() + 0.005) {
-        <p class="aviso-bloco erro">NF + NF adicional ({{ totalAPagar() | moeda }}) passam do saldo livre das NEs apontadas na medição ({{ saldoLivreNotas() | moeda }}). Reabra a medição para incluir outra NE.</p>
+      <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!valido()" (click)="concluir()">Juntar nota fiscal</button></div>
+    }
+
+    @if (d.nf_concluida_em) {
+      <p class="secao-formulario">E-mail ao Financeiro</p>
+      @if (d.email_nf.enviado_em === null) {
+        <p class="dica-formulario">Enviando o aviso ao Financeiro…</p>
+      } @else if (d.email_nf.ok) {
+        <p class="aviso-bloco informativo">Enviado em {{ d.email_nf.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_nf.destinatarios.join(', ') }}.</p>
       } @else {
-        <p class="dica-formulario">A OB debitará {{ totalAPagar() | moeda }} (NF + NF adicional) nas NEs {{ detalhe().notas_selecionadas.map(n => n.numero).join(', ') }} — saldo livre {{ saldoLivreNotas() | moeda }}.</p>
+        <p class="aviso-bloco erro">O e-mail não foi enviado: {{ d.email_nf.erro }}</p>
       }
-      <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!valido()" (click)="concluir()">Concluir nota fiscal</button></div>
+      @if (d.pode_editar && d.email_nf.enviado_em !== null) {
+        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Reenviando…' : 'Reenviar e-mail' }}</button>
+      }
     }
   </div>
 </section>

@@ -17,7 +17,7 @@ from app.schemas.contratos.empresas import Texto, TextoObrigatorio
 from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade
 
 # Etapas da competência (iguais às do modelo) e a situação resumida mostrada na aba Execução
-Etapa = Literal["medicao", "avaliacao", "nota_fiscal", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida"]
+Etapa = Literal["medicao", "avaliacao", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida"]
 SituacaoCompetencia = Literal["pendente", "disponivel", "em_andamento", "concluida"]
 
 
@@ -224,6 +224,28 @@ class LeituraItemMedicao(BaseModel):
     quantidade_prevista: ValorQuantidade
     quantidade_medida: Annotated[Decimal, Field(description="Até 10 casas.")]
     subtotal: ValorMonetario
+    saldo: ValorQuantidade = Field(..., description="Contínuo: previsto da competência; sob demanda: saldo do item na vigência.")
+    glosas: ValorQuantidade = Field(..., description="Glosas do diário de bordo com data no período da competência.")
+    saldo_liquido: ValorQuantidade = Field(..., description="Saldo − glosas (mínimo 0): o máximo que pode ser medido.")
+
+
+class GlosaDoPeriodo(BaseModel):
+    """Glosa do diário de bordo que vale nesta competência."""
+    ocorrencia_id: uuid.UUID
+    data_ocorrencia: date
+    descricao_ocorrencia: str
+    registrada_por_nome: str
+    item_id: uuid.UUID
+    descricao_item: str
+    quantidade: ValorQuantidade
+
+
+class EmailMedicao(BaseModel):
+    """E-mail enviado à equipe e ao preposto ao concluir a medição (pede a NF em até 48 h)."""
+    enviado_em: datetime | None = None
+    ok: bool | None = None
+    destinatarios: list[str] = []
+    erro: str | None = None
 
 
 class LeituraCiencia(BaseModel):
@@ -257,17 +279,53 @@ class NotaSelecionada(BaseModel):
     saldo_livre: ValorMonetario = Field(..., description="Saldo menos o comprometido por outras competências medidas e ainda não pagas.")
 
 
+class ConferenciaNota(BaseModel):
+    """Conferência automática da nota (etapa de retenção)."""
+    descricao: str
+    situacao: Literal["ok", "alerta", "info"] = Field(..., description="`ok` conforme, `alerta` conferir, `info` sem como verificar.")
+    detalhe: str
+
+
 class LeituraNotaFiscal(BaseModel):
     """Dados de uma nota fiscal registrada (principal ou adicional)."""
     numero: str
     arquivo: LeituraArquivo | None
+    xml: LeituraArquivo | None = Field(None, description="XML da nota (NF-e ou NFS-e).")
+    dados_xml: dict[str, Any] | None = Field(None, description="Dados lidos do XML (ver docs: emitente, tomador, itens, retenções…).")
+    conferencias: list[ConferenciaNota] = []
     valor_bruto: ValorMonetario | None
     retencao_ir: ValorMonetario
     retencao_inss: ValorMonetario
     retencao_iss: ValorMonetario
     retencao_pis: ValorMonetario
     retencao_cofins: ValorMonetario
+    retencao_csll: ValorMonetario = Decimal(0)
     valor_liquido: ValorMonetario
+
+
+class RetencoesNota(BaseModel):
+    """Retenções conferidas de uma nota (valores ≥ 0; a soma não passa do bruto)."""
+    ir: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)] = Decimal(0)
+    inss: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)] = Decimal(0)
+    iss: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)] = Decimal(0)
+    pis: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)] = Decimal(0)
+    cofins: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)] = Decimal(0)
+    csll: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)] = Decimal(0)
+
+
+class GravacaoRetencao(BaseModel):
+    """Conferência da etapa 4: retenções da NF (e da adicional, se houver) e a confirmação da discriminação."""
+    principal: RetencoesNota
+    adicional: RetencoesNota | None = None
+    discriminacao_conferida: bool = Field(..., description="A discriminação dos serviços é compatível com o objeto (obrigatório = true).")
+
+
+class LeituraRetencao(BaseModel):
+    """Conferência registrada na etapa 4."""
+    concluida_em: datetime | None
+    por_nome: str
+    discriminacao_conferida: bool
+    pdf: LeituraArquivo | None
 
 
 class LeituraConsultaCadin(BaseModel):
@@ -349,7 +407,15 @@ class DetalheCompetencia(ResumoCompetencia):
     valor_a_pagar: ValorMonetario = Field(
         ..., description="Valor que a OB debita nas NEs apontadas: NF + NF adicional (brutos) depois da etapa da NF; antes, o valor autorizado."
     )
-    avisos: list[str] = Field(default_factory=list, description="Alertas da medição (ex.: item sob demanda acima do saldo da vigência).")
+    avisos: list[str] = Field(default_factory=list, description="Alertas da medição (ex.: item medido acima do saldo líquido).")
+    glosas_periodo: list[GlosaDoPeriodo] = Field(default_factory=list, description="Glosas do diário de bordo que valem nesta competência.")
+    email_medicao: EmailMedicao = Field(default_factory=EmailMedicao, description="Resultado do e-mail da medição concluída.")
+    email_nf: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail ao Financeiro (cópia à equipe) com a NF juntada.")
+    email_retencao: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail à equipe com as retenções conferidas.")
+    retencao: LeituraRetencao | None = Field(None, description="Conferência da retenção de tributos, se feita.")
+    pode_conferir_retencao: bool = Field(False, description="O usuário pode fazer a etapa de retenção (Financeiro, equipe ou SuperRoot).")
+    etapas_abertas: list[Etapa] = Field(default_factory=list, description="Etapas que aceitam gravação agora (retenção, CADIN e checklist em paralelo).")
+    etapas_concluidas: list[Etapa] = Field(default_factory=list, description="Etapas já concluídas.")
     reaberturas_permitidas: bool = Field(False, description="O usuário pode reabrir etapas (SuperRoot ou gestor vigente do contrato).")
     nota_fiscal: LeituraNotaFiscal | None
     nota_fiscal_adicional: LeituraNotaFiscal | None

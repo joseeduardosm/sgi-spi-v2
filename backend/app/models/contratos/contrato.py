@@ -130,6 +130,10 @@ class Contrato(Base):
     alteracoes: Mapped[list["AlteracaoQuantidade"]] = relationship(  # noqa: F821
         back_populates="contrato", cascade="all, delete-orphan", order_by="AlteracaoQuantidade.criado_em"
     )
+    # Diário de bordo, em ordem cronológica de registro
+    ocorrencias: Mapped[list["OcorrenciaDiario"]] = relationship(  # noqa: F821
+        back_populates="contrato", cascade="all, delete-orphan", order_by="OcorrenciaDiario.criado_em"
+    )
 
     @property
     def numero(self) -> str:

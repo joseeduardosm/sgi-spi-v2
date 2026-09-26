@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from tests.apoio_contratos import PDF, criar_contrato, item, restringir_contratos
+from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, item, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -263,11 +263,9 @@ def test_aditamento_apos_reajuste_soma_ao_valor_global_e_contrato_completo_pode_
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
     cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
-    for etapa, dados, arquivos in (
-        ("nota-fiscal", {"numero": "1", "recebida_em": "2026-02-01", "prazo_pagamento_dias": "30", "origem_valor": "medicao"}, {"arquivo": ("n.pdf", PDF)}),
-        ("cadin", {"possui_pendencia": "false"}, {"certidao": ("c.pdf", PDF)}),
-    ):
-        assert cliente.post(f"{base}/{etapa}", data=dados, files=arquivos, headers=gestora).status_code == 200
+    assert juntar_nf(cliente, base, gestora, "2105.00", recebida_em="2026-02-01").status_code == 200
+    assert conferir_retencao(cliente, base, gestora).status_code == 200
+    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).status_code == 200
     for documento in cliente.get(base, headers=gestora).json()["documentos"]:
         cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
     cliente.post(f"{base}/consolidado", headers=gestora)

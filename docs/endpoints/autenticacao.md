@@ -155,6 +155,14 @@ Grava o próprio perfil e **registra a revalidação**, reiniciando o prazo de 3
 
 ---
 
+## `GET /api/autenticacao/perfil/opcoes-departamento`
+
+Setores para o combobox **Departamento** do perfil (em "Meu perfil" e no cadastro de usuários). Fica liberado durante a restrição de perfil e não exige acesso ao módulo Setores.
+
+- Traz os setores **ativos e institucionais** (os grupos sistêmicos, como "Auditores", ficam de fora), em ordem hierárquica: cada pai antes dos filhos, irmãos em ordem alfabética. Setor cujo pai não entra na lista aparece como raiz.
+- **Resposta `200`:** `OpcaoDepartamento[]`, com `id`, `nome` (o valor gravado em `perfil.departamento`) e `nivel` (0 = raiz; usado para recuar a opção).
+- O perfil continua guardando o departamento como texto: valores que já existiam, inclusive os que vêm do AD na sincronização LDAP, são preservados. A tela mostra o valor atual mesmo quando ele não está em Setores.
+
 ## `GET /api/autenticacao/perfil/opcoes-gestor`
 
 Usuários ativos para o seletor de gestor imediato. Fica liberado durante a restrição de perfil, diferentemente de `/api/usuarios/opcoes`.

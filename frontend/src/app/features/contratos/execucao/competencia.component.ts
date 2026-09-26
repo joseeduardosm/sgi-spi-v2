@@ -16,13 +16,14 @@ import { EtapaCadinComponent } from './etapa-cadin.component';
 import { EtapaFinaisComponent } from './etapa-finais.component';
 import { EtapaMedicaoComponent } from './etapa-medicao.component';
 import { EtapaNotaFiscalComponent } from './etapa-nota-fiscal.component';
+import { EtapaRetencaoComponent } from './etapa-retencao.component';
 
 /** Tela 5: execução de uma competência (etapas 1 a 7). */
 @Component({
   selector: 'app-competencia',
   imports: [
     FormsModule, RouterLink, CabecalhoModuloComponent, EtapaMedicaoComponent, EtapaAvaliacaoComponent, EtapaNotaFiscalComponent,
-    EtapaCadinComponent, EtapaFinaisComponent, ...PIPES_FORMATACAO,
+    EtapaCadinComponent, EtapaFinaisComponent, EtapaRetencaoComponent, ...PIPES_FORMATACAO,
   ],
   templateUrl: './competencia.component.html',
   // Esc fecha a janela de reabertura
@@ -32,6 +33,8 @@ export class CompetenciaComponent implements OnInit {
   // Parâmetros da URL /contratos/:id/execucao/:competencia (id do contrato e identificador, ex.: 2026-03)
   readonly id = input.required<string>();
   readonly competencia = input.required<string>();
+  /** `?etapa=` do link dos e-mails: abre direto nessa etapa (se já liberada). */
+  readonly etapa = input<string | undefined>(undefined);
 
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
@@ -59,10 +62,16 @@ export class CompetenciaComponent implements OnInit {
   /** Recebe a competência atualizada (de qualquer etapa) e decide qual etapa exibir. */
   protected aplicar(detalhe: DetalheCompetencia, reposicionar = false): void {
     const anterior = this.detalhe()?.etapa_atual;
+    // A etapa em tela acabou de ser concluída (ex.: CADIN feito enquanto a retenção segue aberta)?
+    const concluiuAEmTela = !!this.detalhe()?.etapas_abertas.includes(this.selecionada()) && !detalhe.etapas_abertas.includes(this.selecionada());
     this.detalhe.set(detalhe);
-    // Ao avançar de etapa, a tela acompanha a nova etapa aberta
-    if (reposicionar || anterior !== detalhe.etapa_atual) {
-      this.selecionada.set(detalhe.etapa_atual === 'concluida' ? 'ordem_bancaria' : detalhe.etapa_atual);
+    // Ao avançar de etapa, a tela acompanha a próxima etapa aberta
+    if (reposicionar || anterior !== detalhe.etapa_atual || concluiuAEmTela) {
+      const proxima = detalhe.etapas_abertas.find((e) => e !== 'retencao' || detalhe.pode_conferir_retencao) ?? detalhe.etapas_abertas[0];
+      this.selecionada.set(detalhe.etapa_atual === 'concluida' ? 'ordem_bancaria' : proxima ?? detalhe.etapa_atual);
+      // Link direto (e-mails): abre a etapa pedida, se ela existe e não está bloqueada
+      const pedida = this.etapa() as Etapa | undefined;
+      if (reposicionar && pedida && detalhe.etapas.includes(pedida) && !this.bloqueada(pedida)) this.selecionada.set(pedida);
     }
   }
 
@@ -71,21 +80,28 @@ export class CompetenciaComponent implements OnInit {
     return this.detalhe()?.etapas.indexOf(etapa) ?? -1;
   }
 
-  /** A etapa já foi concluída (vem antes da etapa atual). */
+  /** A etapa já foi concluída (retenção, CADIN e checklist correm em paralelo e concluem em qualquer ordem). */
   protected concluida(etapa: Etapa): boolean {
-    return this.indice(etapa) < this.indice(this.detalhe()!.etapa_atual);
+    return this.detalhe()!.etapas_concluidas.includes(etapa);
+  }
+
+  /** A etapa está aberta agora (pode haver mais de uma: retenção, CADIN e checklist). */
+  protected aberta(etapa: Etapa): boolean {
+    return this.detalhe()!.etapas_abertas.includes(etapa);
   }
 
   /** A etapa ainda não pode ser aberta (período não terminou ou etapa futura). */
   protected bloqueada(etapa: Etapa): boolean {
     const d = this.detalhe()!;
-    return !d.liberada || this.indice(etapa) > this.indice(d.etapa_atual);
+    return !d.liberada || (!this.concluida(etapa) && !this.aberta(etapa));
   }
 
   /** A etapa selecionada aceita gravação (é a etapa aberta e o usuário pode editar). */
   protected editavel(etapa: Etapa): boolean {
     const d = this.detalhe()!;
-    return d.pode_editar && d.liberada && d.etapa_atual === etapa;
+    // A retenção de tributos também pode ser feita pelo Financeiro (sem poder editar o contrato)
+    const pode = etapa === 'retencao' ? d.pode_conferir_retencao : d.pode_editar;
+    return pode && d.liberada && this.aberta(etapa);
   }
 
   /** Etapas anteriores à atual, oferecidas na reabertura. */

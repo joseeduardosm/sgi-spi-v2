@@ -102,7 +102,7 @@ Todo usuário comum precisa manter o perfil institucional **completo** e **reval
 - **Campos obrigatórios:** `nome_completo`, `email`, `ramal`, `cargo`, `departamento`, `andar` e `predio`.
 - **Campos opcionais:** `celular`, `data_nascimento` e `gestor_id`.
 - **Revalidação:** feita em `PUT /api/autenticacao/perfil`, que grava `perfil_revisado_em`.
-- **Restrição:** enquanto houver campo obrigatório vazio ou a revalidação estiver vencida (ou nunca feita), o **backend** recusa todos os endpoints com `403` e `codigo = revisao_perfil_obrigatoria`. Continuam liberados: `/api/autenticacao/login`, `/sessao`, `/perfil` e `/perfil/opcoes-gestor`.
+- **Restrição:** enquanto houver campo obrigatório vazio ou a revalidação estiver vencida (ou nunca feita), o **backend** recusa todos os endpoints com `403` e `codigo = revisao_perfil_obrigatoria`. Continuam liberados: `/api/autenticacao/login`, `/sessao`, `/perfil`, `/perfil/opcoes-gestor` e `/perfil/opcoes-departamento`.
 - **Sessão:** `GET /api/autenticacao/sessao` informa `perfil_restrito`, `campos_pendentes` e `revisao_obrigatoria`.
 - **SuperRoot:** não passa por essa restrição.
 

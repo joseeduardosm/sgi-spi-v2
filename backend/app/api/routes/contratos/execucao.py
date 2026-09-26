@@ -16,10 +16,9 @@ a tela se redesenhar sem precisar de uma segunda requisição.
 import re
 import uuid
 from datetime import date
-from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -30,6 +29,7 @@ from app.core.erros import ErroApi
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
     ConclusaoMedicao,
+    GravacaoRetencao,
     DetalheCompetencia,
     GravacaoAssinaturas,
     GravacaoAvaliacaoGestor,
@@ -43,6 +43,7 @@ from app.schemas.contratos.execucao import (
     Reabertura,
 )
 from app.services.contratos import servico_competencias as competencias
+from app.services.contratos import servico_notificacoes, servico_retencao
 from app.services.contratos import servico_configuracao_execucao as configuracao
 
 roteador = APIRouter(prefix="/contratos/{contrato_id}", tags=["Contratos: execução"], responses=RESPOSTAS_AUTENTICADAS)
@@ -50,8 +51,6 @@ roteador = APIRouter(prefix="/contratos/{contrato_id}", tags=["Contratos: execu�
 NAO_ENCONTRADO = resposta_nao_encontrado("Contrato")
 NAO_ENCONTRADA = resposta_nao_encontrado("Contrato ou competência")
 ESCRITA = {**INVALIDO, **SEM_VINCULO}
-# Tipo reutilizável para campos de dinheiro enviados em formulário multipart (≥ 0, 2 casas)
-Dinheiro = Annotated[Decimal, Form(ge=0, max_digits=18, decimal_places=2)]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -246,13 +245,30 @@ def ciencia_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: S
 
 
 @roteador.post("/competencias/{competencia_id}/medicao/concluir", response_model=DetalheCompetencia, summary="Concluir medição e gerar memória",
-               description="Exige ao menos 2 ciências de pessoas diferentes e a mesma seleção de NEs salva. Gera a memória de cálculo "
-               "(nova versão só se os dados mudaram), soma o executado nos itens e avança a etapa.", responses={**NAO_ENCONTRADA, **ESCRITA})
-def concluir_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: ConclusaoMedicao, sessao: Session = Depends(obter_sessao),
-                     autor: Usuario = Depends(pode_modificar)):
-    """Etapa 1: conclui a medição, gera a memória de cálculo em PDF e libera a etapa seguinte."""
+               description="Exige ao menos 2 ciências de pessoas diferentes, a mesma seleção de NEs salva e nenhum item acima do saldo "
+               "líquido. Gera a memória de cálculo (nova versão só se os dados mudaram), soma o executado nos itens e avança a etapa. "
+               "Em segundo plano, envia à equipe e aos prepostos o e-mail com a memória e o diário de bordo do período em PDF, "
+               "pedindo a nota fiscal em até 48 horas.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def concluir_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: ConclusaoMedicao, tarefas: BackgroundTasks,
+                     sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 1: conclui a medição, gera a memória de cálculo em PDF, libera a etapa seguinte e avisa equipe e preposto."""
     with traduzir_erros(sessao):
         competencias.concluir_medicao(sessao, contrato_id, competencia_id, dados.notas_empenho_ids, autor)
+        tarefas.add_task(servico_notificacoes.notificar_medicao, competencia_id)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/reenviar-email-medicao", response_model=DetalheCompetencia,
+               summary="Reenviar o e-mail da medição",
+               description="Envia de novo à equipe e aos prepostos o e-mail da medição concluída (memória + diário do período). "
+               "Só depois de concluída a medição. Mesma permissão de edição do contrato.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def reenviar_email_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                           autor: Usuario = Depends(pode_modificar)):
+    """Reenvio síncrono (a tela mostra o resultado na hora)."""
+    with traduzir_erros(sessao):
+        servico_notificacoes.exigir_reenvio_medicao(sessao, contrato_id, competencia_id, autor)
+        servico_notificacoes.notificar_medicao(competencia_id)
+        sessao.expire_all()
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
@@ -333,64 +349,88 @@ def reconsideracao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: U
 
 # --- Etapa 3: nota fiscal --------------------------------------------------------------------
 
-@roteador.post("/competencias/{competencia_id}/nota-fiscal", response_model=DetalheCompetencia, summary="Concluir nota fiscal",
-               description="`multipart/form-data`. NF em PDF (`arquivo`), número, data de recebimento, prazo de pagamento (1 a 3650 dias), "
-               "origem do valor (`medicao` = total medido × % autorizado; `manual` = `valor_bruto`) e retenções (IR, INSS, ISS, PIS/PASEP, "
-               "COFINS; não negativas e com soma ≤ bruto). Nota adicional opcional (campos `adicional_*`).",
-               responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
+@roteador.post("/competencias/{competencia_id}/nota-fiscal", response_model=DetalheCompetencia, summary="Juntar nota fiscal (PDF + XML)",
+               description="`multipart/form-data`: NF em PDF (`arquivo`) e XML (`xml`, NF-e ou NFS-e), ambos obrigatórios; data de "
+               "recebimento e prazo de pagamento (1 a 3650 dias). NF adicional opcional (`possui_adicional`, `arquivo_adicional`, "
+               "`xml_adicional`). Número, chave, valor e as retenções sugeridas vêm do XML; o saldo livre das NEs precisa cobrir as "
+               "notas. Conclui a etapa (próxima: retenção de tributos) e envia, em segundo plano, o e-mail ao Financeiro com cópia à "
+               "equipe.", responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def nota_fiscal(
     contrato_id: uuid.UUID,
     competencia_id: uuid.UUID,
-    numero: Annotated[str, Form(min_length=1, max_length=100)],
+    tarefas: BackgroundTasks,
     recebida_em: Annotated[date, Form(description="Data em que a Administração recebeu a NF.")],
     prazo_pagamento_dias: Annotated[int, Form(ge=1, le=3650)],
-    origem_valor: Annotated[Literal["medicao", "manual"], Form()],
-    valor_bruto: Annotated[Decimal | None, Form(ge=0, max_digits=18, decimal_places=2)] = None,
-    retencao_ir: Dinheiro = Decimal(0),
-    retencao_inss: Dinheiro = Decimal(0),
-    retencao_iss: Dinheiro = Decimal(0),
-    retencao_pis: Dinheiro = Decimal(0),
-    retencao_cofins: Dinheiro = Decimal(0),
     possui_adicional: Annotated[bool, Form()] = False,
-    adicional_numero: Annotated[str, Form(max_length=100)] = "",
-    adicional_valor_bruto: Annotated[Decimal | None, Form(ge=0, max_digits=18, decimal_places=2)] = None,
-    adicional_retencao_ir: Dinheiro = Decimal(0),
-    adicional_retencao_inss: Dinheiro = Decimal(0),
-    adicional_retencao_iss: Dinheiro = Decimal(0),
-    adicional_retencao_pis: Dinheiro = Decimal(0),
-    adicional_retencao_cofins: Dinheiro = Decimal(0),
     arquivo: UploadFile | None = File(None),
+    xml: UploadFile | None = File(None),
     arquivo_adicional: UploadFile | None = File(None),
+    xml_adicional: UploadFile | None = File(None),
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ):
-    """Etapa 3: registra a nota fiscal (e a nota adicional, se houver) com as retenções.
+    """Etapa 3: junta a nota fiscal (e a adicional, se houver); os valores são lidos do XML."""
+    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo_pagamento_dias, "possui_adicional": possui_adicional}
 
-    A rota recebe `multipart/form-data` porque vem junto com o PDF; por isso cada campo é declarado
-    como `Form` e depois montado aqui em um dicionário no formato que o serviço espera.
-    """
-    dados = {
-        "numero": numero.strip(), "recebida_em": recebida_em, "prazo_pagamento_dias": prazo_pagamento_dias, "origem_valor": origem_valor,
-        "valor_bruto": valor_bruto,
-        "retencoes": {"ir": retencao_ir, "inss": retencao_inss, "iss": retencao_iss, "pis": retencao_pis, "cofins": retencao_cofins},
-    }
-    # A nota adicional só é considerada se o usuário marcou que ela existe
-    if possui_adicional:
-        dados["adicional"] = {
-            "numero": adicional_numero.strip(), "valor_bruto": adicional_valor_bruto,
-            "retencoes": {"ir": adicional_retencao_ir, "inss": adicional_retencao_inss, "iss": adicional_retencao_iss,
-                          "pis": adicional_retencao_pis, "cofins": adicional_retencao_cofins},
-        }
+    def arquivo_xml(upload: UploadFile | None, padrao: str) -> tuple | None:
+        return (upload.file, upload.filename or padrao) if upload else None
+
     with traduzir_erros(sessao):
-        # Os PDFs são opcionais na chamada: ao corrigir dados, o usuário pode manter o arquivo já enviado
+        # Os arquivos são opcionais na chamada: ao corrigir depois de reabrir, os anteriores podem ser mantidos
         competencias.registrar_nota_fiscal(
-            sessao, contrato_id, competencia_id, dados, arquivo_pdf(arquivo) if arquivo else None,
-            arquivo_pdf(arquivo_adicional) if possui_adicional and arquivo_adicional else None, autor,
+            sessao, contrato_id, competencia_id, dados, arquivo_pdf(arquivo) if arquivo else None, arquivo_xml(xml, "nota_fiscal.xml"),
+            arquivo_pdf(arquivo_adicional) if possui_adicional and arquivo_adicional else None,
+            arquivo_xml(xml_adicional, "nota_fiscal_adicional.xml") if possui_adicional else None, autor,
         )
+        tarefas.add_task(servico_notificacoes.notificar_nf, competencia_id)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
-# --- Etapa 4: CADIN --------------------------------------------------------------------------
+@roteador.post("/competencias/{competencia_id}/reenviar-email-nf", response_model=DetalheCompetencia, summary="Reenviar o e-mail da NF",
+               description="Envia de novo ao Financeiro (cópia à equipe) o aviso da nota fiscal juntada.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def reenviar_email_nf(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                      autor: Usuario = Depends(pode_modificar)):
+    """Reenvio síncrono (a tela mostra o resultado na hora)."""
+    with traduzir_erros(sessao):
+        servico_notificacoes.exigir_reenvio(sessao, contrato_id, competencia_id, autor, "nf")
+        servico_notificacoes.notificar_nf(competencia_id)
+        sessao.expire_all()
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+# --- Etapa 4: retenção de tributos -----------------------------------------------------------
+
+@roteador.put("/competencias/{competencia_id}/retencao", response_model=DetalheCompetencia, summary="Salvar retenção de tributos",
+              description="Retenções conferidas (IR, INSS, ISS, PIS, COFINS e CSLL; ≥ 0 e soma ≤ bruto) da NF e da adicional, se houver, "
+              "e a confirmação de que a discriminação é compatível com o objeto. Permitido ao Financeiro (setor configurado em "
+              "`SETOR_FINANCEIRO` e filhos), à equipe do contrato e ao SuperRoot. Gera o PDF da conferência, avança para o CADIN e "
+              "envia, em segundo plano, o e-mail à equipe.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def salvar_retencao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoRetencao, tarefas: BackgroundTasks,
+                    sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):
+    """Etapa 4: conferência do Financeiro."""
+    with traduzir_erros(sessao):
+        servico_retencao.salvar_retencao(
+            sessao, contrato_id, competencia_id, dados.principal.model_dump(), dados.adicional.model_dump() if dados.adicional else None,
+            dados.discriminacao_conferida, autor,
+        )
+        tarefas.add_task(servico_notificacoes.notificar_retencao, competencia_id)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/reenviar-email-retencao", response_model=DetalheCompetencia,
+               summary="Reenviar o e-mail da retenção", description="Envia de novo à equipe o aviso das retenções conferidas.",
+               responses={**NAO_ENCONTRADA, **ESCRITA})
+def reenviar_email_retencao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                            autor: Usuario = Depends(pode_ler)):
+    """Reenvio síncrono (quem pode conferir a retenção)."""
+    with traduzir_erros(sessao):
+        servico_notificacoes.exigir_reenvio(sessao, contrato_id, competencia_id, autor, "retencao")
+        servico_notificacoes.notificar_retencao(competencia_id)
+        sessao.expire_all()
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+# --- Etapa 5: CADIN --------------------------------------------------------------------------
 
 @roteador.post("/competencias/{competencia_id}/cadin", response_model=DetalheCompetencia, summary="Registrar consulta ao CADIN",
                description="`multipart/form-data`: `possui_pendencia`, `certidao` (PDF). Com pendência: `pendencia` (até 2000), "

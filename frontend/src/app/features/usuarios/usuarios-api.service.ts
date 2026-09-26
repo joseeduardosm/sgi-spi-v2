@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../environments/ambiente';
 import { OpcaoUsuario, Usuario } from '../../core/modelos/usuario.model';
-import { AlteracaoUsuario, CriacaoUsuario, DadosPerfil, DetalheUsuario, PaginaUsuarios, PerfilLeitura } from './usuarios.models';
+import { AlteracaoUsuario, CriacaoUsuario, DadosPerfil, DetalheUsuario, OpcaoDepartamento, PaginaUsuarios, PerfilLeitura } from './usuarios.models';
 
 /** Filtros aceitos pela listagem de usuários (vão como parâmetros na URL). */
 export interface FiltroUsuarios {
@@ -65,6 +65,11 @@ export class UsuariosApiService {
 
   revisarMeuPerfil(dados: DadosPerfil): Observable<Usuario> {
     return this.http.put<Usuario>(`${this.baseAutenticacao}/perfil`, dados);
+  }
+
+  /** Setores para o combobox "Departamento" do perfil (liberado mesmo com o perfil pendente). */
+  opcoesDepartamento(): Observable<OpcaoDepartamento[]> {
+    return this.http.get<OpcaoDepartamento[]>(`${this.baseAutenticacao}/perfil/opcoes-departamento`);
   }
 
   /** Busca de usuários para o campo "gestor imediato" do próprio perfil. */

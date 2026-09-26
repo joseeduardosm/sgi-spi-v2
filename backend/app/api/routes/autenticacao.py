@@ -21,7 +21,8 @@ from app.models.usuario import Usuario
 from app.schemas.autenticacao import RequisicaoLogin, RespostaToken, UsuarioSessao
 from app.schemas.comum import RespostaErro
 from app.schemas.usuarios import OpcaoUsuario, PerfilLeitura, RevisaoPerfil
-from app.services import servico_admin_usuarios
+from app.schemas.setores import OpcaoDepartamento
+from app.services import servico_admin_usuarios, servico_setores
 from app.services.servico_admin_usuarios import ErroRegraUsuario
 from app.services.servico_autenticacao import ServicoAutenticacao, para_usuario_sessao
 
@@ -97,6 +98,21 @@ def revisar_meu_perfil(
     except ErroRegraUsuario as erro:
         sessao.rollback()
         raise erro_regra(str(erro), erro.conflito)
+
+
+@roteador.get(
+    "/perfil/opcoes-departamento",
+    response_model=list[OpcaoDepartamento],
+    summary="Opções de departamento",
+    description=(
+        "Setores ativos e institucionais (sem os grupos sistêmicos), em ordem hierárquica, para o combobox "
+        "\"Departamento\" do perfil. Funciona mesmo com o perfil pendente e sem acesso ao módulo Setores."
+    ),
+    responses=NAO_AUTENTICADO,
+)
+def listar_opcoes_departamento(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(obter_usuario_autenticado)) -> list[OpcaoDepartamento]:
+    """Departamentos = setores cadastrados em "Setores"."""
+    return servico_setores.opcoes_departamento(sessao)
 
 
 @roteador.get(

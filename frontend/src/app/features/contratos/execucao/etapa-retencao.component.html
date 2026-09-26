@@ -1,0 +1,101 @@
+@let d = detalhe();
+<section class="cartao-dados" aria-labelledby="titulo-retencao">
+  <header>
+    <div>
+      <h2 id="titulo-retencao">4. Retenção de tributos</h2>
+      <small>Conferência da nota fiscal (dados lidos do XML) e das retenções, feita pelo Financeiro. Líquido = bruto − retenções.</small>
+    </div>
+    @if (d.retencao) { <span class="selo-situacao">Conferida</span> }
+  </header>
+  <div class="corpo">
+    @for (n of notas; track n.titulo) {
+      @let x = n.nota.dados_xml;
+      <article class="nota-xml">
+        <header>
+          <div>
+            <span class="modal-sobretitulo">{{ n.titulo }} · {{ x?.modelo_rotulo ?? 'sem XML' }}</span>
+            <h3>Nº {{ x?.numero ?? n.nota.numero }}@if (x?.serie) { · série {{ x?.serie }} }</h3>
+          </div>
+          <div class="valor-nota"><small>Valor da nota</small><strong>{{ n.nota.valor_bruto | moeda }}</strong></div>
+        </header>
+        @if (x) {
+          <div class="partes-nota">
+            <div><small>Emitente (prestador)</small><strong>{{ x.emitente.razao_social ?? 'não informado' }}</strong><span>CNPJ {{ cnpj(x.emitente.cnpj) }}@if (x.emitente.inscricao_municipal) { · IM {{ x.emitente.inscricao_municipal }} }</span></div>
+            <div><small>Tomador</small><strong>{{ x.tomador.razao_social ?? 'não informado' }}</strong><span>CNPJ {{ cnpj(x.tomador.cnpj) }}</span></div>
+          </div>
+          <dl class="dados-nota">
+            <div><dt>Emissão</dt><dd>{{ x.emissao ? (x.emissao | dataBr) : 'não informada' }}</dd></div>
+            <div><dt>Competência</dt><dd>{{ x.competencia ? (x.competencia | competencia) : 'não informada na nota' }}</dd></div>
+            <div><dt>Código do serviço (guia de ISS)</dt><dd>{{ x.codigo_servico ?? 'não informado na nota' }}</dd></div>
+            <div><dt>Situação</dt><dd>{{ x.situacao ?? '—' }}</dd></div>
+            <div class="ocupa-tudo"><dt>Chave</dt><dd><code>{{ x.chave ?? '—' }}</code></dd></div>
+          </dl>
+          @if (x.itens.length) {
+            <div class="tabela-gestao-envoltorio">
+              <table class="tabela-gestao">
+                <thead><tr><th>Discriminação (itens)</th><th class="num">Qtd.</th><th class="num">Valor unitário</th><th class="num">Valor</th></tr></thead>
+                <tbody>
+                  @for (i of x.itens; track $index) {
+                    <tr><td>{{ i.descricao }}</td><td class="num">{{ i.quantidade | quantidade }}</td><td class="num">R$ {{ i.valor_unitario | quantidade }}</td><td class="num">{{ i.valor_total | moeda }}</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else if (x.discriminacao) {
+            <p class="discriminacao-nota"><b>Discriminação dos serviços:</b> {{ x.discriminacao }}</p>
+          }
+          @if (x.informacoes_complementares) { <p class="dica-formulario"><b>Informações complementares:</b> {{ x.informacoes_complementares }}</p> }
+        }
+
+        <p class="secao-formulario">Conferências</p>
+        <ul class="conferencias-nota">
+          @for (c of n.nota.conferencias; track c.descricao) {
+            <li [class]="c.situacao"><b>{{ c.situacao === 'ok' ? '✓' : c.situacao === 'alerta' ? '⚠' : 'ℹ' }} {{ c.descricao }}</b><span>{{ c.detalhe }}</span></li>
+          }
+        </ul>
+
+        <p class="secao-formulario">Retenções (valores do XML — confira e ajuste)</p>
+        <div class="grade-formulario grade-tributos">
+          @for (t of tributos; track t.chave) {
+            <div>
+              <label [for]="n.titulo + t.chave">{{ t.rotulo }}</label>
+              <input [id]="n.titulo + t.chave" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="n.retencoes[t.chave]" />
+              @if (x && x.retencoes[t.chave] !== '0.00') { <small class="dica-formulario">XML: {{ x.retencoes[t.chave] | moeda }}</small> }
+            </div>
+          }
+        </div>
+        @if (totalRetido(n) > (+(n.nota.valor_bruto ?? 0)) + 0.005) { <p class="aviso-bloco erro">A soma das retenções passa do valor bruto.</p> }
+        <div class="indicadores">
+          <div class="indicador"><span>Valor bruto</span><strong>{{ n.nota.valor_bruto | moeda }}</strong></div>
+          <div class="indicador"><span>Retenções</span><strong>{{ totalRetido(n) | moeda }}</strong></div>
+          <div class="indicador destaque"><span>Líquido a pagar</span><strong>{{ liquido(n) | moeda }}</strong></div>
+        </div>
+      </article>
+    }
+
+    @if (editavel()) {
+      <label class="confirmacao-discriminacao">
+        <input type="checkbox" [(ngModel)]="discriminacaoConferida" />
+        Conferi que a <b>discriminação dos serviços</b> é compatível com o que foi contratado e medido no processo.
+      </label>
+      <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!valido()" (click)="salvar()">Salvar retenção</button></div>
+    }
+
+    @if (d.retencao; as r) {
+      <p class="aviso-bloco informativo">Conferida por <b>{{ r.por_nome }}</b> em {{ r.concluida_em | date: 'dd/MM/yyyy HH:mm' }}.
+        @if (r.pdf) { <button type="button" class="link-arquivo" (click)="baixar(r.pdf.anexo_id)">Baixar PDF da conferência</button> }
+      </p>
+      <p class="secao-formulario">E-mail à equipe</p>
+      @if (d.email_retencao.enviado_em === null) {
+        <p class="dica-formulario">Enviando o aviso à equipe…</p>
+      } @else if (d.email_retencao.ok) {
+        <p class="aviso-bloco informativo">Enviado em {{ d.email_retencao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_retencao.destinatarios.join(', ') }}.</p>
+      } @else {
+        <p class="aviso-bloco erro">O e-mail não foi enviado: {{ d.email_retencao.erro }}</p>
+      }
+      @if (d.pode_conferir_retencao && d.email_retencao.enviado_em !== null) {
+        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Reenviando…' : 'Reenviar e-mail' }}</button>
+      }
+    }
+  </div>
+</section>

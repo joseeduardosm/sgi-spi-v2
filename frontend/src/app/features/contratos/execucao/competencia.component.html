@@ -24,8 +24,8 @@
 
   <nav class="barra-etapas" aria-label="Etapas da competência">
     @for (e of etapasVisiveis(); track e; let n = $index) {
-      <button type="button" [class.concluida]="concluida(e) || d.etapa_atual === 'concluida'" [class.atual]="d.etapa_atual === e"
-              [class.selecionada]="selecionada() === e" [disabled]="bloqueada(e)" [attr.aria-current]="d.etapa_atual === e ? 'step' : null"
+      <button type="button" [class.concluida]="concluida(e) || d.etapa_atual === 'concluida'" [class.atual]="aberta(e)"
+              [class.selecionada]="selecionada() === e" [disabled]="bloqueada(e)" [attr.aria-current]="aberta(e) ? 'step' : null"
               (click)="selecionada.set(e)">
         <b>{{ concluida(e) || d.etapa_atual === 'concluida' ? '✓' : n + 1 }}</b> {{ rotulos[e] }}
       </button>
@@ -36,6 +36,7 @@
     @case ('medicao') { <app-etapa-medicao [detalhe]="d" [editavel]="editavel('medicao')" (atualizado)="aplicar($event)" /> }
     @case ('avaliacao') { <app-etapa-avaliacao [detalhe]="d" [editavel]="editavel('avaliacao')" (atualizado)="aplicar($event)" /> }
     @case ('nota_fiscal') { <app-etapa-nota-fiscal [detalhe]="d" [editavel]="editavel('nota_fiscal')" (atualizado)="aplicar($event)" /> }
+    @case ('retencao') { <app-etapa-retencao [detalhe]="d" [editavel]="editavel('retencao')" (atualizado)="aplicar($event)" /> }
     @case ('cadin') { <app-etapa-cadin [detalhe]="d" [editavel]="editavel('cadin')" (atualizado)="aplicar($event)" /> }
     @default { <app-etapa-finais [detalhe]="d" [etapa]="selecionada()" [editavel]="editavel(selecionada())" (atualizado)="aplicar($event)" /> }
   }

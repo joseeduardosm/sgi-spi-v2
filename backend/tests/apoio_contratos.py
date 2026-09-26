@@ -95,3 +95,43 @@ def restringir_contratos(cliente: TestClient, admin: dict, niveis: dict[int, str
     for usuario_id, nivel in niveis.items():
         corpo = {"recurso_id": r.json()["id"], "nivel": nivel, "usuarios_ids": [usuario_id], "setores_ids": []}
         assert cliente.post("/api/acl/regras", json=corpo, headers=admin).status_code == 201
+
+
+# --- Nota fiscal (PDF + XML) e retenção de tributos ------------------------------------------------
+
+CNPJ_CONTRATADA = gerar_cnpj("112223330001")  # empresa padrão de `criar_empresa`
+CNPJ_SPI = "96480850000103"
+
+
+def xml_nfe(valor: str, numero: str = "1", cnpj_emitente: str = CNPJ_CONTRATADA, cnpj_tomador: str = CNPJ_SPI,
+            retencoes: dict | None = None, chave: str | None = None) -> bytes:
+    """XML de NF-e (modelo 55) mínimo e autorizado, no layout da SEFAZ, para os testes."""
+    chave = chave or f"35260{cnpj_emitente}55001{int(numero):09d}1{int(numero):08d}1"[:44].ljust(44, "0")
+    r = {"vIRRF": "0.00", "vRetPrev": "0.00", "vRetPIS": "0.00", "vRetCOFINS": "0.00", "vRetCSLL": "0.00", **(retencoes or {})}
+    ret = "".join(f"<{k}>{v}</{k}>" for k, v in r.items())
+    return f"""<?xml version="1.0" encoding="UTF-8"?><nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
+<NFe><infNFe Id="NFe{chave}" versao="4.00"><ide><nNF>{numero}</nNF><serie>1</serie><dhEmi>2026-02-03T10:00:00-03:00</dhEmi></ide>
+<emit><CNPJ>{cnpj_emitente}</CNPJ><xNome>ACME Serviços Ltda</xNome></emit>
+<dest><CNPJ>{cnpj_tomador}</CNPJ><xNome>SECRETARIA DE PARCERIAS EM INVESTIMENTOS</xNome></dest>
+<det nItem="1"><prod><xProd>Serviços de limpeza</xProd><qCom>1.0000</qCom><vUnCom>{valor}</vUnCom><vProd>{valor}</vProd></prod></det>
+<total><ICMSTot><vNF>{valor}</vNF></ICMSTot><retTrib>{ret}</retTrib></total></infNFe></NFe>
+<protNFe versao="4.00"><infProt><chNFe>{chave}</chNFe><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>
+</nfeProc>""".encode()
+
+
+def juntar_nf(cliente, base: str, h: dict, valor: str, numero: str = "1", adicional: tuple[str, str] | None = None,
+              recebida_em: str = "2026-02-05", prazo: str = "30", **xml_extras):
+    """Etapa 3: envia PDF + XML (e a adicional, se `adicional=(valor, numero)`); devolve a resposta."""
+    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo}
+    arquivos = {"arquivo": ("nf.pdf", PDF, "application/pdf"), "xml": ("nf.xml", xml_nfe(valor, numero, **xml_extras), "application/xml")}
+    if adicional:
+        dados["possui_adicional"] = "true"
+        arquivos["arquivo_adicional"] = ("nf2.pdf", PDF, "application/pdf")
+        arquivos["xml_adicional"] = ("nf2.xml", xml_nfe(adicional[0], adicional[1]), "application/xml")
+    return cliente.post(f"{base}/nota-fiscal", data=dados, files=arquivos, headers=h)
+
+
+def conferir_retencao(cliente, base: str, h: dict, principal: dict | None = None, adicional: dict | None = None, discriminacao: bool = True):
+    """Etapa 4: salva a retenção de tributos; devolve a resposta."""
+    corpo = {"principal": principal or {}, "adicional": adicional, "discriminacao_conferida": discriminacao}
+    return cliente.put(f"{base}/retencao", json=corpo, headers=h)

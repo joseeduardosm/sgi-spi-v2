@@ -1,0 +1,191 @@
+<div class="cabecalho-pagina">
+  <div>
+    <p>Início <span>/</span> Administração <span>/</span> Servidores SMTP</p>
+    <h1>Servidores SMTP</h1>
+    <small>Envio de e-mail pelo sistema: servidor, segurança, conta de autenticação, remetente e saúde da conexão.</small>
+  </div>
+</div>
+
+<section class="painel-gestao" aria-labelledby="titulo-smtp">
+  <div class="barra-ferramentas">
+    <div>
+      <h2 id="titulo-smtp">Servidores configurados</h2>
+      <p>O servidor ativo é o usado pelo sistema para enviar e-mails. Apenas um pode ficar ativo.</p>
+    </div>
+    <button class="acao-primaria" type="button" (click)="abrirFormulario()"><span>+</span> Novo servidor</button>
+  </div>
+
+  @if (aviso(); as a) {
+    <p class="aviso-admin" [class.erro]="a.erro" role="status">{{ a.texto }}</p>
+  }
+
+  <div class="tabela-gestao-envoltorio">
+    <table class="tabela-gestao">
+      <thead>
+        <tr>
+          <th>Servidor</th>
+          <th>Endereço</th>
+          <th>Remetente</th>
+          <th>Situação</th>
+          <th>Último teste</th>
+          <th>Último envio de teste</th>
+          <th class="coluna-acoes">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (s of servidores(); track s.id) {
+          <tr>
+            <td><strong>{{ s.nome }}</strong><small>{{ s.usuario ? 'Autenticado: ' + s.usuario : 'Sem autenticação' }}</small></td>
+            <td><code>{{ s.servidor }}:{{ s.porta }}</code><small>{{ rotulosSeguranca[s.seguranca] }}</small></td>
+            <td><strong>{{ s.remetente_nome || s.remetente_email }}</strong>@if (s.remetente_nome) { <small>{{ s.remetente_email }}</small> }</td>
+            <td><span class="selo-situacao" [class.inativo]="!s.ativo">{{ s.ativo ? 'Ativo' : 'Inativo' }}</span></td>
+            <td>
+              @if (s.ultimo_teste_em) {
+                <strong [class.texto-erro]="s.ultimo_teste_ok === false">{{ s.ultimo_teste_ok ? 'Saudável' : 'Falhou' }} · {{ s.ultima_latencia_ms }} ms</strong>
+                <small>{{ s.ultimo_teste_em | date: 'dd/MM/yyyy HH:mm' }}</small>
+                @if (s.ultimo_erro) { <small class="texto-erro">{{ s.ultimo_erro }}</small> }
+              } @else {
+                <small>Nunca testado</small>
+              }
+            </td>
+            <td>
+              @if (s.ultimo_envio_em) {
+                <strong [class.texto-erro]="s.ultimo_envio_ok === false">{{ s.ultimo_envio_ok ? 'Enviado' : 'Falhou' }} · {{ s.ultimo_envio_para }}</strong>
+                <small>{{ s.ultimo_envio_em | date: 'dd/MM/yyyy HH:mm' }}</small>
+                @if (!s.ultimo_envio_ok) { <small class="texto-erro">{{ s.ultimo_envio_mensagem }}</small> }
+              } @else {
+                <small>Nenhum</small>
+              }
+            </td>
+            <td>
+              <div class="acoes-linha">
+                <button type="button" (click)="testar(s)" [disabled]="idOcupado() !== null">Testar</button>
+                <button type="button" (click)="abrirEnvio(s)" [disabled]="idOcupado() !== null">Enviar teste</button>
+                <button type="button" (click)="abrirFormulario(s)" [disabled]="idOcupado() !== null">Editar</button>
+                <button class="botao-excluir" type="button" (click)="excluir(s)" [disabled]="idOcupado() !== null">Excluir</button>
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td class="estado-vazio" colspan="7">{{ carregando() ? 'Carregando…' : 'Nenhum servidor SMTP configurado. O sistema não envia e-mails.' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
+
+@if (formularioAberto()) {
+  <div class="fundo-modal" role="presentation" (click)="fecharJanelas()"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-smtp">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">Envio de e-mail</span>
+        <h2 id="titulo-formulario-smtp">{{ emEdicao() ? 'Editar servidor SMTP' : 'Novo servidor SMTP' }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharJanelas()">×</button>
+    </header>
+
+    <form [formGroup]="formulario" (ngSubmit)="salvar()" novalidate>
+      <div class="grade-formulario">
+        <div class="ocupa-duas">
+          <label for="smtp-nome">Nome</label>
+          <input id="smtp-nome" formControlName="nome" placeholder="Microsoft 365 — chamados" />
+        </div>
+        <div>
+          <label for="smtp-servidor">Servidor</label>
+          <input id="smtp-servidor" formControlName="servidor" placeholder="smtp.office365.com" />
+        </div>
+        <div>
+          <label for="smtp-seguranca">Segurança</label>
+          <select id="smtp-seguranca" formControlName="seguranca" (change)="aoTrocarSeguranca()">
+            <option value="starttls">STARTTLS (porta 587)</option>
+            <option value="ssl">SSL direto (porta 465)</option>
+            <option value="nenhuma">Sem cifra (só rede interna)</option>
+          </select>
+        </div>
+        <div>
+          <label for="smtp-porta">Porta</label>
+          <input id="smtp-porta" type="number" formControlName="porta" />
+        </div>
+        <div>
+          <label for="smtp-tempo">Tempo limite (segundos)</label>
+          <input id="smtp-tempo" type="number" formControlName="tempo_limite_segundos" />
+        </div>
+        <div>
+          <label for="smtp-usuario">Usuário</label>
+          <input id="smtp-usuario" formControlName="usuario" autocomplete="off" placeholder="conta@sp.gov.br (vazio = sem autenticação)" (blur)="aoSairDoUsuario()" />
+        </div>
+        <div>
+          <label for="smtp-senha">Senha</label>
+          <input id="smtp-senha" type="password" formControlName="senha" autocomplete="new-password"
+                 [placeholder]="emEdicao()?.possui_senha ? 'Deixe vazia para preservar' : ''" />
+        </div>
+        <div>
+          <label for="smtp-remetente">E-mail do remetente</label>
+          <input id="smtp-remetente" type="email" formControlName="remetente_email" placeholder="chamados.spi@sp.gov.br" />
+        </div>
+        <div>
+          <label for="smtp-remetente-nome">Nome do remetente</label>
+          <input id="smtp-remetente-nome" formControlName="remetente_nome" placeholder="Chamados SPI" />
+        </div>
+        <div class="ocupa-duas">
+          <label for="smtp-responder">Responder para (opcional)</label>
+          <input id="smtp-responder" type="email" formControlName="responder_para" placeholder="Vazio = o próprio remetente" />
+        </div>
+      </div>
+      <p class="dica-formulario">No Microsoft 365, o remetente precisa ser a própria conta (ou uma com permissão "Enviar como") e o SMTP autenticado precisa estar habilitado na caixa.</p>
+
+      <div class="linha-caixas">
+        <label><input type="checkbox" formControlName="ativo" /> Servidor ativo (usado pelo sistema)</label>
+      </div>
+
+      @if (testeFormulario(); as t) {
+        <p class="aviso-formulario" [class.erro]="!t.sucesso" role="status">
+          {{ t.sucesso ? 'Conexão saudável' : 'Falha no teste' }} · {{ t.latencia_ms }} ms — {{ t.mensagem }}
+        </p>
+      }
+      @if (erroFormulario()) {
+        <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
+      }
+
+      <footer>
+        <button class="acao-secundaria" type="button" (click)="testarFormulario()" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Testar sem salvar' }}</button>
+        <button class="acao-secundaria" type="button" (click)="fecharJanelas()" [disabled]="salvando()">Cancelar</button>
+        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Salvar servidor' }}</button>
+      </footer>
+    </form>
+  </section>
+}
+
+@if (envioAberto(); as s) {
+  <div class="fundo-modal" role="presentation" (click)="fecharJanelas()"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-envio-smtp">
+    <header>
+      <div>
+        <span class="modal-sobretitulo">{{ s.nome }}</span>
+        <h2 id="titulo-envio-smtp">Enviar e-mail de teste</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharJanelas()">×</button>
+    </header>
+    <form (ngSubmit)="enviarTeste()">
+      <p class="dica-formulario" style="margin-top: 0">Envia uma mensagem de <b>{{ s.remetente_email }}</b> pelo servidor <code>{{ s.servidor }}:{{ s.porta }}</code>. Confira a caixa de entrada (e o lixo eletrônico) do destinatário.</p>
+      <div class="grade-formulario">
+        <div class="ocupa-duas">
+          <label for="smtp-destinatario">Destinatário</label>
+          <input id="smtp-destinatario" name="destinatario" type="email" required [(ngModel)]="destinatario" placeholder="seu.email@sp.gov.br" />
+        </div>
+      </div>
+      @if (resultadoEnvio(); as r) {
+        <p class="aviso-formulario" [class.erro]="!r.sucesso" role="status">
+          {{ r.sucesso ? 'Enviado' : 'Falha no envio' }} · {{ r.latencia_ms }} ms — {{ r.mensagem }}
+        </p>
+      }
+      <footer>
+        <button class="acao-secundaria" type="button" (click)="fecharJanelas()" [disabled]="salvando()">Fechar</button>
+        <button class="acao-primaria" type="submit" [disabled]="salvando() || !destinatario.trim()">{{ salvando() ? 'Enviando…' : 'Enviar teste' }}</button>
+      </footer>
+    </form>
+  </section>
+}

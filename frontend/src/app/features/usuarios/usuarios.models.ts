@@ -18,6 +18,14 @@ export interface DadosPerfil {
 }
 
 /** Perfil devolvido pela API (com o nome do gestor e a data da última revalidação). */
+/** Setor oferecido no combobox "Departamento" (GET /api/autenticacao/perfil/opcoes-departamento). */
+export interface OpcaoDepartamento {
+  id: number;
+  nome: string;
+  /** Profundidade na hierarquia (0 = raiz). */
+  nivel: number;
+}
+
 export interface PerfilLeitura extends DadosPerfil {
   gestor_nome: string | null;
   perfil_revisado_em: string | null;

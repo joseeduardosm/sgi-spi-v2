@@ -20,8 +20,10 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
+    text,
     true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -32,7 +34,9 @@ from app.models.auditoria import TipoJson
 from app.models.contratos.contrato import Contrato, _lista_sql
 
 # Etapas da competência, em ordem. `avaliacao` só existe quando a competência tem formulário.
-ETAPAS = ("medicao", "avaliacao", "nota_fiscal", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida")
+ETAPAS = ("medicao", "avaliacao", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida")
+# Etapas feitas em paralelo depois da nota fiscal (qualquer ordem); o consolidado só depois de todas
+ETAPAS_PARALELAS = ("retencao", "cadin", "checklist")
 # Competência regular (período de execução) ou complementar, que paga a diferença de um reajuste retroativo
 TIPOS_COMPETENCIA = ("regular", "diferenca_reajuste")
 
@@ -175,6 +179,11 @@ class Competencia(Base):
     nf_retencao_iss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     nf_retencao_pis: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     nf_retencao_cofins: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    nf_retencao_csll: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0), server_default=text("0"))
+    # XML da nota (obrigatório junto com o PDF) e os dados lidos dele (ver leitor_nota_xml)
+    nf_xml_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    nf_dados_xml: Mapped[dict[str, Any] | None] = mapped_column(TipoJson)
+    nf_chave: Mapped[str | None] = mapped_column(String(60), index=True)
     # NF adicional (opcional), com as mesmas informações
     nf_adicional_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     nf_adicional_numero: Mapped[str] = mapped_column(String(100), default="")
@@ -184,7 +193,21 @@ class Competencia(Base):
     nf_adicional_retencao_iss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     nf_adicional_retencao_pis: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     nf_adicional_retencao_cofins: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    nf_adicional_retencao_csll: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0), server_default=text("0"))
+    nf_adicional_xml_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    nf_adicional_dados_xml: Mapped[dict[str, Any] | None] = mapped_column(TipoJson)
+    nf_adicional_chave: Mapped[str | None] = mapped_column(String(60), index=True)
     nf_concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Etapa 4 — retenção de tributos (conferida pelo Financeiro ou pela equipe)
+    retencao_concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retencao_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    retencao_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
+    retencao_discriminacao_conferida: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    retencao_pdf_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    # Etapas 5 e 6 — CADIN e checklist correm em paralelo com a retenção; o consolidado exige as três concluídas
+    cadin_concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checklist_concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Etapa 6 — documento consolidado
     consolidado_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
@@ -194,6 +217,22 @@ class Competencia(Base):
     ob_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     ob_enviada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # E-mail ao Financeiro (cópia para a equipe) quando a nota fiscal é juntada
+    email_nf_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_nf_ok: Mapped[bool | None] = mapped_column(Boolean)
+    email_nf_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list, server_default=text("'[]'"))
+    email_nf_erro: Mapped[str | None] = mapped_column(Text)
+    # E-mail à equipe quando o Financeiro salva a retenção
+    email_retencao_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_retencao_ok: Mapped[bool | None] = mapped_column(Boolean)
+    email_retencao_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list, server_default=text("'[]'"))
+    email_retencao_erro: Mapped[str | None] = mapped_column(Text)
+    # E-mail à equipe e ao preposto ao concluir a medição (memória + diário do período; pede a NF em 48 h)
+    email_medicao_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_medicao_ok: Mapped[bool | None] = mapped_column(Boolean)
+    email_medicao_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list, server_default=text("'[]'"))
+    email_medicao_erro: Mapped[str | None] = mapped_column(Text)
 
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
@@ -220,6 +259,9 @@ class Competencia(Base):
     # Os anexos têm várias FKs para a mesma tabela `anexos`; `foreign_keys` diz qual coluna usar em cada uma
     nf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_anexo_id])
     nf_adicional_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_adicional_anexo_id])
+    nf_xml_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_xml_anexo_id])
+    nf_adicional_xml_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_adicional_xml_anexo_id])
+    retencao_pdf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[retencao_pdf_anexo_id])
     consolidado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[consolidado_anexo_id])
     ob_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[ob_anexo_id])
 

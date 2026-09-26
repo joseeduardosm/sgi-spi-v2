@@ -21,7 +21,7 @@ export type Papel =
   | 'fiscal_tecnico'
   | 'fiscal_tecnico_suplente';
 /** Etapas da competência, na ordem do fluxo. */
-export type Etapa = 'medicao' | 'avaliacao' | 'nota_fiscal' | 'cadin' | 'checklist' | 'consolidado' | 'ordem_bancaria' | 'concluida';
+export type Etapa = 'medicao' | 'avaliacao' | 'nota_fiscal' | 'retencao' | 'cadin' | 'checklist' | 'consolidado' | 'ordem_bancaria' | 'concluida';
 /** Situação resumida da competência na lista da aba Execução. */
 export type SituacaoCompetencia = 'pendente' | 'disponivel' | 'em_andamento' | 'concluida';
 
@@ -468,6 +468,30 @@ export interface ItemMedicao {
   quantidade_prevista: Decimal;
   quantidade_medida: Decimal;
   subtotal: Decimal;
+  /** Contínuo: previsto da competência; sob demanda: saldo do item na vigência. */
+  saldo: Decimal;
+  /** Glosas do diário de bordo com data no período. */
+  glosas: Decimal;
+  /** Saldo − glosas: o máximo que pode ser medido. */
+  saldo_liquido: Decimal;
+}
+
+export interface GlosaDoPeriodo {
+  ocorrencia_id: string;
+  data_ocorrencia: string;
+  descricao_ocorrencia: string;
+  registrada_por_nome: string;
+  item_id: string;
+  descricao_item: string;
+  quantidade: Decimal;
+}
+
+/** Resultado do e-mail enviado à equipe e ao preposto. */
+export interface EnvioEmail {
+  enviado_em: string | null;
+  ok: boolean | null;
+  destinatarios: string[];
+  erro: string | null;
 }
 
 /** NE escolhida (ou disponível) na medição, com o saldo livre. */
@@ -479,15 +503,57 @@ export interface NotaSelecionada {
 }
 
 /** Dados de uma nota fiscal registrada. */
+/** Participante da nota (emitente ou tomador), lido do XML. */
+export interface ParticipanteNota {
+  cnpj: string | null;
+  razao_social: string | null;
+  inscricao_municipal: string | null;
+}
+
+/** Dados da nota lidos do XML (NF-e ou NFS-e), iguais para todos os formatos. */
+export interface DadosNotaXml {
+  modelo: 'nfe' | 'nfse_nacional' | 'nfse_sp';
+  modelo_rotulo: string;
+  numero: string | null;
+  serie: string | null;
+  chave: string | null;
+  emissao: string | null;
+  competencia: string | null;
+  autorizada: boolean | null;
+  situacao: string | null;
+  emitente: ParticipanteNota;
+  tomador: ParticipanteNota;
+  valor_bruto: string | null;
+  valor_liquido: string | null;
+  codigo_servico: string | null;
+  discriminacao: string | null;
+  itens: { descricao: string; quantidade: string | null; valor_unitario: string | null; valor_total: string | null }[];
+  retencoes: Record<Tributo, string>;
+  informacoes_complementares: string | null;
+}
+
+export type Tributo = 'ir' | 'inss' | 'iss' | 'pis' | 'cofins' | 'csll';
+
+/** Conferência automática da nota (etapa de retenção). */
+export interface ConferenciaNota {
+  descricao: string;
+  situacao: 'ok' | 'alerta' | 'info';
+  detalhe: string;
+}
+
 export interface NotaFiscal {
   numero: string;
   arquivo: Arquivo | null;
+  xml: Arquivo | null;
+  dados_xml: DadosNotaXml | null;
+  conferencias: ConferenciaNota[];
   valor_bruto: Decimal | null;
   retencao_ir: Decimal;
   retencao_inss: Decimal;
   retencao_iss: Decimal;
   retencao_pis: Decimal;
   retencao_cofins: Decimal;
+  retencao_csll: Decimal;
   valor_liquido: Decimal;
 }
 
@@ -570,6 +636,15 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   valor_a_pagar: Decimal;
   avisos: string[];
   reaberturas_permitidas: boolean;
+  glosas_periodo: GlosaDoPeriodo[];
+  email_medicao: EnvioEmail;
+  email_nf: EnvioEmail;
+  email_retencao: EnvioEmail;
+  retencao: { concluida_em: string | null; por_nome: string; discriminacao_conferida: boolean; pdf: Arquivo | null } | null;
+  pode_conferir_retencao: boolean;
+  /** Etapas que aceitam gravação agora (depois da NF: retenção, CADIN e checklist em paralelo). */
+  etapas_abertas: Etapa[];
+  etapas_concluidas: Etapa[];
   nota_fiscal: NotaFiscal | null;
   nota_fiscal_adicional: NotaFiscal | null;
   nf_recebida_em: string | null;
@@ -828,4 +903,40 @@ export interface EstadoMigracaoSgi {
   resultado: Record<string, number> | null;
   avisos: string[];
   log: string[];
+}
+
+// --- Diário de bordo --------------------------------------------------------------------------
+
+export interface GlosaOcorrencia {
+  item_id: string;
+  descricao_item: string;
+  quantidade: Decimal;
+}
+
+export interface OcorrenciaDiario {
+  id: string;
+  data_ocorrencia: string;
+  descricao: string;
+  possui_glosa: boolean;
+  glosas: GlosaOcorrencia[];
+  registrada_por_id: number | null;
+  registrada_por_nome: string;
+  registrada_por_papel: string;
+  criado_em: string;
+  competencia_rotulo: string | null;
+  medicao_ja_concluida: boolean;
+  email: EnvioEmail;
+}
+
+export interface DiarioContrato {
+  ocorrencias: OcorrenciaDiario[];
+  pode_registrar: boolean;
+  itens: { id: string; ordem: number; descricao: string; tipo: TipoItem }[];
+}
+
+export interface GravacaoOcorrencia {
+  data_ocorrencia: string;
+  descricao: string;
+  possui_glosa: boolean;
+  glosas: { item_id: string; quantidade: string }[];
 }

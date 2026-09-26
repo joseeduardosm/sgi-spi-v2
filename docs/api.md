@@ -34,13 +34,13 @@ Navegador
 
 | Pasta | Responsabilidade |
 |---|---|
-| `api/routes/` | Rotas HTTP, uma por recurso (`autenticacao.py`, `usuarios.py`, `setores.py`, `acl.py`, `ldap.py`, `saude.py`); o módulo de contratos fica em `api/routes/contratos/` |
+| `api/routes/` | Rotas HTTP, uma por recurso (`autenticacao.py`, `usuarios.py`, `setores.py`, `acl.py`, `ldap.py`, `smtp.py`, `saude.py`); o módulo de contratos fica em `api/routes/contratos/` |
 | `api/dependencias.py` | Autenticação (`obter_usuario_autenticado`, `obter_usuario_atual`) e autorização (`exigir_papeis`, `exigir_acl`) |
 | `api/respostas.py` | Respostas de erro padronizadas para as rotas e o OpenAPI |
 | `core/` | Configuração (`configuracao.py`), banco (`banco.py`), senhas e JWT (`seguranca.py`), cifra de segredos (`criptografia.py`), formato de erros (`erros.py`) |
 | `models/` | Modelos SQLAlchemy: `Usuario`, `DiretorioLdap`, `RegistroAuditoria`, `Anexo`, `Setor`, `MembroSetor`, `RecursoAcl`, `RegraAcl` |
 | `schemas/` | Schemas Pydantic de entrada e saída (contrato da API) |
-| `services/` | Regras de negócio (`servico_*.py`, `cliente_ldap.py`, `agendador_ldap.py`), anexos em disco (`servico_anexos.py`) e auditoria (`servico_auditoria.py`) |
+| `services/` | Regras de negócio (`servico_*.py`, `cliente_ldap.py`, `agendador_ldap.py`, `cliente_smtp.py`), anexos em disco (`servico_anexos.py`) e auditoria (`servico_auditoria.py`) |
 | `services/contratos/` | Regras do módulo de contratos; `calculos.py` concentra datas de vigência, situação e valores (funções puras) |
 | `services/documentos/` | Geração de PDF com a identidade do Governo de SP (`pdf.py`, ReportLab + pypdf) e de planilhas XLSX (`planilha.py`, openpyxl) |
 | `recursos/` | Arquivos usados pelos documentos gerados (brasão) |
@@ -52,6 +52,7 @@ Navegador
 |---|---|
 | `usuarios` | Contas locais e corporativas, com o perfil institucional |
 | `diretorios_ldap` | Configuração dos diretórios LDAP (senha de bind cifrada) |
+| `servidores_smtp` | Configuração dos servidores SMTP de envio de e-mail (senha cifrada; um ativo) |
 | `setores`, `membros_setor` | Setores e seus membros |
 | `acl_recursos`, `acl_regras`, `acl_regras_usuarios`, `acl_regras_setores` | Controle de acesso |
 | `auditoria` | Registro das operações. `alvo_tipo`/`alvo_id` identificam o registro alterado e `dados` (JSONB) guarda o conteúdo do ato; nas alterações, `{"campos": {"campo": {"de", "para"}}}` alimenta o histórico por campo |
@@ -61,6 +62,7 @@ Navegador
 | `contratos_notas_empenho`, `contratos_notas_empenho_movimentos` | Notas de Empenho e extrato (débitos das OBs) |
 | `contratos_checklists`, `contratos_checklists_itens`, `contratos_formularios`, `contratos_modelos` | Versões de checklist e de formulário de avaliação; modelos globais |
 | `contratos_competencias` e `contratos_competencias_*` (`itens`, `notas`, `ciencias`, `memorias`, `cadin`, `documentos`, `avaliacoes`) | Competências de execução e tudo o que cada etapa registra |
+| `contratos_diario_ocorrencias`, `contratos_diario_glosas` | Diário de bordo: ocorrências (imutáveis, com o resultado do e-mail) e glosas por item |
 | `contratos_prorrogacoes`, `contratos_prorrogacoes_processos`, `contratos_prorrogacoes_ciencias` | Termos aditivos de prorrogação e o rascunho com parecer e ciências |
 | `contratos_reajustes`, `contratos_reajustes_itens`, `contratos_reajustes_memorias` | Reajustes e memórias versionadas |
 | `contratos_alteracoes`, `contratos_alteracoes_itens`, `contratos_alteracoes_ciencias` | Aditamentos e supressões |
@@ -83,7 +85,7 @@ No Angular, a URL base vem de `ambiente.urlApi` (`/api`).
 - Datas: ISO 8601 em UTC (ex.: `2026-09-23T20:30:00Z`). Datas sem hora: `AAAA-MM-DD`.
 - Listas paginadas: `pagina`, `tamanho_pagina` na requisição; `itens`, `total`, `pagina`, `tamanho_pagina` na resposta.
 - Toda resposta traz o cabeçalho `X-Correlacao`: um código de 12 caracteres que identifica a requisição nos logs da API. As telas o exibem nos erros para que o usuário o informe ao suporte.
-- Anexos: somente PDF (o conteúdo precisa começar com `%PDF-`), não vazio e com até `ANEXOS_TAMANHO_MAXIMO_MB` (padrão 25 MB). Envio em `multipart/form-data` no campo `arquivo`.
+- Anexos: somente PDF (o conteúdo precisa começar com `%PDF-`), não vazio e com até `ANEXOS_TAMANHO_MAXIMO_MB` (padrão 25 MB). Envio em `multipart/form-data` no campo `arquivo`. Exceção: o **XML da nota fiscal** (campos `xml`/`xml_adicional` da etapa de NF), validado pela leitura do próprio XML (até 5 MB, sem `DOCTYPE`).
 
 ## Autenticação e autorização
 
@@ -109,6 +111,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/autenticacao/sessao` | Bearer (1) | Usuário autenticado | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaosessao) |
 | `GET` | `/api/autenticacao/perfil` | Bearer (1) | Meu perfil institucional | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaoperfil) |
 | `PUT` | `/api/autenticacao/perfil` | Bearer (1) | Atualiza e revalida meu perfil | [autenticacao.md](endpoints/autenticacao.md#put-apiautenticacaoperfil) |
+| `GET` | `/api/autenticacao/perfil/opcoes-departamento` | Bearer (1) | Setores para o combobox Departamento | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaoperfilopcoes-departamento) |
 | `GET` | `/api/autenticacao/perfil/opcoes-gestor` | Bearer (1) | Opções de gestor imediato | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaoperfilopcoes-gestor) |
 | `GET` | `/api/usuarios` | ACL `usuarios` ≥ LEITURA | Lista usuários | [usuarios.md](endpoints/usuarios.md#get-apiusuarios) |
 | `GET` | `/api/usuarios/opcoes` | ACL `usuarios` ≥ LEITURA | Opções para seletores | [usuarios.md](endpoints/usuarios.md#get-apiusuariosopcoes) |
@@ -133,6 +136,11 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `POST` | `/api/ldap/diretorios/{diretorio_id}/testar` | SuperRoot | Testa conectividade e registra o resultado | [ldap.md](endpoints/ldap.md#post-apildapdiretoriosdiretorio_idtestar) |
 | `POST` | `/api/ldap/diretorios/{diretorio_id}/sincronizar` | SuperRoot | Sincroniza usuários | [ldap.md](endpoints/ldap.md#post-apildapdiretoriosdiretorio_idsincronizar) |
 | `GET` | `/api/ldap/diretorios/{diretorio_id}/diagnosticar` | SuperRoot | Diagnostica um login | [ldap.md](endpoints/ldap.md#get-apildapdiretoriosdiretorio_iddiagnosticarloginlogin) |
+| `GET` `POST` | `/api/smtp/servidores` | SuperRoot | Lista / cadastra servidores SMTP | [smtp.md](endpoints/smtp.md) |
+| `POST` | `/api/smtp/servidores/testar` | SuperRoot | Testa configuração sem salvar | [smtp.md](endpoints/smtp.md#endpoints) |
+| `GET` `PUT` `DELETE` | `/api/smtp/servidores/{servidor_id}` | SuperRoot | Consulta / altera / exclui servidor | [smtp.md](endpoints/smtp.md#endpoints) |
+| `POST` | `/api/smtp/servidores/{servidor_id}/testar` | SuperRoot | Testa conexão e autenticação e registra o resultado | [smtp.md](endpoints/smtp.md#endpoints) |
+| `POST` | `/api/smtp/servidores/{servidor_id}/enviar-teste` | SuperRoot | Envia e-mail de teste | [smtp.md](endpoints/smtp.md#endpoints) |
 
 | `GET` `POST` | `/api/contratos/empresas` | ACL `contratos` ≥ LEITURA / ≥ MODIFICACAO | Lista / cadastra empresas | [contratos-empresas.md](endpoints/contratos-empresas.md) |
 | `GET` | `/api/contratos/empresas/opcoes` | ACL `contratos` ≥ LEITURA | Empresas para o cadastro de contrato | [contratos-empresas.md](endpoints/contratos-empresas.md#get-apicontratosempresasopcoes) |
@@ -151,6 +159,13 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/contratos/relatorios/notas-empenho` | SuperRoot | Relatório Executivo de NEs (XLSX/PDF) | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` | `/api/contratos/relatorios/previsao-orcamentaria` | SuperRoot | Previsão consolidada com cenários | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/contratos/modelos[/{modelo_id}]` | LEITURA / SuperRoot | Modelos globais de checklist e formulário | [contratos-painel.md](endpoints/contratos-painel.md) |
+| `GET` `POST` | `/api/contratos/{contrato_id}/diario` | LEITURA / edição do contrato | Diário de bordo: lista / registra ocorrência (e-mail à equipe e ao preposto) | [contratos-diario.md](endpoints/contratos-diario.md) |
+| `POST` | `/api/contratos/{contrato_id}/diario/{ocorrencia_id}/reenviar` | Edição do contrato | Reenvia o e-mail da ocorrência | [contratos-diario.md](endpoints/contratos-diario.md) |
+| `GET` | `/api/contratos/{contrato_id}/diario/pdf` | LEITURA | Diário de bordo em PDF | [contratos-diario.md](endpoints/contratos-diario.md) |
+| `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-medicao` | Edição do contrato | Reenvia o e-mail da medição concluída | [contratos-execucao.md](endpoints/contratos-execucao.md) |
+| `PUT` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/retencao` | Financeiro, equipe ou SuperRoot | Retenção de tributos (conferência da NF lida do XML) | [contratos-execucao.md](endpoints/contratos-execucao.md) |
+| `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-nf` | Edição do contrato | Reenvia o e-mail da NF ao Financeiro | [contratos-execucao.md](endpoints/contratos-execucao.md) |
+| `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-retencao` | Financeiro, equipe ou SuperRoot | Reenvia o e-mail da retenção à equipe | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | `GET` `POST` | `/api/contratos/migracao-sgi` | SuperRoot | Importação dos contratos do SGI SPI (estado / iniciar) | [contratos-migracao-sgi.md](endpoints/contratos-migracao-sgi.md) |
 | `GET` `PUT` | `/api/contratos/{contrato_id}/previsao[/{sequencia_vigencia}]` | LEITURA / pode editar (2) | Previsão orçamentária | [contratos-orcamento.md](endpoints/contratos-orcamento.md) |
 | `GET` | `/api/contratos/{contrato_id}/previsao/{sequencia_vigencia}/xlsx` | ACL `contratos` ≥ LEITURA | Exporta a previsão | [contratos-orcamento.md](endpoints/contratos-orcamento.md) |

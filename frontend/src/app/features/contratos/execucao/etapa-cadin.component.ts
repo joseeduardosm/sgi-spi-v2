@@ -17,7 +17,7 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
   template: `
     @let d = detalhe();
     <section class="cartao-dados" aria-labelledby="titulo-cadin">
-      <header><h2 id="titulo-cadin">4. Consulta ao CADIN</h2></header>
+      <header><h2 id="titulo-cadin">5. Consulta ao CADIN</h2></header>
       <div class="corpo">
         @if (editavel()) {
           <fieldset class="linha-caixas">

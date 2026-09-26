@@ -1,0 +1,44 @@
+# Changelog
+
+Todas as mudanças relevantes do contratos-spi ficam registradas aqui, da mais recente para a mais antiga.
+Cada commit atualiza este arquivo na mesma alteração (ver `AGENTS.md`, seção "Commits e changelog").
+
+Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
+Informe também migrações do banco e endpoints novos ou alterados.
+
+## 2026-09-25
+
+### Adicionado
+- **Servidores SMTP** (SuperRoot, `/admin/smtp`). Cadastro no mesmo molde dos diretórios LDAP: senha cifrada, um servidor ativo, teste de conexão e envio de e-mail de teste.
+  - Endpoints `/api/smtp/servidores`, `/testar`, `/{id}`, `/{id}/testar` e `/{id}/enviar-teste`.
+  - Migração `3486e80ca434` (tabela `servidores_smtp`).
+- **Diário de bordo do contrato**, na aba "Diário de bordo" do detalhe.
+  - A equipe registra ocorrências com data, opcionalmente com glosa (item e quantidade).
+  - Cada ocorrência gera e-mail à equipe e aos prepostos ativos, e há PDF do diário.
+  - Na medição aparecem as colunas "Saldo", "Glosas" e "Saldo líquido", e não é possível medir acima do saldo líquido.
+  - Ao concluir a medição, um e-mail com a memória de cálculo e o diário em PDF pede a nota fiscal em até 48 h.
+  - Endpoints `/api/contratos/{id}/diario`, `/diario/pdf`, `/diario/{ocorrencia_id}/reenviar` e `/competencias/{id}/reenviar-email-medicao`.
+  - Migração `7566f71dd5a5`.
+- **Etapa "Retenção de tributos"** na execução.
+  - A NF-e/NFS-e é enviada com o XML, e os valores lidos do XML aparecem na etapa (incluindo a CSLL).
+  - O setor DOF confere a retenção, o sistema gera o PDF e envia os e-mails da NF e da retenção.
+  - Endpoints `/competencias/{id}/retencao`, `/reenviar-email-nf` e `/reenviar-email-retencao`.
+  - Migração `508822e8dedd`.
+- **Setores importados do SGI SPI:** os 28 setores foram trazidos do 10.23.1.220, em leitura apenas.
+- **Departamento do perfil como combobox**, alimentado pelos setores (endpoint `/api/autenticacao/perfil/opcoes-departamento`).
+
+### Alterado
+- **Etapas paralelas:** depois da nota fiscal, retenção, CADIN e checklist ficam abertos ao mesmo tempo. O documento consolidado só é liberado com os três concluídos. Migração `c3e9a1f4b7d2`.
+
+## 2026-09-24 a 2026-09-25
+
+### Alterado
+- Cabeçalho padrão ("Criado por José Eduardo Santana Martins" + finalidade do arquivo) e comentários explicativos em todos os `.py` do backend e `.ts` do frontend. O teste de cabeçalho cobre os dois.
+
+## 2026-09-24
+
+### Adicionado
+- Versão inicial do contratos-spi:
+  - autenticação local e LDAP, perfil institucional, usuários, setores, ACL e diretórios LDAP;
+  - módulo de contratos: carteira, cadastro, empresas e prepostos, documentos importantes, previsão orçamentária, Notas de Empenho, checklists e formulários de avaliação, execução mensal, prorrogação, reajuste, aditamento/supressão, painel, relatórios e modelos globais;
+  - importação dos contratos do SGI SPI.

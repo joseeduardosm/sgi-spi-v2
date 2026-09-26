@@ -106,6 +106,27 @@ def test_perfil_incompleto_restringe_acesso(cliente):
     assert r.status_code == 403 and r.json()["codigo"] == "revisao_perfil_obrigatoria"
     assert cliente.get("/api/autenticacao/perfil", headers=h).status_code == 200
     assert cliente.get("/api/autenticacao/perfil/opcoes-gestor", headers=h).status_code == 200
+    assert cliente.get("/api/autenticacao/perfil/opcoes-departamento", headers=h).status_code == 200
+
+
+def test_opcoes_de_departamento_sao_os_setores_institucionais(cliente, admin):
+    """O combobox "Departamento" lista os setores ativos e não sistêmicos, pai antes dos filhos."""
+    def setor(nome, pai=None, **extras):
+        r = cliente.post("/api/setores", json={"nome": nome, "setor_pai_id": pai, "membros_ids": [], **extras}, headers=admin)
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    raiz = setor("Secretaria")
+    executiva = setor("Secretaria Executiva", raiz)
+    setor("Diretoria de Tecnologia", executiva)
+    setor("Chefia de Gabinete", raiz)
+    setor("Auditores", sistemico=True)
+    setor("Antigo", raiz, ativo=False)
+    criar_usuario("comum", completo=False)
+    opcoes = cliente.get("/api/autenticacao/perfil/opcoes-departamento", headers=cabecalho(cliente, "comum")).json()
+    assert [(o["nome"], o["nivel"]) for o in opcoes] == [
+        ("Secretaria", 0), ("Chefia de Gabinete", 1), ("Secretaria Executiva", 1), ("Diretoria de Tecnologia", 2),
+    ]
 
 
 def test_revalidacao_libera_acesso(cliente):

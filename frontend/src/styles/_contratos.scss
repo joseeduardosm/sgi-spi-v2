@@ -1078,3 +1078,315 @@ a.acao-primaria {
     }
   }
 }
+
+/* Diário de bordo: lista em forma de chat */
+.diario-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 560px;
+  overflow-y: auto;
+  padding: 18px 22px;
+  background: #f7f8fa;
+}
+
+.balao-diario {
+  align-self: flex-start;
+  max-width: min(720px, 88%);
+  padding: 12px 14px;
+  border: 1px solid #e3e6e9;
+  border-radius: 4px 14px 14px 14px;
+  background: #fff;
+  box-shadow: 0 2px 8px #401e2008;
+
+  &.minha {
+    align-self: flex-end;
+    border-radius: 14px 4px 14px 14px;
+    background: #fdf5f5;
+  }
+
+  &.com-glosa {
+    border-left: 3px solid var(--spi-vermelho);
+  }
+
+  > header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    font-size: 12px;
+
+    .papel {
+      color: #6a7786;
+    }
+
+    time {
+      margin-left: auto;
+      color: #8e99a6;
+      font-size: 11px;
+    }
+  }
+
+  .data-ocorrencia {
+    margin: 4px 0 6px;
+    color: #5a6673;
+    font-size: 12px;
+  }
+
+  .texto {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+
+  .glosas-balao {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #fcf0f1;
+    font-size: 12px;
+
+    ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
+    }
+  }
+
+  > footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    color: #8e99a6;
+    font-size: 11px;
+  }
+}
+
+.diario-formulario {
+  padding: 18px 22px;
+  border-top: 1px solid #ecedef;
+
+  .linha-glosa {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 140px auto;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .acoes-cartao {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+}
+
+/* Pergunta Sim/Não com rádios, alinhada aos rótulos do formulário */
+.grupo-radio {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+
+  legend {
+    width: 100%;
+    margin-bottom: 8px;
+    color: #32383f;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+}
+
+/* Medição: glosas do período e campo acima do saldo líquido */
+.glosas-periodo {
+  margin: 12px 22px 0;
+  font-size: 12px;
+
+  summary {
+    cursor: pointer;
+    color: var(--spi-vermelho);
+    font-weight: 700;
+  }
+
+  ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+  }
+}
+
+.campo-tabela.invalido {
+  border-color: var(--spi-vermelho) !important;
+  background: #fcf0f1;
+}
+
+/* Etapa 4 — retenção de tributos: nota renderizada a partir do XML */
+.nota-xml {
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  border: 1px solid #e3e6e9;
+  border-radius: 10px;
+  background: #fff;
+
+  > header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--spi-vermelho);
+
+    h3 {
+      margin: 2px 0 0;
+      font-size: 18px;
+    }
+  }
+
+  .valor-nota {
+    text-align: right;
+
+    small {
+      display: block;
+      color: #8e99a6;
+      font-size: 11px;
+    }
+
+    strong {
+      font-size: 18px;
+    }
+  }
+
+  .partes-nota {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin: 14px 0;
+
+    > div {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f7f8fa;
+      font-size: 12px;
+    }
+
+    small {
+      color: #8e99a6;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+  }
+
+  .dados-nota {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px 16px;
+    margin: 0 0 12px;
+    font-size: 12px;
+
+    dt {
+      color: #8e99a6;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    dd {
+      margin: 2px 0 0;
+    }
+
+    .ocupa-tudo {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .discriminacao-nota {
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+}
+
+.conferencias-nota {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 6px 10px;
+    border-left: 3px solid #cfd4da;
+    border-radius: 4px;
+    background: #f7f8fa;
+
+    & + li {
+      margin-top: 4px;
+    }
+
+    &.ok {
+      border-left-color: #2e8b57;
+
+      b {
+        color: #1f6b41;
+      }
+    }
+
+    &.alerta {
+      border-left-color: #e0a526;
+      background: #fff8e6;
+
+      b {
+        color: #8a5a00;
+      }
+    }
+
+    span {
+      color: #5a6673;
+    }
+  }
+}
+
+.grade-tributos {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important;
+}
+
+.confirmacao-discriminacao {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+
+/* Etapa 3 — seletor do XML da nota */
+.seletor-xml {
+  position: relative;
+  cursor: pointer;
+
+  input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+}
+
+.arquivos-nf {
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}

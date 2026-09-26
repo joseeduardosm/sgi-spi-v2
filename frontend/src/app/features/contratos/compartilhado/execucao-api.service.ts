@@ -154,7 +154,19 @@ export class ExecucaoApiService {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/nota-fiscal'), this.formulario(campos));
   }
 
-  /** Etapa 4: registra a consulta ao CADIN. */
+  /** Etapa 4: salva a retenção de tributos conferida (Financeiro, equipe ou SuperRoot). */
+  salvarRetencao(id: string, c: string, dados: {
+    principal: Record<string, string>; adicional: Record<string, string> | null; discriminacao_conferida: boolean;
+  }): Observable<DetalheCompetencia> {
+    return this.http.put<DetalheCompetencia>(this.competencia(id, c, '/retencao'), dados);
+  }
+
+  /** Reenvia o e-mail da NF (ao Financeiro) ou da retenção (à equipe). */
+  reenviarEmail(id: string, c: string, tipo: 'nf' | 'retencao'): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/reenviar-email-${tipo}`), null);
+  }
+
+  /** Etapa 5: registra a consulta ao CADIN. */
   cadin(id: string, c: string, campos: Record<string, string | boolean | File | null>): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/cadin'), this.formulario(campos));
   }
@@ -182,5 +194,10 @@ export class ExecucaoApiService {
   /** Reabre a competência em uma etapa anterior (SuperRoot ou gestor). */
   reabrir(id: string, c: string, etapa: Etapa, justificativa: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/reabrir'), { etapa, justificativa });
+  }
+
+  /** Reenvia o e-mail da medição concluída à equipe e ao preposto. */
+  reenviarEmailMedicao(id: string, competenciaId: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, competenciaId, '/reenviar-email-medicao'), null);
   }
 }

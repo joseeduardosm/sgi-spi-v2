@@ -17,7 +17,8 @@ export type NomeIcone =
   | 'sair'
   | 'banco-dados'
   | 'organograma'
-  | 'escudo';
+  | 'escudo'
+  | 'envelope';
 
 /** Ícones de traço (24x24) no padrão visual da barra lateral. */
 @Component({
@@ -53,6 +54,7 @@ export type NomeIcone =
           <rect x="16" y="17" width="6" height="5" rx="1" /><path d="M12 7v5M5 17v-5h14v5" />
         }
         @case ('escudo') { <path d="M12 3 20 6v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6l8-3Z" /><path d="m9 12 2 2 4-5" /> }
+        @case ('envelope') { <rect x="3" y="5" width="18" height="14" rx="1.5" /><path d="m3.5 6 8.5 7 8.5-7" /> }
       }
     </svg>
   `,

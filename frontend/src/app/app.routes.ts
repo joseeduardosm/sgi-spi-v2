@@ -88,6 +88,14 @@ export const rotas: Routes = [
         loadComponent: () =>
           import('./features/administracao/ldap/diretorios-ldap.component').then((m) => m.DiretoriosLdapComponent),
       },
+      {
+        path: 'admin/smtp',
+        title: 'Servidores SMTP | Contratos SPI',
+        canActivate: [guardaPapel],
+        data: { papeis: ['SuperRoot'] },
+        loadComponent: () =>
+          import('./features/administracao/smtp/servidores-smtp.component').then((m) => m.ServidoresSmtpComponent),
+      },
     ],
   },
   // Qualquer endereço desconhecido volta para o início

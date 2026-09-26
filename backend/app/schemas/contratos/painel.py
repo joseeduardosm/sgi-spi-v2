@@ -16,7 +16,7 @@ from app.schemas.contratos.tipos import ValorMonetario
 
 # Tipos de pendência (cada um aponta para uma etapa ou tela onde o usuário precisa agir)
 TipoPendencia = Literal[
-    "medicao", "ciencia_medicao", "avaliacao", "ciencia_ateste", "nota_fiscal", "cadin", "checklist", "consolidado", "ordem_bancaria",
+    "medicao", "ciencia_medicao", "avaliacao", "ciencia_ateste", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria",
     "prorrogacao", "reajuste", "alteracao", "ciencia_alteracao", "base_execucao",
 ]
 # Tipos de risco verificados em todos os contratos

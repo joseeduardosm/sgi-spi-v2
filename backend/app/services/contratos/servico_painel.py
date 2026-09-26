@@ -25,15 +25,16 @@ from app.models.contratos import (
 from app.models.usuario import Usuario
 from app.schemas.contratos.painel import AlertasContrato, ExecucaoOrcamentaria, MesExecucao, NumerosCarteira, OpcaoFiltro, Painel, Pendencia, Risco
 from app.services.contratos import calculos
-from app.services.contratos.servico_competencias import CIENCIAS_MINIMAS, compromissos, requisitos, total_medido
+from app.services.contratos.servico_competencias import CIENCIAS_MINIMAS, compromissos, etapas_abertas, requisitos, total_medido
 from app.services.contratos.servico_contratos import designacoes_vigentes, hoje, opcoes_carga_completa, situacao, totais
 from app.services.contratos.servico_orcamento import meses_previstos
 from app.services.contratos.servico_prorrogacao import meses_disponiveis
+from app.services.contratos.servico_retencao import eh_financeiro
 
 ZERO = Decimal(0)
 # Nomes das etapas como aparecem nas pendências
 ETAPAS_ROTULO = {
-    "medicao": "Medição", "avaliacao": "Avaliação", "nota_fiscal": "Nota fiscal", "cadin": "CADIN", "checklist": "Checklist",
+    "medicao": "Medição", "avaliacao": "Avaliação", "nota_fiscal": "Nota fiscal", "retencao": "Retenção de tributos", "cadin": "CADIN", "checklist": "Checklist",
     "consolidado": "Documento consolidado", "ordem_bancaria": "Ordem Bancária",
 }
 # Pagamento que vence em até 5 dias vira alerta de risco médio
@@ -85,9 +86,17 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
     reajustes = set(sessao.scalars(select(Reajuste.contrato_id).where(Reajuste.situacao == "rascunho")))
     lista: list[Pendencia] = []
     referencia = hoje()
+    # O Financeiro confere as retenções de todos os contratos, mesmo sem integrar a equipe
+    financeiro = eh_financeiro(sessao, usuario)
     for contrato in contratos:
         membro = any(d.usuario_id == usuario.id for d in designacoes_vigentes(contrato))
         if not (membro or contrato.criador_id == usuario.id):
+            if financeiro:
+                for competencia in (c for c in contrato.competencias if c.etapa_atual == "retencao"):
+                    lista.append(_pendencia(
+                        contrato, "retencao", f"{_nome(competencia)}: conferir a retenção de tributos da NF {competencia.nf_numero}",
+                        f"/contratos/{contrato.id}/execucao/{competencia.identificador}", competencia.nf_recebida_em or competencia.periodo_fim,
+                    ))
             continue
         # Contrato ainda sem competências: a tarefa é completar a base e gerar a execução
         if not contrato.competencias and situacao(contrato) != "encerrado":
@@ -114,8 +123,12 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
                 continue
             # Nos demais casos, a pendência é a etapa atual (com o vencimento do pagamento, se já houver NF)
             vencimento = competencia.nf_recebida_em + timedelta(days=competencia.prazo_pagamento_dias) if competencia.nf_recebida_em and competencia.prazo_pagamento_dias else None
-            lista.append(_pendencia(contrato, etapa, f"{mes}: {ETAPAS_ROTULO.get(etapa, etapa)}"
-                                    + (f" · pagamento vence {vencimento:%d/%m/%Y}" if vencimento else ""), rota, vencimento or competencia.periodo_fim))
+            prazo = f" · pagamento vence {vencimento:%d/%m/%Y}" if vencimento else ""
+            # Depois da NF, retenção, CADIN e checklist correm em paralelo: uma pendência por etapa em aberto
+            for aberta in etapas_abertas(competencia):
+                sufixo = " (aguardando o Financeiro)" if aberta == "retencao" else ""
+                lista.append(_pendencia(contrato, aberta, f"{mes}: {ETAPAS_ROTULO.get(aberta, aberta)}{sufixo}{prazo}", rota,
+                                        vencimento or competencia.periodo_fim))
         # Atos em elaboração: prorrogação, reajuste e aditamento/supressão
         if contrato.id in rascunhos_prorrogacao:
             lista.append(_pendencia(contrato, "prorrogacao", "Prorrogação em elaboração", f"/contratos/{contrato.id}/prorrogacao", contrato.data_fim))

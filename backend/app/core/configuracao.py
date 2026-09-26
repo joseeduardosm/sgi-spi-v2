@@ -68,6 +68,12 @@ class Configuracao(BaseSettings):
     # Tamanho máximo de cada PDF enviado; o Nginx precisa aceitar um pouco mais que isso
     anexos_tamanho_maximo_mb: int = Field(25, gt=0, le=200)
 
+    # Endereço do sistema usado nos links dos e-mails (ex.: link direto para a etapa da competência)
+    url_publica: str = "http://10.23.0.254"
+    # Tomador que deve constar nas notas fiscais (SPI) e setor do Financeiro, que confere as retenções
+    tomador_cnpj: str = "96480850000103"
+    setor_financeiro: str = "Diretoria de Orçamento e Finanças"
+
     # Importação do Módulo de Contratos do SGI SPI (botão do SuperRoot em /contratos). As senhas são
     # digitadas na tela a cada execução e nunca gravadas.
     migracao_sgi_host: str = "10.23.1.220"

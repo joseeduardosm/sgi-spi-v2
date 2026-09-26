@@ -37,6 +37,7 @@ export const NAVEGACAO: SecaoNavegacao[] = [
     itens: [
       { id: 'acl', rotulo: 'Controle de acesso', icone: 'escudo', rota: '/admin/acl' },
       { id: 'ldap', rotulo: 'Diretórios LDAP', icone: 'banco-dados', rota: '/admin/ldap' },
+      { id: 'smtp', rotulo: 'Servidores SMTP', icone: 'envelope', rota: '/admin/smtp' },
       // Links externos para a documentação interativa da API (abrem em nova aba)
       {
         id: 'api',

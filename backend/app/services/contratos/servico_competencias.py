@@ -15,6 +15,7 @@ import hashlib
 import json
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import BinaryIO
@@ -37,9 +38,13 @@ from app.models.contratos import (
     NotaEmpenho,
     SelecaoNotaEmpenho,
 )
+from app.models.contratos.execucao import ETAPAS_PARALELAS
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
+    ConferenciaNota,
     DetalheCompetencia,
+    EmailMedicao,
+    GlosaDoPeriodo,
     GravacaoAssinaturas,
     GravacaoAvaliacaoGestor,
     GravacaoAvaliacaoInicial,
@@ -53,6 +58,7 @@ from app.schemas.contratos.execucao import (
     LeituraItemMedicao,
     LeituraMemoria,
     LeituraNotaFiscal,
+    LeituraRetencao,
     NotaSelecionada,
     PainelExecucao,
     Reabertura,
@@ -61,7 +67,7 @@ from app.schemas.contratos.execucao import (
     ResumoCompetencia,
 )
 from app.services import servico_anexos
-from app.services.contratos import calculos, documentos_execucao, valores
+from app.services.contratos import calculos, documentos_execucao, leitor_nota_xml, servico_diario, servico_retencao, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist, formulario_ativo
 from app.services.contratos.servico_contratos import (
@@ -175,10 +181,46 @@ def situacao_competencia(competencia: Competencia) -> str:
     return "disponivel"
 
 
+# Coluna que marca a conclusão de cada etapa paralela
+CONCLUSAO_PARALELA = {"retencao": "retencao_concluida_em", "cadin": "cadin_concluido_em", "checklist": "checklist_concluido_em"}
+
+
+def etapas_abertas(competencia: Competencia) -> list[str]:
+    """Etapas que aceitam gravação agora. Depois da NF, retenção, CADIN e checklist ficam abertos ao mesmo tempo."""
+    if competencia.etapa_atual in ETAPAS_PARALELAS:
+        return [e for e in ETAPAS_PARALELAS if getattr(competencia, CONCLUSAO_PARALELA[e]) is None]
+    return [] if competencia.etapa_atual == "concluida" else [competencia.etapa_atual]
+
+
+def etapas_concluidas(competencia: Competencia) -> list[str]:
+    """Etapas já concluídas (as paralelas pela data de conclusão; as demais pela posição)."""
+    etapas = etapas_da_competencia(competencia)
+    atual = etapas.index(competencia.etapa_atual)
+    concluidas = []
+    for indice, etapa in enumerate(etapas):
+        if etapa == "concluida":
+            continue
+        if etapa in ETAPAS_PARALELAS and competencia.etapa_atual in ETAPAS_PARALELAS:
+            feita = getattr(competencia, CONCLUSAO_PARALELA[etapa]) is not None
+        else:
+            feita = indice < atual
+        if feita:
+            concluidas.append(etapa)
+    return concluidas
+
+
+def concluir_etapa_paralela(competencia: Competencia, etapa: str) -> None:
+    """Marca a etapa paralela como concluída; com as três concluídas, libera o documento consolidado."""
+    setattr(competencia, CONCLUSAO_PARALELA[etapa], agora_utc())
+    pendentes = [e for e in ETAPAS_PARALELAS if getattr(competencia, CONCLUSAO_PARALELA[e]) is None]
+    competencia.etapa_atual = pendentes[0] if pendentes else "consolidado"
+
+
 def _exigir_etapa(competencia: Competencia, etapa: str, descricao: str) -> None:
-    """Levanta erro se a etapa aberta da competência não for `etapa`."""
-    if competencia.etapa_atual != etapa:
-        raise ErroRegraContrato(f"{descricao} não está aberta nesta competência (etapa atual: {competencia.etapa_atual}).")
+    """Levanta erro se `etapa` não estiver aberta na competência."""
+    if etapa not in etapas_abertas(competencia):
+        situacao = "já foi concluída" if etapa in etapas_concluidas(competencia) else "não está aberta"
+        raise ErroRegraContrato(f"{descricao} {situacao} nesta competência (etapa atual: {competencia.etapa_atual}).")
 
 
 def _exigir_liberada(competencia: Competencia) -> None:
@@ -339,18 +381,23 @@ def localizar_competencia(sessao: Session, contrato_id: uuid.UUID, identificador
 # Detalhe
 # ---------------------------------------------------------------------------------------------
 
-def _nota_fiscal(competencia: Competencia, adicional: bool) -> LeituraNotaFiscal | None:
+def _nota_fiscal(contrato: Contrato, competencia: Competencia, adicional: bool) -> LeituraNotaFiscal | None:
     """Dados da nota fiscal principal ou da adicional (os campos têm o mesmo nome com prefixos diferentes)."""
     # Mesmo código para as duas notas: só muda o prefixo dos campos (nf_ ou nf_adicional_)
     prefixo = "nf_adicional_" if adicional else "nf_"
     anexo = competencia.nf_adicional_anexo if adicional else competencia.nf_anexo
+    xml = competencia.nf_adicional_xml_anexo if adicional else competencia.nf_xml_anexo
+    dados_xml = getattr(competencia, f"{prefixo}dados_xml")
     bruto = getattr(competencia, f"{prefixo}valor_bruto")
     if anexo is None and bruto is None:
         return None
     # Valor líquido = bruto − retenções (nunca negativo)
-    retencoes = {r: getattr(competencia, f"{prefixo}retencao_{r}") or ZERO for r in ("ir", "inss", "iss", "pis", "cofins")}
+    retencoes = {r: getattr(competencia, f"{prefixo}retencao_{r}") or ZERO for r in ("ir", "inss", "iss", "pis", "cofins", "csll")}
+    esperado = None if adicional else servico_retencao.valor_autorizado(competencia)
     return LeituraNotaFiscal(
-        numero=getattr(competencia, f"{prefixo}numero"), arquivo=_arquivo(anexo), valor_bruto=bruto,
+        numero=getattr(competencia, f"{prefixo}numero"), arquivo=_arquivo(anexo), xml=_arquivo(xml), dados_xml=dados_xml,
+        conferencias=[ConferenciaNota(**c.__dict__) for c in servico_retencao.conferencias(contrato, competencia, dados_xml, esperado)],
+        valor_bruto=bruto,
         **{f"retencao_{r}": v for r, v in retencoes.items()},
         valor_liquido=max(ZERO, (bruto or ZERO) - sum(retencoes.values(), ZERO)),
     )
@@ -373,6 +420,16 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
 
     percentual = percentual_liberado(competencia)
     medido = total_medido(competencia)
+    saldos = saldos_da_medicao(contrato, competencia)
+    glosas_periodo = (
+        [
+            GlosaDoPeriodo(ocorrencia_id=o.id, data_ocorrencia=o.data_ocorrencia, descricao_ocorrencia=o.descricao,
+                           registrada_por_nome=o.registrada_por_nome, item_id=g.item_id, descricao_item=g.descricao_item, quantidade=g.quantidade)
+            for o in servico_diario.ocorrencias_do_periodo(contrato, competencia.periodo_inicio, competencia.periodo_fim)
+            for g in o.glosas
+        ]
+        if competencia.tipo == "regular" else []
+    )
     # Vencimento do pagamento = data de recebimento da NF + prazo em dias corridos
     vencimento = (
         competencia.nf_recebida_em + timedelta(days=competencia.prazo_pagamento_dias)
@@ -389,6 +446,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
                 id=i.id, ordem=i.ordem, descricao=i.descricao, tipo=i.tipo, calcula_pro_rata=i.calcula_pro_rata,
                 valor_unitario=i.valor_unitario, fator_meses=i.fator_meses, quantidade_prevista=i.quantidade_prevista,
                 quantidade_medida=i.quantidade_medida, subtotal=calculos.arredondar(i.quantidade_medida * i.valor_unitario),
+                saldo=saldos[i.id].saldo, glosas=saldos[i.id].glosas, saldo_liquido=saldos[i.id].saldo_liquido,
             )
             for i in competencia.itens
         ],
@@ -404,10 +462,26 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         percentual_autorizado=percentual,
         valor_autorizado=calculos.arredondar(medido * percentual / CEM),
         valor_a_pagar=valor_a_pagar(competencia),
-        avisos=excedentes_sob_demanda(contrato, competencia) if competencia.medicao_concluida_em is None else [],
+        avisos=excedentes_da_medicao(contrato, competencia) if competencia.medicao_concluida_em is None else [],
         reaberturas_permitidas=pode_reabrir(sessao, contrato, usuario),
-        nota_fiscal=_nota_fiscal(competencia, False),
-        nota_fiscal_adicional=_nota_fiscal(competencia, True),
+        glosas_periodo=glosas_periodo,
+        email_nf=EmailMedicao(enviado_em=competencia.email_nf_enviado_em, ok=competencia.email_nf_ok,
+                              destinatarios=competencia.email_nf_destinatarios or [], erro=competencia.email_nf_erro),
+        email_retencao=EmailMedicao(enviado_em=competencia.email_retencao_enviado_em, ok=competencia.email_retencao_ok,
+                                    destinatarios=competencia.email_retencao_destinatarios or [], erro=competencia.email_retencao_erro),
+        retencao=LeituraRetencao(
+            concluida_em=competencia.retencao_concluida_em, por_nome=competencia.retencao_por_nome,
+            discriminacao_conferida=competencia.retencao_discriminacao_conferida, pdf=_arquivo(competencia.retencao_pdf_anexo),
+        ) if competencia.retencao_concluida_em else None,
+        pode_conferir_retencao=servico_retencao.pode_conferir(sessao, contrato, usuario),
+        etapas_abertas=etapas_abertas(competencia),
+        etapas_concluidas=etapas_concluidas(competencia),
+        email_medicao=EmailMedicao(
+            enviado_em=competencia.email_medicao_enviado_em, ok=competencia.email_medicao_ok,
+            destinatarios=competencia.email_medicao_destinatarios or [], erro=competencia.email_medicao_erro,
+        ),
+        nota_fiscal=_nota_fiscal(contrato, competencia, False),
+        nota_fiscal_adicional=_nota_fiscal(contrato, competencia, True),
         nf_recebida_em=competencia.nf_recebida_em, prazo_pagamento_dias=competencia.prazo_pagamento_dias,
         vencimento_pagamento=vencimento, origem_valor_nf=competencia.origem_valor_nf, nf_concluida_em=competencia.nf_concluida_em,
         consultas_cadin=[
@@ -430,7 +504,8 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
 
 def _ids_anexos(competencia: Competencia) -> set[uuid.UUID]:
     """Todos os anexos da competência (usados no detalhe e para autorizar downloads)."""
-    ids = {competencia.nf_anexo_id, competencia.nf_adicional_anexo_id, competencia.consolidado_anexo_id, competencia.ob_anexo_id}
+    ids = {competencia.nf_anexo_id, competencia.nf_adicional_anexo_id, competencia.consolidado_anexo_id, competencia.ob_anexo_id,
+           competencia.nf_xml_anexo_id, competencia.nf_adicional_xml_anexo_id, competencia.retencao_pdf_anexo_id}
     ids |= {m.anexo_id for m in competencia.memorias}
     ids |= {c.certidao_anexo_id for c in competencia.consultas_cadin} | {c.email_anexo_id for c in competencia.consultas_cadin}
     ids |= {d.anexo_id for d in competencia.documentos}
@@ -478,25 +553,53 @@ def _exigir_saldo(notas: list[NotaEmpenho], valor: Decimal, reservado: dict[uuid
         )
 
 
-def excedentes_sob_demanda(contrato: Contrato, competencia: Competencia) -> list[str]:
-    """Itens sob demanda cuja medição passa do saldo disponível do item na vigência."""
-    if competencia.tipo != "regular":
-        return []
-    # Mapa dos itens do contrato, para saber o tipo de cada linha da competência
+@dataclass(frozen=True)
+class SaldoItem:
+    """Quanto pode ser medido de um item na competência: saldo − glosas do período = saldo líquido."""
+    saldo: Decimal
+    glosas: Decimal
+    saldo_liquido: Decimal
+
+
+def saldos_da_medicao(contrato: Contrato, competencia: Competencia) -> dict[uuid.UUID, SaldoItem]:
+    """Saldo, glosas e saldo líquido de cada linha da medição (chave: id da linha da competência).
+
+    - Saldo do item contínuo: a quantidade prevista da competência (já com pró-rata);
+    - saldo do item sob demanda: o que resta do item na vigência (limite − executado nas outras competências);
+    - glosas: soma das glosas do diário de bordo com data dentro do período da competência;
+    - diferença de reajuste: sem glosas; o saldo é a quantidade já medida (fixa).
+    """
     itens = {i.id: i for i in contrato.itens}
-    avisos = []
+    regular = competencia.tipo == "regular"
+    glosas = servico_diario.glosas_do_periodo(contrato, competencia.periodo_inicio, competencia.periodo_fim) if regular else {}
+    resultado = {}
     for linha in competencia.itens:
         item = itens.get(linha.item_id)
-        if item is None or item.tipo != "sob_demanda" or linha.quantidade_medida <= 0:
-            continue
-        # Saldo do item na vigência = limite − já executado em outras competências
-        limite = valores.limite_na_vigencia(contrato, item, competencia.sequencia_vigencia)
-        executado = valores.executado_na_vigencia(contrato, item, competencia.sequencia_vigencia, exceto=competencia.id)
-        disponivel = max(ZERO, limite - executado)
-        if linha.quantidade_medida > disponivel:
+        if not regular:
+            saldo = linha.quantidade_medida
+        elif item is not None and item.tipo == "sob_demanda":
+            limite = valores.limite_na_vigencia(contrato, item, competencia.sequencia_vigencia)
+            executado = valores.executado_na_vigencia(contrato, item, competencia.sequencia_vigencia, exceto=competencia.id)
+            saldo = max(ZERO, limite - executado)
+        else:
+            saldo = linha.quantidade_prevista
+        glosa = glosas.get(linha.item_id, ZERO)
+        resultado[linha.id] = SaldoItem(saldo, glosa, max(ZERO, saldo - glosa))
+    return resultado
+
+
+def excedentes_da_medicao(contrato: Contrato, competencia: Competencia) -> list[str]:
+    """Linhas cuja medição passa do saldo líquido (saldo − glosas), com a explicação de cada uma."""
+    saldos = saldos_da_medicao(contrato, competencia)
+    avisos = []
+    for linha in competencia.itens:
+        saldo = saldos[linha.id]
+        if linha.quantidade_medida > saldo.saldo_liquido:
+            conta = f"saldo {saldo.saldo:.4f} − glosas {saldo.glosas:.4f}" if saldo.glosas else f"saldo {saldo.saldo:.4f}"
+            dica = " Registre um aditamento para ampliar o limite." if linha.tipo == "sob_demanda" and not saldo.glosas else ""
             avisos.append(
-                f"\"{linha.descricao}\": a medição ({linha.quantidade_medida:.4f}) passa do saldo disponível na vigência "
-                f"({disponivel:.4f} de {limite:.4f}). Registre um aditamento antes de concluir."
+                f"\"{linha.descricao}\": a medição ({linha.quantidade_medida:.4f}) passa do saldo líquido "
+                f"({saldo.saldo_liquido:.4f} = {conta}).{dica}"
             )
     return avisos
 
@@ -522,6 +625,10 @@ def salvar_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
         item = itens[linha.id]
         alterou |= item.quantidade_medida != linha.quantidade_medida
         item.quantidade_medida = linha.quantidade_medida
+    # Nenhum item pode ser medido acima do saldo líquido (saldo − glosas do diário de bordo)
+    excedentes = excedentes_da_medicao(contrato, competencia)
+    if excedentes:
+        raise ErroRegraContrato(" ".join(excedentes))
     # As NEs precisam cobrir o valor a pagar, descontado o que outras competências já reservaram
     _exigir_saldo(notas, valor_a_pagar(competencia), compromissos(contrato, exceto=competencia.id))
     # Se a seleção de NEs mudou, substitui a lista (a posição define a ordem de consumo)
@@ -585,7 +692,8 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
         raise ErroRegraContrato("As Notas de Empenho foram alteradas na tela. Salve a medição novamente antes de concluir.")
     notas = _resolver_notas(contrato, notas_ids)
     _exigir_saldo(notas, valor_a_pagar(competencia), compromissos(contrato, exceto=competencia.id))
-    excedentes = excedentes_sob_demanda(contrato, competencia)
+    # De novo na conclusão: uma glosa pode ter sido registrada depois de a medição ser salva
+    excedentes = excedentes_da_medicao(contrato, competencia)
     if excedentes:
         raise ErroRegraContrato(" ".join(excedentes))
     # Gera o PDF, marca a conclusão, avança a etapa e atualiza o executado dos itens do contrato
@@ -882,55 +990,107 @@ def reconsiderar_avaliacao(sessao: Session, contrato_id, competencia_id, arquivo
 # Etapa 3 — nota fiscal
 # ---------------------------------------------------------------------------------------------
 
+def _ler_xml(arquivo_xml: tuple) -> tuple[bytes, dict]:
+    """Lê o XML enviado (conteúdo e dados normalizados); XML ilegível ou de outro tipo vira `ErroRegraContrato`."""
+    conteudo = arquivo_xml[0].read()
+    dados = leitor_nota_xml.ler_nota(conteudo).como_dict()
+    if not dados.get("valor_bruto"):
+        raise ErroRegraContrato("O XML não traz o valor da nota fiscal.")
+    return conteudo, dados
+
+
+def _exigir_nota_inedita(sessao: Session, competencia: Competencia, chave: str | None, qual: str) -> None:
+    """A mesma nota (chave) não pode ser juntada em outra competência."""
+    if not chave:
+        return
+    outra = sessao.scalar(
+        select(Competencia).where(
+            Competencia.id != competencia.id, (Competencia.nf_chave == chave) | (Competencia.nf_adicional_chave == chave)
+        )
+    )
+    if outra is not None:
+        raise ErroRegraContrato(
+            f"A nota fiscal {qual} (chave {chave}) já foi juntada à competência {outra.numero_competencia} do contrato {outra.contrato.numero}."
+        )
+
+
 def registrar_nota_fiscal(
-    sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: dict, arquivo: tuple | None,
-    arquivo_adicional: tuple | None, autor: Usuario,
+    sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: dict, arquivo: tuple | None, xml: tuple | None,
+    arquivo_adicional: tuple | None, xml_adicional: tuple | None, autor: Usuario,
 ) -> None:
-    """`dados`: numero, recebida_em, prazo_pagamento_dias, origem_valor, valor_bruto, retencoes{…}, adicional{…} (opcional)."""
+    """Etapa 3: junta a NF (PDF + XML obrigatórios) e, opcionalmente, a NF adicional; os valores vêm do XML.
+
+    `dados`: recebida_em, prazo_pagamento_dias e possui_adicional. As retenções lidas do XML ficam como sugestão
+    para a etapa de retenção de tributos, onde o Financeiro confere e confirma.
+    """
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     _exigir_etapa(competencia, "nota_fiscal", "A nota fiscal")
-    # O PDF só é obrigatório na primeira vez (ao corrigir dados, o arquivo anterior é mantido)
+    # PDF e XML são obrigatórios (na correção depois de reabrir, os arquivos anteriores podem ser mantidos)
     if arquivo is None and competencia.nf_anexo_id is None:
         raise ErroRegraContrato("Selecione a nota fiscal em PDF.")
-    # Valor bruto: calculado pela medição (medido × % liberado) ou digitado pelo usuário
-    autorizado = calculos.arredondar(total_medido(competencia) * percentual_liberado(competencia) / CEM)
-    bruto = autorizado if dados["origem_valor"] == "medicao" else dados.get("valor_bruto")
-    if bruto is None or bruto <= 0:
-        raise ErroRegraContrato("Informe o valor bruto da nota fiscal.")
-    _validar_retencoes(dados["retencoes"], bruto, "principal")
-    # Grava o PDF novo (se veio) e os dados da nota principal
-    if arquivo:
-        competencia.nf_anexo = servico_anexos.guardar_pdf(sessao, arquivo[0], arquivo[1], "contrato-execucao-nf", autor.id, contrato_id=contrato.id)
-    competencia.nf_numero, competencia.nf_recebida_em = dados["numero"], dados["recebida_em"]
-    competencia.prazo_pagamento_dias, competencia.origem_valor_nf, competencia.nf_valor_bruto = dados["prazo_pagamento_dias"], dados["origem_valor"], bruto
-    for nome, valor in dados["retencoes"].items():
-        setattr(competencia, f"nf_retencao_{nome}", valor)
-    adicional = dados.get("adicional")
-    if not adicional:
-        # Sem nota adicional nesta gravação: limpa uma adicional registrada antes (ex.: após reabertura)
-        competencia.nf_adicional_numero, competencia.nf_adicional_valor_bruto = "", None
-    if adicional:
+    if xml is None and competencia.nf_xml_anexo_id is None:
+        raise ErroRegraContrato("Selecione o XML da nota fiscal.")
+    principal = _ler_xml(xml) if xml else (None, competencia.nf_dados_xml)
+    _exigir_nota_inedita(sessao, competencia, principal[1].get("chave"), "principal")
+    adicional = None
+    if dados.get("possui_adicional"):
         if arquivo_adicional is None and competencia.nf_adicional_anexo_id is None:
             raise ErroRegraContrato("Selecione o PDF da nota fiscal adicional.")
-        if not adicional.get("valor_bruto") or adicional["valor_bruto"] <= 0:
-            raise ErroRegraContrato("Informe o valor bruto da nota fiscal adicional.")
-        _validar_retencoes(adicional["retencoes"], adicional["valor_bruto"], "adicional")
+        if xml_adicional is None and competencia.nf_adicional_xml_anexo_id is None:
+            raise ErroRegraContrato("Selecione o XML da nota fiscal adicional.")
+        adicional = _ler_xml(xml_adicional) if xml_adicional else (None, competencia.nf_adicional_dados_xml)
+        if adicional[1].get("chave") and adicional[1].get("chave") == principal[1].get("chave"):
+            raise ErroRegraContrato("A nota fiscal adicional é a mesma da principal.")
+        _exigir_nota_inedita(sessao, competencia, adicional[1].get("chave"), "adicional")
+    # As duas notas são pagas pelas NEs apontadas na medição: o saldo livre delas precisa cobrir o total
+    bruto = Decimal(principal[1]["valor_bruto"])
+    bruto_adicional = Decimal(adicional[1]["valor_bruto"]) if adicional else ZERO
+    notas = _resolver_notas(contrato, [n.nota_id for n in competencia.notas])
+    _exigir_saldo(notas, calculos.arredondar(bruto + bruto_adicional), compromissos(contrato, exceto=competencia.id))
+
+    categoria_xml = "contrato-execucao-nf-xml"
+    if arquivo:
+        competencia.nf_anexo = servico_anexos.guardar_pdf(sessao, arquivo[0], arquivo[1], "contrato-execucao-nf", autor.id, contrato_id=contrato.id)
+    if xml:
+        competencia.nf_xml_anexo = servico_anexos.guardar_arquivo_gerado(
+            sessao, principal[0], xml[1] or "nota_fiscal.xml", "application/xml", categoria_xml, autor.id, contrato_id=contrato.id)
+    _aplicar_nota(competencia, "nf_", principal[1])
+    if adicional:
         if arquivo_adicional:
             competencia.nf_adicional_anexo = servico_anexos.guardar_pdf(
                 sessao, arquivo_adicional[0], arquivo_adicional[1], "contrato-execucao-nf-adicional", autor.id, contrato_id=contrato.id)
-        competencia.nf_adicional_numero, competencia.nf_adicional_valor_bruto = adicional["numero"], adicional["valor_bruto"]
-        for nome, valor in adicional["retencoes"].items():
-            setattr(competencia, f"nf_adicional_retencao_{nome}", valor)
-    # As duas notas são pagas pelas NEs apontadas na medição: o saldo livre delas precisa cobrir o total
-    total_nfs = bruto + ((adicional or {}).get("valor_bruto") or ZERO)
-    notas = _resolver_notas(contrato, [n.nota_id for n in competencia.notas])
-    _exigir_saldo(notas, calculos.arredondar(total_nfs), compromissos(contrato, exceto=competencia.id))
+        if xml_adicional:
+            competencia.nf_adicional_xml_anexo = servico_anexos.guardar_arquivo_gerado(
+                sessao, adicional[0], xml_adicional[1] or "nota_fiscal_adicional.xml", "application/xml", categoria_xml, autor.id,
+                contrato_id=contrato.id)
+        _aplicar_nota(competencia, "nf_adicional_", adicional[1])
+    else:
+        # Sem nota adicional nesta gravação: limpa uma adicional registrada antes (ex.: após reabertura)
+        competencia.nf_adicional_numero, competencia.nf_adicional_valor_bruto = "", None
+        competencia.nf_adicional_dados_xml, competencia.nf_adicional_chave = None, None
+        competencia.nf_adicional_anexo_id = competencia.nf_adicional_xml_anexo_id = None
+    competencia.nf_recebida_em, competencia.prazo_pagamento_dias = dados["recebida_em"], dados["prazo_pagamento_dias"]
+    competencia.origem_valor_nf = None
     competencia.nf_concluida_em = agora_utc()
+    # Uma NF nova (ou corrigida) exige nova conferência de tributos
+    competencia.retencao_concluida_em, competencia.retencao_pdf_anexo_id = None, None
+    competencia.retencao_por_id, competencia.retencao_por_nome, competencia.retencao_discriminacao_conferida = None, "", False
     competencia.etapa_atual = proxima_etapa(competencia, "nota_fiscal")
-    _auditar(sessao, autor, "contrato.execucao.nota_fiscal.concluir", contrato, competencia, numero=dados["numero"], bruto=bruto)
+    _auditar(sessao, autor, "contrato.execucao.nota_fiscal.concluir", contrato, competencia, numero=competencia.nf_numero, bruto=bruto,
+             chave=competencia.nf_chave)
     sessao.commit()
+
+
+def _aplicar_nota(competencia: Competencia, prefixo: str, dados: dict) -> None:
+    """Grava número, chave, bruto e dados do XML; as retenções do XML ficam como sugestão para a conferência."""
+    setattr(competencia, f"{prefixo}numero", (dados.get("numero") or "")[:100])
+    setattr(competencia, f"{prefixo}chave", dados.get("chave"))
+    setattr(competencia, f"{prefixo}valor_bruto", Decimal(dados["valor_bruto"]))
+    setattr(competencia, f"{prefixo}dados_xml", dados)
+    for tributo, valor in (dados.get("retencoes") or {}).items():
+        setattr(competencia, f"{prefixo}retencao_{tributo}", Decimal(valor or "0"))
 
 
 def _validar_retencoes(retencoes: dict[str, Decimal], bruto: Decimal, qual: str) -> None:
@@ -968,7 +1128,7 @@ def registrar_cadin(
     competencia.consultas_cadin.append(consulta)
     # Com pendência, a etapa continua aberta até uma nova consulta sem pendência
     if not possui_pendencia:
-        competencia.etapa_atual = proxima_etapa(competencia, "cadin")
+        concluir_etapa_paralela(competencia, "cadin")
     _auditar(sessao, autor, "contrato.execucao.cadin", contrato, competencia, possui_pendencia=possui_pendencia)
     sessao.commit()
 
@@ -991,7 +1151,7 @@ def enviar_documento_mensal(sessao: Session, contrato_id, competencia_id, docume
     sessao.flush()
     # Com todos os documentos anexados (obrigatórios e opcionais), a etapa conclui sozinha
     if all(d.anexo_id for d in competencia.documentos):
-        competencia.etapa_atual = proxima_etapa(competencia, "checklist")
+        concluir_etapa_paralela(competencia, "checklist")
     _auditar(sessao, autor, "contrato.execucao.checklist.enviar", contrato, competencia, documento=documento.nome)
     sessao.commit()
 
@@ -1005,7 +1165,7 @@ def concluir_checklist(sessao: Session, contrato_id, competencia_id, autor: Usua
     faltando = [d.nome for d in competencia.documentos if d.obrigatorio and not d.anexo_id]
     if faltando:
         raise ErroRegraContrato("Anexe os documentos obrigatórios: " + "; ".join(faltando) + ".")
-    competencia.etapa_atual = proxima_etapa(competencia, "checklist")
+    concluir_etapa_paralela(competencia, "checklist")
     _auditar(sessao, autor, "contrato.execucao.checklist.concluir", contrato, competencia,
              opcionais_sem_anexo=[d.nome for d in competencia.documentos if not d.anexo_id])
     sessao.commit()
@@ -1022,7 +1182,11 @@ def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuar
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     # Pode ser gerado de novo enquanto a OB não foi anexada
     if competencia.etapa_atual not in ("consolidado", "ordem_bancaria"):
-        raise ErroRegraContrato("O documento consolidado é liberado depois do checklist completo.")
+        rotulos = {"medicao": "medição", "avaliacao": "avaliação", "nota_fiscal": "nota fiscal", "retencao": "retenção de tributos",
+                   "cadin": "CADIN", "checklist": "checklist"}
+        faltam = [rotulos[e] for e in etapas_da_competencia(competencia) if e in rotulos and e not in etapas_concluidas(competencia)]
+        raise ErroRegraContrato("O documento consolidado só é gerado com todas as etapas anteriores concluídas. Falta concluir: "
+                                + ", ".join(faltam) + ".")
     # Reaproveita o detalhe (mesmos números da tela) para montar o resumo executivo do PDF
     anexos = {a.id: a for a in sessao.scalars(select(Anexo).where(Anexo.id.in_(_ids_anexos(competencia))))}
     detalhe = detalhar(sessao, contrato_id, competencia_id, autor)
@@ -1116,6 +1280,13 @@ def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, aut
     # Desfaz as conclusões das etapas reabertas (anexos continuam guardados)
     if reaberta("consolidado"):
         competencia.consolidado_anexo_id, competencia.consolidado_em = None, None
+    if reaberta("cadin"):
+        competencia.cadin_concluido_em = None
+    if reaberta("checklist"):
+        competencia.checklist_concluido_em = None
+    if reaberta("retencao"):
+        competencia.retencao_concluida_em, competencia.retencao_pdf_anexo_id = None, None
+        competencia.retencao_por_id, competencia.retencao_por_nome, competencia.retencao_discriminacao_conferida = None, "", False
     if reaberta("nota_fiscal"):
         competencia.nf_concluida_em = None
     if reaberta("avaliacao") and competencia.avaliacao:

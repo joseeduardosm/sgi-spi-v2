@@ -158,6 +158,7 @@
     @case ('checklists') { <app-aba-checklists [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
     @case ('formularios') { <app-aba-formularios [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
     @case ('notas') { <app-aba-notas [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
+    @case ('diario') { <app-aba-diario [contratoId]="c.id" [usuarioId]="usuarioId()" /> }
     @case ('execucao') { <app-aba-execucao [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" (alterado)="carregar()" /> }
   }
 } @else {

@@ -2,12 +2,18 @@
 <section class="cartao-dados" aria-labelledby="titulo-medicao">
   <header>
     <div><h2 id="titulo-medicao">1. Medição do serviço</h2><small>{{ detalhe().tipo === 'regular' ? 'Prevista: pró-rata 30/360 nos itens com pró-rata; sob demanda pela previsão.' : 'Quantidades já medidas desde o mês de referência do reajuste; valor unitário = preço reajustado − preço pago.' }}</small></div>
-    @if (editavel() && detalhe().tipo === 'regular') { <button type="button" class="acao-secundaria" (click)="usarPrevista()">Usar as quantidades previstas</button> }
+    @if (editavel() && detalhe().tipo === 'regular') { <button type="button" class="acao-secundaria" (click)="usarPrevista()">Usar o saldo líquido</button> }
   </header>
   <div class="tabela-gestao-envoltorio">
     <table class="tabela-gestao">
       <thead>
-        <tr><th>Item</th><th>Descrição</th><th class="num">Valor unitário</th><th class="num">Qtd. prevista</th><th class="num">Medição</th><th class="num">Subtotal</th></tr>
+        <tr>
+          <th>Item</th><th>Descrição</th><th class="num">Valor unitário</th>
+          <th class="num" title="Contínuo: previsto da competência. Sob demanda: saldo do item na vigência.">Saldo</th>
+          <th class="num" title="Glosas do diário de bordo com data no período da competência.">Glosas</th>
+          <th class="num" title="Saldo − glosas: o máximo que pode ser medido.">Saldo líquido</th>
+          <th class="num">Medição</th><th class="num">Subtotal</th>
+        </tr>
       </thead>
       <tbody>
         @for (i of d.itens; track i.id) {
@@ -15,19 +21,35 @@
             <td>{{ i.ordem }}</td>
             <td><strong>{{ i.descricao }}</strong><small>{{ i.tipo === 'continuo' ? 'Contínuo' : 'Sob demanda' }}{{ detalhe().tipo === 'regular' && i.tipo === 'continuo' && i.calcula_pro_rata && i.fator_meses !== '1.00000000' ? ' · fração ' + (i.fator_meses | quantidade) : '' }}</small></td>
             <td class="num">{{ i.valor_unitario | moeda }}</td>
-            <td class="num">{{ i.quantidade_prevista | quantidade }}</td>
+            <td class="num">{{ i.saldo | quantidade }}</td>
+            <td class="num" [class.texto-erro]="i.glosas !== '0.0000'">{{ i.glosas !== '0.0000' ? '− ' : '' }}{{ i.glosas | quantidade }}</td>
+            <td class="num"><strong>{{ i.saldo_liquido | quantidade }}</strong></td>
             <td class="num" style="width: 140px">
               @if (editavel() && detalhe().tipo === 'regular') {
-                <input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Medição de ' + i.descricao" [(ngModel)]="medidas[i.id]" (ngModelChange)="alterado.set(true)" />
+                <input class="campo-tabela" inputmode="decimal" [class.invalido]="acimaDoSaldo(i.id, i.saldo_liquido)" [attr.aria-label]="'Medição de ' + i.descricao"
+                       [attr.aria-invalid]="acimaDoSaldo(i.id, i.saldo_liquido)" [(ngModel)]="medidas[i.id]" (ngModelChange)="alterado.set(true)" />
               } @else { {{ i.quantidade_medida | quantidade }} }
             </td>
             <td class="num">{{ subtotal(i.id, i.valor_unitario) | moeda }}</td>
           </tr>
         }
       </tbody>
-      <tfoot><tr><td colspan="5">Total medido</td><td class="num">{{ total() | moeda }}</td></tr></tfoot>
+      <tfoot><tr><td colspan="7">Total medido</td><td class="num">{{ total() | moeda }}</td></tr></tfoot>
     </table>
   </div>
+  @if (excedentes().length) {
+    <p class="aviso-bloco erro" style="margin: 12px 22px 0">Medição acima do saldo líquido em: {{ excedentes().join(', ') }}. Nenhum item pode ser medido acima do saldo líquido (saldo − glosas).</p>
+  }
+  @if (d.glosas_periodo.length) {
+    <details class="glosas-periodo">
+      <summary>{{ d.glosas_periodo.length }} glosa(s) do diário de bordo neste período</summary>
+      <ul>
+        @for (g of d.glosas_periodo; track g.ocorrencia_id + g.item_id) {
+          <li><b>{{ g.data_ocorrencia | dataBr }}</b> · {{ g.descricao_item }}: <b>{{ g.quantidade | quantidade }}</b> — {{ g.descricao_ocorrencia }} <small>({{ g.registrada_por_nome }})</small></li>
+        }
+      </ul>
+    </details>
+  }
 
   <div class="corpo">
     <p class="secao-formulario" style="margin-top: 0">Notas de Empenho (ordem de consumo)</p>
@@ -79,6 +101,20 @@
         }
         <button type="button" class="acao-primaria" [disabled]="alterado() || d.ciencias.length < d.ciencias_minimas" (click)="concluir()">Concluir medição e gerar relatório</button>
       </div>
+    }
+
+    @if (d.medicao_concluida_em) {
+      <p class="secao-formulario">E-mail à equipe e ao preposto</p>
+      @if (d.email_medicao.enviado_em === null) {
+        <p class="dica-formulario">Enviando a memória e o diário de bordo, com o pedido de nota fiscal em até 48 horas…</p>
+      } @else if (d.email_medicao.ok) {
+        <p class="aviso-bloco informativo">Enviado em {{ d.email_medicao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_medicao.destinatarios.join(', ') }}, com a memória de cálculo e o diário de bordo, pedindo a nota fiscal em até 48 horas.</p>
+      } @else {
+        <p class="aviso-bloco erro">O e-mail não foi enviado: {{ d.email_medicao.erro }}</p>
+      }
+      @if (d.pode_editar && d.email_medicao.enviado_em !== null) {
+        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Reenviando…' : 'Reenviar e-mail' }}</button>
+      }
     }
 
     @if (d.memorias.length) {

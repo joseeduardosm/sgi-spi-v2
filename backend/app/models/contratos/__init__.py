@@ -7,7 +7,8 @@ Organização dos arquivos:
 - `contrato.py`: contrato, itens, equipe de gestão/fiscalização e documentos importantes;
 - `orcamento.py`: previsão orçamentária e Notas de Empenho;
 - `execucao.py`: checklists, formulários, competências e tudo o que é registrado nas etapas;
-- `alteracoes.py`: prorrogação, reajuste e aditamento/supressão.
+- `alteracoes.py`: prorrogação, reajuste e aditamento/supressão;
+- `diario.py`: diário de bordo (ocorrências) e glosas.
 
 Este arquivo reexporta as classes para que o restante do código importe de um lugar só.
 """
@@ -30,6 +31,7 @@ from app.models.contratos.contrato import (
     DocumentoContrato,
     ItemContrato,
 )
+from app.models.contratos.diario import GlosaOcorrencia, OcorrenciaDiario
 from app.models.contratos.empresa import EmpresaContratada, PrepostoEmpresa
 from app.models.contratos.execucao import (
     ETAPAS,
@@ -72,6 +74,7 @@ __all__ = [
     "DocumentoMensal",
     "EmpresaContratada",
     "FormularioAvaliacao",
+    "GlosaOcorrencia",
     "ItemAlteracao",
     "ItemChecklist",
     "ItemContrato",
@@ -83,6 +86,7 @@ __all__ = [
     "ModeloGlobal",
     "MovimentoNotaEmpenho",
     "NotaEmpenho",
+    "OcorrenciaDiario",
     "PrepostoEmpresa",
     "PrevisaoVigencia",
     "ProcessoProrrogacao",

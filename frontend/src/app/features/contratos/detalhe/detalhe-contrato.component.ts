@@ -17,20 +17,22 @@ import { LinhaDoTempoComponent } from '../compartilhado/linha-do-tempo.component
 import { MESES, PAPEIS, PERIODICIDADES, ROTULOS_CAMPO, ROTULOS_SITUACAO, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
 import { AbaChecklistsComponent } from './aba-checklists.component';
 import { AbaDocumentosComponent } from './aba-documentos.component';
+import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
+import { AbaDiarioComponent } from './aba-diario.component';
 import { AbaExecucaoComponent } from './aba-execucao.component';
 import { AbaFormulariosComponent } from './aba-formularios.component';
 import { AbaNotasComponent } from './aba-notas.component';
 import { AbaPrevisaoComponent } from './aba-previsao.component';
 
 /** Abas da tela de detalhe. */
-type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'notas' | 'execucao';
+type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'notas' | 'diario' | 'execucao';
 
 /** Tela 3: detalhe do contrato com abas. */
 @Component({
   selector: 'app-detalhe-contrato',
   imports: [
     RouterLink, CabecalhoModuloComponent, HistoricoCampoComponent, LinhaDoTempoComponent, AbaPrevisaoComponent, AbaDocumentosComponent,
-    AbaChecklistsComponent, AbaFormulariosComponent, AbaNotasComponent, AbaExecucaoComponent, ...PIPES_FORMATACAO,
+    AbaChecklistsComponent, AbaFormulariosComponent, AbaNotasComponent, AbaDiarioComponent, AbaExecucaoComponent, ...PIPES_FORMATACAO,
   ],
   templateUrl: './detalhe-contrato.component.html',
 })
@@ -43,6 +45,9 @@ export class DetalheContratoComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   private readonly rota = inject(ActivatedRoute);
   private readonly roteador = inject(Router);
+  private readonly autenticacao = inject(AutenticacaoService);
+  /** Usuário logado (no diário, os próprios registros ficam à direita). */
+  protected readonly usuarioId = computed(() => this.autenticacao.usuario()?.id ?? null);
 
   // Abas na ordem de exibição
   protected readonly abas: { id: Aba; rotulo: string }[] = [
@@ -55,6 +60,7 @@ export class DetalheContratoComponent implements OnInit {
     { id: 'checklists', rotulo: 'Checklists' },
     { id: 'formularios', rotulo: 'Formulários de avaliação' },
     { id: 'notas', rotulo: 'Notas de Empenho' },
+    { id: 'diario', rotulo: 'Diário de bordo' },
     { id: 'execucao', rotulo: 'Execução' },
   ];
   // Estado: aba aberta, contrato, histórico de campos e prorrogações

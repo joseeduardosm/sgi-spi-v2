@@ -260,9 +260,9 @@ def quantitativos(contrato_id: uuid.UUID, alteracao_id: uuid.UUID, dados: Gravac
 
 
 @roteador.post("/alteracoes/{alteracao_id}/ciencia", response_model=PainelAlteracao, tags=ALTERACAO, summary="Registrar minha ciência",
-               description="Mínimo de 2 pessoas diferentes da equipe.", responses=ESCRITA)
+               description="Uma ciência de integrante da equipe já libera a memória e a formalização.", responses=ESCRITA)
 def ciencia_alteracao(contrato_id: uuid.UUID, alteracao_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
-    """Registra a ciência do usuário (são necessárias ao menos duas, de pessoas diferentes)."""
+    """Registra a ciência do usuário (uma ciência já basta para avançar)."""
     with traduzir_erros(sessao):
         servico_alteracao.registrar_ciencia(sessao, contrato_id, alteracao_id, autor)
         return servico_alteracao.painel(sessao, contrato_id, autor)

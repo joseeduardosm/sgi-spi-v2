@@ -53,15 +53,19 @@ import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
         <section class="cartao-dados" aria-labelledby="titulo-consolidado">
           <header><h2 id="titulo-consolidado">7. Documento consolidado</h2></header>
           <div class="corpo">
-            <p class="dica-formulario" style="margin: 0 0 12px">O sistema reúne medição, notas fiscais, retenção de tributos, avaliação assinada, histórico do CADIN, checklist e resumo executivo em um único PDF.</p>
+            <p class="dica-formulario" style="margin: 0 0 12px">Um único PDF na ordem de execução: medição, avaliação (quando houver), nota fiscal, retenção de tributos, CADIN, checklist e resumo executivo. Cada documento enviado vem precedido de uma contracapa, e as páginas são numeradas em sequência.</p>
             @if (d.etapa_atual !== 'consolidado' && d.etapa_atual !== 'ordem_bancaria' && d.etapa_atual !== 'concluida') {
               <p class="aviso-bloco">Liberado quando todas as etapas anteriores estiverem concluídas.
                 @if (d.etapas_abertas.length) { Falta concluir: <b>{{ faltando(d) }}</b>. }
               </p>
             }
             <div class="acoes-cartao esquerda">
-              @if (d.pode_editar && (d.etapa_atual === 'consolidado' || d.etapa_atual === 'ordem_bancaria')) {
+              <!-- 1ª geração: quem pode editar. Gerar novamente (substitui o atual): só o gestor ou o SuperRoot, inclusive após a OB -->
+              @if (!d.consolidado && d.pode_editar && (d.etapa_atual === 'consolidado' || d.etapa_atual === 'ordem_bancaria')) {
                 <button type="button" class="acao-primaria" (click)="gerarConsolidado()">Gerar e baixar documento unificado</button>
+              }
+              @if (d.consolidado && d.pode_gerar_consolidado_novamente) {
+                <button type="button" class="acao-primaria" (click)="gerarConsolidado(true)">Gerar novamente</button>
               }
               @if (d.consolidado) { <button type="button" class="acao-secundaria" (click)="baixar(d.consolidado.anexo_id)">Baixar documento consolidado</button> }
             </div>
@@ -136,9 +140,17 @@ export class EtapaFinaisComponent {
     });
   }
 
-  /** Gera o consolidado e já baixa o arquivo. */
-  protected gerarConsolidado(): void {
+  /** Gera o consolidado e já baixa o arquivo; ao gerar novamente, confirma antes a substituição. */
+  protected async gerarConsolidado(novamente = false): Promise<void> {
     const d = this.detalhe();
+    if (novamente) {
+      const ok = await this.dialogos.confirmar({
+        titulo: 'Gerar novamente o documento consolidado?',
+        mensagem: 'O documento atual será substituído por um novo, montado com os arquivos que estão na competência agora.',
+        rotuloConfirmar: 'Gerar novamente',
+      });
+      if (!ok) return;
+    }
     this.dialogos.executar(this.api.consolidado(d.contrato_id, d.id), 'Gerando o documento consolidado…').subscribe({
       next: (novo) => {
         this.atualizado.emit(novo);

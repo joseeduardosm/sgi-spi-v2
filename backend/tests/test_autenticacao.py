@@ -151,7 +151,6 @@ CAMINHOS_CONTRATOS = {
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/medicao/concluir",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/avaliacao/inicial",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/avaliacao/gestor",
-    "/api/contratos/{contrato_id}/competencias/{competencia_id}/avaliacao/assinaturas",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/avaliacao/ciencia",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/avaliacao/pdf",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/avaliacao/assinada",

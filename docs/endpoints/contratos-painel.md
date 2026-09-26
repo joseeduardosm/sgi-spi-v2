@@ -15,9 +15,9 @@ Resposta `Painel`:
 - `minhas_pendencias[]`: o que o usuário precisa fazer nos contratos em que é **criador ou integrante vigente da equipe**.
   - Campos: `tipo`, `contrato_numero`, `contrato_apelido`, `descricao`, `rota` (tela do Angular) e `desde` (para ordenar por urgência).
   - Tipos:
-    - competências liberadas e não concluídas: a etapa atual, `ciencia_medicao` ou `ciencia_ateste`;
+    - competências liberadas e não concluídas: a etapa atual, `ciencia_medicao` ou `ciencia_ateste` (para os integrantes da equipe, só enquanto ninguém deu ciência; no ateste, depois das notas fechadas. Após a primeira ciência, a pendência volta a ser a etapa);
     - `base_execucao`: competências ainda não geradas;
-    - processos em elaboração: `prorrogacao`, `reajuste`, `alteracao` e `ciencia_alteracao`.
+    - processos em elaboração: `prorrogacao`, `reajuste`, `alteracao` e `ciencia_alteracao` (só enquanto a alteração não tem nenhuma ciência).
 - `alertas[]` da carteira, **agrupados por contrato** (`AlertasContrato`: `contrato_id`, `contrato_numero`, `contrato_apelido`, `empresa`, `gravidade` — a maior do contrato, `riscos[]`). Só entram **riscos**; tarefas ficam em `minhas_pendencias`. Cada `Risco`: `tipo`, `gravidade` (`alta`/`media`), `descricao`, `rota`, `data`, `valor`. Contratos com risco alto vêm primeiro. Tipos:
   - `a_vencer_sem_prorrogacao`: a até 90 dias do fim e sem rascunho de prorrogação;
   - `vigencia_maxima`: a vencer e sem meses disponíveis (planejar nova contratação);
@@ -25,7 +25,7 @@ Resposta `Painel`:
   - `empenho_insuficiente`: o **saldo livre** das NEs não cobre a próxima competência;
   - `pagamento_vencido` / `pagamento_vencendo` (até 5 dias): recebimento da NF + prazo;
   - `competencias_atrasadas`: **um** risco por contrato somando as competências com período encerrado há mais de 30 dias sem medição concluída (`alta` acima de 60 dias). Na competência de diferença de reajuste, o prazo conta da sua criação (conclusão do reajuste).
-- `execucao`: exercício, 12 `meses` com `previsto`, `medido` e `pago` (débitos das OBs), totais, e `empenhado`, `consumido` e `saldo_empenho`.
+- `execucao`: exercício, 12 `meses` com `previsto`, `medido` e `pago` (débitos das OBs, somados no **mês da competência paga**, e não na data do pagamento: a OB de 08/2026 lançada em setembro entra em agosto; estornos entram como negativos), totais, e `empenhado`, `consumido` e `saldo_empenho`.
 - `numeros`: `contratos_ativos`, `contratos_a_vencer`, `contratos_encerrados`, `valor_global_ativos`, `base_mensal_ativos`.
 - `empresas[]` e `contratos[]`: opções dos filtros (`id`, `rotulo`).
 
@@ -60,6 +60,6 @@ Checklists e formulários reutilizáveis, que a tela copia para o contrato como 
 
 ## Consumo no Angular
 
-- `/contratos/painel`: tela do painel.
+- `/contratos/painel`: tela do painel e **tela inicial do módulo**. O item Módulos → Contratos da barra lateral abre aqui e continua destacado em todas as telas sob `/contratos`. **Minhas pendências** e **Alertas de risco** aparecem como resumos clicáveis (título e total de `minhas_pendencias` / `alertas`). O clique abre `/contratos/minhas-pendencias` e `/contratos/alertas-de-risco`, com uma ocorrência por cartão.
 - `/contratos`: botões **Exportar Previsão Orçamentária** e **Relatório Executivo de Notas de Empenho**, só para o SuperRoot.
 - `/contratos/modelos`: modelos globais, só para o SuperRoot.

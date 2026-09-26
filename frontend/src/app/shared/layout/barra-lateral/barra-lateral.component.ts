@@ -35,6 +35,9 @@ export class BarraLateralComponent {
   protected readonly autenticacao = inject(AutenticacaoService);
   private readonly roteador = inject(Router);
 
+  /** URL atual, atualizada a cada navegação (faz o destaque dos itens do submenu reagir). */
+  private readonly urlAtual = signal(this.roteador.url);
+
   /** Grupos fechados. Todos começam abertos. */
   private readonly gruposFechados = signal<ReadonlySet<string>>(new Set());
 
@@ -45,7 +48,10 @@ export class BarraLateralComponent {
         filter((e) => e instanceof NavigationEnd),
         takeUntilDestroyed(),
       )
-      .subscribe(() => this.abrirGruposAtivos());
+      .subscribe(() => {
+        this.urlAtual.set(this.roteador.url);
+        this.abrirGruposAtivos();
+      });
   }
 
   /** Indica se o grupo (submenu) está aberto. */
@@ -76,6 +82,12 @@ export class BarraLateralComponent {
     if (ativos.length) {
       this.gruposFechados.update((conjunto) => new Set([...conjunto].filter((id) => !ativos.some((g) => g.id === id))));
     }
+  }
+
+  /** Item do submenu ativo: compara com `rota` (e não com `destino`), relendo a URL atual. */
+  protected filhoAtivo(item: ItemNavegacao): boolean {
+    this.urlAtual();
+    return this.rotaAtiva(item);
   }
 
   /** Indica se o item corresponde à rota atual (exata ou como prefixo, conforme o item). */

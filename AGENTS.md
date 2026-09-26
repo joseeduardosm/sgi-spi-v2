@@ -22,9 +22,11 @@ Nos códigos **Angular (TypeScript, HTML, SCSS)** e **Python (FastAPI)**:
 
 Qualquer criação, alteração ou remoção de endpoint, parâmetro, schema, resposta, código HTTP, autenticação ou autorização deve atualizar `docs/` **na mesma alteração**, seguindo o modelo de `docs/endpoints/autenticacao.md` e o índice de `docs/api.md`. O OpenAPI do FastAPI deve permanecer completo e consistente. O teste `test_openapi_documenta_endpoints` precisa ser atualizado junto.
 
-## Commits e changelog (obrigatório)
+## Changelog e commits (obrigatório)
 
-Todo commit atualiza o `CHANGELOG.md` da raiz **no mesmo commit**. A entrada fica na seção da data do commit (a mais recente no topo), em pt-BR, dividida em Adicionado / Alterado / Corrigido / Removido. Ela descreve o que mudou para o usuário e cita as migrações do banco e os endpoints criados ou alterados. Commit sem entrada no changelog não deve ser feito.
+- **Toda alteração** é registrada no `CHANGELOG.md` da raiz **assim que é feita**, mesmo que ainda não vá para o Git. A entrada fica na seção da data (a mais recente no topo), em pt-BR, dividida em Adicionado / Alterado / Corrigido / Removido. Ela descreve o que mudou para o usuário e cita as migrações do banco e os endpoints criados ou alterados.
+- **Commit e push só quando o usuário mandar.** Ao terminar uma tarefa, deixe as alterações no working tree, com o changelog atualizado, e avise que estão prontas. Não faça `git commit` nem `git push` por iniciativa própria.
+- Quando o commit for pedido, ele leva junto as entradas do changelog correspondentes. Commit sem entrada no changelog não deve ser feito.
 
 ## Escopo
 

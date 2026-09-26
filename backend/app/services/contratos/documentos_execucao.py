@@ -15,7 +15,7 @@ from app.models.anexo import Anexo
 from app.models.contratos import Competencia, Contrato, NotaEmpenho
 from app.services import servico_anexos
 from app.services.contratos.calculos import arredondar
-from app.services.documentos.pdf import FUSO_SAO_PAULO, DocumentoPdf, mesclar_pdfs
+from app.services.documentos.pdf import FUSO_SAO_PAULO, DocumentoPdf, contar_paginas, contracapa, montar_consolidado
 
 # Nomes dos papéis da equipe como aparecem nos documentos
 PAPEIS = {
@@ -225,19 +225,94 @@ def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Deci
          ("Complemento geral do gestor", avaliacao.complemento_gestor or "—")],
         colunas=1,
     )
+    # Ateste: as ciências registradas pela equipe (pessoas indicadas sem ciência, de registros antigos, ficam de fora)
+    ciencias = [a for a in avaliacao.assinaturas or [] if a.get("ciencia_em")]
     documento.secao("Ateste").tabela(
         ["Papel", "Nome", "Ciência em"],
-        [[PAPEIS.get(a["papel"], a["papel"]), a["nome"], (a.get("ciencia_em") or "—")[:16].replace("T", " ")] for a in avaliacao.assinaturas or []],
+        [[PAPEIS.get(a["papel"], a["papel"]), a["nome"], str(a["ciencia_em"])[:16].replace("T", " ")] for a in ciencias],
         larguras=[2, 4, 2],
     )
-    documento.assinaturas([(a["nome"], PAPEIS.get(a["papel"], a["papel"])) for a in avaliacao.assinaturas or []] + [("", "Preposto da contratada")])
+    documento.assinaturas([(a["nome"], PAPEIS.get(a["papel"], a["papel"])) for a in ciencias] + [("", "Preposto da contratada")])
     return documento.gerar()
 
 
-def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: dict, autor: str) -> bytes:
-    """Resumo executivo seguido de todos os PDFs da competência, na ordem das etapas."""
-    # 1ª parte: o resumo executivo, gerado agora
-    resumo = DocumentoPdf("Documento consolidado da competência", f"Contrato {contrato.numero} · Competência {competencia.competencia:%m/%Y}", autor=autor)
+def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: dict, autor: str, enviados_por: dict | None = None) -> bytes:
+    """Documento consolidado da competência, na ordem de execução, com páginas numeradas em sequência.
+
+    Ordem: 1 medição (memória de cálculo) → 2 avaliação (quando houver) → 3 nota(s) fiscal(is) →
+    4 retenção de tributos → 5 CADIN → 6 checklist → 7 resumo executivo (por último).
+    Cada documento enviado pela equipe é precedido de uma contracapa na identidade do sistema; os
+    documentos gerados pelo sistema já trazem título próprio. Os arquivos enviados entram como
+    foram enviados (orientação e layout preservados), só com o selo do número da página.
+    `enviados_por` traz {id do usuário: nome completo}, para a contracapa dizer quem enviou o arquivo.
+    """
+    enviados_por = enviados_por or {}
+
+    def envio(anexo: Anexo | None) -> str:
+        """Data e hora do envio, seguidas de "por <nome completo>" quando se sabe quem enviou."""
+        if anexo is None:
+            return "—"
+        nome = enviados_por.get(anexo.enviado_por_id)
+        return data_hora(anexo.criado_em) + (f" por {nome}" if nome else "")
+
+    contexto = f"Contrato {contrato.numero} · Competência {competencia.competencia:%m/%Y}"
+
+    # 1) Lista dos documentos na ordem de execução: (etapa, título, anexo_id, gerado, dados extras)
+    documentos: list[tuple[str, str, object, bool, list[tuple[str, str]]]] = []
+    if competencia.memorias:
+        memoria = competencia.memorias[-1]
+        documentos.append(("Medição", f"Memória de cálculo da medição (versão {memoria.versao})", memoria.anexo_id, True, []))
+    if competencia.avaliacao:
+        avaliacao = competencia.avaliacao
+        # Vale a via assinada pela contratada; sem ela, o relatório gerado pelo sistema
+        if avaliacao.pdf_assinado_anexo_id:
+            documentos.append(("Avaliação dos serviços", "Relatório de avaliação assinado pela contratada", avaliacao.pdf_assinado_anexo_id, False, []))
+        elif avaliacao.pdf_gerado_anexo_id:
+            documentos.append(("Avaliação dos serviços", "Relatório de avaliação dos serviços", avaliacao.pdf_gerado_anexo_id, True, []))
+    if competencia.nf_anexo_id:
+        documentos.append(("Nota fiscal", f"Nota fiscal {competencia.nf_numero or ''}".strip(), competencia.nf_anexo_id, False, []))
+    if competencia.nf_adicional_anexo_id:
+        documentos.append(("Nota fiscal", f"Nota fiscal adicional {competencia.nf_adicional_numero or ''}".strip(),
+                           competencia.nf_adicional_anexo_id, False, []))
+    if competencia.retencao_pdf_anexo_id:
+        documentos.append(("Avaliação de retenção", "Retenção de tributos", competencia.retencao_pdf_anexo_id, True, []))
+    for consulta in competencia.consultas_cadin:
+        resultado = [("Resultado", "Pendência encontrada" if consulta.possui_pendencia else "Sem pendência"),
+                     ("Consulta registrada em", data_hora(consulta.criado_em)), ("Registrada por", consulta.criado_por_nome)]
+        documentos.append(("CADIN", "Certidão do CADIN", consulta.certidao_anexo_id, False, resultado))
+        if consulta.email_anexo_id:
+            documentos.append(("CADIN", "E-mail de notificação da pendência no CADIN", consulta.email_anexo_id, False, resultado[:1]))
+    for documento in competencia.documentos:
+        if documento.anexo_id:
+            tipo = "Obrigatório" if documento.obrigatorio else "Opcional"
+            extras = [("Item do checklist", f"{documento.ordem} · {tipo}")] + ([("Observação", documento.observacao)] if documento.observacao else [])
+            documentos.append(("Checklist", documento.nome, documento.anexo_id, False, extras))
+
+    # 2) Monta as partes: contracapa (para os enviados) + o arquivo; anota as páginas de cada um
+    partes: list[tuple[bytes | object, bool]] = []
+    composicao: list[list[str]] = []
+    pagina = 1
+    total_documentos = len(documentos) + 1  # + o resumo executivo, ao final
+    for posicao, (etapa, titulo, anexo_id, gerado, extras) in enumerate(documentos, start=1):
+        anexo: Anexo | None = anexos.get(anexo_id) if anexo_id else None
+        caminho = servico_anexos.caminho(anexo) if anexo else None
+        legivel = bool(caminho and caminho.is_file() and _pdf_legivel(caminho.read_bytes()))
+        inicio = pagina
+        if not gerado or not legivel:
+            dados = [("Etapa", etapa), ("Arquivo", anexo.nome_original if anexo else "—"),
+                     ("Enviado em" if not gerado else "Gerado em", envio(anexo)), *extras]
+            if not legivel:
+                dados.append(("Situação", "Arquivo ausente ou ilegível: não foi incluído neste consolidado."))
+            capa = contracapa(f"Documento {posicao} de {total_documentos} · {etapa}", titulo, dados, contexto, autor)
+            partes.append((capa, True))
+            pagina += contar_paginas(capa)
+        if legivel:
+            partes.append((caminho, gerado))
+            pagina += contar_paginas(caminho)
+        composicao.append([str(posicao), etapa, titulo, f"{inicio}" if pagina - 1 == inicio else f"{inicio} a {pagina - 1}"])
+
+    # 3) Resumo executivo, por último: dados da competência e a composição do documento
+    resumo = DocumentoPdf("Resumo executivo da competência", contexto, autor=autor)
     _cabecalho_contrato(resumo, contrato, competencia)
     resumo.secao("Resumo executivo").campos(
         [
@@ -264,26 +339,10 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         [[str(d.ordem), d.nome, "Obrigatório" if d.obrigatorio else "Opcional", d.arquivo.nome if d.arquivo else "Não anexado"] for d in detalhe.documentos],
         larguras=[0.5, 4, 1.4, 3.6]
     )
-    # 2ª parte: os PDFs anexados, na ordem das etapas (a última memória, avaliação assinada, NFs, CADIN, checklist)
-    partes: list[bytes | object] = [resumo.gerar()]
-    ordem = []
-    if competencia.memorias:
-        ordem.append(competencia.memorias[-1].anexo_id)
-    if competencia.avaliacao:
-        ordem.append(competencia.avaliacao.pdf_assinado_anexo_id)
-    ordem += [competencia.nf_anexo_id, competencia.nf_adicional_anexo_id, competencia.retencao_pdf_anexo_id]
-    for consulta in competencia.consultas_cadin:
-        ordem += [consulta.certidao_anexo_id, consulta.email_anexo_id]
-    ordem += [d.anexo_id for d in competencia.documentos]
-    # Anexos ausentes ou ilegíveis são pulados
-    for anexo_id in ordem:
-        anexo: Anexo | None = anexos.get(anexo_id) if anexo_id else None
-        if anexo is None:
-            continue
-        caminho = servico_anexos.caminho(anexo)
-        if caminho.is_file() and _pdf_legivel(caminho.read_bytes()):
-            partes.append(caminho)
-    return mesclar_pdfs(partes)
+    composicao.append([str(total_documentos), "Resumo executivo", "Resumo executivo da competência", f"a partir da {pagina}"])
+    resumo.secao("Composição deste documento").tabela(["Nº", "Etapa", "Documento", "Páginas"], composicao, larguras=[0.5, 2, 5, 1.5])
+    partes.append((resumo.gerar(), True))
+    return montar_consolidado(partes)
 
 
 def _pdf_legivel(conteudo: bytes) -> bool:

@@ -41,7 +41,11 @@
       <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!completas(iniciais)" (click)="salvarInicial()">Salvar avaliação inicial</button></div>
     }
 
-    @if (a.avaliacao_inicial_em) {
+    <!-- Avaliação do gestor: só quando alguma nota inicial ficou abaixo da máxima -->
+    @if (a.avaliacao_inicial_em && !a.precisa_avaliacao_gestor) {
+      <p class="aviso-bloco informativo">Todas as notas iniciais estão na máxima: a avaliação do gestor não é necessária e vale a nota inicial.</p>
+    }
+    @if (a.avaliacao_inicial_em && a.precisa_avaliacao_gestor) {
       <p class="secao-formulario">2. Avaliação do gestor @if (a.avaliacao_gestor_em) { <small class="dica-formulario" style="display: inline">— salva em {{ a.avaliacao_gestor_em | date: 'dd/MM/yyyy HH:mm' }}</small> }</p>
       @for (g of a.definicao.grupos; track g.id) {
         <table class="tabela-gestao" style="margin-bottom: 12px">
@@ -74,35 +78,22 @@
       }
     }
 
-    @if (a.avaliacao_gestor_em) {
-      <p class="secao-formulario">3. Assinaturas do ateste</p>
-      <div class="grade-formulario tres-colunas">
-        @for (p of papeisAteste; track p.papel) {
-          <div>
-            <label [for]="'ateste-' + p.papel">{{ p.rotulo }}</label>
-            <select [id]="'ateste-' + p.papel" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="assinantes[p.papel]">
-              <option [ngValue]="null">—</option>
-              @for (m of membrosDoPapel(p.papel); track m.usuario_id + m.papel) { <option [ngValue]="m.usuario_id">{{ m.nome }}</option> }
-            </select>
-          </div>
-        }
-      </div>
-      @if (editavel() && !a.concluida_em) {
-        <div class="acoes-cartao"><button type="button" class="acao-secundaria" (click)="salvarAssinaturas()">Salvar assinaturas</button></div>
-      }
-      <ul class="lista-ciencias">
-        @for (s of a.assinaturas; track s.papel) {
-          <li><span>{{ s.nome }} · {{ s.papel === 'gestor' ? 'Gestor' : s.papel === 'fiscal_tecnico' ? 'Fiscal técnico' : 'Fiscal administrativo' }}</span>
-            <small>{{ s.ciencia_em ? 'ciência em ' + (s.ciencia_em | date: 'dd/MM/yyyy HH:mm') : 'ciência pendente' }}</small></li>
+    <!-- Ateste: ciências da equipe, como na medição (qualquer integrante; uma já libera o PDF) -->
+    @if (notasFechadas()) {
+      <p class="secao-formulario">{{ a.precisa_avaliacao_gestor ? '3.' : '2.' }} Ciências no ateste</p>
+      <span class="contador-ciencias" [class.completo]="a.ciencias.length >= d.ciencias_minimas">{{ a.ciencias.length }} ciência(s) registrada(s) · {{ a.ciencias.length >= d.ciencias_minimas ? 'já pode exportar o PDF' : 'falta ao menos uma' }}</span>
+      <ul class="lista-ciencias" style="margin-top: 8px">
+        @for (c of a.ciencias; track c.usuario_id) {
+          <li><span>{{ c.nome }} · {{ papeis[c.papel] }}</span><small>ciência em {{ c.registrada_em | date: 'dd/MM/yyyy HH:mm' }}</small></li>
         }
       </ul>
-      @if (souAssinante() && !a.concluida_em && d.etapa_atual === 'avaliacao') {
-        <div class="acoes-cartao"><button type="button" class="acao-primaria" (click)="cienciaAteste()">Registrar minha ciência no ateste</button></div>
+      @if (d.integra_equipe && !jaRegistrei() && !a.concluida_em && d.etapa_atual === 'avaliacao') {
+        <div class="acoes-cartao"><button type="button" class="acao-secundaria" (click)="cienciaAteste()">Registrar minha ciência</button></div>
       }
     }
 
-    @if (a.assinaturas.length) {
-      <p class="secao-formulario">4. Documento</p>
+    @if (a.ciencias.length || a.pdf_gerado) {
+      <p class="secao-formulario">{{ a.precisa_avaliacao_gestor ? '4.' : '3.' }} Documento</p>
       <div class="acoes-cartao esquerda">
         @if (a.pdf_gerado) { <button type="button" class="link-arquivo" (click)="baixar(a.pdf_gerado.anexo_id)">Baixar PDF gerado</button> }
         @if (a.pdf_assinado) { <button type="button" class="link-arquivo" (click)="baixar(a.pdf_assinado.anexo_id)">Baixar via assinada</button> }

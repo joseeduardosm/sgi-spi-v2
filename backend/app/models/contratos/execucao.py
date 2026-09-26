@@ -333,7 +333,7 @@ class SelecaoNotaEmpenho(Base):
 
 
 class CienciaMedicao(Base):
-    """Ciência de um integrante da equipe na medição (mínimo de 2 pessoas diferentes)."""
+    """Ciência de um integrante da equipe na medição (uma ciência já basta para concluir)."""
 
     __tablename__ = "contratos_competencias_ciencias"
     # Uma ciência por pessoa em cada competência
@@ -419,8 +419,8 @@ class DocumentoMensal(Base):
 class AvaliacaoCompetencia(Base):
     """Avaliação dos serviços na competência (etapa 2), com a fotografia do formulário.
 
-    Respostas: [{"item_id", "nota", "justificativa"}]. Assinaturas do ateste:
-    [{"papel", "usuario_id", "nome", "ciencia_em"}].
+    Respostas: [{"item_id", "nota", "justificativa"}]. Ciências do ateste (coluna `assinaturas`):
+    [{"papel", "usuario_id", "nome", "ciencia_em"}], uma por integrante da equipe que deu ciência.
     """
 
     __tablename__ = "contratos_competencias_avaliacoes"
@@ -440,7 +440,7 @@ class AvaliacaoCompetencia(Base):
     complemento_gestor: Mapped[str] = mapped_column(String(4000), default="")
     gestor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     avaliacao_gestor_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Quem assina o ateste e quando cada um deu ciência
+    # Ciências da equipe no ateste (o nome da coluna vem da versão com assinantes indicados por papel)
     assinaturas: Mapped[list[Any]] = mapped_column(TipoJson, default=list)
     assinaturas_definidas_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # PDF gerado pelo sistema e a via assinada devolvida pela contratada

@@ -96,7 +96,7 @@ Implementação:
   - Impacto em % sobre o valor da vigência.
   - Acumulado do mesmo tipo na vigência **acima de 25%** exige a autorização do Ordenador de Despesa.
   - Salvar envia para ciência e apaga as ciências anteriores.
-- **Aba 3:** ciências (**mínimo de 2 pessoas diferentes**); depois disso, a memória em PDF e XLSX.
+- **Aba 3:** ciências (**uma ciência de integrante da equipe já basta**); depois dela, a memória em PDF e XLSX e a formalização são liberadas.
 - **Aba 4:**
   - De Acordo da contratada, que libera o documento consolidado;
   - Termo Aditivo assinado;
@@ -109,7 +109,7 @@ Implementação:
 | `POST /alteracoes/{id}/documentos/{tipo}` | `tipo`: `justificativa`, `autorizacao`, `de_acordo`, `termo` (`multipart` `arquivo`) |
 | `PUT /alteracoes/{id}/quantitativos` | `{ "itens": [{ "item_id", "quantidade_nova" }] }` |
 | `POST /alteracoes/{id}/ciencia` | Minha ciência |
-| `POST /alteracoes/{id}/memoria` | Gera PDF e XLSX (exige as ciências) |
+| `POST /alteracoes/{id}/memoria` | Gera PDF e XLSX (exige ao menos uma ciência) |
 | `POST /alteracoes/{id}/consolidado` | Justificativa + autorização + memória + De Acordo |
 | `POST /alteracoes/{id}/concluir` | Aplica a alteração |
 | `POST /alteracoes/{id}/cancelar` | Cancela |
@@ -120,7 +120,7 @@ Implementação:
 - **Itens:** `itens[]` (original, executado, nova, impacto, `abaixo_do_executado`);
 - **Valores:** `valor_global_original`, `impacto_valor`, `impacto_percentual`, `acumulado_percentual`, `exige_autorizacao`;
 - **Documentos:** os anexos;
-- **Ciências:** `ciencias` e `ciencias_minimas`.
+- **Ciências:** `ciencias` e `ciencias_minimas` (hoje 1: uma ciência já libera a memória e a formalização).
 
 ## Consumo no Angular
 

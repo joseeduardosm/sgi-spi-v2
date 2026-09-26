@@ -45,7 +45,6 @@ from app.schemas.contratos.execucao import (
     DetalheCompetencia,
     EmailMedicao,
     GlosaDoPeriodo,
-    GravacaoAssinaturas,
     GravacaoAvaliacaoGestor,
     GravacaoAvaliacaoInicial,
     GravacaoMedicao,
@@ -83,8 +82,8 @@ from app.services.contratos.servico_orcamento import apontamentos_da_vigencia, m
 from app.services.servico_auditoria import auditar
 
 ZERO = Decimal(0)
-# Mínimo de ciências de pessoas diferentes para concluir a medição
-CIENCIAS_MINIMAS = 2
+# Mínimo de ciências da equipe para avançar a etapa (medição e alteração): uma ciência já basta
+CIENCIAS_MINIMAS = 1
 # Constantes de apoio: 100 (para percentuais) e a precisão de 4 casas das quantidades
 CEM = Decimal(100)
 QUATRO_CASAS = Decimal("0.0001")
@@ -440,6 +439,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         **resumo(competencia).model_dump(),
         contrato_id=contrato.id, contrato_numero=contrato.numero, etapas=etapas_da_competencia(competencia),
         pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=integra_equipe(contrato, usuario),
+        pode_gerar_consolidado_novamente=pode_gerar_consolidado_novamente(contrato, usuario) and pode_editar(sessao, contrato, usuario),
         liberada=hoje() > competencia.periodo_fim,
         itens=[
             LeituraItemMedicao(
@@ -687,7 +687,7 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     _exigir_etapa(competencia, "medicao", "A medição")
     # Regras para concluir: ciências mínimas, mesma seleção de NEs salva, saldo e limite dos itens sob demanda
     if len({c.usuario_id for c in competencia.ciencias}) < CIENCIAS_MINIMAS:
-        raise ErroRegraContrato(f"A conclusão exige ao menos {CIENCIAS_MINIMAS} ciências de pessoas diferentes da equipe.")
+        raise ErroRegraContrato("A conclusão exige ao menos uma ciência de integrante da equipe.")
     if [n.nota_id for n in competencia.notas] != notas_ids:
         raise ErroRegraContrato("As Notas de Empenho foram alteradas na tela. Salve a medição novamente antes de concluir.")
     notas = _resolver_notas(contrato, notas_ids)
@@ -843,7 +843,11 @@ def _leitura_avaliacao(avaliacao: AvaliacaoCompetencia, anexos: dict) -> Leitura
         percentual_liberado=(
             percentual_da_nota(avaliacao.definicao, nota, maximo_de_notas_minimas_por_grupo(avaliacao)) if nota is not None else None
         ),
-        assinaturas=avaliacao.assinaturas or [], assinaturas_definidas_em=avaliacao.assinaturas_definidas_em,
+        precisa_avaliacao_gestor=precisa_avaliacao_gestor(avaliacao),
+        ciencias=[
+            LeituraCiencia(usuario_id=c["usuario_id"], nome=c["nome"], papel=c["papel"], registrada_em=c["ciencia_em"])
+            for c in ciencias_ateste(avaliacao)
+        ],
         pdf_gerado=_arquivo(anexos.get(avaliacao.pdf_gerado_anexo_id)), pdf_assinado=_arquivo(anexos.get(avaliacao.pdf_assinado_anexo_id)),
         concluida_em=avaliacao.concluida_em, reconsideracoes=avaliacao.reconsideracoes,
         reconsideracao=_arquivo(anexos.get(avaliacao.reconsideracao_anexo_id)),
@@ -867,9 +871,33 @@ def _avaliacao_aberta(sessao: Session, contrato_id: uuid.UUID, competencia_id: u
     return contrato, competencia, competencia.avaliacao
 
 
+def ciencias_ateste(avaliacao: AvaliacaoCompetencia) -> list[dict]:
+    """Ciências registradas no ateste: [{"papel", "usuario_id", "nome", "ciencia_em"}].
+
+    Ficam na coluna JSON `assinaturas`. Registros antigos (e os migrados do SGI) podem trazer
+    pessoas indicadas que não deram ciência (`ciencia_em` vazio): essas não contam e são omitidas.
+    """
+    return [a for a in avaliacao.assinaturas or [] if a.get("ciencia_em")]
+
+
+def precisa_avaliacao_gestor(avaliacao: AvaliacaoCompetencia) -> bool:
+    """A avaliação do gestor só é necessária quando alguma nota inicial ficou abaixo da máxima."""
+    if not avaliacao.respostas_iniciais:
+        return False
+    maxima = _nota_maxima(avaliacao.definicao)
+    return any(Decimal(r["nota"]) < maxima for r in avaliacao.respostas_iniciais)
+
+
+def avaliacao_pronta_para_ciencia(avaliacao: AvaliacaoCompetencia) -> bool:
+    """Notas fechadas: avaliação inicial salva e, se for necessária, a do gestor também."""
+    if not avaliacao.respostas_iniciais:
+        return False
+    return not precisa_avaliacao_gestor(avaliacao) or avaliacao.avaliacao_gestor_em is not None
+
+
 def _invalidar_documento(avaliacao: AvaliacaoCompetencia) -> None:
-    """Mudanças nas notas invalidam as ciências do ateste e o PDF já gerado."""
-    avaliacao.assinaturas = [{**a, "ciencia_em": None} for a in avaliacao.assinaturas or []]
+    """Mudanças nas notas apagam as ciências do ateste e invalidam o PDF já gerado (como na medição)."""
+    avaliacao.assinaturas, avaliacao.assinaturas_definidas_em = [], None
     avaliacao.pdf_gerado_anexo_id = None
 
 
@@ -878,6 +906,11 @@ def salvar_avaliacao_inicial(sessao: Session, contrato_id, competencia_id, dados
     contrato, competencia, avaliacao = _avaliacao_aberta(sessao, contrato_id, competencia_id, autor)
     avaliacao.respostas_iniciais = _validar_respostas(avaliacao.definicao, dados.respostas, "Justifique a nota do item")
     avaliacao.avaliador_inicial_id, avaliacao.avaliacao_inicial_em = autor.id, agora_utc()
+    # Todas as notas na máxima: a avaliação do gestor deixa de ser necessária, e uma feita antes
+    # (sobre notas iniciais que mudaram) é descartada para não sobrepor as novas notas
+    if not precisa_avaliacao_gestor(avaliacao):
+        avaliacao.respostas_gestor, avaliacao.complemento_gestor = [], ""
+        avaliacao.gestor_id, avaliacao.avaliacao_gestor_em = None, None
     _invalidar_documento(avaliacao)
     _auditar(sessao, autor, "contrato.execucao.avaliacao.inicial", contrato, competencia)
     sessao.commit()
@@ -888,6 +921,9 @@ def salvar_avaliacao_gestor(sessao: Session, contrato_id, competencia_id, dados:
     contrato, competencia, avaliacao = _avaliacao_aberta(sessao, contrato_id, competencia_id, autor)
     if not avaliacao.respostas_iniciais:
         raise ErroRegraContrato("Registre a avaliação inicial antes da avaliação do gestor.")
+    # Só há avaliação do gestor quando alguma nota inicial ficou abaixo da máxima
+    if not precisa_avaliacao_gestor(avaliacao):
+        raise ErroRegraContrato("Todas as notas iniciais estão na máxima: a avaliação do gestor não é necessária.")
     avaliacao.respostas_gestor = _validar_respostas(avaliacao.definicao, dados.respostas, "Complemente a nota do item")
     avaliacao.complemento_gestor = dados.complemento
     avaliacao.gestor_id, avaliacao.avaliacao_gestor_em = autor.id, agora_utc()
@@ -896,52 +932,39 @@ def salvar_avaliacao_gestor(sessao: Session, contrato_id, competencia_id, dados:
     sessao.commit()
 
 
-def salvar_assinaturas(sessao: Session, contrato_id, competencia_id, dados: GravacaoAssinaturas, autor: Usuario) -> None:
-    """Etapa 2: define quem assina o ateste (um integrante vigente por papel)."""
-    contrato, competencia, avaliacao = _avaliacao_aberta(sessao, contrato_id, competencia_id, autor)
-    if avaliacao.avaliacao_gestor_em is None:
-        raise ErroRegraContrato("Registre a avaliação do gestor antes de definir as assinaturas do ateste.")
-    # Cada papel (gestor, fiscal administrativo, fiscal técnico) aparece uma só vez
-    papeis = [a.papel for a in dados.assinaturas]
-    if len(set(papeis)) != len(papeis):
-        raise ErroRegraContrato("Cada papel do ateste recebe uma única pessoa.")
-    equipe = {d.usuario_id: d for d in designacoes_vigentes(contrato)}
-    # Monta as assinaturas com o nome fotografado; todas começam sem ciência
-    assinaturas = []
-    for assinatura in dados.assinaturas:
-        designacao = equipe.get(assinatura.usuario_id)
-        if designacao is None:
-            raise ErroRegraContrato("As assinaturas do ateste devem ser de integrantes vigentes da equipe.")
-        assinaturas.append({"papel": assinatura.papel, "usuario_id": assinatura.usuario_id, "nome": designacao.nome_usuario, "ciencia_em": None})
-    avaliacao.assinaturas, avaliacao.assinaturas_definidas_em = assinaturas, agora_utc()
-    # Mudou quem assina: o PDF gerado antes deixa de valer
-    avaliacao.pdf_gerado_anexo_id = None
-    _auditar(sessao, autor, "contrato.execucao.avaliacao.assinaturas", contrato, competencia, assinaturas=papeis)
-    sessao.commit()
-
-
 def registrar_ciencia_ateste(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
-    """Etapa 2: registra a ciência de uma das pessoas indicadas no ateste."""
+    """Etapa 2: registra a ciência do usuário no ateste (qualquer integrante vigente da equipe).
+
+    Funciona como a ciência da medição: uma por pessoa, com o papel da equipe fotografado.
+    Uma ciência (`CIENCIAS_MINIMAS`) já libera a exportação do PDF.
+    """
     contrato = obter_contrato(sessao, contrato_id)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     avaliacao = competencia.avaliacao
     if avaliacao is None:
         raise ErroRegraContrato("Esta competência não tem formulário de avaliação.")
     _exigir_etapa(competencia, "avaliacao", "A avaliação")
-    if not any(a["usuario_id"] == autor.id for a in avaliacao.assinaturas or []):
-        raise ErroRegraContrato("Você não foi indicado para assinar o ateste desta avaliação.")
-    # Marca a ciência só na assinatura do usuário (mantendo a data, se já existia)
-    agora = agora_utc().isoformat()
-    avaliacao.assinaturas = [{**a, "ciencia_em": a.get("ciencia_em") or agora} if a["usuario_id"] == autor.id else a for a in avaliacao.assinaturas]
-    _auditar(sessao, autor, "contrato.execucao.avaliacao.ciencia_ateste", contrato, competencia)
+    if not avaliacao_pronta_para_ciencia(avaliacao):
+        raise ErroRegraContrato("Conclua as notas da avaliação antes de registrar a ciência no ateste.")
+    papel = _papel_do_usuario(contrato, autor)
+    if papel is None:
+        raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
+    # Ciência repetida da mesma pessoa é ignorada (não gera erro)
+    if any(c["usuario_id"] == autor.id for c in ciencias_ateste(avaliacao)):
+        return
+    # Reatribui a lista (e não usa append) para o SQLAlchemy perceber a mudança na coluna JSON
+    ciencia = {"papel": papel, "usuario_id": autor.id, "nome": _nome(autor), "ciencia_em": agora_utc().isoformat()}
+    avaliacao.assinaturas = [*ciencias_ateste(avaliacao), ciencia]
+    _auditar(sessao, autor, "contrato.execucao.avaliacao.ciencia_ateste", contrato, competencia, papel=papel)
     sessao.commit()
 
 
 def gerar_pdf_avaliacao(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
-    """Etapa 2: gera o PDF do relatório de avaliação, depois de todas as ciências do ateste."""
+    """Etapa 2: gera o PDF do relatório de avaliação, depois de ao menos uma ciência no ateste."""
     contrato, competencia, avaliacao = _avaliacao_aberta(sessao, contrato_id, competencia_id, autor, exigir_equipe=False)
-    if not avaliacao.assinaturas or any(not a.get("ciencia_em") for a in avaliacao.assinaturas):
-        raise ErroRegraContrato("Todas as pessoas indicadas precisam registrar ciência no ateste antes de exportar o PDF.")
+    # Basta uma das pessoas indicadas ter dado ciência; as demais podem registrar depois, até a conclusão
+    if len(ciencias_ateste(avaliacao)) < CIENCIAS_MINIMAS:
+        raise ErroRegraContrato("Registre ao menos uma ciência da equipe no ateste antes de exportar o PDF.")
     conteudo = documentos_execucao.relatorio_avaliacao(contrato, competencia, nota_final(avaliacao), percentual_liberado(competencia), _nome(autor))
     nome = f"avaliacao-{contrato.sequencial:03d}-{contrato.ano}-{competencia.competencia:%Y-%m}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-avaliacao", autor.id, contrato_id=contrato.id)
@@ -1175,13 +1198,23 @@ def concluir_checklist(sessao: Session, contrato_id, competencia_id, autor: Usua
 # Etapa 6 — documento consolidado
 # ---------------------------------------------------------------------------------------------
 
+def pode_gerar_consolidado_novamente(contrato: Contrato, usuario: Usuario) -> bool:
+    """Gerar o consolidado **novamente** (já existe um) é só do gestor titular vigente ou do SuperRoot."""
+    return usuario.superusuario or _papel_do_usuario(contrato, usuario) == "gestor"
+
+
 def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
-    """Etapa 6: gera o PDF consolidado (resumo + todos os documentos da competência)."""
+    """Etapa 6: gera o PDF consolidado (todos os documentos da competência, na ordem de execução).
+
+    A primeira geração é de quem pode editar o contrato. Gerar novamente (substituir um
+    consolidado existente) é só do gestor do contrato ou do SuperRoot, inclusive depois da OB.
+    """
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
-    # Pode ser gerado de novo enquanto a OB não foi anexada
-    if competencia.etapa_atual not in ("consolidado", "ordem_bancaria"):
+    if competencia.consolidado_anexo_id is not None and not pode_gerar_consolidado_novamente(contrato, autor):
+        raise SemPermissaoContrato("Somente o gestor do contrato ou o SuperRoot podem gerar novamente o documento consolidado.")
+    if competencia.etapa_atual not in ("consolidado", "ordem_bancaria", "concluida"):
         rotulos = {"medicao": "medição", "avaliacao": "avaliação", "nota_fiscal": "nota fiscal", "retencao": "retenção de tributos",
                    "cadin": "CADIN", "checklist": "checklist"}
         faltam = [rotulos[e] for e in etapas_da_competencia(competencia) if e in rotulos and e not in etapas_concluidas(competencia)]
@@ -1189,8 +1222,11 @@ def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuar
                                 + ", ".join(faltam) + ".")
     # Reaproveita o detalhe (mesmos números da tela) para montar o resumo executivo do PDF
     anexos = {a.id: a for a in sessao.scalars(select(Anexo).where(Anexo.id.in_(_ids_anexos(competencia))))}
+    # Nome completo de quem enviou cada arquivo (vai na contracapa: "Enviado em … por …")
+    ids_envio = {a.enviado_por_id for a in anexos.values() if a.enviado_por_id}
+    enviados_por = {u.id: _nome(u) for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(ids_envio)))} if ids_envio else {}
     detalhe = detalhar(sessao, contrato_id, competencia_id, autor)
-    conteudo = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor))
+    conteudo = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor), enviados_por)
     nome = f"consolidado-{contrato.sequencial:03d}-{contrato.ano}-{competencia.competencia:%Y-%m}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-consolidado", autor.id, contrato_id=contrato.id)
     competencia.consolidado_anexo, competencia.consolidado_em = anexo, agora_utc()

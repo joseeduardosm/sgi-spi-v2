@@ -25,9 +25,6 @@ export class PainelComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   private readonly rota = inject(ActivatedRoute);
 
-  /** Ocorrências mostradas em cada cartão; o restante fica nas telas dedicadas. */
-  protected readonly LIMITE = 5;
-
   // Dados do painel e os filtros do topo
   protected readonly painel = signal<PainelContratos | null>(null);
   protected exercicio = new Date().getFullYear();

@@ -67,9 +67,7 @@ a.acao-primaria {
   background: #fff;
   box-shadow: 0 4px 16px #401e2008;
 
-  // O cabeçalho pode vir dentro de um link (cartões clicáveis do painel)
-  > header,
-  > .cabecalho-clicavel > header {
+  > header {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -729,82 +727,6 @@ a.acao-primaria {
   }
 }
 
-.lista-painel {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-
-  li {
-    display: flex;
-    gap: 12px;
-    padding: 11px 22px;
-    border-top: 1px solid #f0f1f3;
-
-    &:first-child {
-      border-top: 0;
-    }
-  }
-
-  a {
-    color: #32383f;
-    font-size: 12px;
-    text-decoration: none;
-
-    &:hover strong {
-      color: var(--spi-vermelho);
-    }
-  }
-
-  strong {
-    display: block;
-    font-size: 12px;
-  }
-
-  small {
-    color: #8e99a6;
-    font-size: 11px;
-  }
-
-  .marcador {
-    flex: 0 0 8px;
-    height: 8px;
-    margin-top: 5px;
-    border-radius: 50%;
-    background: #e0a526;
-
-    &.alta {
-      background: var(--spi-vermelho);
-    }
-  }
-
-  /* Riscos de um contrato, listados sob o cabeçalho do contrato */
-  .grupo-riscos {
-    flex: 1;
-    min-width: 0;
-
-    ul {
-      margin: 6px 0 0;
-      padding-left: 16px;
-      list-style: disc;
-    }
-
-    ul li {
-      display: list-item;
-      padding: 2px 0;
-      border-top: 0;
-      color: #b07d12;
-
-      &.alta {
-        color: var(--spi-vermelho);
-      }
-    }
-
-    ul a:hover {
-      text-decoration: underline;
-    }
-  }
-}
-
 .duas-colunas {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -920,32 +842,35 @@ a.acao-primaria {
   white-space: pre-wrap;
 }
 
-/* Painel: cabeçalhos dos cartões levam às telas dedicadas */
-.cabecalho-clicavel {
+/* Painel: resumos clicáveis (título + total) que abrem as telas de pendências e de alertas */
+.cartao-resumo {
   display: block;
   color: inherit;
   text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 
-  &:hover h2 {
-    color: var(--spi-vermelho);
+  > header {
+    border-bottom: 0;
   }
 
-  &:hover h2::after {
-    content: " →";
+  .contador-ciencias {
+    min-width: 42px;
+    font-size: 16px;
+    text-align: center;
   }
-}
 
-.ver-todas {
-  display: block;
-  padding: 11px 22px;
-  border-top: 1px solid #f0f1f3;
-  color: var(--spi-vermelho);
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
+  &:hover,
+  &:focus-visible {
+    border-color: var(--spi-vermelho);
+    box-shadow: 0 6px 20px #401e2014;
 
-  &:hover {
-    background: var(--spi-vermelho-suave);
+    h2 {
+      color: var(--spi-vermelho);
+    }
+
+    h2::after {
+      content: " →";
+    }
   }
 }
 

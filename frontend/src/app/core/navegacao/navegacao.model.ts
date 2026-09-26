@@ -14,6 +14,11 @@ export interface ItemNavegacao {
   rotulo: string;
   icone?: NomeIcone;
   rota?: string;
+  /**
+   * Rota aberta ao clicar, quando diferente de `rota`. Ex.: o módulo Contratos abre no painel
+   * (`/contratos/painel`), mas o item continua ativo em todas as telas sob `/contratos`.
+   */
+  destino?: string;
   /** Ativo somente quando a URL é exatamente `rota` (use para a rota '/'). */
   exata?: boolean;
   href?: string;

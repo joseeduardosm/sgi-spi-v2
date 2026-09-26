@@ -26,8 +26,9 @@
             <div class="nav-submenu" [id]="'submenu-' + item.id">
               @for (filho of item.filhos; track filho.id) {
                 @if (filho.rota) {
-                  <a [routerLink]="filho.rota" routerLinkActive="ativo" ariaCurrentWhenActive="page"
-                     [routerLinkActiveOptions]="{ exact: !!filho.exata }">{{ filho.rotulo }}</a>
+                  <!-- O link leva a `destino` (se houver), mas o destaque segue `rota`: o módulo fica ativo em todas as suas telas -->
+                  <a [routerLink]="filho.destino ?? filho.rota" [class.ativo]="filhoAtivo(filho)"
+                     [attr.aria-current]="filhoAtivo(filho) ? 'page' : null">{{ filho.rotulo }}</a>
                 } @else {
                   <a [href]="filho.href" [attr.target]="filho.novaAba ? '_blank' : null" [attr.rel]="filho.novaAba ? 'noopener' : null">
                     {{ filho.rotulo }} @if (filho.novaAba) { <span aria-label="abre em nova aba">↗</span> }

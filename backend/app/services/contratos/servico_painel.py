@@ -25,7 +25,15 @@ from app.models.contratos import (
 from app.models.usuario import Usuario
 from app.schemas.contratos.painel import AlertasContrato, ExecucaoOrcamentaria, MesExecucao, NumerosCarteira, OpcaoFiltro, Painel, Pendencia, Risco
 from app.services.contratos import calculos
-from app.services.contratos.servico_competencias import CIENCIAS_MINIMAS, compromissos, etapas_abertas, requisitos, total_medido
+from app.services.contratos.servico_competencias import (
+    CIENCIAS_MINIMAS,
+    avaliacao_pronta_para_ciencia,
+    ciencias_ateste,
+    compromissos,
+    etapas_abertas,
+    requisitos,
+    total_medido,
+)
 from app.services.contratos.servico_contratos import designacoes_vigentes, hoje, opcoes_carga_completa, situacao, totais
 from app.services.contratos.servico_orcamento import meses_previstos
 from app.services.contratos.servico_prorrogacao import meses_disponiveis
@@ -110,15 +118,17 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
             rota = _rota_competencia(contrato, competencia)
             mes = _nome(competencia)
             etapa = competencia.etapa_atual
-            # Na medição, se falta a ciência do usuário, a pendência é dar ciência
-            if etapa == "medicao" and membro and competencia.medicao_iniciada_em and not any(c.usuario_id == usuario.id for c in competencia.ciencias):
-                faltam = max(0, CIENCIAS_MINIMAS - len(competencia.ciencias))
-                lista.append(_pendencia(contrato, "ciencia_medicao", f"{mes}: registrar sua ciência na medição"
-                                        + (f" (faltam {faltam})" if faltam else ""), rota, competencia.periodo_fim))
+            # Na medição, enquanto falta a ciência mínima, a pendência de cada integrante é dar ciência;
+            # depois dela (uma já basta), a pendência volta a ser a etapa (concluir a medição)
+            if (etapa == "medicao" and membro and competencia.medicao_iniciada_em and len(competencia.ciencias) < CIENCIAS_MINIMAS
+                    and not any(c.usuario_id == usuario.id for c in competencia.ciencias)):
+                lista.append(_pendencia(contrato, "ciencia_medicao", f"{mes}: registrar sua ciência na medição", rota, competencia.periodo_fim))
                 continue
-            # Na avaliação, se o usuário foi indicado no ateste e ainda não deu ciência
+            # Na avaliação, com as notas fechadas e sem nenhuma ciência no ateste (uma já basta),
+            # a pendência de cada integrante da equipe é dar ciência
             avaliacao: AvaliacaoCompetencia | None = competencia.avaliacao
-            if etapa == "avaliacao" and avaliacao and any(a["usuario_id"] == usuario.id and not a.get("ciencia_em") for a in avaliacao.assinaturas or []):
+            if (etapa == "avaliacao" and membro and avaliacao and avaliacao_pronta_para_ciencia(avaliacao)
+                    and len(ciencias_ateste(avaliacao)) < CIENCIAS_MINIMAS):
                 lista.append(_pendencia(contrato, "ciencia_ateste", f"{mes}: registrar sua ciência no ateste da avaliação", rota, competencia.periodo_fim))
                 continue
             # Nos demais casos, a pendência é a etapa atual (com o vencimento do pagamento, se já houver NF)
@@ -139,7 +149,8 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
                 continue
             nome = "Aditamento" if alteracao.tipo == "aditamento" else "Supressão"
             rota = f"/contratos/{contrato.id}/{alteracao.tipo}"
-            if alteracao.situacao == "aguardando_ciencias" and membro and not any(c.usuario_id == usuario.id for c in alteracao.ciencias):
+            # A pendência de ciência só existe enquanto ninguém deu a ciência mínima (uma já basta)
+            if alteracao.situacao == "aguardando_ciencias" and membro and len(alteracao.ciencias) < CIENCIAS_MINIMAS:
                 lista.append(_pendencia(contrato, "ciencia_alteracao", f"{nome}: registrar sua ciência", rota))
             else:
                 lista.append(_pendencia(contrato, "alteracao", f"{nome} em elaboração", rota))
@@ -255,11 +266,14 @@ def execucao_orcamentaria(contratos: list[Contrato], exercicio: int) -> Execucao
         for competencia in contrato.competencias:
             if competencia.medicao_concluida_em and competencia.competencia.year == exercicio:
                 medido[competencia.competencia] += total_medido(competencia)
-        # Pago: débitos lançados nas NEs, pelo mês do lançamento (estornos entram como negativos)
+        # Pago: débitos lançados nas NEs, no mês da COMPETÊNCIA paga (e não na data do pagamento):
+        # a OB de agosto paga em setembro entra na barra de agosto. Estornos entram como negativos.
+        mes_da_competencia = {c.id: c.competencia for c in contrato.competencias}
         for nota in contrato.notas_empenho:
             for movimento in nota.movimentos:
-                if movimento.criado_em.year == exercicio:
-                    pago[date(exercicio, movimento.criado_em.month, 1)] += movimento.debito
+                mes = mes_da_competencia.get(movimento.competencia_id)
+                if mes is not None and mes.year == exercicio:
+                    pago[mes] += movimento.debito
     meses = [date(exercicio, m, 1) for m in range(1, 13)]
     empenhado = sum((n.valor_original for c in contratos for n in c.notas_empenho), ZERO)
     consumido = sum((n.consumido for c in contratos for n in c.notas_empenho), ZERO)

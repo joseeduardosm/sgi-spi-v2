@@ -12,7 +12,7 @@ import { DetalheCompetencia, NotaSelecionada } from '../compartilhado/contratos.
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { paraDecimalApi, paraDecimalTela, ROTULOS_PAPEL } from '../compartilhado/rotulos';
 
-/** Etapa 1: medição, NEs em ordem de consumo, ciências (mínimo 2) e memória de cálculo. */
+/** Etapa 1: medição, NEs em ordem de consumo, ciências (uma já basta) e memória de cálculo. */
 @Component({
   selector: 'app-etapa-medicao',
   imports: [FormsModule, DatePipe, ...PIPES_FORMATACAO],

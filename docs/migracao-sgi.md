@@ -51,7 +51,7 @@ cd /home/administrador/projeto/backend
 | UUIDs de todas as tabelas | preservados |
 | `*UserId` (id do `portal-data.json`) | usuário local com o mesmo login ou o mesmo id externo (AD). A conta administrativa local do SGI (`admin`) vira o `root`. Quem não existir é criado **inativo e sem senha** |
 | Papéis `Manager`, `ManagerSubstitute`, `AdministrativeInspector`… | `gestor`, `gestor_suplente`, `fiscal_administrativo`… |
-| Assinatura do ateste por suplente "em exercício" | posto do titular (`gestor`, `fiscal_administrativo` ou `fiscal_tecnico`) |
+| Assinatura do ateste por suplente "em exercício" | posto do titular (`gestor`, `fiscal_administrativo` ou `fiscal_tecnico`). Só as assinaturas com ciência (`AcknowledgedAt`) contam como ciência no ateste; as demais são ignoradas na leitura |
 | Etapas `Measurement` … `Download`, `BankOrder`, `Completed` | `medicao` … `consolidado`, `ordem_bancaria`, `concluida` |
 | `ExecutionPeriodicity` (`Monthly`, `Bimonthly`…) | `periodicidade_meses` (1, 2, 3, 6, 12) |
 | `contract_documents` sem arquivo (as 23 posições do catálogo) | não migradas (aqui só existe o documento que tem PDF) |

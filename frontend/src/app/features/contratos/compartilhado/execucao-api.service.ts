@@ -8,7 +8,6 @@ import { Observable } from 'rxjs';
 import { ambiente } from '../../../../environments/ambiente';
 import { baixarArquivo } from '../../../shared/utilitarios/download';
 import {
-  AssinaturaAteste,
   Checklist,
   DefinicaoFormulario,
   DetalheCompetencia,
@@ -132,11 +131,6 @@ export class ExecucaoApiService {
   /** Etapa 2: notas e complemento do gestor. */
   avaliacaoGestor(id: string, c: string, respostas: RespostaAvaliacao[], complemento: string): Observable<DetalheCompetencia> {
     return this.http.put<DetalheCompetencia>(this.competencia(id, c, '/avaliacao/gestor'), { respostas, complemento });
-  }
-
-  /** Etapa 2: quem assina o ateste. */
-  assinaturas(id: string, c: string, assinaturas: Pick<AssinaturaAteste, 'papel' | 'usuario_id'>[]): Observable<DetalheCompetencia> {
-    return this.http.put<DetalheCompetencia>(this.competencia(id, c, '/avaliacao/assinaturas'), { assinaturas });
   }
 
   /** Etapa 2: ciência no ateste ou geração do PDF. */

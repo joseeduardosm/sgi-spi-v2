@@ -22,7 +22,8 @@ export const NAVEGACAO: SecaoNavegacao[] = [
         icone: 'grade',
         filhos: [
           // Um item por módulo; as funções internas (painel, empresas, modelos) ficam nos atalhos do cabeçalho do módulo
-          { id: 'contratos', rotulo: 'Contratos', rota: '/contratos', acl: 'contratos' },
+          // O clique abre o painel do módulo; o item fica ativo em qualquer tela sob /contratos
+          { id: 'contratos', rotulo: 'Contratos', rota: '/contratos', destino: '/contratos/painel', acl: 'contratos' },
         ],
         textoVazio: 'Nenhum módulo disponível ainda',
       },

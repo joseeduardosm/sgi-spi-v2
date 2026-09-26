@@ -47,7 +47,7 @@ Configurar a execução (checklist de documentos mensais e formulário de avalia
   - informa a quantidade medida de todos os itens (até 10 casas) e as NEs em **ordem de consumo**; o **saldo livre** somado dessas NEs deve cobrir o valor a pagar (saldo livre = saldo − o **comprometido** por outras competências com medição concluída e ainda não pagas);
   - nenhum item pode ser medido acima do **saldo líquido** (ver abaixo): `400` ao salvar e de novo ao concluir, porque uma glosa pode ser registrada depois de salva a medição;
   - qualquer alteração apaga as ciências;
-  - a conclusão exige **ao menos 2 ciências de pessoas diferentes** e gera a memória de cálculo em PDF (nova versão só se os dados mudaram);
+  - a conclusão exige **ao menos uma ciência de integrante da equipe** (as demais são opcionais) e gera a memória de cálculo em PDF (nova versão só se os dados mudaram);
   - concluir soma o medido na quantidade executada dos itens;
   - **e-mail da medição concluída** (em segundo plano, pelo [servidor SMTP](smtp.md) ativo): vai à equipe vigente e aos prepostos ativos da contratada, com a memória de cálculo e o [diário de bordo](contratos-diario.md) do período em PDF, pedindo a emissão da nota fiscal com base na medição **em até 48 horas** (a data e a hora limite vão no texto). "Responder para" = equipe vigente (as respostas não voltam à caixa de envio). O resultado fica em `email_medicao`; `POST /competencias/{id}/reenviar-email-medicao` reenvia.
 
@@ -64,9 +64,10 @@ Cada item da medição traz:
 A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seção "Glosas do período".
 - **Avaliação:**
   - nota da escala abaixo da máxima exige justificativa (inicial) ou complemento (gestor);
+  - **avaliação do gestor só quando alguma nota inicial ficou abaixo da máxima** (`precisa_avaliacao_gestor`). Com todas na máxima, vale a nota inicial, e o `PUT /avaliacao/gestor` responde `400`. Salvar a avaliação inicial toda na máxima descarta uma avaliação do gestor feita antes;
   - nota final = **soma** das notas dos grupos, e em cada grupo Σ nota × peso / 100 (vale a nota do gestor, se houver) — igual à planilha oficial ("Somatório das notas totais dos grupos");
   - % liberado: pela nota, a faixa com mínimo ≤ nota ≤ máximo (entre várias, a de maior mínimo). Faixas com `notas_zero = N` também se aplicam quando algum grupo tem **ao menos N notas mínimas** da escala (a "nota 0" da planilha). Entre as faixas aplicáveis, vale a de **menor** percentual; nenhuma = 0%. Ex. da planilha: ≥ 6,75 → 100%; 5 a 6,74 ou 1 nota 0 num grupo → 90%; < 5 ou 2+ notas 0 num grupo → 75%;
-  - fluxo: assinaturas do ateste (integrantes da equipe) → ciência de cada indicado → PDF → via assinada pela contratada (conclui a etapa);
+  - fluxo: notas fechadas (inicial e, se preciso, a do gestor) → **ciências da equipe no ateste**, como na medição: qualquer integrante vigente, uma por pessoa, e **uma já libera o PDF** → PDF → via assinada pela contratada (conclui a etapa). Não há indicação de assinantes por papel. Mudar as notas apaga as ciências e o PDF gerado;
   - reconsideração: uma vez, antes da nota fiscal, reabre a avaliação.
 - **Nota fiscal** (equipe): só os arquivos e as datas.
   - **PDF e XML obrigatórios** (principal e, se houver, adicional). O XML é lido automaticamente (NF-e modelo 55, NFS-e Padrão Nacional ou NFS-e da Prefeitura de São Paulo; ver [Leitura do XML](#leitura-do-xml)): **número, chave e valor bruto vêm do XML**, e as retenções informadas nele ficam como sugestão para a etapa seguinte;
@@ -87,7 +88,12 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
   - cada documento é **obrigatório** ou **opcional** (`obrigatorio`, padrão `true`; os documentos anteriores a esta opção são obrigatórios);
   - a etapa conclui sozinha quando todos os documentos estão anexados;
   - com os obrigatórios anexados, `POST …/checklist/concluir` conclui a etapa mesmo com opcionais sem anexo.
-- **Consolidado:** resumo executivo + memória, avaliação assinada, NFs, PDF da retenção, CADIN e checklist em um PDF. Pode ser gerado de novo até a OB.
+- **Consolidado:** um PDF só.
+  - **Quem gera:** a primeira geração é de quem pode editar o contrato. **Gerar novamente** (substituir o consolidado existente) é só do **gestor do contrato** (titular vigente) ou do **SuperRoot**, inclusive depois da OB, para refazer consolidados antigos. Os demais recebem `403`. `pode_gerar_consolidado_novamente` diz se o usuário vê o botão.
+  - **Ordem de execução:** 1 medição (última memória de cálculo) → 2 avaliação (via assinada; sem ela, o relatório gerado), quando houver → 3 nota fiscal e NF adicional → 4 retenção de tributos (PDF gerado) → 5 CADIN (certidão e, se houver, e-mail de notificação, por consulta) → 6 documentos do checklist → 7 **resumo executivo, por último**, com a tabela "Composição deste documento" (nº, etapa, documento e páginas).
+  - **Contracapa:** cada documento **enviado** (avaliação assinada, NFs, CADIN e checklist) vem precedido de uma página na identidade visual do sistema: "Documento N de M · etapa", nome do documento, arquivo, data de envio com o nome completo de quem enviou e dados da etapa. Um arquivo ausente ou ilegível fica só com a contracapa, que avisa que ele não foi incluído.
+  - **Paginação sequencial:** todas as páginas levam "Página X de N". Nas páginas geradas pelo sistema, o número substitui o do rodapé original. Nos documentos enviados, entra num selo pequeno no canto inferior direito, e **o layout e a orientação do arquivo enviado são preservados**.
+- **PDFs gerados pelo sistema:** todos em **A4 paisagem** (memórias, avaliação, retenção, parecer de prorrogação, relatórios, contracapas e resumo).
 - **Ordem Bancária:** debita nas NEs apontadas, na ordem escolhida, o **valor a pagar** = NF principal + NF adicional (valores brutos), e conclui a competência. O lançamento (`pagamento`) registra o autor.
 - **Reabrir (SuperRoot ou gestor):** volta para uma etapa anterior com justificativa e desfaz as conclusões posteriores. Se a competência estava paga, cada débito ganha um lançamento de **`estorno`** (valor negativo, com autor e justificativa) no extrato da NE; o pagamento original **permanece** no extrato. Anexos e histórico ficam guardados.
 - **Auditoria:** `contrato.checklist.*`, `contrato.formulario.*`, `contrato.execucao.gerar`, `contrato.execucao.medicao.*`, `contrato.execucao.avaliacao.*`, `contrato.execucao.nota_fiscal.concluir`, `contrato.execucao.cadin`, `contrato.execucao.checklist.enviar`, `contrato.execucao.consolidado`, `contrato.execucao.ordem_bancaria` e `contrato.execucao.reabrir`.
@@ -133,10 +139,9 @@ A API gera `id` para grupos e itens. As respostas da avaliação referenciam o `
 | `POST /competencias/{id}/medicao/concluir` | `{ "notas_empenho_ids": [...] }` (igual à seleção salva). Em segundo plano, envia o e-mail da medição |
 | `POST /competencias/{id}/reenviar-email-medicao` | Reenvia o e-mail da medição concluída (quem pode editar o contrato) |
 | `PUT /competencias/{id}/avaliacao/inicial` | `{ "respostas": [{ "item_id", "nota", "justificativa" }] }` |
-| `PUT /competencias/{id}/avaliacao/gestor` | `{ "respostas": [...], "complemento": "…" }` |
-| `PUT /competencias/{id}/avaliacao/assinaturas` | `{ "assinaturas": [{ "papel": "gestor" \| "fiscal_administrativo" \| "fiscal_tecnico", "usuario_id" }] }` |
-| `POST /competencias/{id}/avaliacao/ciencia` | Ciência de quem foi indicado no ateste |
-| `POST /competencias/{id}/avaliacao/pdf` | Gera o PDF (exige todas as ciências do ateste) |
+| `PUT /competencias/{id}/avaliacao/gestor` | `{ "respostas": [...], "complemento": "…" }`. Só com nota inicial abaixo da máxima |
+| `POST /competencias/{id}/avaliacao/ciencia` | Minha ciência no ateste (integrante vigente da equipe, uma por pessoa, depois das notas fechadas) |
+| `POST /competencias/{id}/avaliacao/pdf` | Gera o PDF (exige ao menos uma ciência no ateste) |
 | `POST /competencias/{id}/avaliacao/assinada` | `multipart` `arquivo`: via assinada pela contratada; conclui a etapa |
 | `POST /competencias/{id}/avaliacao/reconsideracao` | `multipart` `arquivo`: justificativa da contratada; reabre a avaliação (uma vez) |
 | `POST /competencias/{id}/nota-fiscal` | `multipart`: `arquivo` (PDF), `xml`, `recebida_em`, `prazo_pagamento_dias`; adicional: `possui_adicional`, `arquivo_adicional`, `xml_adicional`. Arquivos já enviados podem ser mantidos numa correção depois de reabrir |
@@ -146,22 +151,22 @@ A API gera `id` para grupos e itens. As respostas da avaliação referenciam o `
 | `POST /competencias/{id}/cadin` | `multipart`: `possui_pendencia`, `certidao`; com pendência: `pendencia`, `texto_notificacao` e `email` |
 | `POST /competencias/{id}/checklist/{documento_id}` | `multipart` `arquivo` |
 | `POST /competencias/{id}/checklist/concluir` | Conclui a etapa com os obrigatórios anexados. Falta de obrigatório → `400` com os nomes |
-| `POST /competencias/{id}/consolidado` | Gera o documento consolidado |
+| `POST /competencias/{id}/consolidado` | Gera o documento consolidado. Gerar novamente: só gestor do contrato ou SuperRoot (`403`), também após a OB |
 | `POST /competencias/{id}/ordem-bancaria` | `multipart` `arquivo`: debita as NEs e conclui |
 | `POST /competencias/{id}/reabrir` | `{ "etapa": "…", "justificativa": "…" }` (SuperRoot ou gestor vigente; demais → `403`) |
 
 O `DetalheCompetencia` traz o `ResumoCompetencia` e mais:
-- **Contrato e etapas:** `contrato_numero`, `etapas` (as etapas desta competência), `pode_editar`, `integra_equipe`, `liberada`.
+- **Contrato e etapas:** `contrato_numero`, `etapas` (as etapas desta competência), `pode_editar`, `integra_equipe`, `pode_gerar_consolidado_novamente`, `liberada`.
 - **Medição:**
   - `itens[]` (preço, fator, prevista, medida, subtotal, `saldo`, `glosas`, `saldo_liquido`), `total_previsto`, `total_medido`;
   - `glosas_periodo[]` (`ocorrencia_id`, `data_ocorrencia`, `descricao_ocorrencia`, `registrada_por_nome`, `item_id`, `descricao_item`, `quantidade`);
   - `email_medicao` (`enviado_em`, `ok`, `destinatarios[]`, `erro`);
   - NEs: `notas_selecionadas`, `notas_disponiveis` (só as com saldo livre), cada uma com `saldo` e `saldo_livre`;
   - `avisos[]` (ex.: item medido acima do saldo líquido por causa de uma glosa registrada depois);
-  - ciências: `ciencias`, `ciencias_minimas`;
+  - ciências: `ciencias`, `ciencias_minimas` (hoje 1);
   - `memorias[]` e `medicao_concluida_em`.
 - **Avaliação e pagamento:**
-  - `avaliacao`: definição, respostas, `nota_final`, `percentual_liberado`, assinaturas, PDFs e reconsideração;
+  - `avaliacao`: definição, respostas, `nota_final`, `percentual_liberado`, `precisa_avaliacao_gestor`, `ciencias` (mesmo formato das ciências da medição: `usuario_id`, `nome`, `papel`, `registrada_em`), PDFs e reconsideração;
   - `percentual_autorizado`, `valor_autorizado` (medido × %; sugestão do valor da NF) e `valor_a_pagar` (o que a OB debita: NF + NF adicional; antes da NF, o valor autorizado);
   - `reaberturas_permitidas` (o usuário pode reabrir etapas).
 - **Nota fiscal:** `nota_fiscal` e `nota_fiscal_adicional` (número, `arquivo`, `xml`, `dados_xml`, `conferencias[]` com `descricao`/`situacao`/`detalhe`, bruto, retenções — `retencao_ir`, `_inss`, `_iss`, `_pis`, `_cofins`, `_csll` —, líquido), `nf_recebida_em`, `prazo_pagamento_dias`, `vencimento_pagamento`, `nf_concluida_em`, `email_nf`.

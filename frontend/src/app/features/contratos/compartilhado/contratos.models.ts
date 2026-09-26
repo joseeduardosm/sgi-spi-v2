@@ -568,14 +568,6 @@ export interface RespostaAvaliacao {
   justificativa: string;
 }
 
-/** Pessoa indicada para assinar o ateste. */
-export interface AssinaturaAteste {
-  papel: 'gestor' | 'fiscal_administrativo' | 'fiscal_tecnico';
-  usuario_id: number;
-  nome: string;
-  ciencia_em: string | null;
-}
-
 /** Avaliação da competência (etapa 2). */
 export interface Avaliacao {
   definicao: DefinicaoFormulario & { grupos: (GrupoFormulario & { id: string; itens: (ItemFormulario & { id: string })[] })[] };
@@ -586,8 +578,10 @@ export interface Avaliacao {
   avaliacao_gestor_em: string | null;
   nota_final: Decimal | null;
   percentual_liberado: Decimal | null;
-  assinaturas: AssinaturaAteste[];
-  assinaturas_definidas_em: string | null;
+  // A avaliação do gestor só existe quando alguma nota inicial ficou abaixo da máxima
+  precisa_avaliacao_gestor: boolean;
+  // Ciências da equipe no ateste (como na medição: uma já libera o PDF)
+  ciencias: Ciencia[];
   pdf_gerado: Arquivo | null;
   pdf_assinado: Arquivo | null;
   concluida_em: string | null;
@@ -624,6 +618,8 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   etapas: Etapa[];
   pode_editar: boolean;
   integra_equipe: boolean;
+  // Substituir o consolidado já gerado: só o gestor do contrato ou o SuperRoot
+  pode_gerar_consolidado_novamente: boolean;
   liberada: boolean;
   itens: ItemMedicao[];
   total_previsto: Decimal;

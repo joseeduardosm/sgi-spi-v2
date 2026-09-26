@@ -15,50 +15,22 @@
     </select>
   </form>
 
+  <!-- Resumos clicáveis: só o título e o total; o cartão inteiro abre a tela com os cartões detalhados -->
   <div class="duas-colunas">
-    <section class="cartao-dados" aria-labelledby="titulo-pendencias">
-      <a class="cabecalho-clicavel" routerLink="/contratos/minhas-pendencias" title="Abrir todas as pendências">
-        <header><div><h2 id="titulo-pendencias">Minhas pendências</h2><small>Contratos em que você é criador ou integra a equipe.</small></div>
-          <span class="contador-ciencias" [class.completo]="!p.minhas_pendencias.length">{{ p.minhas_pendencias.length }}</span></header>
-      </a>
-      <ul class="lista-painel">
-        @for (item of p.minhas_pendencias.slice(0, LIMITE); track $index) {
-          <li><span class="marcador" [class.alta]="item.tipo.startsWith('ciencia')"></span>
-            <a [routerLink]="item.rota"><strong>{{ item.descricao }}</strong><small>Contrato {{ item.contrato_numero }}{{ item.contrato_apelido ? ' · ' + item.contrato_apelido : '' }}</small></a></li>
-        } @empty { <li><small>Nada pendente com você. 🎉</small></li> }
-      </ul>
-      @if (p.minhas_pendencias.length) {
-        <a class="ver-todas" routerLink="/contratos/minhas-pendencias">Ver {{ p.minhas_pendencias.length > LIMITE ? 'todas as ' + p.minhas_pendencias.length + ' pendências' : 'pendências em cartões' }} →</a>
-      }
-    </section>
+    <a class="cartao-dados cartao-resumo" routerLink="/contratos/minhas-pendencias" aria-labelledby="titulo-pendencias" title="Abrir minhas pendências em cartões">
+      <header><div><h2 id="titulo-pendencias">Minhas pendências</h2><small>Contratos em que você é criador ou integra a equipe.</small></div>
+        <span class="contador-ciencias" [class.completo]="!p.minhas_pendencias.length">{{ p.minhas_pendencias.length }}</span></header>
+    </a>
 
-    <section class="cartao-dados" aria-labelledby="titulo-alertas">
-      <a class="cabecalho-clicavel" routerLink="/contratos/alertas-de-risco" [queryParams]="filtrosUrl()" title="Abrir todos os alertas">
-        <header><div><h2 id="titulo-alertas">Alertas de risco</h2><small>{{ p.alertas.length }} contrato(s) em risco · {{ alertasAltos() }} de alta gravidade</small></div>
-          <span class="contador-ciencias" [class.completo]="!p.alertas.length">{{ p.alertas.length }}</span></header>
-      </a>
-      <ul class="lista-painel">
-        @for (c of p.alertas.slice(0, LIMITE); track c.contrato_id) {
-          <li><span class="marcador" [class.alta]="c.gravidade === 'alta'"></span>
-            <div class="grupo-riscos">
-              <a [routerLink]="['/contratos', c.contrato_id]"><strong>Contrato {{ c.contrato_numero }}{{ c.contrato_apelido ? ' · ' + c.contrato_apelido : '' }}</strong><small>{{ c.empresa }}</small></a>
-              <ul>
-                @for (r of c.riscos; track $index) {
-                  <li [class.alta]="r.gravidade === 'alta'"><a [routerLink]="r.rota">{{ r.descricao }}</a></li>
-                }
-              </ul>
-            </div></li>
-        } @empty { <li><small>Nenhum contrato em risco na carteira.</small></li> }
-      </ul>
-      @if (p.alertas.length) {
-        <a class="ver-todas" routerLink="/contratos/alertas-de-risco" [queryParams]="filtrosUrl()">Ver {{ p.alertas.length > LIMITE ? 'todos os ' + p.alertas.length + ' contratos em risco' : 'alertas em cartões' }} →</a>
-      }
-    </section>
+    <a class="cartao-dados cartao-resumo" routerLink="/contratos/alertas-de-risco" [queryParams]="filtrosUrl()" aria-labelledby="titulo-alertas" title="Abrir os alertas de risco em cartões">
+      <header><div><h2 id="titulo-alertas">Alertas de risco</h2><small>Contratos da carteira em risco{{ alertasAltos() ? ' · ' + alertasAltos() + ' de alta gravidade' : '' }}.</small></div>
+        <span class="contador-ciencias" [class.completo]="!p.alertas.length">{{ p.alertas.length }}</span></header>
+    </a>
   </div>
 
   <section class="cartao-dados" aria-labelledby="titulo-execucao-orcamentaria">
     <header>
-      <div><h2 id="titulo-execucao-orcamentaria">Execução orçamentária {{ p.execucao.exercicio }}</h2><small>Previsto (previsão mensal) × medido (medições concluídas) × pago (Ordens Bancárias).</small></div>
+      <div><h2 id="titulo-execucao-orcamentaria">Execução orçamentária {{ p.execucao.exercicio }}</h2><small>Previsto (previsão mensal) × medido (medições concluídas) × pago (Ordens Bancárias, no mês da competência paga).</small></div>
       <div class="legenda-grafico"><span><i class="previsto"></i>Previsto</span><span><i class="medido"></i>Medido</span><span><i class="pago"></i>Pago</span></div>
     </header>
     <div class="corpo">

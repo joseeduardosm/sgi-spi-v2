@@ -4,6 +4,11 @@
 
 Os documentos são montados com blocos simples (títulos, parágrafos, pares rótulo/valor e
 tabelas) para que cada módulo descreva só o conteúdo, sem repetir estilo nem paginação.
+Todo documento gerado pelo sistema sai em **A4 paisagem**.
+
+Para os documentos consolidados há também:
+- `contracapa()`: página que antecede cada documento enviado, dizendo que documento é aquele;
+- `montar_consolidado()`: junta as partes e numera todas as páginas em sequência ("Página X de N").
 """
 
 from collections.abc import Iterable, Sequence
@@ -14,12 +19,13 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter, Transformation
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Flowable, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # Imagem do brasão usada no cabeçalho de todas as páginas
@@ -45,6 +51,11 @@ ESTILO_SUBTITULO = ParagraphStyle("subtitulo", parent=ESTILO_TEXTO, textColor=AP
 ESTILO_SECAO = ParagraphStyle(
     "secao", parent=ESTILO_TEXTO, fontName="Helvetica-Bold", fontSize=10.5, textColor=VERMELHO, spaceBefore=10, spaceAfter=4
 )
+# Contracapa: sobretítulo ("Documento 3 de 8") e o nome do documento em destaque
+ESTILO_CONTRACAPA_SOBRE = ParagraphStyle("contracapa_sobre", parent=ESTILO_TEXTO, fontSize=11, textColor=APAGADO, spaceAfter=6)
+ESTILO_CONTRACAPA_TITULO = ParagraphStyle(
+    "contracapa_titulo", parent=ESTILO_TEXTO, fontName="Helvetica-Bold", fontSize=24, leading=30, textColor=VERMELHO, spaceAfter=14
+)
 
 
 def texto(conteudo: str, estilo: ParagraphStyle = ESTILO_TEXTO) -> Paragraph:
@@ -56,10 +67,11 @@ def texto(conteudo: str, estilo: ParagraphStyle = ESTILO_TEXTO) -> Paragraph:
 class DocumentoPdf:
     """Documento em construção. Use os métodos para empilhar blocos e `gerar()` no final."""
 
-    # Campos do documento: título, subtítulo, orientação e autor (vai para o rodapé)
+    # Campos do documento: título, subtítulo, orientação e autor (vai para o rodapé).
+    # Todos os documentos do sistema são em paisagem; o retrato fica só como opção explícita.
     titulo: str
     subtitulo: str = ""
-    paisagem: bool = False
+    paisagem: bool = True
     autor: str = ""
     # Blocos empilhados na ordem em que serão desenhados
     blocos: list[Flowable] = field(default_factory=list)
@@ -149,6 +161,11 @@ class DocumentoPdf:
             self.blocos.append(KeepTogether([Spacer(1, 6 * mm), tabela]))
         return self
 
+    def bloco(self, *elementos: Flowable) -> "DocumentoPdf":
+        """Empilha elementos prontos do ReportLab (usado pela contracapa)."""
+        self.blocos.extend(elementos)
+        return self
+
     def _tamanho(self) -> tuple[float, float]:
         """Tamanho da página: A4 retrato ou paisagem."""
         return landscape(A4) if self.paisagem else A4
@@ -203,6 +220,81 @@ class DocumentoPdf:
             cabecalho.append(texto(self.subtitulo, ESTILO_SUBTITULO))
         documento.build(cabecalho + self.blocos, onFirstPage=self._desenhar_moldura, onLaterPages=self._desenhar_moldura)
         return saida.getvalue()
+
+
+def contracapa(sobretitulo: str, titulo: str, pares: Sequence[tuple[str, str]], contexto: str, autor: str = "") -> bytes:
+    """Página (A4 paisagem, identidade do sistema) que antecede um documento no consolidado.
+
+    `sobretitulo` indica a posição ("Documento 3 de 8 · Nota fiscal"), `titulo` diz que documento
+    vem a seguir e `pares` trazem os dados do arquivo (nome, envio...). `contexto` vai como título
+    pequeno da página (contrato e competência).
+    """
+    documento = DocumentoPdf(contexto, autor=autor)
+    documento.bloco(Spacer(1, 22 * mm), texto(sobretitulo, ESTILO_CONTRACAPA_SOBRE), texto(titulo, ESTILO_CONTRACAPA_TITULO))
+    documento.campos(pares, colunas=1)
+    return documento.gerar()
+
+
+# Numeração do consolidado: área do "Página N" que a moldura desenha nos documentos do sistema
+# (canto inferior direito, linha de base a 9 mm). Nas partes geradas pelo sistema ela é coberta e
+# reescrita; nas enviadas, o número entra num selo pequeno no canto, sem mexer no layout do arquivo.
+_LARGURA_NUMERO = 42 * mm
+
+
+def _selo_pagina(largura: float, altura: float, texto_pagina: str, gerado: bool) -> PdfReader:
+    """Página transparente do tamanho informado com o número da página no canto inferior direito."""
+    saida = BytesIO()
+    tela = Canvas(saida, pagesize=(largura, altura))
+    tela.setFont("Helvetica", 7.5)
+    if gerado:
+        # Cobre o "Página N" original do documento do sistema e escreve o número sequencial no lugar
+        tela.setFillColor(colors.white)
+        tela.rect(largura - 15 * mm - _LARGURA_NUMERO, 7 * mm, _LARGURA_NUMERO, 5 * mm, stroke=0, fill=1)
+        tela.setFillColor(APAGADO)
+        tela.drawRightString(largura - 15 * mm, 9 * mm, texto_pagina)
+    else:
+        # Documento enviado: selo discreto (fundo branco e filete) no canto, fora da área útil comum
+        largura_selo = tela.stringWidth(texto_pagina, "Helvetica", 7.5) + 4 * mm
+        tela.setFillColor(colors.white)
+        tela.setStrokeColor(BORDA)
+        tela.setLineWidth(0.5)
+        tela.rect(largura - 4 * mm - largura_selo, 3 * mm, largura_selo, 4.6 * mm, stroke=1, fill=1)
+        tela.setFillColor(APAGADO)
+        tela.drawRightString(largura - 6 * mm, 4.6 * mm, texto_pagina)
+    tela.save()
+    return PdfReader(BytesIO(saida.getvalue()))
+
+
+def montar_consolidado(partes: Iterable[tuple[bytes | Path, bool]]) -> bytes:
+    """Junta as partes, na ordem, e numera todas as páginas em sequência ("Página X de N").
+
+    Cada parte é (conteúdo, gerado_pelo_sistema). O conteúdo dos documentos enviados não é
+    alterado: só recebem o selo com o número da página, na orientação em que foram enviados.
+    """
+    escritor = PdfWriter()
+    origem: list[bool] = []
+    for conteudo, gerado in partes:
+        leitor = PdfReader(BytesIO(conteudo) if isinstance(conteudo, bytes) else str(conteudo))
+        for pagina in leitor.pages:
+            escritor.add_page(pagina)
+            origem.append(gerado)
+    total = len(escritor.pages)
+    for numero, (pagina, gerado) in enumerate(zip(escritor.pages, origem, strict=True), start=1):
+        # Páginas giradas (/Rotate) têm a rotação aplicada ao conteúdo, para o selo cair no canto certo
+        if pagina.rotation:
+            pagina.transfer_rotation_to_content()
+        caixa = pagina.mediabox
+        selo = _selo_pagina(float(caixa.width), float(caixa.height), f"Página {numero} de {total}", gerado)
+        # A caixa da página pode não começar em (0, 0): o selo é deslocado para a origem dela
+        pagina.merge_transformed_page(selo.pages[0], Transformation().translate(float(caixa.left), float(caixa.bottom)))
+    saida = BytesIO()
+    escritor.write(saida)
+    return saida.getvalue()
+
+
+def contar_paginas(conteudo: bytes | Path) -> int:
+    """Quantidade de páginas de um PDF (em memória ou em disco)."""
+    return len(PdfReader(BytesIO(conteudo) if isinstance(conteudo, bytes) else str(conteudo)).pages)
 
 
 def mesclar_pdfs(partes: Iterable[bytes | Path]) -> bytes:

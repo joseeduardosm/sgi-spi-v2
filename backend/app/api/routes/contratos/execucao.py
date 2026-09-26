@@ -31,7 +31,6 @@ from app.schemas.contratos.execucao import (
     ConclusaoMedicao,
     GravacaoRetencao,
     DetalheCompetencia,
-    GravacaoAssinaturas,
     GravacaoAvaliacaoGestor,
     GravacaoAvaliacaoInicial,
     GravacaoChecklist,
@@ -238,14 +237,14 @@ def salvar_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Gra
 @roteador.post("/competencias/{competencia_id}/medicao/ciencia", response_model=DetalheCompetencia, summary="Registrar minha ciência na medição",
                description="Somente integrantes vigentes da equipe, uma vez por pessoa. Exige a medição salva.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def ciencia_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
-    """Etapa 1: registra a ciência do usuário logado (é preciso ao menos duas, de pessoas diferentes)."""
+    """Etapa 1: registra a ciência do usuário logado (uma ciência já basta para concluir)."""
     with traduzir_erros(sessao):
         competencias.registrar_ciencia(sessao, contrato_id, competencia_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
 @roteador.post("/competencias/{competencia_id}/medicao/concluir", response_model=DetalheCompetencia, summary="Concluir medição e gerar memória",
-               description="Exige ao menos 2 ciências de pessoas diferentes, a mesma seleção de NEs salva e nenhum item acima do saldo "
+               description="Exige ao menos uma ciência de integrante da equipe, a mesma seleção de NEs salva e nenhum item acima do saldo "
                "líquido. Gera a memória de cálculo (nova versão só se os dados mudaram), soma o executado nos itens e avança a etapa. "
                "Em segundo plano, envia à equipe e aos prepostos o e-mail com a memória e o diário de bordo do período em PDF, "
                "pedindo a nota fiscal em até 48 horas.", responses={**NAO_ENCONTRADA, **ESCRITA})
@@ -286,7 +285,8 @@ def avaliacao_inicial(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: 
 
 
 @roteador.put("/competencias/{competencia_id}/avaliacao/gestor", response_model=DetalheCompetencia, summary="Salvar avaliação do gestor",
-              description="Nota do gestor por item (complemento obrigatório abaixo da máxima) e complemento geral. Define a nota final e o % liberado.",
+              description="Só quando alguma nota inicial ficou abaixo da máxima (senão, 400 e vale a nota inicial). Nota do gestor por item "
+              "(complemento obrigatório abaixo da máxima) e complemento geral. Define a nota final e o % liberado.",
               responses={**NAO_ENCONTRADA, **ESCRITA})
 def avaliacao_gestor(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoAvaliacaoGestor, sessao: Session = Depends(obter_sessao),
                      autor: Usuario = Depends(pode_modificar)):
@@ -296,28 +296,19 @@ def avaliacao_gestor(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: G
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
-@roteador.put("/competencias/{competencia_id}/avaliacao/assinaturas", response_model=DetalheCompetencia, summary="Definir assinaturas do ateste",
-              description="Um integrante vigente da equipe por papel (gestor, fiscal administrativo, fiscal técnico).", responses={**NAO_ENCONTRADA, **ESCRITA})
-def assinaturas(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoAssinaturas, sessao: Session = Depends(obter_sessao),
-                autor: Usuario = Depends(pode_modificar)):
-    """Etapa 2: define quem assina o ateste (um integrante por papel)."""
-    with traduzir_erros(sessao):
-        competencias.salvar_assinaturas(sessao, contrato_id, competencia_id, dados, autor)
-        return _depois(sessao, contrato_id, competencia_id, autor)
-
-
 @roteador.post("/competencias/{competencia_id}/avaliacao/ciencia", response_model=DetalheCompetencia, summary="Registrar minha ciência no ateste",
-               description="Somente as pessoas indicadas nas assinaturas.", responses={**NAO_ENCONTRADA, **ESCRITA})
+               description="Qualquer integrante vigente da equipe, uma vez por pessoa, depois das notas fechadas "
+               "(avaliação inicial e, se alguma nota ficou abaixo da máxima, a do gestor). Uma ciência já libera o PDF.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def ciencia_ateste(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):
-    """Etapa 2: ciência de quem foi indicado para assinar o ateste."""
-    # Aqui basta ACL de leitura: a permissão real é estar entre as pessoas indicadas
+    """Etapa 2: ciência de um integrante da equipe no ateste."""
+    # Aqui basta ACL de leitura: a permissão real é integrar a equipe vigente do contrato
     with traduzir_erros(sessao):
         competencias.registrar_ciencia_ateste(sessao, contrato_id, competencia_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
 @roteador.post("/competencias/{competencia_id}/avaliacao/pdf", response_model=DetalheCompetencia, summary="Exportar PDF da avaliação",
-               description="Exige todas as ciências do ateste.", responses={**NAO_ENCONTRADA, **ESCRITA})
+               description="Exige ao menos uma ciência da equipe no ateste (as demais podem ser registradas depois).", responses={**NAO_ENCONTRADA, **ESCRITA})
 def pdf_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Etapa 2: gera o PDF do relatório de avaliação para a contratada assinar."""
     with traduzir_erros(sessao):
@@ -481,8 +472,10 @@ def documento_mensal(contrato_id: uuid.UUID, competencia_id: uuid.UUID, document
 
 
 @roteador.post("/competencias/{competencia_id}/consolidado", response_model=DetalheCompetencia, summary="Gerar documento consolidado",
-               description="Resumo executivo + memória, avaliação assinada, notas fiscais, CADIN e checklist em um único PDF. "
-               "Pode ser gerado de novo até a OB.", responses={**NAO_ENCONTRADA, **ESCRITA})
+               description="Um único PDF na ordem de execução (medição, avaliação, NFs, retenção, CADIN, checklist e, por último, o "
+               "resumo executivo), com contracapa antes de cada documento enviado e páginas numeradas em sequência. "
+               "Gerar novamente (já existe um consolidado) é só do gestor do contrato ou do SuperRoot, inclusive depois da OB (senão, 403).",
+               responses={**NAO_ENCONTRADA, **ESCRITA})
 def consolidado(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Etapa 6: gera o PDF consolidado com todos os documentos da competência."""
     with traduzir_erros(sessao):

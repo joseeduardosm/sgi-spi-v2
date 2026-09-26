@@ -87,7 +87,7 @@
     }
 
     <p class="secao-formulario">Ciências</p>
-    <span class="contador-ciencias" [class.completo]="d.ciencias.length >= d.ciencias_minimas">{{ d.ciencias.length }} de {{ d.ciencias_minimas }} ciências mínimas</span>
+    <span class="contador-ciencias" [class.completo]="d.ciencias.length >= d.ciencias_minimas">{{ d.ciencias.length }} ciência(s) registrada(s) · {{ d.ciencias.length >= d.ciencias_minimas ? 'já pode concluir' : 'falta ao menos uma' }}</span>
     <ul class="lista-ciencias" style="margin-top: 8px">
       @for (c of d.ciencias; track c.usuario_id) {
         <li><span>{{ c.nome }} · {{ papeis[c.papel] }}</span><small>ciência em {{ c.registrada_em | date: 'dd/MM/yyyy HH:mm:ss' }}</small></li>

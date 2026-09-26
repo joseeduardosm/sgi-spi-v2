@@ -67,7 +67,7 @@
               }
             }
             @case ('memoria') {
-              <span class="contador-ciencias" [class.completo]="a.ciencias.length >= a.ciencias_minimas">{{ a.ciencias.length }} de {{ a.ciencias_minimas }} ciências mínimas</span>
+              <span class="contador-ciencias" [class.completo]="a.ciencias.length >= a.ciencias_minimas">{{ a.ciencias.length }} ciência(s) registrada(s) · {{ a.ciencias.length >= a.ciencias_minimas ? 'formalização liberada' : 'falta ao menos uma' }}</span>
               <ul class="lista-ciencias" style="margin-top: 8px">
                 @for (ci of a.ciencias; track ci.usuario_id) { <li><span>{{ ci.nome }} · {{ papeis[ci.papel] }}</span><small>{{ ci.registrada_em | date: 'dd/MM/yyyy HH:mm' }}</small></li> }
               </ul>

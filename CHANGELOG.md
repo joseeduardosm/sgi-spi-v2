@@ -1,7 +1,7 @@
 # Changelog
 
 Todas as mudanças relevantes do contratos-spi ficam registradas aqui, da mais recente para a mais antiga.
-Cada commit atualiza este arquivo na mesma alteração (ver `AGENTS.md`, seção "Commits e changelog").
+Toda alteração é registrada aqui assim que é feita; commit e push só quando o usuário pedir (ver `AGENTS.md`, seção "Changelog e commits").
 
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
@@ -25,6 +25,24 @@ Informe também migrações do banco e endpoints novos ou alterados.
 - **Limpar documento importante:** botão "Limpar" ao lado de "Substituir" na aba Documentos Importantes. O PDF sai do contrato e o documento volta a "Não anexado"; o arquivo fica guardado para auditoria. Endpoint `DELETE /api/contratos/{contrato_id}/documentos/{codigo}` (códigos 1 a 23).
 
 ### Alterado
+- **Uma ciência já basta para avançar** em todas as etapas que pedem ciência da equipe:
+  - **medição:** a conclusão exige uma ciência, e não mais duas de pessoas diferentes;
+  - **aditamento/supressão:** uma ciência libera a memória e a formalização;
+  - **ateste da avaliação:** deixou de ter assinantes indicados por papel e virou **ciência da equipe, como na medição**. Qualquer integrante vigente registra a sua, uma já libera o PDF, e mudar as notas apaga as ciências. Removido o endpoint `PUT .../avaliacao/assinaturas`; `avaliacao.assinaturas` e `assinaturas_definidas_em` deram lugar a `avaliacao.ciencias` (sem migração: a coluna JSON é a mesma);
+  - **painel:** as pendências "registrar sua ciência" somem para todos depois da primeira ciência e voltam a apontar a etapa;
+  - a prorrogação não muda, porque a ciência no parecer já era opcional.
+  - Endpoints com regra alterada: `POST .../medicao/concluir`, `POST .../avaliacao/pdf`, `POST .../alteracoes/{id}/memoria`, anexos `de_acordo`/`termo` e conclusão da alteração. `ciencias_minimas` passa a valer 1.
+- **Avaliação do gestor só quando necessária:** a seção só é habilitada quando alguma nota inicial fica abaixo da máxima. Com todas na máxima, vale a nota inicial, e a ciência no ateste vem logo depois. Novo campo `avaliacao.precisa_avaliacao_gestor`; `PUT .../avaliacao/gestor` responde 400 quando não é necessária.
+- **Painel de contratos:** "Minhas pendências" e "Alertas de risco" viraram resumos clicáveis, só com título e total. A lista das primeiras ocorrências saiu, e o clique abre a tela correspondente em cartões.
+- **Documento consolidado da competência:**
+  - segue a ordem de execução: medição → avaliação (quando houver) → NF → retenção → CADIN → checklist → resumo executivo (agora por último, com a composição do documento e as páginas de cada parte);
+  - cada documento enviado ganha uma contracapa na identidade visual do sistema, dizendo que documento é aquele, quando e por quem foi enviado (nome completo);
+  - as páginas são numeradas em sequência ("Página X de N"), e os documentos enviados mantêm o layout e a orientação originais.
+  - **Gerar novamente** passou a ser do gestor do contrato ou do SuperRoot, inclusive depois da OB; os demais recebem 403. Novo campo `pode_gerar_consolidado_novamente` no detalhe da competência.
+- **Todos os PDFs gerados pelo sistema em A4 paisagem:** avaliação, retenção e parecer de prorrogação, que estavam em retrato, passaram para paisagem.
+- **Módulos → Contratos abre no painel** (`/contratos/painel`), e não mais na carteira. A carteira continua acessível pelos atalhos do módulo, e o item da barra lateral fica destacado em todas as telas de contratos.
+- **Painel, execução orçamentária:** o valor pago agora entra na barra do mês da competência paga, e não no mês em que a OB foi lançada. Assim, a liquidação de 08/2026 paga em setembro aparece em agosto.
+- **Regra do projeto:** toda alteração entra no CHANGELOG na hora, e commit/push só acontecem quando o usuário pedir (`AGENTS.md` e `CLAUDE.md`).
 - **Diário de bordo mais compacto:**
   - cabeçalho do balão numa linha, com selos de data e competência;
   - glosas em chips e balões mais largos;

@@ -2,10 +2,13 @@
 # Este arquivo serve para testar previsão, Notas de Empenho, checklists e as etapas da execução.
 """MVPs 2 a 4: previsão, Notas de Empenho, checklists, competências (etapas 1 a 7), avaliação e reabertura."""
 
+import re
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
 
 import pytest
+from pypdf import PdfReader
 
 from app.services.contratos import calculos
 from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, juntar_nf, restringir_contratos
@@ -156,11 +159,11 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": ordem_notas}
     r = cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     assert r.status_code == 200 and r.json()["total_medido"] == "2105.00" and r.json()["situacao"] == "em_andamento"
-    assert cliente.post(f"{base}/medicao/ciencia", headers=gestora).status_code == 200
+    # Sem nenhuma ciência, a conclusão é recusada; uma ciência já basta para avançar
     r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": ordem_notas}, headers=gestora)
-    assert r.status_code == 400 and "2 ciências" in r.json()["detalhe"]
+    assert r.status_code == 400 and "uma ciência" in r.json()["detalhe"]
     assert cliente.post(f"{base}/medicao/ciencia", headers=admin).status_code == 400  # SuperRoot fora da equipe
-    assert len(cliente.post(f"{base}/medicao/ciencia", headers=fiscal).json()["ciencias"]) == 2
+    assert len(cliente.post(f"{base}/medicao/ciencia", headers=gestora).json()["ciencias"]) == 1
     r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": ordem_notas}, headers=fiscal)
     assert r.status_code == 200, r.text
     detalhe = r.json()
@@ -208,8 +211,33 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     assert r.json()["etapa_atual"] == "ordem_bancaria"
     consolidado = cliente.get(f"{base}/arquivos/{r.json()['consolidado']['anexo_id']}", headers=gestora)
     assert consolidado.content[:5] == b"%PDF-"
+    # Ordem de execução, contracapas antes dos enviados, resumo por último e páginas numeradas em sequência
+    paginas = PdfReader(BytesIO(consolidado.content)).pages
+    textos = [" ".join(pg.extract_text().split()) for pg in paginas]
+    assert all(f"Página {i} de {len(paginas)}" in texto for i, texto in enumerate(textos, start=1))
+    assert "Memória de cálculo" in textos[0] and "Resumo executivo" in textos[-1]
+    # Contracapas ("Documento 2 de 8 · Nota fiscal"): a retenção é gerada pelo sistema e não tem contracapa
+    etapas = [m.group(1) for texto in textos if (m := re.search(r"Documento \d+ de \d+ · (Nota fiscal|CADIN|Checklist)", texto))]
+    assert etapas[0] == "Nota fiscal" and etapas.index("CADIN") < etapas.index("Checklist")
+    # A contracapa diz quando e por quem o arquivo foi enviado
+    assert re.search(r"Enviado em \d{2}/\d{2}/\d{4} \d{2}:\d{2} por \S+", textos[1])
+    # Documentos gerados pelo sistema em paisagem
+    assert float(paginas[0].mediabox.width) > float(paginas[0].mediabox.height)
+    # Gerar novamente: só o gestor do contrato ou o SuperRoot
+    assert cliente.get(base, headers=fiscal).json()["pode_gerar_consolidado_novamente"] is False
+    r = cliente.post(f"{base}/consolidado", headers=fiscal)
+    assert r.status_code == 403 and "gerar novamente" in r.json()["detalhe"]
+    assert cliente.get(base, headers=gestora).json()["pode_gerar_consolidado_novamente"] is True
+    assert cliente.post(f"{base}/consolidado", headers=gestora).status_code == 200
     r = cliente.post(f"{base}/ordem-bancaria", files={"arquivo": ("ob.pdf", PDF)}, headers=gestora)
     assert r.status_code == 200 and r.json()["situacao"] == "concluida"
+    # Painel: o pagamento entra no mês da competência paga (01/2026), e não no mês em que a OB foi lançada
+    meses = cliente.get("/api/contratos/painel", params={"exercicio": 2026}, headers=gestora).json()["execucao"]["meses"]
+    pagos = {m["competencia"][:7]: m["pago"] for m in meses if Decimal(m["pago"])}
+    assert list(pagos) == ["2026-01"]
+    # Depois da OB, o SuperRoot ainda pode gerar novamente (a competência continua concluída)
+    r = cliente.post(f"{base}/consolidado", headers=admin)
+    assert r.status_code == 200 and r.json()["etapa_atual"] == "concluida"
     saldos = {n["numero"]: (n["saldo"], len(n["movimentos"])) for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
     assert saldos == {"2026NE00001": ("0.00", 1), "2026NE00002": ("48895.00", 1)}
 
@@ -277,17 +305,21 @@ def test_avaliacao_libera_pagamento_pela_faixa(cliente, admin, equipe):
     sem_justificativa = {"respostas": [{"item_id": itens[0], "nota": "5"}, {"item_id": itens[1], "nota": "10"}]}
     assert cliente.put(f"{base}/avaliacao/inicial", json=sem_justificativa, headers=fiscal).status_code == 400
     inicial = {"respostas": [{"item_id": itens[0], "nota": "5", "justificativa": "Atrasos"}, {"item_id": itens[1], "nota": "10"}]}
-    assert cliente.put(f"{base}/avaliacao/inicial", json=inicial, headers=fiscal).status_code == 200
+    r = cliente.put(f"{base}/avaliacao/inicial", json=inicial, headers=fiscal)
+    assert r.status_code == 200 and r.json()["avaliacao"]["precisa_avaliacao_gestor"] is True
+    # Com nota abaixo da máxima, a ciência no ateste espera a avaliação do gestor
+    assert cliente.post(f"{base}/avaliacao/ciencia", headers=gestora).status_code == 400
     gestor = {"respostas": [{"item_id": itens[0], "nota": "5", "justificativa": "Confirmo"}, {"item_id": itens[1], "nota": "10"}], "complemento": "Ok"}
     r = cliente.put(f"{base}/avaliacao/gestor", json=gestor, headers=gestora).json()
     assert r["avaliacao"]["nota_final"] == "7.50" and r["percentual_autorizado"] == "90.00" and r["valor_autorizado"] == "1894.50"
 
-    ids = {m["login"]: m["usuario_id"] for m in cliente.get(_url(contrato), headers=gestora).json()["equipe"]}
-    assinaturas = {"assinaturas": [{"papel": "gestor", "usuario_id": ids["gestora"]}, {"papel": "fiscal_tecnico", "usuario_id": ids["fiscal"]}]}
-    assert cliente.put(f"{base}/avaliacao/assinaturas", json=assinaturas, headers=gestora).status_code == 200
+    # Ateste: ciências da equipe, como na medição (sem indicar assinantes); uma já libera o PDF
     assert cliente.post(f"{base}/avaliacao/pdf", headers=gestora).status_code == 400
-    cliente.post(f"{base}/avaliacao/ciencia", headers=gestora)
-    cliente.post(f"{base}/avaliacao/ciencia", headers=fiscal)
+    assert cliente.post(f"{base}/avaliacao/ciencia", headers=admin).status_code == 400  # SuperRoot fora da equipe
+    ciencias = cliente.post(f"{base}/avaliacao/ciencia", headers=gestora).json()["avaliacao"]["ciencias"]
+    assert [(c["nome"], c["papel"]) for c in ciencias] == [(ciencias[0]["nome"], "gestor")]
+    # Repetir a ciência não duplica
+    assert len(cliente.post(f"{base}/avaliacao/ciencia", headers=gestora).json()["avaliacao"]["ciencias"]) == 1
     assert cliente.post(f"{base}/avaliacao/pdf", headers=gestora).json()["avaliacao"]["pdf_gerado"] is not None
     r = cliente.post(f"{base}/avaliacao/assinada", files={"arquivo": ("assinada.pdf", PDF)}, headers=gestora)
     assert r.json()["etapa_atual"] == "nota_fiscal"
@@ -352,3 +384,35 @@ def test_checklist_com_documentos_obrigatorios_e_opcionais(cliente, admin, equip
     r = cliente.post(f"{base}/checklist/concluir", headers=gestora)
     assert r.status_code == 200 and r.json()["etapa_atual"] == "consolidado"
     assert cliente.post(f"{base}/consolidado", headers=gestora).status_code == 200
+
+
+def test_avaliacao_toda_na_maxima_dispensa_o_gestor(cliente, admin, equipe):
+    """Notas iniciais todas na máxima: sem avaliação do gestor, a nota inicial vale e a ciência já pode ser dada."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    formularios = cliente.post(_url(contrato, "/formularios"), json=FORMULARIO, headers=gestora).json()
+    cliente.post(_url(contrato, f"/formularios/{formularios[0]['id']}/ativar"), headers=gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
+    cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).json()["etapa_atual"] == "avaliacao"
+
+    itens = [i["id"] for g in competencia["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
+    maxima = {"respostas": [{"item_id": i, "nota": "10"} for i in itens]}
+    r = cliente.put(f"{base}/avaliacao/inicial", json=maxima, headers=fiscal).json()
+    assert r["avaliacao"]["precisa_avaliacao_gestor"] is False and r["avaliacao"]["nota_final"] == "10.00"
+    gestor = {"respostas": [{"item_id": i, "nota": "10"} for i in itens], "complemento": ""}
+    r = cliente.put(f"{base}/avaliacao/gestor", json=gestor, headers=gestora)
+    assert r.status_code == 400 and "não é necessária" in r.json()["detalhe"]
+    # A ciência vem direto depois da avaliação inicial
+    r = cliente.post(f"{base}/avaliacao/ciencia", headers=fiscal)
+    assert r.status_code == 200 and len(r.json()["avaliacao"]["ciencias"]) == 1
+    # Mudar as notas apaga as ciências e, com nota abaixo da máxima, volta a exigir o gestor
+    inicial = {"respostas": [{"item_id": itens[0], "nota": "5", "justificativa": "Atrasos"}, {"item_id": itens[1], "nota": "10"}]}
+    r = cliente.put(f"{base}/avaliacao/inicial", json=inicial, headers=fiscal).json()
+    assert r["avaliacao"]["precisa_avaliacao_gestor"] is True and r["avaliacao"]["ciencias"] == []
+    assert cliente.post(f"{base}/avaliacao/ciencia", headers=fiscal).status_code == 400

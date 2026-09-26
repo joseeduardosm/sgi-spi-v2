@@ -294,7 +294,7 @@ class ItemAlteracao(Base):
 
 
 class CienciaAlteracao(Base):
-    """Ciência de um integrante da equipe na alteração (mínimo de 2 pessoas diferentes)."""
+    """Ciência de um integrante da equipe na alteração (uma ciência já basta para avançar)."""
     __tablename__ = "contratos_alteracoes_ciencias"
     __table_args__ = (UniqueConstraint("alteracao_id", "usuario_id"),)
 

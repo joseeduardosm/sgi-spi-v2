@@ -357,14 +357,6 @@ class RespostaAvaliacao(BaseModel):
     justificativa: Texto = Field("", max_length=4000)
 
 
-class AssinaturaAteste(BaseModel):
-    """Pessoa indicada para assinar o ateste em um papel, e quando deu ciência."""
-    papel: Literal["gestor", "fiscal_administrativo", "fiscal_tecnico"]
-    usuario_id: int
-    nome: str = ""
-    ciencia_em: datetime | None = None
-
-
 class LeituraAvaliacao(BaseModel):
     """Avaliação da competência (etapa 2)."""
     definicao: dict[str, Any]
@@ -375,8 +367,12 @@ class LeituraAvaliacao(BaseModel):
     avaliacao_gestor_em: datetime | None
     nota_final: ValorMonetario | None
     percentual_liberado: ValorMonetario | None
-    assinaturas: list[AssinaturaAteste]
-    assinaturas_definidas_em: datetime | None
+    precisa_avaliacao_gestor: bool = Field(
+        ..., description="Verdadeiro quando alguma nota inicial ficou abaixo da máxima; só então a avaliação do gestor é feita."
+    )
+    ciencias: list[LeituraCiencia] = Field(
+        ..., description="Ciências da equipe no ateste (qualquer integrante vigente; `ciencias_minimas` já libera o PDF)."
+    )
     pdf_gerado: LeituraArquivo | None
     pdf_assinado: LeituraArquivo | None
     concluida_em: datetime | None
@@ -391,6 +387,9 @@ class DetalheCompetencia(ResumoCompetencia):
     etapas: list[Etapa] = Field(..., description="Etapas desta competência, em ordem (sem `avaliacao` se não houver formulário).")
     pode_editar: bool
     integra_equipe: bool = Field(..., description="O usuário pode registrar ciência.")
+    pode_gerar_consolidado_novamente: bool = Field(
+        ..., description="O usuário pode substituir o consolidado já gerado (gestor do contrato ou SuperRoot)."
+    )
     liberada: bool = Field(..., description="O período terminou; a medição pode ser feita.")
     itens: list[LeituraItemMedicao]
     total_previsto: ValorMonetario
@@ -457,11 +456,6 @@ class GravacaoAvaliacaoGestor(BaseModel):
     """Corpo do `PUT /avaliacao/gestor`."""
     respostas: list[RespostaAvaliacao]
     complemento: Texto = Field("", max_length=4000)
-
-
-class GravacaoAssinaturas(BaseModel):
-    """Corpo do `PUT /avaliacao/assinaturas`."""
-    assinaturas: list[AssinaturaAteste] = Field(..., min_length=1)
 
 
 class Reabertura(BaseModel):

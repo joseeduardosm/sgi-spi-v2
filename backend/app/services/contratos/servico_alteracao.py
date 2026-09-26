@@ -3,7 +3,7 @@
 """Aditamento e supressão de quantidades (tela 7).
 
 Abas em sequência: 1 justificativa técnica → 2 quantitativos (impacto em R$ e %) → 3 memória e
-ciências (mínimo de 2 pessoas) → 4 formalização (De Acordo da contratada, consolidado, termo) e
+ciências (basta uma) → 4 formalização (De Acordo da contratada, consolidado, termo) e
 conclusão, que aplica as novas quantidades. Uma alteração em andamento por vez.
 """
 
@@ -196,7 +196,7 @@ def anexar(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UUID, tip
         raise RegistroNaoEncontrado("Tipo de documento")
     # De Acordo e Termo só depois das ciências mínimas
     if tipo_documento in ("de_acordo", "termo") and len(alteracao.ciencias) < CIENCIAS_MINIMAS:
-        raise ErroRegraContrato("A formalização é liberada depois das ciências mínimas.")
+        raise ErroRegraContrato("A formalização é liberada depois de ao menos uma ciência da equipe.")
     coluna, categoria = DOCUMENTOS[tipo_documento]
     anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, categoria, autor.id, contrato_id=contrato.id)
     sessao.flush()
@@ -292,7 +292,7 @@ def gerar_memoria(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UU
     exigir_edicao(sessao, contrato, autor)
     alteracao, alteracoes = _em_andamento(sessao, contrato, alteracao_id)
     if len(alteracao.ciencias) < CIENCIAS_MINIMAS:
-        raise ErroRegraContrato(f"A memória é liberada com ao menos {CIENCIAS_MINIMAS} ciências de pessoas diferentes.")
+        raise ErroRegraContrato("A memória é liberada com ao menos uma ciência de integrante da equipe.")
     rotulo = "Aditamento" if alteracao.tipo == "aditamento" else "Supressão"
     documento = DocumentoPdf(f"Memória de cálculo — {rotulo}", f"Contrato {contrato.numero} · {alteracao.sequencia_vigencia}ª vigência",
                              paisagem=True, autor=autor.nome_completo or autor.login)
@@ -347,7 +347,7 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UUID, a
     exigir_edicao(sessao, contrato, autor)
     alteracao, alteracoes = _em_andamento(sessao, contrato, alteracao_id)
     if len(alteracao.ciencias) < CIENCIAS_MINIMAS:
-        raise ErroRegraContrato(f"A conclusão exige ao menos {CIENCIAS_MINIMAS} ciências de pessoas diferentes.")
+        raise ErroRegraContrato("A conclusão exige ao menos uma ciência de integrante da equipe.")
     if _acumulado(contrato, alteracoes, alteracao) > LIMITE_SEM_AUTORIZACAO and alteracao.autorizacao_anexo_id is None:
         raise ErroRegraContrato("Acima de 25%: anexe a autorização do Ordenador de Despesa.")
     faltando = [n for n, c in (("De Acordo da contratada", "de_acordo_anexo_id"), ("Termo Aditivo assinado", "termo_anexo_id")) if getattr(alteracao, c) is None]

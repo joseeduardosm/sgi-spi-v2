@@ -99,7 +99,14 @@ COLUNAS_ITENS = {
     "qtd mensal": ("quantidade_mensal", "QTD MENSAL"),
     "qtd na vigencia": ("quantidade_total", "QTD NA VIGÊNCIA"),
     "valor unitario": ("valor_unitario", "VALOR UNITÁRIO"),
+    # Opcional (o modelo antigo não tem): Unidade de Fornecimento
+    "uf": ("unidade_fornecimento", "UF"),
+    "unidade de fornecimento": ("unidade_fornecimento", "UF"),
+    "unidade de fornecimento - uf": ("unidade_fornecimento", "UF"),
+    "unidade de fornecimento (uf)": ("unidade_fornecimento", "UF"),
 }
+# Colunas que podem faltar na planilha
+COLUNAS_OPCIONAIS = {"unidade_fornecimento"}
 
 PERIODICIDADES = {"mensal": 1, "bimestral": 2, "trimestral": 3, "semestral": 6, "anual": 12}
 MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
@@ -341,7 +348,7 @@ def _ler_itens(folha, linha_titulos: int, leitura: Leitura) -> None:
         if titulo in COLUNAS_ITENS:
             chave, rotulo = COLUNAS_ITENS[titulo]
             colunas.setdefault(chave, (coluna, rotulo))
-    faltando = [r for c, r in {v[0]: v[1] for v in COLUNAS_ITENS.values()}.items() if c not in colunas]
+    faltando = [r for c, r in {v[0]: v[1] for v in COLUNAS_ITENS.values()}.items() if c not in colunas and c not in COLUNAS_OPCIONAIS]
     if faltando:
         leitura.erro("Itens", "Colunas não encontradas na tabela de itens: " + ", ".join(faltando) + ".", linha_titulos)
         return
@@ -403,6 +410,7 @@ def _item_para_gravacao(item: dict[str, Any]) -> dict[str, Any]:
         "descricao": item["descricao"],
         "tipo": item.get("tipo") or "",
         "calcula_pro_rata": item.get("calcula_pro_rata") if item.get("calcula_pro_rata") is not None else True,
+        "unidade_fornecimento": _vazio(item.get("unidade_fornecimento")),
         "codigo_classe": _vazio(item.get("codigo_classe")),
         "codigo_natureza_despesa": _vazio(item.get("codigo_natureza_despesa")),
         "codigo_siafisico": _vazio(item.get("codigo_siafisico")),

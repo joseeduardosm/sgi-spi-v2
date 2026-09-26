@@ -131,6 +131,8 @@ export interface ItemContrato {
   descricao: string;
   tipo: TipoItem;
   calcula_pro_rata: boolean;
+  /** Unidade de Fornecimento (UF), ex.: posto, hora, unidade. */
+  unidade_fornecimento: string;
   codigo_classe: string;
   codigo_natureza_despesa: string;
   codigo_siafisico: string;
@@ -206,6 +208,8 @@ export interface GravacaoItem {
   descricao: string;
   tipo: TipoItem;
   calcula_pro_rata: boolean;
+  /** Unidade de Fornecimento (UF), ex.: posto, hora, unidade. */
+  unidade_fornecimento: string;
   codigo_classe: string;
   codigo_natureza_despesa: string;
   codigo_siafisico: string;
@@ -956,6 +960,7 @@ export interface ItemPreviaImportacao {
   descricao: string;
   tipo: TipoItem | null;
   calcula_pro_rata: boolean | null;
+  unidade_fornecimento: string;
   codigo_classe: string;
   codigo_natureza_despesa: string;
   codigo_siafisico: string;

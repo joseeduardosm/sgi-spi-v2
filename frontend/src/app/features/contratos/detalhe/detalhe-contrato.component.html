@@ -92,7 +92,7 @@
           <table class="tabela-gestao">
             <thead>
               <tr>
-                <th>Item</th><th>Descrição</th><th>Tipo</th><th>Faturamento</th><th>Classe</th><th>ND</th><th>SIAFÍSICO</th><th>CATMAT/CATSER</th>
+                <th>Item</th><th>Descrição</th><th>UF</th><th>Tipo</th><th>Faturamento</th><th>Classe</th><th>ND</th><th>SIAFÍSICO</th><th>CATMAT/CATSER</th>
                 <th class="num">Qtd. total</th><th class="num">Qtd. mensal</th><th class="num">Executada</th><th class="num">Disponível</th>
                 <th class="num">Valor unitário</th><th class="num">Subtotal mensal</th><th class="num">Vigência</th>
               </tr>
@@ -100,7 +100,7 @@
             <tbody>
               @for (i of c.itens; track i.id) {
                 <tr>
-                  <td>{{ i.ordem }}</td><td><strong>{{ i.descricao }}</strong></td><td>{{ rotulosTipo[i.tipo] }}</td>
+                  <td>{{ i.ordem }}</td><td><strong>{{ i.descricao }}</strong></td><td>{{ i.unidade_fornecimento || '—' }}</td><td>{{ rotulosTipo[i.tipo] }}</td>
                   <td>{{ i.calcula_pro_rata ? 'Com pró-rata' : 'Sempre integral' }}</td>
                   <td>{{ i.codigo_classe }}</td><td>{{ i.codigo_natureza_despesa }}</td><td>{{ i.codigo_siafisico }}</td><td>{{ i.codigo_catmat_catser }}</td>
                   <td class="num">{{ i.quantidade_total | quantidade }}</td>

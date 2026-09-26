@@ -69,6 +69,7 @@ class ItemPrevia(BaseModel):
     descricao: str
     tipo: str | None = Field(None, description="`continuo` ou `sob_demanda`.")
     calcula_pro_rata: bool | None = None
+    unidade_fornecimento: str = Field("", description="Unidade de Fornecimento (UF), se a planilha tiver a coluna.")
     codigo_classe: str = ""
     codigo_natureza_despesa: str = ""
     codigo_siafisico: str = ""

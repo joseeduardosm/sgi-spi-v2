@@ -296,6 +296,44 @@ a.acao-primaria {
   grid-template-columns: repeat(3, 1fr);
 }
 
+/* Grade de 4 colunas do cadastro do contrato; .ocupa-N ocupa N colunas */
+.grade-formulario.quatro-colunas {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+
+  .ocupa-2 { grid-column: span 2; }
+  .ocupa-3 { grid-column: span 3; }
+  .ocupa-4 { grid-column: 1 / -1; }
+}
+
+/* Primeiro subtítulo do bloco sem a linha divisória de cima */
+.cartao-dados .corpo > .secao-formulario:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Campo calculado pelo sistema: só leitura, visualmente diferente dos editáveis */
+.grade-formulario .campo-calculado {
+  label span {
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: #eff0f2;
+    color: #7c8998;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  input {
+    border-style: dashed;
+    background: #f6f7f8;
+    color: #361a1c;
+    font-weight: 700;
+    cursor: default;
+  }
+}
+
 /* Barra superior fixa com o botão principal (cadastro/edição) */
 .barra-fixa {
   position: sticky;
@@ -777,6 +815,13 @@ a.acao-primaria {
   .duas-colunas,
   .grade-formulario.tres-colunas {
     grid-template-columns: 1fr;
+  }
+
+  /* Em telas médias, 4 colunas viram 2; blocos de 3 ocupam a linha inteira */
+  .grade-formulario.quatro-colunas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    .ocupa-3 { grid-column: 1 / -1; }
   }
 }
 
@@ -1389,4 +1434,14 @@ a.acao-primaria {
 .arquivos-nf {
   flex-wrap: wrap;
   gap: 8px 14px;
+}
+
+/* Em celulares, a grade de 4 colunas vira uma só */
+@media (max-width: 575px) {
+  .grade-formulario.quatro-colunas {
+    grid-template-columns: 1fr;
+
+    .ocupa-2,
+    .ocupa-3 { grid-column: 1 / -1; }
+  }
 }

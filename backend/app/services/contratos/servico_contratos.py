@@ -71,7 +71,7 @@ CAMPOS_AUDITADOS = (
 CAMPOS_ITEM_IMUTAVEIS = ("descricao", "tipo", "calcula_pro_rata")
 # Campos do item que podem ser editados a qualquer momento (até a geração das competências)
 CAMPOS_ITEM_EDITAVEIS = (
-    "codigo_classe", "codigo_natureza_despesa", "codigo_siafisico", "codigo_catmat_catser",
+    "unidade_fornecimento", "codigo_classe", "codigo_natureza_despesa", "codigo_siafisico", "codigo_catmat_catser",
     "quantidade_mensal", "quantidade_total", "valor_unitario",
 )
 
@@ -281,6 +281,7 @@ def leitura_itens(contrato: Contrato) -> list[LeituraItem]:
                 descricao=item.descricao,
                 tipo=item.tipo,
                 calcula_pro_rata=item.calcula_pro_rata,
+                unidade_fornecimento=item.unidade_fornecimento,
                 codigo_classe=item.codigo_classe,
                 codigo_natureza_despesa=item.codigo_natureza_despesa,
                 codigo_siafisico=item.codigo_siafisico,

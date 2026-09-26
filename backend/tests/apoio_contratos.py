@@ -45,6 +45,7 @@ def item(descricao: str = "Limpeza", tipo: str = "continuo", **extras) -> dict:
         "descricao": descricao,
         "tipo": tipo,
         "calcula_pro_rata": True,
+        "unidade_fornecimento": "posto",
         "codigo_classe": "01",
         "codigo_natureza_despesa": "339039",
         "codigo_siafisico": "123",

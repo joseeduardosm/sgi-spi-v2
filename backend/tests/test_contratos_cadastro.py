@@ -110,6 +110,7 @@ def test_cadastro_calcula_data_final_e_valor_global(cliente, admin):
     assert contrato["numero"] == "001/2026" and contrato["data_fim"] == "2026-12-31"
     assert contrato["base_mensal"] == "2000.00" and contrato["valor_global"] == "25050.00"
     assert [i["ordem"] for i in contrato["itens"]] == [1, 2]
+    assert contrato["itens"][0]["unidade_fornecimento"] == "posto"
     assert contrato["itens"][0]["quantidade_total"] == "24.0000" and contrato["itens"][1]["quantidade_total"] == "100.0000"
     assert contrato["equipe"] == [{**contrato["equipe"][0], "papel": "gestor", "usuario_id": usuario_id, "login": "gestora"}]
     assert contrato["permissoes"] == {"pode_editar": True, "pode_excluir": True}

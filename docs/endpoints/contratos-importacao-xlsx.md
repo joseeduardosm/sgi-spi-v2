@@ -43,7 +43,7 @@ Modelo: `backend/app/recursos/modelo-importacao-contrato.xlsx`, disponível em `
 | Gestor, Fiscais e suplentes (22–27) | — | **Não importados.** Se preenchidos, geram aviso: a equipe é cadastrada depois, editando o contrato |
 
 **Itens.**
-- A tabela começa na linha com **Descrição** na coluna A. As colunas são achadas pelo título: Descrição, Tipo, Faturamento, Classe, ND, SIAFISICO (BEC), CATMAT/CATSER, QTD MENSAL, QTD NA VIGÊNCIA e VALOR UNITÁRIO.
+- A tabela começa na linha com **Descrição** na coluna A. As colunas são achadas pelo título: Descrição, Tipo, Faturamento, Classe, ND, SIAFISICO (BEC), CATMAT/CATSER, QTD MENSAL, QTD NA VIGÊNCIA, VALOR UNITÁRIO e UF (opcional).
 - Entram só as linhas com descrição. As linhas de legenda do modelo (Contínuo/Sob demanda, Pró-rata/Sempre Integral) são ignoradas.
 
 | Coluna | Regra |
@@ -54,6 +54,7 @@ Modelo: `backend/app/recursos/modelo-importacao-contrato.xlsx`, disponível em `
 | QTD MENSAL | Contínuo: maior que zero. Sob demanda: estimativa (pode ficar vazia) |
 | QTD NA VIGÊNCIA | Sob demanda: teto da vigência inicial, maior que zero. Contínuo: ignorada (calculada) |
 | VALOR UNITÁRIO | Número do Excel ou formato brasileiro (`1.234,56`, `R$ 10,50`) |
+| UF | Opcional (coluna K do modelo): Unidade de Fornecimento do item. Planilhas sem essa coluna continuam aceitas |
 
 **Empresa e preposto existentes.**
 - CNPJ já cadastrado: a empresa é **reaproveitada sem alteração**. Dados diferentes na planilha viram **avisos**.

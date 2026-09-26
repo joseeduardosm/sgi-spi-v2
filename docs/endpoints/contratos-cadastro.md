@@ -55,7 +55,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 | `itens` | `GravacaoItem[]` | não | Lista completa, na ordem de exibição |
 | `versao` | integer | no `PUT` | Versão lida no detalhe |
 
-`GravacaoItem`: `id` (nulo = novo), `descricao` (1 a 1000), `tipo` (`continuo`/`sob_demanda`), `calcula_pro_rata` (`true` = com pró-rata, `false` = sempre integral), `codigo_classe`, `codigo_natureza_despesa`, `codigo_siafisico`, `codigo_catmat_catser` (obrigatórios, até 80), `quantidade_mensal`, `quantidade_total` (até 4 casas), `valor_unitario` (2 casas).
+`GravacaoItem`: `id` (nulo = novo), `descricao` (1 a 1000), `tipo` (`continuo`/`sob_demanda`), `calcula_pro_rata` (`true` = com pró-rata, `false` = sempre integral), `unidade_fornecimento` (Unidade de Fornecimento - UF, opcional, até 50), `codigo_classe`, `codigo_natureza_despesa`, `codigo_siafisico`, `codigo_catmat_catser` (obrigatórios, até 80), `quantidade_mensal`, `quantidade_total` (até 4 casas), `valor_unitario` (2 casas).
 
 ### Respostas
 

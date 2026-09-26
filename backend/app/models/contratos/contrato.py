@@ -162,6 +162,8 @@ class ItemContrato(Base):
     codigo_natureza_despesa: Mapped[str] = mapped_column(String(80), default="")
     codigo_siafisico: Mapped[str] = mapped_column(String(80), default="")
     codigo_catmat_catser: Mapped[str] = mapped_column(String(80), default="")
+    # Unidade de Fornecimento (UF): como o item é medido e faturado (ex.: "posto", "hora", "unidade")
+    unidade_fornecimento: Mapped[str] = mapped_column(String(50), default="", server_default="")
     # Contínuo: quantidade de todo mês
     quantidade_mensal: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal(0))
     # Sob demanda: teto da vigência inicial. Contínuo: não usado (mensal × meses)

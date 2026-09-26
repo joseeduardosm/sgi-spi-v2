@@ -16,69 +16,89 @@
 
     <section class="cartao-dados" aria-labelledby="bloco-dados">
       <header><h2 id="bloco-dados">Dados do contrato</h2></header>
-      <div class="corpo grade-formulario tres-colunas">
-        <div>
-          <label for="numero">Número do contrato *</label>
-          <input id="numero" name="numero" required pattern="^\d{1,4}/\d{4}$" placeholder="NNN/AAAA" [(ngModel)]="dados.numero" />
-        </div>
-        <div class="ocupa-duas" style="grid-column: span 2">
-          <label for="empresa">Empresa contratada *</label>
-          <select id="empresa" name="empresa" required [(ngModel)]="dados.empresa_id">
-            <option value="" disabled>Selecione</option>
-            @for (e of empresas(); track e.id) {
-              @if (e.ativa || e.id === dados.empresa_id) {
-                <option [value]="e.id">{{ e.razao_social }}{{ e.nome_fantasia ? ' (' + e.nome_fantasia + ')' : '' }}{{ e.ativa ? '' : ' — inativa' }}</option>
+      <div class="corpo">
+        <!-- 1. Identificação: quem é a contratada e como o contrato será reconhecido -->
+        <p class="secao-formulario">Identificação</p>
+        <div class="grade-formulario quatro-colunas">
+          <div class="ocupa-3">
+            <label for="empresa">Empresa contratada *</label>
+            <select id="empresa" name="empresa" required [(ngModel)]="dados.empresa_id">
+              <option value="" disabled>Selecione a empresa</option>
+              @for (e of empresas(); track e.id) {
+                @if (e.ativa || e.id === dados.empresa_id) {
+                  <option [value]="e.id">{{ e.razao_social }}{{ e.nome_fantasia && e.nome_fantasia !== e.razao_social ? ' (' + e.nome_fantasia + ')' : '' }}{{ e.ativa ? '' : ' — inativa' }}</option>
+                }
               }
+            </select>
+            @if (!empresas().length) {
+              <p class="dica-formulario">Nenhuma empresa cadastrada. <a routerLink="/contratos/empresas/nova">Cadastre a empresa</a> antes do contrato.</p>
             }
-          </select>
+          </div>
+          <div>
+            <label for="numero">Número do contrato *</label>
+            <input id="numero" name="numero" required pattern="^\d{1,4}/\d{4}$" placeholder="NNN/AAAA" [(ngModel)]="dados.numero" />
+            @if (!original()) { <p class="dica-formulario">Sugerido pelo ano da data inicial.</p> }
+          </div>
+          <div class="ocupa-4">
+            <label for="apelido">Apelido</label>
+            <input id="apelido" name="apelido" maxlength="200" placeholder="Nome curto para achar o contrato na carteira (ex.: Limpeza da sede)" [(ngModel)]="dados.apelido" />
+          </div>
+          <div class="ocupa-4">
+            <label for="objeto">Objeto *</label>
+            <textarea id="objeto" name="objeto" required maxlength="4000" placeholder="Descrição do objeto, como consta no contrato assinado" [(ngModel)]="dados.objeto"></textarea>
+          </div>
         </div>
-        <div>
-          <label for="apelido">Apelido</label>
-          <input id="apelido" name="apelido" maxlength="200" [(ngModel)]="dados.apelido" />
+
+        <!-- 2. Vigência: do início ao fim, na ordem em que o usuário pensa o prazo -->
+        <p class="secao-formulario">Vigência</p>
+        <div class="grade-formulario quatro-colunas">
+          <div>
+            <label for="data-inicio">Data inicial *</label>
+            <input id="data-inicio" name="data_inicio" type="date" required [disabled]="datasBloqueadas()" [(ngModel)]="dados.data_inicio" (change)="sugerirNumero()" />
+          </div>
+          <div>
+            <label for="vigencia-inicial">Vigência (meses) *</label>
+            <input id="vigencia-inicial" name="vigencia_inicial" type="number" min="1" max="600" required [disabled]="datasBloqueadas()" [(ngModel)]="dados.vigencia_inicial_meses" />
+          </div>
+          <div class="campo-calculado">
+            <label for="data-final">Data final <span>calculada</span></label>
+            <input id="data-final" name="data_final" [value]="dataFinal()" readonly tabindex="-1" />
+          </div>
+          <div>
+            <label for="vigencia-maxima">Vigência máxima (meses) *</label>
+            <input id="vigencia-maxima" name="vigencia_maxima" type="number" min="1" max="600" required [(ngModel)]="dados.vigencia_maxima_meses" />
+            <p class="dica-formulario">Limite com prorrogações: {{ dataLimite() }}</p>
+          </div>
         </div>
-        <div>
-          <label for="data-inicio">Data inicial *</label>
-          <input id="data-inicio" name="data_inicio" type="date" required [disabled]="datasBloqueadas()" [(ngModel)]="dados.data_inicio" (change)="sugerirNumero()" />
-        </div>
-        <div>
-          <label for="data-final">Data final calculada</label>
-          <input id="data-final" name="data_final" [value]="dataFinal()" disabled />
-        </div>
-        <div>
-          <label for="vigencia-inicial">Vigência inicial (meses) *</label>
-          <input id="vigencia-inicial" name="vigencia_inicial" type="number" min="1" max="600" required [disabled]="datasBloqueadas()" [(ngModel)]="dados.vigencia_inicial_meses" />
-        </div>
-        <div>
-          <label for="vigencia-maxima">Vigência máxima (meses) *</label>
-          <input id="vigencia-maxima" name="vigencia_maxima" type="number" min="1" max="600" required [(ngModel)]="dados.vigencia_maxima_meses" />
-        </div>
-        <div>
-          <label for="periodicidade">Periodicidade de execução *</label>
-          <select id="periodicidade" name="periodicidade" [(ngModel)]="dados.periodicidade_meses">
-            @for (p of periodicidades; track p.valor) { <option [ngValue]="p.valor">{{ p.rotulo }}</option> }
-          </select>
-        </div>
-        <div>
-          <label for="mes-reajuste">Mês de reajuste *</label>
-          <select id="mes-reajuste" name="mes_reajuste" [(ngModel)]="dados.mes_reajuste">
-            @for (m of meses; track $index) { <option [ngValue]="$index + 1">{{ m }}</option> }
-          </select>
-        </div>
-        <div>
-          <label for="situacao-forcada">Situação</label>
-          <select id="situacao-forcada" name="situacao_forcada" [(ngModel)]="dados.situacao_forcada">
-            <option [ngValue]="null">Automática (pelas datas)</option>
-            @for (s of situacoes; track s[0]) { <option [ngValue]="s[0]">{{ s[1] }} (forçada)</option> }
-          </select>
-        </div>
-        <div style="grid-column: 1 / -1">
-          <label for="objeto">Objeto *</label>
-          <textarea id="objeto" name="objeto" required maxlength="4000" [(ngModel)]="dados.objeto"></textarea>
+        @if (datasBloqueadas()) {
+          <p class="dica-formulario">Depois de uma prorrogação, a data inicial e a vigência ficam bloqueadas.</p>
+        }
+
+        <!-- 3. Execução e reajuste: regras que valem durante a vigência -->
+        <p class="secao-formulario">Execução e reajuste</p>
+        <div class="grade-formulario quatro-colunas">
+          <div>
+            <label for="periodicidade">Periodicidade de execução *</label>
+            <select id="periodicidade" name="periodicidade" [(ngModel)]="dados.periodicidade_meses">
+              @for (p of periodicidades; track p.valor) { <option [ngValue]="p.valor">{{ p.rotulo }}</option> }
+            </select>
+          </div>
+          <div>
+            <label for="mes-reajuste">Mês de reajuste *</label>
+            <select id="mes-reajuste" name="mes_reajuste" [(ngModel)]="dados.mes_reajuste">
+              @for (m of meses; track $index) { <option [ngValue]="$index + 1">{{ m }}</option> }
+            </select>
+          </div>
+          <div class="ocupa-2">
+            <label for="situacao-forcada">Situação</label>
+            <select id="situacao-forcada" name="situacao_forcada" [(ngModel)]="dados.situacao_forcada">
+              <option [ngValue]="null">Automática (pelas datas)</option>
+              @for (s of situacoes; track s[0]) { <option [ngValue]="s[0]">{{ s[1] }} (forçada)</option> }
+            </select>
+            <p class="dica-formulario">Deixe automática; force só em casos excepcionais (ex.: contrato suspenso).</p>
+          </div>
         </div>
       </div>
-      @if (datasBloqueadas()) {
-        <p class="dica-formulario" style="margin: -8px 22px 16px">Depois de uma prorrogação, a data inicial e a vigência inicial ficam bloqueadas.</p>
-      }
     </section>
 
     <section class="cartao-dados" aria-labelledby="bloco-sei">
@@ -120,7 +140,7 @@
         <table class="tabela-gestao tabela-itens-contrato">
           <thead>
             <tr>
-              <th>Item</th><th>Descrição</th><th>Tipo</th><th>Códigos</th>
+              <th>Item</th><th>Descrição</th><th>UF</th><th>Tipo</th><th>Códigos</th>
               <th class="num">Qtd. mensal</th><th class="num">Qtd. total</th><th class="num">Valor unitário</th><th class="num">Subtotal mensal</th>
               <th class="coluna-acoes">Ações</th>
             </tr>
@@ -130,10 +150,12 @@
               <tr [attr.draggable]="!itensBloqueados()" (dragstart)="aoArrastar($index)" (dragover)="$event.preventDefault()" (drop)="aoSoltar($index)">
                 <td>{{ $index + 1 }}</td>
                 <td><strong>{{ i.descricao }}</strong></td>
+                <td>{{ i.unidade_fornecimento || '—' }}</td>
                 <td>{{ tipoItem(i.tipo) }}<small>{{ i.calcula_pro_rata ? 'Com pró-rata' : 'Sempre integral' }}</small></td>
                 <td class="codigos-item"><small>Classe {{ i.codigo_classe }} · ND {{ i.codigo_natureza_despesa }}</small><small>SIAFÍSICO {{ i.codigo_siafisico }} · CATMAT/CATSER {{ i.codigo_catmat_catser }}</small></td>
                 <td class="num">{{ numero(i.quantidade_mensal) | quantidade }}</td>
-                <td class="num">{{ i.tipo === 'sob_demanda' ? (numero(i.quantidade_total) | quantidade) : '—' }}</td>
+                <!-- Contínuo: mensal × meses da vigência; sob demanda: o limite informado -->
+                <td class="num">{{ quantidadeTotal(i) | quantidade }}@if (i.tipo === 'continuo') { <small>{{ mesesVigencia() }} meses</small> }</td>
                 <td class="num">{{ numero(i.valor_unitario) | moeda }}</td>
                 <td class="num">{{ (i.tipo === 'continuo' ? numero(i.quantidade_mensal) * numero(i.valor_unitario) : null) | moeda }}</td>
                 <td>
@@ -146,18 +168,18 @@
                 </td>
               </tr>
             } @empty {
-              <tr><td class="estado-vazio" colspan="9">Nenhum item cadastrado.</td></tr>
+              <tr><td class="estado-vazio" colspan="10">Nenhum item cadastrado.</td></tr>
             }
           </tbody>
           @if (itens().length) {
             <tfoot>
               <tr>
-                <td colspan="7">Base mensal (itens contínuos)</td>
+                <td colspan="8">Base mensal (itens contínuos)</td>
                 <td class="num">{{ baseMensal() | moeda }}</td>
                 <td></td>
               </tr>
               <tr>
-                <td colspan="7">Valor global estimado da vigência <small>contínuos × meses + sob demanda × limite; o valor oficial é calculado mês a mês (pró-rata, reajustes e aditamentos) ao salvar</small></td>
+                <td colspan="8">Valor global estimado da vigência <small>contínuos × meses + sob demanda × limite; o valor oficial é calculado mês a mês (pró-rata, reajustes e aditamentos) ao salvar</small></td>
                 <td class="num">{{ valorGlobal() | moeda }}</td>
                 <td></td>
               </tr>
@@ -186,6 +208,10 @@
             <label for="item-nome">Nome do item *</label>
             <input id="item-nome" name="descricao" required maxlength="1000" [(ngModel)]="item.descricao" />
           </div>
+          <div class="ocupa-duas">
+            <label for="item-uf">Unidade de Fornecimento (UF) *</label>
+            <input id="item-uf" name="unidade_fornecimento" required maxlength="50" placeholder="Ex.: posto, hora, unidade, m²" [(ngModel)]="item.unidade_fornecimento" />
+          </div>
           <div>
             <label for="item-tipo">Tipo *</label>
             <select id="item-tipo" name="tipo" [(ngModel)]="item.tipo"><option value="continuo">Contínuo</option><option value="sob_demanda">Sob demanda</option></select>
@@ -200,13 +226,19 @@
         <p class="dica-formulario">Depois de salvo, o item não muda nome, tipo nem faturamento (para corrigir, exclua e crie outro).</p>
         <footer>
           <button type="button" class="acao-secundaria" (click)="fecharItem()">Cancelar</button>
-          <button type="submit" class="acao-primaria" [disabled]="!item.descricao.trim()">Continuar</button>
+          <button type="submit" class="acao-primaria" [disabled]="!item.descricao.trim() || !item.unidade_fornecimento.trim()">Continuar</button>
         </footer>
       </form>
     } @else {
       <form (ngSubmit)="concluirItem()">
         <p class="aviso-formulario">{{ item.descricao }} · {{ tipoItem(item.tipo) }} · {{ item.calcula_pro_rata ? 'Com pró-rata' : 'Sempre integral' }}</p>
         <div class="grade-formulario">
+          @if (item.salvo) {
+            <div class="ocupa-duas">
+              <label for="item-uf-2">Unidade de Fornecimento (UF) *</label>
+              <input id="item-uf-2" name="unidade_fornecimento" required maxlength="50" placeholder="Ex.: posto, hora, unidade, m²" [(ngModel)]="item.unidade_fornecimento" />
+            </div>
+          }
           <div><label for="item-classe">Classe *</label><input id="item-classe" name="classe" required maxlength="80" [(ngModel)]="item.codigo_classe" /></div>
           <div><label for="item-nd">Natureza da despesa (ND) *</label><input id="item-nd" name="nd" required maxlength="80" [(ngModel)]="item.codigo_natureza_despesa" /></div>
           <div><label for="item-siafisico">SIAFÍSICO *</label><input id="item-siafisico" name="siafisico" required maxlength="80" [(ngModel)]="item.codigo_siafisico" /></div>
@@ -219,6 +251,12 @@
             <div>
               <label for="item-qtd-total">Qtd. total da vigência *</label>
               <input id="item-qtd-total" name="quantidade_total" inputmode="decimal" [(ngModel)]="item.quantidade_total" placeholder="0" />
+            </div>
+          } @else {
+            <div class="campo-calculado">
+              <label for="item-qtd-total-calc">Qtd. total da vigência <span>calculada</span></label>
+              <input id="item-qtd-total-calc" name="quantidade_total_calculada" readonly tabindex="-1"
+                     [value]="(quantidadeTotal(item) | quantidade) + ' (' + mesesVigencia() + ' meses)'" />
             </div>
           }
           <div>

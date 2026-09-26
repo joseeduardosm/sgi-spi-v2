@@ -86,7 +86,7 @@ const TAMANHO_MAXIMO_MB = 5;
                   @for (i of p.itens; track i.linha) {
                     <tr>
                       <td>{{ i.linha }}</td>
-                      <td>{{ i.descricao }}<small>{{ i.codigo_classe }} · {{ i.codigo_natureza_despesa }} · {{ i.codigo_siafisico }} · {{ i.codigo_catmat_catser }}</small></td>
+                      <td>{{ i.descricao }}@if (i.unidade_fornecimento) { <small>UF: {{ i.unidade_fornecimento }}</small> }<small>{{ i.codigo_classe }} · {{ i.codigo_natureza_despesa }} · {{ i.codigo_siafisico }} · {{ i.codigo_catmat_catser }}</small></td>
                       <td>{{ i.tipo ? tipos[i.tipo] : '—' }}</td>
                       <td>{{ i.calcula_pro_rata === null ? '—' : i.calcula_pro_rata ? 'Pró-rata' : 'Sempre integral' }}</td>
                       <td class="num">{{ i.quantidade_mensal | quantidade }}</td>

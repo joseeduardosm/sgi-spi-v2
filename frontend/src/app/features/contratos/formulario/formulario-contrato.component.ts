@@ -30,6 +30,7 @@ const ITEM_VAZIO: ItemEdicao = {
   descricao: '',
   tipo: 'continuo',
   calcula_pro_rata: true,
+  unidade_fornecimento: '',
   codigo_classe: '',
   codigo_natureza_despesa: '',
   codigo_siafisico: '',
@@ -147,8 +148,8 @@ export class FormularioContratoComponent implements OnInit {
     }
     this.itens.set(
       c.itens.map((i) => ({
-        id: i.id, descricao: i.descricao, tipo: i.tipo, calcula_pro_rata: i.calcula_pro_rata, codigo_classe: i.codigo_classe,
-        codigo_natureza_despesa: i.codigo_natureza_despesa, codigo_siafisico: i.codigo_siafisico, codigo_catmat_catser: i.codigo_catmat_catser,
+        id: i.id, descricao: i.descricao, tipo: i.tipo, calcula_pro_rata: i.calcula_pro_rata, unidade_fornecimento: i.unidade_fornecimento ?? '',
+        codigo_classe: i.codigo_classe, codigo_natureza_despesa: i.codigo_natureza_despesa, codigo_siafisico: i.codigo_siafisico, codigo_catmat_catser: i.codigo_catmat_catser,
         quantidade_mensal: paraDecimalTela(i.quantidade_mensal),
         // Para sob demanda, a quantidade total da vigência inicial é o teto original do item
         quantidade_total: i.tipo === 'sob_demanda' ? paraDecimalTela(i.quantidade_original) : '',
@@ -166,9 +167,19 @@ export class FormularioContratoComponent implements OnInit {
 
   /** Data final prevista (início + vigência inicial − 1 dia), calculada em UTC. */
   protected dataFinal(): string {
-    if (!this.dados.data_inicio || !this.dados.vigencia_inicial_meses) return '—';
+    return this.fimDoPrazo(this.dados.vigencia_inicial_meses);
+  }
+
+  /** Data-limite com todas as prorrogações possíveis (início + vigência máxima − 1 dia). */
+  protected dataLimite(): string {
+    return this.fimDoPrazo(this.dados.vigencia_maxima_meses);
+  }
+
+  /** Fim de um prazo em meses a partir da data inicial (início + meses − 1 dia), calculado em UTC. */
+  private fimDoPrazo(meses: number | null | undefined): string {
+    if (!this.dados.data_inicio || !meses) return '—';
     const [ano, mes, dia] = this.dados.data_inicio.split('-').map(Number);
-    const alvo = new Date(Date.UTC(ano, mes - 1 + Number(this.dados.vigencia_inicial_meses), 1));
+    const alvo = new Date(Date.UTC(ano, mes - 1 + Number(meses), 1));
     // Último dia do mês de destino: evita datas inválidas como 31/02
     const ultimo = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)).getUTCDate();
     alvo.setUTCDate(Math.min(dia, ultimo));
@@ -184,11 +195,17 @@ export class FormularioContratoComponent implements OnInit {
 
   /** Valor global estimado da vigência atual (contínuos × meses + sob demanda × teto). */
   protected valorGlobal(): number {
-    const meses = this.original()?.vigencias.at(-1)?.meses ?? Number(this.dados.vigencia_inicial_meses || 0);
-    return this.itens().reduce(
-      (t, i) => t + (i.tipo === 'continuo' ? this.numero(i.quantidade_mensal) * meses : this.numero(i.quantidade_total)) * this.numero(i.valor_unitario),
-      0,
-    );
+    return this.itens().reduce((t, i) => t + this.quantidadeTotal(i) * this.numero(i.valor_unitario), 0);
+  }
+
+  /** Meses da vigência atual (na edição) ou da vigência inicial digitada (no cadastro). */
+  protected mesesVigencia(): number {
+    return this.original()?.vigencias.at(-1)?.meses ?? Number(this.dados.vigencia_inicial_meses || 0);
+  }
+
+  /** Quantidade total da vigência: contínuo = qtd. mensal × meses; sob demanda = limite digitado. */
+  protected quantidadeTotal(i: GravacaoItem): number {
+    return i.tipo === 'continuo' ? this.numero(i.quantidade_mensal) * this.mesesVigencia() : this.numero(i.quantidade_total);
   }
 
   // --- Itens ---
@@ -206,7 +223,7 @@ export class FormularioContratoComponent implements OnInit {
 
   /** Avança para o passo 2 (códigos, quantidades e preço). */
   protected continuarItem(): void {
-    if (!this.item.descricao.trim()) return;
+    if (!this.item.descricao.trim() || !this.item.unidade_fornecimento.trim()) return;
     this.itemAberto.update((a) => (a ? { ...a, passo: 2 } : a));
   }
 
@@ -231,7 +248,8 @@ export class FormularioContratoComponent implements OnInit {
     const i = this.item;
     const codigos = [i.codigo_classe, i.codigo_natureza_despesa, i.codigo_siafisico, i.codigo_catmat_catser].every((c) => c.trim());
     const quantidades = i.tipo === 'continuo' ? this.numero(i.quantidade_mensal) > 0 : this.numero(i.quantidade_total) > 0;
-    return codigos && quantidades && i.valor_unitario !== '' && this.numero(i.valor_unitario) >= 0;
+    // A UF também é exigida aqui: itens antigos (sem UF) precisam recebê-la ao serem editados
+    return codigos && quantidades && !!i.unidade_fornecimento.trim() && i.valor_unitario !== '' && this.numero(i.valor_unitario) >= 0;
   }
 
   /** Remove o item da lista (pede confirmação se ele já estava salvo). */
@@ -291,7 +309,8 @@ export class FormularioContratoComponent implements OnInit {
       // Equipe: o id da pessoa escolhida em cada papel (ou null)
       equipe: Object.fromEntries(PAPEIS.map((p) => [p.papel, this.equipe[p.papel]()[0]?.id ?? null])),
       itens: this.itens().map((i) => ({
-        id: i.id, descricao: i.descricao.trim(), tipo: i.tipo, calcula_pro_rata: i.calcula_pro_rata, codigo_classe: i.codigo_classe.trim(),
+        id: i.id, descricao: i.descricao.trim(), tipo: i.tipo, calcula_pro_rata: i.calcula_pro_rata,
+        unidade_fornecimento: i.unidade_fornecimento.trim(), codigo_classe: i.codigo_classe.trim(),
         codigo_natureza_despesa: i.codigo_natureza_despesa.trim(), codigo_siafisico: i.codigo_siafisico.trim(),
         codigo_catmat_catser: i.codigo_catmat_catser.trim(), quantidade_mensal: paraDecimalApi(i.quantidade_mensal),
         quantidade_total: i.tipo === 'sob_demanda' ? paraDecimalApi(i.quantidade_total) : '0', valor_unitario: paraDecimalApi(i.valor_unitario),

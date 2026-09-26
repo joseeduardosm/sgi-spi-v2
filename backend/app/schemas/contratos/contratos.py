@@ -50,6 +50,7 @@ class GravacaoItem(BaseModel):
     descricao: TextoObrigatorio = Field(..., max_length=1000, description="Nome do item. Não muda depois de salvo.")
     tipo: TipoItem = Field(..., description="Não muda depois de salvo.")
     calcula_pro_rata: bool = Field(..., description="Faturamento: `true` com pró-rata, `false` sempre integral. Não muda depois de salvo.")
+    unidade_fornecimento: Texto = Field("", max_length=50, description="Unidade de Fornecimento (UF), ex.: `posto`, `hora`, `unidade`.")
     codigo_classe: TextoObrigatorio = Field(..., max_length=80)
     codigo_natureza_despesa: TextoObrigatorio = Field(..., max_length=80)
     codigo_siafisico: TextoObrigatorio = Field(..., max_length=80)
@@ -117,6 +118,7 @@ class LeituraItem(BaseModel):
     descricao: str
     tipo: TipoItem
     calcula_pro_rata: bool
+    unidade_fornecimento: str = Field("", description="Unidade de Fornecimento (UF).")
     codigo_classe: str
     codigo_natureza_despesa: str
     codigo_siafisico: str

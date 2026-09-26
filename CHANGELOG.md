@@ -16,8 +16,21 @@ Informe também migrações do banco e endpoints novos ou alterados.
   - Endpoints `POST /api/contratos/importacao-xlsx/previa`, `POST /api/contratos/importacao-xlsx` e `GET /api/contratos/importacao-xlsx/modelo`.
   - Novo recurso de ACL `importacao-contratos`, que nasce fechado (só a conta root) e é liberado por usuário ou setor na tela de ACL. Migração `d4f7b2c9e1a3`.
 
+- **Unidade de Fornecimento (UF) nos itens do contrato:**
+  - campo obrigatório na janela do item, logo depois do nome;
+  - coluna "UF" nas tabelas de itens do cadastro e do detalhe;
+  - coluna opcional "UF" (K) na planilha de importação.
+  - Campo `unidade_fornecimento` em `GravacaoItem` e `LeituraItem`. Migração `e5a8c3d1f2b4`.
+
 ### Alterado
+- **Tela de cadastro/edição do contrato reorganizada** em três grupos:
+  - Identificação: empresa, número, apelido e objeto;
+  - Vigência: data inicial, vigência, data final calculada, e vigência máxima com a data-limite;
+  - Execução e reajuste: periodicidade, mês de reajuste e situação.
 - Mensagens de validação de números decimais traduzidas para o português ("deve ser um número", "no máximo N casas decimais").
+
+### Corrigido
+- **Quantidade total dos itens contínuos:** no cadastro/edição do contrato, a quantidade aparecia como "—". Agora mostra qtd. mensal × meses da vigência, também na janela do item.
 
 ## 2026-09-25
 

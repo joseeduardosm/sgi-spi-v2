@@ -28,7 +28,7 @@ CABECALHO = {
 }
 # Itens a partir da linha 32 (as linhas 30–31 do modelo são a legenda das opções, sem descrição)
 ITENS = [
-    ["Limpeza diária", "Contínuo", "Pró-rata", "01", 339039, "123", "456", 2, None, "1.000,00"],
+    ["Limpeza diária", "Contínuo", "Pró-rata", "01", 339039, "123", "456", 2, None, "1.000,00", "posto"],
     ["Material de limpeza", "Sob demanda", "Sempre Integral", "02", "339030", "124", "457", None, 100, 10.5],
 ]
 
@@ -80,6 +80,8 @@ def test_importacao_grava_empresa_preposto_contrato_e_itens(cliente, admin):
     contrato = r.json()
     assert contrato["numero"] == "007/2026" and contrato["equipe"] == [] and len(contrato["itens"]) == 2
     assert contrato["empresa"]["cnpj"] == CNPJ
+    # A coluna UF (opcional) chega ao item; a linha sem UF fica vazia
+    assert [i["unidade_fornecimento"] for i in contrato["itens"]] == ["posto", ""]
     empresa = cliente.get(f"/api/contratos/empresas/{contrato['empresa']['id']}", headers=admin).json()
     assert [p["cpf"] for p in empresa["prepostos"]] == [CPF]
     # Enviar de novo: o número já existe

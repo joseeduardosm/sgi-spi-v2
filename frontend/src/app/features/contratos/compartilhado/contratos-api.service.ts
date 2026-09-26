@@ -26,6 +26,7 @@ import {
   Pagina,
   PainelContratos,
   Previsao,
+  PreviaImportacao,
   ResumoContrato,
   ResumoEmpresa,
 } from './contratos.models';
@@ -219,6 +220,26 @@ export class ContratosApiService {
   diarioPdf(id: string, inicio?: string, fim?: string) {
     const params = new HttpParams({ fromObject: { ...(inicio ? { inicio } : {}), ...(fim ? { fim } : {}) } });
     return baixarArquivo(this.http, `${this.base}/${id}/diario/pdf?${params.toString()}`, 'diario_de_bordo.pdf');
+  }
+
+  // --- Importação por planilha XLSX (ACL `importacao-contratos`) ---
+  /** Lê e valida a planilha sem gravar nada (envio multipart no campo `arquivo`). */
+  previaImportacao(arquivo: File): Observable<PreviaImportacao> {
+    const dados = new FormData();
+    dados.append('arquivo', arquivo);
+    return this.http.post<PreviaImportacao>(`${this.base}/importacao-xlsx/previa`, dados);
+  }
+
+  /** Importa o contrato da planilha (a mesma da prévia); devolve o contrato criado. */
+  importarXlsx(arquivo: File): Observable<DetalheContrato> {
+    const dados = new FormData();
+    dados.append('arquivo', arquivo);
+    return this.http.post<DetalheContrato>(`${this.base}/importacao-xlsx`, dados);
+  }
+
+  /** Baixa a planilha modelo em branco. */
+  baixarModeloImportacao() {
+    return baixarArquivo(this.http, `${this.base}/importacao-xlsx/modelo`, 'modelo-importacao-contrato.xlsx');
   }
 
   // --- Importação do SGI (SuperRoot) ---

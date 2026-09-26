@@ -524,8 +524,12 @@ def _aplicar_equipe(sessao: Session, contrato: Contrato, dados: GravacaoContrato
     return alteracoes
 
 
-def criar_contrato(sessao: Session, dados: GravacaoContrato, autor: Usuario) -> Contrato:
-    """Cadastra o contrato com itens e equipe; o autor fica como criador."""
+def criar_contrato(sessao: Session, dados: GravacaoContrato, autor: Usuario, commit: bool = True) -> Contrato:
+    """Cadastra o contrato com itens e equipe; o autor fica como criador.
+
+    Com `commit=False` a gravação fica pendente na sessão, para quem chama (ex.: a importação por
+    XLSX) confirmar tudo numa transação só.
+    """
     sequencial, ano = _validar_cabecalho(sessao, dados, None)
     contrato = Contrato(criador_id=autor.id, versao=1)
     _aplicar_cabecalho(contrato, dados, sequencial, ano)
@@ -535,7 +539,8 @@ def criar_contrato(sessao: Session, dados: GravacaoContrato, autor: Usuario) -> 
     sessao.flush()
     auditar(sessao, autor.login, "contrato.criar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"numero": contrato.numero, "itens": len(dados.itens)})
-    sessao.commit()
+    if commit:
+        sessao.commit()
     return contrato
 
 

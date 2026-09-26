@@ -940,3 +940,54 @@ export interface GravacaoOcorrencia {
   possui_glosa: boolean;
   glosas: { item_id: string; quantidade: string }[];
 }
+
+// --- Importação por XLSX ----------------------------------------------------------------------
+
+/** Problema da planilha que impede a importação, com a linha em que está. */
+export interface ErroImportacao {
+  linha: number | null;
+  campo: string;
+  mensagem: string;
+}
+
+/** Item lido de uma linha da tabela de itens da planilha. */
+export interface ItemPreviaImportacao {
+  linha: number;
+  descricao: string;
+  tipo: TipoItem | null;
+  calcula_pro_rata: boolean | null;
+  codigo_classe: string;
+  codigo_natureza_despesa: string;
+  codigo_siafisico: string;
+  codigo_catmat_catser: string;
+  quantidade_mensal: Decimal | null;
+  quantidade_total: Decimal | null;
+  valor_unitario: Decimal | null;
+}
+
+/** Resposta da prévia: o que será cadastrado, os erros (bloqueiam) e os avisos (só informam). */
+export interface PreviaImportacao {
+  contrato: {
+    numero: string | null;
+    apelido: string;
+    objeto: string;
+    data_inicio: string | null;
+    data_fim: string | null;
+    vigencia_inicial_meses: number | null;
+    vigencia_maxima_meses: number | null;
+    periodicidade_meses: number | null;
+    mes_reajuste: number | null;
+    sei_gestao_numero: string;
+    sei_gestao_link: string;
+    sei_execucao_numero: string;
+    sei_execucao_link: string;
+  };
+  // Empresa existente é reaproveitada sem alteração; nova será cadastrada
+  empresa: { existente: boolean; id: string | null; cnpj: string; razao_social: string; nome_fantasia: string; endereco: string } | null;
+  preposto: { existente: boolean; cpf: string; nome: string; email: string; telefone: string } | null;
+  itens: ItemPreviaImportacao[];
+  valor_global_estimado: Decimal | null;
+  erros: ErroImportacao[];
+  avisos: string[];
+  pode_importar: boolean;
+}

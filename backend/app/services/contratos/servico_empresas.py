@@ -177,8 +177,8 @@ def _dados(empresa: EmpresaContratada) -> dict:
     return {c: getattr(empresa, c) for c in ("cnpj", "razao_social", "nome_fantasia", "endereco", "ativa")}
 
 
-def criar_empresa(sessao: Session, dados: GravacaoEmpresa, autor: Usuario) -> EmpresaContratada:
-    """Cadastra a empresa (CNPJ único)."""
+def criar_empresa(sessao: Session, dados: GravacaoEmpresa, autor: Usuario, commit: bool = True) -> EmpresaContratada:
+    """Cadastra a empresa (CNPJ único). Com `commit=False`, quem chama confirma a transação."""
     if _cnpj_em_uso(sessao, dados.cnpj, None):
         raise ErroRegraContrato("Já existe uma empresa com este CNPJ.", conflito=True)
     empresa = EmpresaContratada(**dados.model_dump())
@@ -186,7 +186,8 @@ def criar_empresa(sessao: Session, dados: GravacaoEmpresa, autor: Usuario) -> Em
     sessao.flush()
     auditar(sessao, autor.login, "contrato.empresa.criar", f"Empresa {empresa.razao_social}", autor_id=autor.id,
             alvo_tipo="empresa", alvo_id=empresa.id, dados=_dados(empresa))
-    sessao.commit()
+    if commit:
+        sessao.commit()
     return empresa
 
 
@@ -232,9 +233,10 @@ def _cpf_em_uso(sessao: Session, empresa_id: uuid.UUID, cpf: str, preposto_id: u
 
 
 def salvar_preposto(
-    sessao: Session, empresa_id: uuid.UUID, dados: GravacaoPreposto, autor: Usuario, preposto_id: uuid.UUID | None = None
+    sessao: Session, empresa_id: uuid.UUID, dados: GravacaoPreposto, autor: Usuario, preposto_id: uuid.UUID | None = None,
+    commit: bool = True,
 ) -> PrepostoEmpresa:
-    """Cria (sem `preposto_id`) ou altera um preposto."""
+    """Cria (sem `preposto_id`) ou altera um preposto. Com `commit=False`, quem chama confirma a transação."""
     empresa = obter_empresa(sessao, empresa_id)
     preposto = _obter_preposto(sessao, empresa_id, preposto_id) if preposto_id else PrepostoEmpresa(empresa_id=empresa.id)
     if _cpf_em_uso(sessao, empresa.id, dados.cpf, preposto_id):
@@ -256,7 +258,8 @@ def salvar_preposto(
                        f"Preposto {preposto.nome} ({empresa.razao_social})",
                        {f"preposto.{preposto.id}.{c}": v for c, v in antes.items()},
                        {f"preposto.{preposto.id}.{c}": getattr(preposto, c) for c in dados.model_fields})
-    sessao.commit()
+    if commit:
+        sessao.commit()
     return preposto
 
 

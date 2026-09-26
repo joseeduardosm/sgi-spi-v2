@@ -8,6 +8,8 @@
     </div>
     <div class="acoes-formulario">
       @if (superRoot()) { <app-importacao-sgi (concluida)="carregar(1)" /> }
+      <!-- Liberado por usuário/setor na ACL `importacao-contratos` (e exige poder cadastrar contratos) -->
+      @if (acesso.pode('importacao-contratos', 'MODIFICACAO') && acesso.pode('contratos', 'MODIFICACAO')) { <app-importacao-xlsx /> }
       @if (acesso.pode('contratos', 'MODIFICACAO')) {
         <a class="acao-primaria" routerLink="/contratos/novo"><span>+</span> Novo contrato</a>
       }

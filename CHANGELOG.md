@@ -6,6 +6,19 @@ Cada commit atualiza este arquivo na mesma alteração (ver `AGENTS.md`, seção
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-09-26
+
+### Adicionado
+- **Importação de contrato por planilha XLSX:** botão "Importar XLSX" na carteira de contratos.
+  - Lê a planilha "Checklist de Alimentação do Sistema de Contratos" e mostra uma prévia com erros (com a linha da planilha) e avisos.
+  - Depois da confirmação, cadastra numa transação só a empresa (se nova), o preposto (se novo) e o contrato com os itens.
+  - Empresa e preposto já cadastrados são reaproveitados sem alteração, e as divergências viram avisos. A equipe não é importada.
+  - Endpoints `POST /api/contratos/importacao-xlsx/previa`, `POST /api/contratos/importacao-xlsx` e `GET /api/contratos/importacao-xlsx/modelo`.
+  - Novo recurso de ACL `importacao-contratos`, que nasce fechado (só a conta root) e é liberado por usuário ou setor na tela de ACL. Migração `d4f7b2c9e1a3`.
+
+### Alterado
+- Mensagens de validação de números decimais traduzidas para o português ("deve ser um número", "no máximo N casas decimais").
+
 ## 2026-09-25
 
 ### Adicionado

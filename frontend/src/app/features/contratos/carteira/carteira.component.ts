@@ -17,11 +17,12 @@ import { ROTULOS_SITUACAO } from '../compartilhado/rotulos';
 import { AcessoService } from '../../../core/acesso/acesso.service';
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { ImportacaoSgiComponent } from './importacao-sgi.component';
+import { ImportacaoXlsxComponent } from './importacao-xlsx.component';
 
 /** Tela 1: carteira de contratos, com busca e paginação no servidor. */
 @Component({
   selector: 'app-carteira',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent, ImportacaoSgiComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent, ImportacaoSgiComponent, ImportacaoXlsxComponent, ...PIPES_FORMATACAO],
   templateUrl: './carteira.component.html',
   // Qualquer clique fora fecha o menu de ações aberto
   host: { '(document:click)': 'menuAberto.set(null)' },

@@ -9,7 +9,7 @@ A API expõe as regras de negócio e os dados do contratos-spi para o frontend A
 - administração de diretórios LDAP;
 - verificação de disponibilidade.
 
-- módulo de contratos: empresas contratadas, carteira, cadastro, documentos importantes, orçamento, execução mensal, prorrogação, reajuste, aditamento/supressão e painel.
+- módulo de contratos: empresas contratadas, carteira, cadastro, documentos importantes, orçamento, execução mensal, prorrogação, reajuste, aditamento/supressão, painel e importação de contrato por planilha XLSX.
 
 ## Arquitetura e funcionamento
 
@@ -43,7 +43,7 @@ Navegador
 | `services/` | Regras de negócio (`servico_*.py`, `cliente_ldap.py`, `agendador_ldap.py`, `cliente_smtp.py`), anexos em disco (`servico_anexos.py`) e auditoria (`servico_auditoria.py`) |
 | `services/contratos/` | Regras do módulo de contratos; `calculos.py` concentra datas de vigência, situação e valores (funções puras) |
 | `services/documentos/` | Geração de PDF com a identidade do Governo de SP (`pdf.py`, ReportLab + pypdf) e de planilhas XLSX (`planilha.py`, openpyxl) |
-| `recursos/` | Arquivos usados pelos documentos gerados (brasão) |
+| `recursos/` | Arquivos usados pelos documentos gerados (brasão) e o modelo da planilha de importação de contrato |
 | `alembic/` (em `backend/`) | Migrações do banco. Toda alteração de modelo exige uma nova migração |
 
 ### Tabelas
@@ -167,6 +167,9 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-nf` | Edição do contrato | Reenvia o e-mail da NF ao Financeiro | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-retencao` | Financeiro, equipe ou SuperRoot | Reenvia o e-mail da retenção à equipe | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | `GET` `POST` | `/api/contratos/migracao-sgi` | SuperRoot | Importação dos contratos do SGI SPI (estado / iniciar) | [contratos-migracao-sgi.md](endpoints/contratos-migracao-sgi.md) |
+| `POST` | `/api/contratos/importacao-xlsx/previa` | ACL `importacao-contratos` e `contratos` ≥ MODIFICACAO | Prévia da importação de contrato por planilha XLSX | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
+| `POST` | `/api/contratos/importacao-xlsx` | ACL `importacao-contratos` e `contratos` ≥ MODIFICACAO | Importa o contrato da planilha | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
+| `GET` | `/api/contratos/importacao-xlsx/modelo` | ACL `importacao-contratos` e `contratos` ≥ MODIFICACAO | Baixa a planilha modelo | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
 | `GET` `PUT` | `/api/contratos/{contrato_id}/previsao[/{sequencia_vigencia}]` | LEITURA / pode editar (2) | Previsão orçamentária | [contratos-orcamento.md](endpoints/contratos-orcamento.md) |
 | `GET` | `/api/contratos/{contrato_id}/previsao/{sequencia_vigencia}/xlsx` | ACL `contratos` ≥ LEITURA | Exporta a previsão | [contratos-orcamento.md](endpoints/contratos-orcamento.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/contratos/{contrato_id}/notas-empenho[/{nota_id}]` | LEITURA / pode editar (2) | Notas de Empenho | [contratos-orcamento.md](endpoints/contratos-orcamento.md) |

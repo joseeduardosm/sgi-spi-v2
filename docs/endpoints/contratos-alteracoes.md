@@ -56,15 +56,33 @@ Implementação:
 - Um reajuste em elaboração por vez (`409`). Cada vigência é reajustada **uma vez**.
 - **Abertura:** vigência + mês de referência (primeiro mês com os novos preços). Os itens são fotografados com o preço vigente naquele mês.
 - **Memória:**
-  - por item, `indice_percentual` (2 = 2%) e `valor_referencial` opcional, que funciona como teto;
-  - preço reajustado = preço × (1 + índice/100), com 2 casas;
+  - por item, um `indice_percentual` **independente**, em pontos percentuais:
+    - **positivo** reajusta (`2` = +2%);
+    - **negativo** dá desconto (`-3` = −3%);
+    - `0` mantém o preço.
+  - Aceita de −100 (exclusive, o preço não pode zerar) a 1000, com até 8 casas. Fora disso: `422`.
+  - A tela tem "Aplicar a todos", que preenche o mesmo percentual em todos os itens antes de salvar. Na API, basta enviar o mesmo valor em cada item.
+  - `valor_referencial` é opcional e funciona como teto do novo preço (útil no reajuste positivo);
+  - novo preço = preço × (1 + índice/100), com 2 casas;
   - totais: base atual × nova base; valor global atual × novo valor global, ambos somados mês a mês (ver [contratos-cadastro.md](contratos-cadastro.md)), com os preços reajustados a partir do mês de referência — inclusive nos meses já medidos, que serão pagos pela competência de diferença.
+- **Evidência:** um único PDF para o reajuste, mesmo com percentuais diferentes por item.
 - **Arquivos da memória:** PDF + XLSX versionados; nova versão só se os dados mudaram.
+  - Mostram o percentual com sinal e a variação (novo − atual) de cada item.
+  - Os totais trazem o destino da diferença das competências já medidas.
 - **Conclusão:**
   - exige a evidência do índice, a memória gerada e o apostilamento assinado;
   - atualiza o preço dos itens e as competências ainda não medidas a partir do mês de referência, e grava o novo valor global;
   - as competências já medidas mantêm os preços antigos (fotografia);
-  - **reajuste retroativo:** se houver competências medidas a partir do mês de referência, é gerada uma competência `diferenca_reajuste` (identificador `AAAA-MM-dif`) com, por item, a quantidade medida × (preço novo − preço pago), a medição já preenchida e o checklist copiado. Ela segue o fluxo normal da execução (NEs, NF, OB), sem avaliação.
+  - **competências já medidas a partir do mês de referência:** calcula-se a **diferença retroativa líquida** = Σ quantidade medida × (preço novo − preço pago), gravada em `diferenca_retroativa`.
+    - **Positiva:** é gerada uma competência `diferenca_reajuste` (identificador `AAAA-MM-dif`) com a medição já preenchida e o checklist copiado.
+      - Por item, entra a quantidade medida e o preço unitário da diferença; num reajuste misto, os itens com desconto entram com preço negativo, e o total é o líquido.
+      - Ela segue o fluxo normal da execução (NEs, NF, OB), sem avaliação.
+    - **Negativa (desconto):** não há competência de diferença. O valor vira um **crédito da SPI**, abatido no valor autorizado da **próxima competência regular com a medição aberta** (tabela `contratos_abatimentos_reajuste`).
+      - Se o crédito passar do valor da medição (medido × % da avaliação), abate o que cabe, e o restante segue para a competência seguinte. O ajuste é feito ao concluir a medição e de novo ao concluir a avaliação.
+      - Reabrir a medição devolve as sobras ainda não usadas.
+      - Sem competência a medir, o crédito fica **pendente** e é vinculado à primeira competência criada depois (por exemplo, ao gerar a execução de uma prorrogação).
+      - Na execução, o desconto aparece em `desconto_reajuste` / `descontos_reajuste` (ver [contratos-execucao.md](contratos-execucao.md)).
+    - **Zero:** nada é gerado.
 
 | Método e caminho | Descrição |
 |---|---|
@@ -79,7 +97,15 @@ Implementação:
 
 `LeituraReajuste` traz:
 - **Identificação:** `situacao`, a vigência e o `mes_referencia`;
-- **Efeito:** `competencias_recalculadas`, `competencias_com_diferenca` (competências medidas que entram na diferença) e `competencia_diferenca` (`identificador` `AAAA-MM-dif` da competência gerada, após a conclusão);
+- **Efeito:**
+  - `competencias_recalculadas`;
+  - `competencias_com_diferenca` (competências medidas que entram na diferença);
+  - `competencia_diferenca` (`identificador` `AAAA-MM-dif` da competência gerada, após a conclusão);
+- **Diferença retroativa:**
+  - `diferenca_retroativa` (string decimal com sinal: prévia no rascunho, valor gravado depois de concluído);
+  - `competencia_credito` (rascunho com desconto: rótulo `MM/AAAA` da competência que receberá o crédito, ou nulo);
+  - `abatimentos[]` (`competencia`, `identificador`, `medida`, `valor`: onde o crédito foi ou será abatido);
+  - `credito_pendente` (parte ainda sem competência);
 - **Itens:** `itens[]` (atual, índice, referencial, reajustado, subtotal);
 - **Totais:** `base_atual`, `base_reajustada`, `valor_global_atual`, `valor_global_reajustado`;
 - **Arquivos:** `evidencia`, `apostilamento` e `memorias[]` (`versao`, `pdf`, `xlsx`).

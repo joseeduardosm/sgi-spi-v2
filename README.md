@@ -1,17 +1,17 @@
-# contratos-spi
+# SGI SPI – Sistema de Gestão Integrada
 
-Sistema de gestão de contratos da **Secretaria de Parcerias em Investimentos (SPI)**, Governo do Estado de São Paulo.
+Sistema de Gestão Integrada da **Secretaria de Parcerias em Investimentos (SPI)**, Governo do Estado de São Paulo (antes chamado contratos-spi): contratos, RH, mensageria e administração.
 
 - **Backend:** Python 3.12 + FastAPI (`backend/`)
 - **Frontend:** Angular 22 + Bootstrap 5.3 (`frontend/`)
 - **Servidor web:** Nginx serve o build do Angular e encaminha `/api/*` para o FastAPI
-- **Serviço:** FastAPI/uvicorn gerenciado pelo systemd (`contratos-spi-api`)
+- **Serviço:** FastAPI/uvicorn gerenciado pelo systemd (`sgi-spi-api`)
 
 Etapa atual: estrutura do projeto, identidade visual e autenticação. Os módulos de negócio ainda não foram implementados.
 
 ```text
-Usuário → Nginx ─┬─ /       → Angular (frontend/dist/contratos-spi/browser)
-                 └─ /api/*  → FastAPI (127.0.0.1:8000, systemd contratos-spi-api)
+Usuário → Nginx ─┬─ /       → Angular (frontend/dist/sgi-spi/browser)
+                 └─ /api/*  → FastAPI (127.0.0.1:8000, systemd sgi-spi-api)
 ```
 
 ## Estrutura
@@ -29,8 +29,8 @@ O projeto roda no próprio diretório **`/home/administrador/projeto`**. Não ex
 │   └── .env.example    modelo do .env
 ├── frontend/           Angular
 │   └── src/app/{core,shared,features}/  app.routes.ts
-├── nginx/contratos-spi.conf        modelo do site Nginx
-├── systemd/contratos-spi-api.service  modelo da unidade systemd
+├── nginx/sgi-spi.conf        modelo do site Nginx
+├── systemd/sgi-spi-api.service  modelo da unidade systemd
 ├── scripts/            instalar.sh, deploy.sh, gerar-hash-senha.py
 ├── docs/               documentação da API (obrigatória, ver docs/README.md)
 ├── dados/anexos/       PDFs enviados e gerados (ANEXOS_DIRETORIO; incluir no backup, não versionar)
@@ -71,8 +71,8 @@ Ubuntu 24.04 com:
    O script:
    - libera apenas a travessia (`chmod o+x`) de `/home/administrador` e `projeto`, para o Nginx ler o build do Angular;
    - cria o virtualenv, instala as dependências, roda os testes, aplica as migrações do banco e compila o Angular (`scripts/deploy.sh`);
-   - encerra processos manuais (uvicorn na 8000, `ng serve` na 4200), instala e inicia `contratos-spi-api.service`;
-   - gera `/etc/nginx/sites-available/contratos-spi` a partir de `nginx/contratos-spi.conf`, ativa o site, valida (`nginx -t`) e recarrega o Nginx;
+   - encerra processos manuais (uvicorn na 8000, `ng serve` na 4200), instala e inicia `sgi-spi-api.service`;
+   - gera `/etc/nginx/sites-available/sgi-spi` a partir de `nginx/sgi-spi.conf`, ativa o site, valida (`nginx -t`) e recarrega o Nginx;
    - verifica `GET /api/saude` pelo Nginx.
 
 3. Acesse `http://<servidor>/` e entre com o administrador configurado.
@@ -86,7 +86,7 @@ scripts/deploy.sh                # dependências + testes + migrações + build 
 scripts/deploy.sh --sem-testes
 ```
 
-Alterações em `nginx/contratos-spi.conf` ou `systemd/*.service` exigem rodar `sudo scripts/instalar.sh` novamente.
+Alterações em `nginx/sgi-spi.conf` ou `systemd/*.service` exigem rodar `sudo scripts/instalar.sh` novamente.
 
 ## Desenvolvimento
 
@@ -106,7 +106,7 @@ Frontend com recarga automática (`proxy.conf.json` encaminha `/api` para `127.0
 cd frontend
 npx ng serve --host 127.0.0.1 --port 4201
 npx ng test --watch=false
-npx ng build              # produção → dist/contratos-spi/browser (servido pelo Nginx)
+npx ng build              # produção → dist/sgi-spi/browser (servido pelo Nginx)
 ```
 
 ## Configuração (`backend/.env`)
@@ -131,9 +131,9 @@ npx ng build              # produção → dist/contratos-spi/browser (servido p
 
 | Tarefa | Comando |
 |---|---|
-| Status da API | `systemctl status contratos-spi-api` |
-| Logs da API | `journalctl -u contratos-spi-api -f` |
-| Reiniciar a API | `sudo systemctl restart contratos-spi-api` |
+| Status da API | `systemctl status sgi-spi-api` |
+| Logs da API | `journalctl -u sgi-spi-api -f` |
+| Reiniciar a API | `sudo systemctl restart sgi-spi-api` |
 | Saúde | `curl http://127.0.0.1/api/saude` |
 | Validar/recarregar o Nginx | `sudo nginx -t && sudo systemctl reload nginx` |
 | Logs do Nginx | `/var/log/nginx/access.log`, `/var/log/nginx/error.log` |
@@ -160,7 +160,7 @@ As páginas autenticadas usam o layout `LayoutAutenticadoComponent` (`frontend/s
 
 Os itens vêm de `frontend/src/app/core/navegacao/navegacao.ts`. Para publicar um módulo:
 
-1. Crie a feature em `frontend/src/app/features/<modulo>/` e a rota como filha de `''` em `app.routes.ts`, com `title: '<Nome> | Contratos SPI'`. O título aparece na topbar.
+1. Crie a feature em `frontend/src/app/features/<modulo>/` e a rota como filha de `''` em `app.routes.ts`, com `title: '<Nome> | SGI SPI'`. O título aparece na topbar.
 2. Acrescente o item em `NAVIGATION`, normalmente como filho do grupo `modulos`:
    `{ id: 'contratos', rotulo: 'Contratos', rota: '/contratos', acl: 'contratos' }`.
    `acl` esconde o item de quem não tem acesso ao recurso; `papeis` (ex.: `['SuperRoot']`) restringe por papel. A API continua validando as permissões.

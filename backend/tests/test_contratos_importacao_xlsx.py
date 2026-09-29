@@ -60,7 +60,7 @@ def test_previa_converte_os_valores_e_nao_grava(cliente, admin):
     p = r.json()
     assert p["pode_importar"] and p["erros"] == []
     c = p["contrato"]
-    assert (c["numero"], c["data_inicio"], c["data_fim"]) == ("007/2026", "2026-03-01", "2027-02-28")
+    assert (c["numero"], c["data_inicio"], c["data_fim"]) == ("7/2026", "2026-03-01", "2027-02-28")
     assert (c["vigencia_inicial_meses"], c["periodicidade_meses"], c["mes_reajuste"]) == (12, 1, 3)
     assert p["empresa"]["existente"] is False and p["empresa"]["cnpj"] == CNPJ
     assert p["preposto"] == {"existente": False, "cpf": CPF, "nome": "João Preposto", "email": "joao@limpatudo.com", "telefone": "(11) 99999-0000"}
@@ -78,7 +78,7 @@ def test_importacao_grava_empresa_preposto_contrato_e_itens(cliente, admin):
     r = enviar(cliente, admin, planilha(), caminho="")
     assert r.status_code == 201, r.text
     contrato = r.json()
-    assert contrato["numero"] == "007/2026" and contrato["equipe"] == [] and len(contrato["itens"]) == 2
+    assert contrato["numero"] == "7/2026" and contrato["equipe"] == [] and len(contrato["itens"]) == 2
     assert contrato["empresa"]["cnpj"] == CNPJ
     # A coluna UF (opcional) chega ao item; a linha sem UF fica vazia
     assert [i["unidade_fornecimento"] for i in contrato["itens"]] == ["posto", ""]
@@ -86,7 +86,7 @@ def test_importacao_grava_empresa_preposto_contrato_e_itens(cliente, admin):
     assert [p["cpf"] for p in empresa["prepostos"]] == [CPF]
     # Enviar de novo: o número já existe
     r = enviar(cliente, admin, planilha(), caminho="")
-    assert r.status_code == 400 and r.json()["erros"] == [{"linha": 2, "campo": "Nro do Contrato", "mensagem": "Já existe um contrato com o número 007/2026."}]
+    assert r.status_code == 400 and r.json()["erros"] == [{"linha": 2, "campo": "Nro do Contrato", "mensagem": "Já existe um contrato com o número 7/2026."}]
 
 
 def test_empresa_existente_e_reaproveitada_com_aviso(cliente, admin):
@@ -141,3 +141,27 @@ def test_acl_da_importacao_e_modelo(cliente, admin):
     assert enviar(cliente, cabecalho(cliente, "liberado"), planilha()).status_code == 200
     modelo = cliente.get(f"{URL}/modelo", headers=cabecalho(cliente, "liberado"))
     assert modelo.status_code == 200 and modelo.content[:2] == b"PK"
+
+
+def test_quantidades_grandes_e_dizimas_do_excel_sao_arredondadas(cliente, admin):
+    """Célula numérica do Excel (ponto flutuante) é arredondada: 4 casas na quantidade, 2 no preço.
+
+    999.999.999.999,9999 não cabe exatamente num double e chega como 999999999999.99988; 1/3 vem de fórmula.
+    """
+    itens = [
+        ["Serviço grande", "Contínuo", "Pró-rata", "01", "339039", "123", "456", 999999999999.9999, None, 0.1 + 0.2],
+        ["Material fracionado", "Sob demanda", "Sempre Integral", "02", "339030", "124", "457", 1 / 3, 999000000000.12345, 2],
+    ]
+    r = enviar(cliente, admin, planilha(itens=itens))
+    assert r.status_code == 200, r.text
+    p = r.json()
+    assert p["erros"] == [], p["erros"]
+    assert (p["itens"][0]["quantidade_mensal"], p["itens"][0]["valor_unitario"]) == ("999999999999.9999", "0.30")
+    assert (p["itens"][1]["quantidade_mensal"], p["itens"][1]["quantidade_total"]) == ("0.3333", "999000000000.1234")
+
+
+def test_texto_com_casas_a_mais_continua_sendo_erro(cliente, admin):
+    """Número digitado como texto não é arredondado: casas a mais são apontadas."""
+    itens = [["Limpeza", "Contínuo", "Pró-rata", "01", "339039", "123", "456", "1,123456", None, "10,00"]]
+    r = enviar(cliente, admin, planilha(itens=itens))
+    assert any("QTD MENSAL" in e["campo"] and "casa" in e["mensagem"] for e in r.json()["erros"])

@@ -144,7 +144,7 @@ async def tratar_erro_validacao(_: Request, erro: RequestValidationError) -> JSO
 
 # Nome do cabeçalho com o código de correlação, devolvido em todas as respostas
 CABECALHO_CORRELACAO = "X-Correlacao"
-registro_log = logging.getLogger("contratos_spi.erros")
+registro_log = logging.getLogger("sgi_spi.erros")
 
 
 def correlacao_da_requisicao(requisicao: Request) -> str:

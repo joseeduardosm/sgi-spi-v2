@@ -7,6 +7,7 @@ o que os cálculos precisam (`obter_contrato`), conferir quem pode editar (`exig
 montar as vigências e calcular os totais.
 """
 
+import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -201,12 +202,23 @@ def situacao(contrato: Contrato) -> str:
 # Consultas
 # ---------------------------------------------------------------------------------------------
 
-def _numero(termo: str) -> tuple[int, int] | None:
-    """Interpreta "12/2026" como (12, 2026); outro formato → None."""
-    partes = termo.split("/")
-    if len(partes) == 2 and all(p.isdigit() for p in partes) and len(partes[1]) == 4:
-        return int(partes[0]), int(partes[1])
-    return None
+def partes_numero(numero: str) -> tuple[int | None, int | None]:
+    """(sequencial, ano) quando o número segue NNN/AAAA ("12/2026" → (12, 2026)); senão (None, None).
+
+    O número é livre; as partes só servem para ordenar a carteira e sugerir o próximo número.
+    """
+    achado = re.fullmatch(r"\s*(\d{1,6})\s*/\s*(\d{4})\s*", numero or "")
+    return (int(achado.group(1)), int(achado.group(2))) if achado else (None, None)
+
+
+def ordem_contratos():
+    """Ordem da carteira: ano e sequencial do mais recente ao mais antigo; números livres por último, em ordem alfabética."""
+    return (Contrato.ano.desc().nulls_last(), Contrato.sequencial.desc().nulls_last(), Contrato.numero)
+
+
+def chave_ordem(contrato: Contrato) -> tuple:
+    """Mesma ordem de `ordem_contratos`, para listas já carregadas."""
+    return (-(contrato.ano or 0), -(contrato.sequencial or 0), contrato.numero.lower())
 
 
 def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pagina: int) -> PaginaContratos:
@@ -222,10 +234,11 @@ def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pa
             func.lower(EmpresaContratada.razao_social).like(padrao),
             func.lower(EmpresaContratada.nome_fantasia).like(padrao),
         ]
-        # Número completo (12/2026) ou só o sequencial (12)
-        numero = _numero(termo)
-        if numero:
-            condicoes.append((Contrato.sequencial == numero[0]) & (Contrato.ano == numero[1]))
+        # Número em qualquer formato (trecho), o número NNN/AAAA sem os zeros à esquerda ou só o sequencial (12)
+        condicoes.append(func.lower(Contrato.numero).like(padrao))
+        sequencial, ano = partes_numero(termo)
+        if sequencial is not None:
+            condicoes.append((Contrato.sequencial == sequencial) & (Contrato.ano == ano))
         elif termo.isdigit():
             condicoes.append(Contrato.sequencial == int(termo))
         consulta = consulta.where(or_(*condicoes))
@@ -233,7 +246,7 @@ def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pa
     total = sessao.scalar(select(func.count()).select_from(consulta.subquery())) or 0
     contratos = sessao.scalars(
         consulta.options(*opcoes_carga_resumo())
-        .order_by(Contrato.ano.desc(), Contrato.sequencial.desc())
+        .order_by(*ordem_contratos())
         .offset((pagina - 1) * tamanho_pagina)
         .limit(tamanho_pagina)
     )
@@ -396,26 +409,36 @@ def _dados_auditados(contrato: Contrato) -> dict:
     return dados
 
 
-def _validar_cabecalho(sessao: Session, dados: GravacaoContrato, contrato: Contrato | None) -> tuple[int, int]:
-    """Valida número único e empresa; devolve (sequencial, ano) já separados."""
-    # "12/2026" → (12, 2026)
-    sequencial, ano = (int(p) for p in dados.numero.split("/"))
-    if sequencial < 1:
-        raise ErroRegraContrato("O número do contrato deve ser maior que zero.")
-    existente = sessao.scalar(select(Contrato.id).where(Contrato.sequencial == sequencial, Contrato.ano == ano))
+def numero_em_uso(sessao: Session, numero: str, exceto: uuid.UUID | None = None) -> bool:
+    """Há outro contrato com o mesmo número?
+
+    Mesmo texto sem diferenciar maiúsculas e espaços nas pontas; no padrão NNN/AAAA, também o mesmo
+    sequencial e ano ("1/2026" e "001/2026" são o mesmo contrato).
+    """
+    condicao = func.lower(Contrato.numero) == numero.strip().lower()
+    sequencial, ano = partes_numero(numero)
+    if sequencial is not None:
+        condicao = or_(condicao, (Contrato.sequencial == sequencial) & (Contrato.ano == ano))
+    ids = sessao.scalars(select(Contrato.id).where(condicao)).all()
+    return any(i != exceto for i in ids)
+
+
+def _validar_cabecalho(sessao: Session, dados: GravacaoContrato, contrato: Contrato | None) -> str:
+    """Valida número único e empresa; devolve o número já sem espaços nas pontas."""
+    numero = dados.numero.strip()
     # O número não pode repetir, exceto o do próprio contrato na alteração
-    if existente is not None and (contrato is None or existente != contrato.id):
-        raise ErroRegraContrato(f"Já existe um contrato com o número {sequencial:03d}/{ano:04d}.", conflito=True)
+    if numero_em_uso(sessao, numero, contrato.id if contrato else None):
+        raise ErroRegraContrato(f"Já existe um contrato com o número {numero}.", conflito=True)
     empresa = sessao.get(EmpresaContratada, dados.empresa_id)
     if empresa is None:
         raise ErroRegraContrato("Empresa não encontrada.")
     # Contrato existente pode manter uma empresa que foi inativada depois
     if not empresa.ativa and (contrato is None or contrato.empresa_id != empresa.id):
         raise ErroRegraContrato("Selecione uma empresa ativa.")
-    return sequencial, ano
+    return numero
 
 
-def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, sequencial: int, ano: int) -> None:
+def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, numero: str) -> None:
     """Copia os dados do cabeçalho para o contrato, respeitando as regras de vigência."""
     # Depois de uma prorrogação, as datas iniciais ficam travadas (as vigências dependem delas)
     datas_bloqueadas = bool(contrato.id and contrato.prorrogacoes)
@@ -427,7 +450,8 @@ def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, sequencial: 
     # A vigência máxima não pode ficar menor que a soma das vigências já registradas
     if dados.vigencia_maxima_meses < soma_vigencias:
         raise ErroRegraContrato(f"A vigência máxima deve ser de ao menos {soma_vigencias} meses (soma das vigências registradas).")
-    contrato.sequencial, contrato.ano = sequencial, ano
+    contrato.numero = numero
+    contrato.sequencial, contrato.ano = partes_numero(numero)
     for campo in (
         "empresa_id", "apelido", "objeto", "data_inicio", "vigencia_inicial_meses", "vigencia_maxima_meses",
         "periodicidade_meses", "mes_reajuste", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero",
@@ -520,9 +544,28 @@ def _aplicar_equipe(sessao: Session, contrato: Contrato, dados: GravacaoContrato
                 existente.valido_de, existente.valido_ate, existente.nome_usuario = agora, None, nome_novo
             else:
                 contrato.equipe.append(DesignacaoEquipe(usuario_id=novo_id, papel=papel, nome_usuario=nome_novo, valido_de=agora))
-            # Ponto único para a futura caixa de notificações (designação na equipe)
         alteracoes[f"equipe.{papel}"] = {"de": atual.nome_usuario if atual else None, "para": nome_novo}
     return alteracoes
+
+
+def _avisar_designados(sessao: Session, contrato: Contrato, dados: GravacaoContrato, mudancas: dict, autor: Usuario) -> None:
+    """Mensagem em janela para cada pessoa que passou a integrar a equipe (quem designou a si mesmo não recebe)."""
+    from app.services import servico_mensagens
+    from app.services.contratos.documentos_execucao import PAPEIS
+
+    identificacao = contrato.apelido or contrato.empresa.razao_social if contrato.empresa else contrato.apelido
+    for papel in PAPEIS_EQUIPE:
+        usuario_id = getattr(dados.equipe, papel)
+        if f"equipe.{papel}" not in mudancas or usuario_id is None or usuario_id == autor.id:
+            continue
+        rotulo = PAPEIS.get(papel, papel)
+        servico_mensagens.notificar(
+            sessao, [usuario_id], f"Você foi cadastrado como {rotulo} no contrato {contrato.numero}",
+            f"{autor.nome_completo or autor.login} cadastrou você como {rotulo} no contrato {contrato.numero}"
+            + (f" – {identificacao}" if identificacao else "") + f".\n\nObjeto: {contrato.objeto}",
+            chave=f"equipe:{contrato.id}:{papel}:{usuario_id}:{agora_utc():%Y%m%d%H%M%S%f}", categoria="atribuicao", prioridade="alta",
+            link=f"/contratos/{contrato.id}", contrato_id=contrato.id, abrir_em_janela=True, email=True,
+        )
 
 
 def criar_contrato(sessao: Session, dados: GravacaoContrato, autor: Usuario, commit: bool = True) -> Contrato:
@@ -531,13 +574,14 @@ def criar_contrato(sessao: Session, dados: GravacaoContrato, autor: Usuario, com
     Com `commit=False` a gravação fica pendente na sessão, para quem chama (ex.: a importação por
     XLSX) confirmar tudo numa transação só.
     """
-    sequencial, ano = _validar_cabecalho(sessao, dados, None)
+    numero = _validar_cabecalho(sessao, dados, None)
     contrato = Contrato(criador_id=autor.id, versao=1)
-    _aplicar_cabecalho(contrato, dados, sequencial, ano)
+    _aplicar_cabecalho(contrato, dados, numero)
     sessao.add(contrato)
     _aplicar_itens(contrato, dados.itens, autor)
-    _aplicar_equipe(sessao, contrato, dados)
+    mudancas_equipe = _aplicar_equipe(sessao, contrato, dados)
     sessao.flush()
+    _avisar_designados(sessao, contrato, dados, mudancas_equipe, autor)
     auditar(sessao, autor.login, "contrato.criar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"numero": contrato.numero, "itens": len(dados.itens)})
     if commit:
@@ -555,11 +599,12 @@ def alterar_contrato(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCon
             "O contrato foi alterado por outra pessoa depois que você o abriu. Recarregue a página e refaça a alteração.",
             conflito=True,
         )
-    sequencial, ano = _validar_cabecalho(sessao, dados, contrato)
+    numero = _validar_cabecalho(sessao, dados, contrato)
     antes = _dados_auditados(contrato)
-    _aplicar_cabecalho(contrato, dados, sequencial, ano)
+    _aplicar_cabecalho(contrato, dados, numero)
     mudancas_itens = _aplicar_itens(contrato, dados.itens, autor)
     mudancas_equipe = _aplicar_equipe(sessao, contrato, dados)
+    _avisar_designados(sessao, contrato, dados, mudancas_equipe, autor)
     # Cada gravação incrementa a versão
     contrato.versao += 1
     # Três registros de auditoria: campos do cabeçalho, equipe e itens
@@ -619,7 +664,7 @@ def listar_documentos(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraDo
                 numero=f"{codigo:03d}",
                 titulo=documento.titulo if documento else POR_CODIGO[codigo].titulo,
                 anexado=anexo is not None,
-                nome_arquivo=nome_download(codigo, contrato.sequencial, contrato.ano),
+                nome_arquivo=nome_download(codigo, contrato.numero_arquivo),
                 tamanho=anexo.tamanho if anexo else None,
                 enviado_em=documento.enviado_em if anexo else None,
                 enviado_por_nome=nomes.get(documento.enviado_por_id) if anexo else None,
@@ -684,7 +729,7 @@ def documento_para_download(sessao: Session, contrato_id: uuid.UUID, codigo: int
     documento = next((d for d in contrato.documentos if d.codigo_tipo == codigo), None)
     if documento is None or documento.anexo is None:
         raise RegistroNaoEncontrado("Documento")
-    return servico_anexos.resposta_download(documento.anexo, nome_download(codigo, contrato.sequencial, contrato.ano))
+    return servico_anexos.resposta_download(documento.anexo, nome_download(codigo, contrato.numero_arquivo))
 
 
 # ---------------------------------------------------------------------------------------------

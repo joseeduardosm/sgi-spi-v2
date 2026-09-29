@@ -21,8 +21,9 @@ import re
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
+from functools import partial
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from io import BytesIO
 from typing import Any
 from zipfile import BadZipFile
@@ -48,7 +49,7 @@ from app.schemas.contratos.importacao import (
 from app.schemas.contratos.validadores import normalizar_cnpj, normalizar_cpf, somente_digitos
 from app.services.contratos import calculos
 from app.services.contratos.erros import ErroRegraContrato
-from app.services.contratos.servico_contratos import criar_contrato
+from app.services.contratos.servico_contratos import criar_contrato, numero_em_uso
 from app.services.contratos.servico_empresas import criar_empresa, salvar_preposto
 from app.services.servico_auditoria import auditar
 
@@ -231,13 +232,21 @@ def converter_faturamento(valor: Any) -> bool:
     raise ValueError("use Pró-rata ou Sempre Integral")
 
 
-def converter_decimal(valor: Any) -> Decimal:
-    """Número do Excel ou texto no formato brasileiro ("1.234,56", "R$ 10,50")."""
+def converter_decimal(valor: Any, casas: int | None = None) -> Decimal:
+    """Número do Excel ou texto no formato brasileiro ("1.234,56", "R$ 10,50").
+
+    `casas`: arredonda os números vindos de célula numérica. O Excel guarda números em ponto
+    flutuante (15 a 16 dígitos significativos): 999.999.999.999,9999 chega como 999999999999.99988,
+    e fórmulas geram dízimas (1/3). Texto digitado não é arredondado: casas a mais são erro.
+    """
     if isinstance(valor, bool):
         raise ValueError("deve ser um número")
     if isinstance(valor, (int, float)):
         # repr evita o ruído binário (0.1 vira "0.1" e não 0.1000000000000000055...)
-        return Decimal(repr(valor)) if isinstance(valor, float) else Decimal(valor)
+        numero = Decimal(repr(valor)) if isinstance(valor, float) else Decimal(valor)
+        if casas is not None and isinstance(valor, float):
+            numero = numero.quantize(Decimal(1).scaleb(-casas), rounding=ROUND_HALF_UP)
+        return numero
     bruto = texto(valor).replace("R$", "").replace(" ", "").replace(" ", "")
     # Com vírgula, o formato é brasileiro: pontos são separadores de milhar
     if "," in bruto:
@@ -249,12 +258,14 @@ def converter_decimal(valor: Any) -> Decimal:
 
 
 def converter_numero_contrato(valor: Any) -> str:
-    """"12/2026" ou "012/2026" → "012/2026" (o formato validado pela API)."""
-    bruto = texto(valor).replace(" ", "")
-    achado = re.fullmatch(r"(\d{1,4})/(\d{4})", bruto)
-    if not achado:
-        raise ValueError("use o formato NNN/AAAA (ex.: 012/2026)")
-    return f"{int(achado.group(1)):03d}/{achado.group(2)}"
+    """Número em formato livre, como está na planilha (sem espaços nas pontas; até 60 caracteres).
+
+    Número digitado como número no Excel (ex.: 45) vira texto sem ".0" (ver `texto`).
+    """
+    numero = texto(valor).strip()
+    if len(numero) > 60:
+        raise ValueError("deve ter no máximo 60 caracteres")
+    return numero
 
 
 def documento(valor: Any, digitos: int) -> str:
@@ -356,9 +367,10 @@ def _ler_itens(folha, linha_titulos: int, leitura: Leitura) -> None:
     conversores = {
         "tipo": converter_tipo,
         "calcula_pro_rata": converter_faturamento,
-        "quantidade_mensal": converter_decimal,
-        "quantidade_total": converter_decimal,
-        "valor_unitario": converter_decimal,
+        # Casas aceitas pela API: 4 nas quantidades e 2 no preço
+        "quantidade_mensal": partial(converter_decimal, casas=4),
+        "quantidade_total": partial(converter_decimal, casas=4),
+        "valor_unitario": partial(converter_decimal, casas=2),
     }
     for linha in range(linha_titulos + 1, folha.max_row + 1):
         descricao = texto(folha.cell(linha, colunas["descricao"][0]).value)
@@ -546,10 +558,8 @@ def analisar(sessao: Session, conteudo: bytes) -> Analise:
         leitura.erro("vigencia_maxima_meses", "a vigência máxima deve ser maior ou igual à vigência inicial")
 
     # Número já usado por outro contrato
-    if v.get("numero"):
-        sequencial, ano = (int(p) for p in v["numero"].split("/"))
-        if sessao.scalar(select(Contrato.id).where(Contrato.sequencial == sequencial, Contrato.ano == ano)) is not None:
-            leitura.erro("numero", f"Já existe um contrato com o número {v['numero']}.")
+    if v.get("numero") and numero_em_uso(sessao, v["numero"]):
+        leitura.erro("numero", f"Já existe um contrato com o número {v['numero']}.")
 
     previa = PreviaImportacao(
         contrato=_contrato_previa(v),

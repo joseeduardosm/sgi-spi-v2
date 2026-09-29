@@ -1,4 +1,4 @@
-<app-cabecalho-modulo [titulo]="original() ? 'Editar contrato ' + original()!.numero : 'Novo contrato'" [trilha]="[original() ? 'Editar' : 'Novo']" />
+<app-cabecalho-modulo [titulo]="original() ? 'Editar contrato ' + original()!.numero : 'Novo contrato'" [trilha]="original() ? [{ rotulo: original()!.numero, rota: ['/contratos', original()!.id] }, 'Editar'] : ['Novo']" />
 
 @if (carregando()) {
   <p class="estado-vazio">Carregando…</p>
@@ -36,8 +36,8 @@
           </div>
           <div>
             <label for="numero">Número do contrato *</label>
-            <input id="numero" name="numero" required pattern="^\d{1,4}/\d{4}$" placeholder="NNN/AAAA" [(ngModel)]="dados.numero" />
-            @if (!original()) { <p class="dica-formulario">Sugerido pelo ano da data inicial.</p> }
+            <input id="numero" name="numero" required maxlength="60" placeholder="ex.: 012/2026 ou 20214514" [(ngModel)]="dados.numero" />
+            @if (!original()) { <p class="dica-formulario">Qualquer formato. Sugerido pelo ano da data inicial (NNN/AAAA); pode ser trocado.</p> }
           </div>
           <div class="ocupa-4">
             <label for="apelido">Apelido</label>

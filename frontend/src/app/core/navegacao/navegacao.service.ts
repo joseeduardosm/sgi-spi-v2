@@ -26,10 +26,10 @@ export class NavegacaoService {
       .filter((s) => s.itens.length > 0);
   });
 
-  /** Mantém só os itens permitidos (papel e ACL), aplicando o mesmo filtro aos submenus. */
+  /** Mantém só os itens permitidos (papel, conta root e ACL), aplicando o mesmo filtro aos submenus. */
   private filtrarItens(itens: ItemNavegacao[]): ItemNavegacao[] {
     return itens
-      .filter((i) => this.permitido(i.papeis) && (!i.acl || this.acesso.pode(i.acl)))
+      .filter((i) => this.permitido(i.papeis) && (!i.somenteRoot || !!this.autenticacao.usuario()?.conta_root) && (!i.acl || this.acesso.pode(i.acl)))
       .map((i) => (i.filhos ? { ...i, filhos: this.filtrarItens(i.filhos) } : i));
   }
 

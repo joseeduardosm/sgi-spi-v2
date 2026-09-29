@@ -69,6 +69,14 @@ class AnexoEmail:
 
 
 @dataclass(frozen=True)
+class ImagemEmbutida:
+    """Imagem exibida no corpo HTML (referenciada como `cid:<cid>`), enviada junto com o e-mail."""
+    cid: str
+    conteudo: bytes
+    tipo: str = "image/png"
+
+
+@dataclass(frozen=True)
 class Mensagem:
     """E-mail a enviar. `html` é opcional (o texto simples sempre vai junto, para leitores sem HTML).
 
@@ -83,6 +91,7 @@ class Mensagem:
     cco: list[str] = field(default_factory=list)
     responder_para: list[str] = field(default_factory=list)
     anexos: list[AnexoEmail] = field(default_factory=list)
+    imagens: list[ImagemEmbutida] = field(default_factory=list)
 
 
 def _traduzir(erro: Exception, parametros: ParametrosSmtp) -> str:
@@ -184,6 +193,11 @@ def montar_mensagem(parametros: ParametrosSmtp, mensagem: Mensagem) -> EmailMess
     email.set_content(mensagem.texto)
     if mensagem.html:
         email.add_alternative(mensagem.html, subtype="html")
+        # Imagens do corpo (ex.: brasão) vão como partes "related" do HTML: aparecem sem baixar nada da rede
+        parte_html = email.get_body(("html",))
+        for imagem in mensagem.imagens:
+            principal, _, secundario = imagem.tipo.partition("/")
+            parte_html.add_related(imagem.conteudo, maintype=principal, subtype=secundario, cid=f"<{imagem.cid}>", disposition="inline")
     for anexo in mensagem.anexos:
         principal, _, secundario = anexo.tipo.partition("/")
         email.add_attachment(anexo.conteudo, maintype=principal, subtype=secundario or "octet-stream", filename=anexo.nome)

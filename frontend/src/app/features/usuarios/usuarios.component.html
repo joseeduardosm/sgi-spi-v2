@@ -1,6 +1,6 @@
 <div class="cabecalho-pagina">
   <div>
-    <p>Início <span>/</span> Usuários</p>
+    <app-trilha [itens]="[{ rotulo: 'Usuários' }]" />
     <h1>Usuários</h1>
     <small>Contas locais e corporativas (LDAP), perfis institucionais e privilégios.</small>
   </div>
@@ -111,7 +111,7 @@
 
 @if (formularioAberto()) {
   <div class="fundo-modal" role="presentation" (click)="fecharFormulario()"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-usuario">
+  <section class="modal-portal modal-usuario" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-usuario">
     <header>
       <div>
         <span class="modal-sobretitulo">{{ emEdicao() ? rotulosOrigem[emEdicao()!.origem] : 'Conta local' }}</span>
@@ -121,7 +121,11 @@
     </header>
 
     <form (ngSubmit)="salvar()" novalidate>
-      <div class="grade-formulario" [formGroup]="conta">
+      <!-- Só o meio rola: cabeçalho e rodapé ficam fixos. Com o bloco do RH, duas colunas -->
+      <div class="corpo-usuario">
+      <div class="colunas-usuario">
+      <div class="coluna-conta">
+      <div class="grade-formulario tres-colunas" [formGroup]="conta">
         <div>
           <label for="usuario-login">Login</label>
           <input id="usuario-login" formControlName="login" autocomplete="off" />
@@ -141,11 +145,17 @@
       }
 
       <h3 class="secao-formulario">Perfil institucional</h3>
-      <app-campos-perfil [formulario]="perfil" [(gestor)]="gestor" [fonteGestor]="api.opcoes" [marcarObrigatorios]="false" />
+      <app-campos-perfil [formulario]="perfil" [(gestor)]="gestor" [fonteGestor]="api.opcoes" [marcarObrigatorios]="false" [colunas]="3" />
+      </div>
+
+      <!-- Dados funcionais do RH: só aparecem para a CGP e o SuperRoot (a API nega aos demais) -->
+      @if (emEdicao(); as u) { <div class="coluna-rh"><app-dados-funcionais [usuarioId]="u.id" /></div> }
+      </div>
 
       @if (erroFormulario()) {
         <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
       }
+      </div>
       <footer>
         <button class="acao-secundaria" type="button" (click)="fecharFormulario()" [disabled]="salvando()">Cancelar</button>
         <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar usuário' }}</button>

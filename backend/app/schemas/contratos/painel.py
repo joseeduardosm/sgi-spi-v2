@@ -1,9 +1,10 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para definir o formato dos dados do painel de contratos.
-"""Schemas do painel de contratos (`/contratos/painel`).
+"""Schemas do painel de contratos (`/contratos/painel`) e do painel de vigências (`/contratos/painel/vigencias`).
 
 O painel tem quatro blocos: minhas pendências (tarefas do usuário), alertas de risco da
-carteira, execução orçamentária do exercício e números da carteira.
+carteira, execução orçamentária do exercício e números da carteira. O painel de vigências mostra a
+vigência de cada contrato vigente, do que vence primeiro ao último.
 """
 
 import uuid
@@ -100,3 +101,37 @@ class Painel(BaseModel):
     numeros: NumerosCarteira
     empresas: list[OpcaoFiltro] = Field(..., description="Opções do filtro de empresa.")
     contratos: list[OpcaoFiltro] = Field(..., description="Opções do filtro de contrato.")
+
+
+# ---------------------------------------------------------------------------------------------
+# Painel de vigências
+# ---------------------------------------------------------------------------------------------
+
+class VigenciaSegmento(BaseModel):
+    """Um bloco de vigência: a inicial (sequência 1) ou uma prorrogação (2, 3…)."""
+    sequencia: int
+    inicio: date
+    fim: date
+
+
+class VigenciaContratoPainel(BaseModel):
+    """Linha do painel de vigências: a linha do tempo de um contrato vigente, de `data_inicio` a `data_fim`."""
+    contrato_id: uuid.UUID
+    numero: str
+    rotulo: str = Field(..., description="Apelido do contrato ou, sem apelido, a razão social da empresa.")
+    empresa: str
+    situacao: Literal["ativo", "a_vencer"] = Field(..., description="`a_vencer`: termina em até 90 dias.")
+    data_inicio: date
+    data_fim: date = Field(..., description="Fim da vigência atual.")
+    dias_restantes: int = Field(..., description="Dias corridos de hoje até `data_fim` (0 = vence hoje).")
+    data_limite_maxima: date = Field(..., description="Início + vigência máxima − 1 dia.")
+    meses_prorrogaveis: int = Field(..., description="Meses que ainda cabem até a vigência máxima (0 = no limite).")
+    vigencias: list[VigenciaSegmento] = Field(..., description="Vigência inicial e uma por termo aditivo de prorrogação, em ordem.")
+    reajustes: list[date] = Field(..., description="Meses de referência dos reajustes concluídos.")
+
+
+class PainelVigencias(BaseModel):
+    """Resposta do `GET /api/contratos/painel/vigencias`."""
+    hoje: date
+    contratos: list[VigenciaContratoPainel] = Field(..., description="Contratos vigentes (ativos e a vencer), do que vence primeiro ao último.")
+    empresas: list[OpcaoFiltro] = Field(..., description="Opções do filtro de empresa (empresas com contrato vigente).")

@@ -24,6 +24,8 @@ export interface ItemNavegacao {
   href?: string;
   novaAba?: boolean;
   papeis?: Papel[];
+  /** Só a conta root (login `LOGIN_ADMIN`) vê o item. */
+  somenteRoot?: boolean;
   /** Slug do recurso de ACL: o item só aparece se o usuário tiver ao menos LEITURA. */
   acl?: string;
   filhos?: ItemNavegacao[];

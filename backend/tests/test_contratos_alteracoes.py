@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, item, juntar_nf, restringir_contratos
+from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, criar_empresa, item, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -228,6 +228,41 @@ def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkey
     assert cliente.get("/api/contratos/painel", headers=admin).json()["minhas_pendencias"]
     vazio = cliente.get("/api/contratos/painel", params={"empresa_id": str(contrato["id"])}, headers=admin).json()
     assert vazio["numeros"]["contratos_ativos"] == 0 and vazio["alertas"] == []
+
+
+def test_painel_de_vigencias_ordena_vigentes_pelo_vencimento(cliente, admin, equipe, monkeypatch):
+    """Painel de vigências: só vigentes, do que vence primeiro ao último, com as vigências e o filtro de empresa."""
+    monkeypatch.setattr("app.services.contratos.servico_painel.hoje", lambda: HOJE)
+    contrato, gestora, _ = equipe
+    # Contrato da equipe (01/2026 a 12/2026, máximo 24 meses) prorrogado por 12 meses: vai a 31/12/2027
+    cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12, "regra_sob_demanda": "repetir_inicial"}, headers=gestora)
+    r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10", "numero_termo": "01/2026"},
+                     files={"termo": ("ta.pdf", PDF)}, headers=gestora)
+    assert r.status_code == 200, r.text
+    outra = criar_empresa(cliente, admin, base="44555666", razao="Outra Ltda")
+    a_vencer = criar_contrato(cliente, admin, numero="002/2025", empresa_id=outra["id"], apelido="", data_inicio="2025-06-01")
+    criar_contrato(cliente, admin, numero="003/2024", empresa_id=outra["id"], data_inicio="2024-01-01")  # encerrado
+    quinze = criar_contrato(cliente, admin, numero="004/2026", empresa_id=outra["id"], data_inicio="2026-02-01", vigencia_inicial_meses=15)
+
+    r = cliente.get("/api/contratos/painel/vigencias", headers=admin)
+    assert r.status_code == 200, r.text
+    p = r.json()
+    assert p["hoje"] == "2026-03-15"
+    assert [c["numero"] for c in p["contratos"]] == ["002/2025", "004/2026", "001/2026"]
+    primeiro = p["contratos"][0]
+    assert primeiro["contrato_id"] == a_vencer["id"] and primeiro["situacao"] == "a_vencer" and primeiro["rotulo"] == "Outra Ltda"
+    assert (primeiro["data_fim"], primeiro["dias_restantes"], primeiro["meses_prorrogaveis"]) == ("2026-05-31", 77, 48)
+    assert p["contratos"][1]["contrato_id"] == quinze["id"] and p["contratos"][1]["data_fim"] == "2027-04-30"
+    prorrogado = p["contratos"][2]
+    assert [(v["sequencia"], v["inicio"], v["fim"]) for v in prorrogado["vigencias"]] == [
+        (1, "2026-01-01", "2026-12-31"), (2, "2027-01-01", "2027-12-31")]
+    assert prorrogado["meses_prorrogaveis"] == 0 and prorrogado["data_limite_maxima"] == "2027-12-31"
+    # Filtro por empresa (as opções do filtro continuam todas)
+    filtrado = cliente.get("/api/contratos/painel/vigencias", params={"empresa_id": outra["id"]}, headers=admin).json()
+    assert [c["numero"] for c in filtrado["contratos"]] == ["002/2025", "004/2026"] and len(filtrado["empresas"]) == 2
+    # Sem ACL de leitura em contratos: 403
+    criar_usuario("sem_acesso")
+    assert cliente.get("/api/contratos/painel/vigencias", headers=cabecalho(cliente, "sem_acesso")).status_code == 403
 
 
 def test_previsao_consolidada_com_cenarios(cliente, admin, equipe):

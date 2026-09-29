@@ -23,10 +23,10 @@ npm ci --no-audit --no-fund
 if (( TESTES )); then npx ng test --watch=false; fi
 npx ng build --configuration production
 
-# CONTRATOS_SEM_RESTART=1 é usado pelo instalar.sh, que reinicia o serviço por conta própria
-if [[ -z "${CONTRATOS_SEM_RESTART:-}" ]] && systemctl list-unit-files contratos-spi-api.service >/dev/null 2>&1; then
-  echo "==> Reiniciando contratos-spi-api"
-  sudo systemctl restart contratos-spi-api
+# SGI_SEM_RESTART=1 é usado pelo instalar.sh, que reinicia o serviço por conta própria
+if [[ -z "${SGI_SEM_RESTART:-}" ]] && systemctl list-unit-files sgi-spi-api.service >/dev/null 2>&1; then
+  echo "==> Reiniciando sgi-spi-api"
+  sudo systemctl restart sgi-spi-api
   sleep 2
   curl -fsS http://127.0.0.1:8000/api/saude && echo
 fi

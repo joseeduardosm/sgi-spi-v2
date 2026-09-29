@@ -10,15 +10,17 @@ import { debounceTime, Subject } from 'rxjs';
 
 import { AutenticacaoService } from '../../core/autenticacao/autenticacao.service';
 import { OpcaoUsuario, ROTULOS_ORIGEM } from '../../core/modelos/usuario.model';
+import { DadosFuncionaisComponent } from '../rh/dados-funcionais.component';
 import { CamposPerfilComponent } from './campos-perfil.component';
 import { criarFormularioPerfil, dadosDoFormularioPerfil, gestorComoOpcao, preencherFormularioPerfil } from './formulario-perfil';
 import { FiltroUsuarios, UsuariosApiService } from './usuarios-api.service';
 import { DetalheUsuario } from './usuarios.models';
+import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 
 /** Administração de usuários: consulta para quem tem ACL; criação, edição e exclusão para o SuperRoot. */
 @Component({
   selector: 'app-usuarios',
-  imports: [FormsModule, ReactiveFormsModule, DatePipe, CamposPerfilComponent],
+  imports: [FormsModule, ReactiveFormsModule, DatePipe, CamposPerfilComponent, DadosFuncionaisComponent, TrilhaComponent],
   templateUrl: './usuarios.component.html',
   // Esc fecha a janela de cadastro
   host: { '(document:keydown.escape)': 'fecharFormulario()' },

@@ -13,7 +13,10 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
   - **Cadastro:** ACL `contratos` ≥ `MODIFICACAO`. Quem cadastra vira o **criador**.
   - **Alteração e anexos (pode editar):** ACL ≥ `MODIFICACAO` **e** ser SuperRoot, o criador ou integrante **vigente** da equipe. Sem esse vínculo: `403 acesso_negado`. Os seis papéis da equipe têm os mesmos poderes.
   - **Exclusão:** ACL `contratos` = `CONTROLE_TOTAL`.
-- **Número:** `NNN/AAAA`, único. `GET /proximo-numero` sugere o maior sequencial do ano + 1.
+- **Número:** formato livre (ex.: `012/2026`, `CT-45/2025`, `20214514`), até 60 caracteres, sem espaços nas pontas.
+  - É **único** sem diferenciar maiúsculas. No padrão `NNN/AAAA`, `1/2026` e `001/2026` também contam como o mesmo número (`409`).
+  - `sequencial` e `ano` são preenchidos só quando o número segue `NNN/AAAA` (nulos nos demais). Servem para a ordenação da carteira e para `GET /proximo-numero`, que sugere o maior sequencial do ano + 1.
+  - Nos nomes de arquivo (`DFD_SPI_…`, `ITENS_SPI_…`, memórias), o número entra com os caracteres que não são letra ou dígito trocados por `_` (`012/2026` → `012_2026`).
 - **Datas:** `data_fim` = `data_inicio` + vigência inicial − 1 dia (ex.: 01/01/2026 + 12 meses = 31/12/2026). Depois de uma prorrogação, a data inicial e a vigência inicial ficam bloqueadas.
 - **Vigência máxima** ≥ vigência inicial e ≥ soma das vigências já registradas.
 - **Situação** (calculada, não gravada): `encerrado` depois do fim da vigência atual; `a_vencer` a até 90 dias do fim; senão `ativo`. `situacao_forcada` (ex.: `suspenso`) prevalece.
@@ -39,7 +42,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 
 | Campo | Tipo | Obrigatório | Regras |
 |---|---|---|---|
-| `numero` | string | sim | `NNN/AAAA` (aceita `1/2026`); único |
+| `numero` | string | sim | Formato livre, 1 a 60 caracteres; único (ver regras acima) |
 | `empresa_id` | uuid | sim | Empresa ativa (um contrato existente pode manter uma empresa já inativada) |
 | `apelido` | string | não | Até 200 |
 | `objeto` | string | sim | 1 a 4000 |
@@ -167,3 +170,15 @@ O PDF, com o nome `PREFIXO_SPI_NNN_AAAA.pdf` (ex.: `CONTRATO_ASSINADO_SPI_012_20
 
 - Serviço: `ContratosApiService` (`frontend/src/app/features/contratos/compartilhado/contratos-api.service.ts`).
 - Telas: `/contratos` (carteira), `/contratos/novo` e `/contratos/:id/editar` (cadastro), e `/contratos/:id` (detalhe com abas).
+
+## `GET /api/contratos/{contrato_id}/itens/pdf`
+
+Relatório em PDF da aba **Itens** (A4 paisagem, gerado na hora, nada é gravado). Nome do arquivo: `ITENS_SPI_NNN_AAAA.pdf`.
+
+- **Autorização:** ACL `contratos` ≥ LEITURA (senão `403 acl_negado`). Contrato inexistente: `404 nao_encontrado`.
+- **Conteúdo:**
+  - identificação: contrato, situação, contratada com CNPJ, vigência atual, periodicidade, processo SEI de execução e objeto;
+  - totais da vigência atual: base mensal, valor global, aditamentos e supressões acumulados;
+  - tabela dos itens com os mesmos números de `GET /api/contratos/{contrato_id}` (`itens[]`): nº, descrição, UF, tipo e faturamento, códigos (Classe · ND · SIAFÍSICO · CATMAT/CATSER), quantidade total, mensal, executada e disponível, valor unitário vigente, subtotal mensal (só contínuos) e meses da vigência.
+- **Resposta `200 OK`:** `application/pdf` com `Content-Disposition: attachment`.
+- **Angular:** botão **Relatório PDF** no cabeçalho da aba Itens (`/contratos/:id?aba=itens`), desabilitado sem itens.

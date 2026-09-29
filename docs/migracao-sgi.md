@@ -1,12 +1,12 @@
 # Migração do Módulo de Contratos do SGI SPI
 
 Traz os dados do Módulo de Contratos do SGI SPI (10.23.1.220, PostgreSQL `sgi_spi`, schema `sgi`) para o
-contratos-spi. São dois scripts:
+sgi-spi. São dois scripts:
 
 | Script | O que faz |
 |---|---|
 | `scripts/extrair-contratos-sgi.py` | Gera o **pacote** a partir do SGI, **somente leitura** |
-| `scripts/migrar-contratos-sgi.py` | Carrega o pacote no banco do contratos-spi, confere os dados e copia os anexos |
+| `scripts/migrar-contratos-sgi.py` | Carrega o pacote no banco do sgi-spi, confere os dados e copia os anexos |
 
 ## 1. Extração (somente leitura no SGI)
 
@@ -46,7 +46,7 @@ cd /home/administrador/projeto/backend
 
 ### De-para
 
-| SGI | contratos-spi |
+| SGI | sgi-spi |
 |---|---|
 | UUIDs de todas as tabelas | preservados |
 | `*UserId` (id do `portal-data.json`) | usuário local com o mesmo login ou o mesmo id externo (AD). A conta administrativa local do SGI (`admin`) vira o `root`. Quem não existir é criado **inativo e sem senha** |
@@ -95,7 +95,7 @@ cd /home/administrador/projeto/backend
 
 1. Avise os usuários e congele o uso do módulo no SGI.
 2. Gere um pacote novo (seção 1).
-3. Rode a carga com `--gravar --substituir` (seção 2). Tudo o que foi feito no contratos-spi desde a carga
+3. Rode a carga com `--gravar --substituir` (seção 2). Tudo o que foi feito no sgi-spi desde a carga
    anterior é **apagado** e substituído pelo SGI.
 4. Confira alguns contratos na tela e apague o pacote.
 

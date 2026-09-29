@@ -37,6 +37,7 @@ from app.schemas.contratos.contratos import (
 from app.schemas.usuarios import OpcaoUsuario
 from app.services import servico_admin_usuarios
 from app.services.contratos import servico_contratos as servico
+from app.services.contratos.relatorio_itens import relatorio_itens as relatorio_itens_pdf
 
 roteador = APIRouter(prefix="/contratos", tags=["Contratos"], responses=RESPOSTAS_AUTENTICADAS)
 NAO_ENCONTRADO = resposta_nao_encontrado("Contrato")
@@ -209,6 +210,22 @@ def limpar_documento(
     with traduzir_erros(sessao):
         servico.limpar_documento(sessao, contrato_id, codigo, autor)
         return servico.listar_documentos(sessao, contrato_id)
+
+
+@roteador.get(
+    "/{contrato_id}/itens/pdf",
+    response_class=Response,
+    summary="Relatório dos itens em PDF",
+    description="Relatório da aba Itens (A4 paisagem): identificação do contrato, itens com UF, tipo, códigos, quantidades "
+    "(total, mensal, executada, disponível), valor unitário vigente, subtotal mensal, base mensal e valor global da vigência "
+    "atual. Nome `ITENS_SPI_NNN_AAAA.pdf`. Exige ACL `contratos` ≥ LEITURA.",
+    responses={**PDF, **NAO_ENCONTRADO},
+)
+def relatorio_itens(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)) -> Response:
+    """Gera o PDF na hora (nada é gravado)."""
+    with traduzir_erros():
+        conteudo, nome = relatorio_itens_pdf(sessao, contrato_id, usuario)
+    return Response(conteudo, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 @roteador.get(

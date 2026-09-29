@@ -55,10 +55,10 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="API contratos-spi",
+    title="API SGI SPI – Sistema de Gestão Integrada",
     version=config.versao_aplicacao,
     description=(
-        "API do sistema de gestão de contratos da Secretaria de Parcerias em Investimentos.\n\n"
+        "API do SGI SPI (Sistema de Gestão Integrada) da Secretaria de Parcerias em Investimentos: contratos, RH, mensageria e administração.\n\n"
         "Autenticação: obtenha um token em `POST /api/autenticacao/login` e envie-o em "
         "`Authorization: Bearer <token>`. Erros seguem o formato `{\"detalhe\": ..., \"codigo\": ...}`. "
         "Documentação textual completa em `docs/` no repositório."

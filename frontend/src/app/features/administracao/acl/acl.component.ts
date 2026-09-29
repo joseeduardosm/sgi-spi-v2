@@ -12,6 +12,7 @@ import { SeletorUsuariosComponent } from '../../../shared/componentes/seletor-us
 import { Setor, SetoresApiService } from '../../setores/setores-api.service';
 import { UsuariosApiService } from '../../usuarios/usuarios-api.service';
 import { AclApiService, RecursoAcl, RegraAcl } from './acl-api.service';
+import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 
 /** Abas da tela. */
 type Aba = 'regras' | 'recursos' | 'efetivo';
@@ -19,7 +20,7 @@ type Aba = 'regras' | 'recursos' | 'efetivo';
 /** Administração de ACL: recursos, regras e consulta de acesso efetivo (SuperRoot). */
 @Component({
   selector: 'app-acl',
-  imports: [FormsModule, ReactiveFormsModule, DatePipe, SeletorUsuariosComponent],
+  imports: [FormsModule, ReactiveFormsModule, DatePipe, SeletorUsuariosComponent, TrilhaComponent],
   templateUrl: './acl.component.html',
   host: { '(document:keydown.escape)': 'fecharFormularios()' },
 })

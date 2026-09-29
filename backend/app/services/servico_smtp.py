@@ -8,6 +8,7 @@ mandam e-mail (ex.: mensageria) por meio do servidor ativo.
 """
 
 import uuid
+from dataclasses import replace
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -16,7 +17,7 @@ from app.core.banco import agora_utc
 from app.core.criptografia import cifrar_segredo
 from app.models.servidor_smtp import ServidorSmtp
 from app.schemas.smtp import AlteracaoServidorSmtp, CriacaoServidorSmtp
-from app.services import cliente_smtp
+from app.services import cliente_smtp, modelo_email
 from app.services.cliente_smtp import ErroSmtp, Mensagem, ParametrosSmtp, ResultadoSmtp
 from app.services.servico_auditoria import auditar
 
@@ -133,14 +134,25 @@ def enviar_teste(sessao: Session, servidor_id: uuid.UUID, destinatario: str, aut
         para=[destinatario],
         assunto=f"Teste de envio — {servidor.nome}",
         texto=(
-            "Esta é uma mensagem de teste do portal Contratos SPI.\n\n"
+            "Esta é uma mensagem de teste do portal SGI SPI.\n\n"
             f"Servidor: {servidor.servidor}:{servidor.porta} ({servidor.seguranca})\n"
             f"Remetente: {servidor.remetente_email}\n"
             f"Enviada por: {autor}\n"
             f"Data: {agora:%d/%m/%Y %H:%M} (UTC)\n\n"
             "Se você recebeu este e-mail, o envio pelo portal está funcionando."
         ),
+        html=modelo_email.pagina(
+            f"Teste de envio — {servidor.nome}",
+            modelo_email.paragrafos([
+                "Esta é uma mensagem de teste do SGI SPI.",
+                f"Servidor: {servidor.servidor}:{servidor.porta} ({servidor.seguranca})\nRemetente: {servidor.remetente_email}\n"
+                f"Enviada por: {autor}\nData: {agora:%d/%m/%Y %H:%M} (UTC)",
+                "Se você recebeu este e-mail, o envio pelo sistema está funcionando.",
+            ]),
+            sobretitulo="Servidores SMTP",
+        ),
     )
+    mensagem = com_brasao(mensagem)
     try:
         resultado = cliente_smtp.enviar(ParametrosSmtp.do_modelo(servidor), mensagem)
     except ErroSmtp as erro:
@@ -154,8 +166,16 @@ def enviar_teste(sessao: Session, servidor_id: uuid.UUID, destinatario: str, aut
     return resultado
 
 
+def com_brasao(mensagem: Mensagem) -> Mensagem:
+    """Anexa o brasão (imagem embutida) quando o HTML usa o layout oficial."""
+    if mensagem.html and f"cid:{modelo_email.CID_BRASAO}" in mensagem.html and not any(i.cid == modelo_email.CID_BRASAO for i in mensagem.imagens):
+        return replace(mensagem, imagens=[*mensagem.imagens, modelo_email.imagem_brasao()])
+    return mensagem
+
+
 def enviar_email(sessao: Session, mensagem: Mensagem) -> ResultadoSmtp:
     """Envia pelo servidor ativo. Usado pelos módulos que mandam e-mail. Lança `SemServidorAtivo`."""
+    mensagem = com_brasao(mensagem)
     servidor = obter_servidor_ativo(sessao)
     if servidor is None:
         raise SemServidorAtivo("Nenhum servidor SMTP ativo. Cadastre e ative um em Administração > Servidores SMTP.")

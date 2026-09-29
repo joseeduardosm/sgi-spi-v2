@@ -8,7 +8,7 @@ serviço (journalctl), o que ajuda a investigar problemas.
 
 import logging
 from collections.abc import Mapping
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 from typing import Any
@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.models.auditoria import RegistroAuditoria
 
 # Logger próprio, para filtrar as linhas de auditoria no journal do systemd
-registro_log = logging.getLogger("contratos_spi.auditoria")
+registro_log = logging.getLogger("sgi_spi.auditoria")
 
 
 def auditar(
@@ -66,7 +66,7 @@ def valor_json(valor: Any) -> Any:
         return [valor_json(item) for item in valor]
     if isinstance(valor, Decimal):
         return str(valor)
-    if isinstance(valor, (datetime, date)):
+    if isinstance(valor, (datetime, date, time)):
         return valor.isoformat()
     if isinstance(valor, UUID):
         return str(valor)

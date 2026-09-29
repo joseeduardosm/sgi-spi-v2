@@ -9,7 +9,6 @@ desativada, excluída nem perder o SuperRoot, e ninguém pode desativar ou exclu
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.banco import agora_utc
 from app.core.configuracao import obter_configuracao
 from app.core.seguranca import gerar_hash_senha
 from app.models.diretorio_ldap import DiretorioLdap
@@ -169,6 +168,13 @@ def _aplicar_perfil(sessao: Session, usuario: Usuario, perfil: DadosPerfil) -> N
             raise ErroRegraUsuario("O usuário não pode ser gestor de si mesmo.")
         if sessao.get(Usuario, perfil.gestor_id) is None:
             raise ErroRegraUsuario("Gestor imediato inválido.")
+        # Sem ciclos na hierarquia (A superior de B e B superior de A)
+        from app.services.rh.servico_cadastro import ErroCadastro, validar_superior
+
+        try:
+            validar_superior(sessao, usuario.id, perfil.gestor_id, False)
+        except ErroCadastro as erro:
+            raise ErroRegraUsuario(str(erro)) from erro
     for campo in CAMPOS_PERFIL:
         setattr(usuario, campo, getattr(perfil, campo))
 
@@ -235,9 +241,10 @@ def excluir_usuario(sessao: Session, usuario_id: int, autor: Usuario) -> None:
 
 
 def revisar_proprio_perfil(sessao: Session, usuario: Usuario, perfil: DadosPerfil) -> Usuario:
-    """Atualiza e confirma o próprio perfil, reiniciando o prazo de 30 dias."""
-    _aplicar_perfil(sessao, usuario, perfil)
-    usuario.perfil_revisado_em = agora_utc()
-    auditar(sessao, usuario.login, "usuario.revisar-perfil", usuario.login)
-    sessao.commit()
-    return usuario
+    """Confirma o próprio perfil no mês. Usuário comum: alterações ficam pendentes de validação da CGP (Módulo RH)."""
+    from app.services.rh.servico_cadastro import ErroCadastro, revisar_perfil
+
+    try:
+        return revisar_perfil(sessao, usuario, perfil)
+    except ErroCadastro as erro:
+        raise ErroRegraUsuario(str(erro)) from erro

@@ -18,7 +18,9 @@ export type NomeIcone =
   | 'banco-dados'
   | 'organograma'
   | 'escudo'
-  | 'envelope';
+  | 'envelope'
+  | 'sino'
+  | 'megafone';
 
 /** Ícones de traço (24x24) no padrão visual da barra lateral. */
 @Component({
@@ -54,6 +56,8 @@ export type NomeIcone =
           <rect x="16" y="17" width="6" height="5" rx="1" /><path d="M12 7v5M5 17v-5h14v5" />
         }
         @case ('escudo') { <path d="M12 3 20 6v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6l8-3Z" /><path d="m9 12 2 2 4-5" /> }
+        @case ('sino') { <path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16Z" /><path d="M10 20a2 2 0 0 0 4 0" /> }
+        @case ('megafone') { <path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1Z" /><path d="M17 9a4 4 0 0 1 0 6M7 15l1 5h3l-1-4" /> }
         @case ('envelope') { <rect x="3" y="5" width="18" height="14" rx="1.5" /><path d="m3.5 6 8.5 7 8.5-7" /> }
       }
     </svg>

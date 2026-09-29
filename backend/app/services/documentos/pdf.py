@@ -212,7 +212,7 @@ class DocumentoPdf:
             topMargin=32 * mm,
             bottomMargin=16 * mm,
             title=self.titulo,
-            author=self.autor or "contratos-spi",
+            author=self.autor or "sgi-spi",
         )
         # Título (e subtítulo) entram antes dos blocos; a moldura é desenhada em todas as páginas
         cabecalho: list[Flowable] = [Paragraph(escape(self.titulo), ESTILO_TITULO)]

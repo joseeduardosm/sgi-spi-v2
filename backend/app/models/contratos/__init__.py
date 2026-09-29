@@ -14,6 +14,7 @@ Este arquivo reexporta as classes para que o restante do código importe de um l
 """
 
 from app.models.contratos.alteracoes import (
+    AbatimentoReajuste,
     AlteracaoQuantidade,
     CienciaAlteracao,
     CienciaProrrogacao,
@@ -57,6 +58,7 @@ from app.models.contratos.orcamento import (
 )
 
 __all__ = [
+    "AbatimentoReajuste",
     "ETAPAS",
     "PAPEIS_EQUIPE",
     "AlteracaoQuantidade",

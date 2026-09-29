@@ -85,7 +85,9 @@ class GravacaoEquipe(BaseModel):
 
 class GravacaoContrato(BaseModel):
     """Corpo do `POST /api/contratos` e do `PUT /api/contratos/{id}`."""
-    numero: str = Field(..., pattern=r"^\d{1,4}/\d{4}$", description="NNN/AAAA. Único.", examples=["012/2026"])
+    numero: TextoObrigatorio = Field(
+        ..., max_length=60, description="Formato livre (ex.: 012/2026, CT-45/2025). Único, sem diferenciar maiúsculas.", examples=["012/2026"]
+    )
     empresa_id: uuid.UUID = Field(..., description="Empresa ativa.")
     apelido: Texto = Field("", max_length=200)
     objeto: TextoObrigatorio = Field(..., max_length=4000)
@@ -187,8 +189,8 @@ class MarcoLinhaTempo(BaseModel):
 
 class DetalheContrato(ResumoContrato):
     """Detalhe completo do contrato (herda os campos do resumo e acrescenta os demais)."""
-    sequencial: int
-    ano: int
+    sequencial: int | None = Field(..., description="Parte do número quando ele segue NNN/AAAA; nulo nos demais formatos.")
+    ano: int | None = Field(..., description="Parte do número quando ele segue NNN/AAAA; nulo nos demais formatos.")
     empresa: EmpresaDoContrato
     data_fim_prazo_inicial: date = Field(..., description="Início + vigência inicial − 1 dia.")
     data_limite_maxima: date = Field(..., description="Início + vigência máxima − 1 dia.")

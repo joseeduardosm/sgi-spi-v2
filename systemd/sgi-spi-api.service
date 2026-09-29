@@ -1,5 +1,5 @@
 [Unit]
-Description=contratos-spi API (FastAPI/uvicorn)
+Description=sgi-spi API (FastAPI/uvicorn)
 After=network.target postgresql.service
 Wants=postgresql.service
 

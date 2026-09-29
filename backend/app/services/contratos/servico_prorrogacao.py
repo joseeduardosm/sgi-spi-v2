@@ -263,7 +263,7 @@ def emitir_parecer(sessao: Session, contrato: Contrato, processo: ProcessoProrro
     if processo.relatorio_anexo_id and processo.relatorio_hash == origem:
         return sessao.get(Anexo, processo.relatorio_anexo_id)
     conteudo = _pdf_parecer(contrato, processo, autor.nome_completo or autor.login)
-    anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, f"parecer-prorrogacao-{contrato.sequencial:03d}-{contrato.ano}.pdf",
+    anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, f"parecer-prorrogacao-{contrato.numero_arquivo}.pdf",
                                               "contrato-prorrogacao-parecer", autor.id, contrato_id=contrato.id)
     sessao.flush()
     processo.relatorio_anexo_id, processo.relatorio_hash = anexo.id, origem
@@ -343,6 +343,9 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, assinada_em: date, numero
     auditar(sessao, autor.login, "contrato.prorrogacao.registrar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
             alvo_id=contrato.id, dados={"campos": {"data_fim": {"de": prorrogacao.fim_anterior, "para": fim}}, "meses": processo.meses,
                                         "termo": numero, "com_parecer": relatorio is not None})
+    from app.services.contratos import avisos
+    avisos.alteracao_concluida(sessao, contrato, "prorrogacao", prorrogacao.id,
+                               f"prorrogação de {processo.meses} meses registrada (vigência até {fim:%d/%m/%Y})", autor)
     sessao.commit()
     return prorrogacao
 

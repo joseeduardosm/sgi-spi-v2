@@ -108,7 +108,7 @@ def _cenario_prorrogacoes(sessao: Session, linha: LinhaContrato, exercicio: int)
 def montar(sessao: Session, exercicio: int, cenarios: set[str]) -> list[LinhaContrato]:
     """Monta uma linha por contrato com valores no exercício (contratos zerados ficam de fora)."""
     linhas = []
-    for contrato in sorted(carregar_contratos(sessao), key=lambda c: (c.ano, c.sequencial)):
+    for contrato in sorted(carregar_contratos(sessao), key=lambda c: (c.ano or 0, c.sequencial or 0, c.numero.lower())):
         linha = LinhaContrato(contrato)
         for mes in meses_previstos(contrato):
             if mes.competencia.year == exercicio:

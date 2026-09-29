@@ -17,7 +17,7 @@ from app.api.respostas import RESPOSTAS_AUTENTICADAS
 from app.api.routes.contratos.comum import pode_ler
 from app.core.banco import obter_sessao
 from app.models.usuario import Papel, Usuario
-from app.schemas.contratos.painel import Painel
+from app.schemas.contratos.painel import Painel, PainelVigencias
 from app.services.contratos import servico_orcamento, servico_painel, servico_relatorios
 
 roteador = APIRouter(prefix="/contratos/relatorios", tags=["Contratos: relatórios"], responses=RESPOSTAS_AUTENTICADAS)
@@ -61,6 +61,19 @@ def previsao_orcamentaria(
     cenarios = {nome for nome, ativo in (("reajustes", cenario_reajustes), ("aditamentos", cenario_aditamentos),
                                          ("supressoes", cenario_supressoes), ("prorrogacoes", cenario_prorrogacoes)) if ativo}
     return _arquivo(*servico_relatorios.exportar(sessao, exercicio, formato, resumo_anual, detalhamento_mensal, cenarios, autor))
+
+
+@roteador_painel.get("/painel/vigencias", response_model=PainelVigencias, summary="Painel de vigências (vigências)",
+                     description="Uma linha do tempo por contrato vigente (ativo ou a vencer): vigência inicial e prorrogações, dias "
+                     "restantes e meses ainda prorrogáveis até a vigência máxima. Ordenado do que vence primeiro ao último. Filtro "
+                     "opcional por empresa. Exige ACL `contratos` ≥ LEITURA.")
+def painel_vigencias(
+    empresa_id: uuid.UUID | None = Query(None),
+    sessao: Session = Depends(obter_sessao),
+    _: Usuario = Depends(pode_ler),
+) -> PainelVigencias:
+    """Vigências da carteira, para a aba "Vigências"."""
+    return servico_painel.vigencias_da_carteira(sessao, empresa_id)
 
 
 @roteador_painel.get("/painel", response_model=Painel, summary="Painel de contratos",

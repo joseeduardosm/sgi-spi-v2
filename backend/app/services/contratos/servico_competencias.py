@@ -27,6 +27,7 @@ from app.core.banco import agora_utc
 from app.models.anexo import Anexo
 from app.models.contratos import (
     ETAPAS,
+    AbatimentoReajuste,
     AvaliacaoCompetencia,
     CienciaMedicao,
     Competencia,
@@ -42,6 +43,7 @@ from app.models.contratos.execucao import ETAPAS_PARALELAS
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
     ConferenciaNota,
+    DescontoReajuste,
     DetalheCompetencia,
     EmailMedicao,
     GlosaDoPeriodo,
@@ -66,7 +68,7 @@ from app.schemas.contratos.execucao import (
     ResumoCompetencia,
 )
 from app.services import servico_anexos
-from app.services.contratos import calculos, documentos_execucao, leitor_nota_xml, servico_diario, servico_retencao, valores
+from app.services.contratos import avisos, calculos, documentos_execucao, leitor_nota_xml, servico_diario, servico_retencao, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist, formulario_ativo
 from app.services.contratos.servico_contratos import (
@@ -107,6 +109,7 @@ def _carregar_competencia(sessao: Session, contrato: Contrato, competencia_id: u
             selectinload(Competencia.consultas_cadin),
             selectinload(Competencia.documentos),
             selectinload(Competencia.avaliacao),
+            selectinload(Competencia.abatimentos_reajuste).selectinload(AbatimentoReajuste.reajuste),
         )
     )
     if competencia is None:
@@ -130,15 +133,104 @@ def total_medido(competencia: Competencia) -> Decimal:
     return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), ZERO))
 
 
+def desconto_reajuste(competencia: Competencia) -> Decimal:
+    """Crédito de desconto de reajuste abatido nesta competência (soma dos abatimentos)."""
+    return calculos.arredondar(sum((a.valor for a in competencia.abatimentos_reajuste), ZERO))
+
+
+def valor_autorizado_bruto(competencia: Competencia) -> Decimal:
+    """Total medido × % liberado pela avaliação, antes do desconto de reajuste."""
+    return calculos.arredondar(total_medido(competencia) * percentual_liberado(competencia) / CEM)
+
+
+def valor_autorizado(competencia: Competencia) -> Decimal:
+    """Valor autorizado para a NF: medido × % liberado − desconto de reajuste (nunca negativo)."""
+    return max(ZERO, valor_autorizado_bruto(competencia) - desconto_reajuste(competencia))
+
+
 def valor_a_pagar(competencia: Competencia) -> Decimal:
     """Valor que a Ordem Bancária debita nas NEs apontadas.
 
     Com a nota fiscal concluída: NF principal + NF adicional (valores brutos). Antes disso, a estimativa é
-    o valor autorizado da medição (medido × % liberado pela avaliação).
+    o valor autorizado da medição (medido × % liberado pela avaliação − desconto de reajuste).
     """
     if competencia.nf_concluida_em is not None and competencia.nf_valor_bruto is not None:
         return calculos.arredondar(competencia.nf_valor_bruto + (competencia.nf_adicional_valor_bruto or ZERO))
-    return calculos.arredondar(total_medido(competencia) * percentual_liberado(competencia) / CEM)
+    return valor_autorizado(competencia)
+
+
+# ---------------------------------------------------------------------------------------------
+# Crédito de desconto de reajuste (abatido nas próximas medições)
+# ---------------------------------------------------------------------------------------------
+
+def proxima_competencia_a_medir(contrato: Contrato, depois_de: Competencia | None = None) -> Competencia | None:
+    """Primeira competência regular com a medição ainda aberta (depois de `depois_de`, se informada)."""
+    candidatas = sorted(
+        (c for c in contrato.competencias
+         if c.tipo == "regular" and c.medicao_concluida_em is None and c is not depois_de
+         and (depois_de is None or c.periodo_inicio > depois_de.periodo_inicio)),
+        key=lambda c: c.periodo_inicio,
+    )
+    return candidatas[0] if candidatas else None
+
+
+def registrar_credito_reajuste(sessao: Session, contrato: Contrato, reajuste, valor: Decimal) -> AbatimentoReajuste:
+    """Crédito de um desconto retroativo: vai para a próxima competência a medir (ou fica pendente)."""
+    abatimento = AbatimentoReajuste(contrato_id=contrato.id, reajuste_id=reajuste.id, valor=valor,
+                                    competencia=proxima_competencia_a_medir(contrato), criado_em=agora_utc())
+    sessao.add(abatimento)
+    return abatimento
+
+
+def vincular_creditos_pendentes(sessao: Session, contrato: Contrato) -> None:
+    """Créditos sem competência (não havia o que medir) vão para a próxima competência a medir."""
+    destino = proxima_competencia_a_medir(contrato)
+    if destino is None:
+        return
+    for abatimento in sessao.scalars(select(AbatimentoReajuste).where(
+        AbatimentoReajuste.contrato_id == contrato.id, AbatimentoReajuste.competencia_id.is_(None)
+    )):
+        abatimento.competencia = destino
+
+
+def ajustar_abatimentos(sessao: Session, contrato: Contrato, competencia: Competencia) -> None:
+    """Se o desconto passar do valor autorizado bruto, a sobra segue para a próxima competência a medir.
+
+    Chamado ao concluir a medição e a avaliação (quando o % liberado fica definitivo). O abatimento
+    reduzido continua na competência (mesmo zerado) e a sobra aponta para ele em `origem_id`, para que
+    uma reabertura da medição possa devolvê-la (`recolher_sobras`).
+    """
+    excesso = desconto_reajuste(competencia) - valor_autorizado_bruto(competencia)
+    if excesso <= 0:
+        return
+    destino = proxima_competencia_a_medir(contrato, depois_de=competencia)
+    # Reduz os abatimentos mais recentes primeiro
+    for abatimento in reversed(list(competencia.abatimentos_reajuste)):
+        parte = min(excesso, abatimento.valor)
+        if parte <= 0:
+            continue
+        abatimento.valor -= parte
+        sessao.add(AbatimentoReajuste(contrato_id=contrato.id, reajuste_id=abatimento.reajuste_id, origem_id=abatimento.id,
+                                      valor=parte, competencia=destino, criado_em=agora_utc()))
+        excesso -= parte
+        if excesso <= 0:
+            break
+
+
+def recolher_sobras(sessao: Session, competencia: Competencia) -> None:
+    """Reabertura da medição: as sobras ainda não usadas voltam ao abatimento de origem."""
+    ids = [a.id for a in competencia.abatimentos_reajuste]
+    if not ids:
+        return
+    origens = {a.id: a for a in competencia.abatimentos_reajuste}
+    for sobra in list(sessao.scalars(select(AbatimentoReajuste).where(AbatimentoReajuste.origem_id.in_(ids)))):
+        # Sobra já abatida numa medição concluída fica onde está
+        if sobra.competencia is not None and sobra.competencia.medicao_concluida_em is not None:
+            continue
+        origens[sobra.origem_id].valor += sobra.valor
+        if sobra.competencia is not None:
+            sobra.competencia.abatimentos_reajuste.remove(sobra)
+        sessao.delete(sobra)
 
 
 def compromissos(contrato: Contrato, exceto: uuid.UUID | None = None) -> dict[uuid.UUID, Decimal]:
@@ -327,6 +419,8 @@ def gerar_competencias(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) 
             competencia.avaliacao = AvaliacaoCompetencia(formulario_id=formulario.id, definicao=formulario.definicao)
         contrato.competencias.append(competencia)
         geradas += 1
+    # Crédito de desconto de reajuste sem competência a medir: vai para a primeira nova
+    vincular_creditos_pendentes(sessao, contrato)
     auditar(sessao, autor.login, "contrato.execucao.gerar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"geradas": geradas})
     sessao.commit()
@@ -460,7 +554,12 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         medicao_concluida_em=competencia.medicao_concluida_em,
         avaliacao=_leitura_avaliacao(competencia.avaliacao, anexos) if competencia.avaliacao else None,
         percentual_autorizado=percentual,
-        valor_autorizado=calculos.arredondar(medido * percentual / CEM),
+        valor_autorizado=valor_autorizado(competencia),
+        desconto_reajuste=desconto_reajuste(competencia),
+        descontos_reajuste=[
+            DescontoReajuste(reajuste_id=a.reajuste_id, mes_referencia=a.reajuste.mes_referencia, valor=a.valor)
+            for a in competencia.abatimentos_reajuste if a.valor > 0
+        ],
         valor_a_pagar=valor_a_pagar(competencia),
         avisos=excedentes_da_medicao(contrato, competencia) if competencia.medicao_concluida_em is None else [],
         reaberturas_permitidas=pode_reabrir(sessao, contrato, usuario),
@@ -673,6 +772,7 @@ def _hash_medicao(contrato: Contrato, competencia: Competencia) -> str:
         "itens": [[i.ordem, i.descricao, str(i.valor_unitario), str(i.quantidade_prevista), str(i.quantidade_medida)] for i in competencia.itens],
         "ciencias": [[c.usuario_id, c.nome, c.papel] for c in competencia.ciencias],
         "notas": [str(n.nota_id) for n in competencia.notas],
+        "desconto_reajuste": str(desconto_reajuste(competencia)),
     }
     # `sort_keys` garante o mesmo texto (e o mesmo hash) para os mesmos dados
     return hashlib.sha256(json.dumps(origem, sort_keys=True).encode()).hexdigest()
@@ -691,6 +791,8 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     if [n.nota_id for n in competencia.notas] != notas_ids:
         raise ErroRegraContrato("As Notas de Empenho foram alteradas na tela. Salve a medição novamente antes de concluir.")
     notas = _resolver_notas(contrato, notas_ids)
+    # Desconto de reajuste maior que a medição: a sobra segue para a próxima competência
+    ajustar_abatimentos(sessao, contrato, competencia)
     _exigir_saldo(notas, valor_a_pagar(competencia), compromissos(contrato, exceto=competencia.id))
     # De novo na conclusão: uma glosa pode ter sido registrada depois de a medição ser salva
     excedentes = excedentes_da_medicao(contrato, competencia)
@@ -702,6 +804,7 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     competencia.etapa_atual = proxima_etapa(competencia, "medicao")
     atualizar_executado(contrato)
     _auditar(sessao, autor, "contrato.execucao.medicao.concluir", contrato, competencia, total=total_medido(competencia))
+    avisos.medicao_concluida(sessao, contrato, competencia, autor)
     sessao.commit()
 
 
@@ -715,7 +818,7 @@ def gerar_memoria(sessao: Session, contrato: Contrato, competencia: Competencia,
     versao = (ultima.versao + 1) if ultima else 1
     notas = {n.id: n for n in contrato.notas_empenho}
     conteudo = documentos_execucao.memoria_medicao(contrato, competencia, [notas[n.nota_id] for n in competencia.notas], versao, _nome(autor))
-    nome = f"memoria-medicao-{contrato.sequencial:03d}-{contrato.ano}-{competencia.competencia:%Y-%m}-v{versao}.pdf"
+    nome = f"memoria-medicao-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}-v{versao}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-memoria", autor.id, contrato_id=contrato.id)
     memoria = MemoriaMedicao(versao=versao, anexo=anexo, hash_origem=origem, criado_por_id=autor.id, criado_em=agora_utc())
     competencia.memorias.append(memoria)
@@ -966,7 +1069,7 @@ def gerar_pdf_avaliacao(sessao: Session, contrato_id, competencia_id, autor: Usu
     if len(ciencias_ateste(avaliacao)) < CIENCIAS_MINIMAS:
         raise ErroRegraContrato("Registre ao menos uma ciência da equipe no ateste antes de exportar o PDF.")
     conteudo = documentos_execucao.relatorio_avaliacao(contrato, competencia, nota_final(avaliacao), percentual_liberado(competencia), _nome(autor))
-    nome = f"avaliacao-{contrato.sequencial:03d}-{contrato.ano}-{competencia.competencia:%Y-%m}.pdf"
+    nome = f"avaliacao-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-avaliacao", autor.id, contrato_id=contrato.id)
     sessao.flush()
     avaliacao.pdf_gerado_anexo_id = anexo.id
@@ -983,6 +1086,8 @@ def enviar_avaliacao_assinada(sessao: Session, contrato_id, competencia_id, arqu
     sessao.flush()
     avaliacao.pdf_assinado_anexo_id, avaliacao.concluida_em = anexo.id, agora_utc()
     competencia.etapa_atual = proxima_etapa(competencia, "avaliacao")
+    # Com o % liberado definitivo, o desconto de reajuste que não couber segue para a próxima competência
+    ajustar_abatimentos(sessao, contrato, competencia)
     _auditar(sessao, autor, "contrato.execucao.avaliacao.concluir", contrato, competencia, percentual=percentual_liberado(competencia))
     sessao.commit()
 
@@ -1103,6 +1208,7 @@ def registrar_nota_fiscal(
     competencia.etapa_atual = proxima_etapa(competencia, "nota_fiscal")
     _auditar(sessao, autor, "contrato.execucao.nota_fiscal.concluir", contrato, competencia, numero=competencia.nf_numero, bruto=bruto,
              chave=competencia.nf_chave)
+    avisos.nota_fiscal_juntada(sessao, contrato, competencia, autor)
     sessao.commit()
 
 
@@ -1227,12 +1333,13 @@ def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuar
     enviados_por = {u.id: _nome(u) for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(ids_envio)))} if ids_envio else {}
     detalhe = detalhar(sessao, contrato_id, competencia_id, autor)
     conteudo = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor), enviados_por)
-    nome = f"consolidado-{contrato.sequencial:03d}-{contrato.ano}-{competencia.competencia:%Y-%m}.pdf"
+    nome = f"consolidado-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-consolidado", autor.id, contrato_id=contrato.id)
     competencia.consolidado_anexo, competencia.consolidado_em = anexo, agora_utc()
     if competencia.etapa_atual == "consolidado":
         competencia.etapa_atual = "ordem_bancaria"
     _auditar(sessao, autor, "contrato.execucao.consolidado", contrato, competencia)
+    avisos.consolidado_gerado(sessao, competencia)
     sessao.commit()
 
 
@@ -1331,6 +1438,8 @@ def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, aut
     if reaberta("medicao"):
         competencia.medicao_concluida_em = None
         competencia.ciencias.clear()
+        # Sobras de desconto de reajuste ainda não usadas voltam para esta competência
+        recolher_sobras(sessao, competencia)
         atualizar_executado(contrato)
     etapa_anterior = competencia.etapa_atual
     competencia.etapa_atual = dados.etapa

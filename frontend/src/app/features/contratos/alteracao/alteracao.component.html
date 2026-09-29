@@ -1,5 +1,5 @@
 @if (contrato(); as c) {
-  <app-cabecalho-modulo [titulo]="rotuloTipo" [trilha]="[c.numero, rotuloTipo]" [descricao]="'Contrato ' + c.numero" />
+  <app-cabecalho-modulo [titulo]="rotuloTipo" [trilha]="[{ rotulo: c.numero, rota: ['/contratos', c.id] }, rotuloTipo]" [descricao]="'Contrato ' + c.numero" />
   <div class="barra-fixa"><a class="acao-secundaria" [routerLink]="['/contratos', c.id]" [queryParams]="{ aba: 'itens' }">← Contrato {{ c.numero }}</a></div>
 
   @if (painel(); as p) {

@@ -113,10 +113,14 @@ class AberturaReajuste(BaseModel):
 
 
 class ItemReajusteGravacao(BaseModel):
-    """Índice aplicado a um item e, opcionalmente, um teto para o novo preço."""
+    """Percentual (positivo = reajuste, negativo = desconto) aplicado a um item e, opcionalmente, um teto para o novo preço."""
     item_id: uuid.UUID
-    indice_percentual: Annotated[Decimal, Field(ge=-100, le=1000, max_digits=18, decimal_places=8)] = Field(..., description="2 = 2%.")
-    valor_referencial: Annotated[Decimal | None, Field(None, ge=0, max_digits=18, decimal_places=2)] = Field(None, description="Teto opcional.")
+    indice_percentual: Annotated[Decimal, Field(gt=-100, le=1000, max_digits=18, decimal_places=8)] = Field(
+        ..., description="Em pontos percentuais: 2 = reajuste de 2%; −3 = desconto de 3%; 0 = item sem alteração. Maior que −100."
+    )
+    valor_referencial: Annotated[Decimal | None, Field(None, ge=0, max_digits=18, decimal_places=2)] = Field(
+        None, description="Teto opcional do preço reajustado (útil no reajuste positivo)."
+    )
 
 
 class GravacaoMemoriaReajuste(BaseModel):
@@ -146,6 +150,14 @@ class LeituraMemoriaVersao(BaseModel):
     xlsx: LeituraArquivo
 
 
+class AbatimentoLeitura(BaseModel):
+    """Parte do crédito de desconto abatida numa competência."""
+    competencia: str = Field(..., description="Rótulo da competência (MM/AAAA).")
+    identificador: str = Field(..., description="Identificador da rota da execução (`AAAA-MM`).")
+    medida: bool = Field(..., description="Verdadeiro quando a medição dessa competência já foi concluída.")
+    valor: ValorMonetario
+
+
 class LeituraReajuste(BaseModel):
     """Reajuste completo, em elaboração ou já encerrado."""
     id: uuid.UUID
@@ -156,8 +168,17 @@ class LeituraReajuste(BaseModel):
     mes_referencia: date
     competencias_recalculadas: int = Field(..., description="Competências não medidas a partir do mês de referência (recebem o novo preço).")
     competencias_com_diferenca: int = Field(
-        0, description="Competências já medidas a partir do mês de referência: a diferença de preço delas vira uma competência complementar."
+        0, description="Competências já medidas a partir do mês de referência: a diferença de preço delas é acertada na conclusão."
     )
+    diferenca_retroativa: ValorMonetario = Field(
+        Decimal(0), description="Soma de quantidade medida × (preço novo − preço pago) das competências já medidas: prévia no "
+        "rascunho, valor gravado depois de concluído. > 0: competência de diferença a pagar; < 0: crédito da SPI abatido nas próximas medições.",
+    )
+    competencia_credito: str | None = Field(
+        None, description="Rascunho com diferença negativa: rótulo (MM/AAAA) da competência que receberá o crédito; nulo se não houver competência a medir."
+    )
+    abatimentos: list[AbatimentoLeitura] = Field(default_factory=list, description="Concluído com desconto retroativo: onde o crédito foi (ou será) abatido.")
+    credito_pendente: ValorMonetario = Field(Decimal(0), description="Parte do crédito ainda sem competência a medir (vai para a próxima gerada).")
     competencia_diferenca: str | None = Field(
         None, description="Identificador (`AAAA-MM-dif`) da competência complementar gerada na conclusão, se houver."
     )

@@ -2,9 +2,13 @@
 # Este arquivo serve para aplicar as regras de reajuste de preços, memória e apostilamento.
 """Reajuste de preços (tela 6): abertura, evidência do índice, memória, apostilamento e conclusão.
 
-Regras: um reajuste em elaboração por vez; cada vigência é reajustada uma vez. Competências já
-medidas mantêm os preços antigos (princípio da fotografia); a diferença de preço delas é paga
-por uma competência complementar ("diferença de reajuste") gerada na conclusão.
+Regras: um reajuste em elaboração por vez; cada vigência é reajustada uma vez. Cada item tem o seu
+percentual: positivo reajusta, negativo dá desconto, zero mantém o preço.
+
+Competências já medidas mantêm os preços antigos (princípio da fotografia). Na conclusão, a diferença
+líquida delas (quantidade medida × (preço novo − preço pago)):
+- positiva: vira uma competência complementar ("diferença de reajuste") a pagar;
+- negativa: vira um crédito da SPI, abatido no valor autorizado das próximas medições.
 """
 
 import hashlib
@@ -21,6 +25,7 @@ from app.models.anexo import Anexo
 from app.models.contratos import Competencia, Contrato, ItemMedicao, ItemReajuste, MemoriaReajuste, Reajuste
 from app.models.usuario import Usuario
 from app.schemas.contratos.alteracoes import (
+    AbatimentoLeitura,
     AberturaReajuste,
     GravacaoMemoriaReajuste,
     ItemReajusteLeitura,
@@ -35,6 +40,7 @@ from app.services.contratos import calculos, valores
 from app.services.contratos.documentos_execucao import moeda, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist
+from app.services.contratos.servico_competencias import proxima_competencia_a_medir, registrar_credito_reajuste
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
@@ -57,7 +63,8 @@ def _carregar(sessao: Session, contrato: Contrato) -> list[Reajuste]:
         sessao.scalars(
             select(Reajuste)
             .where(Reajuste.contrato_id == contrato.id)
-            .options(selectinload(Reajuste.itens), selectinload(Reajuste.memorias).selectinload(MemoriaReajuste.pdf_anexo),
+            .options(selectinload(Reajuste.itens), selectinload(Reajuste.abatimentos),
+                     selectinload(Reajuste.memorias).selectinload(MemoriaReajuste.pdf_anexo),
                      selectinload(Reajuste.memorias).selectinload(MemoriaReajuste.xlsx_anexo))
             .order_by(Reajuste.criado_em)
         )
@@ -115,15 +122,8 @@ def _competencias_medidas(contrato: Contrato, reajuste: Reajuste) -> list[Compet
     )
 
 
-def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: dict) -> Competencia | None:
-    """Competência complementar (`diferenca_reajuste`) com a diferença de preço das quantidades já medidas.
-
-    Por item: quantidade = soma das medições concluídas desde a referência; valor unitário = preço
-    reajustado − preço fotografado na competência (média ponderada, se houver preços diferentes).
-    A medição já vem preenchida e segue o fluxo normal: NEs e ciências, nota fiscal, CADIN,
-    checklist, consolidado e Ordem Bancária (sem avaliação).
-    """
-    # Soma, por item, as quantidades medidas e o valor da diferença (quantidade × (novo − antigo))
+def _diferencas(contrato: Contrato, reajuste: Reajuste, novos: dict) -> tuple[list[Competencia], dict, dict]:
+    """Competências medidas desde a referência e, por item, a quantidade medida e o valor da diferença."""
     medidas = _competencias_medidas(contrato, reajuste)
     quantidades: dict = {}
     valores_diferenca: dict = {}
@@ -135,9 +135,30 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
             valores_diferenca[linha.item_id] = valores_diferenca.get(linha.item_id, ZERO) + linha.quantidade_medida * (
                 novos[linha.item_id] - linha.valor_unitario
             )
-    # Sem nada medido ou sem diferença a pagar, não há competência complementar
-    if not quantidades or calculos.arredondar(sum(valores_diferenca.values(), ZERO)) == 0:
+    return medidas, quantidades, valores_diferenca
+
+
+def diferenca_retroativa(contrato: Contrato, reajuste: Reajuste) -> Decimal:
+    """Diferença líquida das competências já medidas: > 0 a pagar à contratada, < 0 crédito da SPI."""
+    _, _, valores_diferenca = _diferencas(contrato, reajuste, {i.item_id: i.valor_unitario_reajustado for i in reajuste.itens})
+    return calculos.arredondar(sum(valores_diferenca.values(), ZERO))
+
+
+def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: dict) -> Competencia | None:
+    """Competência complementar (`diferenca_reajuste`) com a diferença de preço das quantidades já medidas.
+
+    Por item: quantidade = soma das medições concluídas desde a referência; valor unitário = preço
+    reajustado − preço fotografado na competência (média ponderada, se houver preços diferentes).
+    A medição já vem preenchida e segue o fluxo normal: NEs e ciências, nota fiscal, CADIN,
+    checklist, consolidado e Ordem Bancária (sem avaliação).
+    """
+    # Soma, por item, as quantidades medidas e o valor da diferença (quantidade × (novo − antigo))
+    medidas, quantidades, valores_diferenca = _diferencas(contrato, reajuste, novos)
+    # Só há competência complementar com diferença líquida a pagar (a negativa vira crédito)
+    if not quantidades or calculos.arredondar(sum(valores_diferenca.values(), ZERO)) <= 0:
         return None
+    # Itens sem diferença não entram; itens com desconto entram com preço negativo (o total é líquido)
+    quantidades = {k: v for k, v in quantidades.items() if calculos.arredondar(valores_diferenca[k]) != 0}
     itens = {i.id: i for i in contrato.itens}
     competencia = Competencia(
         tipo="diferenca_reajuste", reajuste_id=reajuste.id, competencia=reajuste.mes_referencia,
@@ -165,7 +186,20 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
 
 def leitura(contrato: Contrato, reajuste: Reajuste, anexos: dict) -> LeituraReajuste:
     """Converte o reajuste para o formato de leitura (as contagens de competências só valem em elaboração)."""
+    rascunho = reajuste.situacao == "rascunho"
+    diferenca = diferenca_retroativa(contrato, reajuste) if rascunho else (reajuste.diferenca_retroativa or ZERO)
+    # Prévia do destino do crédito (rascunho) ou onde ele foi abatido (concluído)
+    destino = proxima_competencia_a_medir(contrato) if rascunho and diferenca < 0 else None
+    abatimentos = [a for a in reajuste.abatimentos if a.valor > 0]
     return LeituraReajuste(
+        diferenca_retroativa=diferenca,
+        competencia_credito=destino.numero_competencia if destino else None,
+        abatimentos=[
+            AbatimentoLeitura(competencia=a.competencia.numero_competencia, identificador=a.competencia.identificador,
+                              medida=a.competencia.medicao_concluida_em is not None, valor=a.valor)
+            for a in abatimentos if a.competencia is not None
+        ],
+        credito_pendente=calculos.arredondar(sum((a.valor for a in abatimentos if a.competencia is None), ZERO)),
         id=reajuste.id, situacao=reajuste.situacao, sequencia_vigencia=reajuste.sequencia_vigencia, vigencia_inicio=reajuste.vigencia_inicio,
         vigencia_fim=reajuste.vigencia_fim, mes_referencia=reajuste.mes_referencia,
         competencias_recalculadas=len(_competencias_afetadas(contrato, reajuste)) if reajuste.situacao == "rascunho" else 0,
@@ -302,7 +336,7 @@ def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id:
     if reajuste.memorias and reajuste.memorias[-1].hash_origem == origem:
         return
     versao = len(reajuste.memorias) + 1
-    base = f"memoria-reajuste-{contrato.sequencial:03d}-{contrato.ano}-v{versao}"
+    base = f"memoria-reajuste-{contrato.numero_arquivo}-v{versao}"
     pdf = servico_anexos.guardar_pdf_gerado(sessao, _pdf_memoria(contrato, reajuste, versao, autor), f"{base}.pdf", "contrato-reajuste-memoria", autor.id, contrato_id=contrato.id)
     xlsx = servico_anexos.guardar_arquivo_gerado(sessao, _xlsx_memoria(contrato, reajuste), f"{base}.xlsx", XLSX, "contrato-reajuste-memoria", autor.id, contrato_id=contrato.id)
     reajuste.memorias.append(MemoriaReajuste(versao=versao, pdf_anexo=pdf, xlsx_anexo=xlsx, hash_origem=origem, criado_por_id=autor.id, criado_em=agora_utc()))
@@ -312,12 +346,35 @@ def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id:
 
 
 def _linhas(reajuste: Reajuste) -> list[list]:
-    """Linhas da tabela da memória (usadas no PDF e na planilha)."""
+    """Linhas da tabela da memória (usadas no PDF e na planilha); a variação é negativa no desconto."""
     return [
         [i.ordem, i.descricao, i.quantidade_mensal, i.valor_unitario_atual, i.indice_percentual, i.valor_referencial, i.valor_unitario_reajustado,
-         calculos.arredondar(i.quantidade_mensal * i.valor_unitario_reajustado)]
+         i.valor_unitario_reajustado - i.valor_unitario_atual, calculos.arredondar(i.quantidade_mensal * i.valor_unitario_reajustado)]
         for i in reajuste.itens
     ]
+
+
+def _percentual(valor: Decimal) -> str:
+    """+2,0000% / -3,0000% / 0,0000%."""
+    texto = f"{abs(valor):.4f}".replace(".", ",") + "%"
+    return ("+" if valor > 0 else "-" if valor < 0 else "") + texto
+
+
+def _moeda_com_sinal(valor: Decimal) -> str:
+    """+R$ 0,53 / -R$ 100,00 / R$ 0,00."""
+    return ("+" if valor > 0 else "-" if valor < 0 else "") + moeda(abs(valor))
+
+
+def _texto_diferenca(contrato: Contrato, reajuste: Reajuste) -> str:
+    """Destino da diferença retroativa, para os totais da memória."""
+    diferenca = diferenca_retroativa(contrato, reajuste)
+    if diferenca > 0:
+        return f"{moeda(diferenca)} a pagar em competência de diferença de reajuste"
+    if diferenca < 0:
+        destino = proxima_competencia_a_medir(contrato)
+        onde = f"na medição de {destino.numero_competencia}" if destino else "na próxima competência gerada"
+        return f"crédito de {moeda(-diferenca)} da SPI, abatido {onde}"
+    return "sem diferença (nenhuma competência medida a partir da referência)"
 
 
 def _pdf_memoria(contrato: Contrato, reajuste: Reajuste, versao: int, autor: Usuario) -> bytes:
@@ -328,15 +385,17 @@ def _pdf_memoria(contrato: Contrato, reajuste: Reajuste, versao: int, autor: Usu
         ("Contrato", contrato.numero), ("Contratada", contrato.empresa.razao_social),
         ("Vigência", f"{reajuste.vigencia_inicio:%d/%m/%Y} a {reajuste.vigencia_fim:%d/%m/%Y}"), ("Mês de referência", f"{reajuste.mes_referencia:%m/%Y}"),
     ])
-    documento.secao("Itens").tabela(
-        ["Item", "Descrição", "Qtd. mensal", "Valor atual", "Índice (%)", "Referencial", "Valor reajustado", "Subtotal reajustado"],
-        [[str(l[0]), l[1], quantidade(l[2]), moeda(l[3]), f"{l[4]:.4f}".replace(".", ","), moeda(l[5]) if l[5] is not None else "—", moeda(l[6]), moeda(l[7])]
+    documento.secao("Itens (percentual positivo = reajuste; negativo = desconto)").tabela(
+        ["Item", "Descrição", "Qtd. mensal", "Valor atual", "Índice (%)", "Referencial", "Valor reajustado", "Variação", "Subtotal reajustado"],
+        [[str(l[0]), l[1], quantidade(l[2]), moeda(l[3]), _percentual(l[4]), moeda(l[5]) if l[5] is not None else "—", moeda(l[6]),
+          _moeda_com_sinal(l[7]), moeda(l[8])]
          for l in _linhas(reajuste)],
-        larguras=[0.5, 4, 1.2, 1.4, 1.1, 1.4, 1.5, 1.6], alinhar_direita=[2, 3, 4, 5, 6, 7],
+        larguras=[0.5, 3.6, 1.1, 1.3, 1.1, 1.3, 1.4, 1.2, 1.5], alinhar_direita=[2, 3, 4, 5, 6, 7, 8],
     )
     documento.secao("Totais").campos([
         ("Base atual", moeda(reajuste.base_atual)), ("Nova base por competência", moeda(reajuste.base_reajustada)),
         ("Valor global atual", moeda(reajuste.valor_global_atual)), ("Novo valor global", moeda(reajuste.valor_global_reajustado)),
+        ("Competências já medidas", _texto_diferenca(contrato, reajuste)),
     ])
     return documento.gerar()
 
@@ -346,11 +405,14 @@ def _xlsx_memoria(contrato: Contrato, reajuste: Reajuste) -> bytes:
     return gerar_planilha([Aba(
         "Reajuste",
         [Coluna("Item", largura=6), Coluna("Descrição", largura=40), Coluna("Qtd. mensal", FORMATO_QUANTIDADE), Coluna("Valor atual", FORMATO_MOEDA),
-         Coluna("Índice (%)", "0.0000"), Coluna("Referencial", FORMATO_MOEDA), Coluna("Valor reajustado", FORMATO_MOEDA), Coluna("Subtotal reajustado", FORMATO_MOEDA, 20)],
+         Coluna("Índice (%)", "+0.0000;-0.0000;0.0000"), Coluna("Referencial", FORMATO_MOEDA), Coluna("Valor reajustado", FORMATO_MOEDA),
+         Coluna("Variação", FORMATO_MOEDA), Coluna("Subtotal reajustado", FORMATO_MOEDA, 20)],
         _linhas(reajuste),
         titulo=f"Memória de cálculo do reajuste — Contrato {contrato.numero} — referência {reajuste.mes_referencia:%m/%Y}",
-        observacoes=[f"Base atual: {moeda(reajuste.base_atual)} · Nova base: {moeda(reajuste.base_reajustada)}",
-                     f"Valor global atual: {moeda(reajuste.valor_global_atual)} · Novo valor global: {moeda(reajuste.valor_global_reajustado)}"],
+        observacoes=["Índice: percentual positivo = reajuste; negativo = desconto.",
+                     f"Base atual: {moeda(reajuste.base_atual)} · Nova base: {moeda(reajuste.base_reajustada)}",
+                     f"Valor global atual: {moeda(reajuste.valor_global_atual)} · Novo valor global: {moeda(reajuste.valor_global_reajustado)}",
+                     f"Competências já medidas: {_texto_diferenca(contrato, reajuste)}"],
     )])
 
 
@@ -382,14 +444,21 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ar
     # O valor global reajustado do contrato também só vale para a vigência atual
     if reajuste.sequencia_vigencia == ultima_vigencia:
         contrato.valor_global_reajustado = reajuste.valor_global_reajustado
-    # Diferença de preço das competências já medidas vira uma competência complementar
+    # Diferença de preço das competências já medidas (calculada antes de mexer nos preços das não medidas):
+    # a positiva vira competência complementar; a negativa, crédito abatido nas próximas medições
+    reajuste.diferenca_retroativa = diferenca_retroativa(contrato, reajuste)
     diferenca = gerar_competencia_diferenca(contrato, reajuste, novos)
+    if reajuste.diferenca_retroativa < 0:
+        registrar_credito_reajuste(sessao, contrato, reajuste, -reajuste.diferenca_retroativa)
     reajuste.situacao, reajuste.concluido_em = "concluido", agora_utc()
     contrato.versao += 1
     auditar(sessao, autor.login, "contrato.reajuste.concluir", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id,
             dados={"mes_referencia": reajuste.mes_referencia, "competencias_recalculadas": len(afetadas),
                    "competencia_diferenca": diferenca.identificador if diferenca else None,
+                   "diferenca_retroativa": reajuste.diferenca_retroativa,
                    "campos": {"valor_global": {"de": reajuste.valor_global_atual, "para": reajuste.valor_global_reajustado}}})
+    from app.services.contratos import avisos
+    avisos.alteracao_concluida(sessao, contrato, "reajuste", reajuste.id, f"reajuste aplicado a partir de {reajuste.mes_referencia:%m/%Y}", autor)
     sessao.commit()
 
 

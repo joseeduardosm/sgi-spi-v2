@@ -1495,3 +1495,197 @@ a.acao-primaria {
   align-items: center;
   gap: 8px;
 }
+
+// Reajuste: resumo do topo (referência, mês de reajuste, vigência), "aplicar a todos" e variação por item
+.resumo-reajuste {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 16px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #e2e5e8;
+  border-radius: 8px;
+  background: #f8f9fa;
+  font-size: 13px;
+
+  dt {
+    color: #8e99a6;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  dd {
+    margin: 2px 0 0;
+    font-weight: 600;
+  }
+}
+
+.aplicar-todos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 22px 12px;
+  font-size: 13px;
+
+  label {
+    font-weight: 600;
+  }
+
+  .campo-tabela {
+    width: 110px;
+  }
+
+  .dica-formulario {
+    flex-basis: 100%;
+    margin: 0;
+  }
+}
+
+.tabela-gestao td.variacao-positiva {
+  color: #218365;
+}
+
+.tabela-gestao td.variacao-negativa,
+.tabela-gestao .linha-desconto-reajuste td {
+  color: #c64d56;
+}
+
+// Vigências: uma linha por contrato; todos os trilhos com a mesma largura, cada um na sua escala
+$prazo-critico: #c64d56;
+$prazo-atencao: #d99a1e;
+$prazo-normal: #2b4468;
+
+.legenda-prazos i {
+  &.critico { background: $prazo-critico; }
+  &.atencao { background: $prazo-atencao; }
+  &.normal { background: $prazo-normal; }
+  &.reajuste { width: 3px; background: #218365; }
+}
+
+.lista-prazos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.linha-prazo {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr 190px;
+  align-items: center;
+  gap: 22px;
+  min-height: 76px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--spi-borda);
+
+  &:hover { background: #fafbfc; }
+
+  .identificacao-prazo {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 13px;
+
+    a { color: var(--spi-titulo); text-decoration: none; }
+    a:hover strong { color: var(--spi-vermelho); }
+
+    span, small {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    small { color: var(--spi-apagado); font-size: 11px; }
+  }
+
+  .trilho-prazo {
+    position: relative;
+    height: 14px;
+    border-radius: 7px;
+    background: #eceef1;
+    overflow: hidden;
+  }
+
+  // Blocos de vigência (inicial e prorrogações), separados por um filete branco
+  .segmento {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-right: 2px solid #fff;
+    background: #e3e6ea;
+
+    &.prorrogacao { background: #d6dbe1; }
+  }
+
+  .decorrido-prazo {
+    position: absolute;
+    inset: 0 auto 0 0;
+    opacity: .85;
+    pointer-events: none;
+  }
+
+  .marca-reajuste {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    margin-left: -1px;
+    background: #218365;
+  }
+
+  .marca-hoje {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    margin-left: -1px;
+    background: var(--spi-titulo);
+  }
+
+  .datas-prazo {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+    color: var(--spi-apagado);
+    font-size: 11px;
+  }
+
+  .vencimento-prazo {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 12px;
+    text-align: right;
+
+    strong { font-size: 15px; }
+    small { color: var(--spi-apagado); font-size: 11px; }
+  }
+
+  &.critico {
+    .decorrido-prazo { background: $prazo-critico; }
+    .vencimento-prazo strong { color: $prazo-critico; }
+  }
+
+  &.atencao {
+    .decorrido-prazo { background: $prazo-atencao; }
+    .vencimento-prazo strong { color: #a8740f; }
+  }
+
+  &.normal {
+    .decorrido-prazo { background: $prazo-normal; }
+  }
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+    gap: 8px;
+
+    .vencimento-prazo {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 8px;
+      text-align: left;
+    }
+  }
+}

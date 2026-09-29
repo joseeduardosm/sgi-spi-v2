@@ -174,3 +174,53 @@ def excluir_setor(sessao: Session, setor_id: int, autor: str) -> None:
     auditar(sessao, autor, "setor.excluir", setor.nome, f"id={setor.id}")
     sessao.delete(setor)
     sessao.commit()
+
+
+# ---------------------------------------------------------------------------------------------
+# Reorganização completa (estrutura oficial)
+# ---------------------------------------------------------------------------------------------
+
+def substituir_estrutura(sessao: Session, arvore: dict[str, dict], autor_login: str) -> dict:
+    """Troca todos os setores institucionais pela `arvore` ({nome: {filhos}}), sem commit.
+
+    - Setores sistêmicos (grupos do sistema) e os membros deles são mantidos.
+    - Os setores institucionais, os membros deles e as regras de ACL que os citam (CASCADE) saem.
+    - O Departamento de todos os usuários é limpo: como é obrigatório no perfil, o usuário comum é
+      levado a "Meu perfil" no próximo login para escolher o novo setor.
+    Devolve um resumo do que foi feito.
+    """
+    antigos = list(sessao.scalars(select(Setor).where(Setor.sistemico.is_(False))))
+    ids = [s.id for s in antigos]
+    membros = sessao.execute(delete(MembroSetor).where(MembroSetor.setor_id.in_(ids))).rowcount if ids else 0
+    # A hierarquia usa RESTRICT: primeiro solta os pais, depois exclui
+    for setor in antigos:
+        setor.setor_pai_id = None
+    sessao.flush()
+    for setor in antigos:
+        sessao.delete(setor)
+    sessao.flush()
+    usuarios = list(sessao.scalars(select(Usuario).where(func.trim(Usuario.departamento) != "")))
+    for usuario in usuarios:
+        usuario.departamento = ""
+
+    criados: list[str] = []
+
+    def criar(ramo: dict[str, dict], pai_id: int | None) -> None:
+        for nome, filhos in ramo.items():
+            setor = Setor(nome=nome, setor_pai_id=pai_id, sistemico=False, ativo=True)
+            sessao.add(setor)
+            sessao.flush()
+            criados.append(nome)
+            criar(filhos, setor.id)
+
+    criar(arvore, None)
+    resumo = {
+        "setores_removidos": sorted(s.nome for s in antigos),
+        "membros_removidos": membros,
+        "departamentos_limpos": len(usuarios),
+        "setores_criados": criados,
+    }
+    auditar(sessao, autor_login, "setores.reorganizar", "Estrutura organizacional",
+            f"{len(antigos)} setor(es) removido(s), {len(criados)} criado(s), {len(usuarios)} departamento(s) limpo(s)",
+            alvo_tipo="setores", alvo_id="estrutura", dados=resumo)
+    return resumo

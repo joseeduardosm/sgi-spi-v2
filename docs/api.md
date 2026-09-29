@@ -1,8 +1,8 @@
-# API do contratos-spi
+# API do sgi-spi
 
 ## Finalidade
 
-A API expõe as regras de negócio e os dados do contratos-spi para o frontend Angular e para futuros sistemas consumidores. Hoje ela oferece:
+A API expõe as regras de negócio e os dados do sgi-spi para o frontend Angular e para futuros sistemas consumidores. Hoje ela oferece:
 - autenticação local e corporativa (LDAP), com perfil institucional obrigatório;
 - cadastro de usuários e setores;
 - controle de acesso por recurso (ACL);
@@ -19,9 +19,9 @@ Navegador
    ▼
  Nginx (porta pública)
    │
-   ├── /            → frontend Angular (arquivos estáticos em frontend/dist/contratos-spi/browser)
+   ├── /            → frontend Angular (arquivos estáticos em frontend/dist/sgi-spi/browser)
    │
-   └── /api/*       → FastAPI (uvicorn em 127.0.0.1:8000, serviço systemd contratos-spi-api)
+   └── /api/*       → FastAPI (uvicorn em 127.0.0.1:8000, serviço systemd sgi-spi-api)
                           │
                           ├── PostgreSQL (URL_BANCO_DADOS)
                           ├── Anexos PDF em disco (ANEXOS_DIRETORIO)
@@ -34,7 +34,7 @@ Navegador
 
 | Pasta | Responsabilidade |
 |---|---|
-| `api/routes/` | Rotas HTTP, uma por recurso (`autenticacao.py`, `usuarios.py`, `setores.py`, `acl.py`, `ldap.py`, `smtp.py`, `saude.py`); o módulo de contratos fica em `api/routes/contratos/` |
+| `api/routes/` | Rotas HTTP, uma por recurso (`autenticacao.py`, `usuarios.py`, `setores.py`, `acl.py`, `ldap.py`, `smtp.py`, `mensagens.py`, `mensageria.py`, `rh.py`, `saude.py`); o módulo de contratos fica em `api/routes/contratos/` |
 | `api/dependencias.py` | Autenticação (`obter_usuario_autenticado`, `obter_usuario_atual`) e autorização (`exigir_papeis`, `exigir_acl`) |
 | `api/respostas.py` | Respostas de erro padronizadas para as rotas e o OpenAPI |
 | `core/` | Configuração (`configuracao.py`), banco (`banco.py`), senhas e JWT (`seguranca.py`), cifra de segredos (`criptografia.py`), formato de erros (`erros.py`) |
@@ -53,6 +53,12 @@ Navegador
 | `usuarios` | Contas locais e corporativas, com o perfil institucional |
 | `diretorios_ldap` | Configuração dos diretórios LDAP (senha de bind cifrada) |
 | `servidores_smtp` | Configuração dos servidores SMTP de envio de e-mail (senha cifrada; um ativo) |
+| `rh_alteracoes_cadastrais`, `rh_dados_funcionais` | Módulo RH: alterações de cadastro pendentes de validação da CGP (histórico) e dados funcionais (autorizador, substituto, início do período aquisitivo, saldo de LP, jornada, horários, RG/CIN e RS/PV) |
+| `rh_periodos_aquisitivos` | Módulo RH: períodos aquisitivos de férias (12 meses), dias creditados, ajuste da CGP e expiração |
+| `rh_feriados` | Módulo RH: feriados e pontos facultativos (um por data), usados no calendário, no painel, na regra de início e na folha de ponto |
+| `rh_afastamentos`, `rh_afastamentos_eventos`, `rh_parametros` | Módulo RH: férias e licença-prêmio, histórico de status e regras de agendamento |
+| `mensagens`, `mensagens_entregas` | Mensageria: mensagens (avulsas e automáticas) e a entrega a cada destinatário (lida, ciência, encerrada, e-mail) |
+| `mensageria_envios_changelog` | Mensageria: e-mails de changelog enviados pela conta root (texto, destino, até que data do CHANGELOG e resultado) |
 | `setores`, `membros_setor` | Setores e seus membros |
 | `acl_recursos`, `acl_regras`, `acl_regras_usuarios`, `acl_regras_setores` | Controle de acesso |
 | `auditoria` | Registro das operações. `alvo_tipo`/`alvo_id` identificam o registro alterado e `dados` (JSONB) guarda o conteúdo do ato; nas alterações, `{"campos": {"campo": {"de", "para"}}}` alimenta o histórico por campo |
@@ -65,6 +71,7 @@ Navegador
 | `contratos_diario_ocorrencias`, `contratos_diario_glosas` | Diário de bordo: ocorrências (imutáveis, com o resultado do e-mail) e glosas por item |
 | `contratos_prorrogacoes`, `contratos_prorrogacoes_processos`, `contratos_prorrogacoes_ciencias` | Termos aditivos de prorrogação e o rascunho com parecer e ciências |
 | `contratos_reajustes`, `contratos_reajustes_itens`, `contratos_reajustes_memorias` | Reajustes e memórias versionadas |
+| `contratos_abatimentos_reajuste` | Crédito de desconto de reajuste retroativo abatido no valor autorizado das competências (`competencia_id` nulo = pendente) |
 | `contratos_alteracoes`, `contratos_alteracoes_itens`, `contratos_alteracoes_ciencias` | Aditamentos e supressões |
 | `anexos` | Metadados dos PDFs enviados ou gerados (nome original, chave em disco, SHA-256, tamanho, categoria, autor e `contrato_id` quando pertence a um contrato — usado para descartar os arquivos ao excluir o contrato). O arquivo fica em `ANEXOS_DIRETORIO/AAAA/MM/<uuid>.pdf` |
 
@@ -141,6 +148,22 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` `PUT` `DELETE` | `/api/smtp/servidores/{servidor_id}` | SuperRoot | Consulta / altera / exclui servidor | [smtp.md](endpoints/smtp.md#endpoints) |
 | `POST` | `/api/smtp/servidores/{servidor_id}/testar` | SuperRoot | Testa conexão e autenticação e registra o resultado | [smtp.md](endpoints/smtp.md#endpoints) |
 | `POST` | `/api/smtp/servidores/{servidor_id}/enviar-teste` | SuperRoot | Envia e-mail de teste | [smtp.md](endpoints/smtp.md#endpoints) |
+| `GET` | `/api/rh/papeis` | Autenticado | Papéis no RH (CGP, autorizador) | [rh-cadastro.md](endpoints/rh-cadastro.md) |
+| `GET` `POST` `PUT` | `/api/rh/cadastro/…` | CGP | Pendências, cadastro, validar/recusar alteração, dados funcionais, ajuste do período aquisitivo vigente | [rh-cadastro.md](endpoints/rh-cadastro.md) |
+| `GET` `POST` `PUT` | `/api/rh/afastamentos[/…]` | Autenticado (por papel) | Férias e licença-prêmio: meus, agendar, alterar, cancelar, aprovar/recusar, aprovações, painel, exportar | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
+| `GET` `POST` `PUT` `DELETE` | `/api/rh/feriados[/{feriado_id}]` | Leitura: autenticado; gravação: CGP | Feriados e pontos facultativos | [rh-afastamentos.md](endpoints/rh-afastamentos.md#feriados-e-pontos-facultativos-apirhferiados) |
+| `GET` | `/api/rh/folha-ponto[/competencias]` | Autenticado (só a própria) | Folha de ponto em PDF / competências disponíveis | [rh-folha-ponto.md](endpoints/rh-folha-ponto.md) |
+| `GET` `PUT` | `/api/rh/parametros` | Leitura: autenticado; gravação: CGP | Regras de agendamento | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
+| `GET` | `/api/mensagens/resumo` | Autenticado | Contador do sino e janela a abrir | [mensagens.md](endpoints/mensagens.md) |
+| `GET` `POST` | `/api/mensagens` | Autenticado (setores: ACL `mensageria-setores`) | Caixa de entrada / envia mensagem avulsa | [mensagens.md](endpoints/mensagens.md) |
+| `GET` | `/api/mensagens/{entrega_id}` | Autenticado (só a própria) | Abre a mensagem (marca lida) | [mensagens.md](endpoints/mensagens.md) |
+| `POST` | `/api/mensagens/{entrega_id}/ciencia` | Autenticado (só a própria) | Registra ciência | [mensagens.md](endpoints/mensagens.md) |
+| `GET` | `/api/mensagens/destinatarios` | Autenticado | Usuários e setores para o envio | [mensagens.md](endpoints/mensagens.md) |
+| `GET` | `/api/mensagens/enviadas[/{mensagem_id}]` | Autor ou SuperRoot | Acompanhamento das enviadas | [mensagens.md](endpoints/mensagens.md) |
+| `POST` | `/api/mensagens/enviadas/{mensagem_id}/lembrar` | Autor ou SuperRoot | E-mail de lembrete a quem não deu ciência | [mensagens.md](endpoints/mensagens.md) |
+| `GET` | `/api/mensageria/changelog/rascunho` | Conta root | Rascunho do e-mail de changelog a partir do CHANGELOG.md | [mensageria.md](endpoints/mensageria.md) |
+| `POST` | `/api/mensageria/changelog/previa` | Conta root | Prévia do e-mail no layout oficial | [mensageria.md](endpoints/mensageria.md) |
+| `GET` `POST` | `/api/mensageria/changelog/envios` | Conta root | Histórico / envia (todos ou teste) | [mensageria.md](endpoints/mensageria.md) |
 
 | `GET` `POST` | `/api/contratos/empresas` | ACL `contratos` ≥ LEITURA / ≥ MODIFICACAO | Lista / cadastra empresas | [contratos-empresas.md](endpoints/contratos-empresas.md) |
 | `GET` | `/api/contratos/empresas/opcoes` | ACL `contratos` ≥ LEITURA | Empresas para o cadastro de contrato | [contratos-empresas.md](endpoints/contratos-empresas.md#get-apicontratosempresasopcoes) |
@@ -151,12 +174,14 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/contratos/proximo-numero` | ACL `contratos` ≥ LEITURA | Próximo número do ano | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` | `/api/contratos/opcoes-usuarios` | ACL `contratos` ≥ MODIFICACAO | Usuários para a equipe | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` `PUT` `DELETE` | `/api/contratos/{contrato_id}` | LEITURA / pode editar (2) / CONTROLE_TOTAL | Detalhe / altera / exclui contrato | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
+| `GET` | `/api/contratos/{contrato_id}/itens/pdf` | ACL `contratos` ≥ LEITURA | Relatório da aba Itens em PDF | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` | `/api/contratos/{contrato_id}/historico` | ACL `contratos` ≥ LEITURA | Histórico por campo | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` | `/api/contratos/{contrato_id}/documentos` | ACL `contratos` ≥ LEITURA | Documentos importantes | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `POST` | `/api/contratos/{contrato_id}/documentos/{codigo}` | Pode editar (2) | Anexa documento importante | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `DELETE` | `/api/contratos/{contrato_id}/documentos/{codigo}` | Pode editar (2) | Limpa documento importante (retira o PDF) | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` | `/api/contratos/{contrato_id}/documentos/{codigo}/arquivo` | ACL `contratos` ≥ LEITURA | Baixa documento importante | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `GET` | `/api/contratos/painel` | ACL `contratos` ≥ LEITURA | Painel: pendências, alertas, execução orçamentária | [contratos-painel.md](endpoints/contratos-painel.md) |
+| `GET` | `/api/contratos/painel/vigencias` | ACL `contratos` ≥ LEITURA | Painel de vigências: vigência de cada contrato vigente, do que vence primeiro | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` | `/api/contratos/relatorios/notas-empenho` | SuperRoot | Relatório Executivo de NEs (XLSX/PDF) | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` | `/api/contratos/relatorios/previsao-orcamentaria` | SuperRoot | Previsão consolidada com cenários | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/contratos/modelos[/{modelo_id}]` | LEITURA / SuperRoot | Modelos globais de checklist e formulário | [contratos-painel.md](endpoints/contratos-painel.md) |
@@ -241,7 +266,7 @@ Os sucessos usam `200 OK`, `201 Created` (criação, com o registro no corpo) e 
 }
 ```
 
-O mesmo código aparece no cabeçalho `X-Correlacao` e na linha do log `contratos_spi.erros` com o rastreamento completo.
+O mesmo código aparece no cabeçalho `X-Correlacao` e na linha do log `sgi_spi.erros` com o rastreamento completo.
 
 ### Tratamento no Angular
 

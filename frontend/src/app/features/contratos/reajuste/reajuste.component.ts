@@ -13,10 +13,13 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { DetalheContrato, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
-import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
+import { DetalheContrato, ItemReajuste, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
+import { MESES, paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
-/** Tela 6: reajuste (evidência do índice, memória, apostilamento e conclusão). */
+/** Percentual aceito pela API: maior que −100 (o preço não pode zerar) e até 1000. */
+const INDICE = /^-?\d+(\.\d{1,8})?$/;
+
+/** Tela 6: reajuste (evidência do índice, memória, apostilamento e conclusão). Percentual por item: positivo reajusta, negativo dá desconto. */
 @Component({
   selector: 'app-reajuste',
   imports: [FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
@@ -37,6 +40,9 @@ export class ReajusteComponent implements OnInit {
   protected vigencia: number | null = null;
   protected indices: Record<string, string> = {};
   protected referenciais: Record<string, string> = {};
+  // Percentual digitado em "Aplicar a todos"
+  protected indiceTodos = '';
+  protected readonly meses = MESES;
   // PDFs escolhidos: evidência do índice e apostilamento assinado
   protected evidencia: File | null = null;
   protected apostilamento: File | null = null;
@@ -83,6 +89,52 @@ export class ReajusteComponent implements OnInit {
     if (this.evidencia) this.tratar(this.api.enviarReajuste(this.id(), r.id, 'evidencia', this.evidencia), 'Não foi possível anexar a evidência', 'Enviando a evidência…');
   }
 
+  /** Percentual válido: vazio (= 0) ou número entre −100 (exclusive) e 1000. */
+  protected indiceValido(valor: string | undefined): boolean {
+    if (!valor || !valor.trim()) return true;
+    const texto = paraDecimalApi(valor);
+    return INDICE.test(texto) && Number(texto) > -100 && Number(texto) <= 1000;
+  }
+
+  protected todosValidos(r: Reajuste): boolean {
+    return r.itens.every((i) => this.indiceValido(this.indices[i.item_id]));
+  }
+
+  /** Copia o percentual de "Aplicar a todos" para todos os itens (ainda sem salvar). */
+  protected aplicarATodos(r: Reajuste): void {
+    if (!this.indiceValido(this.indiceTodos)) return;
+    this.indices = Object.fromEntries(r.itens.map((i) => [i.item_id, this.indiceTodos.trim() || '0']));
+  }
+
+  /** Percentual ou teto do item diferente do que está salvo. */
+  private alteradoItem(i: ItemReajuste): boolean {
+    const numero = (v: string | null | undefined) => (v === null || v === undefined || v === '' ? null : Number(paraDecimalApi(v)));
+    return (numero(this.indices[i.item_id]) ?? 0) !== Number(i.indice_percentual) ||
+      numero(this.referenciais[i.item_id]) !== (i.valor_referencial === null ? null : Number(i.valor_referencial));
+  }
+
+  protected alteradoSemSalvar(r: Reajuste): boolean {
+    return r.itens.some((i) => this.alteradoItem(i));
+  }
+
+  /** Novo preço: o salvo, ou a prévia com o que foi digitado (preço × (1 + %/100), 2 casas, limitado ao teto). */
+  protected precoNovo(i: ItemReajuste): number {
+    if (!this.alteradoItem(i) || !this.indiceValido(this.indices[i.item_id])) return Number(i.valor_unitario_reajustado);
+    const indice = Number(paraDecimalApi(this.indices[i.item_id] || '0'));
+    const novo = Math.round((Number(i.valor_unitario_atual) * (1 + indice / 100) + Number.EPSILON) * 100) / 100;
+    const teto = this.referenciais[i.item_id] ? Number(paraDecimalApi(this.referenciais[i.item_id])) : null;
+    return teto !== null && Number.isFinite(teto) ? Math.min(novo, teto) : novo;
+  }
+
+  /** Variação percentual entre dois valores ("+4,50%" / "−3,00%"). */
+  protected variacao(de: string, para: string): string {
+    const base = Number(de);
+    if (!base) return '0,00%';
+    const pct = ((Number(para) - base) / base) * 100;
+    const texto = Math.abs(pct).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+    return pct > 0.004 ? '+' + texto : pct < -0.004 ? '−' + texto : '0,00%';
+  }
+
   /** Grava índice e teto de cada item (teto vazio = sem teto). */
   protected salvarMemoria(r: Reajuste): void {
     const itens = r.itens.map((i) => ({
@@ -110,11 +162,22 @@ export class ReajusteComponent implements OnInit {
     if (!this.apostilamento) return;
     const ok = await this.dialogos.confirmar({
       titulo: 'Concluir e aplicar o reajuste?',
-      mensagem: `Os preços reajustados passam a valer a partir de ${r.mes_referencia.slice(5, 7)}/${r.mes_referencia.slice(0, 4)}, em ${r.competencias_recalculadas} competência(s) ainda não medida(s)${r.competencias_com_diferenca ? `; a diferença de ${r.competencias_com_diferenca} competência(s) já medida(s) vira uma competência complementar` : ''}, e o valor global passa a ${Number(r.valor_global_reajustado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`,
+      mensagem: `Os novos preços passam a valer a partir de ${r.mes_referencia.slice(5, 7)}/${r.mes_referencia.slice(0, 4)}, em ${r.competencias_recalculadas} competência(s) ainda não medida(s)${this.textoRetroativo(r)}, e o valor global passa a ${reais(r.valor_global_reajustado)}.`,
       rotuloConfirmar: 'Concluir e aplicar',
       segundos: 5,
     });
     if (ok) this.tratar(this.api.enviarReajuste(this.id(), r.id, 'concluir', this.apostilamento), 'Não foi possível concluir o reajuste', 'Aplicando o reajuste…');
+  }
+
+  /** Efeito nas competências já medidas: competência de diferença a pagar ou crédito abatido nas próximas medições. */
+  private textoRetroativo(r: Reajuste): string {
+    const diferenca = Number(r.diferenca_retroativa);
+    if (diferenca > 0) return `; a diferença de ${reais(diferenca)} das competências já medidas vira uma competência complementar a pagar`;
+    if (diferenca < 0) {
+      const onde = r.competencia_credito ? `na medição de ${r.competencia_credito}` : 'na próxima competência gerada';
+      return `; o crédito de ${reais(-diferenca)} das competências já medidas será abatido ${onde}`;
+    }
+    return '';
   }
 
   /** Pede confirmação e cancela o reajuste em elaboração. */
@@ -127,4 +190,9 @@ export class ReajusteComponent implements OnInit {
   protected baixar(r: Reajuste, anexoId: string): void {
     this.api.baixarReajuste(this.id(), r.id, anexoId).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }
+}
+
+/** Valor em reais (R$ 1.234,56). */
+function reais(valor: string | number): string {
+  return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }

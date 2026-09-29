@@ -256,6 +256,10 @@ class Competencia(Base):
         back_populates="competencia", cascade="all, delete-orphan", order_by="DocumentoMensal.ordem"
     )
     avaliacao: Mapped["AvaliacaoCompetencia | None"] = relationship(back_populates="competencia", cascade="all, delete-orphan", uselist=False)
+    # Créditos de desconto de reajuste abatidos no valor autorizado desta competência
+    abatimentos_reajuste: Mapped[list["AbatimentoReajuste"]] = relationship(  # noqa: F821
+        back_populates="competencia", order_by="AbatimentoReajuste.criado_em"
+    )
     # Os anexos têm várias FKs para a mesma tabela `anexos`; `foreign_keys` diz qual coluna usar em cada uma
     nf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_anexo_id])
     nf_adicional_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_adicional_anexo_id])

@@ -79,6 +79,7 @@
         <header>
           <h2 id="titulo-itens">Itens financeiros</h2>
           <div class="acoes-formulario">
+            <button type="button" class="acao-secundaria" [disabled]="!c.itens.length" (click)="baixarRelatorioItens()">Relatório PDF</button>
             @if (c.permissoes.pode_editar) {
               <a class="acao-secundaria" [routerLink]="['/contratos', c.id, 'reajuste']">Reajuste</a>
               <a class="acao-secundaria" [routerLink]="['/contratos', c.id, 'aditamento']">Aditar</a>

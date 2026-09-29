@@ -4,12 +4,12 @@
 import { computed, Injectable, signal } from '@angular/core';
 
 // Chave do localStorage onde fica a preferência "barra lateral fixada"
-const CHAVE_FIXADA = 'contratos-spi.barra-lateral-fixada';
+const CHAVE_FIXADA = 'sgi-spi.barra-lateral-fixada';
 
 /** Lê a preferência salva; se o navegador bloquear o armazenamento, assume "não fixada". */
 function lerFixada(): boolean {
   try {
-    return localStorage.getItem(CHAVE_FIXADA) === 'true';
+    return (localStorage.getItem(CHAVE_FIXADA) ?? localStorage.getItem('contratos-spi.barra-lateral-fixada')) === 'true';
   } catch {
     return false;
   }

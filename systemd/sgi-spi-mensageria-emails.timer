@@ -1,0 +1,10 @@
+[Unit]
+Description=sgi-spi: envia a fila de e-mails da mensageria a cada 2 minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

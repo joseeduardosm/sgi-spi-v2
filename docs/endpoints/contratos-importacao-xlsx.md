@@ -29,7 +29,7 @@ Modelo: `backend/app/recursos/modelo-importacao-contrato.xlsx`, disponível em `
 
 | Rótulo (linha no modelo) | Campo | Conversão / regra |
 |---|---|---|
-| Nro do Contrato (2) | `numero` | `12/2026` ou `012/2026` → `012/2026`. Obrigatório e único |
+| Nro do Contrato (2) | `numero` | Formato livre, como está na planilha (número do Excel perde o `.0`). Obrigatório, até 60 caracteres e único |
 | Empresa · CNPJ (3) | CNPJ | Com ou sem máscara; dígitos verificadores conferidos. Obrigatório |
 | Empresa · Razão Social / Nome Fantasia / Endereço (4–6) | empresa | Razão social obrigatória quando a empresa é nova |
 | Empresa - Preposto · Nome / CPF / E-mail / Telefone (7–10) | preposto | Opcional: bloco em branco = sem preposto. Se preenchido, nome e CPF são obrigatórios |
@@ -51,9 +51,11 @@ Modelo: `backend/app/recursos/modelo-importacao-contrato.xlsx`, disponível em `
 | Tipo | `Contínuo` ou `Sob demanda` |
 | Faturamento | `Pró-rata` (proporcional em mês parcial) ou `Sempre Integral` |
 | Classe, ND, SIAFISICO, CATMAT/CATSER | Obrigatórios (números digitados no Excel viram texto sem `.0`) |
-| QTD MENSAL | Contínuo: maior que zero. Sob demanda: estimativa (pode ficar vazia) |
+| QTD MENSAL | Contínuo: maior que zero. Sob demanda: estimativa (pode ficar vazia). Até 14 dígitos inteiros e 4 casas |
 | QTD NA VIGÊNCIA | Sob demanda: teto da vigência inicial, maior que zero. Contínuo: ignorada (calculada) |
 | VALOR UNITÁRIO | Número do Excel ou formato brasileiro (`1.234,56`, `R$ 10,50`) |
+
+**Casas decimais.** Célula numérica do Excel (ponto flutuante, inclusive resultado de fórmula) é arredondada para 4 casas nas quantidades e 2 no valor unitário: `=1/3` vira `0,3333`. Número digitado como **texto** não é arredondado, e casas a mais geram erro.
 | UF | Opcional (coluna K do modelo): Unidade de Fornecimento do item. Planilhas sem essa coluna continuam aceitas |
 
 **Empresa e preposto existentes.**

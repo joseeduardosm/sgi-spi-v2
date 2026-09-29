@@ -6,8 +6,17 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
+import { ItemTrilha, TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { ContratosApiService } from './contratos-api.service';
+
+/** Seções do módulo com tela própria (o passo da trilha com esse nome vira link). */
+const SECOES: Record<string, string> = {
+  Painel: '/contratos/painel',
+  Vigências: '/contratos/vigencias',
+  Empresas: '/contratos/empresas',
+  Modelos: '/contratos/modelos',
+};
 
 /**
  * Cabeçalho de todas as telas do módulo: trilha, título e os atalhos Painel/Contratos/Empresas.
@@ -15,7 +24,7 @@ import { ContratosApiService } from './contratos-api.service';
  */
 @Component({
   selector: 'app-cabecalho-modulo',
-  imports: [RouterLink, RouterLinkActive, FormsModule],
+  imports: [RouterLink, RouterLinkActive, FormsModule, TrilhaComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Esc fecha a janela de relatório e o menu
   host: { '(document:keydown.escape)': 'janela.set(null); menuRelatorios.set(false)' },
@@ -24,8 +33,15 @@ import { ContratosApiService } from './contratos-api.service';
 export class CabecalhoModuloComponent {
   // Entradas definidas por cada tela: título, trilha (breadcrumb) e descrição
   readonly titulo = input('Carteira de contratos');
-  readonly trilha = input<string[]>([]);
+  // Passos da trilha: texto (as seções conhecidas ganham link) ou { rotulo, rota } (ex.: o número do contrato)
+  readonly trilha = input<(string | ItemTrilha)[]>([]);
   readonly descricao = input('');
+
+  /** "Início / Contratos / …": Contratos leva ao painel do módulo; o último passo, à própria página. */
+  protected readonly passos = computed<ItemTrilha[]>(() => [
+    { rotulo: 'Contratos', rota: '/contratos/painel' },
+    ...this.trilha().map((t) => (typeof t === 'string' ? { rotulo: t, rota: SECOES[t] } : t)),
+  ]);
 
   private readonly autenticacao = inject(AutenticacaoService);
   private readonly api = inject(ContratosApiService);

@@ -167,7 +167,7 @@ O `DetalheCompetencia` traz o `ResumoCompetencia` e mais:
   - `memorias[]` e `medicao_concluida_em`.
 - **Avaliação e pagamento:**
   - `avaliacao`: definição, respostas, `nota_final`, `percentual_liberado`, `precisa_avaliacao_gestor`, `ciencias` (mesmo formato das ciências da medição: `usuario_id`, `nome`, `papel`, `registrada_em`), PDFs e reconsideração;
-  - `percentual_autorizado`, `valor_autorizado` (medido × %; sugestão do valor da NF) e `valor_a_pagar` (o que a OB debita: NF + NF adicional; antes da NF, o valor autorizado);
+  - `percentual_autorizado`, `valor_autorizado` (medido × % − desconto de reajuste, nunca negativo; sugestão do valor da NF), `desconto_reajuste` (crédito de um reajuste com desconto retroativo abatido nesta competência; `0.00` quando não há) e `descontos_reajuste[]` (`reajuste_id`, `mes_referencia`, `valor`: a origem de cada desconto) e `valor_a_pagar` (o que a OB debita: NF + NF adicional; antes da NF, o valor autorizado);
   - `reaberturas_permitidas` (o usuário pode reabrir etapas).
 - **Nota fiscal:** `nota_fiscal` e `nota_fiscal_adicional` (número, `arquivo`, `xml`, `dados_xml`, `conferencias[]` com `descricao`/`situacao`/`detalhe`, bruto, retenções — `retencao_ir`, `_inss`, `_iss`, `_pis`, `_cofins`, `_csll` —, líquido), `nf_recebida_em`, `prazo_pagamento_dias`, `vencimento_pagamento`, `nf_concluida_em`, `email_nf`.
 - **Retenção:** `retencao` (`concluida_em`, `por_nome`, `discriminacao_conferida`, `pdf`) ou `null`, `pode_conferir_retencao`, `email_retencao`.

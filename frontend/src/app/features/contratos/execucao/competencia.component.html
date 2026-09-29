@@ -1,5 +1,5 @@
 @if (detalhe(); as d) {
-  <app-cabecalho-modulo [titulo]="d.tipo === 'regular' ? 'Competência ' + d.rotulo : d.rotulo" [trilha]="[d.contrato_numero, 'Execução']"
+  <app-cabecalho-modulo [titulo]="d.tipo === 'regular' ? 'Competência ' + d.rotulo : d.rotulo" [trilha]="[{ rotulo: d.contrato_numero, rota: ['/contratos', d.contrato_id] }, 'Execução']"
                         [descricao]="'Contrato ' + d.contrato_numero + ' · período ' + (d.periodo_inicio | dataBr) + ' a ' + (d.periodo_fim | dataBr)" />
 
   <div class="barra-fixa">

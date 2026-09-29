@@ -11,7 +11,9 @@ import { Papel, Usuario } from '../modelos/usuario.model';
 import { MotivoSaida, RequisicaoLogin, RespostaToken, SessaoAutenticada } from './autenticacao.models';
 
 // Chave onde a sessão fica guardada no localStorage (sobrevive ao recarregar a página)
-const CHAVE_ARMAZENAMENTO = 'contratos-spi.sessao';
+const CHAVE_ARMAZENAMENTO = 'sgi-spi.sessao';
+// Chave usada antes da troca de nome (Contratos SPI → SGI SPI): lida uma vez e migrada, para ninguém ser deslogado
+const CHAVE_ANTIGA = 'contratos-spi.sessao';
 // setTimeout aceita no máximo ~24,8 dias
 const ESPERA_MAXIMA_MS = 2_147_483_647;
 
@@ -102,6 +104,9 @@ export class AutenticacaoService {
   private restaurar(): void {
     let sessao: SessaoAutenticada | null = null;
     try {
+      const antiga = localStorage.getItem(CHAVE_ANTIGA);
+      if (antiga !== null && localStorage.getItem(CHAVE_ARMAZENAMENTO) === null) localStorage.setItem(CHAVE_ARMAZENAMENTO, antiga);
+      localStorage.removeItem(CHAVE_ANTIGA);
       const bruto = localStorage.getItem(CHAVE_ARMAZENAMENTO);
       sessao = bruto ? (JSON.parse(bruto) as SessaoAutenticada) : null;
     // Conteúdo corrompido no navegador: trata como sem sessão

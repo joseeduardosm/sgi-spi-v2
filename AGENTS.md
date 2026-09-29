@@ -1,4 +1,4 @@
-# AGENTS.md: regras para agentes e desenvolvedores do contratos-spi
+# AGENTS.md: regras para agentes e desenvolvedores do sgi-spi
 
 Este arquivo vale para qualquer agente de IA ou pessoa que altere o código deste repositório.
 

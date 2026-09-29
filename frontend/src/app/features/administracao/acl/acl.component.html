@@ -1,6 +1,6 @@
 <div class="cabecalho-pagina">
   <div>
-    <p>Início <span>/</span> Administração <span>/</span> Controle de acesso</p>
+    <app-trilha [itens]="[{ rotulo: 'Administração' }, { rotulo: 'Controle de acesso' }]" />
     <h1>Controle de acesso</h1>
     <small>ACL por recurso. Sem regras, o recurso fica aberto; a partir da primeira regra, só os contemplados acessam.</small>
   </div>

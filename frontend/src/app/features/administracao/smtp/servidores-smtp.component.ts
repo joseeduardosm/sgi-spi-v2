@@ -8,6 +8,7 @@ import { FormsModule, NonNullableFormBuilder, ReactiveFormsModule, Validators } 
 
 import { SmtpApiService } from './smtp-api.service';
 import { GravacaoServidorSmtp, ResultadoSmtp, SegurancaSmtp, ServidorSmtp } from './smtp.models';
+import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 
 /** Porta usual de cada segurança (sugerida ao trocar a segurança no formulário). */
 const PORTA_PADRAO: Record<SegurancaSmtp, number> = { starttls: 587, ssl: 465, nenhuma: 25 };
@@ -15,7 +16,7 @@ const PORTA_PADRAO: Record<SegurancaSmtp, number> = { starttls: 587, ssl: 465, n
 /** Administração de servidores SMTP (restrita ao SuperRoot). */
 @Component({
   selector: 'app-servidores-smtp',
-  imports: [ReactiveFormsModule, FormsModule, DatePipe],
+  imports: [ReactiveFormsModule, FormsModule, DatePipe, TrilhaComponent],
   templateUrl: './servidores-smtp.component.html',
   host: { '(document:keydown.escape)': 'fecharJanelas()' },
 })

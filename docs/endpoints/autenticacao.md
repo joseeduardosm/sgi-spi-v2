@@ -44,7 +44,8 @@ Valida login e senha e emite um token JWT de acesso. Com um diretório LDAP ativ
 | `origem` | string | `local`, `ldap` ou `local_ldap` |
 | `perfil_restrito` | boolean | Perfil incompleto ou revalidação vencida: acesso restrito ao próprio perfil |
 | `campos_pendentes` | string[] | Campos obrigatórios não preenchidos (ex.: `["ramal", "andar"]`) |
-| `revisao_obrigatoria` | boolean | Revalidação vencida (mais de 30 dias) ou nunca feita |
+| `revisao_obrigatoria` | boolean | Perfil ainda não confirmado no mês civil atual (ou nunca confirmado) |
+| `conta_root` | boolean | Conta administrativa principal (login `LOGIN_ADMIN`): dispensada da confirmação do perfil e única com acesso à Mensageria |
 
 ```json
 {
@@ -60,12 +61,13 @@ Valida login e senha e emite um token JWT de acesso. Com um diretório LDAP ativ
     "origem": "local",
     "perfil_restrito": false,
     "campos_pendentes": ["ramal", "cargo", "departamento", "andar", "predio"],
-    "revisao_obrigatoria": true
+    "revisao_obrigatoria": true,
+    "conta_root": false
   }
 }
 ```
 
-O SuperRoot pode ter campos pendentes sem ficar restrito.
+Só a conta root (login `LOGIN_ADMIN`, padrão `root`) pode ter campos pendentes sem ficar restrita; os SuperRoot também confirmam o perfil todo mês. `conta_root = true` identifica essa conta: o Angular mostra a Mensageria (ver [mensageria.md](mensageria.md)).
 
 ### Erros
 
@@ -115,20 +117,25 @@ Perfil institucional do usuário autenticado.
 | `andar` | string | Andar |
 | `predio` | string | Prédio |
 | `data_nascimento` | string (date) \| null | `AAAA-MM-DD` |
-| `gestor_id` | integer \| null | Gestor imediato |
+| `gestor_id` | integer \| null | Superior imediato (em vigor) |
 | `gestor_nome` | string \| null | Nome do gestor |
-| `perfil_revisado_em` | datetime \| null | Última revalidação |
+| `perfil_revisado_em` | datetime \| null | Última confirmação |
+| `situacao_campos` | objeto | Por campo: `pendente`, `valor_proposto`, `valor_proposto_rotulo`, `validado_por`, `validado_em`, `corrigido` (validação da CGP; só no `GET` do próprio perfil) |
+| `superior_obrigatorio` | boolean | O superior imediato é obrigatório para este usuário |
 
 ---
 
 ## `PUT /api/autenticacao/perfil`
 
-Grava o próprio perfil e **registra a revalidação**, reiniciando o prazo de 30 dias. Operação auditada como `usuario.revisar-perfil`.
+Confirma o próprio perfil no mês civil (grava `perfil_revisado_em`). Operação auditada como `usuario.revisar-perfil`.
+
+- **Usuário comum:** cada campo diferente do valor em vigor vira uma **alteração pendente** de validação da CGP (o valor em vigor não muda), e a CGP recebe e-mail. Voltar ao valor em vigor descarta a pendência do campo. **CGP e SuperRoot:** a alteração vale na hora (histórico como validada).
+- **Superior imediato:** obrigatório (`400` "Informe o superior imediato."), exceto para a conta root e o topo da hierarquia; `400` se for o próprio usuário ou formar ciclo.
 
 - **Autorização:** Bearer.
 - **Requisição: `RevisaoPerfil`**. Mesmos campos de `PerfilLeitura`, sem `gestor_nome` e `perfil_revisado_em`.
   - **Obrigatórios, não podem ser vazios:** `nome_completo`, `email` (formato válido), `ramal`, `cargo`, `departamento`, `andar`, `predio`.
-  - **Opcionais:** `celular`, `data_nascimento`, `gestor_id`.
+  - **Opcionais:** `celular`, `data_nascimento`; `gestor_id` (ver acima).
 
 ```json
 {

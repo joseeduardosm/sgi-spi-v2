@@ -132,17 +132,22 @@ def test_opcoes_de_departamento_sao_os_setores_institucionais(cliente, admin):
 def test_revalidacao_libera_acesso(cliente):
     """Revalidar com todos os campos obrigatórios libera o acesso."""
     criar_usuario("novo", completo=False)
+    chefe = criar_usuario("chefe")
     h = cabecalho(cliente, "novo")
-    r = cliente.put("/api/autenticacao/perfil", json={**PERFIL_COMPLETO, "ramal": ""}, headers=h)
+    r = cliente.put("/api/autenticacao/perfil", json={**PERFIL_COMPLETO, "ramal": "", "gestor_id": chefe}, headers=h)
     assert r.status_code == 422 and "ramal" in r.json()["detalhe"]
+    # O superior imediato é obrigatório
     r = cliente.put("/api/autenticacao/perfil", json=PERFIL_COMPLETO, headers=h)
+    assert r.status_code == 400 and "superior imediato" in r.json()["detalhe"]
+    # As alterações ficam pendentes de validação da CGP, mas o envio já libera o acesso
+    r = cliente.put("/api/autenticacao/perfil", json={**PERFIL_COMPLETO, "gestor_id": chefe}, headers=h)
     assert r.status_code == 200 and r.json()["perfil_restrito"] is False
     assert cliente.get("/api/usuarios", headers=h).status_code == 200
 
 
-def test_revalidacao_vencida_apos_30_dias(cliente):
-    """Revalidação com mais de 30 dias volta a restringir o acesso."""
-    # Simula uma revalidação feita há 31 dias
+def test_revalidacao_vencida_no_mes_seguinte(cliente):
+    """A confirmação vale até o fim do mês civil: a de um mês anterior volta a restringir o acesso."""
+    # Simula uma confirmação feita há 31 dias (sempre num mês anterior)
     uid = criar_usuario("antigo")
     with FabricaSessao() as sessao:
         sessao.get(Usuario, uid).perfil_revisado_em = agora_utc() - timedelta(days=31)
@@ -152,10 +157,17 @@ def test_revalidacao_vencida_apos_30_dias(cliente):
     assert cliente.get("/api/usuarios", headers=h).json()["codigo"] == "revisao_perfil_obrigatoria"
 
 
-def test_superroot_nao_passa_pela_restricao(cliente, admin):
-    """O SuperRoot nunca fica restrito pelo perfil."""
+def test_so_a_conta_root_nao_passa_pela_restricao(cliente, admin):
+    """A conta root é a única dispensada; os demais SuperRoot também confirmam o perfil todo mês."""
     assert cliente.get("/api/autenticacao/sessao", headers=admin).json()["perfil_restrito"] is False
     assert cliente.get("/api/usuarios", headers=admin).status_code == 200
+    criar_usuario("outro_admin", superusuario=True, completo=False)
+    h = cabecalho(cliente, "outro_admin")
+    assert cliente.get("/api/autenticacao/sessao", headers=h).json()["perfil_restrito"] is True
+    assert cliente.get("/api/usuarios", headers=h).json()["codigo"] == "revisao_perfil_obrigatoria"
+    # E, como qualquer usuário, precisa informar o superior imediato
+    r = cliente.put("/api/autenticacao/perfil", json=PERFIL_COMPLETO, headers=h)
+    assert r.status_code == 400 and "superior imediato" in r.json()["detalhe"]
 
 
 def test_ldap_nao_possui_senha_local_ate_admin_definir(cliente, admin):

@@ -129,6 +129,32 @@ def test_numero_unico_e_regras_de_itens(cliente, admin):
     assert r.status_code == 422
 
 
+def test_numero_em_formato_livre(cliente, admin):
+    """O número aceita qualquer formato (até 60 caracteres), é único sem diferenciar maiúsculas e dá nome aos arquivos."""
+    contrato = criar_contrato(cliente, admin, numero="  CT-45/2025 SPI  ")
+    assert contrato["numero"] == "CT-45/2025 SPI" and contrato["sequencial"] is None and contrato["ano"] is None
+    empresa = contrato["empresa"]["id"]
+    assert cliente.post("/api/contratos", json=dados_contrato(empresa, "ct-45/2025 spi"), headers=admin).status_code == 409
+    assert cliente.post("/api/contratos", json=dados_contrato(empresa, "x" * 61), headers=admin).status_code == 422
+    assert cliente.post("/api/contratos", json=dados_contrato(empresa, "   "), headers=admin).status_code == 422
+    so_digitos = criar_contrato(cliente, admin, empresa_id=empresa, numero="20214514")
+    assert (so_digitos["numero"], so_digitos["sequencial"]) == ("20214514", None)
+    assert [c["numero"] for c in cliente.get("/api/contratos", params={"busca": "20214514"}, headers=admin).json()["itens"]] == ["20214514"]
+    # NNN/AAAA continua separado em sequencial e ano (ordenação e próximo número)
+    outro = criar_contrato(cliente, admin, empresa_id=empresa, numero="7/2026")
+    assert (outro["numero"], outro["sequencial"], outro["ano"]) == ("7/2026", 7, 2026)
+    assert cliente.get("/api/contratos/proximo-numero", params={"ano": 2026}, headers=admin).json()["numero"] == "008/2026"
+    # Busca por trecho do número livre; arquivos com o número saneado
+    assert [c["numero"] for c in cliente.get("/api/contratos", params={"busca": "ct-45"}, headers=admin).json()["itens"]] == ["CT-45/2025 SPI"]
+    r = cliente.get(f"/api/contratos/{contrato['id']}/itens/pdf", headers=admin)
+    assert 'filename="ITENS_SPI_CT_45_2025_SPI.pdf"' in r.headers["content-disposition"]
+    # Edição: pode manter o próprio número e trocar por outro livre
+    corpo = dados_contrato(empresa, "Contrato 99", versao=outro["versao"])
+    r = cliente.put(f"/api/contratos/{outro['id']}", json=corpo, headers=admin)
+    assert r.status_code == 200, r.text
+    assert (r.json()["numero"], r.json()["sequencial"]) == ("Contrato 99", None)
+
+
 def test_busca_por_numero_empresa_apelido_e_objeto(cliente, admin):
     """A carteira encontra por número, apelido, empresa e objeto."""
     contrato = criar_contrato(cliente, admin)
@@ -224,3 +250,25 @@ def test_documentos_importantes(cliente, admin):
     assert cliente.get(f"{url}/arquivo", headers=admin).status_code == 404
     assert cliente.delete(url, headers=admin).status_code == 404
     assert cliente.delete(f"/api/contratos/{contrato['id']}/documentos/24", headers=admin).status_code == 400
+
+
+def test_relatorio_dos_itens_em_pdf(cliente, admin):
+    """Aba Itens: o PDF traz os itens, os códigos, as quantidades e os totais da vigência atual."""
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    contrato = criar_contrato(cliente, admin, itens=[item(unidade_fornecimento="posto"),
+                                                      item("Material", "sob_demanda", quantidade_mensal="0", quantidade_total="100", valor_unitario="10.50")])
+    r = cliente.get(f"/api/contratos/{contrato['id']}/itens/pdf", headers=admin)
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert 'filename="ITENS_SPI_001_2026.pdf"' in r.headers["content-disposition"]
+    texto = " ".join(p.extract_text() for p in PdfReader(BytesIO(r.content)).pages)
+    for trecho in ("Itens financeiros do contrato", "001/2026", "Material", "posto", "demanda", "Base mensal", "R$ 25.050,00", "R$ 1.000,00"):
+        assert trecho in texto, trecho
+    # Sem ACL de leitura em contratos: 403; contrato inexistente: 404
+    restringir_contratos(cliente, admin, {criar_usuario("leitor"): "LEITURA"})
+    criar_usuario("sem_acesso")
+    assert cliente.get(f"/api/contratos/{contrato['id']}/itens/pdf", headers=cabecalho(cliente, "leitor")).status_code == 200
+    assert cliente.get(f"/api/contratos/{contrato['id']}/itens/pdf", headers=cabecalho(cliente, "sem_acesso")).status_code == 403
+    assert cliente.get("/api/contratos/00000000-0000-0000-0000-000000000000/itens/pdf", headers=admin).status_code == 404

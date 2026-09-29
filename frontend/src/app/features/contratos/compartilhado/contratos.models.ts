@@ -51,7 +51,7 @@ export interface Ciencia {
 
 // --- Empresas ---------------------------------------------------------------------------------
 
-/** Contrato em que a empresa aparece (número NNN/AAAA). */
+/** Contrato em que a empresa aparece (número em formato livre). */
 export interface ContratoDaEmpresa {
   id: string;
   numero: string;
@@ -173,8 +173,9 @@ export interface Marco {
 
 /** Contrato completo, com tudo o que as abas do detalhe exibem. */
 export interface DetalheContrato extends ResumoContrato {
-  sequencial: number;
-  ano: number;
+  /** Partes do número quando ele segue NNN/AAAA; nulas nos demais formatos. */
+  sequencial: number | null;
+  ano: number | null;
   empresa: OpcaoEmpresa;
   data_fim_prazo_inicial: string;
   data_limite_maxima: string;
@@ -633,6 +634,9 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   avaliacao: Avaliacao | null;
   percentual_autorizado: Decimal;
   valor_autorizado: Decimal;
+  /** Crédito de desconto de reajuste abatido do valor autorizado (0 quando não há). */
+  desconto_reajuste: Decimal;
+  descontos_reajuste: { reajuste_id: string; mes_referencia: string; valor: Decimal }[];
   valor_a_pagar: Decimal;
   avisos: string[];
   reaberturas_permitidas: boolean;
@@ -746,6 +750,13 @@ export interface Reajuste {
   competencias_recalculadas: number;
   competencias_com_diferenca: number;
   competencia_diferenca: string | null;
+  /** Diferença líquida das competências já medidas: > 0 a pagar (competência "-dif"); < 0 crédito da SPI. */
+  diferenca_retroativa: Decimal;
+  /** Rascunho com desconto retroativo: competência (MM/AAAA) que receberá o crédito. */
+  competencia_credito: string | null;
+  /** Concluído com desconto retroativo: onde o crédito foi (ou será) abatido. */
+  abatimentos: { competencia: string; identificador: string; medida: boolean; valor: Decimal }[];
+  credito_pendente: Decimal;
   itens: ItemReajuste[];
   base_atual: Decimal;
   base_reajustada: Decimal;
@@ -886,6 +897,29 @@ export interface PainelContratos {
   // Opções dos filtros do topo do painel
   empresas: { id: string; rotulo: string }[];
   contratos: { id: string; rotulo: string }[];
+}
+
+/** Linha do painel de vigências: a vigência de um contrato vigente (escala própria, de `data_inicio` a `data_fim`). */
+export interface VigenciaContratoPainel {
+  contrato_id: string;
+  numero: string;
+  rotulo: string;
+  empresa: string;
+  situacao: 'ativo' | 'a_vencer';
+  data_inicio: string;
+  data_fim: string;
+  dias_restantes: number;
+  data_limite_maxima: string;
+  meses_prorrogaveis: number;
+  vigencias: { sequencia: number; inicio: string; fim: string }[];
+  reajustes: string[];
+}
+
+/** Resposta do painel de vigências. */
+export interface PainelVigencias {
+  hoje: string;
+  contratos: VigenciaContratoPainel[];
+  empresas: { id: string; rotulo: string }[];
 }
 
 // --- Importação do SGI ------------------------------------------------------------------------

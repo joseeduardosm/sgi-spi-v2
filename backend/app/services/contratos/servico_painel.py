@@ -23,7 +23,19 @@ from app.models.contratos import (
     Reajuste,
 )
 from app.models.usuario import Usuario
-from app.schemas.contratos.painel import AlertasContrato, ExecucaoOrcamentaria, MesExecucao, NumerosCarteira, OpcaoFiltro, Painel, Pendencia, Risco
+from app.schemas.contratos.painel import (
+    AlertasContrato,
+    ExecucaoOrcamentaria,
+    MesExecucao,
+    NumerosCarteira,
+    OpcaoFiltro,
+    Painel,
+    PainelVigencias,
+    Pendencia,
+    Risco,
+    VigenciaContratoPainel,
+    VigenciaSegmento,
+)
 from app.services.contratos import calculos
 from app.services.contratos.servico_competencias import (
     CIENCIAS_MINIMAS,
@@ -34,7 +46,7 @@ from app.services.contratos.servico_competencias import (
     requisitos,
     total_medido,
 )
-from app.services.contratos.servico_contratos import designacoes_vigentes, hoje, opcoes_carga_completa, situacao, totais
+from app.services.contratos.servico_contratos import chave_ordem, designacoes_vigentes, hoje, opcoes_carga_completa, situacao, totais, vigencias
 from app.services.contratos.servico_orcamento import meses_previstos
 from app.services.contratos.servico_prorrogacao import meses_disponiveis
 from app.services.contratos.servico_retencao import eh_financeiro
@@ -311,6 +323,35 @@ def montar_painel(sessao: Session, usuario: Usuario, exercicio: int | None, empr
         numeros=numeros(filtrados),
         empresas=[OpcaoFiltro(id=i, rotulo=n) for i, n in sorted(empresas.items(), key=lambda e: e[1].lower())],
         contratos=[OpcaoFiltro(id=c.id, rotulo=f"{c.numero} · {c.apelido or c.empresa.razao_social}")
-                   for c in sorted(todos, key=lambda c: (-c.ano, -c.sequencial))],
+                   for c in sorted(todos, key=chave_ordem)],
     )
 
+
+
+def vigencias_da_carteira(sessao: Session, empresa_id: uuid.UUID | None) -> PainelVigencias:
+    """Painel de vigências: uma linha do tempo por contrato vigente, do que vence primeiro ao último.
+
+    Encerrados e suspensos ficam de fora. O filtro de empresa não muda as opções do filtro.
+    """
+    contratos = list(sessao.scalars(select(Contrato).options(
+        selectinload(Contrato.empresa), selectinload(Contrato.prorrogacoes), selectinload(Contrato.reajustes),
+    )))
+    vigentes = [c for c in contratos if situacao(c) in ("ativo", "a_vencer")]
+    empresas = {c.empresa.id: c.empresa.razao_social for c in vigentes}
+    dia = hoje()
+    linhas = [
+        VigenciaContratoPainel(
+            contrato_id=c.id, numero=c.numero, rotulo=c.apelido or c.empresa.razao_social, empresa=c.empresa.razao_social,
+            situacao=situacao(c), data_inicio=c.data_inicio, data_fim=c.data_fim, dias_restantes=(c.data_fim - dia).days,
+            data_limite_maxima=calculos.data_limite_maxima(c.data_inicio, c.vigencia_maxima_meses),
+            meses_prorrogaveis=max(0, meses_disponiveis(c)),
+            vigencias=[VigenciaSegmento(sequencia=v.sequencia, inicio=v.inicio, fim=v.fim) for v in vigencias(c)],
+            reajustes=sorted(r.mes_referencia for r in c.reajustes if r.situacao == "concluido"),
+        )
+        for c in vigentes if empresa_id is None or c.empresa_id == empresa_id
+    ]
+    return PainelVigencias(
+        hoje=dia,
+        contratos=sorted(linhas, key=lambda linha: (linha.data_fim, linha.numero)),
+        empresas=[OpcaoFiltro(id=i, rotulo=n) for i, n in sorted(empresas.items(), key=lambda e: e[1].lower())],
+    )

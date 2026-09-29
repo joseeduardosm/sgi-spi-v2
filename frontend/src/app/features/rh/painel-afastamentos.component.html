@@ -1,0 +1,132 @@
+<app-cabecalho-rh titulo="Painel de afastamentos" [trilha]="['Painel']"
+                  descricao="Férias e licenças-prêmio no calendário. Amarelo: aguardando aprovação; verde: aprovado." />
+
+@if (aprovacoes().length) {
+  <section class="cartao-dados" aria-labelledby="titulo-aprovacoes">
+    <header><div><h2 id="titulo-aprovacoes">Aguardando sua aprovação ({{ aprovacoes().length }})</h2></div></header>
+    <div class="tabela-gestao-envoltorio">
+      <table class="tabela-gestao">
+        <thead><tr><th>Pessoa</th><th>Tipo</th><th>Período</th><th class="num">Dias</th><th></th></tr></thead>
+        <tbody>
+          @for (a of aprovacoes(); track a.id) {
+            <tr>
+              <td><strong>{{ a.nome }}</strong><small> – {{ a.setor }}</small></td>
+              <td><span [class]="'etiqueta-afastamento ' + a.tipo">[{{ siglas[a.tipo] }}]</span> {{ tipos[a.tipo] }}@if (a.substitui_id) { <small> · alteração</small> }</td>
+              <td>{{ data(a.inicio) }} a {{ data(a.fim) }}</td>
+              <td class="num">{{ a.dias }}</td>
+              <td class="acoes-linha">
+                <button type="button" class="acao-primaria acao-pequena" (click)="aprovar(a)">Aprovar</button>
+                <button type="button" class="acao-secundaria acao-pequena" (click)="recusando.set(a)">Recusar</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}
+
+@if (painel()?.ferias_a_vencer?.length) {
+  <section class="cartao-dados" aria-labelledby="titulo-a-vencer">
+    <header><div><h2 id="titulo-a-vencer">Férias a vencer ({{ painel()!.ferias_a_vencer.length }})</h2>
+      <small>Saldo de férias não agendado com o período aquisitivo terminando em até 90 dias; o saldo expira no início do período seguinte.</small></div></header>
+    <div class="tabela-gestao-envoltorio">
+      <table class="tabela-gestao">
+        <thead><tr><th>Pessoa</th><th>Período aquisitivo</th><th class="num">Dias não agendados</th><th>Pedir até</th></tr></thead>
+        <tbody>
+          @for (x of painel()!.ferias_a_vencer; track x.usuario_id) {
+            <tr><td><strong>{{ x.nome }}</strong><small> – {{ x.setor }}</small></td><td>{{ data(x.periodo_inicio) }} a {{ data(x.periodo_fim) }}</td>
+              <td class="num">{{ x.disponivel }}</td><td [class.texto-erro]="!!x.data_limite_pedido && x.data_limite_pedido <= hoje">{{ x.data_limite_pedido ? data(x.data_limite_pedido) : '—' }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}
+
+@if (painel(); as p) {
+  <form class="filtros-gestao painel-gestao" style="margin-bottom: 18px; border-bottom: 0" (ngSubmit)="carregar()">
+    <select name="visao" aria-label="Visão" [(ngModel)]="filtros.visao" (change)="carregar()">
+      <option value="mensal">Visão mensal</option><option value="anual">Visão anual</option>
+    </select>
+    @if (filtros.visao === 'mensal') {
+      <select name="mes" aria-label="Mês" [(ngModel)]="filtros.mes" (change)="carregar()">
+        @for (m of meses; track $index) { <option [ngValue]="$index + 1">{{ m }}</option> }
+      </select>
+    }
+    <select name="ano" aria-label="Ano" [(ngModel)]="filtros.ano" (change)="carregar()">
+      @for (a of anos; track a) { <option [ngValue]="a">{{ a }}</option> }
+    </select>
+    <select name="pessoa" aria-label="Pessoa" [(ngModel)]="filtros.pessoa_id" (change)="carregar()">
+      <option [ngValue]="null">Todas as pessoas</option>
+      @for (x of p.pessoas; track x.id) { <option [ngValue]="x.id">{{ x.nome }}</option> }
+    </select>
+    <select name="setor" aria-label="Setor" [(ngModel)]="filtros.setor_id" (change)="carregar()">
+      <option [ngValue]="null">Todos os setores</option>
+      @for (s of p.setores; track s.id) { <option [ngValue]="s.id">{{ '  '.repeat(s.nivel) }}{{ s.nome }}</option> }
+    </select>
+    <select name="tipo" aria-label="Tipo" [(ngModel)]="filtros.tipo" (change)="carregar()">
+      <option value="">Férias e licença-prêmio</option><option value="ferias">Só férias</option><option value="licenca_premio">Só licença-prêmio</option>
+    </select>
+  </form>
+
+  @for (x of p.alertas; track $index) {
+    <p class="aviso-bloco erro">Alerta: {{ x.pessoas }} pessoas de <b>{{ x.setor }}</b> afastadas ao mesmo tempo de {{ data(x.inicio) }} a {{ data(x.fim) }}.</p>
+  }
+
+  <section class="cartao-dados" aria-labelledby="titulo-calendario-rh">
+    <header>
+      <div><h2 id="titulo-calendario-rh">{{ filtros.visao === 'anual' ? 'Ano de ' + filtros.ano : meses[(filtros.mes ?? 1) - 1] + ' de ' + filtros.ano }} · {{ p.periodos.length }} período(s)</h2></div>
+      <div class="acoes-formulario">
+        <div class="legenda-grafico legenda-afastamentos"><span><i class="pendente"></i>Aguardando</span><span><i class="aprovado"></i>Aprovado</span></div>
+        <button type="button" class="acao-secundaria acao-pequena" (click)="exportar('pdf')">Exportar PDF</button>
+        <button type="button" class="acao-secundaria acao-pequena" (click)="exportar('xlsx')">Exportar Excel</button>
+      </div>
+    </header>
+    <div class="gantt-afastamentos" [class.anual]="p.visao === 'anual'">
+      <div class="gantt-linha gantt-cabecalho">
+        <div class="gantt-rotulo">Pessoa – setor</div>
+        <div class="gantt-trilho gantt-eixo">
+          @for (m of eixo(); track $index) { <span [style.left.%]="m.posicao" [class.fim-de-semana]="m.fimDeSemana" [class.feriado]="!!m.feriado" [attr.title]="m.feriado">{{ m.rotulo }}</span> }
+        </div>
+      </div>
+      @for (a of p.periodos; track a.id) {
+        @let b = barra(a);
+        <div class="gantt-linha">
+          <div class="gantt-rotulo" [title]="a.nome + ' – ' + a.setor">
+            <span [class]="'etiqueta-afastamento ' + a.tipo">[{{ siglas[a.tipo] }}]</span> <strong>{{ a.nome }}</strong> – {{ a.setor }}
+          </div>
+          <div class="gantt-trilho">
+            @for (m of eixo(); track $index) { @if (m.fimDeSemana || m.feriado) { <i class="gantt-fds" [class.feriado]="!!m.feriado" [style.left.%]="m.posicao" [style.width.%]="100 / eixo().length"></i> } }
+            <div [class]="'gantt-barra ' + (a.status === 'pendente' ? 'pendente' : 'aprovado')" [style.left.%]="b.esquerda" [style.width.%]="b.largura"
+                 [title]="tipos[a.tipo] + ': ' + a.nome + ' – ' + a.setor + ' · ' + data(a.inicio) + ' a ' + data(a.fim) + ' (' + a.dias + ' dias) · ' + status[a.status]">
+              <span>{{ data(a.inicio).slice(0, 5) }}–{{ data(a.fim).slice(0, 5) }}</span>
+            </div>
+          </div>
+        </div>
+      } @empty {
+        <p class="estado-vazio">Nenhum afastamento neste período com os filtros escolhidos.</p>
+      }
+    </div>
+  </section>
+} @else {
+  <p class="estado-vazio">Carregando…</p>
+}
+
+@if (recusando(); as a) {
+  <div class="fundo-modal" role="presentation" (click)="recusando.set(null)"></div>
+  <section class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa">
+    <header>
+      <div><span class="modal-sobretitulo">{{ tipos[a.tipo] }} · {{ a.nome }}</span><h2 id="titulo-recusa">Recusar {{ data(a.inicio) }} a {{ data(a.fim) }}</h2></div>
+      <button type="button" aria-label="Fechar" (click)="recusando.set(null)">×</button>
+    </header>
+    <div class="corpo-nova-mensagem">
+      <label for="justificativa-recusa">Justificativa (enviada por e-mail ao solicitante) *</label>
+      <textarea id="justificativa-recusa" rows="4" maxlength="2000" [(ngModel)]="justificativa"></textarea>
+    </div>
+    <footer>
+      <button type="button" class="acao-secundaria" (click)="recusando.set(null)">Voltar</button>
+      <button type="button" class="acao-primaria" [disabled]="!justificativa.trim()" (click)="recusar()">Recusar pedido</button>
+    </footer>
+  </section>
+}

@@ -1,12 +1,15 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para montar a moldura das telas autenticadas (barra lateral, barra superior e conteúdo).
 
-import { Component, ElementRef, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map, startWith, tap } from 'rxjs';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
+import { CaixaMensagensService } from '../../../core/mensagens/caixa-mensagens.service';
+import { JanelaMensagemComponent } from '../../../features/mensagens/janela-mensagem.component';
+import { FolhaPontoDialogoComponent } from '../../../features/rh/folha-ponto-dialogo.component';
 import { DialogosComponent } from '../../componentes/dialogos/dialogos.component';
 import { IconeComponent } from '../../componentes/icone/icone.component';
 import { BarraLateralComponent } from '../barra-lateral/barra-lateral.component';
@@ -15,7 +18,7 @@ import { LayoutService } from '../layout.service';
 /** Layout das rotas autenticadas: barra lateral, barra superior e área de conteúdo. */
 @Component({
   selector: 'app-layout-autenticado',
-  imports: [RouterOutlet, BarraLateralComponent, IconeComponent, DialogosComponent],
+  imports: [RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaMensagemComponent, FolhaPontoDialogoComponent],
   templateUrl: './layout-autenticado.component.html',
   styleUrl: './layout-autenticado.component.scss',
   // Esc fecha menus abertos; clique fora do menu do usuário o fecha
@@ -29,14 +32,23 @@ export class LayoutAutenticadoComponent {
   protected readonly autenticacao = inject(AutenticacaoService);
   private readonly roteador = inject(Router);
   private readonly elemento = inject(ElementRef<HTMLElement>);
+  // Sino da mensageria (contador de pendentes) e janela de avisos
+  protected readonly caixa = inject(CaixaMensagensService);
 
-  /** Título da página atual, extraído do `title` da rota ("Início | Contratos SPI" → "Início"). */
+  constructor() {
+    this.caixa.iniciar(inject(DestroyRef));
+  }
+
+  /** Título da página atual, extraído do `title` da rota ("Início | SGI SPI" → "Início"). */
   // `toSignal` transforma o fluxo de eventos do roteador em um signal que o template lê diretamente.
   // A cada navegação concluída: fecha menus abertos e recalcula o título.
   protected readonly tituloPagina = toSignal(
     this.roteador.events.pipe(
       filter((e) => e instanceof NavigationEnd),
-      tap(() => this.layout.fecharSobreposicoes()),
+      tap(() => {
+        this.layout.fecharSobreposicoes();
+        this.caixa.atualizar();
+      }),
       startWith(null),
       map(() => this.tituloAtual()),
     ),
@@ -53,6 +65,14 @@ export class LayoutAutenticadoComponent {
   protected abrirPerfil(): void {
     this.layout.fecharSobreposicoes();
     void this.roteador.navigate(['/perfil']);
+  }
+
+  /** Janela da folha de ponto (criada ao abrir: a lista de competências é sempre a do mês atual). */
+  protected readonly folhaPontoAberta = signal(false);
+
+  protected abrirFolhaPonto(): void {
+    this.layout.fecharSobreposicoes();
+    this.folhaPontoAberta.set(true);
   }
 
   /** Encerra a sessão a partir do menu do usuário. */

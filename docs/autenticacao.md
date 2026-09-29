@@ -39,7 +39,7 @@ Para trocar a senha:
 ```bash
 backend/.venv/bin/python scripts/gerar-hash-senha.py
 # edite backend/.env: HASH_SENHA_ADMIN='<hash>'   (aspas simples: o hash contém "$")
-sudo systemctl restart contratos-spi-api
+sudo systemctl restart sgi-spi-api
 ```
 
 ## Fluxo de login
@@ -97,14 +97,16 @@ Todas as respostas `401` têm `codigo = nao_autenticado` e o cabeçalho `WWW-Aut
 
 ## Perfil institucional obrigatório
 
-Todo usuário comum precisa manter o perfil institucional **completo** e **revalidá-lo a cada 30 dias**.
+Todo usuário (inclusive os SuperRoot; só a conta root é dispensada) precisa manter o perfil institucional **completo** e **confirmá-lo uma vez por mês civil** (no primeiro acesso de cada mês, horário de São Paulo). Na tela, um modal bloqueante pede para confirmar ou atualizar os dados.
 
 - **Campos obrigatórios:** `nome_completo`, `email`, `ramal`, `cargo`, `departamento`, `andar` e `predio`.
-- **Campos opcionais:** `celular`, `data_nascimento` e `gestor_id`.
+- **Superior imediato (`gestor_id`):** obrigatório no envio, exceto para a conta root e para quem a CGP marcar como topo da hierarquia. Não pode ser o próprio usuário nem formar ciclo (A superior de B e B superior de A, direta ou indiretamente).
+- **Campos opcionais:** `celular` e `data_nascimento`.
+- **Validação da CGP (Módulo RH):** cada campo alterado pelo usuário comum fica **pendente** até a Coordenadoria de Gestão de Pessoas validar ou recusar com correção. Até lá, valem os dados anteriores, mas os valores pendentes já contam como preenchidos para liberar o acesso. Ver [endpoints/rh-cadastro.md](endpoints/rh-cadastro.md).
 - **Revalidação:** feita em `PUT /api/autenticacao/perfil`, que grava `perfil_revisado_em`.
-- **Restrição:** enquanto houver campo obrigatório vazio ou a revalidação estiver vencida (ou nunca feita), o **backend** recusa todos os endpoints com `403` e `codigo = revisao_perfil_obrigatoria`. Continuam liberados: `/api/autenticacao/login`, `/sessao`, `/perfil`, `/perfil/opcoes-gestor` e `/perfil/opcoes-departamento`.
-- **Sessão:** `GET /api/autenticacao/sessao` informa `perfil_restrito`, `campos_pendentes` e `revisao_obrigatoria`.
-- **SuperRoot:** não passa por essa restrição.
+- **Restrição:** enquanto houver campo obrigatório vazio ou a confirmação do mês não tiver sido feita, o **backend** recusa todos os endpoints com `403` e `codigo = revisao_perfil_obrigatoria`. Continuam liberados: `/api/autenticacao/login`, `/sessao`, `/perfil`, `/perfil/opcoes-gestor` e `/perfil/opcoes-departamento`.
+- **Sessão:** `GET /api/autenticacao/sessao` informa `perfil_restrito`, `campos_pendentes`, `revisao_obrigatoria` e `conta_root`.
+- **Quem é dispensado:** só a conta administrativa principal (login `LOGIN_ADMIN`, padrão `root`). Os SuperRoot também confirmam o perfil todo mês e informam o superior imediato.
 
 Contas criadas pelo LDAP começam com perfil incompleto (só nome e e-mail vêm do diretório). No primeiro acesso, a pessoa completa e confirma o cadastro.
 
@@ -180,8 +182,8 @@ Arquivos em `frontend/src/app/core/autenticacao/` e `frontend/src/app/core/acess
 
 Comportamento:
 
-- **Armazenamento:** a sessão (`tokenAcesso`, `expiraEm`, `usuario`) fica em `localStorage`, na chave `contratos-spi.sessao`.
+- **Armazenamento:** a sessão (`tokenAcesso`, `expiraEm`, `usuario`) fica em `localStorage`, na chave `sgi-spi.sessao`.
 - **Expiração:** o logout automático é agendado para `expira_em`. Ao expirar, redireciona para `/login?sessao=expirada`.
 - **Inicialização:** com sessão salva, `validarSessao()` chama `GET /api/autenticacao/sessao`. Se o token não for mais aceito, a sessão é encerrada.
 - **Logout:** descarta o token localmente e redireciona para `/login`. O JWT é stateless, então não há chamada ao backend.
-- **Rotas:** toda rota autenticada é filha da rota `''` (layout `LayoutAutenticadoComponent`) em `app.routes.ts`, com `guardaAutenticacao` e `guardaPerfil`. Módulos usam `guardaAcl`; telas administrativas usam `guardaPapel` com `data: { papeis: ['SuperRoot'] }`.
+- **Rotas:** toda rota autenticada é filha da rota `''` (layout `LayoutAutenticadoComponent`) em `app.routes.ts`, com `guardaAutenticacao` e `guardaPerfil`. Módulos usam `guardaAcl`; telas administrativas usam `guardaPapel` com `data: { papeis: ['SuperRoot'] }`; a Mensageria usa `guardaContaRoot` (só a conta root, pelo `conta_root` da sessão), e o item da barra lateral tem `somenteRoot: true`.

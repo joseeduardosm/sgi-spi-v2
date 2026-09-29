@@ -1,8 +1,8 @@
 <div class="cabecalho-pagina">
   <div>
-    <p>Início <span>/</span> Meu perfil</p>
+    <app-trilha [itens]="[{ rotulo: 'Meu perfil' }]" />
     <h1>Meu perfil</h1>
-    <small>Mantenha seu cadastro institucional completo. Ele precisa ser revalidado a cada 30 dias.</small>
+    <small>Mantenha seu cadastro institucional completo. Ele precisa ser confirmado todo mês; as alterações são validadas pela Coordenadoria de Gestão de Pessoas (CGP).</small>
   </div>
 </div>
 
@@ -12,7 +12,7 @@
     @if (rotulosPendentes()) {
       Campos pendentes: {{ rotulosPendentes() }}.
     } @else {
-      Confirme que seus dados estão corretos (revalidação a cada 30 dias).
+      Confirme que seus dados estão corretos (confirmação mensal).
     }
   </div>
 }
@@ -40,7 +40,11 @@
     @if (carregando()) {
       <p class="estado-vazio">Carregando…</p>
     } @else {
-      <app-campos-perfil [formulario]="formulario" [(gestor)]="gestor" [fonteGestor]="api.opcoesGestor" />
+      @if (haPendencias()) {
+        <p class="aviso-bloco informativo">Há alterações aguardando validação da CGP. Até lá, continuam valendo os dados anteriores.</p>
+      }
+      <app-campos-perfil [formulario]="formulario" [(gestor)]="gestor" [fonteGestor]="api.opcoesGestor"
+                         [situacao]="perfil()?.situacao_campos ?? {}" [superiorObrigatorio]="perfil()?.superior_obrigatorio ?? true" />
       <div class="acoes-formulario">
         <button class="acao-primaria" type="submit" [disabled]="salvando()">
           {{ salvando() ? 'Salvando…' : 'Confirmar cadastro' }}
@@ -49,3 +53,22 @@
     }
   </form>
 </section>
+
+<!-- Confirmação mensal do cadastro: bloqueia o sistema até o usuário confirmar ou atualizar os dados -->
+@if (modalMensal()) {
+  <div class="fundo-modal" role="presentation"></div>
+  <section class="modal-portal janela-mensagem" role="alertdialog" aria-modal="true" aria-labelledby="titulo-confirmacao-mensal">
+    <header>
+      <div><span class="modal-sobretitulo">Atualização cadastral · {{ mesAtual }}</span>
+        <h2 id="titulo-confirmacao-mensal">Confirme ou atualize seus dados</h2></div>
+    </header>
+    <div class="corpo-janela-mensagem">Todo mês é preciso confirmar o seu cadastro para continuar usando o sistema.
+Se algo mudou (cargo, ramal, setor, superior imediato…), atualize: a alteração será validada pela Coordenadoria de Gestão de Pessoas (CGP) e, até lá, continuam valendo os dados anteriores.</div>
+    @if (aviso()?.erro) { <p class="aviso-bloco erro" style="margin: 8px 24px 0">{{ aviso()!.texto }}</p> }
+    <footer>
+      <button type="button" class="acao-secundaria" (click)="modalMensal.set(false)">Revisar e atualizar</button>
+      <button type="button" class="acao-primaria" [disabled]="salvando() || carregando()" (click)="salvar()">
+        {{ salvando() ? 'Confirmando…' : 'Meus dados estão corretos' }}</button>
+    </footer>
+  </section>
+}

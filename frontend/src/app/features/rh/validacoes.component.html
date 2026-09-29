@@ -1,0 +1,99 @@
+<app-cabecalho-rh titulo="Validações de cadastro" [trilha]="['Validações']"
+                  descricao="Alterações feitas pelos usuários aguardam a validação da CGP; até lá, valem os dados anteriores." />
+
+@if (semPermissao()) {
+  <p class="aviso-bloco erro">Somente a Coordenadoria de Gestão de Pessoas (CGP) acessa esta tela.</p>
+} @else {
+  <div class="duas-colunas validacoes-rh">
+    <section class="cartao-dados" aria-labelledby="titulo-pendencias-rh">
+      <header><div><h2 id="titulo-pendencias-rh">Aguardando validação ({{ pendencias()?.length ?? 0 }})</h2>
+        <small>Clique para analisar.</small></div></header>
+      <ul class="lista-pendencias-rh">
+        @for (p of pendencias() ?? []; track p.usuario_id) {
+          <li><button type="button" [class.ativo]="cadastro()?.usuario_id === p.usuario_id" (click)="abrir(p.usuario_id)">
+            <strong>{{ p.nome }}</strong><small>{{ p.departamento || 'Sem setor' }} · {{ p.alteracoes.length }} campo(s)</small></button></li>
+        } @empty {
+          <li class="estado-vazio">{{ pendencias() ? 'Nenhuma alteração pendente.' : 'Carregando…' }}</li>
+        }
+      </ul>
+      <div class="corpo">
+        <label for="busca-usuario-rh">Abrir o cadastro de outro usuário</label>
+        <app-seletor-usuarios idCampo="busca-usuario-rh" [multiplo]="false" [(selecionados)]="buscaUsuario" [fonte]="usuariosApi.opcoesGestor"
+                              textoAjuda="Pesquisar usuário" (selecionadosChange)="abrirBusca()" />
+      </div>
+    </section>
+
+    @if (cadastro(); as c) {
+      <section class="cartao-dados" aria-labelledby="titulo-cadastro-rh">
+        <header><div><h2 id="titulo-cadastro-rh">{{ c.nome }}</h2><small>&#64;{{ c.login }} · {{ c.perfil['departamento'] }}</small></div></header>
+        @if (c.pendentes.length) {
+          <div class="tabela-gestao-envoltorio">
+            <table class="tabela-gestao">
+              <thead><tr><th>Campo</th><th>Em vigor</th><th>Proposto</th><th>Em</th><th></th></tr></thead>
+              <tbody>
+                @for (a of c.pendentes; track a.id) {
+                  <tr>
+                    <td><strong>{{ a.rotulo }}</strong></td>
+                    <td>{{ a.valor_anterior_rotulo }}</td>
+                    <td><b>{{ a.valor_proposto_rotulo }}</b></td>
+                    <td>{{ a.solicitada_em | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td class="acoes-linha">
+                      <button type="button" class="acao-primaria acao-pequena" (click)="validar(a)">Validar</button>
+                      <button type="button" class="acao-secundaria acao-pequena" (click)="iniciarRecusa(a)">Recusar</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="dica-formulario" style="margin: 14px 22px">Sem alterações pendentes.</p>
+        }
+
+        <div class="corpo">
+          <app-dados-funcionais [usuarioId]="c.usuario_id" [cadastroInicial]="c" [mostrarLinkValidacoes]="false" (salvo)="cadastro.set($event)" />
+
+          <p class="secao-formulario">Histórico do cadastro</p>
+          <div class="tabela-gestao-envoltorio">
+            <table class="tabela-gestao">
+              <thead><tr><th>Quando</th><th>Campo</th><th>De → para</th><th>Quem alterou</th><th>Análise</th></tr></thead>
+              <tbody>
+                @for (a of c.historico; track a.id) {
+                  <tr>
+                    <td>{{ a.solicitada_em | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td>{{ a.rotulo }}</td>
+                    <td>{{ a.valor_anterior_rotulo }} → <b>{{ a.valor_proposto_rotulo }}</b>@if (a.valor_corrigido_rotulo) { <small> · corrigido para {{ a.valor_corrigido_rotulo }}</small> }</td>
+                    <td>{{ a.solicitada_por_nome }}</td>
+                    <td>{{ rotulosStatus[a.status] }}@if (a.analisada_por_nome) { por {{ a.analisada_por_nome }} em {{ a.analisada_em | date: 'dd/MM/yyyy' }} }
+                      @if (a.justificativa) { <small class="texto-erro">{{ a.justificativa }}</small> }</td>
+                  </tr>
+                } @empty { <tr><td class="estado-vazio" colspan="5">Sem histórico.</td></tr> }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    }
+  </div>
+}
+
+@if (recusando(); as a) {
+  <div class="fundo-modal" role="presentation" (click)="recusando.set(null)"></div>
+  <section class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa-cadastro">
+    <header>
+      <div><span class="modal-sobretitulo">{{ a.rotulo }}: proposto "{{ a.valor_proposto_rotulo }}"</span><h2 id="titulo-recusa-cadastro">Recusar e corrigir</h2></div>
+      <button type="button" aria-label="Fechar" (click)="recusando.set(null)">×</button>
+    </header>
+    <div class="corpo-nova-mensagem">
+      <label for="recusa-justificativa">Justificativa (enviada por e-mail ao usuário) *</label>
+      <textarea id="recusa-justificativa" rows="3" maxlength="2000" [(ngModel)]="justificativa"></textarea>
+      <label for="recusa-correcao" style="margin-top: 12px">Correção do campo (passa a valer){{ a.campo === 'gestor_id' ? ' – id do usuário' : a.campo === 'data_nascimento' ? ' – AAAA-MM-DD' : '' }}</label>
+      <input id="recusa-correcao" maxlength="500" [(ngModel)]="correcao" />
+      <small class="dica-formulario">Em vigor hoje: {{ a.valor_anterior_rotulo }}</small>
+    </div>
+    <footer>
+      <button type="button" class="acao-secundaria" (click)="recusando.set(null)">Voltar</button>
+      <button type="button" class="acao-primaria" [disabled]="!justificativa.trim()" (click)="recusar()">Recusar e corrigir</button>
+    </footer>
+  </section>
+}

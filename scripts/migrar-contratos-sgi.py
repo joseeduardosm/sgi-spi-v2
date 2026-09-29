@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Migra o Módulo de Contratos do SGI SPI (10.23.1.220) para o contratos-spi.
+"""Migra o Módulo de Contratos do SGI SPI (10.23.1.220) para o sgi-spi.
 
 Lê o pacote gerado por `scripts/extrair-contratos-sgi.py` (ou pelo `deploy/sql/backup-modulo-contratos.sh`
 do SGI) e carrega empresas, contratos, orçamento, execução, reajustes, prorrogações, anexos e auditoria.

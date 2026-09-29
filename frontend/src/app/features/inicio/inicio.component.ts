@@ -13,7 +13,7 @@ import { AutenticacaoService } from '../../core/autenticacao/autenticacao.servic
       <div>
         <p>Início</p>
         <h1>Olá, {{ autenticacao.usuario()?.nome_completo }}</h1>
-        <small>Os módulos do Contratos SPI aparecerão na barra lateral, em "Módulos", à medida que forem disponibilizados.</small>
+        <small>Os módulos do SGI SPI aparecerão na barra lateral, em "Módulos", à medida que forem disponibilizados.</small>
       </div>
     </div>
     @if (acesso() === 'negado') {

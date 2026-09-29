@@ -73,3 +73,25 @@ Resposta **`204`**. Erros:
 
 - Serviço: `SetoresApiService` (`frontend/src/app/features/setores/setores-api.service.ts`).
 - Tela: `/setores` (`SetoresComponent`), protegida por `guardaAcl` (`setores`). Criação, edição e exclusão aparecem só para o SuperRoot.
+
+## Estrutura oficial (reorganização)
+
+A estrutura institucional da SPI, transcrita do decreto de organização, fica em `backend/app/services/estrutura_setores.py` (28 setores, raiz "Secretaria de Parcerias em Investimentos"). Ela é aplicada pelo script:
+
+```bash
+cd backend
+.venv/bin/python ../scripts/reorganizar-setores.py            # ensaio: mostra o resultado e desfaz
+.venv/bin/python ../scripts/reorganizar-setores.py --gravar   # aplica
+```
+
+O script (`servico_setores.substituir_estrutura`) faz tudo numa transação só:
+- mantém os **setores sistêmicos** e os membros deles;
+- apaga os **setores institucionais**, os membros deles e as regras de ACL que citam esses setores (em cascata);
+- **limpa o Departamento de todos os usuários.** Como o campo é obrigatório no perfil, o usuário comum é levado a "Meu perfil" no próximo login (`403 revisao_perfil_obrigatoria` na API) para escolher o novo setor. O SuperRoot não é bloqueado;
+- cadastra a árvore oficial e registra `setores.reorganizar` na auditoria.
+
+Aplicado em 29/09/2026:
+- 17 setores institucionais removidos;
+- 2 vínculos de membro removidos;
+- 5 departamentos limpos;
+- 28 setores criados.

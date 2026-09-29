@@ -1,6 +1,6 @@
-# Documentação do contratos-spi
+# Documentação do sgi-spi
 
-Documentação técnica e funcional da API do **contratos-spi**, sistema de gestão de contratos da Secretaria de Parcerias em Investimentos (SPI).
+Documentação técnica e funcional da API do **sgi-spi**, sistema de gestão de contratos da Secretaria de Parcerias em Investimentos (SPI).
 
 Esta pasta é parte do código-fonte. Ela é a referência para o desenvolvimento do backend, para o frontend Angular e para futuros sistemas consumidores.
 
@@ -16,6 +16,11 @@ Esta pasta é parte do código-fonte. Ela é a referência para o desenvolviment
 | [endpoints/acl.md](endpoints/acl.md) | `/api/acl/*`: recursos, regras e acessos efetivos |
 | [endpoints/ldap.md](endpoints/ldap.md) | `/api/ldap/diretorios/*`: diretórios LDAP |
 | [endpoints/smtp.md](endpoints/smtp.md) | `/api/smtp/servidores/*`: servidores SMTP (envio de e-mail) |
+| [endpoints/rh-cadastro.md](endpoints/rh-cadastro.md) | `/api/rh/cadastro/*`, `/api/rh/papeis`: Módulo RH, atualização cadastral validada pela CGP |
+| [endpoints/rh-afastamentos.md](endpoints/rh-afastamentos.md) | `/api/rh/afastamentos/*`, `/api/rh/parametros`, `/api/rh/feriados`: férias, licença-prêmio, feriados e pontos facultativos |
+| [endpoints/rh-folha-ponto.md](endpoints/rh-folha-ponto.md) | `/api/rh/folha-ponto`: folha de ponto do usuário em PDF |
+| [endpoints/mensagens.md](endpoints/mensagens.md) | `/api/mensagens/*`: mensageria (caixa de mensagens, avisos automáticos, e-mail e lembretes) |
+| [endpoints/mensageria.md](endpoints/mensageria.md) | `/api/mensageria/*`: tela Mensageria da conta root (e-mail de changelog) |
 | [endpoints/sistema.md](endpoints/sistema.md) | `/api/saude` |
 | [endpoints/contratos-empresas.md](endpoints/contratos-empresas.md) | `/api/contratos/empresas/*`: empresas contratadas e prepostos |
 | [endpoints/contratos-cadastro.md](endpoints/contratos-cadastro.md) | `/api/contratos/*`: carteira, cadastro, detalhe, documentos importantes e histórico |

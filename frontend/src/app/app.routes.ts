@@ -4,7 +4,7 @@
 import { Routes } from '@angular/router';
 
 import { guardaAcl, guardaPerfil } from './core/acesso/acesso.guards';
-import { guardaAutenticacao, guardaPapel, guardaVisitante } from './core/autenticacao/autenticacao.guards';
+import { guardaAutenticacao, guardaContaRoot, guardaPapel, guardaVisitante } from './core/autenticacao/autenticacao.guards';
 
 /**
  * Mapa de rotas do portal.
@@ -25,7 +25,7 @@ export const rotas: Routes = [
     children: [
       {
         path: '',
-        title: 'Entrar | Contratos SPI',
+        title: 'Entrar | SGI SPI',
         loadComponent: () => import('./features/auth/login/login.component').then((m) => m.LoginComponent),
       },
     ],
@@ -42,28 +42,39 @@ export const rotas: Routes = [
     children: [
       {
         path: '',
-        title: 'Início | Contratos SPI',
+        title: 'Início | SGI SPI',
         loadComponent: () => import('./features/inicio/inicio.component').then((m) => m.InicioComponent),
       },
       {
+        // Caixa de mensagens: todo usuário autenticado (sem ACL)
+        path: 'mensagens',
+        title: 'Caixa de mensagens | SGI SPI',
+        loadComponent: () => import('./features/mensagens/mensagens.component').then((m) => m.MensagensComponent),
+      },
+      {
         path: 'perfil',
-        title: 'Meu perfil | Contratos SPI',
+        title: 'Meu perfil | SGI SPI',
         loadComponent: () => import('./features/perfil/perfil.component').then((m) => m.PerfilComponent),
       },
       // Módulos protegidos pela ACL: `data.acl` informa o slug do recurso conferido por `guardaAcl`
       {
         path: 'usuarios',
-        title: 'Usuários | Contratos SPI',
+        title: 'Usuários | SGI SPI',
         canActivate: [guardaAcl],
         data: { acl: 'usuarios' },
         loadComponent: () => import('./features/usuarios/usuarios.component').then((m) => m.UsuariosComponent),
       },
       {
         path: 'setores',
-        title: 'Setores | Contratos SPI',
+        title: 'Setores | SGI SPI',
         canActivate: [guardaAcl],
         data: { acl: 'setores' },
         loadComponent: () => import('./features/setores/setores.component').then((m) => m.SetoresComponent),
+      },
+      {
+        // Módulo RH: todo usuário autenticado (as telas de CGP e autorizador conferem o papel na API)
+        path: 'rh',
+        loadChildren: () => import('./features/rh/rh.routes').then((m) => m.ROTAS_RH),
       },
       {
         // Módulo de contratos: todas as telas exigem ACL `contratos` (a API valida o nível de cada ação)
@@ -75,14 +86,14 @@ export const rotas: Routes = [
       // Administração: só para o papel SuperRoot
       {
         path: 'admin/acl',
-        title: 'Controle de acesso | Contratos SPI',
+        title: 'Controle de acesso | SGI SPI',
         canActivate: [guardaPapel],
         data: { papeis: ['SuperRoot'] },
         loadComponent: () => import('./features/administracao/acl/acl.component').then((m) => m.AclComponent),
       },
       {
         path: 'admin/ldap',
-        title: 'Diretórios LDAP | Contratos SPI',
+        title: 'Diretórios LDAP | SGI SPI',
         canActivate: [guardaPapel],
         data: { papeis: ['SuperRoot'] },
         loadComponent: () =>
@@ -90,11 +101,19 @@ export const rotas: Routes = [
       },
       {
         path: 'admin/smtp',
-        title: 'Servidores SMTP | Contratos SPI',
+        title: 'Servidores SMTP | SGI SPI',
         canActivate: [guardaPapel],
         data: { papeis: ['SuperRoot'] },
         loadComponent: () =>
           import('./features/administracao/smtp/servidores-smtp.component').then((m) => m.ServidoresSmtpComponent),
+      },
+      {
+        // Mensageria (e-mail de changelog): exclusiva da conta root
+        path: 'admin/mensageria',
+        title: 'Mensageria | SGI SPI',
+        canActivate: [guardaContaRoot],
+        loadComponent: () =>
+          import('./features/administracao/mensageria/mensageria.component').then((m) => m.MensageriaComponent),
       },
     ],
   },

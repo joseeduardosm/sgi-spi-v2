@@ -25,6 +25,7 @@ import {
   OpcaoEmpresa,
   Pagina,
   PainelContratos,
+  PainelVigencias,
   Previsao,
   PreviaImportacao,
   ResumoContrato,
@@ -97,6 +98,11 @@ export class ContratosApiService {
   }
 
   /** Baixa o PDF de um documento importante. */
+  /** Relatório dos itens do contrato em PDF (aba Itens). */
+  baixarRelatorioItens(id: string) {
+    return baixarArquivo(this.http, `${this.base}/${id}/itens/pdf`, 'itens.pdf');
+  }
+
   baixarDocumento(id: string, codigo: number) {
     return baixarArquivo(this.http, `${this.base}/${id}/documentos/${codigo}/arquivo`);
   }
@@ -179,6 +185,12 @@ export class ContratosApiService {
     let params = new HttpParams();
     for (const [chave, valor] of Object.entries(filtros)) if (valor) params = params.set(chave, valor);
     return this.http.get<PainelContratos>(`${this.base}/painel`, { params });
+  }
+
+  /** Painel de vigências: vigência de cada contrato vigente, do que vence primeiro ao último. */
+  painelVigencias(empresaId: string): Observable<PainelVigencias> {
+    const params = empresaId ? new HttpParams().set('empresa_id', empresaId) : new HttpParams();
+    return this.http.get<PainelVigencias>(`${this.base}/painel/vigencias`, { params });
   }
 
   /** Baixa o relatório executivo de NEs (SuperRoot). */

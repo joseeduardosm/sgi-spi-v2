@@ -74,8 +74,13 @@ def obter_sessao_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) ->
     responses=NAO_AUTENTICADO,
 )
 def obter_meu_perfil(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado)) -> PerfilLeitura:
-    """Perfil institucional do próprio usuário (reaproveita o detalhe completo e devolve só o perfil)."""
-    return servico_admin_usuarios.para_detalhe(sessao, usuario).perfil
+    """Perfil institucional do próprio usuário, com a situação de cada campo no fluxo de validação da CGP."""
+    from app.services.rh import servico_cadastro
+
+    perfil = servico_admin_usuarios.para_detalhe(sessao, usuario).perfil
+    perfil.situacao_campos = servico_cadastro.situacao_campos(sessao, usuario)
+    perfil.superior_obrigatorio = servico_cadastro.superior_obrigatorio(sessao, usuario)
+    return perfil
 
 
 @roteador.put(
@@ -83,8 +88,10 @@ def obter_meu_perfil(sessao: Session = Depends(obter_sessao), usuario: Usuario =
     response_model=UsuarioSessao,
     summary="Atualizar e revalidar meu perfil",
     description=(
-        "Grava o perfil institucional e registra a revalidação (reinicia o prazo de 30 dias). "
-        "Exige nome completo, e-mail, ramal, cargo, departamento, andar e prédio. "
+        "Confirma o perfil no mês civil. Usuário comum: cada campo alterado fica **pendente de validação da CGP** "
+        "(o valor em vigor continua o anterior) e a CGP recebe um e-mail; os valores pendentes já contam como preenchidos. "
+        "CGP e SuperRoot: vale na hora. Exige nome completo, e-mail, ramal, cargo, departamento, andar, prédio e "
+        "superior imediato (sem ser o próprio usuário nem formar ciclo na hierarquia). "
         "Retorna a sessão atualizada, com `perfil_restrito` recalculado."
     ),
     responses={**NAO_AUTENTICADO, **INVALIDO},

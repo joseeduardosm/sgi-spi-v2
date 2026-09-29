@@ -1,4 +1,4 @@
-# contratos-spi: instruções para agentes
+# SGI SPI (Sistema de Gestão Integrada, antigo contratos-spi): instruções para agentes
 
 **Leia e siga `AGENTS.md`**: código em pt-BR (nomes e comentários), documentação obrigatória da API e escopo.
 

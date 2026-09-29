@@ -1,0 +1,13 @@
+[Unit]
+Description=sgi-spi: lembretes diários da mensageria (vencimentos, atrasos, ciência e resumo)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=__USUARIO__
+Group=__USUARIO__
+WorkingDirectory=__PROJETO__/backend
+ExecStart=__PROJETO__/backend/.venv/bin/python -m app.tarefas.mensageria lembretes
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

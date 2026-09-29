@@ -1,0 +1,86 @@
+<div class="cabecalho-pagina">
+  <div>
+    <app-trilha [itens]="[{ rotulo: 'Administração' }, { rotulo: 'Mensageria' }]" />
+    <h1>Mensageria</h1>
+    <small>Comunicados por e-mail a todos os usuários no layout oficial. Exclusivo da conta root.</small>
+  </div>
+</div>
+
+<section class="painel-gestao" aria-labelledby="titulo-changelog">
+  <div class="barra-ferramentas">
+    <div>
+      <h2 id="titulo-changelog">E-mail de changelog</h2>
+      <p>Monta um rascunho com as novidades do CHANGELOG ainda não enviadas. Você edita o texto, confere a prévia, testa e envia a todos.</p>
+    </div>
+    <button class="acao-primaria" type="button" (click)="preparar()">Preparar e-mail de changelog</button>
+  </div>
+
+  <div class="tabela-gestao-envoltorio">
+    <table class="tabela-gestao">
+      <thead>
+        <tr><th>Enviado em</th><th>Assunto</th><th>Destino</th><th>Resultado</th><th>Por</th><th class="coluna-acoes">Ações</th></tr>
+      </thead>
+      <tbody>
+        @for (e of historico(); track e.id) {
+          <tr>
+            <td>{{ e.criado_em | date: 'dd/MM/yyyy HH:mm' }}</td>
+            <td><strong>{{ e.assunto }}</strong>@if (e.ate_data) { <small>Novidades até {{ data(e.ate_data) }}</small> }</td>
+            <td>{{ e.destino === 'todos' ? 'Todos os usuários' : 'Teste' }}</td>
+            <td>
+              @if (!e.concluido_em) { <span class="selo-situacao alerta">Enviando… {{ e.enviados + e.falhas }}/{{ e.total }}</span> }
+              @else if (e.falhas) { <span class="selo-situacao vermelho" [title]="e.erros ?? ''">{{ e.enviados }} enviado(s), {{ e.falhas }} falha(s)</span> }
+              @else { <span class="selo-situacao">{{ e.enviados }} enviado(s)</span> }
+            </td>
+            <td>{{ e.enviado_por_nome }}</td>
+            <td class="coluna-acoes"><button type="button" class="link-arquivo" (click)="reaproveitar(e)">Reabrir texto</button></td>
+          </tr>
+        } @empty {
+          <tr><td class="estado-vazio" colspan="6">Nenhum e-mail de changelog enviado ainda.</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
+
+@if (rascunho(); as r) {
+  <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
+  <section class="modal-portal modal-changelog" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-changelog">
+    <header>
+      <div><span class="modal-sobretitulo">Mensageria</span><h2 id="titulo-janela-changelog">E-mail de changelog</h2></div>
+      <button type="button" aria-label="Fechar" (click)="fechar()">×</button>
+    </header>
+    <form (ngSubmit)="enviar()">
+      <div class="corpo-changelog">
+        <div class="edicao-changelog">
+          <p class="dica-formulario" style="margin-top: 0">
+            @if (r.datas.length) { Novidades do CHANGELOG de {{ data(r.datas[r.datas.length - 1]) }}@if (r.datas.length > 1) { a {{ data(r.datas[0]) }} }. }
+            @else { Nenhuma entrada nova no CHANGELOG desde o último envio a todos. }
+            @if (r.desde) { Último envio a todos: novidades até {{ data(r.desde) }}. }
+          </p>
+          <label for="changelog-assunto">Assunto</label>
+          <input id="changelog-assunto" name="assunto" maxlength="300" [(ngModel)]="assunto" (ngModelChange)="editou()" />
+          <label for="changelog-corpo">Texto</label>
+          <textarea id="changelog-corpo" name="corpo" [(ngModel)]="corpo" (ngModelChange)="editou()"></textarea>
+          <small class="dica-formulario">Formato: <code>## Título</code> para subtítulo, <code>- item</code> para lista (2 espaços antes do hífen = subitem) e <code>**negrito**</code>.</small>
+        </div>
+        <div class="previa-changelog">
+          <span class="rotulo-previa">Prévia do e-mail</span>
+          @if (previa(); as html) { <iframe title="Prévia do e-mail de changelog" [srcdoc]="html"></iframe> }
+          @else if (erroPrevia()) { <p class="estado-vazio">Não foi possível gerar a prévia.</p> }
+          @else { <p class="estado-vazio">Gerando a prévia…</p> }
+        </div>
+      </div>
+      <footer class="rodape-changelog">
+        <div class="destino-changelog linha-caixas">
+          <label><input type="radio" name="destino" value="teste" [(ngModel)]="destino" /> Somente teste para</label>
+          <input type="email" name="email_teste" placeholder="seu.email@sp.gov.br" aria-label="E-mail de teste" [(ngModel)]="emailTeste" [disabled]="destino !== 'teste'" />
+          <label><input type="radio" name="destino" value="todos" [(ngModel)]="destino" /> Todos os usuários ativos ({{ r.total_destinatarios }})</label>
+        </div>
+        <div class="acoes-formulario">
+          <button type="button" class="acao-secundaria" (click)="fechar()">Cancelar</button>
+          <button type="submit" class="acao-primaria" [disabled]="!podeEnviar()">{{ destino === 'todos' ? 'Enviar a todos' : 'Enviar teste' }}</button>
+        </div>
+      </footer>
+    </form>
+  </section>
+}

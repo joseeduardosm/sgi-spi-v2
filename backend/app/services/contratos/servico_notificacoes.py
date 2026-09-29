@@ -22,7 +22,7 @@ from app.core.banco import FabricaSessao, agora_utc
 from app.core.configuracao import obter_configuracao
 from app.models.contratos import Competencia, Contrato, OcorrenciaDiario
 from app.models.usuario import Usuario
-from app.services import servico_anexos, servico_smtp
+from app.services import modelo_email, servico_anexos, servico_smtp
 from app.services.cliente_smtp import AnexoEmail, Mensagem, ResultadoSmtp
 from app.services.contratos import servico_diario
 from app.services.contratos.documentos_execucao import PAPEIS, data_hora, moeda, quantidade
@@ -223,20 +223,24 @@ def exigir_reenvio(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
 
 
 def _html(titulo: str, blocos: list[str]) -> str:
-    """Corpo HTML simples (tabelas inline, sem imagens), legível em qualquer cliente de e-mail."""
-    corpo = "".join(blocos)
-    return (
-        "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#32383f;max-width:720px\">"
-        f"<h2 style=\"color:#b0222e;font-size:18px;margin:0 0 12px\">{escape(titulo)}</h2>{corpo}"
-        "<p style=\"color:#8e99a6;font-size:12px;margin-top:24px\">Mensagem automática do portal Contratos SPI. "
-        "Para responder, use \"Responder a todos\": a resposta vai para a equipe do contrato.</p></div>"
+    """E-mail no layout oficial do SGI SPI (brasão, cabeçalho institucional e rodapé)."""
+    return modelo_email.pagina(
+        titulo, "".join(blocos), sobretitulo="Gestão de contratos",
+        nota_rodape="Mensagem automática do SGI SPI. Para responder, use \"Responder a todos\": a resposta vai para a equipe do contrato.",
     )
 
 
 def _tabela_html(cabecalho: list[str], linhas: list[list[str]]) -> str:
-    th = "".join(f"<th style=\"text-align:left;padding:6px 8px;background:#f6e7e8\">{escape(c)}</th>" for c in cabecalho)
-    tr = "".join("<tr>" + "".join(f"<td style=\"padding:6px 8px;border-top:1px solid #eee\">{escape(v)}</td>" for v in linha) + "</tr>" for linha in linhas)
-    return f"<table style=\"border-collapse:collapse;margin:8px 0 12px\"><tr>{th}</tr>{tr}</table>"
+    """Tabela sóbria para o corpo do e-mail (cabeçalho cinza, bordas finas)."""
+    th = "".join(
+        f"<th style=\"text-align:left;padding:7px 10px;background:#f1f2f4;border:1px solid #dfe2e6;font-size:12px;color:#3a424a\">{escape(c)}</th>"
+        for c in cabecalho
+    )
+    tr = "".join(
+        "<tr>" + "".join(f"<td style=\"padding:7px 10px;border:1px solid #dfe2e6;font-size:13px;color:#2b3137\">{escape(v)}</td>" for v in linha) + "</tr>"
+        for linha in linhas
+    )
+    return f"<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;margin:8px 0 14px;width:100%\"><tr>{th}</tr>{tr}</table>"
 
 
 # --- Ocorrência do diário de bordo ---------------------------------------------------------------

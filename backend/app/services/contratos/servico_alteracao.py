@@ -308,7 +308,7 @@ def gerar_memoria(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UU
     )
     documento.secao("Ciências").tabela(["Nome", "Papel", "Ciência em"],
                                        [[c.nome, PAPEIS.get(c.papel, c.papel), data_hora(c.registrada_em)] for c in alteracao.ciencias], larguras=[4, 3, 2])
-    base = f"memoria-{alteracao.tipo}-{contrato.sequencial:03d}-{contrato.ano}"
+    base = f"memoria-{alteracao.tipo}-{contrato.numero_arquivo}"
     pdf = servico_anexos.guardar_pdf_gerado(sessao, documento.gerar(), f"{base}.pdf", "contrato-alteracao-memoria", autor.id, contrato_id=contrato.id)
     xlsx = servico_anexos.guardar_arquivo_gerado(sessao, gerar_planilha([Aba(
         rotulo,
@@ -334,7 +334,7 @@ def gerar_consolidado(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uui
         anexo = sessao.get(Anexo, getattr(alteracao, coluna)) if getattr(alteracao, coluna) else None
         if anexo:
             partes.append(servico_anexos.caminho(anexo))
-    nome = f"consolidado-{alteracao.tipo}-{contrato.sequencial:03d}-{contrato.ano}.pdf"
+    nome = f"consolidado-{alteracao.tipo}-{contrato.numero_arquivo}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, mesclar_pdfs(partes), nome, "contrato-alteracao-consolidado", autor.id, contrato_id=contrato.id)
     sessao.flush()
     alteracao.consolidado_anexo_id = anexo.id
@@ -382,6 +382,10 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UUID, a
     contrato.versao += 1
     auditar(sessao, autor.login, f"contrato.{alteracao.tipo}.concluir", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
             alvo_id=contrato.id, dados={"impacto": alteracao.impacto_valor, "percentual": alteracao.impacto_percentual})
+    from app.services.contratos import avisos
+    avisos.alteracao_concluida(sessao, contrato, "alteracao", alteracao.id,
+                               f"{'aditamento' if alteracao.tipo == 'aditamento' else 'supressão'} concluído "
+                               f"({abs(alteracao.impacto_percentual):.2f}%)".replace(".", ","), autor)
     sessao.commit()
 
 

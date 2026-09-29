@@ -34,7 +34,19 @@
           </tr>
         }
       </tbody>
-      <tfoot><tr><td colspan="7">Total medido</td><td class="num">{{ total() | moeda }}</td></tr></tfoot>
+      <tfoot>
+        <tr><td colspan="7">Total medido</td><td class="num">{{ total() | moeda }}</td></tr>
+        @if (+d.desconto_reajuste > 0) {
+          <!-- Crédito de um reajuste com desconto retroativo: abatido do valor autorizado desta competência -->
+          <tr class="linha-desconto-reajuste">
+            <td colspan="7">Desconto de reajuste
+              @for (x of d.descontos_reajuste; track x.reajuste_id) { <small>(crédito do reajuste com referência {{ x.mes_referencia | competencia }})</small> }
+            </td>
+            <td class="num">− {{ d.desconto_reajuste | moeda }}</td>
+          </tr>
+          <tr><td colspan="7">Valor após o desconto</td><td class="num"><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></td></tr>
+        }
+      </tfoot>
     </table>
   </div>
   @if (excedentes().length) {

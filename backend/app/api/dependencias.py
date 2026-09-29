@@ -70,7 +70,7 @@ def obter_usuario_autenticado(
 
 
 def obter_usuario_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) -> Usuario:
-    """Usuário autenticado com perfil institucional em dia (SuperRoot não passa por essa restrição)."""
+    """Usuário autenticado com perfil institucional em dia (só a conta root não passa por essa restrição)."""
     if servico_perfil.perfil_restrito(usuario):
         # O frontend reconhece este código e leva o usuário para a tela de perfil
         raise ErroApi(
@@ -97,6 +97,13 @@ def exigir_papeis(*papeis: str) -> Callable[..., Usuario]:
         return usuario
 
     return verificar
+
+
+def exigir_conta_root(usuario: Usuario = Depends(obter_usuario_atual)) -> Usuario:
+    """Exige a conta administrativa principal (login `LOGIN_ADMIN`, padrão "root"). Ex.: a tela Mensageria."""
+    if not servico_perfil.dispensado(usuario):
+        raise ErroApi(status.HTTP_403_FORBIDDEN, "Somente a conta root tem acesso a este recurso.", "acesso_negado")
+    return usuario
 
 
 def exigir_acl(recurso: str, nivel_minimo: str = NivelAcl.LEITURA) -> Callable[..., Usuario]:

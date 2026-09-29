@@ -26,7 +26,7 @@ from app.models.contratos import Competencia, Contrato
 from app.models.setor import MembroSetor, Setor
 from app.models.usuario import Usuario
 from app.services import servico_anexos
-from app.services.contratos import calculos, documentos_execucao
+from app.services.contratos import documentos_execucao
 from app.services.contratos.erros import ErroRegraContrato, SemPermissaoContrato
 from app.services.contratos.servico_contratos import obter_contrato, pode_editar
 from app.services.servico_auditoria import auditar
@@ -133,9 +133,10 @@ def conferencias(contrato: Contrato, competencia: Competencia, dados: dict | Non
 
 
 def valor_autorizado(competencia: Competencia) -> Decimal:
-    from app.services.contratos.servico_competencias import percentual_liberado, total_medido
+    """Medido × % liberado − desconto de reajuste (a regra fica em `servico_competencias`)."""
+    from app.services.contratos.servico_competencias import valor_autorizado as calcular
 
-    return calculos.arredondar(total_medido(competencia) * percentual_liberado(competencia) / Decimal(100))
+    return calcular(competencia)
 
 
 # --- Gravação ------------------------------------------------------------------------------------
@@ -177,6 +178,8 @@ def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uui
     )
     # CADIN e checklist correm em paralelo: com os três concluídos, o consolidado é liberado
     concluir_etapa_paralela(competencia, "retencao")
+    from app.services.contratos import avisos
+    avisos.retencao_conferida(sessao, contrato, competencia, autor)
     auditar(
         sessao, autor.login, "contrato.execucao.retencao", f"Contrato {contrato.numero} · {competencia.numero_competencia}", autor_id=autor.id,
         alvo_tipo="contrato", alvo_id=contrato.id,

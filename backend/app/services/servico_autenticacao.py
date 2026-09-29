@@ -91,4 +91,5 @@ def para_usuario_sessao(usuario: Usuario) -> UsuarioSessao:
         perfil_restrito=servico_perfil.perfil_restrito(usuario),
         campos_pendentes=servico_perfil.campos_pendentes(usuario),
         revisao_obrigatoria=servico_perfil.revisao_vencida(usuario),
+        conta_root=servico_perfil.dispensado(usuario),
     )

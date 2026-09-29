@@ -1,5 +1,5 @@
 @if (contrato(); as c) {
-  <app-cabecalho-modulo titulo="Reajuste" [trilha]="[c.numero, 'Reajuste']" [descricao]="'Contrato ' + c.numero + ' · mês de reajuste previsto: ' + c.mes_reajuste" />
+  <app-cabecalho-modulo titulo="Reajuste" [trilha]="[{ rotulo: c.numero, rota: ['/contratos', c.id] }, 'Reajuste']" [descricao]="'Contrato ' + c.numero + ' · mês de reajuste previsto: ' + meses[c.mes_reajuste - 1]" />
   <div class="barra-fixa"><a class="acao-secundaria" [routerLink]="['/contratos', c.id]" [queryParams]="{ aba: 'itens' }">← Contrato {{ c.numero }}</a></div>
 
   @if (painel(); as p) {
@@ -7,12 +7,26 @@
       <section class="cartao-dados" aria-labelledby="titulo-reajuste">
         <header>
           <div><h2 id="titulo-reajuste">Reajuste em elaboração</h2>
-            <small>Referência {{ r.mes_referencia | competencia }} · {{ r.sequencia_vigencia }}ª vigência · {{ r.competencias_recalculadas }} competência(s) recalculada(s)</small></div>
+            <small>Percentual positivo reajusta o preço do item; negativo dá desconto; zero mantém o preço.</small></div>
           @if (p.pode_editar) { <button type="button" class="acao-perigo" (click)="cancelar(r)">Cancelar reajuste</button> }
         </header>
         <div class="corpo">
+          <!-- Mês de referência e mês de reajuste sempre no topo -->
+          <dl class="resumo-reajuste">
+            <div><dt>Mês de referência</dt><dd>{{ r.mes_referencia | competencia }}</dd></div>
+            <div><dt>Mês de reajuste do contrato</dt><dd>{{ meses[c.mes_reajuste - 1] }}</dd></div>
+            <div><dt>Vigência</dt><dd>{{ r.sequencia_vigencia }}ª · {{ r.vigencia_inicio | dataBr }} a {{ r.vigencia_fim | dataBr }}</dd></div>
+            <div><dt>Competências recalculadas</dt><dd>{{ r.competencias_recalculadas }} ainda não medida(s)</dd></div>
+          </dl>
           @if (r.competencias_com_diferenca) {
-            <p class="aviso-bloco informativo">Reajuste retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.mes_referencia | competencia }} mantêm o preço pago. Ao concluir, será gerada uma <strong>competência de diferença de reajuste</strong> com as quantidades medidas × (preço reajustado − preço pago), para pagamento pelo fluxo normal da execução.</p>
+            @let dif = +r.diferenca_retroativa;
+            @if (dif > 0) {
+              <p class="aviso-bloco informativo">Reajuste retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.mes_referencia | competencia }} mantêm o preço pago. Ao concluir, será gerada uma <strong>competência de diferença de reajuste</strong> de {{ r.diferenca_retroativa | moeda }} (quantidades medidas × (preço novo − preço pago)), paga pelo fluxo normal da execução.</p>
+            } @else if (dif < 0) {
+              <p class="aviso-bloco informativo">Desconto retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.mes_referencia | competencia }} foram pagas com o preço anterior. Ao concluir, o <strong>crédito de {{ -dif | moeda }}</strong> da SPI será abatido do valor autorizado {{ r.competencia_credito ? 'na medição de ' + r.competencia_credito : 'na próxima competência gerada' }} (e, se não couber, nas seguintes).</p>
+            } @else {
+              <p class="dica-formulario">{{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir da referência: com os percentuais salvos, não há diferença a acertar.</p>
+            }
           }
           <p class="secao-formulario" style="margin-top: 0">1. Evidência do índice</p>
           <div class="acoes-cartao esquerda">
@@ -24,11 +38,20 @@
           </div>
         </div>
         <p class="secao-formulario" style="margin: 0 22px 8px">2. Memória de cálculo</p>
+        @if (p.pode_editar) {
+          <div class="aplicar-todos">
+            <label for="indice-todos">Aplicar o mesmo percentual a todos os itens</label>
+            <input id="indice-todos" class="campo-tabela" inputmode="decimal" placeholder="ex.: 4,5 ou -3" [(ngModel)]="indiceTodos" />
+            <span>%</span>
+            <button type="button" class="acao-secundaria acao-pequena" [disabled]="!indiceValido(indiceTodos)" (click)="aplicarATodos(r)">Aplicar a todos</button>
+            <small class="dica-formulario">Depois é possível ajustar item a item. Os valores só valem depois de "Salvar memória".</small>
+          </div>
+        }
         <div class="tabela-gestao-envoltorio">
           <table class="tabela-gestao">
             <thead>
-              <tr><th>Item</th><th>Descrição</th><th class="num">Qtd. mensal</th><th class="num">Valor unitário atual</th><th class="num">Índice (%)</th>
-                <th class="num">Valor referencial</th><th class="num">Valor reajustado</th><th class="num">Subtotal reajustado</th></tr>
+              <tr><th>Item</th><th>Descrição</th><th class="num">Qtd. mensal</th><th class="num">Valor unitário atual</th><th class="num">Percentual (%)</th>
+                <th class="num">Valor referencial (teto)</th><th class="num">Novo valor unitário</th><th class="num">Variação</th><th class="num">Subtotal mensal</th></tr>
             </thead>
             <tbody>
               @for (i of r.itens; track i.item_id) {
@@ -36,10 +59,15 @@
                   <td>{{ i.ordem }}</td><td><strong>{{ i.descricao }}</strong></td>
                   <td class="num">{{ i.quantidade_mensal | quantidade }}</td>
                   <td class="num">{{ i.valor_unitario_atual | moeda }}</td>
-                  <td class="num" style="width: 110px"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Índice de ' + i.descricao" [disabled]="!p.pode_editar" [(ngModel)]="indices[i.item_id]" placeholder="2 = 2%" /></td>
+                  <td class="num" style="width: 110px"><input class="campo-tabela" inputmode="decimal" [class.invalido]="!indiceValido(indices[i.item_id])"
+                         [attr.aria-invalid]="!indiceValido(indices[i.item_id])" [attr.aria-label]="'Percentual de ' + i.descricao" [disabled]="!p.pode_editar"
+                         [(ngModel)]="indices[i.item_id]" placeholder="0" /></td>
                   <td class="num" style="width: 130px"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Valor referencial de ' + i.descricao" [disabled]="!p.pode_editar" [(ngModel)]="referenciais[i.item_id]" placeholder="opcional" /></td>
-                  <td class="num"><strong>{{ i.valor_unitario_reajustado | moeda }}</strong></td>
-                  <td class="num">{{ i.subtotal_reajustado | moeda }}</td>
+                  @let novo = precoNovo(i);
+                  <td class="num"><strong>{{ novo | moeda }}</strong></td>
+                  <td class="num" [class.variacao-positiva]="novo > +i.valor_unitario_atual" [class.variacao-negativa]="novo < +i.valor_unitario_atual">
+                    {{ novo > +i.valor_unitario_atual ? '+' : '' }}{{ novo - +i.valor_unitario_atual | moeda }}</td>
+                  <td class="num">{{ novo * +i.quantidade_mensal | moeda }}</td>
                 </tr>
               }
             </tbody>
@@ -48,14 +76,15 @@
         <div class="corpo">
           <div class="indicadores">
             <div class="indicador"><span>Base atual</span><strong>{{ r.base_atual | moeda }}</strong></div>
-            <div class="indicador"><span>Nova base mensal</span><strong>{{ r.base_reajustada | moeda }}</strong></div>
+            <div class="indicador"><span>Nova base mensal ({{ variacao(r.base_atual, r.base_reajustada) }})</span><strong>{{ r.base_reajustada | moeda }}</strong></div>
             <div class="indicador"><span>Valor global atual</span><strong>{{ r.valor_global_atual | moeda }}</strong></div>
-            <div class="indicador destaque"><span>Novo valor global</span><strong>{{ r.valor_global_reajustado | moeda }}</strong></div>
+            <div class="indicador destaque"><span>Novo valor global ({{ variacao(r.valor_global_atual, r.valor_global_reajustado) }})</span><strong>{{ r.valor_global_reajustado | moeda }}</strong></div>
           </div>
+          @if (alteradoSemSalvar(r)) { <p class="aviso-bloco">Há percentuais alterados e não salvos: os totais acima só mudam depois de "Salvar memória".</p> }
           @if (p.pode_editar) {
             <div class="acoes-cartao">
-              <button type="button" class="acao-secundaria" (click)="salvarMemoria(r)">Salvar memória</button>
-              <button type="button" class="acao-secundaria" (click)="gerarArquivos(r)">Gerar e baixar PDF e XLSX</button>
+              <button type="button" class="acao-secundaria" [disabled]="!todosValidos(r)" (click)="salvarMemoria(r)">Salvar memória</button>
+              <button type="button" class="acao-secundaria" [disabled]="alteradoSemSalvar(r)" (click)="gerarArquivos(r)">Gerar e baixar PDF e XLSX</button>
             </div>
           }
           @if (r.memorias.length) {
@@ -99,7 +128,7 @@
         <header><h2 id="titulo-historico-reajuste">Histórico</h2></header>
         <div class="tabela-gestao-envoltorio">
           <table class="tabela-gestao">
-            <thead><tr><th>Referência</th><th>Vigência</th><th>Situação</th><th class="num">Base</th><th class="num">Valor global</th><th>Arquivos</th></tr></thead>
+            <thead><tr><th>Referência</th><th>Vigência</th><th>Situação</th><th class="num">Base</th><th class="num">Valor global</th><th>Competências já medidas</th><th>Arquivos</th></tr></thead>
             <tbody>
               @for (r of p.historico; track r.id) {
                 <tr>
@@ -107,6 +136,16 @@
                   <td><span class="selo-situacao" [class.inativo]="r.situacao === 'cancelado'">{{ r.situacao === 'concluido' ? 'Concluído' : 'Cancelado' }}</span></td>
                   <td class="num">{{ r.base_atual | moeda }} → {{ r.base_reajustada | moeda }}</td>
                   <td class="num">{{ r.valor_global_atual | moeda }} → {{ r.valor_global_reajustado | moeda }}</td>
+                  <td>
+                    @if (+r.diferenca_retroativa > 0) { {{ r.diferenca_retroativa | moeda }} a pagar }
+                    @else if (+r.diferenca_retroativa < 0) {
+                      Crédito de {{ -r.diferenca_retroativa | moeda }}:
+                      @for (a of r.abatimentos; track a.identificador) {
+                        <a class="link-arquivo" [routerLink]="['/contratos', id(), 'execucao', a.identificador]">{{ a.valor | moeda }} {{ a.medida ? 'abatido em' : 'a abater em' }} {{ a.competencia }}</a>@if (!$last) { · }
+                      }
+                      @if (+r.credito_pendente > 0) { <span class="texto-erro">{{ r.credito_pendente | moeda }} pendente (sem competência a medir)</span> }
+                    } @else { — }
+                  </td>
                   <td>
                     @if (r.memorias.at(-1); as m) { <button type="button" class="link-arquivo" (click)="baixar(r, m.pdf.anexo_id)">Memória</button> }
                     @if (r.apostilamento) { · <button type="button" class="link-arquivo" (click)="baixar(r, r.apostilamento.anexo_id)">Apostilamento</button> }

@@ -137,6 +137,13 @@ export class DetalheContratoComponent implements OnInit {
   }
 
   /** Baixa o Termo Aditivo da prorrogação (guardado como documento importante). */
+  /** Gera e baixa o relatório da aba Itens (PDF). */
+  protected baixarRelatorioItens(): void {
+    this.dialogos.executar(this.api.baixarRelatorioItens(this.id()), 'Gerando o relatório dos itens…').subscribe({
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o relatório'),
+    });
+  }
+
   protected baixarTermo(prorrogacao: Prorrogacao): void {
     if (prorrogacao.codigo_documento) this.api.baixarDocumento(this.id(), prorrogacao.codigo_documento).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }

@@ -70,21 +70,9 @@ def _filtrar(consulta: Select, busca: str | None) -> Select:
     if digitos:
         condicoes.append(EmpresaContratada.cnpj.like(f"%{digitos}%"))
         condicoes.append(exists().where(PrepostoEmpresa.empresa_id == EmpresaContratada.id, PrepostoEmpresa.cpf.like(f"%{digitos}%")))
-    # Termo no formato NNN/AAAA: procura também pelo número do contrato
-    numero = _numero_contrato(termo)
-    if numero:
-        condicoes.append(
-            exists().where(Contrato.empresa_id == EmpresaContratada.id, Contrato.sequencial == numero[0], Contrato.ano == numero[1])
-        )
+    # Procura também pelo número do contrato (qualquer formato; trecho do número)
+    condicoes.append(exists().where(Contrato.empresa_id == EmpresaContratada.id, func.lower(Contrato.numero).like(f"%{termo.lower()}%")))
     return consulta.where(or_(*condicoes))
-
-
-def _numero_contrato(termo: str) -> tuple[int, int] | None:
-    """Interpreta "12/2026" como (sequencial 12, ano 2026); qualquer outra coisa → None."""
-    partes = termo.split("/")
-    if len(partes) == 2 and all(p.isdigit() for p in partes) and len(partes[1]) == 4:
-        return int(partes[0]), int(partes[1])
-    return None
 
 
 def _contratos_por_empresa(sessao: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, list[ContratoDaEmpresa]]:
@@ -93,12 +81,12 @@ def _contratos_por_empresa(sessao: Session, ids: list[uuid.UUID]) -> dict[uuid.U
     if not ids:
         return resultado
     linhas = sessao.execute(
-        select(Contrato.id, Contrato.empresa_id, Contrato.sequencial, Contrato.ano)
+        select(Contrato.id, Contrato.empresa_id, Contrato.numero)
         .where(Contrato.empresa_id.in_(ids))
-        .order_by(Contrato.ano.desc(), Contrato.sequencial.desc())
+        .order_by(Contrato.ano.desc().nulls_last(), Contrato.sequencial.desc().nulls_last(), Contrato.numero)
     )
-    for contrato_id, empresa_id, sequencial, ano in linhas:
-        resultado[empresa_id].append(ContratoDaEmpresa(id=contrato_id, numero=f"{sequencial:03d}/{ano:04d}"))
+    for contrato_id, empresa_id, numero in linhas:
+        resultado[empresa_id].append(ContratoDaEmpresa(id=contrato_id, numero=numero))
     return resultado
 
 

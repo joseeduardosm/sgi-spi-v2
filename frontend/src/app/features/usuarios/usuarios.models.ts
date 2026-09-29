@@ -29,6 +29,19 @@ export interface OpcaoDepartamento {
 export interface PerfilLeitura extends DadosPerfil {
   gestor_nome: string | null;
   perfil_revisado_em: string | null;
+  /** Só em "Meu perfil": situação de cada campo no fluxo de validação da CGP (Módulo RH). */
+  situacao_campos?: Record<string, SituacaoCampo>;
+  superior_obrigatorio?: boolean;
+}
+
+/** Campo alterado pelo usuário: pendente de validação da CGP, ou a última validação/correção. */
+export interface SituacaoCampo {
+  pendente: boolean;
+  valor_proposto: string | null;
+  valor_proposto_rotulo: string | null;
+  validado_por: string | null;
+  validado_em: string | null;
+  corrigido: boolean;
 }
 
 /** Usuário completo, como aparece na administração. */
@@ -86,7 +99,7 @@ export const ROTULOS_PERFIL: Record<string, string> = {
   andar: 'Andar',
   predio: 'Prédio',
   data_nascimento: 'Data de nascimento',
-  gestor_id: 'Gestor imediato',
+  gestor_id: 'Superior imediato',
 };
 
 /** Campos que precisam estar preenchidos para o perfil ficar "em dia". */

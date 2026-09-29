@@ -18,7 +18,7 @@ from cryptography.fernet import Fernet
 
 # Configuração isolada: os testes não dependem do backend/.env real nem do PostgreSQL.
 # Pasta temporária exclusiva desta execução (banco SQLite e anexos)
-_diretorio_temporario = tempfile.mkdtemp(prefix="contratos-spi-testes-")
+_diretorio_temporario = tempfile.mkdtemp(prefix="sgi-spi-testes-")
 os.environ["URL_BANCO_DADOS"] = f"sqlite:///{_diretorio_temporario}/teste.db"
 os.environ["CHAVE_SECRETA_JWT"] = "chave-de-teste-com-pelo-menos-32-caracteres"
 os.environ["LOGIN_ADMIN"] = "root"

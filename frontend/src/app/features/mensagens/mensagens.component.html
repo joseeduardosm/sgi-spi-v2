@@ -1,0 +1,185 @@
+<section class="painel-gestao" aria-labelledby="titulo-mensagens">
+  <div class="barra-ferramentas">
+    <div>
+      <h2 id="titulo-mensagens">Caixa de mensagens</h2>
+      <p>Comunicados, avisos dos contratos e pendências destinados a você. Registre sua ciência depois de ler.</p>
+    </div>
+    <div class="acoes-formulario"><button type="button" class="acao-primaria" (click)="abrirNova()"><span>+</span> Nova mensagem</button></div>
+  </div>
+
+  <nav class="abas" role="tablist" aria-label="Mensagens">
+    <button type="button" role="tab" [class.ativa]="aba() === 'recebidas'" [attr.aria-selected]="aba() === 'recebidas'" (click)="escolherAba('recebidas')">Recebidas</button>
+    <button type="button" role="tab" [class.ativa]="aba() === 'enviadas'" [attr.aria-selected]="aba() === 'enviadas'" (click)="escolherAba('enviadas')">Enviadas por mim</button>
+  </nav>
+
+  @if (aba() === 'recebidas') {
+    <form class="filtros-gestao" role="search" (ngSubmit)="carregar(1)">
+      <select name="estado" aria-label="Situação" [(ngModel)]="estado" (change)="carregar(1)">
+        <option value="pendentes">Pendentes</option>
+        <option value="cientes">Cientes / resolvidas</option>
+        <option value="todas">Todas</option>
+      </select>
+      <input type="search" name="busca" aria-label="Pesquisar mensagens" placeholder="Pesquisar no assunto, no texto ou no remetente" [(ngModel)]="busca" />
+      <button type="submit" class="acao-secundaria">Buscar</button>
+    </form>
+    <div class="tabela-gestao-envoltorio">
+      <table class="tabela-gestao tabela-mensagens">
+        <thead><tr><th>Situação</th><th>Prioridade</th><th>Assunto</th><th>Categoria</th><th>Remetente</th><th>Recebida em</th></tr></thead>
+        <tbody>
+          @for (m of recebidas()?.itens ?? []; track m.id) {
+            <tr tabindex="0" class="linha-clicavel" [class.nao-lida]="m.estado === 'nao_visualizada'" (click)="abrir(m)" (keydown.enter)="abrir(m)">
+              <td><span class="selo-situacao" [class.pendente]="m.estado === 'nao_visualizada'" [class.amarelo]="m.estado === 'visualizada'">{{ estados[m.estado] }}</span></td>
+              <td><span [class]="'selo-prioridade ' + m.prioridade">{{ prioridades[m.prioridade] }}</span></td>
+              <td><strong>{{ m.assunto }}</strong></td>
+              <td>{{ categorias[m.categoria] }}</td>
+              <td>{{ m.autor_nome }}</td>
+              <td>{{ m.entregue_em | date: 'dd/MM/yyyy HH:mm' }}</td>
+            </tr>
+          } @empty {
+            <tr><td class="estado-vazio" colspan="6">{{ recebidas() ? 'Nenhuma mensagem aqui.' : 'Carregando…' }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (recebidas(); as p) { <app-paginacao [pagina]="p.pagina" [tamanhoPagina]="p.tamanho_pagina" [total]="p.total" (mudar)="carregar($event)" /> }
+  } @else {
+    <div class="tabela-gestao-envoltorio">
+      <table class="tabela-gestao tabela-mensagens">
+        <thead><tr><th>Enviada em</th><th>Assunto</th><th>Prioridade</th><th class="num">Destinatários</th><th class="num">Lidas</th><th>Ciência</th></tr></thead>
+        <tbody>
+          @for (m of enviadas()?.itens ?? []; track m.id) {
+            <tr tabindex="0" class="linha-clicavel" (click)="acompanhar(m)" (keydown.enter)="acompanhar(m)">
+              <td>{{ m.publicada_em | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td><strong>{{ m.assunto }}</strong>@if (m.enviar_email) { <small> · também por e-mail</small> }</td>
+              <td><span [class]="'selo-prioridade ' + m.prioridade">{{ prioridades[m.prioridade] }}</span></td>
+              <td class="num">{{ m.destinatarios }}</td>
+              <td class="num">{{ m.visualizadas }}</td>
+              <td><div class="barra-ciencia" [title]="m.cientes + ' de ' + m.destinatarios"><span [style.width.%]="percentual(m)"></span></div>
+                <small>{{ m.cientes }}/{{ m.destinatarios }} ({{ percentual(m) }}%)</small></td>
+            </tr>
+          } @empty {
+            <tr><td class="estado-vazio" colspan="6">{{ enviadas() ? 'Você ainda não enviou mensagens.' : 'Carregando…' }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (enviadas(); as p) { <app-paginacao [pagina]="p.pagina" [tamanhoPagina]="p.tamanho_pagina" [total]="p.total" (mudar)="carregar($event)" /> }
+  }
+</section>
+
+<!-- Mensagem aberta -->
+@if (aberta(); as m) {
+  <div class="fundo-modal" role="presentation" (click)="aberta.set(null)"></div>
+  <section class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-mensagem-aberta">
+    <header>
+      <div><span class="modal-sobretitulo">{{ categorias[m.categoria] }} · prioridade {{ prioridades[m.prioridade].toLowerCase() }}</span>
+        <h2 id="titulo-mensagem-aberta">{{ m.assunto }}</h2></div>
+      <button type="button" aria-label="Fechar" (click)="aberta.set(null)">×</button>
+    </header>
+    <p class="dica-formulario" style="margin: 0 24px">Enviada por {{ m.autor_nome }} em {{ m.entregue_em | date: 'dd/MM/yyyy HH:mm' }}</p>
+    <div class="corpo-janela-mensagem">{{ m.corpo }}</div>
+    <footer>
+      @if (m.link) { <button type="button" class="acao-secundaria" (click)="irPara(m.link)">Abrir</button> }
+      @if (m.ciente_em) {
+        <span class="dica-formulario">Ciência registrada em {{ m.ciente_em | date: 'dd/MM/yyyy HH:mm' }}.</span>
+      } @else if (m.encerrada_em) {
+        <span class="dica-formulario">Resolvida no sistema em {{ m.encerrada_em | date: 'dd/MM/yyyy HH:mm' }}.</span>
+      } @else {
+        <button type="button" class="acao-primaria" [disabled]="ocupado()" (click)="ciente(m)">Li e estou ciente</button>
+      }
+    </footer>
+  </section>
+}
+
+<!-- Nova mensagem -->
+@if (novaAberta()) {
+  <div class="fundo-modal" role="presentation" (click)="fecharJanelas()"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-nova-mensagem">
+    <header>
+      <div><span class="modal-sobretitulo">Caixa de mensagens</span><h2 id="titulo-nova-mensagem">Nova mensagem</h2></div>
+      <button type="button" aria-label="Fechar" (click)="fecharJanelas()">×</button>
+    </header>
+    <form class="corpo-nova-mensagem" (ngSubmit)="enviar()">
+      <div class="grade-formulario">
+        <div class="ocupa-duas"><label for="msg-assunto">Assunto *</label>
+          <input id="msg-assunto" name="assunto" maxlength="300" required [(ngModel)]="envio.assunto" /></div>
+        <div class="ocupa-duas"><label for="msg-corpo">Mensagem *</label>
+          <textarea id="msg-corpo" name="corpo" rows="6" maxlength="12000" required [(ngModel)]="envio.corpo"></textarea></div>
+      </div>
+      <div class="grade-formulario tres-colunas">
+        <div><label for="msg-prioridade">Prioridade</label>
+          <select id="msg-prioridade" name="prioridade" [(ngModel)]="envio.prioridade">@for (p of listaPrioridades; track p[0]) { <option [value]="p[0]">{{ p[1] }}</option> }</select></div>
+        <div><label for="msg-categoria">Categoria</label>
+          <select id="msg-categoria" name="categoria" [(ngModel)]="envio.categoria">@for (c of listaCategorias; track c[0]) { <option [value]="c[0]">{{ c[1] }}</option> }</select></div>
+        <div><label for="msg-expira">Expira em (opcional)</label><input id="msg-expira" name="expira" type="date" [(ngModel)]="expiraEm" /></div>
+      </div>
+      <div class="grade-formulario">
+        <div class="ocupa-duas"><label for="msg-link">Link no sistema (opcional)</label>
+          <input id="msg-link" name="link" placeholder="ex.: /contratos/painel" [(ngModel)]="envio.link" /></div>
+      </div>
+
+      <div class="grade-formulario destinatarios-mensagem" [class.dois]="destinatarios()?.pode_enviar_setores">
+        <fieldset>
+          <legend>Usuários ({{ envio.usuarios_ids.length }})</legend>
+          <input type="search" aria-label="Pesquisar usuários" placeholder="Pesquisar usuário" [ngModel]="filtroUsuarios()" (ngModelChange)="filtroUsuarios.set($event)" [ngModelOptions]="{ standalone: true }" />
+          <div class="lista-selecao">
+            @for (u of usuariosFiltrados(); track u.id) {
+              <label><input type="checkbox" [checked]="envio.usuarios_ids.includes(u.id)" (change)="alternar('usuarios_ids', u.id, $any($event.target).checked)" />
+                {{ u.nome }} <small>{{ u.detalhe }}</small></label>
+            } @empty { <p class="dica-formulario">Nenhum usuário encontrado.</p> }
+          </div>
+        </fieldset>
+        @if (destinatarios()?.pode_enviar_setores) {
+          <fieldset>
+            <legend>Setores ({{ envio.setores_ids.length }})</legend>
+            <input type="search" aria-label="Pesquisar setores" placeholder="Pesquisar setor" [ngModel]="filtroSetores()" (ngModelChange)="filtroSetores.set($event)" [ngModelOptions]="{ standalone: true }" />
+            <div class="lista-selecao">
+              @for (s of setoresFiltrados(); track s.id) {
+                <label><input type="checkbox" [checked]="envio.setores_ids.includes(s.id)" (change)="alternar('setores_ids', s.id, $any($event.target).checked)" /> {{ s.nome }}</label>
+              } @empty { <p class="dica-formulario">Nenhum setor encontrado.</p> }
+            </div>
+          </fieldset>
+        }
+      </div>
+      <label class="linha-caixas"><input type="checkbox" name="email" [(ngModel)]="envio.enviar_email" /> Também enviar por e-mail (para o e-mail do perfil de cada destinatário)</label>
+    </form>
+    <footer>
+      <button type="button" class="acao-secundaria" (click)="fecharJanelas()">Cancelar</button>
+      <button type="button" class="acao-primaria" [disabled]="!valida()" (click)="enviar()">Enviar mensagem</button>
+    </footer>
+  </section>
+}
+
+<!-- Acompanhamento de uma mensagem enviada -->
+@if (acompanhamento(); as d) {
+  <div class="fundo-modal" role="presentation" (click)="acompanhamento.set(null)"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-acompanhamento">
+    <header>
+      <div><span class="modal-sobretitulo">Enviada em {{ d.publicada_em | date: 'dd/MM/yyyy HH:mm' }} · {{ d.cientes }}/{{ d.destinatarios }} cientes</span>
+        <h2 id="titulo-acompanhamento">{{ d.assunto }}</h2></div>
+      <button type="button" aria-label="Fechar" (click)="acompanhamento.set(null)">×</button>
+    </header>
+    <div class="corpo-janela-mensagem">{{ d.corpo }}</div>
+    <div class="tabela-gestao-envoltorio">
+      <table class="tabela-gestao">
+        <thead><tr><th>Destinatário</th><th>Lida em</th><th>Ciência em</th>@if (d.enviar_email) { <th>E-mail</th> }</tr></thead>
+        <tbody>
+          @for (s of d.situacao; track s.usuario_id) {
+            <tr>
+              <td>{{ s.nome }}</td>
+              <td>{{ s.visualizada_em ? (s.visualizada_em | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td>@if (s.ciente_em) { <span class="selo-situacao">{{ s.ciente_em | date: 'dd/MM/yyyy HH:mm' }}</span> } @else { <span class="selo-situacao pendente">Pendente</span> }</td>
+              @if (d.enviar_email) {
+                <td>@if (s.email_ok === true) { Enviado } @else if (s.email_ok === false) { <span class="texto-erro" [title]="s.email_erro ?? ''">Falhou: {{ s.email_erro }}</span> } @else { Na fila }</td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <footer>
+      <button type="button" class="acao-secundaria" (click)="acompanhamento.set(null)">Fechar</button>
+      <button type="button" class="acao-primaria" [disabled]="d.cientes === d.destinatarios" (click)="lembrar(d)">Lembrar pendentes por e-mail</button>
+    </footer>
+  </section>
+}

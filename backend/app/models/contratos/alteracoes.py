@@ -142,6 +142,9 @@ class Reajuste(Base):
     base_reajustada: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     valor_global_atual: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     valor_global_reajustado: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    # Diferença líquida das competências já medidas, gravada na conclusão: > 0 vira competência de
+    # diferença a pagar; < 0 (desconto) vira crédito da SPI abatido nas próximas medições
+    diferenca_retroativa: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     # PDF que comprova o índice e o apostilamento assinado
     evidencia_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     apostilamento_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
@@ -154,6 +157,9 @@ class Reajuste(Base):
     itens: Mapped[list["ItemReajuste"]] = relationship(back_populates="reajuste", cascade="all, delete-orphan", order_by="ItemReajuste.ordem")
     memorias: Mapped[list["MemoriaReajuste"]] = relationship(
         back_populates="reajuste", cascade="all, delete-orphan", order_by="MemoriaReajuste.versao"
+    )
+    abatimentos: Mapped[list["AbatimentoReajuste"]] = relationship(
+        back_populates="reajuste", cascade="all, delete-orphan", order_by="AbatimentoReajuste.criado_em"
     )
     evidencia_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[evidencia_anexo_id])
     apostilamento_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[apostilamento_anexo_id])
@@ -209,6 +215,31 @@ class MemoriaReajuste(Base):
     reajuste: Mapped[Reajuste] = relationship(back_populates="memorias")
     pdf_anexo: Mapped[Anexo] = relationship(foreign_keys=[pdf_anexo_id])
     xlsx_anexo: Mapped[Anexo] = relationship(foreign_keys=[xlsx_anexo_id])
+
+
+class AbatimentoReajuste(Base):
+    """Parte do crédito de um desconto retroativo, abatida no valor autorizado de uma competência.
+
+    Na conclusão de um reajuste com diferença retroativa negativa nasce um abatimento na próxima
+    competência regular ainda não medida (sem nenhuma, fica pendente: `competencia_id` nulo). Se o
+    crédito passar do valor da medição, o que sobra vira outro abatimento (`origem_id` aponta o
+    original) na competência seguinte.
+    """
+    __tablename__ = "contratos_abatimentos_reajuste"
+    __table_args__ = (CheckConstraint("valor >= 0", name="ck_contratos_abatimentos_reajuste_valor"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    reajuste_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="CASCADE"), index=True)
+    # Competência que recebe o desconto; nula enquanto não houver competência a medir
+    competencia_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="SET NULL"), index=True)
+    # Abatimento de onde veio esta sobra (para devolvê-la se a medição for reaberta)
+    origem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_abatimentos_reajuste.id", ondelete="SET NULL"))
+    valor: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    reajuste: Mapped[Reajuste] = relationship(back_populates="abatimentos")
+    competencia: Mapped["Competencia | None"] = relationship(back_populates="abatimentos_reajuste")  # noqa: F821
 
 
 # ---------------------------------------------------------------------------------------------

@@ -24,9 +24,12 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           // Um item por módulo; as funções internas (painel, empresas, modelos) ficam nos atalhos do cabeçalho do módulo
           // O clique abre o painel do módulo; o item fica ativo em qualquer tela sob /contratos
           { id: 'contratos', rotulo: 'Contratos', rota: '/contratos', destino: '/contratos/painel', acl: 'contratos' },
+          // RH: férias e licença-prêmio para todos; painel, validações e parâmetros conforme o papel
+          { id: 'rh', rotulo: 'RH', rota: '/rh', destino: '/rh/ferias' },
         ],
         textoVazio: 'Nenhum módulo disponível ainda',
       },
+      { id: 'mensagens', rotulo: 'Mensagens', icone: 'sino', rota: '/mensagens' },
       { id: 'usuarios', rotulo: 'Usuários', icone: 'usuarios', rota: '/usuarios', acl: 'usuarios' },
       { id: 'setores', rotulo: 'Setores', icone: 'organograma', rota: '/setores', acl: 'setores' },
     ],
@@ -39,6 +42,8 @@ export const NAVEGACAO: SecaoNavegacao[] = [
       { id: 'acl', rotulo: 'Controle de acesso', icone: 'escudo', rota: '/admin/acl' },
       { id: 'ldap', rotulo: 'Diretórios LDAP', icone: 'banco-dados', rota: '/admin/ldap' },
       { id: 'smtp', rotulo: 'Servidores SMTP', icone: 'envelope', rota: '/admin/smtp' },
+      // Mensageria (e-mail de changelog): só a conta root
+      { id: 'mensageria', rotulo: 'Mensageria', icone: 'megafone', rota: '/admin/mensageria', somenteRoot: true },
       // Links externos para a documentação interativa da API (abrem em nova aba)
       {
         id: 'api',

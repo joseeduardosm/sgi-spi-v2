@@ -60,6 +60,21 @@ class PerfilLeitura(DadosPerfil):
 
     gestor_nome: str | None = Field(None, description="Nome do gestor imediato.")
     perfil_revisado_em: datetime | None = Field(None, description="Última revalidação do perfil.")
+    situacao_campos: dict[str, "SituacaoCampo"] = Field(
+        default_factory=dict,
+        description="Só em `GET /api/autenticacao/perfil`: por campo, a proposta pendente de validação da CGP e a última validação.",
+    )
+    superior_obrigatorio: bool = Field(True, description="Só em `GET /api/autenticacao/perfil`: o superior imediato é obrigatório.")
+
+
+class SituacaoCampo(BaseModel):
+    """Situação de um campo do perfil no fluxo de validação da CGP (Módulo RH)."""
+    pendente: bool = Field(..., description="Há alteração aguardando validação (o valor em vigor ainda é o anterior).")
+    valor_proposto: str | None = Field(None, description="Valor proposto (texto; superior imediato pelo id; datas AAAA-MM-DD).")
+    valor_proposto_rotulo: str | None = Field(None, description="Valor proposto para exibir.")
+    validado_por: str | None = Field(None, description="Quem validou ou corrigiu por último.")
+    validado_em: datetime | None = None
+    corrigido: bool = Field(False, description="A última análise foi uma recusa com correção da CGP.")
 
 
 class CriacaoUsuario(BaseModel):
@@ -122,3 +137,7 @@ class OpcaoUsuario(BaseModel):
     nome_completo: str
     cargo: str = ""
     ativo: bool = True
+
+
+# SituacaoCampo é declarada depois de PerfilLeitura
+PerfilLeitura.model_rebuild()

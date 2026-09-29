@@ -86,6 +86,8 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoOcorrencia
         alvo_id=contrato.id,
         dados={"ocorrencia": ocorrencia.id, "data": dados.data_ocorrencia, "glosas": [{"item": str(g.item_id), "quantidade": g.quantidade} for g in dados.glosas]},
     )
+    from app.services.contratos import avisos
+    avisos.ocorrencia_registrada(sessao, contrato, ocorrencia, autor)
     sessao.commit()
     return ocorrencia
 

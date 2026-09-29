@@ -1,7 +1,7 @@
 @let d = detalhe();
 <section class="cartao-dados" aria-labelledby="titulo-nf">
   <header>
-    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Junte o PDF e o XML da nota. Os valores são lidos do XML; as retenções são conferidas pelo Financeiro na etapa seguinte. Valor autorizado pela medição: {{ d.valor_autorizado | moeda }}.</small></div>
+    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Junte o PDF e o XML da nota. Os valores são lidos do XML; as retenções são conferidas pelo Financeiro na etapa seguinte. Valor autorizado pela medição: {{ d.valor_autorizado | moeda }}@if (+d.desconto_reajuste > 0) { (já descontado o crédito de reajuste de {{ d.desconto_reajuste | moeda }}) }.</small></div>
     @if (d.nf_concluida_em) { <span class="selo-situacao">Concluída</span> }
   </header>
   <div class="corpo">

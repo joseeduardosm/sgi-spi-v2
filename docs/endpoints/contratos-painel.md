@@ -29,6 +29,49 @@ Resposta `Painel`:
 - `numeros`: `contratos_ativos`, `contratos_a_vencer`, `contratos_encerrados`, `valor_global_ativos`, `base_mensal_ativos`.
 - `empresas[]` e `contratos[]`: opções dos filtros (`id`, `rotulo`).
 
+## `GET /api/contratos/painel/vigencias`
+
+Painel de vigências, que alimenta a aba **Vigências**. Traz uma linha do tempo de vigência por contrato vigente.
+
+- **Autorização:** ACL `contratos` ≥ LEITURA (senão `403 acl_negado`).
+- **Parâmetro opcional:** `empresa_id` (UUID), que filtra os contratos. As opções de `empresas` continuam todas.
+- **Contratos que entram:** só os vigentes, isto é, `ativo` e `a_vencer`. Encerrados e suspensos ficam de fora.
+- **Ordem:** do que vence primeiro ao último (`data_fim`, depois `numero`).
+
+### Resposta `200 OK`: `PainelVigencias`
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `hoje` | date | Data de referência dos cálculos |
+| `contratos` | `VigenciaContratoPainel[]` | Uma linha por contrato vigente |
+| `empresas` | `OpcaoFiltro[]` | Empresas com contrato vigente (filtro) |
+
+`VigenciaContratoPainel`:
+
+| Campo | Descrição |
+|---|---|
+| `contrato_id`, `numero` | Identificação |
+| `rotulo`, `empresa` | Apelido (ou razão social, se não houver apelido) e razão social |
+| `situacao` | `ativo` ou `a_vencer` (termina em até 90 dias) |
+| `data_inicio`, `data_fim` | Início do contrato e fim da vigência atual: os extremos da linha do tempo |
+| `dias_restantes` | Dias corridos de hoje até `data_fim` (0 = vence hoje) |
+| `data_limite_maxima`, `meses_prorrogaveis` | Limite pela vigência máxima e quantos meses ainda cabem (0 = no limite) |
+| `vigencias[]` | `sequencia`, `inicio` e `fim` da vigência inicial e de cada prorrogação |
+| `reajustes[]` | Meses de referência dos reajustes concluídos |
+
+```json
+{
+  "hoje": "2026-09-28",
+  "contratos": [{
+    "contrato_id": "…", "numero": "022/2024", "rotulo": "Gerador", "empresa": "Manutesp Ltda.", "situacao": "a_vencer",
+    "data_inicio": "2026-03-26", "data_fim": "2026-11-25", "dias_restantes": 58,
+    "data_limite_maxima": "2036-03-25", "meses_prorrogaveis": 112,
+    "vigencias": [{ "sequencia": 1, "inicio": "2026-03-26", "fim": "2026-11-25" }], "reajustes": []
+  }],
+  "empresas": [{ "id": "…", "rotulo": "Manutesp Ltda." }]
+}
+```
+
 ## `GET /api/contratos/relatorios/notas-empenho?formato=xlsx|pdf`
 
 Relatório Executivo de Notas de Empenho: todas as NEs de todos os contratos, com valor inicial, consumido e saldo. **SuperRoot.**
@@ -61,5 +104,10 @@ Checklists e formulários reutilizáveis, que a tela copia para o contrato como 
 ## Consumo no Angular
 
 - `/contratos/painel`: tela do painel e **tela inicial do módulo**. O item Módulos → Contratos da barra lateral abre aqui e continua destacado em todas as telas sob `/contratos`. **Minhas pendências** e **Alertas de risco** aparecem como resumos clicáveis (título e total de `minhas_pendencias` / `alertas`). O clique abre `/contratos/minhas-pendencias` e `/contratos/alertas-de-risco`, com uma ocorrência por cartão.
+- `/contratos/vigencias`: aba **Vigências**, ao lado de "Painel" no cabeçalho do módulo.
+  - Uma linha por contrato, com um trilho de **mesma largura em todas as linhas**, em escala própria (de `data_inicio` a `data_fim`).
+  - Os blocos de vigência (inicial e prorrogações) ficam separados por filete. O preenchimento vai até hoje, e marcas verdes indicam os reajustes.
+  - A cor segue `dias_restantes`: vermelho até 90 dias, âmbar até 180 e azul acima disso.
+  - Filtro de empresa.
 - `/contratos`: botões **Exportar Previsão Orçamentária** e **Relatório Executivo de Notas de Empenho**, só para o SuperRoot.
 - `/contratos/modelos`: modelos globais, só para o SuperRoot.

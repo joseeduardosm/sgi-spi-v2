@@ -89,6 +89,7 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
         larguras=[0.5, 4.4, 1.2, 1.4, 1.1, 1.1, 1.2, 1.1, 1.5], alinhar_direita=[3, 4, 5, 6, 7, 8],
         rodape=["", "Total medido", "", "", "", "", "", "", moeda(total)],
     )
+    _secao_desconto_reajuste(documento, competencia, arredondar(total))
     # Glosas do diário de bordo que valem nesta competência (data no período)
     glosas = [
         [f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, o.descricao if len(o.descricao) <= 300 else o.descricao[:297] + "…",
@@ -168,6 +169,20 @@ def _secao_nota(documento: DocumentoPdf, titulo: str, dados: dict, conferencias:
     )
 
 
+def _secao_desconto_reajuste(documento: DocumentoPdf, competencia: Competencia, total: Decimal) -> None:
+    """Crédito de desconto de reajuste retroativo abatido nesta competência (se houver)."""
+    abatimentos = [a for a in competencia.abatimentos_reajuste if a.valor > 0]
+    if not abatimentos:
+        return
+    desconto = sum((a.valor for a in abatimentos), Decimal(0))
+    documento.secao("Desconto de reajuste (crédito de competências já medidas)").tabela(
+        ["Origem", "Valor abatido"],
+        [[f"Reajuste com referência {a.reajuste.mes_referencia:%m/%Y}", moeda(a.valor)] for a in abatimentos],
+        larguras=[6, 2], alinhar_direita=[1],
+        rodape=[f"Total medido {moeda(total)} − desconto", moeda(max(Decimal(0), total - desconto))],
+    )
+
+
 def relatorio_retencao(contrato: Contrato, competencia: Competencia, conferencias_principal: list, conferencias_adicional: list, autor: str) -> bytes:
     """PDF da etapa de retenção: a(s) nota(s) renderizada(s) do XML, conferências, retenções e quem conferiu."""
     documento = DocumentoPdf(
@@ -185,6 +200,8 @@ def relatorio_retencao(contrato: Contrato, competencia: Competencia, conferencia
             ("Conferido por", competencia.retencao_por_nome or "—"),
             ("Em", data_hora(competencia.retencao_concluida_em)),
             ("Discriminação compatível com o objeto", "Sim (confirmado)" if competencia.retencao_discriminacao_conferida else "Não confirmado"),
+            *([("Desconto de reajuste abatido", moeda(sum((a.valor for a in competencia.abatimentos_reajuste), Decimal(0))))]
+              if any(a.valor > 0 for a in competencia.abatimentos_reajuste) else []),
             ("Recebimento da NF / vencimento",
              f"{competencia.nf_recebida_em:%d/%m/%Y}" + (f" · prazo {competencia.prazo_pagamento_dias} dia(s)" if competencia.prazo_pagamento_dias else "")
              if competencia.nf_recebida_em else "—"),
@@ -319,6 +336,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             ("Total previsto", moeda(detalhe.total_previsto)),
             ("Total medido", moeda(detalhe.total_medido)),
             ("% autorizado pela avaliação", f"{detalhe.percentual_autorizado}%"),
+            *([("Desconto de reajuste", "-" + moeda(detalhe.desconto_reajuste))] if detalhe.desconto_reajuste > 0 else []),
             ("Valor autorizado", moeda(detalhe.valor_autorizado)),
             ("Nota fiscal", detalhe.nota_fiscal.numero if detalhe.nota_fiscal else "—"),
             ("Valor líquido da NF", moeda(detalhe.nota_fiscal.valor_liquido) if detalhe.nota_fiscal else "—"),

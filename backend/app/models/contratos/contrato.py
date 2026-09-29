@@ -6,6 +6,7 @@ Totais (base mensal, valor global, situação) não são gravados: são calculad
 itens e das datas em `services/contratos/calculos.py`, para nunca divergirem.
 """
 
+import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -16,12 +17,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.banco import Base, agora_utc
@@ -55,7 +58,6 @@ class Contrato(Base):
     __tablename__ = "contratos"
     # Regras garantidas também pelo próprio banco (e não só pela aplicação)
     __table_args__ = (
-        UniqueConstraint("sequencial", "ano"),
         CheckConstraint(f"periodicidade_meses IN ({_lista_sql(PERIODICIDADES)})", name="ck_contratos_periodicidade"),
         CheckConstraint("mes_reajuste BETWEEN 1 AND 12", name="ck_contratos_mes_reajuste"),
         CheckConstraint("vigencia_inicial_meses > 0", name="ck_contratos_vigencia_inicial"),
@@ -66,9 +68,11 @@ class Contrato(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    # Número exibido como NNN/AAAA (ex.: 012/2026)
-    sequencial: Mapped[int] = mapped_column(Integer)
-    ano: Mapped[int] = mapped_column(Integer)
+    # Número do contrato em formato livre (ex.: 012/2026, CT-45/2025), único sem diferenciar maiúsculas
+    numero: Mapped[str] = mapped_column(String(60))
+    # Partes do número quando ele segue o padrão NNN/AAAA (nulas nos demais): ordenação e sugestão do próximo número
+    sequencial: Mapped[int | None] = mapped_column(Integer)
+    ano: Mapped[int | None] = mapped_column(Integer)
     # RESTRICT: não se exclui uma empresa que tenha contratos
     empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_empresas.id", ondelete="RESTRICT"), index=True)
     # Nome curto para identificar o contrato nas listas, e a descrição completa do objeto
@@ -136,9 +140,13 @@ class Contrato(Base):
     )
 
     @property
-    def numero(self) -> str:
-        """Número no formato exibido nas telas (ex.: `012/2026`)."""
-        return f"{self.sequencial:03d}/{self.ano:04d}"
+    def numero_arquivo(self) -> str:
+        """Número pronto para nomes de arquivo: o que não é letra ou dígito vira `_` (012/2026 → 012_2026)."""
+        return re.sub(r"[^0-9A-Za-z]+", "_", self.numero).strip("_") or "SEM_NUMERO"
+
+
+# Número único sem diferenciar maiúsculas/minúsculas ("ct-1/2026" e "CT-1/2026" são o mesmo contrato)
+Index("ux_contratos_numero", func.lower(Contrato.numero), unique=True)
 
 
 class ItemContrato(Base):

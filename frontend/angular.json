@@ -6,7 +6,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "contratos-spi": {
+    "sgi-spi": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -73,10 +73,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "contratos-spi:build:production"
+              "buildTarget": "sgi-spi:build:production"
             },
             "development": {
-              "buildTarget": "contratos-spi:build:development"
+              "buildTarget": "sgi-spi:build:development"
             }
           },
           "defaultConfiguration": "development",

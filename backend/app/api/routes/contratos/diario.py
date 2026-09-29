@@ -83,5 +83,5 @@ def diario_pdf(
     with traduzir_erros(sessao):
         contrato = obter_contrato(sessao, contrato_id)
         conteudo = servico_diario.gerar_pdf(contrato, inicio, fim, autor=usuario.nome_completo or usuario.login)
-    nome = f"DIARIO_DE_BORDO_SPI_{contrato.sequencial:03d}_{contrato.ano}.pdf"
+    nome = f"DIARIO_DE_BORDO_SPI_{contrato.numero_arquivo}.pdf"
     return Response(conteudo, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{nome}"'})

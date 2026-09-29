@@ -33,7 +33,7 @@ class Configuracao(BaseSettings):
     )
 
     # Identificação da aplicação e prefixo comum de todas as rotas (/api/...)
-    nome_aplicacao: str = "contratos-spi"
+    nome_aplicacao: str = "sgi-spi"
     versao_aplicacao: str = "0.1.0"
     ambiente: str = "desenvolvimento"
     prefixo_api: str = "/api"
@@ -73,6 +73,8 @@ class Configuracao(BaseSettings):
     # Tomador que deve constar nas notas fiscais (SPI) e setor do Financeiro, que confere as retenções
     tomador_cnpj: str = "96480850000103"
     setor_financeiro: str = "Diretoria de Orçamento e Finanças"
+    # Setor da CGP (Coordenadoria de Gestão de Pessoas): administra o Módulo RH (inclui os setores filhos)
+    setor_cgp: str = "Coordenadoria de Gestão de Pessoas"
 
     # Importação do Módulo de Contratos do SGI SPI (botão do SuperRoot em /contratos). As senhas são
     # digitadas na tela a cada execução e nunca gravadas.

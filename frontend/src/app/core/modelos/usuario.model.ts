@@ -18,6 +18,8 @@ export interface Usuario {
   perfil_restrito?: boolean;
   campos_pendentes?: string[];
   revisao_obrigatoria?: boolean;
+  /** Conta administrativa principal (login root): única com acesso à Mensageria. */
+  conta_root?: boolean;
 }
 
 /** Forma reduzida usada em seletores (`OpcaoUsuario` da API). */

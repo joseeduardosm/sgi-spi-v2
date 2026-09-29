@@ -1,5 +1,5 @@
 @if (contrato(); as c) {
-  <app-cabecalho-modulo titulo="Prorrogação" [trilha]="[c.numero, 'Prorrogação']" [descricao]="'Contrato ' + c.numero" />
+  <app-cabecalho-modulo titulo="Prorrogação" [trilha]="[{ rotulo: c.numero, rota: ['/contratos', c.id] }, 'Prorrogação']" [descricao]="'Contrato ' + c.numero" />
   @if (processo(); as p) {
     <div class="barra-fixa">
       <a class="acao-secundaria" [routerLink]="['/contratos', c.id]">← Contrato {{ c.numero }}</a>

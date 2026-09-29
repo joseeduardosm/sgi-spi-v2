@@ -50,7 +50,7 @@ describe('AutenticacaoService', () => {
     expect(autenticacao.autenticado()).toBe(true);
     expect(autenticacao.usuario()?.login).toBe('root');
     expect(autenticacao.possuiPapel('SuperRoot')).toBe(true);
-    expect(localStorage.getItem('contratos-spi.sessao')).toContain('jwt-teste');
+    expect(localStorage.getItem('sgi-spi.sessao')).toContain('jwt-teste');
   });
 
   it('envia o token nas chamadas da API e encerra a sessão em 401', () => {
@@ -66,7 +66,7 @@ describe('AutenticacaoService', () => {
     sessao.flush({ detalhe: 'Sessão expirada.', codigo: 'nao_autenticado' }, { status: 401, statusText: 'Unauthorized' });
 
     expect(autenticacao.autenticado()).toBe(false);
-    expect(localStorage.getItem('contratos-spi.sessao')).toBeNull();
+    expect(localStorage.getItem('sgi-spi.sessao')).toBeNull();
   });
 
   it('sair limpa a sessão', () => {

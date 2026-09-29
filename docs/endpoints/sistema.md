@@ -26,7 +26,7 @@ Verifica se a API está respondendo. Usado por scripts de implantação, monitor
 
 | HTTP | Causa |
 |---|---|
-| `502 Bad Gateway` | Retornado pelo Nginx quando o serviço `contratos-spi-api` está parado |
+| `502 Bad Gateway` | Retornado pelo Nginx quando o serviço `sgi-spi-api` está parado |
 
 ```bash
 curl http://<servidor>/api/saude

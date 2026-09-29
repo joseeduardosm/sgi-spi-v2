@@ -380,6 +380,13 @@ class LeituraAvaliacao(BaseModel):
     reconsideracao: LeituraArquivo | None
 
 
+class DescontoReajuste(BaseModel):
+    """Parte do crédito de um reajuste com desconto retroativo, abatida nesta competência."""
+    reajuste_id: uuid.UUID
+    mes_referencia: date = Field(..., description="Mês de referência do reajuste que gerou o crédito.")
+    valor: ValorMonetario
+
+
 class DetalheCompetencia(ResumoCompetencia):
     """Detalhe completo da competência: tudo o que a tela de execução precisa em uma resposta."""
     contrato_id: uuid.UUID
@@ -402,7 +409,13 @@ class DetalheCompetencia(ResumoCompetencia):
     medicao_concluida_em: datetime | None
     avaliacao: LeituraAvaliacao | None
     percentual_autorizado: ValorMonetario = Field(..., description="% liberado pela avaliação (100 sem avaliação).")
-    valor_autorizado: ValorMonetario = Field(..., description="Total medido × % liberado pela avaliação (sugestão do valor da NF).")
+    valor_autorizado: ValorMonetario = Field(
+        ..., description="Total medido × % liberado pela avaliação − desconto de reajuste (sugestão do valor da NF; nunca negativo)."
+    )
+    desconto_reajuste: ValorMonetario = Field(
+        Decimal(0), description="Crédito de desconto de reajuste retroativo abatido nesta competência (0 quando não há)."
+    )
+    descontos_reajuste: list[DescontoReajuste] = Field(default_factory=list, description="Origem de cada desconto abatido.")
     valor_a_pagar: ValorMonetario = Field(
         ..., description="Valor que a OB debita nas NEs apontadas: NF + NF adicional (brutos) depois da etapa da NF; antes, o valor autorizado."
     )

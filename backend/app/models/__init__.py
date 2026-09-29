@@ -18,6 +18,9 @@ from app.models.contratos import (
     PrepostoEmpresa,
 )
 from app.models.diretorio_ldap import DiretorioLdap
+from app.models.envio_changelog import EnvioChangelog
+from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.rh import AlteracaoCadastral, Afastamento, DadosFuncionais, EventoAfastamento, Feriado, ParametrosRh, PeriodoAquisitivo
 from app.models.servidor_smtp import ServidorSmtp
 from app.models.setor import MembroSetor, Setor
 from app.models.usuario import OrigemUsuario, Papel, Usuario
@@ -32,6 +35,16 @@ __all__ = [
     "ItemContrato",
     "PrepostoEmpresa",
     "DiretorioLdap",
+    "EnvioChangelog",
+    "EntregaMensagem",
+    "Mensagem",
+    "AlteracaoCadastral",
+    "Afastamento",
+    "DadosFuncionais",
+    "EventoAfastamento",
+    "Feriado",
+    "ParametrosRh",
+    "PeriodoAquisitivo",
     "ServidorSmtp",
     "MembroSetor",
     "NivelAcl",

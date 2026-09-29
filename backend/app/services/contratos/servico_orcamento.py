@@ -40,7 +40,7 @@ from app.schemas.contratos.orcamento import (
 )
 from app.services.contratos import calculos, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
-from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, pode_editar, vigencias
+from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, ordem_contratos, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
 from app.services.servico_auditoria import auditar
@@ -232,7 +232,7 @@ def planilha_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int) -
             ),
         ]
     )
-    return conteudo, f"previsao-{contrato.sequencial:03d}-{contrato.ano}-vigencia-{sequencia}.xlsx"
+    return conteudo, f"previsao-{contrato.numero_arquivo}-vigencia-{sequencia}.xlsx"
 
 
 def previsao_salva_em_todas(contrato: Contrato) -> bool:
@@ -375,7 +375,7 @@ def relatorio_notas(sessao: Session) -> list[LinhaRelatorioNotas]:
         select(NotaEmpenho)
         .join(Contrato, Contrato.id == NotaEmpenho.contrato_id)
         .options(selectinload(NotaEmpenho.movimentos), selectinload(NotaEmpenho.contrato).selectinload(Contrato.empresa))
-        .order_by(Contrato.ano.desc(), Contrato.sequencial.desc(), NotaEmpenho.numero)
+        .order_by(*ordem_contratos(), NotaEmpenho.numero)
     )
     return [
         LinhaRelatorioNotas(

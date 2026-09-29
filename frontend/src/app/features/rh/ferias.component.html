@@ -1,0 +1,127 @@
+<app-cabecalho-rh titulo="Férias e licença-prêmio" [trilha]="['Férias e LP']"
+                  descricao="Clique no primeiro e no último dia do período; depois escolha férias ou licença-prêmio." />
+
+@if (dados(); as d) {
+  <section class="cartao-dados" aria-labelledby="titulo-saldos">
+    <header>
+      <div><h2 id="titulo-saldos">Exercício {{ d.exercicio }}</h2>
+        <small>Férias pelo período aquisitivo ({{ d.parametros.dias_ferias_por_periodo }} dias a cada 12 meses; o saldo não usado expira). Mínimo de {{ d.parametros.minimo_dias_ferias }} dias (férias) e {{ d.parametros.minimo_dias_lp }} dias (licença-prêmio);
+          antecedência de {{ d.parametros.antecedencia_minima_dias }} dias; o período não pode começar em: {{ diasSemana(d.parametros.inicio_vedado_ferias) }}.
+          Alterar ou cancelar: até {{ d.parametros.prazo_cancelamento_dias }} dia(s) antes do início.</small></div>
+      <div class="acoes-formulario">
+        <button type="button" class="acao-secundaria acao-pequena" (click)="mudarExercicio(-1)">‹ {{ d.exercicio - 1 }}</button>
+        <button type="button" class="acao-secundaria acao-pequena" (click)="mudarExercicio(1)">{{ d.exercicio + 1 }} ›</button>
+      </div>
+    </header>
+    <div class="corpo">
+      @if (d.periodo_vigente; as pv) {
+        @if (pv.alerta_expiracao && pv.data_limite_pedido) {
+          <p class="aviso-bloco">Você tem <b>{{ pv.disponivel }} dia(s) de férias</b> que expiram em {{ data(pv.fim) }}.
+            Peça até <b>{{ data(pv.data_limite_pedido) }}</b> (antecedência de {{ d.parametros.antecedencia_minima_dias }} dias) para não perder dias.</p>
+        }
+        <div class="indicadores">
+          <div class="indicador destaque"><span>Férias disponíveis</span><strong>{{ pv.disponivel }} dias</strong>
+            <small>período aquisitivo {{ data(pv.inicio) }} a {{ data(pv.fim) }} · expira em {{ pv.expira_em_dias }} dia(s)</small></div>
+          @if (d.proximo_periodo; as pp) {
+            <div class="indicador"><span>Próximo período</span><strong>{{ pp.dias_creditados_previstos - pp.usado }} dias</strong>
+              <small>a partir de {{ data(pp.inicio) }} · já agendados {{ pp.usado }}</small></div>
+          }
+          <div class="indicador"><span>Licença-prêmio disponível ({{ d.exercicio }})</span><strong>{{ d.saldos.licenca_premio.disponivel }} dias</strong>
+            <small>saldo {{ d.saldos.licenca_premio.saldo }} · agendados {{ d.saldos.licenca_premio.usado }}</small></div>
+        </div>
+      } @else {
+        <p class="aviso-bloco">A CGP ainda não informou o início do seu período aquisitivo: o agendamento de férias fica disponível depois disso.</p>
+        <div class="indicadores">
+          <div class="indicador"><span>Licença-prêmio disponível ({{ d.exercicio }})</span><strong>{{ d.saldos.licenca_premio.disponivel }} dias</strong>
+            <small>saldo {{ d.saldos.licenca_premio.saldo }} · agendados {{ d.saldos.licenca_premio.usado }}</small></div>
+        </div>
+      }
+      @if (alterando(); as a) {
+        <p class="aviso-bloco informativo">Alterando {{ tipos[a.tipo].toLowerCase() }} de {{ data(a.inicio) }} a {{ data(a.fim) }}: selecione o novo período.
+          <button type="button" class="link-arquivo" (click)="alterando.set(null); limparSelecao()">Desistir</button></p>
+      }
+      @if (inicio() && !fim()) { <p class="dica-formulario">Início em {{ data(inicio()!) }}. Agora clique no último dia (Esc cancela).</p> }
+      <div class="legenda-grafico legenda-afastamentos">
+        <span><i class="pendente"></i>Aguardando aprovação</span><span><i class="aprovado"></i>Aprovado</span><span><i class="selecao"></i>Seleção</span><span><i class="feriado"></i>Feriado ou ponto facultativo</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="calendario-exercicio">
+    @for (m of meses(); track m.nome) {
+      <section class="mes-calendario" [attr.aria-label]="m.nome">
+        <h3>{{ m.nome }}</h3>
+        <div class="grade-mes">
+          @for (s of semana; track s) { <span class="cabecalho-dia">{{ s }}</span> }
+          @for (dia of m.dias; track $index) {
+            @if (dia) {
+              @let af = afastamentoDo(dia.data);
+              @let fer = feriadoDo(dia.data);
+              <button type="button" class="dia-calendario"
+                      [class.fim-de-semana]="dia.semana >= 5" [class.passado]="dia.data < hoje" [class.selecionado]="selecionado(dia.data)"
+                      [class.pendente]="af?.status === 'pendente'" [class.aprovado]="af && af.status !== 'pendente'"
+                      [class.vedado]="inicioVedado(dia)" [class.feriado]="!!fer" [disabled]="dia.data < hoje || !!af"
+                      [title]="af ? tipos[af.tipo] + ' · ' + status[af.status] : (fer ? fer.descricao : (inicioVedado(dia) ? 'Períodos não podem começar neste dia da semana' : ''))"
+                      (click)="clicar(dia)" (mouseenter)="passando.set(dia.data)">
+                {{ dia.numero }}@if (af && af.inicio === dia.data) { <small>{{ siglas[af.tipo] }}</small> }
+              </button>
+            } @else { <span></span> }
+          }
+        </div>
+      </section>
+    }
+  </div>
+
+  <section class="cartao-dados" aria-labelledby="titulo-pedidos">
+    <header><h2 id="titulo-pedidos">Meus pedidos em {{ d.exercicio }}</h2></header>
+    <div class="tabela-gestao-envoltorio">
+      <table class="tabela-gestao">
+        <thead><tr><th>Tipo</th><th>Período</th><th class="num">Dias</th><th>Situação</th><th>Decisão</th><th></th></tr></thead>
+        <tbody>
+          @for (a of d.afastamentos; track a.id) {
+            <tr>
+              <td><span [class]="'etiqueta-afastamento ' + a.tipo">[{{ siglas[a.tipo] }}]</span> {{ tipos[a.tipo] }}</td>
+              <td>{{ data(a.inicio) }} a {{ data(a.fim) }}@if (a.substitui_id) { <small> · alteração</small> }</td>
+              <td class="num">{{ a.dias }}</td>
+              <td><span [class]="'selo-afastamento ' + a.status">{{ status[a.status] }}</span></td>
+              <td>@if (a.decidido_por_nome) { {{ a.decidido_por_nome }} em {{ a.decidido_em | date: 'dd/MM/yyyy' }} }
+                @if (a.justificativa) { <small class="texto-erro">{{ a.justificativa }}</small> }</td>
+              <td class="acoes-linha">
+                @if (a.pode_alterar) {
+                  <button type="button" class="link-arquivo" (click)="iniciarAlteracao(a)">Alterar</button>
+                  <button type="button" class="link-arquivo" (click)="cancelar(a)">Cancelar</button>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr><td class="estado-vazio" colspan="6">Nenhum pedido neste exercício.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+} @else {
+  <p class="estado-vazio">Carregando…</p>
+}
+
+<!-- "Deseja agendar férias ou licença-prêmio?" -->
+@if (perguntaTipo() && dados(); as d) {
+  <div class="fundo-modal" role="presentation" (click)="limparSelecao()"></div>
+  <section class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-tipo">
+    <header>
+      <div><span class="modal-sobretitulo">{{ textoIntervalo() }}</span><h2 id="titulo-tipo">Deseja agendar férias ou licença-prêmio?</h2></div>
+      <button type="button" aria-label="Fechar" (click)="limparSelecao()">×</button>
+    </header>
+    <div class="escolha-tipo">
+      <button type="button" class="opcao-tipo ferias" [disabled]="!d.periodo_vigente || dias() > saldoFeriasDoPedido(d)" (click)="agendar('ferias')">
+        <strong>[F] Férias</strong><span>{{ saldoFeriasDoPedido(d) }} dia(s) disponível(is) no período aquisitivo</span>
+        @if (d.periodo_vigente && dias() > saldoFeriasDoPedido(d)) { <small class="texto-erro">Saldo insuficiente para {{ dias() }} dias</small> }
+      </button>
+      <button type="button" class="opcao-tipo licenca_premio" [disabled]="dias() > d.saldos.licenca_premio.disponivel" (click)="agendar('licenca_premio')">
+        <strong>[LP] Licença-prêmio</strong><span>{{ d.saldos.licenca_premio.disponivel }} dia(s) disponível(is)</span>
+        @if (dias() > d.saldos.licenca_premio.disponivel) { <small class="texto-erro">Saldo insuficiente para {{ dias() }} dias</small> }
+      </button>
+    </div>
+    <footer><button type="button" class="acao-secundaria" (click)="limparSelecao()">Cancelar</button></footer>
+  </section>
+}

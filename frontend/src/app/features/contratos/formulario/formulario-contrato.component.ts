@@ -158,11 +158,15 @@ export class FormularioContratoComponent implements OnInit {
     );
   }
 
-  /** No cadastro, sugere o próximo número livre do ano da data inicial. */
+  // Último número sugerido: um número digitado pelo usuário (qualquer formato) não é sobrescrito
+  private numeroSugerido = '';
+
+  /** No cadastro, sugere o próximo número NNN/AAAA do ano da data inicial, se o campo estiver vazio ou com a sugestão anterior. */
   protected sugerirNumero(): void {
     if (this.original()) return;
+    if (this.dados.numero.trim() && this.dados.numero !== this.numeroSugerido) return;
     const ano = this.dados.data_inicio ? Number(this.dados.data_inicio.slice(0, 4)) : new Date().getFullYear();
-    this.api.proximoNumero(ano).subscribe((r) => (this.dados.numero = r.numero));
+    this.api.proximoNumero(ano).subscribe((r) => (this.dados.numero = this.numeroSugerido = r.numero));
   }
 
   /** Data final prevista (início + vigência inicial − 1 dia), calculada em UTC. */

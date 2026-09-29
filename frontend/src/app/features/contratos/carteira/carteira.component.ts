@@ -35,6 +35,8 @@ export class CarteiraComponent implements OnInit {
   protected readonly acesso = inject(AcessoService);
   private readonly autenticacao = inject(AutenticacaoService);
   protected readonly superRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
+  // Botão "Importar do SGI" desabilitado temporariamente (pedido do usuário em 28/09/2026); true volta a exibi-lo ao SuperRoot
+  protected readonly importacaoSgiHabilitada = false;
 
   // Estado da lista: busca, página, itens e o menu de ações aberto (id do contrato)
   protected readonly rotulos = ROTULOS_SITUACAO;

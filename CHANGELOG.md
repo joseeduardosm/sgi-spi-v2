@@ -9,6 +9,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-29
 
 ### Alterado
+- **Validação do cadastro com data e hora:** em Meu perfil (e no histórico de Validações) o campo mostra "Validado por [nome] em dd/mm/aaaa hh:mm:ss" (antes, só a data).
 - **Folha de ponto** some do menu da conta root, que não tem vínculo funcional.
 - **Folha de ponto só sai com o cadastro em dia.**
   - Com alteração de cadastro aguardando validação, ou sem os dados funcionais (jornada, horário de trabalho, intervalo, RG/CIN, RS/PV), o usuário vê o aviso "Folha de ponto indisponível".

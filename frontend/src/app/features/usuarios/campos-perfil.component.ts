@@ -87,7 +87,7 @@ import { OpcaoDepartamento, SituacaoCampo } from './usuarios.models';
         @if (s.pendente) {
           <small class="situacao-campo pendente">Pendente de validação da CGP: <b>{{ s.valor_proposto_rotulo ?? '—' }}</b></small>
         } @else if (s.validado_por) {
-          <small class="situacao-campo" [class.corrigido]="s.corrigido">{{ s.corrigido ? 'Corrigido' : 'Validado' }} por {{ s.validado_por }} em {{ s.validado_em | date: 'dd/MM/yyyy' }}</small>
+          <small class="situacao-campo" [class.corrigido]="s.corrigido">{{ s.corrigido ? 'Corrigido' : 'Validado' }} por {{ s.validado_por }} em {{ s.validado_em | date: 'dd/MM/yyyy HH:mm:ss' }}</small>
         }
       }
     </ng-template>

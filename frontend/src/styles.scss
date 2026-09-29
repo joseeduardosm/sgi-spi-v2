@@ -1047,6 +1047,7 @@ button.gantt-barra {
 }
 
 .acao-aprovar-janela,
+.acao-positiva,
 .acao-recusar {
   height: 39px;
   padding: 0 17px;
@@ -1056,13 +1057,16 @@ button.gantt-barra {
   cursor: pointer;
 }
 
-.acao-aprovar-janela {
+// Padrão do sistema: aprovar/validar em verde; recusar mantém o vermelho claro
+.acao-aprovar-janela,
+.acao-positiva {
   border: 0;
   color: #fff;
   background: #2f9e67;
   box-shadow: 0 7px 16px #2f9e6733;
 
-  &:hover { background: #237f52; }
+  &:hover:not(:disabled) { background: #237f52; }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
 }
 
 .acao-recusar {

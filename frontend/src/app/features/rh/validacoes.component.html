@@ -20,7 +20,7 @@
           </select>
           <label><input type="checkbox" [checked]="marcados().length > 0 && marcados().length === pendenciasFiltradas().length"
                         (change)="marcarTodos($any($event.target).checked)" /> Marcar todos</label>
-          <button type="button" class="acao-primaria acao-pequena" [disabled]="!idsSelecionados().length" (click)="validarSelecionadas()">
+          <button type="button" class="acao-positiva acao-pequena" [disabled]="!idsSelecionados().length" (click)="validarSelecionadas()">
             Validar selecionadas ({{ idsSelecionados().length }})</button>
         </div>
       }
@@ -46,7 +46,7 @@
       <section class="cartao-dados" aria-labelledby="titulo-cadastro-rh">
         <header><div><h2 id="titulo-cadastro-rh">{{ c.nome }}</h2><small>&#64;{{ c.login }} · {{ c.perfil['departamento'] }}</small></div>
           @if (c.pendentes.length > 1) {
-            <button type="button" class="acao-primaria acao-pequena" (click)="validarTodasDoUsuario(c)">Validar todas deste usuário ({{ c.pendentes.length }})</button>
+            <button type="button" class="acao-positiva acao-pequena" (click)="validarTodasDoUsuario(c)">Validar todas deste usuário ({{ c.pendentes.length }})</button>
           }</header>
         @if (c.pendentes.length) {
           <div class="tabela-gestao-envoltorio">
@@ -60,7 +60,7 @@
                     <td><b>{{ a.valor_proposto_rotulo }}</b></td>
                     <td>{{ a.solicitada_em | date: 'dd/MM/yyyy HH:mm' }}</td>
                     <td class="acoes-linha">
-                      <button type="button" class="acao-primaria acao-pequena" (click)="validar(a)">Validar</button>
+                      <button type="button" class="acao-aprovar" (click)="validar(a)">Validar</button>
                       <button type="button" class="acao-secundaria acao-pequena" (click)="iniciarRecusa(a)">Recusar</button>
                     </td>
                   </tr>

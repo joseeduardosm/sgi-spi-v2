@@ -12,6 +12,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 - **Painel de afastamentos:**
   - cada período do gráfico abre uma janela com os detalhes e, para quem pode decidir, Aprovar e Recusar;
   - botão Aprovar em verde (Recusar mantém o vermelho claro);
+- **Padrão de cores das decisões:** aprovar e validar em verde; recusar mantém o vermelho claro. Aplicado também em RH › Validações (Validar, Validar selecionadas e Validar todas deste usuário). Classes `acao-aprovar` (linha de tabela) e `acao-positiva` (botão principal).
   - a justificativa da recusa (painel e Validações) ganhou o estilo dos campos do site;
   - os botões no rodapé das janelas não encostam mais na borda.
 - **Validação do cadastro com data e hora:** em Meu perfil (e no histórico de Validações) o campo mostra "Validado por [nome] em dd/mm/aaaa hh:mm:ss" (antes, só a data).

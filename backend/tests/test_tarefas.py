@@ -91,7 +91,10 @@ def test_tarefa_pessoal_conclui_na_entrega(cliente, equipe):
     ids, h, _ = equipe
     t = _nova(cliente, h["caio"], None)
     _mover(cliente, h["caio"], t["numero"], "iniciar")
-    assert _mover(cliente, h["caio"], t["numero"], "entregar").json()["status"] == "concluida"
+    concluida = _mover(cliente, h["caio"], t["numero"], "entregar").json()
+    assert concluida["status"] == "concluida"
+    # A validação foi pulada: a etapa não aparece como alcançada
+    assert {e["status"]: e["alcancada"] for e in concluida["etapas"]} == {"a_fazer": True, "em_andamento": True, "em_validacao": False, "concluida": True}
 
 
 def test_permissoes_visibilidade_e_atribuicao(cliente, equipe):

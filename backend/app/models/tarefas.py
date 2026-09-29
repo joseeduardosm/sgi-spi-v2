@@ -162,7 +162,7 @@ class MarcadorTarefa(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     equipe_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tarefas_equipes.id", ondelete="CASCADE"), index=True)
-    nome: Mapped[str] = mapped_column(String(60))
+    nome: Mapped[str] = mapped_column(String(120))
     cor: Mapped[str] = mapped_column(String(7), default="#5364ce")
 
 

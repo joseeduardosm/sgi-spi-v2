@@ -91,7 +91,9 @@ def _etapas(sessao: Session, t: Tarefa) -> list[Etapa]:
     atual = ordem.index(t.status)
     return [
         Etapa(status=s, rotulo=ROTULOS_STATUS[s], em=_utc(chegada[s][0]) if s in chegada and i <= atual else None,
-              por=chegada[s][1] if s in chegada and i <= atual else None, atual=i == atual, alcancada=i <= atual)
+              por=chegada[s][1] if s in chegada and i <= atual else None, atual=i == atual,
+              # Etapa pulada (ex.: concluída sem passar pela validação) não conta como alcançada
+              alcancada=i == atual or (i < atual and s in chegada))
         for i, s in enumerate(ordem)
     ]
 

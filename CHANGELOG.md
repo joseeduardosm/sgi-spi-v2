@@ -9,6 +9,15 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-30
 
 ### Adicionado
+- **Módulo Tarefas (Fase 4: migração do 10.23.1.220).** `scripts/extrair-tarefas-sgi.py` (somente leitura) e `scripts/migrar-tarefas-sgi.py` (ensaio por padrão, `--gravar`, `--substituir`, conferência que impede gravar com divergência). Carga feita: 159 tarefas, 971 eventos, 66 anexos (SHA-256 conferido), 5 equipes e 20 marcadores, com números, autores e datas preservados. Mapeamento em `docs/endpoints/tarefas.md`.
+  - Migração `9639d1d834db`: `tarefas_marcadores.nome` passa de 60 para 120 caracteres.
+
+### Alterado
+- Linha de etapas: "Em validação" pulada (tarefa pessoal, ou concluída pela liderança) não aparece mais como alcançada.
+
+### Removido
+- Dados do teste automatizado do Módulo Tarefas (tarefas "(E2E)", equipe de teste e anexos). A tarefa #11, criada por um usuário, foi mantida.
+
 - **Módulo Tarefas (Fase 3: equipes, liderança e relatórios).**
   - `/tarefas/equipes`: cartões por equipe (em aberto, atrasadas, em validação, concluídas, carga), subequipes abaixo da equipe pai, atalhos "Ver tarefas", "Pessoas", "Validar entregas" e "Configurar".
   - Configuração separada do acompanhamento (`/tarefas/equipes/:id/configurar`, só dono ou SuperRoot): nome, equipe pai (sem ciclos), líderes, membros, marcadores com cor e desativação.

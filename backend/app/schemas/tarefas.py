@@ -220,7 +220,7 @@ class GravacaoEquipe(BaseModel):
 
 
 class GravacaoMarcador(BaseModel):
-    nome: str = Field(..., min_length=1, max_length=60)
+    nome: str = Field(..., min_length=1, max_length=120)
     cor: str = Field("#5364ce", pattern=r"^#[0-9a-fA-F]{6}$")
 
     _n = field_validator("nome")(lambda cls, v: _aparar(v))

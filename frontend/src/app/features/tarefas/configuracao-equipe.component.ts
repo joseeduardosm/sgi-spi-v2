@@ -62,7 +62,7 @@ function opcao(p: Pessoa): OpcaoUsuario {
             } @empty { <span class="dica-formulario">Nenhum marcador.</span> }
           </div>
           <form class="novo-marcador" (submit)="$event.preventDefault(); criarMarcador()">
-            <input name="marcador" maxlength="60" placeholder="Novo marcador" aria-label="Nome do marcador" [(ngModel)]="novoMarcador" />
+            <input name="marcador" maxlength="120" placeholder="Novo marcador" aria-label="Nome do marcador" [(ngModel)]="novoMarcador" />
             <div class="cores" role="radiogroup" aria-label="Cor">
               @for (c of cores; track c) {
                 <button type="button" class="cor" [style.background]="c" [class.ativa]="cor === c" [attr.aria-label]="'Cor ' + c" (click)="cor = c"></button>

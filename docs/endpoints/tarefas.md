@@ -103,6 +103,31 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 - Tipos: `criada`, `editada`, `status`, `entregue`, `validada`, `devolvida`, `reaberta`, `prazo`, `transferida`, `comentario`, `checklist`, `removido`.
 - `dados` traz `de`/`para` (status ou nomes), `para` do prazo e `campos` da edição.
 
+## Migração do 10.23.1.220
+
+Scripts em `scripts/` (o 10.23.1.220 só é lido, numa transação read only):
+
+```bash
+SGI_SENHA=... backend/.venv/bin/python scripts/extrair-tarefas-sgi.py <pacote>      # CSVs, anexos (SHA-256) e usuarios.csv sem senhas
+cd backend && .venv/bin/python ../scripts/migrar-tarefas-sgi.py <pacote>           # ensaio: carrega, confere e desfaz
+cd backend && .venv/bin/python ../scripts/migrar-tarefas-sgi.py <pacote> --gravar  # grava (--substituir recarrega o mesmo pacote)
+```
+
+| SGI (10.23.1.220) | Aqui |
+|---|---|
+| `Pending` / `InProgress` / `Completed` (eventos antigos: `AwaitingApproval`, 0–3) | `a_fazer` / `em_andamento` / `concluida` (`em_validacao`) |
+| `Low` / `Normal` / `High` / `Critical` | `baixa` / `normal` / `alta` / `critica` |
+| `Number` | `numero` (preservado; tarefa criada aqui com o mesmo número recebe o próximo livre) |
+| participante único | `responsavel_id` e participante |
+| `Created`, `Edited`, `DeadlineChanged`, `StatusChanged`, `Reopened`, `Transferred`, `CommentAdded`, `ContentRemoved` | `criada`, `editada`, `prazo`, `status`, `reaberta`, `transferida`, `comentario`, `removido` (autor com o nome da época) |
+| primeiro "anterior" de mudança de prazo | `prazo_original` |
+| marcadores (globais) | marcadores globais (`equipe_id` nulo) |
+| usuário sem conta aqui | criado inativo, sem senha |
+
+- Na edição, o SGI só gravava os valores novos: o "de" vem da edição anterior (na primeira, a linha do tempo mostra só o valor novo).
+- Nenhum aviso ou e-mail é disparado pela carga. A conferência compara as contagens por tabela, a situação e o número de cada tarefa; divergência impede gravar.
+- Carga de 29/09/2026: 159 tarefas (35 a fazer, 15 em andamento, 109 concluídas), 971 eventos, 66 anexos, 5 equipes (2 desativadas), 20 marcadores.
+
 ## Consumo no Angular
 
 Código em `frontend/src/app/features/tarefas/` (rotas em `tarefas.routes.ts`, chamadas em `tarefas-api.service.ts`, tipos em `tarefas.models.ts`):

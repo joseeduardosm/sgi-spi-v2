@@ -294,7 +294,8 @@ export class DetalheTarefaComponent implements OnInit {
         return `${rotulo}: ${[entraram.length ? `entrou ${entraram.join(', ')}` : '', sairam.length ? `saiu ${sairam.join(', ')}` : ''].filter(Boolean).join('; ')}`;
       }
       const texto = (x: unknown) => (Array.isArray(x) ? x.join(', ') || '—' : nome === 'prioridade' ? ROTULOS_PRIORIDADE[x as PrioridadeTarefa] ?? String(x) : String(x ?? '—'));
-      return `${rotulo}: ${texto(v['de'])} → ${texto(v['para'])}`;
+      // Edições migradas do 10.23.1.220 podem não ter o valor anterior
+      return 'de' in v ? `${rotulo}: ${texto(v['de'])} → ${texto(v['para'])}` : `${rotulo}: ${texto(v['para'])}`;
     });
   }
 

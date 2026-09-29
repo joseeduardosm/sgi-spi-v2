@@ -23,6 +23,10 @@ from app.models.mensagem import EntregaMensagem, Mensagem
 from app.models.rh import AlteracaoCadastral, Afastamento, DadosFuncionais, EventoAfastamento, Feriado, ParametrosRh, PeriodoAquisitivo
 from app.models.servidor_smtp import ServidorSmtp
 from app.models.setor import MembroSetor, Setor
+from app.models.tarefas import (
+    AnexoEventoTarefa, EquipeTarefas, EventoTarefa, ItemChecklistTarefa, LiderEquipeTarefas, MarcadorTarefa, MembroEquipeTarefas,
+    ParticipanteTarefa, Tarefa, VinculoMarcadorTarefa,
+)
 from app.models.usuario import OrigemUsuario, Papel, Usuario
 
 # Nomes exportados por `from app.models import *`
@@ -43,6 +47,16 @@ __all__ = [
     "DadosFuncionais",
     "EventoAfastamento",
     "Feriado",
+    "AnexoEventoTarefa",
+    "EquipeTarefas",
+    "EventoTarefa",
+    "ItemChecklistTarefa",
+    "LiderEquipeTarefas",
+    "MarcadorTarefa",
+    "MembroEquipeTarefas",
+    "ParticipanteTarefa",
+    "Tarefa",
+    "VinculoMarcadorTarefa",
     "ParametrosRh",
     "PeriodoAquisitivo",
     "ServidorSmtp",

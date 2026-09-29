@@ -6,6 +6,18 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-09-30
+
+### Adicionado
+- **Módulo Tarefas (Fase 1: backend)**, reconstrução do app de tarefas do 10.23.1.220 com melhorias.
+  - **Pipeline com validação:** A fazer → Em andamento → **Em validação** (o executor entrega) → Concluída (a liderança valida) ou volta com motivo. Tarefa sem equipe conclui na entrega.
+  - **Prazo** só com justificativa, guardando o prazo original e o número de prorrogações.
+  - **Transferência** dentro da equipe (a liderança, para qualquer pessoa), com justificativa.
+  - **Linha do tempo** só cresce, com de/para, filtros por tipo e "carregar mais"; comentários com até 5 anexos de formatos conferidos pelo conteúdo.
+  - **Avisos** com e-mail oficial: atribuição, prazo, transferência, entrega para validação, validação, devolução, comentário, vencimento, atraso e validação parada há 2 dias (janela que não bloqueia).
+  - **Equipes** com dono, líderes, membros e hierarquia; marcadores por equipe; checklist; carga de trabalho com faixas.
+  - Migração `2320f1538b36`: tabelas `tarefas*`. Endpoints `/api/tarefas/*` (ver `docs/endpoints/tarefas.md`). `servico_anexos.guardar_arquivo` aceita formatos além de PDF.
+
 ## 2026-09-29
 
 ### Alterado

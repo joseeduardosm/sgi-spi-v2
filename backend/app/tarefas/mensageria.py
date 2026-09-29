@@ -174,6 +174,10 @@ def gerar_lembretes(sessao: Session, dia: date | None = None) -> dict[str, int]:
 
     resultado["rh_periodos"] = servico_periodos.processar(sessao, dia)
     resultado["rh_lembretes"] = servico_afastamentos.lembrar_pendentes(sessao, dia)
+    # Módulo Tarefas: vence amanhã, atrasadas e validação parada há 2+ dias
+    from app.services.tarefas import servico_tarefas
+
+    resultado["tarefas"] = servico_tarefas.lembrar(sessao, dia)
     resultado["emails_rh"] = enviar_emails_pendentes(sessao)
     resultado["resumos_diarios"] = _resumos_diarios(sessao, dia)
     sessao.commit()

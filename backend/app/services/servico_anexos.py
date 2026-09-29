@@ -138,6 +138,51 @@ def guardar_arquivo_gerado(
     return anexo
 
 
+# Formatos aceitos em anexos gerais (ex.: tarefas): extensão → (tipo MIME, assinaturas aceitas do início do arquivo).
+# Assinatura vazia = formato de texto, sem conferência binária.
+_ZIP = (b"PK\x03\x04",)
+_OLE = (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",)
+FORMATOS_GERAIS: dict[str, tuple[str, tuple[bytes, ...]]] = {
+    ".pdf": (TIPO_PDF, (ASSINATURA_PDF,)),
+    ".docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", _ZIP),
+    ".xlsx": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _ZIP),
+    ".pptx": ("application/vnd.openxmlformats-officedocument.presentationml.presentation", _ZIP),
+    ".odt": ("application/vnd.oasis.opendocument.text", _ZIP),
+    ".ods": ("application/vnd.oasis.opendocument.spreadsheet", _ZIP),
+    ".odp": ("application/vnd.oasis.opendocument.presentation", _ZIP),
+    ".doc": ("application/msword", _OLE),
+    ".xls": ("application/vnd.ms-excel", _OLE),
+    ".ppt": ("application/vnd.ms-powerpoint", _OLE),
+    ".png": ("image/png", (b"\x89PNG\r\n\x1a\n",)),
+    ".jpg": ("image/jpeg", (b"\xff\xd8\xff",)),
+    ".jpeg": ("image/jpeg", (b"\xff\xd8\xff",)),
+    ".txt": ("text/plain; charset=utf-8", ()),
+    ".csv": ("text/csv; charset=utf-8", ()),
+}
+
+
+def guardar_arquivo(sessao: Session, origem: BinaryIO, nome_original: str, categoria: str, enviado_por_id: int | None) -> Anexo:
+    """Valida e grava um arquivo de formato geral (`FORMATOS_GERAIS`): extensão permitida, assinatura do conteúdo
+    compatível e tamanho dentro do limite. Devolve o `Anexo` já na sessão (sem commit)."""
+    extensao = Path(nome_original or "").suffix.lower()
+    if extensao not in FORMATOS_GERAIS:
+        raise ErroAnexo(f"Formato não aceito ({extensao or 'sem extensão'}). Envie PDF, documentos do Office/LibreOffice, TXT, CSV, PNG ou JPG.")
+    tipo, assinaturas = FORMATOS_GERAIS[extensao]
+    conteudo = BytesIO()
+    tamanho = 0
+    for bloco in _blocos(origem):
+        tamanho += len(bloco)
+        if tamanho > tamanho_maximo():
+            raise ErroAnexo(f"O arquivo excede o limite de {obter_configuracao().anexos_tamanho_maximo_mb} MB.")
+        conteudo.write(bloco)
+    dados = conteudo.getvalue()
+    if not dados:
+        raise ErroAnexo("O arquivo está vazio.")
+    if assinaturas and not any(dados.startswith(a) for a in assinaturas):
+        raise ErroAnexo(f"O conteúdo do arquivo não corresponde a um {extensao[1:].upper()}.")
+    return guardar_arquivo_gerado(sessao, dados, nome_original, tipo, categoria, enviado_por_id)
+
+
 def caminho(anexo: Anexo) -> Path:
     """Caminho completo do arquivo no disco."""
     return diretorio_anexos() / anexo.chave_armazenamento

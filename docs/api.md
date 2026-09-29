@@ -58,6 +58,7 @@ Navegador
 | `rh_feriados` | Módulo RH: feriados e pontos facultativos (um por data), usados no calendário, no painel, na regra de início e na folha de ponto |
 | `rh_afastamentos`, `rh_afastamentos_eventos`, `rh_parametros` | Módulo RH: férias e licença-prêmio, histórico de status e regras de agendamento |
 | `mensagens`, `mensagens_entregas` | Mensageria: mensagens (avulsas e automáticas) e a entrega a cada destinatário (lida, ciência, encerrada, e-mail) |
+| `tarefas`, `tarefas_equipes` (+ `_membros`, `_lideres`), `tarefas_participantes`, `tarefas_eventos` (+ `_anexos`), `tarefas_marcadores` (+ `_vinculos`), `tarefas_checklist` | Módulo Tarefas: tarefas com pipeline de validação, equipes, envolvidos, linha do tempo, marcadores e checklist |
 | `mensageria_envios_changelog` | Mensageria: e-mails de changelog enviados pela conta root (texto, destino, até que data do CHANGELOG e resultado) |
 | `setores`, `membros_setor` | Setores e seus membros |
 | `acl_recursos`, `acl_regras`, `acl_regras_usuarios`, `acl_regras_setores` | Controle de acesso |
@@ -156,6 +157,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/rh/relatorios/saldos` | CGP | Relatório de saldos (XLSX/PDF) | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` `POST` | `/api/rh/cadastro/funcionais/importacao[/modelo\|/previa]` | CGP | Carga em lote dos dados funcionais por planilha | [rh-cadastro.md](endpoints/rh-cadastro.md) |
 | `POST` | `/api/rh/cadastro/alteracoes/validar-lote` | CGP | Validar alterações em lote | [rh-cadastro.md](endpoints/rh-cadastro.md) |
+| `GET` `POST` `PUT` `DELETE` | `/api/tarefas[/…]` | Autenticado (permissões por tarefa e equipe) | Módulo Tarefas: listas, pipeline, prazo, transferência, comentários, linha do tempo, equipes e marcadores | [tarefas.md](endpoints/tarefas.md) |
 | `GET` | `/api/rh/folha-ponto[/competencias]` | Autenticado (só a própria) | Folha de ponto em PDF / competências disponíveis | [rh-folha-ponto.md](endpoints/rh-folha-ponto.md) |
 | `GET` `PUT` | `/api/rh/parametros` | Leitura: autenticado; gravação: CGP | Regras de agendamento | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` | `/api/mensagens/resumo` | Autenticado | Contador do sino e janela a abrir | [mensagens.md](endpoints/mensagens.md) |

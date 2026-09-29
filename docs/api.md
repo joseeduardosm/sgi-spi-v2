@@ -123,14 +123,14 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/usuarios` | ACL `usuarios` ≥ LEITURA | Lista usuários | [usuarios.md](endpoints/usuarios.md#get-apiusuarios) |
 | `GET` | `/api/usuarios/opcoes` | ACL `usuarios` ≥ LEITURA | Opções para seletores | [usuarios.md](endpoints/usuarios.md#get-apiusuariosopcoes) |
 | `GET` | `/api/usuarios/{usuario_id}` | ACL `usuarios` ≥ LEITURA | Consulta usuário | [usuarios.md](endpoints/usuarios.md#get-apiusuariosusuario_id) |
-| `POST` | `/api/usuarios` | SuperRoot | Cria conta local | [usuarios.md](endpoints/usuarios.md#post-apiusuarios) |
-| `PUT` | `/api/usuarios/{usuario_id}` | SuperRoot | Altera usuário | [usuarios.md](endpoints/usuarios.md#put-apiusuariosusuario_id) |
-| `DELETE` | `/api/usuarios/{usuario_id}` | SuperRoot | Exclui usuário | [usuarios.md](endpoints/usuarios.md#delete-apiusuariosusuario_id) |
+| `POST` | `/api/usuarios` | SuperRoot ou ACL `usuarios` = CONTROLE_TOTAL | Cria conta local | [usuarios.md](endpoints/usuarios.md#post-apiusuarios) |
+| `PUT` | `/api/usuarios/{usuario_id}` | SuperRoot ou ACL `usuarios` = CONTROLE_TOTAL | Altera usuário | [usuarios.md](endpoints/usuarios.md#put-apiusuariosusuario_id) |
+| `DELETE` | `/api/usuarios/{usuario_id}` | SuperRoot ou ACL `usuarios` = CONTROLE_TOTAL | Exclui usuário | [usuarios.md](endpoints/usuarios.md#delete-apiusuariosusuario_id) |
 | `GET` | `/api/setores` | ACL `setores` ≥ LEITURA | Lista setores | [setores.md](endpoints/setores.md#get-apisetores) |
 | `GET` | `/api/setores/{setor_id}` | ACL `setores` ≥ LEITURA | Consulta setor com membros | [setores.md](endpoints/setores.md#get-apisetoressetor_id) |
-| `POST` | `/api/setores` | SuperRoot | Cria setor | [setores.md](endpoints/setores.md#post-apisetores) |
-| `PUT` | `/api/setores/{setor_id}` | SuperRoot | Altera setor | [setores.md](endpoints/setores.md#put-apisetoressetor_id) |
-| `DELETE` | `/api/setores/{setor_id}` | SuperRoot | Exclui setor | [setores.md](endpoints/setores.md#delete-apisetoressetor_id) |
+| `POST` | `/api/setores` | SuperRoot ou ACL `setores` = CONTROLE_TOTAL | Cria setor | [setores.md](endpoints/setores.md#post-apisetores) |
+| `PUT` | `/api/setores/{setor_id}` | SuperRoot ou ACL `setores` = CONTROLE_TOTAL | Altera setor | [setores.md](endpoints/setores.md#put-apisetoressetor_id) |
+| `DELETE` | `/api/setores/{setor_id}` | SuperRoot ou ACL `setores` = CONTROLE_TOTAL | Exclui setor | [setores.md](endpoints/setores.md#delete-apisetoressetor_id) |
 | `GET` | `/api/acl/meus-acessos` | Bearer | Meus acessos efetivos | [acl.md](endpoints/acl.md#get-apiaclmeus-acessos) |
 | `GET` | `/api/acl/efetivo/{usuario_id}` | SuperRoot | Acesso efetivo de um usuário | [acl.md](endpoints/acl.md#get-apiaclefetivousuario_id) |
 | `GET` `POST` | `/api/acl/recursos` | SuperRoot | Lista / cadastra recursos | [acl.md](endpoints/acl.md#recursos) |

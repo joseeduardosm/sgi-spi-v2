@@ -91,7 +91,7 @@ def test_usuario_comum_nao_administra(cliente, admin):
     h = cabecalho(cliente, "comum")
     assert cliente.get("/api/usuarios", headers=h).status_code == 200  # recurso aberto: leitura permitida
     r = _nova_conta(cliente, h)
-    assert r.status_code == 403 and r.json()["codigo"] == "acesso_negado"
+    assert r.status_code == 403 and r.json()["codigo"] == "acl_negado"
 
 
 # --- Perfil institucional e revalidação --------------------------------------

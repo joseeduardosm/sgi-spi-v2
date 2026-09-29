@@ -22,6 +22,14 @@ def _maior_nivel(niveis: list[str]) -> str | None:
     return max(niveis, key=NivelAcl.posicao) if niveis else None
 
 
+def possui_regras(sessao: Session, slug: str) -> bool:
+    """O recurso (ativo) tem ao menos uma regra (é lista positiva)?"""
+    return bool(sessao.scalar(
+        select(func.count(RegraAcl.id)).join(RecursoAcl, RecursoAcl.id == RegraAcl.recurso_id)
+        .where(RecursoAcl.slug == slug, RecursoAcl.ativo.is_(True))
+    ))
+
+
 def resolver_acesso(sessao: Session, usuario: Usuario, slug: str) -> str | None:
     """Nível do usuário no recurso identificado pelo `slug` (None = sem acesso)."""
     if usuario.superusuario:

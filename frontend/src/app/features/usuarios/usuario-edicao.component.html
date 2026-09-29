@@ -1,0 +1,83 @@
+<div class="cabecalho-pagina">
+  <div>
+    <app-trilha [itens]="[{ rotulo: 'Usuários', rota: '/usuarios' }, { rotulo: novo ? 'Nova conta local' : (usuario()?.perfil?.nome_completo || usuario()?.login || 'Usuário') }]" />
+    <h1>{{ novo ? 'Nova conta local' : (usuario()?.perfil?.nome_completo || usuario()?.login || 'Usuário') }}</h1>
+    @if (usuario(); as u) {
+      <small>&#64;{{ u.login }} · {{ rotulosOrigem[u.origem] }}{{ u.superusuario ? ' · SuperRoot' : '' }}{{ u.diretorio_nome ? ' · ' + u.diretorio_nome : '' }}</small>
+    } @else if (novo) {
+      <small>Conta com senha local. As contas corporativas chegam pelo diretório (LDAP).</small>
+    }
+  </div>
+</div>
+
+@if (carregando()) {
+  <p class="estado-vazio">Carregando…</p>
+} @else {
+  @if (somenteLeitura() && usuario()) {
+    <p class="aviso-bloco informativo">
+      {{ podeGerir() ? 'Esta é uma conta de administrador do sistema (SuperRoot): só outro SuperRoot pode alterá-la.' : 'Você pode consultar este cadastro, mas não alterá-lo.' }}
+    </p>
+  }
+  <form class="pagina-usuario" (ngSubmit)="salvar()" novalidate>
+    <div class="colunas-pagina-usuario" [class.com-rh]="!novo">
+      <div class="coluna-principal-usuario">
+        <section class="cartao-dados" aria-labelledby="titulo-conta">
+          <header><div><h2 id="titulo-conta">Conta</h2></div></header>
+          <div class="corpo">
+            <div class="grade-formulario tres-colunas" [formGroup]="conta">
+              <div>
+                <label for="usuario-login">Login</label>
+                <input id="usuario-login" formControlName="login" autocomplete="off" />
+              </div>
+              <div>
+                <label for="usuario-senha">{{ novo ? 'Senha' : 'Nova senha local' }}</label>
+                <input id="usuario-senha" type="password" formControlName="senha" autocomplete="new-password"
+                       [placeholder]="novo ? 'Mínimo 8 caracteres' : (!ehSuperRoot() ? 'Só um SuperRoot define senhas' : (usuario()?.possui_senha_local ? 'Deixe vazia para manter' : 'Sem senha local (conta LDAP)'))" />
+              </div>
+            </div>
+            <div class="linha-caixas" [formGroup]="conta">
+              <label><input type="checkbox" formControlName="ativo" /> Conta ativa</label>
+              <label [title]="ehSuperRoot() ? '' : 'Só um SuperRoot concede este papel'">
+                <input type="checkbox" formControlName="superusuario" /> Administrador do sistema (SuperRoot)</label>
+            </div>
+            @if (usuario()?.origem === 'ldap') {
+              <p class="dica-formulario">Conta corporativa: nome, e-mail e situação são atualizados pelo diretório. Definir uma senha local a torna "Local + LDAP" (contingência).</p>
+            }
+          </div>
+        </section>
+
+        <section class="cartao-dados" aria-labelledby="titulo-perfil-usuario">
+          <header><div><h2 id="titulo-perfil-usuario">Perfil institucional</h2></div></header>
+          <div class="corpo">
+            <app-campos-perfil [formulario]="perfil" [(gestor)]="gestor" [fonteGestor]="api.opcoes" [marcarObrigatorios]="false" [colunas]="3" />
+          </div>
+        </section>
+      </div>
+
+      <!-- Dados funcionais do RH: só na edição e só para a CGP e o SuperRoot (a API nega aos demais e o bloco some) -->
+      @if (usuario(); as u) {
+        <aside class="coluna-rh-usuario">
+          <section class="cartao-dados">
+            <div class="corpo"><app-dados-funcionais [usuarioId]="u.id" /></div>
+          </section>
+        </aside>
+      }
+    </div>
+
+    @if (erro()) {
+      <p class="aviso-formulario erro" role="alert">{{ erro() }}</p>
+    }
+
+    <!-- Barra de ações fixa no rodapé da página -->
+    <div class="barra-salvar-usuario">
+      @if (usuario() && podeGerir() && !somenteLeitura()) {
+        <button type="button" class="acao-recusar" (click)="excluir()">Excluir usuário</button>
+      }
+      <span class="espaco"></span>
+      <button type="button" class="acao-secundaria" (click)="voltar()" [disabled]="salvando()">Voltar para a lista</button>
+      @if (!somenteLeitura()) {
+        <button type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : (novo ? 'Criar conta' : 'Salvar usuário') }}</button>
+      }
+    </div>
+  </form>
+}

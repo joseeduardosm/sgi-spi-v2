@@ -10,7 +10,8 @@ Gerencia a identidade dos usuários e seus dados funcionais: login, situação, 
 
 - **Autorização:**
   - **Leitura** (`GET`): ACL `usuarios` ≥ `LEITURA`, com perfil em dia.
-  - **Escrita** (`POST`, `PUT`, `DELETE`): papel **SuperRoot**.
+  - **Escrita** (`POST`, `PUT`, `DELETE`): papel **SuperRoot**, ou **CONTROLE_TOTAL** na ACL `usuarios` (hoje, os membros do setor "Coordenadoria de Gestão de Pessoas", pela migração `b2e4f6a8c0d1`). Um recurso **sem regras não libera gravação**: nesse caso, só o SuperRoot grava.
+  - Quem grava pela ACL e não é SuperRoot **não pode** (`403 acesso_negado`): conceder o papel SuperRoot, alterar ou excluir contas SuperRoot, nem definir a senha local de outra pessoa. Sem CONTROLE_TOTAL: `403 acl_negado`.
 - **Contas locais** têm senha armazenada como hash bcrypt. **Contas LDAP** não têm senha local utilizável. Se o SuperRoot definir uma senha numa conta `ldap`, ela passa a `local_ldap` (contingência).
 - **Conta administrativa principal** (`LOGIN_ADMIN` do `.env`):
   - não pode ser excluída, desativada nem perder o papel SuperRoot;
@@ -141,5 +142,6 @@ A exclusão remove também os vínculos com setores e regras de ACL. Os setores 
 ## Consumo no Angular
 
 - Serviço: `UsuariosApiService` (`frontend/src/app/features/usuarios/usuarios-api.service.ts`). Tipos em `usuarios.models.ts`.
-- Tela: `/usuarios` (`UsuariosComponent`), protegida por `guardaAcl` (`usuarios`). Ações de escrita aparecem só para o SuperRoot.
+- Tela: `/usuarios` (`UsuariosComponent`), protegida por `guardaAcl` (`usuarios`): lista com filtros. "Nova conta local", "Editar" e "Excluir" aparecem para quem tem CONTROLE_TOTAL em `usuarios` (ou é SuperRoot); contas SuperRoot mostram só "Ver" para quem não é SuperRoot.
+- Página do usuário: `/usuarios/novo` e `/usuarios/:id` (`UsuarioEdicaoComponent`), com os cartões Conta e Perfil institucional e, ao lado, os dados funcionais do RH (CGP e SuperRoot). A barra de ações fica fixa no rodapé (Excluir usuário, Voltar para a lista, Salvar). Para quem não é SuperRoot, o papel SuperRoot e a senha ficam desabilitados, e contas SuperRoot abrem só para leitura.
 - O formulário de perfil (`CamposPerfilComponent`) é compartilhado com a página "Meu perfil".

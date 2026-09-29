@@ -9,6 +9,12 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-29
 
 ### Alterado
+- **Edição de usuário em página própria** (`/usuarios/novo` e `/usuarios/:id`), no lugar da janela: cartões Conta e Perfil institucional, dados funcionais do RH ao lado e barra de ações fixa no rodapé; funciona no celular.
+- **A CGP administra usuários e setores pela ACL.**
+  - As gravações passaram a aceitar CONTROLE_TOTAL nas ACLs `usuarios` e `setores` (antes, só SuperRoot); recurso sem regras não libera gravação.
+  - A migração `b2e4f6a8c0d1` cria as regras para o setor "Coordenadoria de Gestão de Pessoas" (membros). Com isso, só CGP e SuperRoot veem Usuários e Setores.
+  - Sem escalada de privilégio: quem não é SuperRoot não concede o papel SuperRoot, não altera nem exclui contas SuperRoot, não define senha de outra pessoa e não mexe em grupos sistêmicos.
+  - Negação sem CONTROLE_TOTAL passa a responder `403 acl_negado` (antes `acesso_negado`).
 - **Painel de afastamentos:**
   - cada período do gráfico abre uma janela com os detalhes e, para quem pode decidir, Aprovar e Recusar;
   - botão Aprovar em verde (Recusar mantém o vermelho claro);

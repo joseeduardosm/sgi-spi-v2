@@ -10,11 +10,13 @@ os membros. Consultar exige ACL `setores` ≥ LEITURA; alterar é exclusivo do S
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import exigir_acl, exigir_papeis
+from app.api.dependencias import exigir_acl, exigir_gestao
+from app.models.setor import Setor
+from app.core.erros import ErroApi
 from app.api.respostas import CONFLITO, INVALIDO, RESPOSTAS_AUTENTICADAS, erro_regra, nao_encontrado, resposta_nao_encontrado
 from app.core.banco import obter_sessao
 from app.models.acl import NivelAcl
-from app.models.usuario import Papel, Usuario
+from app.models.usuario import Usuario
 from app.schemas.setores import DetalheSetor, GravacaoSetor, LeituraSetor
 from app.services import servico_setores as servico
 from app.services.servico_setores import ErroRegraSetor, SetorNaoEncontrado
@@ -23,7 +25,17 @@ roteador = APIRouter(prefix="/setores", tags=["Setores"], responses=RESPOSTAS_AU
 
 # Dependências de acesso reutilizadas nas rotas abaixo
 pode_ler = exigir_acl("setores", NivelAcl.LEITURA)
-super_root = exigir_papeis(Papel.SUPER_ROOT)
+pode_gerir = exigir_gestao("setores")
+
+
+def _restricoes_nao_superroot(sessao: Session, autor: Usuario, dados: GravacaoSetor | None = None, setor_id: int | None = None) -> None:
+    """Quem gere setores pela ACL (ex.: a CGP) não mexe nos grupos sistêmicos (Administradores, Auditores…),
+    que dão acessos no sistema: só o SuperRoot."""
+    if autor.superusuario:
+        return
+    atual = sessao.get(Setor, setor_id) if setor_id is not None else None
+    if (dados is not None and dados.sistemico) or (atual is not None and atual.sistemico):
+        raise ErroApi(status.HTTP_403_FORBIDDEN, "Somente um SuperRoot pode criar, alterar ou excluir grupos sistêmicos.", "acesso_negado")
 NAO_ENCONTRADO = resposta_nao_encontrado("Setor")
 
 
@@ -49,11 +61,12 @@ def consultar_setor(setor_id: int, sessao: Session = Depends(obter_sessao), _: U
     response_model=DetalheSetor,
     status_code=status.HTTP_201_CREATED,
     summary="Criar setor",
-    description="Restrito ao SuperRoot.",
+    description="SuperRoot, ou CONTROLE_TOTAL na ACL `setores` (grupos sistêmicos: só SuperRoot).",
     responses={**CONFLITO, **INVALIDO},
 )
-def criar_setor(dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalheSetor:
+def criar_setor(dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)) -> DetalheSetor:
     """Cria o setor e devolve o detalhe já com os membros informados."""
+    _restricoes_nao_superroot(sessao, autor, dados)
     try:
         setor = servico.criar_setor(sessao, dados, autor.login)
     except ErroRegraSetor as erro:
@@ -66,11 +79,12 @@ def criar_setor(dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), a
     "/{setor_id}",
     response_model=DetalheSetor,
     summary="Alterar setor",
-    description="`membros_ids` substitui a lista de membros. Restrito ao SuperRoot.",
+    description="`membros_ids` substitui a lista de membros. SuperRoot, ou CONTROLE_TOTAL na ACL `setores` (grupos sistêmicos: só SuperRoot).",
     responses={**NAO_ENCONTRADO, **CONFLITO, **INVALIDO},
 )
-def alterar_setor(setor_id: int, dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalheSetor:
+def alterar_setor(setor_id: int, dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)) -> DetalheSetor:
     """Altera os dados e substitui a lista de membros pela enviada."""
+    _restricoes_nao_superroot(sessao, autor, dados, setor_id)
     try:
         servico.alterar_setor(sessao, setor_id, dados, autor.login)
     except SetorNaoEncontrado:
@@ -85,11 +99,12 @@ def alterar_setor(setor_id: int, dados: GravacaoSetor, sessao: Session = Depends
     "/{setor_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Excluir setor",
-    description="Somente setores sem membros e sem subordinados. Restrito ao SuperRoot.",
+    description="Somente setores sem membros e sem subordinados. SuperRoot, ou CONTROLE_TOTAL na ACL `setores` (grupos sistêmicos: só SuperRoot).",
     responses={**NAO_ENCONTRADO, **INVALIDO},
 )
-def excluir_setor(setor_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> Response:
+def excluir_setor(setor_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)) -> Response:
     """Exclui o setor (o serviço recusa se ele ainda tiver membros ou setores subordinados)."""
+    _restricoes_nao_superroot(sessao, autor, setor_id=setor_id)
     try:
         servico.excluir_setor(sessao, setor_id, autor.login)
     except SetorNaoEncontrado:

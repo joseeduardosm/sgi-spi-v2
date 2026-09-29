@@ -382,6 +382,18 @@ body {
   gap: 5px;
 
   // Aprovar: verde (os demais botões da linha seguem o vermelho claro)
+  // Links (ex.: "Editar" que abre uma página) com o mesmo visual dos botões da linha
+  a {
+    padding: 6px 8px;
+    border-radius: 5px;
+    color: var(--spi-vermelho);
+    background: var(--spi-vermelho-suave);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
   button.acao-aprovar {
     color: #1d6b43;
     background: #e3f4ea;
@@ -1585,4 +1597,59 @@ button.gantt-barra {
     color: #8a2530;
     background: var(--spi-vermelho-suave);
   }
+}
+
+
+/* Página do usuário (/usuarios/:id): conta e perfil à esquerda, dados funcionais do RH à direita, ações fixas no rodapé */
+.pagina-usuario {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+
+  .cartao-dados { min-width: 0; }
+  .linha-caixas { flex-wrap: wrap; gap: 8px 18px; }
+}
+
+.colunas-pagina-usuario {
+  display: grid;
+  // minmax(0, …): a coluna não cresce além da tela por causa de textos longos (celular)
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+
+  &.com-rh:has(.bloco-dados-funcionais) {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+}
+
+.coluna-rh-usuario {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+
+  // Sem os dados funcionais (usuário fora da CGP), o cartão vazio não aparece
+  .cartao-dados:not(:has(.bloco-dados-funcionais)) { display: none; }
+  .grade-formulario { grid-template-columns: 1fr 1fr; }
+}
+
+.barra-salvar-usuario {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px 16px;
+  border: 1px solid #e8eaec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 -6px 18px #1f262d14;
+
+  .espaco { flex: 1; }
+}
+
+@media (max-width: 1000px) {
+  .colunas-pagina-usuario.com-rh:has(.bloco-dados-funcionais) { grid-template-columns: minmax(0, 1fr); }
+  .coluna-rh-usuario { position: static; }
 }

@@ -5,6 +5,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
+import { AcessoService } from '../../core/acesso/acesso.service';
 import { AutenticacaoService } from '../../core/autenticacao/autenticacao.service';
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
@@ -21,10 +22,13 @@ import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.componen
 })
 export class SetoresComponent implements OnInit {
   protected readonly autenticacao = inject(AutenticacaoService);
+  private readonly acesso = inject(AcessoService);
   private readonly api = inject(SetoresApiService);
   protected readonly usuarios = inject(UsuariosApiService);
 
-  protected readonly ehAdministrador = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
+  protected readonly ehSuperRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
+  /** Grava quem é SuperRoot ou tem CONTROLE_TOTAL na ACL `setores` (ex.: a CGP); grupos sistêmicos só o SuperRoot. */
+  protected readonly ehAdministrador = computed(() => this.acesso.pode('setores', 'CONTROLE_TOTAL'));
   // A pesquisa é feita no navegador, sobre a lista já carregada (a quantidade de setores é pequena)
   protected busca = '';
   private readonly termo = signal('');

@@ -10,7 +10,8 @@ Os setores representam a estrutura institucional (hierarquia com setor pai e lí
 
 - **Autorização:**
   - **Leitura:** ACL `setores` ≥ `LEITURA`.
-  - **Escrita:** papel **SuperRoot**.
+  - **Escrita:** papel **SuperRoot**, ou **CONTROLE_TOTAL** na ACL `setores` (hoje, os membros do setor "Coordenadoria de Gestão de Pessoas", pela migração `b2e4f6a8c0d1`). Recurso sem regras não libera gravação.
+  - **Grupos sistêmicos** (criar, alterar, excluir, ou marcar um setor como sistêmico): só o SuperRoot (`403 acesso_negado`), porque dão acessos no sistema.
 - **Nome** único, sem diferenciar maiúsculas.
 - **Hierarquia:** o setor pai não pode ser o próprio setor nem um subordinado dele (sem ciclos).
 - **Exclusão:** só é permitida para setores **sem membros e sem subordinados**.
@@ -72,7 +73,7 @@ Resposta **`204`**. Erros:
 ## Consumo no Angular
 
 - Serviço: `SetoresApiService` (`frontend/src/app/features/setores/setores-api.service.ts`).
-- Tela: `/setores` (`SetoresComponent`), protegida por `guardaAcl` (`setores`). Criação, edição e exclusão aparecem só para o SuperRoot.
+- Tela: `/setores` (`SetoresComponent`), protegida por `guardaAcl` (`setores`). Criação, edição e exclusão aparecem para quem tem CONTROLE_TOTAL em `setores` (ou é SuperRoot); grupos sistêmicos mostram "Só SuperRoot", e a caixa "Grupo sistêmico" só aparece para o SuperRoot.
 
 ## Estrutura oficial (reorganização)
 

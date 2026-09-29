@@ -11,11 +11,12 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import exigir_acl, exigir_papeis
+from app.api.dependencias import exigir_acl, exigir_gestao
+from app.core.erros import ErroApi
 from app.api.respostas import CONFLITO, INVALIDO, RESPOSTAS_AUTENTICADAS, erro_regra, nao_encontrado, resposta_nao_encontrado
 from app.core.banco import obter_sessao
 from app.models.acl import NivelAcl
-from app.models.usuario import Papel, Usuario
+from app.models.usuario import Usuario
 from app.schemas.usuarios import AlteracaoUsuario, CriacaoUsuario, DetalheUsuario, OpcaoUsuario, PaginaUsuarios
 from app.services import servico_admin_usuarios as servico
 from app.services.servico_admin_usuarios import ErroRegraUsuario, UsuarioNaoEncontrado
@@ -24,7 +25,25 @@ roteador = APIRouter(prefix="/usuarios", tags=["Usuários"], responses=RESPOSTAS
 
 # Dependências de acesso reutilizadas nas rotas abaixo
 pode_ler = exigir_acl("usuarios", NivelAcl.LEITURA)
-super_root = exigir_papeis(Papel.SUPER_ROOT)
+pode_gerir = exigir_gestao("usuarios")
+
+
+def _negar(detalhe: str) -> ErroApi:
+    return ErroApi(status.HTTP_403_FORBIDDEN, detalhe, "acesso_negado")
+
+
+def _restricoes_nao_superroot(autor: Usuario, *, alvo: Usuario | None = None, superusuario: bool | None = None,
+                              senha: str | None = None) -> None:
+    """Quem gere usuários pela ACL (ex.: a CGP) não pode tocar no que dá acesso de administrador:
+    contas SuperRoot, o papel SuperRoot e senhas locais de outras pessoas (evita escalada de privilégio)."""
+    if autor.superusuario:
+        return
+    if alvo is not None and alvo.superusuario:
+        raise _negar("Somente um SuperRoot pode alterar ou excluir a conta de um administrador do sistema (SuperRoot).")
+    if superusuario and (alvo is None or not alvo.superusuario):
+        raise _negar("Somente um SuperRoot pode conceder o papel de administrador do sistema (SuperRoot).")
+    if senha and alvo is not None:
+        raise _negar("Somente um SuperRoot pode definir a senha local de outra pessoa.")
 NAO_ENCONTRADO = resposta_nao_encontrado("Usuário")
 
 
@@ -79,11 +98,12 @@ def consultar_usuario(usuario_id: int, sessao: Session = Depends(obter_sessao), 
     response_model=DetalheUsuario,
     status_code=status.HTTP_201_CREATED,
     summary="Criar conta local",
-    description="Cria conta local com senha (hash bcrypt). Restrito ao SuperRoot.",
+    description="Cria conta local com senha (hash bcrypt). SuperRoot, ou CONTROLE_TOTAL na ACL `usuarios` (sem conceder o papel SuperRoot).",
     responses={**CONFLITO, **INVALIDO},
 )
-def criar_usuario(dados: CriacaoUsuario, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalheUsuario:
+def criar_usuario(dados: CriacaoUsuario, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)) -> DetalheUsuario:
     """Cria uma conta local (as contas do LDAP chegam pela sincronização, não por aqui)."""
+    _restricoes_nao_superroot(autor, superusuario=dados.superusuario)
     try:
         return servico.para_detalhe(sessao, servico.criar_conta_local(sessao, dados, autor.login))
     except ErroRegraUsuario as erro:
@@ -98,14 +118,18 @@ def criar_usuario(dados: CriacaoUsuario, sessao: Session = Depends(obter_sessao)
     summary="Alterar usuário",
     description=(
         "Altera situação, papel SuperRoot, perfil institucional e, opcionalmente, a senha local. "
-        "Definir senha numa conta `ldap` a torna `local_ldap`. Restrito ao SuperRoot."
+        "Definir senha numa conta `ldap` a torna `local_ldap`. SuperRoot, ou CONTROLE_TOTAL na ACL `usuarios`: neste caso sem "
+        "mexer em contas SuperRoot, no papel SuperRoot nem na senha local (`403 acesso_negado`)."
     ),
     responses={**NAO_ENCONTRADO, **INVALIDO},
 )
 def alterar_usuario(
-    usuario_id: int, dados: AlteracaoUsuario, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)
+    usuario_id: int, dados: AlteracaoUsuario, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)
 ) -> DetalheUsuario:
     """Altera o usuário; o autor é repassado ao serviço para as regras que protegem a própria conta."""
+    alvo = sessao.get(Usuario, usuario_id)
+    if alvo is not None:
+        _restricoes_nao_superroot(autor, alvo=alvo, superusuario=dados.superusuario, senha=dados.senha)
     try:
         return servico.para_detalhe(sessao, servico.alterar_usuario(sessao, usuario_id, dados, autor))
     except UsuarioNaoEncontrado:
@@ -119,11 +143,15 @@ def alterar_usuario(
     "/{usuario_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Excluir usuário",
-    description="Exclui o usuário (exceto a conta administrativa principal e a própria conta). Restrito ao SuperRoot.",
+    description="Exclui o usuário (exceto a conta administrativa principal e a própria conta). SuperRoot, ou CONTROLE_TOTAL na ACL "
+                "`usuarios` (sem excluir contas SuperRoot).",
     responses={**NAO_ENCONTRADO, **INVALIDO},
 )
-def excluir_usuario(usuario_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> Response:
+def excluir_usuario(usuario_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)) -> Response:
     """Exclui o usuário e responde 204 (sem corpo)."""
+    alvo = sessao.get(Usuario, usuario_id)
+    if alvo is not None:
+        _restricoes_nao_superroot(autor, alvo=alvo)
     try:
         servico.excluir_usuario(sessao, usuario_id, autor)
     except UsuarioNaoEncontrado:

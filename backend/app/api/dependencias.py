@@ -106,6 +106,25 @@ def exigir_conta_root(usuario: Usuario = Depends(obter_usuario_atual)) -> Usuari
     return usuario
 
 
+def exigir_gestao(recurso: str) -> Callable[..., Usuario]:
+    """Gravação em recursos administrativos (ex.: `usuarios`, `setores`): SuperRoot ou CONTROLE_TOTAL na ACL.
+
+    Diferente de `exigir_acl`, um recurso **sem regras não libera a gravação**: se as regras forem apagadas,
+    só o SuperRoot continua podendo alterar (nunca "todos"). As restrições do que o não SuperRoot pode fazer
+    (papel SuperRoot, senhas, grupos sistêmicos) ficam nas próprias rotas.
+    """
+
+    def verificar(usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)) -> Usuario:
+        if usuario.superusuario:
+            return usuario
+        if not servico_acl.possui_regras(sessao, recurso) or servico_acl.resolver_acesso(sessao, usuario, recurso) != NivelAcl.CONTROLE_TOTAL:
+            raise ErroApi(status.HTTP_403_FORBIDDEN, f"Esta operação exige CONTROLE_TOTAL em '{recurso}'.", "acl_negado",
+                          recurso=recurso, nivel_exigido=NivelAcl.CONTROLE_TOTAL)
+        return usuario
+
+    return verificar
+
+
 def exigir_acl(recurso: str, nivel_minimo: str = NivelAcl.LEITURA) -> Callable[..., Usuario]:
     """Exige nível de ACL mínimo no recurso (slug) antes de executar o endpoint.
 

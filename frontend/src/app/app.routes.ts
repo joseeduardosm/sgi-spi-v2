@@ -65,6 +65,14 @@ export const rotas: Routes = [
         loadComponent: () => import('./features/usuarios/usuarios.component').then((m) => m.UsuariosComponent),
       },
       {
+        // Página do usuário: `novo` (conta local) ou o id (edição)
+        path: 'usuarios/:id',
+        title: 'Usuário | SGI SPI',
+        canActivate: [guardaAcl],
+        data: { acl: 'usuarios' },
+        loadComponent: () => import('./features/usuarios/usuario-edicao.component').then((m) => m.UsuarioEdicaoComponent),
+      },
+      {
         path: 'setores',
         title: 'Setores | SGI SPI',
         canActivate: [guardaAcl],

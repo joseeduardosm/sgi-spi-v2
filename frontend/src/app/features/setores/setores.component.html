@@ -51,8 +51,12 @@
             @if (ehAdministrador()) {
               <td>
                 <div class="acoes-linha">
-                  <button type="button" (click)="abrirFormulario(s)">Editar</button>
-                  <button class="botao-excluir" type="button" (click)="excluir(s)">Excluir</button>
+                  @if (ehSuperRoot() || !s.sistemico) {
+                    <button type="button" (click)="abrirFormulario(s)">Editar</button>
+                    <button class="botao-excluir" type="button" (click)="excluir(s)">Excluir</button>
+                  } @else {
+                    <small title="Grupos sistêmicos: só o SuperRoot altera">Só SuperRoot</small>
+                  }
                 </div>
               </td>
             }
@@ -98,7 +102,7 @@
         </div>
       </div>
       <div class="linha-caixas" [formGroup]="formulario">
-        <label><input type="checkbox" formControlName="sistemico" /> Grupo sistêmico (não institucional)</label>
+        @if (ehSuperRoot()) { <label><input type="checkbox" formControlName="sistemico" /> Grupo sistêmico (não institucional)</label> }
         <label><input type="checkbox" formControlName="ativo" /> Ativo</label>
       </div>
       @if (erroFormulario()) {

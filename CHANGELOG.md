@@ -9,6 +9,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-29
 
 ### Alterado
+- **Folha de ponto** some do menu da conta root, que não tem vínculo funcional.
 - **Folha de ponto só sai com o cadastro em dia.**
   - Com alteração de cadastro aguardando validação, ou sem os dados funcionais (jornada, horário de trabalho, intervalo, RG/CIN, RS/PV), o usuário vê o aviso "Folha de ponto indisponível".
   - A CGP recebe mensagem e e-mail: "[Nome] quer baixar a folha de ponto, mas…", no máximo um por motivo e por dia. O aviso se encerra quando os dados são preenchidos ou as alterações são analisadas.
@@ -26,6 +27,17 @@ Informe também migrações do banco e endpoints novos ou alterados.
   - Sem mudança de API.
 
 ### Adicionado
+- **Preparação para o lançamento do Módulo RH (MVP)**, a partir de uma análise de prontidão do banco de produção.
+  - **Carga em lote dos dados funcionais por planilha** (RH › Validações › Importar planilha):
+    - o modelo já traz todos os servidores ativos e os valores atuais; a CGP completa e envia;
+    - a prévia mostra, por linha, o que muda e os erros; só grava sem nenhum erro;
+    - célula vazia mantém o valor; "Dias disponíveis no período vigente" corrige o saldo de quem já gozou parte do período.
+  - **Lançamento de afastamento pela CGP em nome do servidor** (Painel › Lançar afastamento), para férias e licença-prêmio já combinadas ou gozadas fora do sistema, inclusive retroativas, com motivo e opção de ignorar o saldo. O servidor recebe e-mail.
+  - **Validação em lote** em RH › Validações: filtro por campo, seleção de vários usuários e "Validar todas deste usuário". Pensado para os ~210 setores que serão preenchidos no primeiro acesso.
+  - **Relatório de saldos** (Painel, Excel e PDF), com período vigente, disponíveis, "pedir até" e licença-prêmio de cada servidor.
+  - **Alerta em Parâmetros** quando o setor da CGP não tem ninguém (os avisos da CGP não chegariam a ninguém).
+  - **Dados fictícios para demonstração:** `scripts/dados-ficticios-rh.py --criar` / `--remover` (pessoas "[FICTÍCIO]", sem e-mail, removidas em cascata).
+  - Endpoints `POST /api/rh/afastamentos/lancamento`, `GET /api/rh/relatorios/saldos`, `POST /api/rh/cadastro/alteracoes/validar-lote` e `GET`/`POST /api/rh/cadastro/funcionais/importacao[/modelo|/previa]`; os parâmetros trazem `membros_cgp`. Sem migração.
 - **Mensageria com e-mail de changelog** (Administração › Mensageria, só para a conta root).
   - O botão "Preparar e-mail de changelog" abre uma janela com um rascunho das novidades do CHANGELOG ainda não enviadas, em linguagem de usuário.
   - Assunto e texto editáveis, com prévia ao lado no layout oficial com brasão.

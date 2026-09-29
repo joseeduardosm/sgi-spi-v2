@@ -1379,3 +1379,114 @@ $rh-aprovado-fundo: #e5f4ec;
     grid-template-columns: 1fr;
   }
 }
+
+/* Validações do RH: filtro por campo e validação em lote */
+.lote-validacoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 22px;
+  border-bottom: 1px solid #ecedef;
+
+  select {
+    height: 34px;
+    min-width: 0;
+    padding: 0 8px;
+    border: 1px solid #e2e5e8;
+    border-radius: 7px;
+    font-size: 12.5px;
+  }
+
+  label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+  }
+}
+
+.lista-pendencias-rh li.com-marcacao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  > input { flex-shrink: 0; margin-left: 14px; }
+  > button { flex: 1; min-width: 0; }
+}
+
+/* RH: barra de ações da CGP (painel e validações) e janela de importação */
+.barra-acoes-rh {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.modal-portal.modal-importacao-rh {
+  width: min(900px, 94vw);
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  > footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 25px;
+    border-top: 1px solid #ecedef;
+  }
+}
+
+.corpo-importacao-rh {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 25px;
+}
+
+.passos-importacao {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding-left: 20px;
+  font-size: 13.5px;
+
+  button,
+  .seletor-arquivo {
+    margin-left: 8px;
+  }
+
+  small {
+    margin-left: 8px;
+    color: #7c8998;
+  }
+}
+
+.seletor-arquivo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+
+  input[type='file'] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+}
+
+.resumo-importacao {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  color: #1d5e3a;
+  background: #e9f7f2;
+  font-size: 13px;
+
+  &.com-erro {
+    color: #8a2530;
+    background: var(--spi-vermelho-suave);
+  }
+}

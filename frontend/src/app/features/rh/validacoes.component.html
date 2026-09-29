@@ -4,13 +4,32 @@
 @if (semPermissao()) {
   <p class="aviso-bloco erro">Somente a Coordenadoria de Gestão de Pessoas (CGP) acessa esta tela.</p>
 } @else {
+  <div class="barra-acoes-rh">
+    <button type="button" class="acao-secundaria" (click)="importando.set(true)">Importar planilha de dados funcionais</button>
+  </div>
+  <app-importacao-funcionais [(aberta)]="importando" (importado)="cadastro() && abrir(cadastro()!.usuario_id)" />
   <div class="duas-colunas validacoes-rh">
     <section class="cartao-dados" aria-labelledby="titulo-pendencias-rh">
       <header><div><h2 id="titulo-pendencias-rh">Aguardando validação ({{ pendencias()?.length ?? 0 }})</h2>
-        <small>Clique para analisar.</small></div></header>
+        <small>Clique para analisar, ou marque vários e valide em lote.</small></div></header>
+      @if (pendencias()?.length) {
+        <div class="lote-validacoes">
+          <select aria-label="Filtrar por campo" [ngModel]="filtroCampo()" (ngModelChange)="filtroCampo.set($event); marcados.set([])">
+            <option value="">Todos os campos</option>
+            @for (c of campos(); track c.campo) { <option [value]="c.campo">{{ c.rotulo }} ({{ c.total }})</option> }
+          </select>
+          <label><input type="checkbox" [checked]="marcados().length > 0 && marcados().length === pendenciasFiltradas().length"
+                        (change)="marcarTodos($any($event.target).checked)" /> Marcar todos</label>
+          <button type="button" class="acao-primaria acao-pequena" [disabled]="!idsSelecionados().length" (click)="validarSelecionadas()">
+            Validar selecionadas ({{ idsSelecionados().length }})</button>
+        </div>
+      }
       <ul class="lista-pendencias-rh">
-        @for (p of pendencias() ?? []; track p.usuario_id) {
-          <li><button type="button" [class.ativo]="cadastro()?.usuario_id === p.usuario_id" (click)="abrir(p.usuario_id)">
+        @for (p of pendenciasFiltradas(); track p.usuario_id) {
+          <li class="com-marcacao">
+            <input type="checkbox" [attr.aria-label]="'Marcar ' + p.nome" [checked]="marcados().includes(p.usuario_id)"
+                   (change)="marcar(p.usuario_id, $any($event.target).checked)" />
+            <button type="button" [class.ativo]="cadastro()?.usuario_id === p.usuario_id" (click)="abrir(p.usuario_id)">
             <strong>{{ p.nome }}</strong><small>{{ p.departamento || 'Sem setor' }} · {{ p.alteracoes.length }} campo(s)</small></button></li>
         } @empty {
           <li class="estado-vazio">{{ pendencias() ? 'Nenhuma alteração pendente.' : 'Carregando…' }}</li>
@@ -25,7 +44,10 @@
 
     @if (cadastro(); as c) {
       <section class="cartao-dados" aria-labelledby="titulo-cadastro-rh">
-        <header><div><h2 id="titulo-cadastro-rh">{{ c.nome }}</h2><small>&#64;{{ c.login }} · {{ c.perfil['departamento'] }}</small></div></header>
+        <header><div><h2 id="titulo-cadastro-rh">{{ c.nome }}</h2><small>&#64;{{ c.login }} · {{ c.perfil['departamento'] }}</small></div>
+          @if (c.pendentes.length > 1) {
+            <button type="button" class="acao-primaria acao-pequena" (click)="validarTodasDoUsuario(c)">Validar todas deste usuário ({{ c.pendentes.length }})</button>
+          }</header>
         @if (c.pendentes.length) {
           <div class="tabela-gestao-envoltorio">
             <table class="tabela-gestao">

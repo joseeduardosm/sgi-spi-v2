@@ -165,3 +165,31 @@ def test_jornada_horarios_e_documentos_so_para_a_cgp(cliente, pessoas):
     # Nada disso aparece no perfil do próprio usuário
     perfil = cliente.get(PERFIL, headers=h["ana"]).json()
     assert "rg_cin" not in str(perfil) and "jornada_semanal_horas" not in str(perfil)
+
+
+def test_validacao_em_lote(cliente, pessoas):
+    from app.models.rh import AlteracaoCadastral
+
+    ids, h = pessoas
+    with FabricaSessao() as sessao:
+        alteracoes = [
+            AlteracaoCadastral(usuario_id=ids["ana"], campo="departamento", valor_anterior="", valor_proposto="Diretoria A", status="pendente",
+                               solicitada_por_nome="Ana"),
+            AlteracaoCadastral(usuario_id=ids["ana"], campo="ramal", valor_anterior="1234", valor_proposto="5678", status="pendente",
+                               solicitada_por_nome="Ana"),
+            AlteracaoCadastral(usuario_id=ids["chefe"], campo="departamento", valor_anterior="", valor_proposto="Diretoria B", status="validada",
+                               solicitada_por_nome="Chefe"),
+        ]
+        sessao.add_all(alteracoes)
+        sessao.commit()
+        lote = [str(a.id) for a in alteracoes]
+    url = "/api/rh/cadastro/alteracoes/validar-lote"
+    assert cliente.post(url, json={"ids": lote}, headers=h["ana"]).status_code == 403
+    r = cliente.post(url, json={"ids": lote}, headers=h["rh"])
+    assert r.status_code == 200, r.text
+    # As duas pendentes valem; a já analisada volta em "erros" sem impedir as outras
+    assert r.json()["validadas"] == 2 and [e["id"] for e in r.json()["erros"]] == [lote[2]]
+    with FabricaSessao() as sessao:
+        ana = sessao.get(Usuario, ids["ana"])
+        assert (ana.departamento, ana.ramal) == ("Diretoria A", "5678")
+    assert cliente.post(url, json={"ids": []}, headers=h["rh"]).status_code == 422

@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -26,9 +26,15 @@ from app.core.erros import ErroApi
 from app.models.rh import AlteracaoCadastral, Afastamento, PeriodoAquisitivo
 from app.models.usuario import Usuario
 from app.schemas.rh import (
+    LinhaImportacaoRh,
+    ResultadoImportacaoRh,
+    LancamentoAfastamento,
+    ResultadoValidacaoLote,
+    ValidacaoLote,
     AfastamentoLeitura,
     AjustePeriodo,
     CompetenciaFolha,
+    ErroLote,
     FeriadoLeitura,
     FeriasAVencer,
     GravacaoFeriado,
@@ -57,9 +63,9 @@ from app.schemas.rh import (
 from app.services import servico_setores
 from app.services.rh import servico_afastamentos as afastamentos
 from app.services.rh import servico_cadastro as cadastro
-from app.services.rh import folha_ponto, servico_feriados, servico_periodos
+from app.services.rh import folha_ponto, importacao_funcionais, relatorio_saldos, servico_feriados, servico_periodos
 from app.services.servico_auditoria import auditar
-from app.services.rh.papeis import SemPermissaoRh, dados_funcionais, eh_cgp, setor_do_usuario
+from app.services.rh.papeis import SemPermissaoRh, dados_funcionais, eh_cgp, setor_do_usuario, usuarios_cgp
 
 roteador = APIRouter(prefix="/rh", tags=["Módulo RH"], responses=RESPOSTAS_AUTENTICADAS)
 SEM_PERMISSAO = {status.HTTP_403_FORBIDDEN: {"description": "Sem o papel exigido no RH (`sem_permissao`)."}}
@@ -173,6 +179,59 @@ def detalhar_cadastro(usuario_id: int, sessao: Session = Depends(obter_sessao), 
         return _cadastro(sessao, _usuario(sessao, usuario_id))
 
 
+def _resultado_importacao(linhas, gravado: bool) -> ResultadoImportacaoRh:
+    return ResultadoImportacaoRh(
+        total=len(linhas), com_mudanca=sum(1 for l in linhas if l.mudancas and not l.erros), com_erro=sum(1 for l in linhas if l.erros),
+        gravado=gravado, linhas=[LinhaImportacaoRh(linha=l.linha, login=l.login, nome=l.nome, mudancas=l.mudancas, erros=l.erros) for l in linhas],
+    )
+
+
+async def _planilha(arquivo: UploadFile) -> bytes:
+    if not (arquivo.filename or "").lower().endswith(".xlsx"):
+        raise ErroApi(status.HTTP_400_BAD_REQUEST, "Envie a planilha no formato .xlsx.", "invalido")
+    return await arquivo.read(importacao_funcionais.TAMANHO_MAXIMO + 1)
+
+
+@roteador.get("/cadastro/funcionais/importacao/modelo", response_class=Response, summary="Modelo da carga de dados funcionais",
+              description="Planilha com todos os servidores ativos e os valores atuais dos dados funcionais, mais uma aba de instruções. Só CGP.",
+              responses={200: {"content": {XLSX: {}}}, **SEM_PERMISSAO})
+def modelo_importacao_funcionais(sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(obter_usuario_atual)) -> Response:
+    with _traduzir():
+        conteudo = importacao_funcionais.modelo(sessao, autor)
+    return Response(conteudo, media_type=XLSX, headers={"Content-Disposition": 'attachment; filename="dados-funcionais-rh.xlsx"'})
+
+
+@roteador.post("/cadastro/funcionais/importacao/previa", response_model=ResultadoImportacaoRh, summary="Prévia da carga de dados funcionais",
+               description="`multipart/form-data` com a planilha em `arquivo`. Confere sem gravar: por linha, o que muda e os erros. "
+                           "Célula vazia mantém o valor atual. Só CGP.", responses={**SEM_PERMISSAO, **INVALIDO})
+async def previa_importacao_funcionais(arquivo: UploadFile = File(..., description="Planilha .xlsx"), sessao: Session = Depends(obter_sessao),
+                                       autor: Usuario = Depends(obter_usuario_atual)) -> ResultadoImportacaoRh:
+    conteudo = await _planilha(arquivo)
+    with _traduzir():
+        cadastro.exigir_cgp(sessao, autor)
+        return _resultado_importacao(importacao_funcionais.conferir(sessao, conteudo), gravado=False)
+
+
+@roteador.post("/cadastro/funcionais/importacao", response_model=ResultadoImportacaoRh, summary="Importar a carga de dados funcionais",
+               description="Mesma planilha da prévia. Confere de novo e, **sem nenhum erro**, grava tudo numa transação (dados funcionais e "
+                           "dias disponíveis do período vigente). Com erro, nada é gravado (`400`). Auditado como "
+                           "`rh.cadastro.funcionais_lote`. Só CGP.", responses={**SEM_PERMISSAO, **INVALIDO})
+async def importar_funcionais(arquivo: UploadFile = File(..., description="Planilha .xlsx"), sessao: Session = Depends(obter_sessao),
+                              autor: Usuario = Depends(obter_usuario_atual)) -> ResultadoImportacaoRh:
+    conteudo = await _planilha(arquivo)
+    with _traduzir():
+        return _resultado_importacao(importacao_funcionais.importar(sessao, conteudo, autor), gravado=True)
+
+
+@roteador.post("/cadastro/alteracoes/validar-lote", response_model=ResultadoValidacaoLote, summary="Validar alterações em lote",
+               description="Valida várias alterações de uma vez. As que não puderem ser validadas (já analisadas, superior em ciclo) "
+                           "voltam em `erros`, sem impedir as demais. Só CGP.", responses={**SEM_PERMISSAO})
+def validar_lote(dados: ValidacaoLote, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(obter_usuario_atual)) -> ResultadoValidacaoLote:
+    with _traduzir():
+        validadas, erros = cadastro.validar_lote(sessao, dados.ids, autor)
+    return ResultadoValidacaoLote(validadas=len(validadas), erros=[ErroLote(id=i, detalhe=d) for i, d in erros])
+
+
 @roteador.post("/cadastro/alteracoes/{alteracao_id}/validar", response_model=CadastroRh, summary="Validar alteração",
                description="O valor proposto passa a valer e o campo mostra \"Validado por … em …\". Só CGP.",
                responses={**SEM_PERMISSAO, **INVALIDO, **resposta_nao_encontrado("Alteração")})
@@ -248,6 +307,20 @@ def excluir_feriado(feriado_id: uuid.UUID, sessao: Session = Depends(obter_sessa
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# --- Relatório de saldos -----------------------------------------------------------------------
+
+@roteador.get("/relatorios/saldos", response_class=Response, summary="Relatório de saldos de férias e licença-prêmio (CGP)",
+              description="Uma linha por servidor ativo: setor, autorizador, período aquisitivo vigente (creditados, agendados, "
+                          "disponíveis, fim, data-limite para pedir) e licença-prêmio do ano. Quem não tem o início do período aquisitivo "
+                          "aparece como \"não informado\". XLSX ou PDF. Só CGP.",
+              responses={200: {"content": {"application/pdf": {}, XLSX: {}}}, **SEM_PERMISSAO})
+def relatorio_de_saldos(formato: Literal["pdf", "xlsx"] = "xlsx", sessao: Session = Depends(obter_sessao),
+                        autor: Usuario = Depends(obter_usuario_atual)) -> Response:
+    with _traduzir():
+        conteudo, nome, midia = relatorio_saldos.gerar(sessao, autor, formato, afastamentos.hoje())
+    return Response(conteudo, media_type=midia, headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
 # --- Folha de ponto -----------------------------------------------------------------------------
 
 MESES_ANTERIORES_FOLHA, MESES_SEGUINTES_FOLHA = 12, 2
@@ -299,7 +372,12 @@ def gerar_folha_ponto(competencia: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0
 def ler_parametros(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(obter_usuario_atual)) -> ParametrosLeitura:
     p = afastamentos.parametros(sessao)
     sessao.commit()
-    return ParametrosLeitura.model_validate(p, from_attributes=True)
+    return _parametros_leitura(sessao, p)
+
+
+def _parametros_leitura(sessao: Session, p) -> ParametrosLeitura:
+    """Parâmetros com a quantidade de pessoas da CGP (a tela alerta quando ninguém recebe os avisos da CGP)."""
+    return ParametrosLeitura.model_validate(p, from_attributes=True).model_copy(update={"membros_cgp": len(usuarios_cgp(sessao))})
 
 
 @roteador.put("/parametros", response_model=ParametrosLeitura, summary="Alterar regras de agendamento",
@@ -307,7 +385,7 @@ def ler_parametros(sessao: Session = Depends(obter_sessao), _: Usuario = Depends
 def gravar_parametros(dados: GravacaoParametros, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(obter_usuario_atual)) -> ParametrosLeitura:
     with _traduzir():
         p = afastamentos.salvar_parametros(sessao, dados.model_dump(), autor)
-    return ParametrosLeitura.model_validate(p, from_attributes=True)
+    return _parametros_leitura(sessao, p)
 
 
 # --- Afastamentos -------------------------------------------------------------------------------
@@ -357,6 +435,21 @@ def meus_afastamentos(exercicio: int | None = Query(None, ge=2000, le=2100), ses
 def _feriados(sessao: Session, inicio, fim) -> list[FeriadoLeitura]:
     """Feriados e pontos facultativos entre as datas, em ordem."""
     return [FeriadoLeitura.model_validate(f, from_attributes=True) for _, f in sorted(servico_feriados.no_intervalo(sessao, inicio, fim).items())]
+
+
+@roteador.post("/afastamentos/lancamento", response_model=AfastamentoLeitura, status_code=status.HTTP_201_CREATED,
+               summary="Lançar afastamento em nome do servidor (CGP)",
+               description="Férias ou licença-prêmio já combinadas ou gozadas fora do sistema, inclusive retroativas. Sem antecedência, "
+                           "dia vedado nem mínimo de dias; valem a sobreposição e o saldo (que pode ser ignorado com `ignorar_saldo`). "
+                           "Nasce aprovado ou gozado, e o servidor recebe e-mail. Auditado como `rh.afastamento.lancar`. Só CGP.",
+               responses={**SEM_PERMISSAO, **INVALIDO, **resposta_nao_encontrado("Usuário")})
+def lancar_afastamento(dados: LancamentoAfastamento, sessao: Session = Depends(obter_sessao),
+                       autor: Usuario = Depends(obter_usuario_atual)) -> AfastamentoLeitura:
+    with _traduzir():
+        a = afastamentos.lancar(sessao, autor, dados.usuario_id, dados.tipo, dados.inicio, dados.fim, dados.situacao,
+                                dados.justificativa.strip(), dados.ignorar_saldo)
+        dono = _usuario(sessao, a.usuario_id)
+    return _afastamento(sessao, a, dono, autor, eventos=True)
 
 
 @roteador.post("/afastamentos", response_model=AfastamentoLeitura, status_code=status.HTTP_201_CREATED, summary="Agendar férias ou licença-prêmio",

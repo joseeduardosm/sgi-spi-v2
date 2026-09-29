@@ -153,3 +153,52 @@ def test_painel_escopo_setor_alerta_e_exportacao(cliente, equipe):
     assert xlsx.content[:2] == b"PK" and "ferias-licencas-2026-11.xlsx" in xlsx.headers["content-disposition"]
     with FabricaSessao() as sessao:
         assert sessao.query(Usuario).count() >= 5
+
+
+def test_cgp_lanca_afastamento_em_nome_do_servidor(cliente, equipe):
+    ids, h, _ = equipe
+    url = f"{URL}/lancamento"
+    # Férias já gozadas antes do sistema (retroativas, começando numa segunda-feira e sem antecedência)
+    corpo = {"usuario_id": ids["ana"], "tipo": "ferias", "inicio": "2026-08-03", "fim": "2026-08-12", "situacao": "gozado",
+             "justificativa": "Férias registradas na planilha da CGP"}
+    assert cliente.post(url, json=corpo, headers=h["ana"]).status_code == 403
+    r = cliente.post(url, json=corpo, headers=h["rh"])
+    assert r.status_code == 201, r.text
+    lancado = r.json()
+    assert lancado["status"] == "gozado" and lancado["dias"] == 10 and lancado["decidido_por_nome"] == "Rita RH"
+    assert any("Lançado pela CGP" in (e["justificativa"] or "") for e in lancado["eventos"])
+    # Debitou o saldo do período (30 − 10) e aparece para o servidor
+    meus = cliente.get(f"{URL}/meus", headers=h["ana"]).json()
+    assert meus["periodo_vigente"]["disponivel"] == 20
+    # "Gozado" só para períodos encerrados; sobreposição continua proibida
+    futuro = {**corpo, "inicio": "2026-10-05", "fim": "2026-10-09"}
+    assert "encerrados" in cliente.post(url, json=futuro, headers=h["rh"]).json()["detalhe"]
+    assert "sobrepõe" in cliente.post(url, json={**corpo, "inicio": "2026-08-10", "fim": "2026-08-14"}, headers=h["rh"]).json()["detalhe"]
+    # Aprovado sem antecedência (começa em 2 dias); saldo insuficiente só passa com "ignorar saldo"
+    r = cliente.post(url, json={**futuro, "inicio": "2026-10-03", "fim": "2026-10-24", "situacao": "aprovado"}, headers=h["rh"])
+    assert r.status_code == 400 and "insuficiente" in r.json()["detalhe"]
+    r = cliente.post(url, json={**futuro, "inicio": "2026-10-03", "fim": "2026-10-24", "situacao": "aprovado", "ignorar_saldo": True}, headers=h["rh"])
+    assert r.status_code == 201 and r.json()["status"] == "aprovado"
+    assert cliente.post(url, json={**corpo, "justificativa": ""}, headers=h["rh"]).status_code == 422
+
+
+def test_relatorio_de_saldos(cliente, equipe):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    ids, h, _ = equipe
+    assert _pedir(cliente, h["ana"], "2026-11-03", "2026-11-12").status_code == 201
+    url = "/api/rh/relatorios/saldos"
+    assert cliente.get(url, headers=h["ana"]).status_code == 403
+    r = cliente.get(url, params={"formato": "xlsx"}, headers=h["rh"])
+    assert r.status_code == 200 and r.headers["content-disposition"].endswith('saldos-ferias-lp-2026-10-01.xlsx"')
+    folha = load_workbook(BytesIO(r.content)).active
+    linhas = {row[1]: row for row in folha.iter_rows(values_only=True) if row and row[1] in ids}
+    ana = linhas["ana"]
+    assert ana[3] == "Chefe Silva" and ana[4] == "01/01/2026 a 31/12/2026" and (ana[5], ana[6], ana[7]) == (30, 10, 20)
+    assert (ana[10], ana[11], ana[13]) == (2026, 10, 10)
+    # Sem início do período aquisitivo: "não informado"
+    assert linhas["rh"][4] == "não informado"
+    pdf = cliente.get(url, params={"formato": "pdf"}, headers=h["rh"])
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")

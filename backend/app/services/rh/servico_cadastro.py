@@ -235,6 +235,32 @@ def _encerrar_aviso_se_concluido(sessao: Session, usuario_id: int) -> None:
 def validar(sessao: Session, alteracao_id: uuid.UUID, autor: Usuario) -> AlteracaoCadastral:
     """A proposta passa a valer."""
     exigir_cgp(sessao, autor)
+    alteracao = _aplicar_validacao(sessao, alteracao_id, autor)
+    sessao.commit()
+    return alteracao
+
+
+def validar_lote(sessao: Session, ids: list[uuid.UUID], autor: Usuario) -> tuple[list[uuid.UUID], list[tuple[uuid.UUID, str]]]:
+    """Valida várias alterações de uma vez. Cada uma num savepoint: a que falhar (já analisada, superior em ciclo)
+    volta ao estado anterior e é devolvida em `erros`, sem impedir as demais."""
+    exigir_cgp(sessao, autor)
+    validadas: list[uuid.UUID] = []
+    erros: list[tuple[uuid.UUID, str]] = []
+    for alteracao_id in dict.fromkeys(ids):
+        ponto = sessao.begin_nested()
+        try:
+            _aplicar_validacao(sessao, alteracao_id, autor)
+            ponto.commit()
+            validadas.append(alteracao_id)
+        except ErroCadastro as erro:
+            ponto.rollback()
+            erros.append((alteracao_id, str(erro)))
+    sessao.commit()
+    return validadas, erros
+
+
+def _aplicar_validacao(sessao: Session, alteracao_id: uuid.UUID, autor: Usuario) -> AlteracaoCadastral:
+    """Aplica a proposta (sem commit)."""
     alteracao = _alteracao_pendente(sessao, alteracao_id)
     usuario = sessao.get(Usuario, alteracao.usuario_id)
     valor = de_texto(alteracao.campo, alteracao.valor_proposto)
@@ -245,7 +271,6 @@ def validar(sessao: Session, alteracao_id: uuid.UUID, autor: Usuario) -> Alterac
     auditar(sessao, autor.login, "rh.cadastro.validar", usuario.login, autor_id=autor.id, alvo_tipo="usuario", alvo_id=str(usuario.id),
             dados={"campo": alteracao.campo, "valor": alteracao.valor_proposto})
     _encerrar_aviso_se_concluido(sessao, usuario.id)
-    sessao.commit()
     return alteracao
 
 
@@ -288,7 +313,7 @@ def recusar(sessao: Session, alteracao_id: uuid.UUID, justificativa: str, valor_
     return alteracao
 
 
-def salvar_funcionais(sessao: Session, usuario_id: int, dados: dict, autor: Usuario) -> DadosFuncionais:
+def salvar_funcionais(sessao: Session, usuario_id: int, dados: dict, autor: Usuario, commit: bool = True) -> DadosFuncionais:
     """Campos exclusivos da CGP: autorizador, substituto, topo da hierarquia, período aquisitivo, LP, jornada, horários e documentos."""
     exigir_cgp(sessao, autor)
     usuario = sessao.get(Usuario, usuario_id)
@@ -322,14 +347,17 @@ def salvar_funcionais(sessao: Session, usuario_id: int, dados: dict, autor: Usua
     encerrar_aviso_dados(sessao, registro)
     auditar(sessao, autor.login, "rh.cadastro.funcionais", usuario.login, autor_id=autor.id, alvo_tipo="usuario", alvo_id=str(usuario_id),
             dados={"campos": {c: {"de": antes[c], "para": dados[c]} for c in dados if antes[c] != dados[c]}})
-    sessao.commit()
+    if commit:
+        sessao.commit()
+    else:
+        sessao.flush()
     return registro
 
 
 __all__ = ["ErroCadastro", "SemPermissaoRh"]
 
 
-def ajustar_periodo_vigente(sessao: Session, usuario_id: int, dias_creditados: int, autor: Usuario):
+def ajustar_periodo_vigente(sessao: Session, usuario_id: int, dias_creditados: int, autor: Usuario, commit: bool = True):
     """A CGP ajusta os dias creditados do período aquisitivo vigente (ex.: férias gozadas antes do sistema)."""
     from app.services.rh import servico_afastamentos, servico_periodos
 
@@ -341,5 +369,6 @@ def ajustar_periodo_vigente(sessao: Session, usuario_id: int, dias_creditados: i
     periodo.dias_creditados, periodo.origem, periodo.ajustado_por_nome = dias_creditados, "ajuste_cgp", _nome(autor)
     auditar(sessao, autor.login, "rh.ferias.ajuste_periodo", f"usuario={usuario_id}", autor_id=autor.id, alvo_tipo="usuario",
             alvo_id=str(usuario_id), dados={"periodo": periodo.inicio, "de": antes, "para": dias_creditados})
-    sessao.commit()
+    if commit:
+        sessao.commit()
     return periodo

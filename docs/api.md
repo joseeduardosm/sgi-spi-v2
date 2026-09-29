@@ -152,6 +152,10 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` `POST` `PUT` | `/api/rh/cadastro/…` | CGP | Pendências, cadastro, validar/recusar alteração, dados funcionais, ajuste do período aquisitivo vigente | [rh-cadastro.md](endpoints/rh-cadastro.md) |
 | `GET` `POST` `PUT` | `/api/rh/afastamentos[/…]` | Autenticado (por papel) | Férias e licença-prêmio: meus, agendar, alterar, cancelar, aprovar/recusar, aprovações, painel, exportar | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/rh/feriados[/{feriado_id}]` | Leitura: autenticado; gravação: CGP | Feriados e pontos facultativos | [rh-afastamentos.md](endpoints/rh-afastamentos.md#feriados-e-pontos-facultativos-apirhferiados) |
+| `POST` | `/api/rh/afastamentos/lancamento` | CGP | Lançar afastamento em nome do servidor | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
+| `GET` | `/api/rh/relatorios/saldos` | CGP | Relatório de saldos (XLSX/PDF) | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
+| `GET` `POST` | `/api/rh/cadastro/funcionais/importacao[/modelo\|/previa]` | CGP | Carga em lote dos dados funcionais por planilha | [rh-cadastro.md](endpoints/rh-cadastro.md) |
+| `POST` | `/api/rh/cadastro/alteracoes/validar-lote` | CGP | Validar alterações em lote | [rh-cadastro.md](endpoints/rh-cadastro.md) |
 | `GET` | `/api/rh/folha-ponto[/competencias]` | Autenticado (só a própria) | Folha de ponto em PDF / competências disponíveis | [rh-folha-ponto.md](endpoints/rh-folha-ponto.md) |
 | `GET` `PUT` | `/api/rh/parametros` | Leitura: autenticado; gravação: CGP | Regras de agendamento | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` | `/api/mensagens/resumo` | Autenticado | Contador do sino e janela a abrir | [mensagens.md](endpoints/mensagens.md) |

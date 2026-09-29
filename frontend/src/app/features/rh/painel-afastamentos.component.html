@@ -1,6 +1,15 @@
 <app-cabecalho-rh titulo="Painel de afastamentos" [trilha]="['Painel']"
                   descricao="Férias e licenças-prêmio no calendário. Amarelo: aguardando aprovação; verde: aprovado." />
 
+@if (painel()?.cgp) {
+  <div class="barra-acoes-rh">
+    <button type="button" class="acao-primaria" (click)="lancando.set(true)"><span>+</span> Lançar afastamento</button>
+    <button type="button" class="acao-secundaria" (click)="saldos('xlsx')">Relatório de saldos (Excel)</button>
+    <button type="button" class="acao-secundaria" (click)="saldos('pdf')">Relatório de saldos (PDF)</button>
+  </div>
+  <app-lancamento-afastamento [(aberta)]="lancando" (lancado)="carregar()" />
+}
+
 @if (aprovacoes().length) {
   <section class="cartao-dados" aria-labelledby="titulo-aprovacoes">
     <header><div><h2 id="titulo-aprovacoes">Aguardando sua aprovação ({{ aprovacoes().length }})</h2></div></header>

@@ -132,6 +132,8 @@ export interface ParametrosRh {
   aviso_ferias_ativo: boolean;
   /** Períodos não podem começar em feriado ou ponto facultativo cadastrado. */
   inicio_vedado_feriado: boolean;
+  /** Só leitura: pessoas no setor da CGP (0 = ninguém recebe os avisos da CGP). */
+  membros_cgp?: number | null;
   atualizado_por_nome?: string | null;
   atualizado_em?: string | null;
 }
@@ -207,4 +209,24 @@ export interface CompetenciaFolha {
   valor: string;
   rotulo: string;
   atual: boolean;
+}
+
+/** Prévia ou resultado da carga de dados funcionais por planilha. */
+export interface ResultadoImportacaoRh {
+  total: number;
+  com_mudanca: number;
+  com_erro: number;
+  gravado: boolean;
+  linhas: { linha: number; login: string; nome: string; mudancas: string[]; erros: string[] }[];
+}
+
+/** Afastamento lançado pela CGP em nome do servidor. */
+export interface LancamentoAfastamento {
+  usuario_id: number;
+  tipo: TipoAfastamento;
+  inicio: string;
+  fim: string;
+  situacao: 'aprovado' | 'gozado';
+  justificativa: string;
+  ignorar_saldo: boolean;
 }

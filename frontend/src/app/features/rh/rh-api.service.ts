@@ -8,7 +8,7 @@ import { Observable } from 'rxjs';
 import { ambiente } from '../../../environments/ambiente';
 import { baixarArquivo } from '../../shared/utilitarios/download';
 import {
-  Afastamento, CadastroRh, CompetenciaFolha, DadosFuncionais, Feriado, MeusAfastamentos, PainelAfastamentos, PapeisRh, ParametrosRh, TipoAfastamento, UsuarioPendente,
+  Afastamento, CadastroRh, CompetenciaFolha, DadosFuncionais, Feriado, LancamentoAfastamento, ResultadoImportacaoRh, MeusAfastamentos, PainelAfastamentos, PapeisRh, ParametrosRh, TipoAfastamento, UsuarioPendente,
 } from './rh.models';
 
 /** Filtros do painel de afastamentos. */
@@ -37,6 +37,11 @@ export class RhApiService {
 
   cadastro(usuarioId: number): Observable<CadastroRh> {
     return this.http.get<CadastroRh>(`${this.base}/cadastro/usuarios/${usuarioId}`);
+  }
+
+  /** Valida várias alterações de uma vez (as que falharem voltam em `erros`). */
+  validarLote(ids: string[]): Observable<{ validadas: number; erros: { id: string; detalhe: string }[] }> {
+    return this.http.post<{ validadas: number; erros: { id: string; detalhe: string }[] }>(`${this.base}/cadastro/alteracoes/validar-lote`, { ids });
   }
 
   validar(alteracaoId: string): Observable<CadastroRh> {
@@ -80,6 +85,28 @@ export class RhApiService {
   /** Baixa a folha de ponto do próprio usuário (PDF) na competência AAAA-MM. */
   folhaPonto(competencia: string) {
     return baixarArquivo(this.http, `${this.base}/folha-ponto?competencia=${competencia}`, `folha-ponto-${competencia}.pdf`);
+  }
+
+  /** Modelo da carga de dados funcionais (servidores ativos com os valores atuais). */
+  modeloFuncionais() {
+    return baixarArquivo(this.http, `${this.base}/cadastro/funcionais/importacao/modelo`, 'dados-funcionais-rh.xlsx');
+  }
+
+  /** Confere a planilha sem gravar (`gravar = false`) ou importa (`gravar = true`). */
+  importarFuncionais(arquivo: File, gravar: boolean): Observable<ResultadoImportacaoRh> {
+    const corpo = new FormData();
+    corpo.append('arquivo', arquivo);
+    return this.http.post<ResultadoImportacaoRh>(`${this.base}/cadastro/funcionais/importacao${gravar ? '' : '/previa'}`, corpo);
+  }
+
+  /** CGP: lança férias ou licença-prêmio em nome do servidor (já aprovada ou gozada). */
+  lancar(dados: LancamentoAfastamento): Observable<Afastamento> {
+    return this.http.post<Afastamento>(`${this.base}/afastamentos/lancamento`, dados);
+  }
+
+  /** CGP: relatório de saldos de todos os servidores. */
+  relatorioSaldos(formato: 'pdf' | 'xlsx') {
+    return baixarArquivo(this.http, `${this.base}/relatorios/saldos?formato=${formato}`, `saldos-ferias-lp.${formato}`);
   }
 
   parametros(): Observable<ParametrosRh> {

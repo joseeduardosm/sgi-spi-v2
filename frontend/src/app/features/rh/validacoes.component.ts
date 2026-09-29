@@ -2,13 +2,14 @@
 // Este arquivo serve para a tela da CGP validar ou recusar as alterações de cadastro e preencher os dados funcionais.
 
 import { DatePipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { DadosFuncionaisComponent } from './dados-funcionais.component';
+import { ImportacaoFuncionaisComponent } from './importacao-funcionais.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { UsuariosApiService } from '../usuarios/usuarios-api.service';
 import { CabecalhoRhComponent } from './cabecalho-rh.component';
@@ -21,7 +22,7 @@ import { AlteracaoCadastral, CadastroRh, UsuarioPendente } from './rh.models';
  */
 @Component({
   selector: 'app-validacoes',
-  imports: [FormsModule, DatePipe, CabecalhoRhComponent, SeletorUsuariosComponent, DadosFuncionaisComponent],
+  imports: [FormsModule, DatePipe, CabecalhoRhComponent, SeletorUsuariosComponent, DadosFuncionaisComponent, ImportacaoFuncionaisComponent],
   templateUrl: './validacoes.component.html',
 })
 export class ValidacoesComponent implements OnInit {
@@ -31,8 +32,33 @@ export class ValidacoesComponent implements OnInit {
   private readonly rota = inject(ActivatedRoute);
 
   protected readonly pendencias = signal<UsuarioPendente[] | null>(null);
+  // Validação em lote: filtro por campo e usuários marcados na lista
+  protected readonly filtroCampo = signal('');
+  protected readonly marcados = signal<number[]>([]);
+  /** Campos com alteração pendente (para o filtro), com a quantidade. */
+  protected readonly campos = computed(() => {
+    const contagem = new Map<string, { rotulo: string; total: number }>();
+    for (const p of this.pendencias() ?? []) {
+      for (const a of p.alteracoes) contagem.set(a.campo, { rotulo: a.rotulo, total: (contagem.get(a.campo)?.total ?? 0) + 1 });
+    }
+    return [...contagem.entries()].map(([campo, v]) => ({ campo, ...v })).sort((x, y) => x.rotulo.localeCompare(y.rotulo));
+  });
+  /** Usuários com alguma alteração no campo escolhido (ou todos). */
+  protected readonly pendenciasFiltradas = computed(() => {
+    const campo = this.filtroCampo();
+    return (this.pendencias() ?? []).filter((p) => !campo || p.alteracoes.some((a) => a.campo === campo));
+  });
+  /** Alterações que "Validar selecionadas" vai validar: as dos usuários marcados, só do campo filtrado (se houver). */
+  protected readonly idsSelecionados = computed(() => {
+    const campo = this.filtroCampo();
+    const marcados = new Set(this.marcados());
+    return this.pendenciasFiltradas()
+      .filter((p) => marcados.has(p.usuario_id))
+      .flatMap((p) => p.alteracoes.filter((a) => !campo || a.campo === campo).map((a) => a.id));
+  });
   protected readonly cadastro = signal<CadastroRh | null>(null);
   protected readonly semPermissao = signal(false);
+  protected readonly importando = signal(false);
   // Recusa em andamento
   protected readonly recusando = signal<AlteracaoCadastral | null>(null);
   protected justificativa = '';
@@ -77,6 +103,47 @@ export class ValidacoesComponent implements OnInit {
       next: (c) => {
         this.aplicar(c);
         this.carregarPendencias();
+      },
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível validar'),
+    });
+  }
+
+  protected marcar(usuarioId: number, marcado: boolean): void {
+    this.marcados.update((ids) => (marcado ? [...ids, usuarioId] : ids.filter((x) => x !== usuarioId)));
+  }
+
+  protected marcarTodos(marcado: boolean): void {
+    this.marcados.set(marcado ? this.pendenciasFiltradas().map((p) => p.usuario_id) : []);
+  }
+
+  protected async validarSelecionadas(): Promise<void> {
+    const ids = this.idsSelecionados();
+    if (!ids.length) return;
+    const campo = this.campos().find((c) => c.campo === this.filtroCampo())?.rotulo;
+    const ok = await this.dialogos.confirmar({
+      titulo: 'Validar em lote?',
+      mensagem: `${ids.length} alteração(ões) de ${this.marcados().filter((id) => this.pendenciasFiltradas().some((p) => p.usuario_id === id)).length} usuário(s)` +
+        (campo ? `, só do campo "${campo}"` : '') + ' passam a valer.',
+      rotuloConfirmar: 'Validar',
+    });
+    if (ok) this.executarLote(ids);
+  }
+
+  /** "Validar todas deste usuário": todas as pendências do cadastro aberto. */
+  protected validarTodasDoUsuario(c: CadastroRh): void {
+    this.executarLote(c.pendentes.map((a) => a.id), c.usuario_id);
+  }
+
+  private executarLote(ids: string[], reabrir?: number): void {
+    this.dialogos.executar(this.api.validarLote(ids), 'Validando…').subscribe({
+      next: (r) => {
+        this.marcados.set([]);
+        this.carregarPendencias();
+        const aberto = reabrir ?? this.cadastro()?.usuario_id;
+        if (aberto) this.abrir(aberto);
+        if (r.erros.length) {
+          this.dialogos.avisar(`${r.validadas} validada(s), ${r.erros.length} não validada(s)`, r.erros.map((e) => e.detalhe).join('\n'));
+        }
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível validar'),
     });

@@ -6,6 +6,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CabecalhoRhComponent } from './cabecalho-rh.component';
+import { LancamentoAfastamentoComponent } from './lancamento-afastamento.component';
 import { FiltrosPainel, RhApiService } from './rh-api.service';
 import { Afastamento, PainelAfastamentos, ROTULOS_STATUS, ROTULOS_TIPO, SIGLAS_TIPO } from './rh.models';
 
@@ -27,7 +28,7 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-painel-afastamentos',
-  imports: [FormsModule, CabecalhoRhComponent],
+  imports: [FormsModule, CabecalhoRhComponent, LancamentoAfastamentoComponent],
   templateUrl: './painel-afastamentos.component.html',
 })
 export class PainelAfastamentosComponent implements OnInit {
@@ -87,6 +88,15 @@ export class PainelAfastamentosComponent implements OnInit {
 
   protected data(texto: string): string {
     return dataBr(texto);
+  }
+
+  protected readonly lancando = signal(false);
+
+  /** CGP: relatório de saldos de férias e LP de todos os servidores. */
+  protected saldos(formato: 'pdf' | 'xlsx'): void {
+    this.dialogos.executar(this.api.relatorioSaldos(formato), 'Gerando o relatório de saldos…').subscribe({
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o relatório'),
+    });
   }
 
   protected exportar(formato: 'pdf' | 'xlsx'): void {

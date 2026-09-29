@@ -46,6 +46,38 @@ class UsuarioPendente(BaseModel):
     alteracoes: list[AlteracaoLeitura]
 
 
+class ValidacaoLote(BaseModel):
+    """Alterações a validar de uma vez (ex.: todas as de "Departamento", ou todas de um usuário)."""
+    ids: list[uuid.UUID] = Field(..., min_length=1, max_length=1000)
+
+
+class ErroLote(BaseModel):
+    id: uuid.UUID
+    detalhe: str
+
+
+class ResultadoValidacaoLote(BaseModel):
+    validadas: int = Field(..., description="Quantidade validada.")
+    erros: list[ErroLote] = Field(default_factory=list, description="Alterações não validadas, com o motivo (as demais seguem valendo).")
+
+
+class LinhaImportacaoRh(BaseModel):
+    linha: int = Field(..., description="Linha da planilha.")
+    login: str
+    nome: str
+    mudancas: list[str] = Field(default_factory=list, description="Campos que vão mudar (vazio: nada muda).")
+    erros: list[str] = Field(default_factory=list)
+
+
+class ResultadoImportacaoRh(BaseModel):
+    """Prévia ou resultado da carga de dados funcionais."""
+    total: int
+    com_mudanca: int
+    com_erro: int
+    gravado: bool = Field(..., description="`false` na prévia; `true` depois da importação.")
+    linhas: list[LinhaImportacaoRh]
+
+
 class Recusa(BaseModel):
     justificativa: str = Field(..., min_length=1, max_length=2000)
     valor_corrigido: str | None = Field(None, max_length=500, description="Valor que passa a valer (superior imediato: id; data: AAAA-MM-DD).")
@@ -157,6 +189,17 @@ class PedidoAfastamento(BaseModel):
     tipo: TipoAfastamento
     inicio: date
     fim: date
+
+
+class LancamentoAfastamento(BaseModel):
+    """Afastamento lançado pela CGP em nome do servidor (já aprovado ou gozado)."""
+    usuario_id: int
+    tipo: TipoAfastamento
+    inicio: date
+    fim: date
+    situacao: Literal["aprovado", "gozado"] = Field(..., description="`gozado` só para períodos já encerrados.")
+    justificativa: str = Field(..., min_length=3, max_length=2000, description="Motivo do lançamento (vai no histórico e no e-mail ao servidor).")
+    ignorar_saldo: bool = Field(False, description="Lança mesmo sem saldo (ex.: férias anteriores ao sistema).")
 
 
 class Decisao(BaseModel):
@@ -317,6 +360,7 @@ class ParametrosLeitura(BaseModel):
     folga_aviso_ferias_dias: int = Field(..., description="Folga do aviso de expiração: 1º aviso = saldo + antecedência mínima + folga antes do fim.")
     aviso_ferias_ativo: bool
     inicio_vedado_feriado: bool = Field(False, description="Períodos não podem começar em feriado ou ponto facultativo cadastrado.")
+    membros_cgp: int | None = Field(None, description="Pessoas no setor da CGP (0 = ninguém recebe os avisos destinados à CGP). Só leitura.")
     atualizado_por_nome: str | None = None
     atualizado_em: datetime | None = None
 

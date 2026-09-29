@@ -17,6 +17,10 @@ import { DIAS_SEMANA, ParametrosRh } from './rh.models';
   template: `
     <app-cabecalho-rh titulo="Parâmetros do RH" [trilha]="['Parâmetros']" descricao="Regras de agendamento de férias e licença-prêmio. Valem para os próximos pedidos." />
     @if (p(); as x) {
+      @if (x.membros_cgp === 0) {
+        <p class="aviso-bloco erro">Ninguém está no setor da CGP (Coordenadoria de Gestão de Pessoas): os avisos destinados à CGP
+          (alterações de cadastro, pedidos, folha de ponto bloqueada) não chegam a ninguém. Inclua as pessoas da CGP em Setores.</p>
+      }
       <section class="cartao-dados" aria-labelledby="titulo-parametros-rh">
         <header><div><h2 id="titulo-parametros-rh">Regras de agendamento</h2>
           @if (x.atualizado_por_nome) { <small>Atualizado por {{ x.atualizado_por_nome }} em {{ x.atualizado_em | date: 'dd/MM/yyyy HH:mm' }}</small> }</div></header>

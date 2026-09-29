@@ -43,7 +43,11 @@ Tag no OpenAPI: **Módulo RH**. Implementação:
 | `GET /api/rh/cadastro/usuarios/{usuario_id}` | `CadastroRh`: `perfil` (valores em vigor para exibir), `pendentes[]`, `historico[]`, `funcionais` |
 | `POST /api/rh/cadastro/alteracoes/{alteracao_id}/validar` | Valida → `CadastroRh`. `400` se já analisada; `404` se não existe |
 | `POST /api/rh/cadastro/alteracoes/{alteracao_id}/recusar` | `{ "justificativa": "…", "valor_corrigido": "…" }` → `CadastroRh`. Justificativa obrigatória (`422`); correção conferida (e-mail válido, data `AAAA-MM-DD`, superior sem ciclo) |
+| `POST /api/rh/cadastro/alteracoes/validar-lote` | `{ "ids": [...] }` (1 a 1000) → `ResultadoValidacaoLote` `{ validadas, erros: [{ id, detalhe }] }`. Cada alteração é validada à parte: a que não puder (já analisada, superior em ciclo) volta em `erros` sem impedir as demais |
 | `PUT /api/rh/cadastro/usuarios/{usuario_id}/funcionais` | Dados funcionais (abaixo) → `CadastroRh` |
+| `GET /api/rh/cadastro/funcionais/importacao/modelo` | Planilha XLSX com todos os servidores ativos (menos a conta root) e os valores atuais, mais a aba "Instruções" |
+| `POST /api/rh/cadastro/funcionais/importacao/previa` | `multipart/form-data` (`arquivo` .xlsx) → `ResultadoImportacaoRh`, sem gravar |
+| `POST /api/rh/cadastro/funcionais/importacao` | Mesma planilha → grava tudo numa transação **só se não houver nenhum erro** (senão `400`, nada gravado) |
 | `PUT /api/rh/cadastro/usuarios/{usuario_id}/periodo-vigente` | `{ "dias_creditados": 0..365 }` → `CadastroRh`. Ajusta os dias do período aquisitivo vigente (origem `ajuste_cgp`); `400` sem início informado. Auditado como `rh.ferias.ajuste_periodo` |
 
 **`AlteracaoLeitura`:**
@@ -80,6 +84,15 @@ A leitura (`funcionais` em `CadastroRh`) traz também `periodos[]` (`PeriodoLeit
 - O autorizador e o substituto não podem ser o próprio usuário e precisam estar ativos (`400`).
 - Operação auditada como `rh.cadastro.funcionais`.
 
+### Carga em lote dos dados funcionais (planilha)
+
+- **Colunas:** Login (obrigatório; identifica a linha), Nome e Setor (informativos), Autorizador (login), Substituto (login), Topo da hierarquia (Sim/Não), Início do período aquisitivo (dd/mm), Dias disponíveis no período vigente, Exercício da LP, Dias de LP, Jornada (horas/semana), Regime de plantão (Sim/Não), Horário de trabalho ("9:00 às 18:00"), Horário de estudante (Sim/Não), Intervalo de almoço e descanso ("12:00 às 13:00"), RG/CIN nº e RS/PV nº.
+- **Célula vazia mantém o valor atual**: a planilha nunca apaga dados. Reenviar o modelo sem mexer não altera ninguém.
+- **Dias disponíveis no período vigente:** ajusta os dias creditados do período para que sobrem exatamente esses dias, descontando o que já está agendado no sistema (origem `ajuste_cgp`). Só conta como alteração se diferir do saldo atual ou se o início do período mudar.
+- **Validações:** as mesmas da tela (logins existentes e ativos, ninguém autorizador de si mesmo, dd/mm válido, horários em pares, jornada de 1 a 80, documentos). Os erros vêm por linha na prévia.
+- **`ResultadoImportacaoRh`:** `total`, `com_mudanca`, `com_erro`, `gravado` e `linhas[]` (`linha`, `login`, `nome`, `mudancas[]`, `erros[]`).
+- **Auditoria:** `rh.cadastro.funcionais` por servidor, `rh.ferias.ajuste_periodo` quando há dias disponíveis e `rh.cadastro.funcionais_lote` do lote.
+
 ## Consumo no Angular
 
 - **Meu perfil** (`/perfil`):
@@ -88,6 +101,8 @@ A leitura (`funcionais` em `CadastroRh`) traz também `periodos[]` (`PeriodoLeit
   - selo por campo: "Pendente de validação da CGP: …" ou "Validado/Corrigido por … em …";
   - os campos pendentes aparecem com o valor proposto, de modo que confirmar de novo mantém a proposta.
 - **Validações** (`/rh/validacoes`, só CGP):
+  - botão "Importar planilha de dados funcionais" (`importacao-funcionais.component.ts`): baixar o modelo, escolher a planilha (a prévia sai na hora) e importar, só sem erros;
+  - validação em lote: filtro por campo (ex.: só "Departamento", com a quantidade), caixas por usuário, "Marcar todos" e "Validar selecionadas (N)"; no cadastro aberto, "Validar todas deste usuário";
   - lista de pendências e busca de qualquer usuário;
   - comparação em vigor × proposto com Validar e Recusar (justificativa + correção);
   - dados funcionais (o autorizador vem pré-selecionado com o superior imediato);

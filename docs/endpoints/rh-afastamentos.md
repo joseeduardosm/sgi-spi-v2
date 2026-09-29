@@ -22,6 +22,8 @@ Férias (`ferias`) e licença-prêmio (`licenca_premio`) são administradas junt
 | Enviar os avisos de férias a vencer | `aviso_ferias_ativo` | sim |
 | Períodos não podem começar em feriado ou ponto facultativo cadastrado | `inicio_vedado_feriado` | não |
 
+A leitura dos parâmetros traz também `membros_cgp` (só leitura): a quantidade de pessoas no setor da CGP. Com `0`, a tela Parâmetros alerta que os avisos destinados à CGP não chegam a ninguém.
+
 ## Feriados e pontos facultativos (`/api/rh/feriados`)
 
 Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviço `servico_feriados.py`): uma data só pode ter um registro. Aparecem no calendário de férias, no eixo mensal do painel e na folha de ponto; com `inicio_vedado_feriado` ligado, férias e licença-prêmio não podem começar nessas datas (`400` "O período não pode começar em feriado ou ponto facultativo (03/11/2026: Descrição).").
@@ -86,6 +88,8 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
 | Método e caminho | Quem | Descrição |
 |---|---|---|
 | `GET /api/rh/afastamentos/meus?exercicio=` | Todos | `MeusAfastamentos`: `periodo_vigente` (`PeriodoAtual`, nulo sem início informado), `proximo_periodo` (`ProximoPeriodo`), `saldos.licenca_premio` (`saldo`, `usado`, `disponivel`), `afastamentos[]` (com `eventos`) e `parametros` |
+| `POST /api/rh/afastamentos/lancamento` | CGP | `LancamentoAfastamento` → `201 AfastamentoLeitura`: lança em nome do servidor (detalhes abaixo) |
+| `GET /api/rh/relatorios/saldos?formato=xlsx\|pdf` | CGP | Relatório de saldos de todos os servidores (detalhes abaixo) |
 | `POST /api/rh/afastamentos` | Todos | `{ "tipo", "inicio", "fim" }` → `201 AfastamentoLeitura`; `400` com a regra violada |
 | `PUT /api/rh/afastamentos/{id}` | Dono (no prazo) ou CGP | Alteração (ver acima) |
 | `POST /api/rh/afastamentos/{id}/cancelar` | Dono (no prazo) ou CGP | `{ "justificativa" }` opcional |
@@ -107,6 +111,25 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
 - situação: `status`, `solicitado_em`, `decidido_por_nome`, `decidido_em`, `justificativa`, `substitui_id`;
 - permissões: `pode_decidir`, `pode_alterar` (dono, pendente/aprovado, no prazo);
 - `eventos[]`.
+
+### Lançamento pela CGP
+
+Para férias ou licença-prêmio já combinadas ou gozadas fora do sistema, inclusive retroativas.
+- **`LancamentoAfastamento`:** `usuario_id`, `tipo`, `inicio`, `fim`, `situacao` (`aprovado` ou `gozado`), `justificativa` (3 a 2000) e `ignorar_saldo` (padrão `false`).
+- **Não se aplicam:** antecedência mínima, dia vedado, mínimo de dias e início em feriado.
+- **Continuam valendo:** a sobreposição com outro afastamento ativo e o saldo. As férias debitam o período aquisitivo que contém o início, mesmo anterior. `ignorar_saldo` lança mesmo sem saldo, por exemplo em períodos anteriores ao sistema.
+- `gozado` só para períodos já encerrados (`400` caso contrário).
+- O afastamento nasce decidido pela CGP. O histórico registra "Lançado pela CGP: [motivo]", o servidor recebe e-mail e a auditoria é `rh.afastamento.lancar`.
+- Sem início do período aquisitivo (férias): `400`.
+
+### Relatório de saldos (CGP)
+
+Uma linha por servidor ativo, menos a conta root:
+- servidor, login, setor e autorizador;
+- período aquisitivo vigente: creditados, agendados, disponíveis, expira em e "pedir até";
+- licença-prêmio do ano: saldo, usado e disponível.
+
+Quem ainda não tem o início do período aquisitivo aparece como "não informado". Formatos XLSX (com observações) e PDF (paisagem). Serve para conferir a carga inicial e acompanhar os saldos.
 
 ### Painel
 
@@ -136,7 +159,16 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
   - filtros e alertas de setor;
   - uma linha por período, "[F]/[LP] Nome – Setor", com faixa amarela (pendente) ou verde (aprovado), em visão mensal ou anual;
   - bloco "Férias a vencer";
+  - para a CGP: "Lançar afastamento" (`lancamento-afastamento.component.ts`) e "Relatório de saldos (Excel/PDF)";
   - exportação em PDF e Excel.
 - **`/rh/parametros` (CGP):** edição das regras, com a fórmula do aviso explicada na tela e a caixa "Períodos não podem começar em feriado ou ponto facultativo".
 - **`/rh/feriados` (todos; atalho "Feriados"):** lista do ano com dia da semana, tipo e abrangência; a CGP cadastra, edita e exclui em janela.
 - **Destaques:** no calendário de férias, os feriados e pontos facultativos têm fundo azulado (descrição no título) e entram na legenda; no painel mensal, o dia fica marcado no eixo.
+
+## Dados fictícios para demonstração
+
+`scripts/dados-ficticios-rh.py` (na pasta `backend/`: `--criar`, `--remover`, ou sem opção para ver a situação) cria:
+- 12 pessoas fictícias (login `ficticio.*`, nome "[FICTÍCIO] …", sem e-mail e sem senha) em setores reais;
+- dados funcionais e pedidos aguardando aprovação, aprovados e gozados, com sobreposição num setor e férias a vencer.
+
+A remoção apaga as pessoas fictícias e, em cascata, tudo o que é delas. Nenhum servidor real é tocado e nenhum e-mail é enviado.

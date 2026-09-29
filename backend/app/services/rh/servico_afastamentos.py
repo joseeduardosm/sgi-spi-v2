@@ -250,6 +250,62 @@ def _vincular_periodo(sessao: Session, usuario_id: int, tipo: str, inicio: date)
     return servico_periodos.obter(sessao, usuario_id, p_inicio, p_fim).id
 
 
+def lancar(sessao: Session, autor: Usuario, usuario_id: int, tipo: str, inicio: date, fim: date, situacao: str,
+           justificativa: str, ignorar_saldo: bool = False) -> Afastamento:
+    """A CGP lança, em nome do servidor, férias ou licença-prêmio já combinadas ou gozadas fora do sistema.
+
+    Não há antecedência mínima, dia vedado nem mínimo de dias (inclusive retroativo); continuam valendo a
+    sobreposição e o saldo (este pode ser ignorado, por exemplo em períodos anteriores ao sistema). O pedido já
+    nasce aprovado (ou gozado), com o histórico "lançado pela CGP", e o servidor recebe e-mail.
+    """
+    exigir_cgp(sessao, autor)
+    usuario = sessao.get(Usuario, usuario_id)
+    if usuario is None:
+        raise ErroAfastamento("Usuário não encontrado.", 404, "nao_encontrado")
+    if fim < inicio:
+        raise ErroAfastamento("A data final deve ser igual ou posterior à inicial.")
+    if situacao == "gozado" and fim >= hoje():
+        raise ErroAfastamento("Só períodos já encerrados podem ser lançados como gozados; use \"aprovado\" para os demais.")
+    dias = (fim - inicio).days + 1
+    for outro in sessao.scalars(select(Afastamento).where(Afastamento.usuario_id == usuario.id, Afastamento.status.in_(ATIVOS))):
+        if outro.inicio <= fim and inicio <= outro.fim:
+            raise ErroAfastamento(
+                f"O período se sobrepõe a {ROTULOS_TIPO[outro.tipo]} de {_data(outro.inicio)} a {_data(outro.fim)} ({ROTULOS_STATUS[outro.status].lower()})."
+            )
+    periodo_id = None
+    if tipo == "ferias":
+        dados = dados_funcionais(sessao, usuario.id)
+        if not dados or not dados.inicio_aquisitivo_dia:
+            raise ErroAfastamento("Informe antes o início do período aquisitivo deste servidor (dados funcionais).")
+        p_inicio, p_fim = servico_periodos.limites(dados.inicio_aquisitivo_dia, dados.inicio_aquisitivo_mes, inicio)
+        periodo = servico_periodos.obter(sessao, usuario.id, p_inicio, p_fim)
+        periodo_id = periodo.id
+        disponivel = periodo.dias_creditados - servico_periodos.usado(sessao, usuario.id, p_inicio, p_fim)
+        if not ignorar_saldo and dias > disponivel:
+            raise ErroAfastamento(
+                f"Saldo de férias do período aquisitivo {_data(p_inicio)} a {_data(p_fim)} insuficiente: {max(disponivel, 0)} dia(s) "
+                f"disponível(is), lançamento de {dias}. Marque \"ignorar saldo\" se o período é anterior ao sistema."
+            )
+    elif not ignorar_saldo:
+        disponivel = saldos(sessao, usuario.id, inicio.year)["licenca_premio"].disponivel
+        if dias > disponivel:
+            raise ErroAfastamento(f"Saldo de licença-prêmio insuficiente: {max(disponivel, 0)} dia(s) disponível(is) em {inicio.year}, lançamento de {dias}.")
+    a = Afastamento(usuario_id=usuario.id, tipo=tipo, inicio=inicio, fim=fim, dias=dias, exercicio=inicio.year, status=situacao,
+                    periodo_aquisitivo_id=periodo_id, solicitado_em=agora_utc(), decidido_por_id=autor.id, decidido_por_nome=_nome(autor),
+                    decidido_em=agora_utc())
+    _evento(a, None, "aprovado", autor, f"Lançado pela CGP: {justificativa}")
+    if situacao == "gozado":
+        _evento(a, "aprovado", "gozado", autor)
+    sessao.add(a)
+    sessao.flush()
+    _avisar_usuario(sessao, usuario.id, a, f"{ROTULOS_TIPO[a.tipo]} lançada pela CGP",
+                    f"A CGP lançou {_descricao(a)} no seu registro ({ROTULOS_STATUS[situacao].lower()}).\n\nMotivo: {justificativa}")
+    auditar(sessao, autor.login, "rh.afastamento.lancar", _descricao(a), autor_id=autor.id, alvo_tipo="afastamento", alvo_id=a.id,
+            dados={"usuario_id": usuario.id, "situacao": situacao, "ignorar_saldo": ignorar_saldo, "justificativa": justificativa})
+    sessao.commit()
+    return a
+
+
 def agendar(sessao: Session, usuario: Usuario, tipo: str, inicio: date, fim: date) -> Afastamento:
     dias = validar_pedido(sessao, usuario, tipo, inicio, fim)
     a = Afastamento(usuario_id=usuario.id, tipo=tipo, inicio=inicio, fim=fim, dias=dias, exercicio=inicio.year, status="pendente",

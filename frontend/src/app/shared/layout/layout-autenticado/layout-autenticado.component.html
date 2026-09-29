@@ -40,7 +40,8 @@
             <div class="menu-usuario-lista" role="menu">
               <div><strong>{{ usuario.nome_completo }}</strong><small>{{ usuario.papeis.length ? usuario.papeis.join(', ') : 'Usuário' }} · &#64;{{ usuario.login }}</small></div>
               <button type="button" role="menuitem" (click)="abrirPerfil()"><app-icone nome="usuario" /> Meu perfil</button>
-              @if (!usuario.perfil_restrito) {
+              <!-- A conta root não tem vínculo funcional: sem folha de ponto -->
+              @if (!usuario.perfil_restrito && !usuario.conta_root) {
                 <button type="button" role="menuitem" (click)="abrirFolhaPonto()"><app-icone nome="arquivo" /> Folha de ponto</button>
               }
               <button class="acao-sair" type="button" role="menuitem" (click)="sair()"><app-icone nome="sair" /> Sair</button>

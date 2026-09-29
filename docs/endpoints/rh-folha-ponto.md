@@ -37,19 +37,26 @@ A geração é auditada como `rh.folha_ponto` (competência).
 
 ## Conteúdo do PDF
 
-**1ª página**
-- **Cabeçalho:** brasão, "GOVERNO DO ESTADO DE SÃO PAULO / SECRETARIA DE PARCERIAS EM INVESTIMENTOS", o **setor** do usuário (Departamento do perfil) e "REGISTRO DE PONTO – OUTUBRO/2026".
-- **Identificação:**
-  - servidor (nome em maiúsculas), RG/CIN nº, RS/PV nº, função (cargo do perfil);
-  - jornada ("40 horas/semanais"), regime de plantão (Sim/Não);
-  - horário de trabalho ("das 9:00 às 18:00"), horário de estudante (Sim/Não), intervalo de almoço e descanso ("das 12:00 às 13:00").
-  - Os campos além de nome e cargo vêm dos dados funcionais da CGP ([rh-cadastro.md](rh-cadastro.md)); o que não foi informado sai em branco.
-- **Grade diária** (uma linha por dia): Dia | Entrada (Hora, Assinatura) | Saída (Hora, Assinatura) | Observações | Visto do Superior Imediato. Marcações, nesta prioridade:
-  1. sábado e domingo: "--------- SÁBADO"/"DOMINGO";
-  2. feriado ou ponto facultativo cadastrado: "--------- FERIADO"/"PONTO FACULTATIVO", com a descrição em Observações;
-  3. férias ou licença-prêmio **aprovadas ou gozadas**: "--------- FÉRIAS"/"LICENÇA-PRÊMIO", com o período em Observações no primeiro dia do mês em que aparecem. Pedidos pendentes, recusados e cancelados não entram.
+A4 retrato, **frente e verso**, conservando a estrutura do modelo `apoio/10-2026 - FOLHA DE FREQUENCIA.doc`: a mesma ordem de blocos, os mesmos textos e rótulos e a mesma disposição das colunas. O sistema preenche só o setor, a competência, a identificação e as marcações dos dias.
 
-**2ª página:** identificação resumida, quadro "Informações financeiras" em branco (férias, média de GTN, ACA, GTN, serviço extraordinário, substituição eventual, vale-transporte – CLT), assinaturas do servidor e do superior com data, e o quadro "Consolidação" com a assinatura do superior imediato ou do responsável.
+**Frente: a tabela do mês inteira**
+- **Cabeçalho em caixa** (igual na frente e no verso):
+  - à esquerda, o brasão com "GOVERNO DO ESTADO DE SÃO PAULO / Secretaria de Parcerias em Investimentos";
+  - à direita, "GOVERNO DO ESTADO DE SÃO PAULO", "SECRETARIA DE PARCERIAS EM INVESTIMENTOS", o **setor** do usuário (Departamento do perfil, no lugar de "Unidade") e "REGISTRO DE PONTO OUTUBRO/2026".
+- **Identificação** em duas colunas, com o rótulo em negrito:
+  - esquerda: Servidor (nome em maiúsculas), Função (cargo do perfil), Jornada de Trabalho ("40 horas/semanais"), Horário de Trabalho ("das 9:00 às 18:00"), Intervalo de Almoço e Descanso ("das 12:00 às 13:00");
+  - direita: RG/CIN nº, RS/PV nº, Regime de Plantão (Sim/Não), Horário de Estudante (Sim/Não).
+  - Os campos além de nome e cargo vêm dos dados funcionais da CGP ([rh-cadastro.md](rh-cadastro.md)); o que não foi informado sai em branco.
+- **Tabela diária** (todos os dias do mês): Dia | Entrada (Hora, Assinatura) | Saída (Hora, Assinatura) | Observações | Visto do Superior Imediato. Nas linhas marcadas, "---------" na Hora e a marca em **vermelho** na Assinatura, de Entrada e de Saída, nesta prioridade:
+  1. sábado e domingo: SÁBADO/DOMINGO;
+  2. feriado ou ponto facultativo cadastrado: FERIADO/PONTO FACULTATIVO, com a descrição em Observações;
+  3. férias ou licença-prêmio **aprovadas ou gozadas**: FÉRIAS/LICENÇA-PRÊMIO, com o período em Observações no primeiro dia do mês em que aparecem. Pedidos pendentes, recusados e cancelados não entram.
+- **Informações financeiras** logo abaixo da tabela, em branco para preencher à mão:
+  - FÉRIAS, MÉDIA de GTN, ACA (entre 8 e 12 / superior a 12 horas diárias), GTN e percentual;
+  - SERVIÇO EXTRAORDINÁRIO (20% / 10%), SUBSTITUIÇÃO EVENTUAL (cargo/função substituído), VALE TRANSPORTE - CLT (Sim/Não).
+- **Assinaturas:** do servidor e do superior imediato, com a data.
+
+**Verso: só as anotações.** O mesmo cabeçalho, "CONSOLIDAÇÃO" com 42 linhas pautadas, "Data ______/______/_______" e a assinatura do superior imediato ou do responsável.
 
 ## Consumo no Angular
 

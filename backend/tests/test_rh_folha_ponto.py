@@ -53,13 +53,18 @@ def test_folha_com_identificacao_feriados_e_ferias_aprovadas(cliente, equipe):  
     paginas = _texto(r.content)
     assert len(paginas) == 2
     primeira = paginas[0]
-    for trecho in ("GOVERNO DO ESTADO DE SÃO PAULO", "Diretoria A", "REGISTRO DE PONTO – OUTUBRO/2026", "ANA SOUZA", "12.345.678-9",
+    for trecho in ("GOVERNO DO ESTADO DE SÃO PAULO", "Diretoria A", "REGISTRO DE PONTO OUTUBRO/2026", "ANA SOUZA", "12.345.678-9",
                    "1.234.567/8", "40 horas/semanais", "das 9:00 às 18:00", "das 12:00 às 13:00", "Nossa Senhora Aparecida",
                    "PONTO FACULTATIVO", "Dia do Servidor Público", "19/10/2026 a 23/10/2026"):
         assert trecho in primeira, trecho
     assert primeira.count("SÁBADO") == 2 * 5 and primeira.count("DOMINGO") == 2 * 4  # outubro/2026: 5 sábados, 4 domingos
-    assert primeira.count("FÉRIAS") == 2 * 5 and "LICENÇA-PRÊMIO" not in primeira
-    assert "INFORMAÇÕES FINANCEIRAS" in paginas[1] and "CONSOLIDAÇÃO" in paginas[1]
+    # 5 dias × Entrada e Saída, mais o rótulo "FÉRIAS" do quadro de informações financeiras
+    assert primeira.count("FÉRIAS") == 2 * 5 + 1 and "LICENÇA-PRÊMIO" not in primeira
+    # Frente: a tabela inteira, as informações financeiras e as assinaturas; verso: só a consolidação
+    assert "INFORMAÇÕES FINANCEIRAS" in primeira and "Assinatura do Servidor" in primeira and "CONSOLIDAÇÃO" not in primeira
+    verso = paginas[1]
+    assert "CONSOLIDAÇÃO" in verso and "Assinatura do Superior Imediato ou do Responsável" in verso
+    assert "REGISTRO DE PONTO OUTUBRO/2026" in verso and "SÁBADO" not in verso and "INFORMAÇÕES FINANCEIRAS" not in verso
     # Sem dados funcionais: sai com os campos em branco
     r = cliente.get(URL, params={"competencia": "2026-10"}, headers=h["rh"])
     assert r.status_code == 200 and "RITA RH" in _texto(r.content)[0]

@@ -8,6 +8,12 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-09-29
 
+### Alterado
+- **Folha de ponto fiel ao modelo de frequência da SPI**, conservando a estrutura do documento.
+  - **Frente:** cabeçalho em caixa com o brasão, identificação em duas colunas, a tabela do mês inteira com as marcas em vermelho ("---------" na hora; SÁBADO, DOMINGO, FERIADO, PONTO FACULTATIVO, FÉRIAS na assinatura), as informações financeiras e as assinaturas.
+  - **Verso:** só as anotações ("CONSOLIDAÇÃO" com as linhas pautadas, data e assinatura do superior ou do responsável).
+  - Sem mudança de API.
+
 ### Adicionado
 - **Mensageria com e-mail de changelog** (Administração › Mensageria, só para a conta root).
   - O botão "Preparar e-mail de changelog" abre uma janela com um rascunho das novidades do CHANGELOG ainda não enviadas, em linguagem de usuário.
@@ -26,7 +32,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
   - Endpoints: `PUT /api/rh/cadastro/usuarios/{id}/periodo-vigente` (novo); dados funcionais com `inicio_periodo_aquisitivo` e `periodos[]` (sem `saldo_ferias_dias`); `GET /api/rh/afastamentos/meus` com `periodo_vigente` e `proximo_periodo`; painel com `ferias_a_vencer`.
 - **Folha de ponto em PDF** (menu do usuário, abaixo de "Meu perfil").
   - O usuário escolhe a competência (do mês atual, 12 meses para trás e 2 para frente) e baixa a folha no modelo de frequência da SPI.
-  - Vem com o setor, a identificação (nome, RG/CIN, RS/PV, função, jornada, plantão, horários, estudante, intervalo), uma linha por dia com sábados, domingos, feriados, pontos facultativos e férias ou licença-prêmio aprovadas, e a 2ª página com as informações financeiras e a consolidação em branco.
+  - Vem com o setor, a identificação (nome, RG/CIN, RS/PV, função, jornada, plantão, horários, estudante, intervalo), uma linha por dia com sábados, domingos, feriados, pontos facultativos e férias ou licença-prêmio aprovadas, as informações financeiras e as assinaturas na frente, e a consolidação no verso.
   - Endpoints `GET /api/rh/folha-ponto?competencia=AAAA-MM` e `GET /api/rh/folha-ponto/competencias` (ver `docs/endpoints/rh-folha-ponto.md`).
 - **Feriados e pontos facultativos** (RH › Feriados): todos consultam; a CGP cadastra, edita e exclui.
   - Aparecem destacados no calendário de férias, no painel e na folha de ponto.

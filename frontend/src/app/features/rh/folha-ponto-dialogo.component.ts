@@ -67,7 +67,16 @@ export class FolhaPontoDialogoComponent implements OnInit {
     if (!this.competencia) return;
     this.dialogos.executar(this.api.folhaPonto(this.competencia), 'Gerando a folha de ponto…').subscribe({
       next: () => this.aberta.set(false),
-      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar a folha de ponto'),
+      error: (e) => {
+        // Dados funcionais incompletos ou cadastro aguardando validação: aviso (a CGP já foi avisada por e-mail)
+        const corpo = (e as { error?: { codigo?: string; detalhe?: string } })?.error;
+        if (corpo?.codigo === 'folha_dados_incompletos' || corpo?.codigo === 'folha_cadastro_pendente') {
+          this.aberta.set(false);
+          this.dialogos.avisar('Folha de ponto indisponível', corpo.detalhe ?? '');
+          return;
+        }
+        this.dialogos.mostrarErro(e, 'Não foi possível gerar a folha de ponto');
+      },
     });
   }
 }

@@ -89,16 +89,29 @@
                                     textoAjuda="Pesquisar usuário por nome, login ou cargo" />
             </div>
             <fieldset>
-              <legend>Setores ({{ setoresEscolhidos().length }}) <small>inclui membros, quem tem o setor como Departamento e os setores filhos</small></legend>
+              <legend>Setores ({{ setoresEscolhidos().length }}) <small>marcar um setor pai marca os filhos; inclui membros e quem tem o setor como Departamento</small></legend>
               <input type="search" aria-label="Pesquisar setores" placeholder="Pesquisar setor" [ngModel]="filtroSetores()"
                      (ngModelChange)="filtroSetores.set($event)" [ngModelOptions]="{ standalone: true }" />
               <div class="lista-setores-changelog">
-                @for (s of setoresFiltrados(); track s.id) {
-                  <label [style.padding-left.px]="s.nivel * 14">
-                    <input type="checkbox" [checked]="setoresEscolhidos().includes(s.id)" (change)="alternarSetor(s.id, $any($event.target).checked)" />
-                    {{ s.nome }}@if (s.sistemico) { <span class="selo-origem sistemico">sistêmico</span> }
-                  </label>
-                } @empty { <p class="estado-vazio">Nenhum setor encontrado.</p> }
+                @if (institucionaisFiltrados().length) {
+                  <p class="titulo-grupo-setores">Estrutura organizacional</p>
+                  @for (s of institucionaisFiltrados(); track s.id) {
+                    <label [style.padding-left.px]="s.nivel * 14">
+                      <input type="checkbox" [checked]="setoresEscolhidos().includes(s.id)" (change)="alternarSetor(s.id, $any($event.target).checked)" />
+                      {{ s.nome }}
+                    </label>
+                  }
+                }
+                @if (sistemicosFiltrados().length) {
+                  <p class="titulo-grupo-setores">Grupos sistêmicos</p>
+                  @for (s of sistemicosFiltrados(); track s.id) {
+                    <label>
+                      <input type="checkbox" [checked]="setoresEscolhidos().includes(s.id)" (change)="alternarSetor(s.id, $any($event.target).checked)" />
+                      {{ s.nome }} <span class="selo-origem sistemico">sistêmico</span>
+                    </label>
+                  }
+                }
+                @if (!institucionaisFiltrados().length && !sistemicosFiltrados().length) { <p class="estado-vazio">Nenhum setor encontrado.</p> }
               </div>
             </fieldset>
           </div>

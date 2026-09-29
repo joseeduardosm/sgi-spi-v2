@@ -73,7 +73,7 @@ Tag no OpenAPI: **Módulo RH**. Implementação:
 | `rg_cin` | Nº do RG ou da CIN (até 30; dígitos, letras, ponto, hífen, barra e espaço; ex.: `"12.345.678-9"`) |
 | `rs_pv` | Nº do RS/PV (mesmas regras; ex.: `"1.234.567/8"`) |
 
-Jornada, horários e documentos alimentam o cabeçalho da folha de ponto ([rh-folha-ponto.md](rh-folha-ponto.md)). Violações das regras acima → `422 validacao`. A leitura devolve os horários como `"HH:MM"`.
+Jornada, horários e documentos alimentam o cabeçalho da folha de ponto ([rh-folha-ponto.md](rh-folha-ponto.md)). Sem jornada, horário de trabalho, intervalo, RG/CIN ou RS/PV, o usuário não consegue gerar a folha e a CGP é avisada; gravar os dados completos encerra esse aviso. Violações das regras acima → `422 validacao`. A leitura devolve os horários como `"HH:MM"`.
 
 A leitura (`funcionais` em `CadastroRh`) traz também `periodos[]` (`PeriodoLeitura`: `inicio`, `fim`, `dias_creditados`, `usado`, `disponivel`, `dias_expirados`, `origem`, `vigente`), do mais recente ao mais antigo. O antigo `saldo_ferias_dias` deixou de existir: as férias seguem o período aquisitivo.
 

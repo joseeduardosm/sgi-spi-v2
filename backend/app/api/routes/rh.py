@@ -271,13 +271,20 @@ def competencias_folha(_: Usuario = Depends(obter_usuario_atual)) -> list[Compet
 @roteador.get("/folha-ponto", response_class=Response, summary="Gerar a folha de ponto (PDF)",
               description="Folha de ponto do próprio usuário na competência `AAAA-MM`: cabeçalho com o setor, identificação "
                           "(dados funcionais da CGP), uma linha por dia com sábados, domingos, feriados, pontos facultativos e "
-                          "férias/licença-prêmio aprovadas ou gozadas; 2ª página com informações financeiras e consolidação em branco.",
-              responses={200: {"content": {"application/pdf": {}}}, **INVALIDO})
+                          "férias/licença-prêmio aprovadas ou gozadas; verso com a consolidação. Exige os dados funcionais preenchidos "
+                          "e nenhuma alteração de cadastro aguardando validação: senão `409` (`folha_dados_incompletos` ou "
+                          "`folha_cadastro_pendente`) e a CGP recebe aviso com e-mail (um por motivo e por dia).",
+              responses={200: {"content": {"application/pdf": {}}}, **INVALIDO,
+                         status.HTTP_409_CONFLICT: {"description": "Dados funcionais incompletos ou cadastro aguardando validação."}})
 def gerar_folha_ponto(competencia: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="`AAAA-MM`."),
                       sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> Response:
     ano, mes = int(competencia[:4]), int(competencia[5:])
     if (ano, mes) not in _competencias_folha():
         raise ErroApi(status.HTTP_400_BAD_REQUEST, "Competência fora do período disponível (últimos 12 meses e próximos 2).", "invalido")
+    try:
+        folha_ponto.verificar(sessao, usuario, afastamentos.hoje())
+    except folha_ponto.FolhaBloqueada as erro:
+        raise ErroApi(status.HTTP_409_CONFLICT, str(erro), erro.codigo) from erro
     conteudo = folha_ponto.gerar(sessao, usuario, ano, mes)
     auditar(sessao, usuario.login, "rh.folha_ponto", competencia, autor_id=usuario.id, alvo_tipo="usuario", alvo_id=str(usuario.id))
     sessao.commit()

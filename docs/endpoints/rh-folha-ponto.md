@@ -31,9 +31,23 @@ Autenticação: `Authorization: Bearer <token>` (perfil em dia; ver [autenticaca
 | `400` | `invalido` | Competência fora da janela ("Competência fora do período disponível (últimos 12 meses e próximos 2).") |
 | `401` | `nao_autenticado` | Sem token ou token inválido |
 | `403` | `revisao_perfil_obrigatoria` | Perfil pendente |
+| `409` | `folha_cadastro_pendente` | O usuário tem alteração de cadastro aguardando validação da CGP (os campos vêm no `detalhe`) |
+| `409` | `folha_dados_incompletos` | Faltam dados funcionais: jornada de trabalho, horário de trabalho, intervalo de almoço e descanso, RG/CIN nº ou RS/PV nº (os que faltam vêm no `detalhe`) |
 | `422` | `validacao` | `competencia` ausente ou fora do formato `AAAA-MM` |
 
 A geração é auditada como `rh.folha_ponto` (competência).
+
+### Pré-requisitos e aviso à CGP
+
+A folha só é gerada quando **não há alteração de cadastro aguardando validação** e os **dados funcionais obrigatórios** estão preenchidos. Regime de plantão e horário de estudante já valem "Não" por padrão e não bloqueiam. A pendência de cadastro é conferida primeiro.
+
+Quando a folha é recusada (`409`):
+- **todos da CGP** recebem na caixa de mensagens, com e-mail oficial:
+  - "[Nome] quer baixar a folha de ponto, mas ainda não tem os dados preenchidos", com a lista dos campos; ou
+  - "[Nome] quer baixar a folha de ponto, mas tem alterações de cadastro aguardando validação".
+  - O link leva a RH › Validações do usuário.
+  - No máximo um aviso por motivo, por usuário e por dia (chaves `folha-ponto:dados:{usuario}:{AAAAMMDD}` e `folha-ponto:validacao:{usuario}:{AAAAMMDD}`).
+- Os avisos são **encerrados** sozinhos quando a CGP completa os dados funcionais ou quando não resta alteração pendente (validada ou recusada).
 
 ## Conteúdo do PDF
 
@@ -62,3 +76,4 @@ A4 retrato, **frente e verso**, conservando a estrutura do modelo `apoio/10-2026
 
 - **Menu do usuário** (canto superior direito, `layout-autenticado`): item "Folha de ponto" abaixo de "Meu perfil" (oculto com o perfil pendente).
 - **Janela** `features/rh/folha-ponto-dialogo.component.ts`: lista de competências (atual pré-selecionada) e "Gerar PDF", que baixa o arquivo (`RhApiService.folhaPonto`, com `baixarArquivo`).
+- **Bloqueio:** com `409 folha_dados_incompletos` ou `folha_cadastro_pendente`, a janela fecha e abre o aviso modal "Folha de ponto indisponível" com o `detalhe` da API (que já informa que a CGP foi avisada). `baixarArquivo` converte o corpo de erro que chega como `Blob` de volta para JSON, então o `detalhe` aparece também nos demais downloads.

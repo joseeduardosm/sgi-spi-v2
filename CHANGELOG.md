@@ -9,6 +9,12 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-29
 
 ### Alterado
+- **Folha de ponto só sai com o cadastro em dia.**
+  - Com alteração de cadastro aguardando validação, ou sem os dados funcionais (jornada, horário de trabalho, intervalo, RG/CIN, RS/PV), o usuário vê o aviso "Folha de ponto indisponível".
+  - A CGP recebe mensagem e e-mail: "[Nome] quer baixar a folha de ponto, mas…", no máximo um por motivo e por dia. O aviso se encerra quando os dados são preenchidos ou as alterações são analisadas.
+  - Endpoint `GET /api/rh/folha-ponto` passa a responder `409` (`folha_cadastro_pendente` ou `folha_dados_incompletos`).
+  - Downloads mostram a mensagem de erro da API (antes, o corpo em `Blob` se perdia).
+- **E-mail de changelog: marcar um setor pai marca os filhos**; a lista separa "Estrutura organizacional" e "Grupos sistêmicos".
 - **E-mail de changelog também para usuários e setores escolhidos**, além de "todos os usuários ativos" e do teste.
   - Um ou mais usuários pelo seletor e/ou setores sistêmicos ou institucionais. O setor inclui os membros, quem o tem como Departamento e os setores filhos.
   - O histórico mostra quem foi escolhido.

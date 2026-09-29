@@ -12,6 +12,10 @@ A4 retrato, frente e verso, com a mesma estrutura do modelo:
 - **Verso:** só as anotações: o mesmo cabeçalho, "CONSOLIDAÇÃO" com as linhas pautadas, data e assinatura do superior
   imediato ou do responsável.
 
+**Pré-requisitos** (`verificar`): a folha só é gerada com os dados funcionais preenchidos pela CGP (jornada, horário de
+trabalho, intervalo, RG/CIN e RS/PV) e sem alteração de cadastro aguardando validação. Caso contrário, `FolhaBloqueada`,
+e a CGP recebe aviso com e-mail (no máximo um por motivo, por usuário e por dia).
+
 Nas linhas da tabela, "---------" na Hora e a marca em vermelho na Assinatura, nesta prioridade: sábado e domingo;
 feriado ou ponto facultativo cadastrado (descrição em Observações); férias ou licença-prêmio **aprovadas ou gozadas**
 (período em Observações no primeiro dia do mês em que aparecem).
@@ -36,6 +40,7 @@ from sqlalchemy.orm import Session
 from app.models.rh import Afastamento, DadosFuncionais
 from app.models.usuario import Usuario
 from app.services.documentos.pdf import CAMINHO_BRASAO
+from app.services import servico_mensagens
 from app.services.rh import servico_feriados
 
 MESES = ("JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO")
@@ -71,6 +76,75 @@ ASSINATURA = _estilo("assinatura", 7.5, negrito=True, centro=True)
 CONSOLIDACAO = _estilo("consolidacao", 10, negrito=True, centro=True)
 RODAPE_VERSO = _estilo("rodape_verso", 8.5, negrito=True, fonte="Times")
 RODAPE_VERSO_CENTRO = _estilo("rodape_verso_centro", 8.5, negrito=True, centro=True, fonte="Times")
+
+
+# Dados funcionais sem os quais a folha não sai (os de plantão e estudante já nascem como "Não")
+CAMPOS_OBRIGATORIOS = {
+    "jornada_semanal_horas": "Jornada de trabalho",
+    "horario_trabalho_inicio": "Horário de trabalho",
+    "intervalo_inicio": "Intervalo de almoço e descanso",
+    "rg_cin": "RG/CIN nº",
+    "rs_pv": "RS/PV nº",
+}
+PREFIXO_AVISO_DADOS = "folha-ponto:dados:"
+PREFIXO_AVISO_VALIDACAO = "folha-ponto:validacao:"
+
+
+class FolhaBloqueada(Exception):
+    """A folha não pode ser gerada ainda (vira 409 com o código do motivo)."""
+
+    def __init__(self, detalhe: str, codigo: str) -> None:
+        super().__init__(detalhe)
+        self.codigo = codigo
+
+
+def campos_faltantes(funcionais: DadosFuncionais | None) -> list[str]:
+    """Rótulos dos dados funcionais obrigatórios ainda não preenchidos."""
+    return [rotulo for campo, rotulo in CAMPOS_OBRIGATORIOS.items() if not (funcionais and getattr(funcionais, campo))]
+
+
+def verificar(sessao: Session, usuario: Usuario, hoje: date) -> None:
+    """Confere os pré-requisitos; se faltar algo, avisa a CGP (com e-mail) e lança `FolhaBloqueada`."""
+    from app.services.rh.papeis import usuarios_cgp
+    from app.services.rh.servico_cadastro import ROTULOS, pendentes_do_usuario
+
+    nome = usuario.nome_completo or usuario.login
+    link = f"/rh/validacoes?usuario={usuario.id}"
+    cgp = [u.id for u in usuarios_cgp(sessao)]
+    pendentes = pendentes_do_usuario(sessao, usuario.id)
+    if pendentes:
+        campos = ", ".join(dict.fromkeys(ROTULOS.get(a.campo, a.campo) for a in pendentes))
+        servico_mensagens.notificar(
+            sessao, cgp, f"{nome} quer baixar a folha de ponto, mas tem alterações de cadastro aguardando validação",
+            f"{nome} tentou gerar a folha de ponto, mas tem alterações de cadastro aguardando validação da CGP: {campos}.\n\n"
+            "A folha fica disponível assim que as alterações forem validadas ou recusadas.",
+            chave=f"{PREFIXO_AVISO_VALIDACAO}{usuario.id}:{hoje:%Y%m%d}", categoria="pendencia", link=link, email=True,
+        )
+        sessao.commit()
+        raise FolhaBloqueada(
+            f"Você tem alterações de cadastro aguardando validação da CGP ({campos}). A folha de ponto fica disponível "
+            "depois que a CGP analisar essas alterações. A CGP já foi avisada por e-mail.", "folha_cadastro_pendente",
+        )
+    faltantes = campos_faltantes(sessao.get(DadosFuncionais, usuario.id))
+    if faltantes:
+        lista = ", ".join(faltantes)
+        servico_mensagens.notificar(
+            sessao, cgp, f"{nome} quer baixar a folha de ponto, mas ainda não tem os dados preenchidos",
+            f"{nome} tentou gerar a folha de ponto, mas os dados funcionais dele(a) ainda não foram preenchidos pela CGP: {lista}.\n\n"
+            "Preencha em Usuários (janela de edição) ou em RH › Validações, bloco \"Jornada e documentos\".",
+            chave=f"{PREFIXO_AVISO_DADOS}{usuario.id}:{hoje:%Y%m%d}", categoria="pendencia", link=link, email=True,
+        )
+        sessao.commit()
+        raise FolhaBloqueada(
+            f"Seus dados funcionais ainda não foram preenchidos pela CGP ({lista}). A folha de ponto fica disponível "
+            "depois do preenchimento. A CGP já foi avisada por e-mail.", "folha_dados_incompletos",
+        )
+
+
+def encerrar_aviso_dados(sessao: Session, funcionais: DadosFuncionais) -> None:
+    """Com os dados completos, os avisos "dados não preenchidos" deste usuário deixam de pedir ação da CGP."""
+    if not campos_faltantes(funcionais):
+        servico_mensagens.encerrar(sessao, prefixo=f"{PREFIXO_AVISO_DADOS}{funcionais.usuario_id}:")
 
 
 def rotulo_competencia(ano: int, mes: int) -> str:

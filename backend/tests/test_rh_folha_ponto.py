@@ -65,6 +65,49 @@ def test_folha_com_identificacao_feriados_e_ferias_aprovadas(cliente, equipe):  
     verso = paginas[1]
     assert "CONSOLIDAÇÃO" in verso and "Assinatura do Superior Imediato ou do Responsável" in verso
     assert "REGISTRO DE PONTO OUTUBRO/2026" in verso and "SÁBADO" not in verso and "INFORMAÇÕES FINANCEIRAS" not in verso
-    # Sem dados funcionais: sai com os campos em branco
-    r = cliente.get(URL, params={"competencia": "2026-10"}, headers=h["rh"])
-    assert r.status_code == 200 and "RITA RH" in _texto(r.content)[0]
+
+
+def test_bloqueios_avisam_a_cgp(cliente, equipe, monkeypatch):  # noqa: F811
+    from datetime import time
+
+    from app.core.banco import FabricaSessao
+    from app.models.mensagem import EntregaMensagem, Mensagem
+    from app.models.rh import AlteracaoCadastral
+    from sqlalchemy import select
+
+    ids, h, _ = equipe
+
+    def avisos(prefixo):
+        with FabricaSessao() as sessao:
+            return [(e.destinatario_id, e.encerrada_em is not None) for e in sessao.scalars(
+                select(EntregaMensagem).join(Mensagem).where(Mensagem.chave.startswith(prefixo)))]
+
+    # 1) Dados funcionais incompletos (Bia só tem autorizador e período): 409 e aviso com e-mail à CGP (Rita)
+    r = cliente.get(URL, params={"competencia": "2026-10"}, headers=h["bia"])
+    assert r.status_code == 409 and r.json()["codigo"] == "folha_dados_incompletos"
+    assert "Jornada de trabalho" in r.json()["detalhe"] and "RS/PV nº" in r.json()["detalhe"]
+    assert avisos(f"folha-ponto:dados:{ids['bia']}:") == [(ids["rh"], False)]
+    # Nova tentativa no mesmo dia não repete o aviso
+    assert cliente.get(URL, params={"competencia": "2026-10"}, headers=h["bia"]).status_code == 409
+    assert len(avisos(f"folha-ponto:dados:{ids['bia']}:")) == 1
+    # A CGP preenche os dados: o aviso é encerrado e a folha sai
+    corpo = {"autorizador_id": ids["chefe"], "inicio_periodo_aquisitivo": "01/01", "exercicio": 2026, "saldo_lp_dias": 10,
+             "jornada_semanal_horas": 40, "horario_trabalho_inicio": "09:00", "horario_trabalho_fim": "18:00",
+             "intervalo_inicio": "12:00", "intervalo_fim": "13:00", "rg_cin": "12.345.678-9", "rs_pv": "1.234.567/8"}
+    assert cliente.put(f"/api/rh/cadastro/usuarios/{ids['bia']}/funcionais", json=corpo, headers=h["rh"]).status_code == 200
+    assert avisos(f"folha-ponto:dados:{ids['bia']}:") == [(ids["rh"], True)]
+    assert cliente.get(URL, params={"competencia": "2026-10"}, headers=h["bia"]).status_code == 200
+
+    # 2) Alteração de cadastro aguardando validação: 409, aviso à CGP; validada, a folha volta a sair
+    with FabricaSessao() as sessao:
+        alteracao = AlteracaoCadastral(usuario_id=ids["bia"], campo="ramal", valor_anterior="1234", valor_proposto="5678",
+                                       status="pendente", solicitada_por_nome="Bia Lima")
+        sessao.add(alteracao)
+        sessao.commit()
+        alteracao_id = alteracao.id
+    r = cliente.get(URL, params={"competencia": "2026-10"}, headers=h["bia"])
+    assert r.status_code == 409 and r.json()["codigo"] == "folha_cadastro_pendente" and "Ramal" in r.json()["detalhe"]
+    assert avisos(f"folha-ponto:validacao:{ids['bia']}:") == [(ids["rh"], False)]
+    assert cliente.post(f"/api/rh/cadastro/alteracoes/{alteracao_id}/validar", headers=h["rh"]).status_code == 200
+    assert avisos(f"folha-ponto:validacao:{ids['bia']}:") == [(ids["rh"], True)]
+    assert cliente.get(URL, params={"competencia": "2026-10"}, headers=h["bia"]).status_code == 200

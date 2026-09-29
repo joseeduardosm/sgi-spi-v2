@@ -228,6 +228,8 @@ def _encerrar_aviso_se_concluido(sessao: Session, usuario_id: int) -> None:
     sessao.flush()
     if not pendentes_do_usuario(sessao, usuario_id):
         servico_mensagens.encerrar(sessao, prefixo=f"cadastro:{usuario_id}:")
+        # Também os avisos "quer baixar a folha de ponto, mas tem alterações aguardando validação"
+        servico_mensagens.encerrar(sessao, prefixo=f"folha-ponto:validacao:{usuario_id}:")
 
 
 def validar(sessao: Session, alteracao_id: uuid.UUID, autor: Usuario) -> AlteracaoCadastral:
@@ -315,6 +317,9 @@ def salvar_funcionais(sessao: Session, usuario_id: int, dados: dict, autor: Usua
         setattr(registro, campo, valor)
     registro.atualizado_por_id, registro.atualizado_por_nome, registro.atualizado_em = autor.id, _nome(autor), agora_utc()
     sessao.add(registro)
+    from app.services.rh.folha_ponto import encerrar_aviso_dados
+
+    encerrar_aviso_dados(sessao, registro)
     auditar(sessao, autor.login, "rh.cadastro.funcionais", usuario.login, autor_id=autor.id, alvo_tipo="usuario", alvo_id=str(usuario_id),
             dados={"campos": {c: {"de": antes[c], "para": dados[c]} for c in dados if antes[c] != dados[c]}})
     sessao.commit()

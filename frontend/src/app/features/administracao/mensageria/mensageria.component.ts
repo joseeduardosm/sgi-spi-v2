@@ -50,11 +50,23 @@ export class MensageriaComponent implements OnInit {
   protected usuarios: OpcaoUsuario[] = [];
   protected readonly setoresEscolhidos = signal<number[]>([]);
   protected readonly filtroSetores = signal('');
-  protected readonly setoresFiltrados = computed(() => {
+  private readonly setoresFiltrados = computed(() => {
     const termo = this.filtroSetores().trim().toLowerCase();
     const setores = this.rascunho()?.setores ?? [];
     return termo ? setores.filter((s) => s.nome.toLowerCase().includes(termo)) : setores;
   });
+  protected readonly institucionaisFiltrados = computed(() => this.setoresFiltrados().filter((s) => !s.sistemico));
+  protected readonly sistemicosFiltrados = computed(() => this.setoresFiltrados().filter((s) => s.sistemico));
+
+  /** O setor e seus descendentes: na lista hierárquica, os seguintes com nível maior, até voltar ao mesmo nível. */
+  private comDescendentes(id: number): number[] {
+    const setores = this.rascunho()?.setores ?? [];
+    const i = setores.findIndex((s) => s.id === id);
+    if (i < 0 || setores[i].sistemico) return [id];
+    const ids = [id];
+    for (let j = i + 1; j < setores.length && !setores[j].sistemico && setores[j].nivel > setores[i].nivel; j++) ids.push(setores[j].id);
+    return ids;
+  }
   // Prévia atualizada 600 ms depois da última digitação
   private readonly edicao = new Subject<void>();
   private acompanhamento?: ReturnType<typeof setTimeout>;
@@ -123,8 +135,10 @@ export class MensageriaComponent implements OnInit {
     this.rascunho.set(null);
   }
 
+  /** Marcar ou desmarcar um setor pai vale também para todos os setores filhos. */
   protected alternarSetor(id: number, marcado: boolean): void {
-    this.setoresEscolhidos.update((ids) => (marcado ? [...ids, id] : ids.filter((x) => x !== id)));
+    const grupo = this.comDescendentes(id);
+    this.setoresEscolhidos.update((ids) => (marcado ? [...new Set([...ids, ...grupo])] : ids.filter((x) => !grupo.includes(x))));
   }
 
   protected podeEnviar(): boolean {

@@ -1,8 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para baixar arquivos da API e salvá-los no computador do usuário.
 
-import { HttpClient, HttpResponse } from '@angular/common/http';
-import { Observable, tap } from 'rxjs';
+import { HttpClient, HttpErrorResponse, HttpResponse } from '@angular/common/http';
+import { catchError, from, Observable, switchMap, tap, throwError } from 'rxjs';
 
 /** Nome do arquivo indicado pela API no cabeçalho Content-Disposition. */
 export function nomeDoArquivo(resposta: HttpResponse<Blob>, padrao: string): string {
@@ -36,5 +36,22 @@ export function baixarArquivo(http: HttpClient, url: string, padrao = 'arquivo')
   // `observe: 'response'` traz os cabeçalhos (para ler o nome do arquivo); `blob` = conteúdo binário
   return http
     .get(url, { observe: 'response', responseType: 'blob' })
-    .pipe(tap((resposta) => salvarBlob(resposta.body ?? new Blob(), nomeDoArquivo(resposta, padrao))));
+    .pipe(
+      tap((resposta) => salvarBlob(resposta.body ?? new Blob(), nomeDoArquivo(resposta, padrao))),
+      // Com `responseType: 'blob'`, o erro da API ({"detalhe","codigo"}) também chega como Blob: volta a ser JSON
+      catchError((erro: unknown) => {
+        if (!(erro instanceof HttpErrorResponse) || !(erro.error instanceof Blob)) return throwError(() => erro);
+        return from(erro.error.text()).pipe(
+          switchMap((texto) => {
+            let corpo: unknown = texto;
+            try {
+              corpo = JSON.parse(texto);
+            } catch {
+              // Corpo não é JSON: mantém o texto
+            }
+            return throwError(() => new HttpErrorResponse({ error: corpo, headers: erro.headers, status: erro.status, statusText: erro.statusText, url: erro.url ?? undefined }));
+          }),
+        );
+      }),
+    );
 }

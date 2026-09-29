@@ -9,14 +9,26 @@ export interface RascunhoChangelog {
   ate: string | null;
   datas: string[];
   total_destinatarios: number;
+  setores: OpcaoSetorChangelog[];
 }
+
+/** Setor que pode receber o e-mail (`OpcaoSetorChangelog` da API). */
+export interface OpcaoSetorChangelog {
+  id: number;
+  nome: string;
+  sistemico: boolean;
+  nivel: number;
+}
+
+export type DestinoChangelog = 'todos' | 'selecionados' | 'teste';
 
 /** Envio registrado (`EnvioChangelogLeitura` da API). */
 export interface EnvioChangelog {
   id: string;
   assunto: string;
   corpo: string;
-  destino: 'todos' | 'teste';
+  destino: DestinoChangelog;
+  destino_descricao: string | null;
   ate_data: string | null;
   total: number;
   enviados: number;
@@ -31,7 +43,9 @@ export interface EnvioChangelog {
 export interface PedidoEnvioChangelog {
   assunto: string;
   corpo: string;
-  destino: 'todos' | 'teste';
+  destino: DestinoChangelog;
   email_teste: string | null;
   ate_data: string | null;
+  usuarios_ids: number[];
+  setores_ids: number[];
 }

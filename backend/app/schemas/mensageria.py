@@ -19,6 +19,15 @@ class RascunhoChangelog(BaseModel):
     ate: date | None = Field(None, description="Data da entrada mais recente incluída (nulo: nada novo).")
     datas: list[date] = Field(default_factory=list, description="Datas do CHANGELOG incluídas no rascunho.")
     total_destinatarios: int = Field(..., description="Usuários ativos com e-mail (destino `todos`).")
+    setores: list["OpcaoSetorChangelog"] = Field(default_factory=list, description="Setores ativos para o destino `selecionados`.")
+
+
+class OpcaoSetorChangelog(BaseModel):
+    """Setor que pode receber o e-mail (institucional, na hierarquia, ou sistêmico)."""
+    id: int
+    nome: str
+    sistemico: bool
+    nivel: int = Field(0, description="Profundidade na hierarquia (para indentar a lista).")
 
 
 class ConteudoChangelog(BaseModel):
@@ -41,9 +50,12 @@ class PreviaChangelog(BaseModel):
 
 
 class PedidoEnvioChangelog(ConteudoChangelog):
-    """Envio do e-mail: a todos os usuários ativos com e-mail ou só a um endereço de teste."""
-    destino: Literal["todos", "teste"] = Field(..., description="`todos` ou `teste`.")
+    """Envio do e-mail: a todos os usuários ativos, a usuários e setores escolhidos, ou só a um endereço de teste."""
+    destino: Literal["todos", "selecionados", "teste"] = Field(..., description="`todos`, `selecionados` ou `teste`.")
     email_teste: str | None = Field(None, max_length=254, description="Obrigatório quando `destino = teste`.")
+    usuarios_ids: list[int] = Field(default_factory=list, max_length=2000, description="Em `selecionados`: usuários escolhidos (1 ou mais).")
+    setores_ids: list[int] = Field(default_factory=list, max_length=500,
+                                   description="Em `selecionados`: setores sistêmicos ou institucionais (membros, quem tem o setor como Departamento e setores filhos).")
     ate_data: date | None = Field(None, description="`ate` do rascunho: o próximo rascunho começa depois desta data (só em `todos`).")
 
     @model_validator(mode="after")
@@ -51,6 +63,8 @@ class PedidoEnvioChangelog(ConteudoChangelog):
         """O envio de teste exige um e-mail válido."""
         if self.destino == "teste":
             self.email_teste = _email(self.email_teste or "", obrigatorio=True)
+        if self.destino == "selecionados" and not (self.usuarios_ids or self.setores_ids):
+            raise ValueError("Escolha ao menos um usuário ou um setor.")
         return self
 
 
@@ -61,7 +75,8 @@ class EnvioChangelogLeitura(BaseModel):
     id: uuid.UUID
     assunto: str
     corpo: str
-    destino: Literal["todos", "teste"]
+    destino: Literal["todos", "selecionados", "teste"]
+    destino_descricao: str | None = Field(None, description="Em `selecionados`: os usuários e setores escolhidos.")
     ate_data: date | None = Field(None, description="Data da entrada mais recente do CHANGELOG incluída (só em `todos`).")
     total: int = Field(..., description="Destinatários.")
     enviados: int = Field(..., description="E-mails aceitos pelo servidor SMTP.")
@@ -70,3 +85,6 @@ class EnvioChangelogLeitura(BaseModel):
     enviado_por_nome: str
     criado_em: datetime
     concluido_em: datetime | None = Field(None, description="Nulo enquanto o envio está em andamento.")
+
+
+RascunhoChangelog.model_rebuild()

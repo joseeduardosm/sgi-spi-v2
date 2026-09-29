@@ -16,10 +16,10 @@ from app.core.banco import Base, agora_utc
 
 
 class EnvioChangelog(Base):
-    """Um e-mail de changelog enviado (a todos os usuários ativos com e-mail ou só a um endereço de teste)."""
+    """Um e-mail de changelog enviado: a todos os ativos, a usuários e setores escolhidos, ou só a um endereço de teste."""
     __tablename__ = "mensageria_envios_changelog"
     __table_args__ = (
-        CheckConstraint("destino IN ('todos', 'teste')", name="ck_mensageria_envios_changelog_destino"),
+        CheckConstraint("destino IN ('todos', 'teste', 'selecionados')", name="ck_mensageria_envios_changelog_destino"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -27,7 +27,9 @@ class EnvioChangelog(Base):
     corpo: Mapped[str] = mapped_column(Text)
     # Data da entrada mais recente do CHANGELOG incluída (o próximo rascunho começa depois dela)
     ate_data: Mapped[date | None] = mapped_column(Date)
-    destino: Mapped[str] = mapped_column(String(10))
+    destino: Mapped[str] = mapped_column(String(12))
+    # Envio a usuários e setores escolhidos: quem foi escolhido (ex.: "Ana Souza, Bia Lima; setores: Diretoria A")
+    destino_descricao: Mapped[str | None] = mapped_column(Text)
     total: Mapped[int] = mapped_column(Integer, default=0)
     enviados: Mapped[int] = mapped_column(Integer, default=0)
     falhas: Mapped[int] = mapped_column(Integer, default=0)

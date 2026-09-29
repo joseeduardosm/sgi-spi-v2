@@ -9,7 +9,9 @@ Fluxo:
 2. A conta root edita o assunto e o texto; `html_email` gera a prévia no layout oficial (brasão, cabeçalho
    institucional, botão de acesso e rodapé).
 3. `registrar_envio` grava o envio e `processar_envio` (em segundo plano) manda um e-mail por destinatário: todos os
-   usuários ativos com e-mail ou só um endereço de teste. Envios de teste não mudam a data do próximo rascunho.
+   usuários ativos com e-mail, os usuários e setores escolhidos (sistêmicos ou institucionais; um setor inclui os
+   membros, quem o tem como Departamento e os setores filhos) ou só um endereço de teste. Só o envio a todos muda a
+   data do próximo rascunho.
 """
 
 import base64
@@ -26,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.core.banco import FabricaSessao, agora_utc
 from app.core.configuracao import obter_configuracao
 from app.models.envio_changelog import EnvioChangelog
+from app.models.setor import Setor
 from app.models.usuario import Usuario
 from app.services import modelo_email, servico_smtp
 from app.services.cliente_smtp import Mensagem as EmailSmtp
@@ -39,6 +42,10 @@ ARQUIVO_CHANGELOG = Path(__file__).resolve().parents[3] / "CHANGELOG.md"
 SECOES = {"adicionado": "Novidades", "alterado": "Melhorias", "corrigido": "Correções", "removido": "Removido"}
 TITULO_DATA = re.compile(r"^##\s+(.+)$")
 DATA = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+
+
+class ErroChangelog(Exception):
+    """Envio impossível (vira 400)."""
 
 
 @dataclass
@@ -196,27 +203,57 @@ def html_previa(assunto: str, corpo: str) -> str:
 # Envio
 # ---------------------------------------------------------------------------------------------
 
-def destinatarios(sessao: Session) -> list[str]:
-    """E-mails dos usuários ativos (sem repetição, na ordem do nome)."""
+def _emails(usuarios) -> list[str]:
+    """E-mails dos usuários (sem repetição, na ordem do nome; quem não tem e-mail fica de fora)."""
     vistos: dict[str, str] = {}
-    for email in sessao.scalars(select(Usuario.email).where(Usuario.ativo.is_(True)).order_by(Usuario.nome_completo)):
-        email = (email or "").strip()
+    for usuario in sorted(usuarios, key=lambda u: (u.nome_completo or u.login).lower()):
+        email = (usuario.email or "").strip()
         if email and email.lower() not in vistos:
             vistos[email.lower()] = email
     return list(vistos.values())
 
 
-def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, destino: str,
-                    email_teste: str | None, ate_data: date | None) -> tuple[EnvioChangelog, list[str]]:
+def destinatarios(sessao: Session) -> list[str]:
+    """E-mails de todos os usuários ativos."""
+    return _emails(sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True))))
+
+
+def selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: list[int]) -> tuple[list[str], str]:
+    """E-mails dos usuários escolhidos e das pessoas dos setores escolhidos (membros ou com o setor, ou um setor filho,
+    como Departamento), e a descrição da seleção para o histórico."""
+    from app.services.rh.papeis import setor_com_descendentes, usuarios_dos_setores
+
+    usuarios = list(sessao.scalars(select(Usuario).where(Usuario.id.in_(usuarios_ids), Usuario.ativo.is_(True)))) if usuarios_ids else []
+    escolhidos = list(sessao.scalars(select(Setor).where(Setor.id.in_(setores_ids)))) if setores_ids else []
+    pessoas = {u.id: u for u in usuarios}
+    pessoas.update({u.id: u for u in usuarios_dos_setores(sessao, setor_com_descendentes(sessao, [s.id for s in escolhidos]))})
+    partes = []
+    if usuarios:
+        partes.append("usuários: " + ", ".join(sorted((u.nome_completo or u.login) for u in usuarios)))
+    if escolhidos:
+        partes.append("setores: " + ", ".join(sorted(s.nome for s in escolhidos)))
+    return _emails(pessoas.values()), "; ".join(partes)
+
+
+def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, destino: str, email_teste: str | None,
+                    ate_data: date | None, usuarios_ids: list[int] = (), setores_ids: list[int] = ()) -> tuple[EnvioChangelog, list[str]]:
     """Grava o envio (com o total de destinatários) e devolve a lista de e-mails a processar."""
-    lista = destinatarios(sessao) if destino == "todos" else [email_teste or ""]
+    descricao = None
+    if destino == "todos":
+        lista = destinatarios(sessao)
+    elif destino == "selecionados":
+        lista, descricao = selecionados(sessao, list(usuarios_ids), list(setores_ids))
+        if not lista:
+            raise ErroChangelog("Nenhum destinatário ativo com e-mail entre os usuários e setores escolhidos.")
+    else:
+        lista = [email_teste or ""]
     envio = EnvioChangelog(
-        assunto=assunto, corpo=corpo, destino=destino, ate_data=ate_data if destino == "todos" else None,
+        assunto=assunto, corpo=corpo, destino=destino, destino_descricao=descricao, ate_data=ate_data if destino == "todos" else None,
         total=len(lista), enviados=0, falhas=0, enviado_por_id=autor.id, enviado_por_nome=autor.nome_completo or autor.login,
     )
     sessao.add(envio)
     sessao.flush()
-    auditar(sessao, autor.login, "mensageria.changelog", assunto, f"destino={destino} total={len(lista)}",
+    auditar(sessao, autor.login, "mensageria.changelog", assunto, f"destino={destino} total={len(lista)} {descricao or ''}".strip(),
             autor_id=autor.id, alvo_tipo="envio_changelog", alvo_id=envio.id)
     sessao.commit()
     return envio, lista

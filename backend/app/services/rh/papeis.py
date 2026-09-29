@@ -43,9 +43,8 @@ def setores_cgp(sessao: Session) -> list[Setor]:
     return setor_com_descendentes(sessao, raizes)
 
 
-def usuarios_cgp(sessao: Session) -> list[Usuario]:
-    """Usuários ativos da CGP (sem os SuperRoot que não são do setor)."""
-    setores = setores_cgp(sessao)
+def usuarios_dos_setores(sessao: Session, setores: list[Setor]) -> list[Usuario]:
+    """Usuários ativos que são membros dos setores ou têm um deles como Departamento."""
     if not setores:
         return []
     ids = [s.id for s in setores]
@@ -54,6 +53,11 @@ def usuarios_cgp(sessao: Session) -> list[Usuario]:
     return list(sessao.scalars(
         select(Usuario).where(Usuario.ativo.is_(True), Usuario.id.in_(membros) | func.lower(func.trim(Usuario.departamento)).in_(nomes))
     ))
+
+
+def usuarios_cgp(sessao: Session) -> list[Usuario]:
+    """Usuários ativos da CGP (sem os SuperRoot que não são do setor)."""
+    return usuarios_dos_setores(sessao, setores_cgp(sessao))
 
 
 def eh_cgp(sessao: Session, usuario: Usuario) -> bool:

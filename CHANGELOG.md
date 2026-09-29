@@ -9,6 +9,11 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-29
 
 ### Alterado
+- **E-mail de changelog também para usuários e setores escolhidos**, além de "todos os usuários ativos" e do teste.
+  - Um ou mais usuários pelo seletor e/ou setores sistêmicos ou institucionais. O setor inclui os membros, quem o tem como Departamento e os setores filhos.
+  - O histórico mostra quem foi escolhido.
+  - Migração `a1d3f5b7c9e2`: destino `selecionados` e coluna `destino_descricao` em `mensageria_envios_changelog`.
+  - Endpoints: `POST /api/mensageria/changelog/envios` aceita `destino = selecionados`, `usuarios_ids` e `setores_ids`; o rascunho traz `setores[]`.
 - **Folha de ponto fiel ao modelo de frequência da SPI**, conservando a estrutura do documento.
   - **Frente:** cabeçalho em caixa com o brasão, identificação em duas colunas, a tabela do mês inteira com as marcas em vermelho ("---------" na hora; SÁBADO, DOMINGO, FERIADO, PONTO FACULTATIVO, FÉRIAS na assinatura), as informações financeiras e as assinaturas.
   - **Verso:** só as anotações ("CONSOLIDAÇÃO" com as linhas pautadas, data e assinatura do superior ou do responsável).

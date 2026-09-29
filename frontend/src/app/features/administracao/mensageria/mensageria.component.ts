@@ -2,16 +2,19 @@
 // Este arquivo serve para a tela Mensageria da conta root: preparar, revisar e enviar o e-mail de changelog.
 
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { catchError, debounceTime, EMPTY, Subject, switchMap } from 'rxjs';
 
+import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
+import { SeletorUsuariosComponent } from '../../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { MensageriaApiService } from './mensageria-api.service';
-import { EnvioChangelog, RascunhoChangelog } from './mensageria.models';
+import { UsuariosApiService } from '../../usuarios/usuarios-api.service';
+import { DestinoChangelog, EnvioChangelog, RascunhoChangelog } from './mensageria.models';
 
 function dataBr(texto: string): string {
   return texto.split('-').reverse().join('/');
@@ -24,7 +27,7 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-mensageria',
-  imports: [FormsModule, DatePipe, TrilhaComponent],
+  imports: [FormsModule, DatePipe, TrilhaComponent, SeletorUsuariosComponent],
   templateUrl: './mensageria.component.html',
   host: { '(document:keydown.escape)': 'fechar()' },
 })
@@ -40,8 +43,18 @@ export class MensageriaComponent implements OnInit {
   protected readonly erroPrevia = signal(false);
   protected assunto = '';
   protected corpo = '';
-  protected destino: 'todos' | 'teste' = 'teste';
+  protected destino: DestinoChangelog = 'teste';
   protected emailTeste = '';
+  // Destino "selecionados": 1 ou n usuários e/ou setores (sistêmicos ou institucionais)
+  protected readonly usuariosApi = inject(UsuariosApiService);
+  protected usuarios: OpcaoUsuario[] = [];
+  protected readonly setoresEscolhidos = signal<number[]>([]);
+  protected readonly filtroSetores = signal('');
+  protected readonly setoresFiltrados = computed(() => {
+    const termo = this.filtroSetores().trim().toLowerCase();
+    const setores = this.rascunho()?.setores ?? [];
+    return termo ? setores.filter((s) => s.nome.toLowerCase().includes(termo)) : setores;
+  });
   // Prévia atualizada 600 ms depois da última digitação
   private readonly edicao = new Subject<void>();
   private acompanhamento?: ReturnType<typeof setTimeout>;
@@ -92,6 +105,9 @@ export class MensageriaComponent implements OnInit {
         this.assunto = r.assunto;
         this.corpo = r.corpo;
         this.destino = 'teste';
+        this.usuarios = [];
+        this.setoresEscolhidos.set([]);
+        this.filtroSetores.set('');
         this.previa.set(null);
         this.editou();
       },
@@ -107,13 +123,34 @@ export class MensageriaComponent implements OnInit {
     this.rascunho.set(null);
   }
 
+  protected alternarSetor(id: number, marcado: boolean): void {
+    this.setoresEscolhidos.update((ids) => (marcado ? [...ids, id] : ids.filter((x) => x !== id)));
+  }
+
   protected podeEnviar(): boolean {
-    return !!this.assunto.trim() && !!this.corpo.trim() && (this.destino === 'todos' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.emailTeste.trim()));
+    if (!this.assunto.trim() || !this.corpo.trim()) return false;
+    if (this.destino === 'selecionados') return this.usuarios.length > 0 || this.setoresEscolhidos().length > 0;
+    return this.destino === 'todos' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.emailTeste.trim());
+  }
+
+  /** Texto do botão de envio conforme o destino. */
+  protected rotuloEnviar(): string {
+    return { todos: 'Enviar a todos', selecionados: 'Enviar aos escolhidos', teste: 'Enviar teste' }[this.destino];
   }
 
   protected async enviar(): Promise<void> {
     const r = this.rascunho();
     if (!r || !this.podeEnviar()) return;
+    if (this.destino === 'selecionados') {
+      const nomes = this.setoresEscolhidos().map((id) => r.setores.find((s) => s.id === id)?.nome ?? '');
+      const ok = await this.dialogos.confirmar({
+        titulo: 'Enviar aos escolhidos?',
+        mensagem: `"${this.assunto.trim()}" vai para ${this.usuarios.length} usuário(s)` +
+          (nomes.length ? ` e para as pessoas dos setores: ${nomes.join(', ')} (inclui os setores filhos)` : '') + '. Um e-mail para cada.',
+        rotuloConfirmar: 'Enviar',
+      });
+      if (!ok) return;
+    }
     if (this.destino === 'todos') {
       const ok = await this.dialogos.confirmar({
         titulo: 'Enviar a todos os usuários?',
@@ -126,11 +163,13 @@ export class MensageriaComponent implements OnInit {
     const pedido = {
       assunto: this.assunto.trim(), corpo: this.corpo.trim(), destino: this.destino,
       email_teste: this.destino === 'teste' ? this.emailTeste.trim() : null, ate_data: r.ate,
+      usuarios_ids: this.destino === 'selecionados' ? this.usuarios.map((u) => u.id) : [],
+      setores_ids: this.destino === 'selecionados' ? this.setoresEscolhidos() : [],
     };
     this.dialogos.executar(this.api.enviar(pedido), 'Registrando o envio…').subscribe({
       next: (envio) => {
         this.carregarHistorico();
-        if (envio.destino === 'todos') {
+        if (envio.destino !== 'teste') {
           this.fechar();
           this.dialogos.avisar('Envio iniciado', `Os e-mails saem em segundo plano para ${envio.total} destinatário(s); acompanhe o resultado no histórico.`);
         } else {
@@ -150,6 +189,9 @@ export class MensageriaComponent implements OnInit {
         this.assunto = e.assunto;
         this.corpo = e.corpo;
         this.destino = 'teste';
+        this.usuarios = [];
+        this.setoresEscolhidos.set([]);
+        this.filtroSetores.set('');
         this.previa.set(null);
         this.editou();
       },

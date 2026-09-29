@@ -1139,7 +1139,7 @@ $rh-aprovado-fundo: #e5f4ec;
     font-weight: 700;
   }
 
-  input:not([type='radio']),
+  input:not([type='radio']):not([type='checkbox']),
   textarea {
     width: 100%;
     padding: 0 12px;
@@ -1161,7 +1161,7 @@ $rh-aprovado-fundo: #e5f4ec;
     }
   }
 
-  input:not([type='radio']) {
+  input:not([type='radio']):not([type='checkbox']) {
     height: 42px;
   }
 
@@ -1291,5 +1291,71 @@ $rh-aprovado-fundo: #e5f4ec;
     margin-bottom: 16px;
     color: #7c8998;
     font-size: 12px;
+  }
+}
+
+/* Mensageria: escolha de usuários e setores para o e-mail de changelog (no rodapé da janela) */
+.selecao-changelog {
+  display: grid;
+  flex-basis: 100%;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  order: 1;
+
+  fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  legend {
+    margin-bottom: 6px;
+    color: #464f5a;
+    font-size: 12px;
+    font-weight: 700;
+
+    small {
+      color: #7c8998;
+      font-weight: 400;
+    }
+  }
+
+  input[type='search'] {
+    height: 34px !important;
+    margin-bottom: 6px;
+  }
+}
+
+// No rodapé da janela, a lista de usuários abre para cima (para baixo ficaria cortada)
+.modal-changelog .selecao-changelog .resultados {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.lista-setores-changelog {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid #e2e5e8;
+  border-radius: 7px;
+
+  label {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    margin: 2px 0 !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+  }
+
+  .selo-origem {
+    margin-left: 4px;
+  }
+}
+
+@media (max-width: 900px) {
+  .selecao-changelog {
+    grid-template-columns: 1fr;
   }
 }

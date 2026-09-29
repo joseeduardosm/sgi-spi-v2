@@ -25,7 +25,11 @@
           <tr>
             <td>{{ e.criado_em | date: 'dd/MM/yyyy HH:mm' }}</td>
             <td><strong>{{ e.assunto }}</strong>@if (e.ate_data) { <small>Novidades até {{ data(e.ate_data) }}</small> }</td>
-            <td>{{ e.destino === 'todos' ? 'Todos os usuários' : 'Teste' }}</td>
+            <td>@switch (e.destino) {
+                @case ('todos') { Todos os usuários }
+                @case ('selecionados') { Escolhidos<small>{{ e.destino_descricao }}</small> }
+                @default { Teste }
+              }</td>
             <td>
               @if (!e.concluido_em) { <span class="selo-situacao alerta">Enviando… {{ e.enviados + e.falhas }}/{{ e.total }}</span> }
               @else if (e.falhas) { <span class="selo-situacao vermelho" [title]="e.erros ?? ''">{{ e.enviados }} enviado(s), {{ e.falhas }} falha(s)</span> }
@@ -74,11 +78,34 @@
         <div class="destino-changelog linha-caixas">
           <label><input type="radio" name="destino" value="teste" [(ngModel)]="destino" /> Somente teste para</label>
           <input type="email" name="email_teste" placeholder="seu.email@sp.gov.br" aria-label="E-mail de teste" [(ngModel)]="emailTeste" [disabled]="destino !== 'teste'" />
+          <label><input type="radio" name="destino" value="selecionados" [(ngModel)]="destino" /> Usuários e setores escolhidos</label>
           <label><input type="radio" name="destino" value="todos" [(ngModel)]="destino" /> Todos os usuários ativos ({{ r.total_destinatarios }})</label>
         </div>
+        @if (destino === 'selecionados') {
+          <div class="selecao-changelog">
+            <div>
+              <label for="changelog-usuarios">Usuários ({{ usuarios.length }})</label>
+              <app-seletor-usuarios idCampo="changelog-usuarios" [(selecionados)]="usuarios" [fonte]="usuariosApi.opcoesGestor"
+                                    textoAjuda="Pesquisar usuário por nome, login ou cargo" />
+            </div>
+            <fieldset>
+              <legend>Setores ({{ setoresEscolhidos().length }}) <small>inclui membros, quem tem o setor como Departamento e os setores filhos</small></legend>
+              <input type="search" aria-label="Pesquisar setores" placeholder="Pesquisar setor" [ngModel]="filtroSetores()"
+                     (ngModelChange)="filtroSetores.set($event)" [ngModelOptions]="{ standalone: true }" />
+              <div class="lista-setores-changelog">
+                @for (s of setoresFiltrados(); track s.id) {
+                  <label [style.padding-left.px]="s.nivel * 14">
+                    <input type="checkbox" [checked]="setoresEscolhidos().includes(s.id)" (change)="alternarSetor(s.id, $any($event.target).checked)" />
+                    {{ s.nome }}@if (s.sistemico) { <span class="selo-origem sistemico">sistêmico</span> }
+                  </label>
+                } @empty { <p class="estado-vazio">Nenhum setor encontrado.</p> }
+              </div>
+            </fieldset>
+          </div>
+        }
         <div class="acoes-formulario">
           <button type="button" class="acao-secundaria" (click)="fechar()">Cancelar</button>
-          <button type="submit" class="acao-primaria" [disabled]="!podeEnviar()">{{ destino === 'todos' ? 'Enviar a todos' : 'Enviar teste' }}</button>
+          <button type="submit" class="acao-primaria" [disabled]="!podeEnviar()">{{ rotuloEnviar() }}</button>
         </div>
       </footer>
     </form>

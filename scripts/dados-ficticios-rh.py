@@ -102,8 +102,9 @@ def _setores_existentes(sessao) -> list[str]:
 def remover(sessao) -> int:
     ids = list(sessao.scalars(select(Usuario.id).where(Usuario.login.startswith(PREFIXO))))
     if ids:
-        # Tira os fictícios de autorizador e superior de quem quer que seja, antes de apagar
-        for d in sessao.scalars(select(DadosFuncionais).where(DadosFuncionais.autorizador_id.in_(ids) | DadosFuncionais.substituto_id.in_(ids))):
+        # Pessoas reais que tenham um fictício como autorizador ou substituto perdem esse vínculo (os fictícios somem em cascata)
+        for d in sessao.scalars(select(DadosFuncionais).where(
+                DadosFuncionais.usuario_id.notin_(ids), DadosFuncionais.autorizador_id.in_(ids) | DadosFuncionais.substituto_id.in_(ids))):
             d.autorizador_id = None if d.autorizador_id in ids else d.autorizador_id
             d.substituto_id = None if d.substituto_id in ids else d.substituto_id
         sessao.execute(delete(Usuario).where(Usuario.id.in_(ids)))

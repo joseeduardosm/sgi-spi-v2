@@ -26,6 +26,8 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           { id: 'contratos', rotulo: 'Contratos', rota: '/contratos', destino: '/contratos/painel', acl: 'contratos' },
           // RH: férias e licença-prêmio para todos; painel, validações e parâmetros conforme o papel
           { id: 'rh', rotulo: 'RH', rota: '/rh', destino: '/rh/ferias' },
+          // Tarefas: minhas tarefas, equipes e liderança
+          { id: 'tarefas', rotulo: 'Tarefas', rota: '/tarefas' },
         ],
         textoVazio: 'Nenhum módulo disponível ainda',
       },

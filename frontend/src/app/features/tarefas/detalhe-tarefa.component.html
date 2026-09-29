@@ -1,0 +1,270 @@
+@if (tarefa(); as t) {
+  <app-cabecalho-tarefas [titulo]="'#' + t.numero + ' ' + t.titulo" [trilha]="t.equipe
+      ? [{ rotulo: t.equipe.nome, rota: ['/tarefas/equipes', t.equipe.id] }, { rotulo: '#' + t.numero }]
+      : [{ rotulo: '#' + t.numero }]" />
+
+  <!-- Linha de etapas: A fazer → Em andamento → Em validação → Concluída -->
+  <ol class="etapas-tarefa" aria-label="Etapas da tarefa">
+    @for (e of t.etapas; track e.status) {
+      @if (e.status !== 'em_validacao' || t.equipe) {
+        <li [class.alcancada]="e.alcancada" [class.atual]="e.atual" [attr.aria-current]="e.atual ? 'step' : null">
+          <span class="marca" aria-hidden="true">{{ e.alcancada && !e.atual ? '✓' : $index + 1 }}</span>
+          <strong>{{ e.rotulo }}</strong>
+          @if (e.em) { <small>{{ e.em | date: 'dd/MM/yyyy HH:mm' }}@if (e.por) { · {{ e.por }} }</small> }
+        </li>
+      }
+    }
+  </ol>
+
+  <!-- Ações permitidas agora (a API manda a lista) -->
+  <div class="barra-acoes-tarefa">
+    <div class="principais">
+      @if (pode('iniciar')) { <button type="button" class="acao-primaria" (click)="executar('iniciar')">Iniciar</button> }
+      @if (pode('entregar')) {
+        <button type="button" class="acao-positiva" (click)="executar('entregar')">{{ t.equipe ? 'Entregar para validação' : 'Concluir' }}</button>
+      }
+      @if (pode('validar')) { <button type="button" class="acao-positiva" (click)="executar('validar')">Validar</button> }
+      @if (pode('devolver')) { <button type="button" class="acao-recusar" (click)="executar('devolver')">Devolver</button> }
+      @if (pode('concluir')) { <button type="button" class="acao-positiva" (click)="executar('concluir')">Concluir</button> }
+      @if (pode('pausar')) { <button type="button" class="acao-secundaria" (click)="executar('pausar')">Voltar para A fazer</button> }
+      @if (pode('reabrir')) { <button type="button" class="acao-secundaria" (click)="executar('reabrir')">Reabrir</button> }
+    </div>
+    <div class="secundarias">
+      @if (pode('prazo')) { <button type="button" class="acao-secundaria" (click)="modoJanela.set('prazo')">Alterar prazo</button> }
+      @if (pode('transferir')) { <button type="button" class="acao-secundaria" (click)="modoJanela.set('transferir')">Transferir</button> }
+      @if (pode('editar')) { <button type="button" class="acao-secundaria" (click)="abrirEdicao()">Editar</button> }
+      @if (pode('excluir')) { <button type="button" class="acao-secundaria botao-excluir" (click)="excluir()">Excluir</button> }
+    </div>
+  </div>
+
+  <div class="colunas-tarefa">
+    <div class="principal">
+      @if (editando()) {
+        <form class="cartao-dados" (submit)="$event.preventDefault(); salvarEdicao()">
+          <header><h2>Editar tarefa</h2></header>
+          <div class="corpo">
+            <div class="grade-formulario">
+              <div class="ocupa-duas"><label for="ed-titulo">Título *</label>
+                <input id="ed-titulo" name="titulo" maxlength="200" [(ngModel)]="edicao.titulo" /></div>
+              <div class="ocupa-duas"><label for="ed-descricao">Descrição</label>
+                <textarea id="ed-descricao" name="descricao" rows="6" maxlength="20000" [(ngModel)]="edicao.descricao"></textarea></div>
+              <div><label for="ed-prioridade">Prioridade</label>
+                <select id="ed-prioridade" name="prioridade" [(ngModel)]="edicao.prioridade">
+                  @for (p of prioridades; track p) { <option [value]="p">{{ rotulosPrioridade[p] }}</option> }
+                </select></div>
+              <div></div>
+              <div class="ocupa-duas"><label for="ed-participantes">Participantes</label>
+                <app-seletor-usuarios idCampo="ed-participantes" [(selecionados)]="participantes" [fonte]="api.opcoesPessoas" /></div>
+              @if (marcadoresEquipe().length) {
+                <div class="ocupa-duas"><label>Marcadores</label>
+                  <div class="linha-caixas">
+                    @for (m of marcadoresEquipe(); track m.id) {
+                      <label><input type="checkbox" [checked]="marcadoresIds().includes(m.id)" (change)="alternarMarcador(m.id)" />
+                        <span class="marcador-tarefa" [style.--cor]="m.cor">{{ m.nome }}</span></label>
+                    }
+                  </div></div>
+              }
+            </div>
+            <div class="acoes-formulario">
+              <button type="button" class="acao-secundaria" (click)="editando.set(false)">Cancelar</button>
+              <button type="submit" class="acao-primaria" [disabled]="!edicao.titulo.trim()">Salvar</button>
+            </div>
+          </div>
+        </form>
+      } @else {
+        <section class="cartao-dados">
+          <header><h2>Descrição</h2></header>
+          <div class="corpo descricao-tarefa">@if (t.descricao) { {{ t.descricao }} } @else { <span class="dica-formulario">Sem descrição.</span> }</div>
+        </section>
+      }
+
+      <!-- Checklist -->
+      <section class="cartao-dados">
+        <header><h2>Checklist</h2>@if (t.checklist.length) { <small>{{ t.checklist_feitos }} de {{ t.checklist_total }} concluídos</small> }</header>
+        <div class="corpo">
+          @if (t.checklist.length) {
+            <div class="progresso-checklist" role="progressbar" [attr.aria-valuenow]="t.checklist_feitos" aria-valuemin="0" [attr.aria-valuemax]="t.checklist_total">
+              <span [style.width.%]="(t.checklist_feitos / t.checklist_total) * 100"></span>
+            </div>
+          }
+          <ul class="lista-checklist">
+            @for (i of t.checklist; track i.id) {
+              <li [class.feito]="i.concluido">
+                <label><input type="checkbox" [checked]="i.concluido" [disabled]="!pode('comentar')"
+                              (change)="checklist('marcar', i.id)" /> {{ i.texto }}</label>
+                @if (pode('comentar')) { <button type="button" class="link-simples" [attr.aria-label]="'Remover ' + i.texto" (click)="checklist('remover', i.id)">×</button> }
+              </li>
+            }
+          </ul>
+          @if (pode('comentar')) {
+            <form class="novo-item-checklist" (submit)="$event.preventDefault(); checklist('incluir')">
+              <input name="novoItem" maxlength="300" placeholder="Novo item do checklist" [(ngModel)]="novoItem" />
+              <button type="submit" class="acao-secundaria" [disabled]="!novoItem.trim()">Incluir</button>
+            </form>
+          }
+        </div>
+      </section>
+
+      <!-- Comentário -->
+      @if (pode('comentar')) {
+        <section class="cartao-dados">
+          <header><h2>Comentar</h2><small>Os envolvidos recebem aviso. Até 5 anexos (PDF, Office, imagens, TXT, CSV).</small></header>
+          <form class="corpo formulario-comentario" (submit)="$event.preventDefault(); comentar()">
+            <textarea name="comentario" rows="3" maxlength="4000" placeholder="Escreva um comentário" aria-label="Comentário" [(ngModel)]="textoComentario"></textarea>
+            @if (arquivos().length) {
+              <ul class="arquivos-escolhidos">
+                @for (a of arquivos(); track $index) {
+                  <li><svg class="clipe" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="CLIPE" /></svg> {{ a.name }} <small>{{ tamanhoLegivel(a.size) }}</small>
+                    <button type="button" class="link-simples" [attr.aria-label]="'Remover ' + a.name" (click)="removerArquivo($index)">×</button></li>
+                }
+              </ul>
+            }
+            <div class="acoes-formulario">
+              <label class="acao-secundaria botao-arquivo">Anexar arquivos
+                <input type="file" multiple accept=".pdf,.docx,.xlsx,.pptx,.odt,.ods,.odp,.doc,.xls,.ppt,.png,.jpg,.jpeg,.txt,.csv" (change)="escolherArquivos($event)" /></label>
+              <button type="submit" class="acao-primaria" [disabled]="enviando() || (!textoComentario.trim() && !arquivos().length)">Enviar</button>
+            </div>
+          </form>
+        </section>
+      }
+
+      <!-- Linha do tempo -->
+      <section class="cartao-dados">
+        <header>
+          <div><h2>Linha do tempo</h2><small>{{ totalEventos() }} registro{{ totalEventos() === 1 ? '' : 's' }}</small></div>
+          <div class="chips-linha" role="group" aria-label="Filtrar a linha do tempo">
+            @for (f of FILTROS; track f.valor) {
+              <button type="button" [class.ativo]="filtro() === f.valor" [attr.aria-pressed]="filtro() === f.valor" (click)="trocarFiltro(f.valor)">{{ f.rotulo }}</button>
+            }
+          </div>
+        </header>
+        <div class="corpo">
+          @for (g of dias(); track g.dia) {
+            <h3 class="dia-linha">{{ g.dia }}</h3>
+            <ol class="linha-do-tempo">
+              @for (e of g.itens; track e.id) {
+                <li [attr.data-tipo]="e.tipo" [class.removido]="e.removido">
+                  <span class="icone-evento" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="icone(e.tipo)" /></svg></span>
+                  <div class="conteudo-evento">
+                    <div class="topo-evento">
+                      <strong>{{ e.titulo }}</strong>
+                      <small>{{ e.autor }} · {{ e.criado_em | date: 'HH:mm' }}</small>
+                      @if (superRoot() && !e.removido && e.tipo !== 'removido') {
+                        <button type="button" class="link-simples remover-evento" (click)="pedirRemocao(e)" title="Remover (SuperRoot)">Remover</button>
+                      }
+                    </div>
+                    @if (e.removido) {
+                      <p class="texto-removido">Conteúdo removido pelo SuperRoot. Motivo: {{ e.motivo_remocao }}</p>
+                    } @else {
+                      @switch (e.tipo) {
+                        @case ('prazo') {
+                          <p class="de-para"><s>{{ texto(e.dados['de']) | date: 'dd/MM/yyyy HH:mm' }}</s> → <strong>{{ texto(e.dados['para']) | date: 'dd/MM/yyyy HH:mm' }}</strong></p>
+                        }
+                        @case ('transferida') {
+                          <p class="de-para">{{ texto(e.dados['de']) }} → <strong>{{ texto(e.dados['para']) }}</strong>
+                            @if (e.dados['prazo_para']) { · novo prazo {{ texto(e.dados['prazo_para']) | date: 'dd/MM/yyyy HH:mm' }} }</p>
+                        }
+                        @case ('editada') {
+                          <ul class="campos-editados">@for (c of camposEditados(e); track c) { <li>{{ c }}</li> }</ul>
+                        }
+                        @case ('criada') {
+                          <p class="de-para">Responsável: {{ texto(e.dados['responsavel']) }} · prazo {{ texto(e.dados['prazo']) | date: 'dd/MM/yyyy HH:mm' }}</p>
+                        }
+                        @default {
+                          @if (e.dados['de'] && e.dados['para']) {
+                            <p class="de-para">
+                              <span class="selo-status" [attr.data-status]="e.dados['de']">{{ rotuloStatus(e.dados['de']) }}</span> →
+                              <span class="selo-status" [attr.data-status]="e.dados['para']">{{ rotuloStatus(e.dados['para']) }}</span>
+                            </p>
+                          }
+                        }
+                      }
+                      @if (e.texto) {
+                        <p class="texto-evento" [class.justificativa]="e.tipo !== 'comentario'">{{ e.texto }}</p>
+                      }
+                      @if (e.anexos.length) {
+                        <ul class="anexos-evento">
+                          @for (a of e.anexos; track a.id) {
+                            <li>@if (a.removido) { <s>{{ a.nome }}</s> } @else {
+                              <button type="button" class="link-simples" (click)="baixar(a)"><svg class="clipe" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="CLIPE" /></svg> {{ a.nome }}</button> }
+                              <small>{{ tamanhoLegivel(a.tamanho) }}</small></li>
+                          }
+                        </ul>
+                      }
+                    }
+                  </div>
+                </li>
+              }
+            </ol>
+          } @empty {
+            <p class="dica-formulario">{{ carregandoEventos() ? 'Carregando…' : 'Nada com este filtro.' }}</p>
+          }
+          @if (temMais()) {
+            <button type="button" class="acao-secundaria carregar-mais" [disabled]="carregandoEventos()" (click)="carregarEventos(false)">Carregar mais</button>
+          }
+        </div>
+      </section>
+    </div>
+
+    <!-- Resumo lateral -->
+    <aside class="lateral">
+      <section class="cartao-dados resumo-tarefa">
+        <header><h2>Resumo</h2>
+          <span class="selo-status" [attr.data-status]="t.status">{{ rotulosStatus[t.status] }}</span></header>
+        <div class="corpo">
+          <dl class="grade-dados">
+            <div class="ocupa-linha"><dt>Prazo</dt>
+              <dd [class.texto-erro]="t.atrasada && t.status !== 'concluida'"><strong>{{ t.prazo | date: 'dd/MM/yyyy HH:mm' }}</strong>
+                @if (t.status !== 'concluida') { <small class="d-block">{{ prazoRelativo(t.prazo) }}</small> }</dd></div>
+            @if (t.prorrogacoes) {
+              <div class="ocupa-linha"><dt>Prazo original</dt>
+                <dd><s>{{ t.prazo_original | date: 'dd/MM/yyyy HH:mm' }}</s> <span class="selo-prorrogado">alterado {{ t.prorrogacoes }}×</span></dd></div>
+            }
+            <div><dt>Prioridade</dt><dd><span class="selo-prioridade-tarefa" [attr.data-prioridade]="t.prioridade">{{ rotulosPrioridade[t.prioridade] }}</span></dd></div>
+            <div><dt>Carga</dt><dd>{{ t.carga | number: '1.0-1' }} pts</dd></div>
+            <div class="ocupa-linha"><dt>Equipe</dt><dd>@if (t.equipe) { <a [routerLink]="['/tarefas/equipes', t.equipe.id]">{{ t.equipe.nome }}</a> } @else { Pessoal (sem validação) }</dd></div>
+            <div class="ocupa-linha"><dt>Responsável</dt><dd>{{ t.responsavel?.nome ?? '—' }}</dd></div>
+            @if (t.pessoas.length > 1) {
+              <div class="ocupa-linha"><dt>Participantes</dt>
+                <dd>@for (p of t.pessoas; track p.id) { @if (p.id !== t.responsavel?.id) { <span class="pessoa-chip">{{ p.nome }}</span> } }</dd></div>
+            }
+            @if (t.marcadores.length) {
+              <div class="ocupa-linha"><dt>Marcadores</dt>
+                <dd>@for (m of t.marcadores; track m.id) { <span class="marcador-tarefa" [style.--cor]="m.cor">{{ m.nome }}</span> }</dd></div>
+            }
+            <div class="ocupa-linha"><dt>Tempo em andamento</dt><dd>{{ duracao(t.segundos_em_andamento) }}</dd></div>
+            <div class="ocupa-linha"><dt>Criada</dt><dd>{{ t.criado_em | date: 'dd/MM/yyyy HH:mm' }} · {{ t.criado_por?.nome ?? '—' }}</dd></div>
+          </dl>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <app-janela-tarefa [(modo)]="modoJanela" [tarefa]="t" (concluido)="atualizar($event)" />
+
+  @if (eventoRemover(); as ev) {
+    <div class="fundo-modal" role="presentation" (click)="eventoRemover.set(null)"></div>
+    <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-remocao">
+      <header>
+        <div><span class="modal-sobretitulo">SuperRoot</span><h2 id="titulo-remocao">Remover da linha do tempo</h2></div>
+        <button type="button" aria-label="Fechar" (click)="eventoRemover.set(null)">×</button>
+      </header>
+      <form (submit)="$event.preventDefault(); removerEvento()">
+        <p class="dica-formulario" style="margin-top: 0">"{{ ev.titulo }}" de {{ ev.autor }}. O item continua na linha do tempo, marcado como removido, com o motivo.</p>
+        <div class="grade-formulario">
+          <div class="ocupa-duas"><label for="motivo-remocao">Motivo *</label>
+            <textarea id="motivo-remocao" name="motivo" rows="3" maxlength="1000" [(ngModel)]="motivoRemocao"></textarea></div>
+        </div>
+        <footer>
+          <button type="button" class="acao-secundaria" (click)="eventoRemover.set(null)">Cancelar</button>
+          <button type="submit" class="acao-recusar" [disabled]="!motivoRemocao.trim()">Remover</button>
+        </footer>
+      </form>
+    </section>
+  }
+} @else if (naoEncontrada()) {
+  <app-cabecalho-tarefas titulo="Tarefa não encontrada" [trilha]="[{ rotulo: 'Não encontrada' }]" />
+  <p class="estado-vazio">A tarefa não existe ou você não tem acesso a ela. <a routerLink="/tarefas">Voltar às minhas tarefas</a></p>
+} @else {
+  <p class="estado-vazio">Carregando…</p>
+}

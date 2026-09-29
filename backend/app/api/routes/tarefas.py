@@ -71,7 +71,7 @@ def _resumo(sessao: Session, t: Tarefa, prorrogacoes: dict, agora: datetime) -> 
         "prazo_original": _utc(t.prazo_original), "prorrogacoes": prorrogacoes.get(t.id, 0),
         "atrasada": t.status in servico.OPERACIONAIS and servico._comparavel(t.prazo) < agora,
         "equipe": EquipeResumo(id=t.equipe.id, nome=t.equipe.nome) if t.equipe else None, "responsavel": _pessoa(sessao, t.responsavel_id),
-        "participantes": len(t.participantes), "marcadores": [MarcadorLeitura.model_validate(m, from_attributes=True) for m in t.marcadores],
+        "participantes": len([p for p in t.participantes if p.usuario_id != t.responsavel_id]), "marcadores": [MarcadorLeitura.model_validate(m, from_attributes=True) for m in t.marcadores],
         "checklist_feitos": sum(1 for i in t.checklist if i.concluido_em), "checklist_total": len(t.checklist),
         "carga": round(servico.carga(t, agora), 1), "ordem": t.ordem, "atualizado_em": _utc(t.atualizado_em),
     }

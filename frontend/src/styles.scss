@@ -6,6 +6,7 @@
 @use 'bootstrap/dist/css/bootstrap.min.css';
 // Módulo de contratos (usa só seletores próprios ou modificadores dos componentes abaixo)
 @use 'styles/contratos';
+@use 'styles/tarefas';
 
 :root {
   --spi-fundo: #f6f7f8;

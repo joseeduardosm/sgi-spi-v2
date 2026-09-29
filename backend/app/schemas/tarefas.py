@@ -50,7 +50,7 @@ class TarefaResumo(BaseModel):
     atrasada: bool
     equipe: EquipeResumo | None
     responsavel: Pessoa | None
-    participantes: int
+    participantes: int = Field(..., description="Quantos participantes além do responsável.")
     marcadores: list[MarcadorLeitura]
     checklist_feitos: int
     checklist_total: int

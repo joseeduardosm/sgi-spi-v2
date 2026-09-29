@@ -1,0 +1,171 @@
+<app-cabecalho-tarefas [titulo]="titulo()" [trilha]="trilha()"
+                       [descricao]="escopo().tipo === 'minhas' ? 'Tarefas em que você é responsável ou participante.' : ''" />
+
+@if (dados(); as d) {
+  <!-- Indicadores: cada cartão aplica o filtro correspondente -->
+  <div class="indicadores indicadores-tarefas">
+    <button type="button" class="indicador" [class.ativo]="!recorte() && !prioridade() && status().length === 3" (click)="aplicarIndicador('abertas')">
+      <span>Em aberto</span><strong>{{ d.indicadores.operacionais }}</strong><small>a fazer e em andamento</small></button>
+    <button type="button" class="indicador alerta" [class.ativo]="recorte() === 'atrasadas'" (click)="aplicarIndicador('atrasadas')">
+      <span>Atrasadas</span><strong>{{ d.indicadores.atrasadas }}</strong><small>prazo vencido</small></button>
+    <button type="button" class="indicador" [class.ativo]="recorte() === 'hoje'" (click)="aplicarIndicador('hoje')">
+      <span>Vencem hoje</span><strong>{{ d.indicadores.vencem_hoje }}</strong><small>até o fim do dia</small></button>
+    <button type="button" class="indicador" [class.ativo]="prioridade() === 'critica'" (click)="aplicarIndicador('criticas')">
+      <span>Críticas</span><strong>{{ d.indicadores.criticas }}</strong><small>prioridade crítica em aberto</small></button>
+    <button type="button" class="indicador validacao" [class.ativo]="status().length === 1 && status()[0] === 'em_validacao'" (click)="aplicarIndicador('validacao')">
+      <span>Em validação</span><strong>{{ d.indicadores.em_validacao }}</strong><small>{{ lider() ? 'aguardando a sua validação' : 'aguardando a liderança' }}</small></button>
+    <div class="indicador carga" [attr.data-faixa]="d.indicadores.faixa">
+      <span>Carga</span><strong>{{ d.indicadores.carga | number: '1.0-1' }} pts</strong><small>{{ d.indicadores.faixa }}</small></div>
+  </div>
+
+  <section class="painel-gestao">
+    <div class="barra-ferramentas barra-tarefas">
+      <div class="grupo-status" role="group" aria-label="Situação">
+        @if (visao() === 'tabela') {
+          @for (s of STATUS; track s.valor) {
+            <button type="button" class="chip-status" [attr.data-status]="s.valor" [class.ativo]="status().includes(s.valor)"
+                    [attr.aria-pressed]="status().includes(s.valor)" (click)="alternarStatus(s.valor)">{{ s.rotulo }}</button>
+          }
+        } @else { <small>Arraste os cartões entre as colunas ou use os botões de cada cartão.</small> }
+      </div>
+      <div class="alternar-visao" role="group" aria-label="Visão">
+        <button type="button" [class.ativo]="visao() === 'tabela'" [attr.aria-pressed]="visao() === 'tabela'" (click)="navegar({ visao: null })">Tabela</button>
+        <button type="button" [class.ativo]="visao() === 'kanban'" [attr.aria-pressed]="visao() === 'kanban'" (click)="navegar({ visao: 'kanban' })">Kanban</button>
+      </div>
+    </div>
+
+    <div class="filtros-gestao">
+      <input type="search" aria-label="Buscar" placeholder="Buscar por título, número ou responsável" [ngModel]="busca()" (ngModelChange)="digitar($event)" />
+      <select aria-label="Prioridade" [ngModel]="prioridade()" (ngModelChange)="navegar({ prioridade: $event || null })">
+        <option value="">Todas as prioridades</option>
+        @for (p of prioridades; track p) { <option [value]="p">{{ rotulosPrioridade[p] }}</option> }
+      </select>
+      @if (marcadoresDisponiveis().length) {
+        <select aria-label="Marcador" [ngModel]="marcador()" (ngModelChange)="navegar({ marcador: $event || null })">
+          <option value="">Todos os marcadores</option>
+          @for (m of marcadoresDisponiveis(); track m.id) { <option [value]="m.id">{{ m.nome }}</option> }
+        </select>
+      }
+      @if (escopo().tipo === 'equipe' && responsaveisDisponiveis().length > 1) {
+        <select aria-label="Responsável" [ngModel]="responsavel() ?? ''" (ngModelChange)="navegar({ responsavel: $event || null })">
+          <option value="">Todos os responsáveis</option>
+          @for (r of responsaveisDisponiveis(); track r.id) { <option [value]="r.id">{{ r.nome }}</option> }
+        </select>
+      }
+      <select aria-label="Ordenar por" [ngModel]="ordem()" (ngModelChange)="navegar({ ordem: $event === 'manual' ? null : $event })">
+        <option value="manual">Ordem manual</option>
+        <option value="prazo">Prazo mais próximo</option>
+        <option value="prioridade">Prioridade</option>
+      </select>
+    </div>
+
+    @if (chips().length) {
+      <div class="chips-filtro">
+        @for (c of chips(); track c.rotulo) {
+          <button type="button" (click)="navegar(c.limpar)" [attr.aria-label]="'Remover filtro ' + c.rotulo">{{ c.rotulo }} <span aria-hidden="true">×</span></button>
+        }
+        <button type="button" class="limpar" (click)="limparFiltros()">Limpar filtros</button>
+      </div>
+    }
+
+    @if (visao() === 'tabela') {
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao tabela-tarefas">
+          <thead>
+            <tr>
+              @if (ordem() === 'manual') { <th class="coluna-arrastar"><span class="visually-hidden">Ordem</span></th> }
+              <th>Nº</th><th>Tarefa</th><th>Responsável</th><th>Prioridade</th><th>Situação</th><th>Prazo</th><th>Checklist</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of itens(); track t.numero) {
+              <tr [class.arrastando]="arrastando()?.numero === t.numero" [class.alvo]="linhaAlvo() === t.numero"
+                  (dragover)="$event.preventDefault(); linhaAlvo.set(t.numero)" (dragleave)="linhaAlvo.set(null)" (drop)="soltarNaLinha($event, t)">
+                @if (ordem() === 'manual') {
+                  <td class="coluna-arrastar">
+                    <span class="alca" draggable="true" title="Arraste para reordenar" (dragstart)="iniciarArraste($event, t)" (dragend)="terminarArraste()">⋮⋮</span>
+                    <span class="setas">
+                      <button type="button" [attr.aria-label]="'Subir tarefa ' + t.numero" (click)="mover(t, -1)">▲</button>
+                      <button type="button" [attr.aria-label]="'Descer tarefa ' + t.numero" (click)="mover(t, 1)">▼</button>
+                    </span>
+                  </td>
+                }
+                <td><a class="numero-tarefa" [routerLink]="['/tarefas', t.numero]">#{{ t.numero }}</a></td>
+                <td class="coluna-titulo">
+                  <a [routerLink]="['/tarefas', t.numero]"><strong>{{ t.titulo }}</strong></a>
+                  <small>
+                    @if (t.equipe) { {{ t.equipe.nome }} } @else { Pessoal }
+                    @if (t.participantes) { · +{{ t.participantes }} participante{{ t.participantes > 1 ? 's' : '' }} }
+                  </small>
+                  @if (t.marcadores.length) {
+                    <span class="marcadores">@for (m of t.marcadores; track m.id) { <span class="marcador-tarefa" [style.--cor]="m.cor">{{ m.nome }}</span> }</span>
+                  }
+                </td>
+                <td>{{ t.responsavel?.nome ?? '—' }}</td>
+                <td><span class="selo-prioridade-tarefa" [attr.data-prioridade]="t.prioridade">{{ rotulosPrioridade[t.prioridade] }}</span></td>
+                <td><span class="selo-status" [attr.data-status]="t.status">{{ rotulosStatus[t.status] }}</span></td>
+                <td class="coluna-prazo" [class.atrasada]="t.atrasada && t.status !== 'concluida'">
+                  <strong>{{ t.prazo | date: 'dd/MM/yyyy HH:mm' }}</strong>
+                  @if (t.status !== 'concluida') { <small>{{ prazoRelativo(t.prazo) }}</small> }
+                  @if (t.prorrogacoes) { <span class="selo-prorrogado" [title]="'Prazo original: ' + (t.prazo_original | date: 'dd/MM/yyyy HH:mm')">prazo alterado {{ t.prorrogacoes }}×</span> }
+                </td>
+                <td>@if (t.checklist_total) { {{ t.checklist_feitos }}/{{ t.checklist_total }} } @else { — }</td>
+              </tr>
+            } @empty {
+              <tr><td class="estado-vazio" colspan="8">
+                @if (carregando()) { Carregando… }
+                @else if (d.itens.length) { Nenhuma tarefa com esses filtros. <button type="button" class="link-simples" (click)="limparFiltros()">Limpar filtros</button> }
+                @else { Nenhuma tarefa por aqui. <a routerLink="/tarefas/nova">Criar uma tarefa</a> }
+              </td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <!-- Kanban: arrastar entre colunas segue o pipeline; os botões do cartão fazem o mesmo -->
+      <div class="kanban-tarefas">
+        @for (c of colunas(); track c.valor) {
+          <section class="coluna-kanban" [attr.data-status]="c.valor" [class.alvo]="colunaAlvo() === c.valor"
+                   (dragover)="$event.preventDefault(); colunaAlvo.set(c.valor)" (dragleave)="colunaAlvo.set(null)" (drop)="soltarNaColuna($event, c.valor)"
+                   [attr.aria-label]="c.rotulo">
+            <header><h3>{{ c.rotulo }}</h3><span class="contagem">{{ c.total }}</span></header>
+            @for (t of c.itens; track t.numero) {
+              <article class="cartao-tarefa" draggable="true" [class.arrastando]="arrastando()?.numero === t.numero"
+                       [attr.data-prioridade]="t.prioridade" (dragstart)="iniciarArraste($event, t)" (dragend)="terminarArraste()">
+                <a [routerLink]="['/tarefas', t.numero]" class="titulo-cartao"><span>#{{ t.numero }}</span> {{ t.titulo }}</a>
+                @if (t.marcadores.length) {
+                  <span class="marcadores">@for (m of t.marcadores; track m.id) { <span class="marcador-tarefa" [style.--cor]="m.cor">{{ m.nome }}</span> }</span>
+                }
+                <div class="meta-cartao">
+                  <span>{{ t.responsavel?.nome ?? '—' }}</span>
+                  <span class="selo-prioridade-tarefa" [attr.data-prioridade]="t.prioridade">{{ rotulosPrioridade[t.prioridade] }}</span>
+                </div>
+                <div class="meta-cartao">
+                  <span [class.texto-erro]="t.atrasada && t.status !== 'concluida'">
+                    {{ t.status === 'concluida' ? 'Concluída' : prazoRelativo(t.prazo) }}
+                    @if (t.prorrogacoes) { <span class="selo-prorrogado">{{ t.prorrogacoes }}×</span> }
+                  </span>
+                  @if (t.checklist_total) { <span>☑ {{ t.checklist_feitos }}/{{ t.checklist_total }}</span> }
+                </div>
+                @if (proximos(t).length) {
+                  <div class="acoes-linha">
+                    @for (p of proximos(t); track p.rotulo) {
+                      <button type="button" [class]="p.classe" (click)="moverPara(t, p.para)">{{ p.rotulo }}</button>
+                    }
+                  </div>
+                }
+              </article>
+            } @empty { <p class="coluna-vazia">Nada aqui</p> }
+            @if (c.valor === 'concluida' && c.total > c.itens.length) {
+              <p class="coluna-vazia">Mostrando as {{ c.itens.length }} mais recentes de {{ c.total }}</p>
+            }
+          </section>
+        }
+      </div>
+    }
+  </section>
+} @else if (carregando()) {
+  <p class="estado-vazio">Carregando…</p>
+}
+
+<app-janela-tarefa [(modo)]="modoJanela" [tarefa]="tarefaJanela()" (concluido)="aoConcluirJanela()" />

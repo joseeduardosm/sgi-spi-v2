@@ -89,7 +89,7 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 | `DELETE /api/tarefas/marcadores/{marcador_id}` | Liderança da equipe do marcador |
 
 **`TarefaResumo`:**
-- identificação: `numero`, `titulo`, `status`, `prioridade`, `equipe`, `responsavel`, `participantes` (quantidade), `marcadores`;
+- identificação: `numero`, `titulo`, `status`, `prioridade`, `equipe`, `responsavel`, `participantes` (quantos, além do responsável), `marcadores`;
 - prazo: `prazo`, `prazo_original`, `prorrogacoes`, `atrasada`;
 - andamento: `checklist_feitos`/`checklist_total`, `carga`, `ordem`, `atualizado_em`.
 
@@ -101,6 +101,21 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 **`EventoLeitura`:** `tipo`, `titulo`, `texto`, `dados`, `autor`, `criado_em`, `anexos[]` e `removido`/`motivo_remocao`.
 - Tipos: `criada`, `editada`, `status`, `entregue`, `validada`, `devolvida`, `reaberta`, `prazo`, `transferida`, `comentario`, `checklist`, `removido`.
 - `dados` traz `de`/`para` (status ou nomes), `para` do prazo e `campos` da edição.
+
+## Consumo no Angular
+
+Código em `frontend/src/app/features/tarefas/` (rotas em `tarefas.routes.ts`, chamadas em `tarefas-api.service.ts`, tipos em `tarefas.models.ts`):
+
+| Tela | Rota | Endpoints |
+|---|---|---|
+| Minhas tarefas / equipe / pessoa | `/tarefas`, `/tarefas/equipes/:equipeId`, `/tarefas/pessoas/:login` | `GET /api/tarefas` (uma carga, filtros aplicados na tela), `POST /ordem`, `POST /{numero}/mover` (Kanban) |
+| Nova tarefa | `/tarefas/nova` (`?equipe=<id>` já escolhe a equipe) | `GET /equipes`, `GET /pessoas?equipe_id=`, `GET /equipes/{id}/marcadores`, `POST /api/tarefas` |
+| Detalhe | `/tarefas/:numero` | `GET /{numero}`, `PUT`, `DELETE`, `/prazo`, `/mover`, `/transferir`, `/comentarios`, `/linha-do-tempo`, `/anexos/{id}`, `/eventos/{id}/remover`, `/checklist` |
+
+- Estado da lista na URL: `visao=kanban`, `status` (lista separada por vírgula ou `todas`; vazio = em aberto e em validação), `prioridade`, `marcador`, `responsavel`, `busca`, `recorte` (`atrasadas` ou `hoje`) e `ordem` (`prazo` ou `prioridade`; vazio = manual).
+- Kanban: a tela converte o movimento entre colunas na `acao` do pipeline (ex.: Em validação → Em andamento = `devolver`, que abre a janela do motivo). O servidor decide; em `403` o cartão volta.
+- Botões do detalhe: só os de `acoes`. Envie `versao` nas gravações para receber `409` em caso de alteração concorrente.
+- Seletor de pessoas: `GET /pessoas?busca=` (a faixa de carga aparece junto ao nome).
 
 ## Erros
 

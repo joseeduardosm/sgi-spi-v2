@@ -9,6 +9,16 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-30
 
 ### Adicionado
+- **Módulo Tarefas (Fase 2: telas)**, item "Tarefas" em Módulos na barra lateral.
+  - `/tarefas` (minhas), `/tarefas/equipes/:id`, `/tarefas/pessoas/:login`: indicadores clicáveis (em aberto, atrasadas, vencem hoje, críticas, em validação, carga), chips de situação e de filtros ativos, busca com atraso, ordenação; **tudo guardado na URL** (recarregar mantém o estado).
+  - **Tabela** com prazo relativo ("Atrasada há 1 dia"), selo "prazo alterado N×" e ordem manual por arrastar (ou setas pelo teclado).
+  - **Kanban** de 4 colunas: arrastar segue o pipeline (movimento proibido explica o caminho; recusa da API desfaz o movimento) e botões no cartão como alternativa.
+  - `/tarefas/nova`: na equipe, o responsável é escolhido numa lista com a carga de cada pessoa e alerta de sobrecarga.
+  - `/tarefas/:numero`: linha de etapas com data e autor, só as ações permitidas (validar em verde, devolver em vermelho claro), janelas de prazo, transferência, entrega e devolução/reabertura com motivo, edição, checklist com progresso, comentários com anexos e **linha do tempo agrupada por dia**, com ícone e cor por tipo, de/para em selos, prazo antigo riscado, justificativas destacadas, filtros em chips e "Carregar mais". SuperRoot remove itens com motivo.
+
+### Alterado
+- `TarefaResumo.participantes` passa a contar só os participantes além do responsável.
+
 - **Módulo Tarefas (Fase 1: backend)**, reconstrução do app de tarefas do 10.23.1.220 com melhorias.
   - **Pipeline com validação:** A fazer → Em andamento → **Em validação** (o executor entrega) → Concluída (a liderança valida) ou volta com motivo. Tarefa sem equipe conclui na entrega.
   - **Prazo** só com justificativa, guardando o prazo original e o número de prorrogações.

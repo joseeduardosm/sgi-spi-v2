@@ -85,6 +85,11 @@ export const rotas: Routes = [
         loadChildren: () => import('./features/rh/rh.routes').then((m) => m.ROTAS_RH),
       },
       {
+        // Módulo Tarefas: todo usuário autenticado (a API confere o papel em cada tarefa e equipe)
+        path: 'tarefas',
+        loadChildren: () => import('./features/tarefas/tarefas.routes').then((m) => m.ROTAS_TAREFAS),
+      },
+      {
         // Módulo de contratos: todas as telas exigem ACL `contratos` (a API valida o nível de cada ação)
         path: 'contratos',
         canActivate: [guardaAcl],

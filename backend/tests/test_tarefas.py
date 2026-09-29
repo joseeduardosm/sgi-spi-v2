@@ -196,3 +196,40 @@ def test_equipes_marcadores_e_ordem(cliente, equipe):
     item = r["checklist"][0]["id"]
     r = cliente.post(f"{URL}/{t['numero']}/checklist", json={"acao": "marcar", "item_id": item}, headers=h["lia"]).json()
     assert r["checklist_feitos"] == 1 and r["checklist_total"] == 1
+
+
+def test_relatorio_xlsx_e_pdf(cliente, equipe):
+    import io
+
+    from openpyxl import load_workbook
+
+    ids, h, equipe_id = equipe
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], participantes_ids=[ids["beto"]])
+    params = {"escopo": "equipe", "equipe_id": equipe_id}
+    r = cliente.get(f"{URL}/relatorio", params={**params, "formato": "xlsx"}, headers=h["lia"])
+    assert r.status_code == 200 and "tarefas-" in r.headers["content-disposition"]
+    livro = load_workbook(io.BytesIO(r.content))
+    assert livro.sheetnames == ["Tarefas", "Por pessoa"]
+    valores = [c for linha in livro["Tarefas"].iter_rows(values_only=True) for c in linha]
+    assert t["numero"] in valores and t["titulo"] in valores
+    pessoas = [linha[0] for linha in livro["Por pessoa"].iter_rows(values_only=True)]
+    assert any("Ana" in str(p) for p in pessoas) and any("Beto" in str(p) for p in pessoas)
+    r = cliente.get(f"{URL}/relatorio", params={**params, "formato": "pdf"}, headers=h["lia"])
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    # Mesmas permissões da lista; período invertido é recusado
+    assert cliente.get(f"{URL}/relatorio", params=params, headers=h["caio"]).status_code in (403, 404)
+    assert cliente.get(f"{URL}/relatorio", params={**params, "de": "2026-10-10", "ate": "2026-10-01"}, headers=h["lia"]).status_code == 400
+    # Período antes da criação: a tarefa fica de fora
+    r = cliente.get(f"{URL}/relatorio", params={**params, "formato": "xlsx", "ate": "2020-01-01"}, headers=h["lia"])
+    valores = [c for linha in load_workbook(io.BytesIO(r.content))["Tarefas"].iter_rows(values_only=True) for c in linha]
+    assert t["titulo"] not in valores
+
+
+def test_pessoas_da_equipe_com_contagem_na_equipe(cliente, equipe):
+    ids, h, equipe_id = equipe
+    _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    _nova(cliente, h["ana"], None)  # pessoal: conta na carga, não na equipe
+    lista = {p["login"]: p for p in cliente.get(f"{URL}/pessoas", params={"equipe_id": equipe_id}, headers=h["lia"]).json()}
+    assert lista["ana"]["a_fazer"] == 2 and lista["ana"]["na_equipe"]["a_fazer"] == 1
+    assert lista["beto"]["na_equipe"] == {"a_fazer": 0, "em_andamento": 0, "em_validacao": 0, "concluidas": 0, "atrasadas": 0}
+    assert all(p["na_equipe"] is None for p in cliente.get(f"{URL}/pessoas", params={"busca": "a"}, headers=h["lia"]).json())

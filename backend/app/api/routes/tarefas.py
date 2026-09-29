@@ -4,7 +4,7 @@
 
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -21,9 +21,10 @@ from app.models.usuario import Usuario
 from app.schemas.tarefas import (
     AnexoLeitura, Contexto, EdicaoTarefa, EquipeLeitura, EquipeResumo, Etapa, EventoLeitura, GravacaoEquipe, GravacaoMarcador,
     Indicadores, ItemChecklist, LinhaDoTempo, ListaTarefas, MarcadorLeitura, Movimento, MudancaPrazo, NovaTarefa, OperacaoChecklist,
-    Pessoa, PessoaCarga, RemocaoEvento, Reordenacao, TarefaDetalhe, TarefaResumo, Transferencia,
+    ContagemEquipe, Pessoa, PessoaCarga, RemocaoEvento, Reordenacao, TarefaDetalhe, TarefaResumo, Transferencia,
 )
 from app.services import servico_anexos
+from app.services.tarefas import relatorio_tarefas
 from app.services.tarefas import servico_tarefas as servico
 from app.services.tarefas.servico_tarefas import ROTULOS_STATUS, ErroTarefa
 
@@ -127,6 +128,32 @@ def _filtrar(tarefas: list[Tarefa], status_: list[str], prioridade: str | None, 
     return sorted(resultado, key=lambda t: (t.ordem, servico._comparavel(t.prazo), t.numero))
 
 
+def _escopo(sessao: Session, usuario: Usuario, escopo: str, equipe_id: uuid.UUID | None, login: str | None,
+            agora: datetime) -> tuple[list[Tarefa], Contexto, dict]:
+    """Tarefas, contexto e indicadores de um escopo (minhas, equipe ou pessoa), com as permissões conferidas."""
+    with _traduzir():
+        if escopo == "equipe":
+            if equipe_id is None:
+                raise ErroTarefa("Informe a equipe.")
+            equipe, tarefas = servico.da_equipe(sessao, usuario, equipe_id)
+            lider = usuario.superusuario or usuario.id in servico.lideranca(sessao, equipe)
+            contexto = Contexto(tipo="equipe", titulo=equipe.nome if equipe.nome.lower().startswith("equipe") else f"Equipe {equipe.nome}", equipe_id=equipe.id, lider=lider)
+            ind = servico.indicadores(tarefas, agora)
+        elif escopo == "pessoa":
+            pessoa = sessao.scalar(select(Usuario).where(func.lower(Usuario.login) == (login or "").lower()))
+            if pessoa is None:
+                raise ErroTarefa("Pessoa não encontrada.", 404, "nao_encontrado")
+            tarefas = servico.da_pessoa(sessao, usuario, pessoa)
+            contexto = Contexto(tipo="pessoa", titulo=f"Tarefas de {pessoa.nome_completo or pessoa.login}", login=pessoa.login,
+                                lider=usuario.id != pessoa.id)
+            ind = servico.indicadores(tarefas, agora, pessoa.id)
+        else:
+            tarefas = servico.minhas(sessao, usuario)
+            contexto = Contexto(tipo="minhas", titulo="Minhas tarefas", lider=bool(servico.equipes_lideradas(sessao, usuario)))
+            ind = servico.indicadores(tarefas, agora, usuario.id)
+    return tarefas, contexto, ind
+
+
 # ---------------------------------------------------------------------------------------------
 # Listas
 # ---------------------------------------------------------------------------------------------
@@ -141,26 +168,7 @@ def listar(escopo: str = Query("minhas", pattern="^(minhas|equipe|pessoa)$"), eq
            responsavel_id: int | None = None, busca: str = Query("", max_length=200), sessao: Session = Depends(obter_sessao),
            usuario: Usuario = Depends(obter_usuario_atual)) -> ListaTarefas:
     agora = agora_utc()
-    with _traduzir():
-        if escopo == "equipe":
-            if equipe_id is None:
-                raise ErroTarefa("Informe a equipe.")
-            equipe, tarefas = servico.da_equipe(sessao, usuario, equipe_id)
-            lider = usuario.superusuario or usuario.id in servico.lideranca(sessao, equipe)
-            contexto = Contexto(tipo="equipe", titulo=f"Equipe {equipe.nome}", equipe_id=equipe.id, lider=lider)
-            ind = servico.indicadores(tarefas, agora)
-        elif escopo == "pessoa":
-            pessoa = sessao.scalar(select(Usuario).where(func.lower(Usuario.login) == (login or "").lower()))
-            if pessoa is None:
-                raise ErroTarefa("Pessoa não encontrada.", 404, "nao_encontrado")
-            tarefas = servico.da_pessoa(sessao, usuario, pessoa)
-            contexto = Contexto(tipo="pessoa", titulo=f"Tarefas de {pessoa.nome_completo or pessoa.login}", login=pessoa.login,
-                                lider=usuario.id != pessoa.id)
-            ind = servico.indicadores(tarefas, agora, pessoa.id)
-        else:
-            tarefas = servico.minhas(sessao, usuario)
-            contexto = Contexto(tipo="minhas", titulo="Minhas tarefas", lider=bool(servico.equipes_lideradas(sessao, usuario)))
-            ind = servico.indicadores(tarefas, agora, usuario.id)
+    tarefas, contexto, ind = _escopo(sessao, usuario, escopo, equipe_id, login, agora)
     filtradas = _filtrar(tarefas, status_, prioridade, marcador_id, busca, responsavel_id)
     prorrogacoes = _prorrogacoes(sessao, [t.id for t in filtradas])
     return ListaTarefas(contexto=contexto, indicadores=Indicadores(**ind), itens=[TarefaResumo(**_resumo(sessao, t, prorrogacoes, agora)) for t in filtradas])
@@ -173,9 +181,30 @@ def reordenar(dados: Reordenacao, sessao: Session = Depends(obter_sessao), usuar
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@roteador.get("/relatorio", summary="Relatório de tarefas (XLSX ou PDF)", response_class=Response,
+              description="Tarefas do escopo (`minhas`, `equipe` com `equipe_id` ou `pessoa` com `login`, com as mesmas permissões da lista) "
+                          "ativas no período `de`–`ate` (criadas até o fim e abertas ou concluídas a partir do início), opcionalmente de um "
+                          "`marcador_id`. XLSX: abas Tarefas e Por pessoa; PDF: resumo, pessoas e lista.",
+              responses={200: {"content": {relatorio_tarefas.XLSX: {}, "application/pdf": {}}, "description": "Arquivo gerado."},
+                         **SEM_PERMISSAO, **resposta_nao_encontrado("Equipe ou pessoa")})
+def relatorio(formato: str = Query("xlsx", pattern="^(xlsx|pdf)$"), escopo: str = Query("minhas", pattern="^(minhas|equipe|pessoa)$"),
+              equipe_id: uuid.UUID | None = None, login: str | None = None, marcador_id: uuid.UUID | None = None, de: date | None = None,
+              ate: date | None = None, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> Response:
+    if de and ate and de > ate:
+        raise ErroApi(status.HTTP_400_BAD_REQUEST, "O início do período é depois do fim.", "invalido")
+    agora = agora_utc()
+    tarefas, contexto, _ = _escopo(sessao, usuario, escopo, equipe_id, login, agora)
+    if marcador_id:
+        tarefas = [t for t in tarefas if marcador_id in {m.id for m in t.marcadores}]
+    conteudo, nome, midia = relatorio_tarefas.gerar(sessao, usuario, contexto.titulo, tarefas, _prorrogacoes(sessao, [t.id for t in tarefas]),
+                                                    formato, de, ate, agora)
+    return Response(conteudo, media_type=midia, headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
 @roteador.get("/pessoas", response_model=list[PessoaCarga], summary="Pessoas com a carga atual",
               description="Para o seletor de responsável e a visão da liderança: com `equipe_id`, os membros e a liderança da equipe (exige ser "
-                          "da equipe); sem ela, busca entre os usuários ativos (`busca`, até 20).", responses={**SEM_PERMISSAO})
+                          "da equipe), com `na_equipe` (contagens só das tarefas da equipe); sem ela, busca entre os usuários ativos (`busca`, "
+                          "até 20). `carga`, `faixa`, `a_fazer`, `em_andamento` e `atrasadas` são sempre de todas as tarefas da pessoa.", responses={**SEM_PERMISSAO})
 def pessoas(equipe_id: uuid.UUID | None = None, busca: str = Query("", max_length=100), sessao: Session = Depends(obter_sessao),
             usuario: Usuario = Depends(obter_usuario_atual)) -> list[PessoaCarga]:
     with _traduzir():
@@ -189,12 +218,19 @@ def pessoas(equipe_id: uuid.UUID | None = None, busca: str = Query("", max_lengt
             termo = f"%{busca.strip().lower()}%"
             usuarios = list(sessao.scalars(select(Usuario).where(
                 Usuario.ativo.is_(True), func.lower(Usuario.nome_completo + " " + Usuario.login).like(termo)).order_by(Usuario.nome_completo).limit(20)))
-    cargas = servico.carga_das_pessoas(sessao, {u.id for u in usuarios}, agora_utc())
+    agora = agora_utc()
+    cargas = servico.carga_das_pessoas(sessao, {u.id for u in usuarios}, agora)
     extras: dict[int, dict] = {}
     if equipe_id:
-        for t in sessao.scalars(select(Tarefa).where(Tarefa.equipe_id == equipe_id, Tarefa.status.in_(("em_validacao", "concluida")))):
+        # `na_equipe`: contagens só das tarefas desta equipe (visão da liderança); as demais são de todas as tarefas da pessoa
+        for t in sessao.scalars(select(Tarefa).where(Tarefa.equipe_id == equipe_id)):
+            atrasada = t.status in servico.OPERACIONAIS and servico._comparavel(t.prazo) < agora
             for i in servico.envolvidos(t):
-                extras.setdefault(i, {"em_validacao": 0, "concluidas": 0})["em_validacao" if t.status == "em_validacao" else "concluidas"] += 1
+                c = extras.setdefault(i, {"a_fazer": 0, "em_andamento": 0, "atrasadas": 0, "em_validacao": 0, "concluidas": 0})
+                c["concluidas" if t.status == "concluida" else t.status] += 1
+                c["atrasadas"] += atrasada
+        vazio = {"a_fazer": 0, "em_andamento": 0, "atrasadas": 0, "em_validacao": 0, "concluidas": 0}
+        extras = {u.id: {"na_equipe": ContagemEquipe(**extras.get(u.id, vazio))} for u in usuarios}
     lista = [PessoaCarga(id=u.id, nome=u.nome_completo or u.login, login=u.login, cargo=u.cargo or "", **cargas[u.id], **extras.get(u.id, {}))
              for u in usuarios]
     return sorted(lista, key=lambda p: (-p.carga, p.nome.lower()))

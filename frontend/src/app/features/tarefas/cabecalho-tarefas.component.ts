@@ -6,7 +6,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { ItemTrilha, TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 
-/** Cabeçalho das tarefas: "Início / Tarefas / Página", título e atalhos (Minhas tarefas, Nova tarefa). */
+/** Cabeçalho das tarefas: "Início / Tarefas / Página", título e atalhos (Minhas tarefas, Equipes, Nova tarefa). */
 @Component({
   selector: 'app-cabecalho-tarefas',
   imports: [RouterLink, RouterLinkActive, TrilhaComponent],
@@ -21,6 +21,7 @@ import { ItemTrilha, TrilhaComponent } from '../../shared/componentes/trilha/tri
       </div>
       <nav aria-label="Atalhos do Módulo Tarefas">
         <a class="acao-secundaria" routerLink="/tarefas" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">Minhas tarefas</a>
+        <a class="acao-secundaria" routerLink="/tarefas/equipes" routerLinkActive="ativo">Equipes</a>
         <a class="acao-primaria" routerLink="/tarefas/nova"><span>+</span> Nova tarefa</a>
       </nav>
     </div>

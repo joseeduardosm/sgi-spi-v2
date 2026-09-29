@@ -106,6 +106,17 @@ export class TarefasApiService {
       cargo: `${p.faixa} · ${p.a_fazer + p.em_andamento} em aberto${p.atrasadas ? ` · ${p.atrasadas} atrasada(s)` : ''}`,
     }))));
 
+  /** Relatório XLSX ou PDF do escopo, no período (datas aaaa-mm-dd) e, opcionalmente, de um marcador. */
+  relatorio(escopo: Escopo, formato: 'xlsx' | 'pdf', de: string, ate: string, marcadorId: string) {
+    let p = new HttpParams().set('escopo', escopo.tipo).set('formato', formato);
+    if (escopo.equipeId) p = p.set('equipe_id', escopo.equipeId);
+    if (escopo.login) p = p.set('login', escopo.login);
+    if (de) p = p.set('de', de);
+    if (ate) p = p.set('ate', ate);
+    if (marcadorId) p = p.set('marcador_id', marcadorId);
+    return baixarArquivo(this.http, `${this.base}/relatorio?${p.toString()}`, `tarefas.${formato}`);
+  }
+
   equipes(): Observable<Equipe[]> {
     return this.http.get<Equipe[]>(`${this.base}/equipes`);
   }

@@ -80,7 +80,8 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 | `POST /api/tarefas/{numero}/checklist` | `{acao: incluir\|marcar\|remover, texto?, item_id?}` |
 | `DELETE /api/tarefas/{numero}` | `204` |
 | `POST /api/tarefas/ordem` | `{numeros: [...]}`: ordem manual (arrastar); ignora o que o usuário não pode editar |
-| `GET /api/tarefas/pessoas` | `PessoaCarga[]` (carga, faixa, a fazer, em andamento, atrasadas). Com `equipe_id`, a equipe; sem, busca (`busca`, até 20) |
+| `GET /api/tarefas/pessoas` | `PessoaCarga[]`: carga, faixa, a fazer, em andamento e atrasadas de **todas** as tarefas da pessoa. Com `equipe_id`, os membros e a liderança da equipe, mais `na_equipe` (`a_fazer`, `em_andamento`, `em_validacao`, `concluidas`, `atrasadas` só das tarefas da equipe); sem, busca (`busca`, até 20) e `na_equipe` nulo |
+| `GET /api/tarefas/relatorio` | Arquivo XLSX (abas **Tarefas** e **Por pessoa**) ou PDF (resumo, pessoas, lista). `formato` (`xlsx` padrão ou `pdf`), `escopo`/`equipe_id`/`login` (mesmas permissões da lista), `marcador_id`, `de` e `ate` (aaaa-mm-dd). Entram as tarefas ativas no período: criadas até `ate` e abertas ou concluídas a partir de `de`. `400` se `de` > `ate` |
 | `GET /api/tarefas/equipes` | `EquipeLeitura[]` visíveis (membro ou liderança; SuperRoot: todas), com indicadores, `lider` e `pode_configurar` |
 | `POST /api/tarefas/equipes` | `GravacaoEquipe` → `201`: quem cria é o dono |
 | `PUT /api/tarefas/equipes/{equipe_id}` | Dono ou SuperRoot |
@@ -110,9 +111,13 @@ Código em `frontend/src/app/features/tarefas/` (rotas em `tarefas.routes.ts`, c
 |---|---|---|
 | Minhas tarefas / equipe / pessoa | `/tarefas`, `/tarefas/equipes/:equipeId`, `/tarefas/pessoas/:login` | `GET /api/tarefas` (uma carga, filtros aplicados na tela), `POST /ordem`, `POST /{numero}/mover` (Kanban) |
 | Nova tarefa | `/tarefas/nova` (`?equipe=<id>` já escolhe a equipe) | `GET /equipes`, `GET /pessoas?equipe_id=`, `GET /equipes/{id}/marcadores`, `POST /api/tarefas` |
+| Equipes | `/tarefas/equipes` | `GET /equipes` (cartões com totais; subequipes abaixo da equipe pai) |
+| Configurar equipe | `/tarefas/equipes/nova/configurar`, `/tarefas/equipes/:equipeId/configurar` | `POST`/`PUT`/`DELETE /equipes`, `GET`/`POST /equipes/{id}/marcadores`, `DELETE /marcadores/{id}` |
+| Pessoas (liderança) | `/tarefas/equipes/:equipeId?visao=pessoas` | `GET /pessoas?equipe_id=` (barras empilhadas com `na_equipe`) |
+| Relatório (janela na lista) | qualquer lista | `GET /relatorio` |
 | Detalhe | `/tarefas/:numero` | `GET /{numero}`, `PUT`, `DELETE`, `/prazo`, `/mover`, `/transferir`, `/comentarios`, `/linha-do-tempo`, `/anexos/{id}`, `/eventos/{id}/remover`, `/checklist` |
 
-- Estado da lista na URL: `visao=kanban`, `status` (lista separada por vírgula ou `todas`; vazio = em aberto e em validação), `prioridade`, `marcador`, `responsavel`, `busca`, `recorte` (`atrasadas` ou `hoje`) e `ordem` (`prazo` ou `prioridade`; vazio = manual).
+- Estado da lista na URL: `visao` (`kanban`, `pessoas` para a liderança da equipe; vazio = tabela), `status` (lista separada por vírgula ou `todas`; vazio = em aberto e em validação), `prioridade`, `marcador`, `responsavel`, `busca`, `recorte` (`atrasadas` ou `hoje`) e `ordem` (`prazo` ou `prioridade`; vazio = manual).
 - Kanban: a tela converte o movimento entre colunas na `acao` do pipeline (ex.: Em validação → Em andamento = `devolver`, que abre a janela do motivo). O servidor decide; em `403` o cartão volta.
 - Botões do detalhe: só os de `acoes`. Envie `versao` nas gravações para receber `409` em caso de alteração concorrente.
 - Seletor de pessoas: `GET /pessoas?busca=` (a faixa de carga aparece junto ao nome).

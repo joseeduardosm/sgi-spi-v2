@@ -26,14 +26,20 @@
             <button type="button" class="chip-status" [attr.data-status]="s.valor" [class.ativo]="status().includes(s.valor)"
                     [attr.aria-pressed]="status().includes(s.valor)" (click)="alternarStatus(s.valor)">{{ s.rotulo }}</button>
           }
-        } @else { <small>Arraste os cartões entre as colunas ou use os botões de cada cartão.</small> }
+        } @else if (visao() === 'kanban') { <small>Arraste os cartões entre as colunas ou use os botões de cada cartão.</small> }
+        @else { <small>Pessoas da equipe, da maior para a menor carga. Clique para ver as tarefas de cada uma.</small> }
       </div>
       <div class="alternar-visao" role="group" aria-label="Visão">
         <button type="button" [class.ativo]="visao() === 'tabela'" [attr.aria-pressed]="visao() === 'tabela'" (click)="navegar({ visao: null })">Tabela</button>
         <button type="button" [class.ativo]="visao() === 'kanban'" [attr.aria-pressed]="visao() === 'kanban'" (click)="navegar({ visao: 'kanban' })">Kanban</button>
+        @if (escopo().tipo === 'equipe' && lider()) {
+          <button type="button" [class.ativo]="visao() === 'pessoas'" [attr.aria-pressed]="visao() === 'pessoas'" (click)="navegar({ visao: 'pessoas' })">Pessoas</button>
+        }
       </div>
+      <button type="button" class="acao-secundaria" (click)="abrirRelatorio()">Relatório</button>
     </div>
 
+    @if (visao() !== 'pessoas') {
     <div class="filtros-gestao">
       <input type="search" aria-label="Buscar" placeholder="Buscar por título, número ou responsável" [ngModel]="busca()" (ngModelChange)="digitar($event)" />
       <select aria-label="Prioridade" [ngModel]="prioridade()" (ngModelChange)="navegar({ prioridade: $event || null })">
@@ -68,7 +74,38 @@
       </div>
     }
 
-    @if (visao() === 'tabela') {
+    }
+
+    @if (visao() === 'pessoas') {
+      <div class="legenda-pessoas" aria-hidden="true">
+        <span data-status="a_fazer">A fazer</span><span data-status="em_andamento">Em andamento</span>
+        <span data-status="em_validacao">Em validação</span><span data-status="concluida">Concluídas</span>
+      </div>
+      <div class="grade-pessoas">
+        @for (p of pessoas(); track p.id) {
+          @if (p.na_equipe; as e) {
+            <a class="cartao-pessoa" [routerLink]="['/tarefas/pessoas', p.login]">
+              <div class="topo-pessoa">
+                <strong>{{ p.nome }}</strong>
+                <span class="faixa-carga" [attr.data-faixa]="p.faixa" title="Carga de todas as tarefas da pessoa">{{ p.faixa }}</span>
+              </div>
+              <small>{{ p.cargo || '@' + p.login }} · carga total {{ p.carga | number: '1.0-1' }} pts</small>
+              <div class="barra-empilhada" role="img"
+                   [attr.aria-label]="'Nesta equipe: ' + e.a_fazer + ' a fazer, ' + e.em_andamento + ' em andamento, ' + e.em_validacao + ' em validação, ' + e.concluidas + ' concluídas'">
+                <span data-status="a_fazer" [style.width.%]="largura(e.a_fazer)"></span>
+                <span data-status="em_andamento" [style.width.%]="largura(e.em_andamento)"></span>
+                <span data-status="em_validacao" [style.width.%]="largura(e.em_validacao)"></span>
+                <span data-status="concluida" [style.width.%]="largura(e.concluidas)"></span>
+              </div>
+              <div class="numeros-pessoa">
+                <span>Nesta equipe:</span><span>{{ e.a_fazer }} a fazer</span><span>{{ e.em_andamento }} em andamento</span><span>{{ e.em_validacao }} em validação</span>
+                @if (e.atrasadas) { <span class="texto-erro">{{ e.atrasadas }} atrasada{{ e.atrasadas > 1 ? 's' : '' }}</span> }
+              </div>
+            </a>
+          }
+        } @empty { <p class="estado-vazio">Nenhuma pessoa na equipe.</p> }
+      </div>
+    } @else if (visao() === 'tabela') {
       <div class="tabela-gestao-envoltorio">
         <table class="tabela-gestao tabela-tarefas">
           <thead>
@@ -166,6 +203,39 @@
   </section>
 } @else if (carregando()) {
   <p class="estado-vazio">Carregando…</p>
+}
+
+@if (relatorioAberto()) {
+  <div class="fundo-modal" role="presentation" (click)="relatorioAberto.set(false)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-relatorio" (keydown.escape)="relatorioAberto.set(false)">
+    <header>
+      <div><span class="modal-sobretitulo">{{ titulo() }}</span><h2 id="titulo-relatorio">Relatório de tarefas</h2></div>
+      <button type="button" aria-label="Fechar" (click)="relatorioAberto.set(false)">×</button>
+    </header>
+    <form (submit)="$event.preventDefault(); gerarRelatorio()">
+      <p class="dica-formulario" style="margin-top: 0">Tarefas ativas no período: criadas até o fim dele e ainda abertas ou concluídas a partir do início.
+        A planilha traz também a aba "Por pessoa".</p>
+      <div class="grade-formulario">
+        <div><label for="rel-de">De</label><input id="rel-de" name="de" type="date" [(ngModel)]="relatorio.de" /></div>
+        <div><label for="rel-ate">Até</label><input id="rel-ate" name="ate" type="date" [(ngModel)]="relatorio.ate" /></div>
+        @if (marcadoresDisponiveis().length) {
+          <div class="ocupa-duas"><label for="rel-marcador">Marcador</label>
+            <select id="rel-marcador" name="marcador" [(ngModel)]="relatorio.marcador">
+              <option value="">Todos</option>
+              @for (m of marcadoresDisponiveis(); track m.id) { <option [value]="m.id">{{ m.nome }}</option> }
+            </select></div>
+        }
+        <div class="ocupa-duas"><label for="rel-formato">Formato</label>
+          <select id="rel-formato" name="formato" [(ngModel)]="relatorio.formato">
+            <option value="xlsx">Planilha (XLSX)</option><option value="pdf">PDF</option>
+          </select></div>
+      </div>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="relatorioAberto.set(false)">Cancelar</button>
+        <button type="submit" class="acao-primaria">Gerar</button>
+      </footer>
+    </form>
+  </section>
 }
 
 <app-janela-tarefa [(modo)]="modoJanela" [tarefa]="tarefaJanela()" (concluido)="aoConcluirJanela()" />

@@ -244,6 +244,7 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/tarefas/marcadores/{marcador_id}",
         "/api/tarefas/ordem",
         "/api/tarefas/pessoas",
+        "/api/tarefas/relatorio",
         "/api/tarefas/{numero}",
         "/api/tarefas/{numero}/anexos/{anexo_id}",
         "/api/tarefas/{numero}/checklist",

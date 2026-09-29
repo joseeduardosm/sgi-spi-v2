@@ -17,6 +17,17 @@ export const ROTAS_TAREFAS: Routes = [
     loadComponent: () => import('./nova-tarefa.component').then((m) => m.NovaTarefaComponent),
   },
   {
+    path: 'equipes',
+    title: 'Equipes | SGI SPI',
+    loadComponent: () => import('./equipes.component').then((m) => m.EquipesComponent),
+  },
+  {
+    // Configuração: `nova` ou o id da equipe (dono ou SuperRoot; a API confere)
+    path: 'equipes/:equipeId/configurar',
+    title: 'Configurar equipe | SGI SPI',
+    loadComponent: () => import('./configuracao-equipe.component').then((m) => m.ConfiguracaoEquipeComponent),
+  },
+  {
     path: 'equipes/:equipeId',
     title: 'Tarefas da equipe | SGI SPI',
     data: { escopo: 'equipe' },

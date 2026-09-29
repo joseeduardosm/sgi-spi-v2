@@ -9,6 +9,16 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-30
 
 ### Adicionado
+- **Módulo Tarefas (Fase 3: equipes, liderança e relatórios).**
+  - `/tarefas/equipes`: cartões por equipe (em aberto, atrasadas, em validação, concluídas, carga), subequipes abaixo da equipe pai, atalhos "Ver tarefas", "Pessoas", "Validar entregas" e "Configurar".
+  - Configuração separada do acompanhamento (`/tarefas/equipes/:id/configurar`, só dono ou SuperRoot): nome, equipe pai (sem ciclos), líderes, membros, marcadores com cor e desativação.
+  - **Visão da liderança** (`?visao=pessoas`): cartões por pessoa, da maior para a menor carga, com barras empilhadas por situação nesta equipe e link para as tarefas da pessoa.
+  - **Relatório** XLSX (abas Tarefas e Por pessoa) ou PDF por escopo, período e marcador: `GET /api/tarefas/relatorio`.
+  - `PessoaCarga.na_equipe`: contagens da pessoa só nas tarefas da equipe (com `equipe_id`).
+
+### Alterado
+- Título da lista de uma equipe não repete "Equipe" quando o nome já começa assim.
+
 - **Módulo Tarefas (Fase 2: telas)**, item "Tarefas" em Módulos na barra lateral.
   - `/tarefas` (minhas), `/tarefas/equipes/:id`, `/tarefas/pessoas/:login`: indicadores clicáveis (em aberto, atrasadas, vencem hoje, críticas, em validação, carga), chips de situação e de filtros ativos, busca com atraso, ordenação; **tudo guardado na URL** (recarregar mantém o estado).
   - **Tabela** com prazo relativo ("Atrasada há 1 dia"), selo "prazo alterado N×" e ordem manual por arrastar (ou setas pelo teclado).

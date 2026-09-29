@@ -11,7 +11,6 @@ import { AutenticacaoService } from '../../core/autenticacao/autenticacao.servic
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
-import { nomeDoArquivo, salvarBlob } from '../../shared/utilitarios/download';
 import { CabecalhoTarefasComponent } from './cabecalho-tarefas.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
 import { TarefasApiService } from './tarefas-api.service';
@@ -229,8 +228,8 @@ export class DetalheTarefaComponent implements OnInit {
   }
 
   protected baixar(anexo: AnexoEvento): void {
+    // `baixarArquivo` já salva o arquivo; aqui só o erro é tratado
     this.api.baixarAnexo(this.numero(), anexo.id, anexo.nome).subscribe({
-      next: (r) => salvarBlob(r.body!, nomeDoArquivo(r, anexo.nome)),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível baixar o arquivo'),
     });
   }

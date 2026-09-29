@@ -14,10 +14,10 @@ import { CabecalhoTarefasComponent } from './cabecalho-tarefas.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
 import { Escopo, TarefasApiService } from './tarefas-api.service';
 import {
-  AcaoPipeline, ListaTarefas, Marcador, Pessoa, prazoRelativo, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS, STATUS, StatusTarefa, TarefaResumo,
+  AcaoPipeline, ListaTarefas, Marcador, Pessoa, PessoaCarga, prazoRelativo, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS, STATUS, StatusTarefa, TarefaResumo,
 } from './tarefas.models';
 
-type Visao = 'tabela' | 'kanban';
+type Visao = 'tabela' | 'kanban' | 'pessoas';
 type Recorte = '' | 'atrasadas' | 'hoje';
 type Ordem = 'manual' | 'prazo' | 'prioridade';
 
@@ -145,10 +145,14 @@ export class ListaTarefasComponent implements OnInit {
     combineLatest([this.rota.paramMap, this.rota.data]).pipe(takeUntilDestroyed(this.destruir)).subscribe(([p, d]) => {
       const tipo = (d['escopo'] ?? 'minhas') as Escopo['tipo'];
       this.escopo.set({ tipo, equipeId: p.get('equipeId'), login: p.get('login') });
+      this.pessoas.set([]);
       this.carregar();
+      if (this.visao() === 'pessoas') this.carregarPessoas();
     });
     this.rota.queryParamMap.pipe(takeUntilDestroyed(this.destruir)).subscribe((q) => {
-      this.visao.set(q.get('visao') === 'kanban' ? 'kanban' : 'tabela');
+      const visao = q.get('visao');
+      this.visao.set(visao === 'kanban' || visao === 'pessoas' ? visao : 'tabela');
+      if (visao === 'pessoas') this.carregarPessoas();
       const status = q.get('status');
       this.status.set(status === 'todas' ? STATUS.map((s) => s.valor) : status ? (status.split(',') as StatusTarefa[]) : ABERTAS);
       this.prioridade.set((q.get('prioridade') ?? '') as PrioridadeTarefa | '');
@@ -160,6 +164,46 @@ export class ListaTarefasComponent implements OnInit {
     });
     // Busca com atraso: a URL muda 300 ms depois da última tecla
     this.digitacao.pipe(debounceTime(300), takeUntilDestroyed(this.destruir)).subscribe((b) => this.navegar({ busca: b.trim() || null }));
+  }
+
+  // --- Visão da liderança: pessoas da equipe ordenadas pela carga ----------------------------------
+
+  protected readonly pessoas = signal<PessoaCarga[]>([]);
+  /** Maior total de tarefas entre as pessoas (escala das barras empilhadas). */
+  protected readonly maiorTotal = computed(() => Math.max(1, ...this.pessoas().map((p) => {
+    const e = p.na_equipe;
+    return e ? e.a_fazer + e.em_andamento + e.em_validacao + e.concluidas : 0;
+  })));
+
+  private carregarPessoas(): void {
+    const id = this.escopo().equipeId;
+    if (this.escopo().tipo !== 'equipe' || !id) return;
+    this.api.pessoas(id).subscribe({ next: (l) => this.pessoas.set(l), error: (e) => this.dialogos.mostrarErro(e) });
+  }
+
+  protected largura(valor: number): number {
+    return (valor / this.maiorTotal()) * 100;
+  }
+
+  // --- Relatório ------------------------------------------------------------------------------------
+
+  protected readonly relatorioAberto = signal(false);
+  protected relatorio = { de: '', ate: '', marcador: '', formato: 'xlsx' as 'xlsx' | 'pdf' };
+
+  protected abrirRelatorio(): void {
+    const hoje = new Date();
+    const z = (n: number) => String(n).padStart(2, '0');
+    const texto = (d: Date) => `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+    this.relatorio = { de: texto(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), ate: texto(hoje), marcador: this.marcador(), formato: 'xlsx' };
+    this.relatorioAberto.set(true);
+  }
+
+  protected gerarRelatorio(): void {
+    const r = this.relatorio;
+    this.dialogos.executar(this.api.relatorio(this.escopo(), r.formato, r.de, r.ate, r.marcador), 'Gerando o relatório…').subscribe({
+      next: () => this.relatorioAberto.set(false),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o relatório'),
+    });
   }
 
   protected carregar(): void {

@@ -226,8 +226,17 @@ class GravacaoMarcador(BaseModel):
     _n = field_validator("nome")(lambda cls, v: _aparar(v))
 
 
+class ContagemEquipe(BaseModel):
+    """Tarefas da pessoa numa equipe, por situação (visão da liderança)."""
+    a_fazer: int
+    em_andamento: int
+    em_validacao: int
+    concluidas: int
+    atrasadas: int
+
+
 class PessoaCarga(BaseModel):
-    """Pessoa com a carga atual (seletor de responsável e visão da liderança)."""
+    """Pessoa com a carga atual (seletor de responsável e visão da liderança). Contagens de todas as tarefas da pessoa."""
     id: int
     nome: str
     login: str
@@ -237,5 +246,4 @@ class PessoaCarga(BaseModel):
     a_fazer: int
     em_andamento: int
     atrasadas: int
-    em_validacao: int = 0
-    concluidas: int = 0
+    na_equipe: ContagemEquipe | None = Field(None, description="Só com `equipe_id`: contagens das tarefas desta equipe.")

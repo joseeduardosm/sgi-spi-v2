@@ -92,8 +92,8 @@ export interface PessoaCarga {
   a_fazer: number;
   em_andamento: number;
   atrasadas: number;
-  em_validacao: number;
-  concluidas: number;
+  /** Só na lista de uma equipe: tarefas da pessoa nesta equipe, por situação. */
+  na_equipe: { a_fazer: number; em_andamento: number; em_validacao: number; concluidas: number; atrasadas: number } | null;
 }
 
 export interface Equipe {

@@ -2,9 +2,10 @@
 // Este arquivo serve para a página de cadastro e edição de um usuário (conta, perfil institucional e dados funcionais do RH).
 
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, input, OnInit, signal, viewChild } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { map, Observable, of, switchMap } from 'rxjs';
 
 import { AcessoService } from '../../core/acesso/acesso.service';
 import { AutenticacaoService } from '../../core/autenticacao/autenticacao.service';
@@ -46,6 +47,8 @@ export class UsuarioEdicaoComponent implements OnInit {
   protected readonly salvando = signal(false);
   protected readonly erro = signal<string | null>(null);
   protected readonly gestor = signal<OpcaoUsuario[]>([]);
+  /** Bloco dos dados funcionais (só aparece para CGP e SuperRoot): gravado junto com o "Salvar usuário". */
+  private readonly funcionais = viewChild(DadosFuncionaisComponent);
   /** Conta SuperRoot vista por quem não é SuperRoot: só leitura. */
   protected readonly somenteLeitura = computed(() => !this.podeGerir() || (!this.ehSuperRoot() && !!this.usuario()?.superusuario));
 
@@ -103,6 +106,11 @@ export class UsuarioEdicaoComponent implements OnInit {
       this.erro.set(this.novo ? 'Informe login e senha (mínimo 8 caracteres) e verifique os campos.' : 'Verifique os campos. A nova senha precisa de 8 caracteres.');
       return;
     }
+    const erroFuncionais = this.funcionais()?.erroValidacao();
+    if (erroFuncionais) {
+      this.erro.set(`Dados funcionais do RH: ${erroFuncionais}`);
+      return;
+    }
     const valores = this.conta.getRawValue();
     const perfil = dadosDoFormularioPerfil(this.perfil, this.gestor()[0]?.id ?? null);
     const atual = this.usuario();
@@ -111,7 +119,14 @@ export class UsuarioEdicaoComponent implements OnInit {
     const requisicao = atual
       ? this.api.alterar(atual.id, { senha: valores.senha || null, ativo: valores.ativo, superusuario: valores.superusuario, perfil })
       : this.api.criar({ login: valores.login.trim(), senha: valores.senha, ativo: valores.ativo, superusuario: valores.superusuario, perfil });
-    requisicao.subscribe({
+    // Um só "Salvar": conta e perfil, depois os dados funcionais do RH (quando o bloco está disponível)
+    const tudo = requisicao.pipe(
+      switchMap((salvo) => {
+        const funcionais$: Observable<unknown> = this.funcionais()?.gravacao() ?? of(null);
+        return funcionais$.pipe(map(() => salvo));
+      }),
+    );
+    this.dialogos.executar(tudo, 'Salvando…').subscribe({
       next: (salvo) => {
         this.salvando.set(false);
         this.dialogos.avisar(atual ? 'Usuário atualizado' : 'Conta criada', `"${salvo.perfil.nome_completo || salvo.login}" foi ${atual ? 'atualizado' : 'criada'}.`);

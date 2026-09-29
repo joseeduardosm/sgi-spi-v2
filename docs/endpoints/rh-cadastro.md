@@ -107,5 +107,5 @@ A leitura (`funcionais` em `CadastroRh`) traz também `periodos[]` (`PeriodoLeit
   - comparação em vigor × proposto com Validar e Recusar (justificativa + correção);
   - dados funcionais (o autorizador vem pré-selecionado com o superior imediato);
   - histórico.
-- **Usuários** (`/usuarios`, janela larga de edição, com a conta e o perfil à esquerda e o RH à direita): o mesmo bloco de dados funcionais (com o início do período aquisitivo em dd/mm, o período vigente, o ajuste e o histórico) (`features/rh/dados-funcionais.component.ts`), visível só para a CGP e o SuperRoot (a API responde `403` aos demais e o bloco não aparece), com gravação própria e o link para as pendências do usuário.
+- **Usuários** (página `/usuarios/:id`, com a conta e o perfil à esquerda e o RH à direita; o "Salvar usuário" grava também os dados funcionais e o ajuste do período, sem botões próprios no bloco): o mesmo bloco de dados funcionais (com o início do período aquisitivo em dd/mm, o período vigente, o ajuste e o histórico) (`features/rh/dados-funcionais.component.ts`), visível só para a CGP e o SuperRoot (a API responde `403` aos demais e o bloco não aparece), com gravação própria e o link para as pendências do usuário.
 - **Serviço:** `features/rh/rh-api.service.ts`.

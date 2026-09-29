@@ -4,6 +4,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Observable, of, switchMap, tap } from 'rxjs';
 import { RouterLink } from '@angular/router';
 
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
@@ -101,10 +102,12 @@ function dataBr(texto: string): string {
             <input [id]="id('rspv')" maxlength="30" placeholder="Ex.: 1.234.567/8" [(ngModel)]="funcionais.rs_pv" [ngModelOptions]="{ standalone: true }" /></div>
         </div>
         @if (erroHorarios(); as erro) { <p class="texto-erro dica-formulario">{{ erro }}</p> }
-        <div class="acoes-cartao">
+        @if (botaoProprio()) {
+          <div class="acoes-cartao">
           @if (c.funcionais.atualizado_por_nome) { <small class="dica-formulario">Atualizado por {{ c.funcionais.atualizado_por_nome }} em {{ c.funcionais.atualizado_em | date: 'dd/MM/yyyy HH:mm' }}</small> }
           <button type="button" class="acao-secundaria acao-pequena" [disabled]="!inicioValido() || !!erroHorarios()" (click)="salvar()">Salvar dados funcionais</button>
         </div>
+        }
 
         @if (vigente(); as v) {
           <div class="cartao-periodo">
@@ -116,7 +119,9 @@ function dataBr(texto: string): string {
           <div class="ajuste-periodo">
             <label [for]="id('ajuste')">Ajustar dias creditados do período vigente</label>
             <input [id]="id('ajuste')" type="number" min="0" max="365" [(ngModel)]="ajuste" [ngModelOptions]="{ standalone: true }" />
-            <button type="button" class="acao-secundaria acao-pequena" [disabled]="ajuste === null || ajuste === v.dias_creditados" (click)="ajustar()">Ajustar</button>
+            @if (botaoProprio()) {
+              <button type="button" class="acao-secundaria acao-pequena" [disabled]="ajuste === null || ajuste === v.dias_creditados" (click)="ajustar()">Ajustar</button>
+            }
             <small class="dica-formulario">Ex.: férias já gozadas antes do sistema.</small>
           </div>
         }
@@ -146,6 +151,11 @@ export class DadosFuncionaisComponent {
   /** Cadastro já carregado por quem usa o componente (evita uma segunda consulta). */
   readonly cadastroInicial = input<CadastroRh | null>(null);
   readonly mostrarLinkValidacoes = input(true);
+  /**
+   * Botões próprios ("Salvar dados funcionais" e "Ajustar"). Na página do usuário ficam ocultos: o "Salvar usuário"
+   * grava tudo junto, chamando `gravacao()`. Na tela Validações, onde não há outro botão, ficam visíveis.
+   */
+  readonly botaoProprio = input(true);
   readonly salvo = output<CadastroRh>();
 
   private readonly api = inject(RhApiService);
@@ -218,10 +228,38 @@ export class DadosFuncionaisComponent {
     this.ajuste = f.periodos.find((p) => p.vigente)?.dias_creditados ?? null;
   }
 
-  protected salvar(): void {
+  /** Há bloco carregado (o usuário é CGP ou SuperRoot)? Sem ele, não há o que gravar. */
+  carregado(): boolean {
+    return !!this.cadastro();
+  }
+
+  /** Motivo que impede gravar (para a página mostrar antes de salvar), ou null. */
+  erroValidacao(): string | null {
+    if (!this.cadastro()) return null;
+    if (!this.inicioValido()) return 'Início do período aquisitivo: use dd/mm com uma data válida (ex.: 15/03).';
+    return this.erroHorarios();
+  }
+
+  /**
+   * Gravação para quem usa o bloco sem os botões próprios: dados funcionais e, se o campo foi alterado, o ajuste
+   * dos dias do período vigente. Null quando não há o que gravar (bloco não carregado).
+   */
+  gravacao(): Observable<CadastroRh> | null {
     const c = this.cadastro();
-    if (!c || !this.inicioValido()) return;
-    const dados = {
+    if (!c) return null;
+    const ajuste = this.ajuste;
+    const ajustar = ajuste !== null && ajuste !== (this.vigente()?.dias_creditados ?? null);
+    return this.api.salvarFuncionais(c.usuario_id, this.dadosParaGravar()).pipe(
+      switchMap((novo) => (ajustar ? this.api.ajustarPeriodo(c.usuario_id, ajuste) : of(novo))),
+      tap((novo) => {
+        this.aplicar(novo);
+        this.salvo.emit(novo);
+      }),
+    );
+  }
+
+  private dadosParaGravar() {
+    return {
       ...this.funcionais, inicio_periodo_aquisitivo: this.inicio().trim() || null,
       // Campo vazio (number/time) chega como null ou '': a API recebe null
       jornada_semanal_horas: this.funcionais.jornada_semanal_horas || null,
@@ -230,7 +268,12 @@ export class DadosFuncionaisComponent {
       rg_cin: this.funcionais.rg_cin?.trim() || null, rs_pv: this.funcionais.rs_pv?.trim() || null,
       autorizador_id: this.autorizador[0]?.id ?? null, substituto_id: this.substituto[0]?.id ?? null,
     };
-    this.dialogos.executar(this.api.salvarFuncionais(c.usuario_id, dados), 'Salvando os dados funcionais…').subscribe({
+  }
+
+  protected salvar(): void {
+    const c = this.cadastro();
+    if (!c || !this.inicioValido()) return;
+    this.dialogos.executar(this.api.salvarFuncionais(c.usuario_id, this.dadosParaGravar()), 'Salvando os dados funcionais…').subscribe({
       next: (novo) => {
         this.aplicar(novo);
         this.salvo.emit(novo);

@@ -9,6 +9,12 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-29
 
 ### Alterado
+- **Um só "Salvar usuário"** na página do usuário: grava conta, perfil, dados funcionais do RH e o ajuste do período (o bloco do RH perdeu os botões "Salvar dados funcionais" e "Ajustar" ali; em Validações eles continuam).
+
+### Corrigido
+- O botão "Salvar usuário" da nova página não gravava (o formulário usava `ngSubmit` sem o módulo que emite esse evento).
+
+### Alterado
 - **Edição de usuário em página própria** (`/usuarios/novo` e `/usuarios/:id`), no lugar da janela: cartões Conta e Perfil institucional, dados funcionais do RH ao lado e barra de ações fixa no rodapé; funciona no celular.
 - **A CGP administra usuários e setores pela ACL.**
   - As gravações passaram a aceitar CONTROLE_TOTAL nas ACLs `usuarios` e `setores` (antes, só SuperRoot); recurso sem regras não libera gravação.

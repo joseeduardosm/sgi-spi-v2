@@ -18,7 +18,7 @@
       {{ podeGerir() ? 'Esta é uma conta de administrador do sistema (SuperRoot): só outro SuperRoot pode alterá-la.' : 'Você pode consultar este cadastro, mas não alterá-lo.' }}
     </p>
   }
-  <form class="pagina-usuario" (ngSubmit)="salvar()" novalidate>
+  <form class="pagina-usuario" (submit)="$event.preventDefault(); salvar()" novalidate>
     <div class="colunas-pagina-usuario" [class.com-rh]="!novo">
       <div class="coluna-principal-usuario">
         <section class="cartao-dados" aria-labelledby="titulo-conta">
@@ -58,7 +58,7 @@
       @if (usuario(); as u) {
         <aside class="coluna-rh-usuario">
           <section class="cartao-dados">
-            <div class="corpo"><app-dados-funcionais [usuarioId]="u.id" /></div>
+            <div class="corpo"><app-dados-funcionais [usuarioId]="u.id" [botaoProprio]="false" /></div>
           </section>
         </aside>
       }

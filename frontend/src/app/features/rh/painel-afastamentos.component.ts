@@ -2,6 +2,7 @@
 // Este arquivo serve para o painel de férias e licença-prêmio da CGP e dos autorizadores (calendário, filtros, alertas e aprovação).
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
@@ -28,8 +29,10 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-painel-afastamentos',
-  imports: [FormsModule, CabecalhoRhComponent, LancamentoAfastamentoComponent],
+  imports: [FormsModule, DatePipe, CabecalhoRhComponent, LancamentoAfastamentoComponent],
   templateUrl: './painel-afastamentos.component.html',
+  // Esc fecha o detalhe do período e a janela de recusa
+  host: { '(document:keydown.escape)': 'detalhe.set(null); recusando.set(null)' },
 })
 export class PainelAfastamentosComponent implements OnInit {
   private readonly api = inject(RhApiService);
@@ -114,6 +117,20 @@ export class PainelAfastamentosComponent implements OnInit {
     if (!ok) return;
     this.dialogos.executar(this.api.aprovar(a.id), 'Aprovando…').subscribe({
       next: () => this.carregar(),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível aprovar'),
+    });
+  }
+
+  // Detalhe do período clicado no gráfico
+  protected readonly detalhe = signal<Afastamento | null>(null);
+
+  /** Aprovar a partir do detalhe: a própria janela já é a confirmação. */
+  protected aprovarDoDetalhe(a: Afastamento): void {
+    this.dialogos.executar(this.api.aprovar(a.id), 'Aprovando…').subscribe({
+      next: () => {
+        this.detalhe.set(null);
+        this.carregar();
+      },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível aprovar'),
     });
   }

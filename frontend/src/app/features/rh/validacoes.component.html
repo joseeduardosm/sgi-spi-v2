@@ -106,12 +106,14 @@
       <div><span class="modal-sobretitulo">{{ a.rotulo }}: proposto "{{ a.valor_proposto_rotulo }}"</span><h2 id="titulo-recusa-cadastro">Recusar e corrigir</h2></div>
       <button type="button" aria-label="Fechar" (click)="recusando.set(null)">×</button>
     </header>
-    <div class="corpo-nova-mensagem">
+    <div class="corpo-nova-mensagem grade-formulario campos-janela">
+      <div>
       <label for="recusa-justificativa">Justificativa (enviada por e-mail ao usuário) *</label>
       <textarea id="recusa-justificativa" rows="3" maxlength="2000" [(ngModel)]="justificativa"></textarea>
-      <label for="recusa-correcao" style="margin-top: 12px">Correção do campo (passa a valer){{ a.campo === 'gestor_id' ? ' – id do usuário' : a.campo === 'data_nascimento' ? ' – AAAA-MM-DD' : '' }}</label>
+      <label for="recusa-correcao">Correção do campo (passa a valer){{ a.campo === 'gestor_id' ? ' – id do usuário' : a.campo === 'data_nascimento' ? ' – AAAA-MM-DD' : '' }}</label>
       <input id="recusa-correcao" maxlength="500" [(ngModel)]="correcao" />
       <small class="dica-formulario">Em vigor hoje: {{ a.valor_anterior_rotulo }}</small>
+      </div>
     </div>
     <footer>
       <button type="button" class="acao-secundaria" (click)="recusando.set(null)">Voltar</button>

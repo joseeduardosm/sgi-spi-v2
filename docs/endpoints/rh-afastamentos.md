@@ -157,7 +157,8 @@ Quem ainda não tem o início do período aquisitivo aparece como "não informad
 - **`/rh/painel-afastamentos` (CGP e autorizadores):**
   - fila "Aguardando sua aprovação" (Aprovar; Recusar com justificativa);
   - filtros e alertas de setor;
-  - uma linha por período, "[F]/[LP] Nome – Setor", com faixa amarela (pendente) ou verde (aprovado), em visão mensal ou anual;
+  - uma linha por período, "[F]/[LP] Nome – Setor", com faixa amarela (pendente) ou verde (aprovado), em visão mensal ou anual. **Cada faixa é clicável** e abre o detalhe (setor, período, situação, decisão, justificativa); se o usuário pode decidir o pedido, a janela traz **Aprovar** (verde) e **Recusar** (abre a justificativa);
+  - na fila "Aguardando sua aprovação", o botão Aprovar é verde e o Recusar, vermelho claro;
   - bloco "Férias a vencer";
   - para a CGP: "Lançar afastamento" (`lancamento-afastamento.component.ts`) e "Relatório de saldos (Excel/PDF)";
   - exportação em PDF e Excel.

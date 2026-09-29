@@ -381,6 +381,18 @@ body {
   justify-content: flex-end;
   gap: 5px;
 
+  // Aprovar: verde (os demais botões da linha seguem o vermelho claro)
+  button.acao-aprovar {
+    color: #1d6b43;
+    background: #e3f4ea;
+    font-weight: 700;
+
+    &:hover:not(:disabled) {
+      color: #fff;
+      background: #2f9e67;
+    }
+  }
+
   button {
     padding: 6px 8px;
     border: 0;
@@ -780,6 +792,36 @@ body {
   .linha-caixas { margin: 4px 0 8px; font-size: 13px; }
 }
 
+/* Campos em janelas (ex.: justificativa de recusa): mesmo visual da .grade-formulario, numa coluna só */
+/* Rodapé solto numa janela (fora de <form>): mesmo respiro das janelas com formulário */
+.modal-portal > footer {
+  padding: 4px 25px 22px;
+}
+
+.corpo-nova-mensagem.campos-janela {
+  display: block;
+
+  textarea {
+    width: 100%;
+    min-height: 110px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid #e2e5e8;
+    border-radius: 7px;
+    outline: 0;
+    color: #3d454e;
+    background: #fcfcfc;
+    font: inherit;
+    font-size: 13px;
+    resize: vertical;
+
+    &:focus {
+      border-color: #bc3843;
+      box-shadow: 0 0 0 3px #af374112;
+    }
+  }
+}
+
 .grade-formulario.destinatarios-mensagem {
   grid-template-columns: 1fr;
   gap: 0 14px;
@@ -979,6 +1021,56 @@ $rh-aprovado-fundo: #e5f4ec;
 
   &.pendente { color: #6d4b00; background: $rh-pendente-fundo; border: 1px solid $rh-pendente; }
   &.aprovado { color: #1d5e3a; background: $rh-aprovado-fundo; border: 1px solid $rh-aprovado; }
+}
+
+// A barra é um botão: abre o detalhe do período
+button.gantt-barra {
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover { filter: brightness(0.96); box-shadow: 0 2px 6px #1f262d24; }
+  &:focus-visible { outline: 2px solid var(--spi-vermelho); outline-offset: 1px; }
+}
+
+/* Detalhe do período (janela aberta pelo gráfico) */
+.detalhe-afastamento {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px 14px;
+  margin: 0;
+  padding: 18px 25px 14px;
+  font-size: 13.5px;
+
+  dt { color: #7c8998; font-weight: 700; font-size: 12px; }
+  dd { margin: 0; color: #3d454e; }
+}
+
+.acao-aprovar-janela,
+.acao-recusar {
+  height: 39px;
+  padding: 0 17px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.acao-aprovar-janela {
+  border: 0;
+  color: #fff;
+  background: #2f9e67;
+  box-shadow: 0 7px 16px #2f9e6733;
+
+  &:hover { background: #237f52; }
+}
+
+.acao-recusar {
+  border: 0;
+  color: var(--spi-vermelho);
+  background: var(--spi-vermelho-suave);
+
+  &:hover { color: #fff; background: var(--spi-vermelho); }
 }
 
 @media (max-width: 760px) {

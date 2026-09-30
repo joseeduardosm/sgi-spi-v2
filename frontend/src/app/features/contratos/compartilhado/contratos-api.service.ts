@@ -14,7 +14,6 @@ import {
   DiarioContrato,
   DetalheEmpresa,
   DocumentoContrato,
-  EstadoMigracaoSgi,
   GravacaoContrato,
   GravacaoEmpresa,
   GravacaoOcorrencia,
@@ -28,6 +27,7 @@ import {
   PainelVigencias,
   Previsao,
   PreviaImportacao,
+  RascunhoContratoSgi,
   ResumoContrato,
   ResumoEmpresa,
 } from './contratos.models';
@@ -267,14 +267,9 @@ export class ContratosApiService {
     return baixarArquivo(this.http, `${this.base}/importacao-xlsx/modelo`, 'modelo-importacao-contrato.xlsx');
   }
 
-  // --- Importação do SGI (SuperRoot) ---
-  /** Andamento da importação do SGI. */
-  estadoMigracaoSgi(): Observable<EstadoMigracaoSgi> {
-    return this.http.get<EstadoMigracaoSgi>(`${this.base}/migracao-sgi`);
-  }
-
-  /** Inicia a importação do SGI com as senhas informadas (não são guardadas). */
-  iniciarMigracaoSgi(senhaOrigem: string, senhaDestino: string): Observable<EstadoMigracaoSgi> {
-    return this.http.post<EstadoMigracaoSgi>(`${this.base}/migracao-sgi`, { senha_origem: senhaOrigem, senha_destino: senhaDestino });
+  // --- Importação do SGI (conta root) ---
+  /** Lê um contrato no SGI (somente leitura) e devolve o rascunho do cadastro; nada é gravado. */
+  rascunhoSgi(numero: string, senhaOrigem: string): Observable<RascunhoContratoSgi> {
+    return this.http.post<RascunhoContratoSgi>(`${this.base}/migracao-sgi/rascunho`, { numero, senha_origem: senhaOrigem });
   }
 }

@@ -2,11 +2,67 @@
 
 Tag no OpenAPI: **Contratos: importação do SGI**. Serviço: `backend/app/services/contratos/servico_migracao_sgi.py`.
 
-Traz o Módulo de Contratos do SGI SPI para este servidor pela tela, com o botão **Importar do SGI** da
-carteira (`/contratos`), visível só para o SuperRoot. Por baixo, roda os mesmos scripts da migração pelo
-terminal ([../migracao-sgi.md](../migracao-sgi.md)).
+Duas formas de trazer contratos do SGI SPI (10.23.1.220):
 
-## Regras
+- **`POST /rascunho` — um contrato, pela tela (conta root).** É o que o botão **Importar do SGI** da carteira usa.
+- **`GET`/`POST ""` — o módulo inteiro, com substituição (SuperRoot).** Não é usado pela tela. Por baixo, roda os
+  mesmos scripts da migração pelo terminal ([../migracao-sgi.md](../migracao-sgi.md)).
+
+## `POST /api/contratos/migracao-sgi/rascunho` (botão "Importar do SGI")
+
+Lê um contrato no SGI, **somente leitura**, e devolve o rascunho do cadastro. **Nada é gravado**: a tela abre
+"Novo contrato" preenchido, e o usuário revisa e salva pelo `POST /api/contratos` normal.
+
+- **Autorização:** só a **conta root** (`LOGIN_ADMIN`). Os demais, inclusive outros SuperRoot, recebem `403 acesso_negado`.
+- **Senha:** a do SSH de `MIGRACAO_SGI_USUARIO@MIGRACAO_SGI_HOST`, também aceita pelo `sudo` de lá. É usada só nesta
+  leitura e **não é gravada**.
+- **O que vem:** cabeçalho (número, apelido, objeto, datas, vigências, periodicidade, mês de reajuste e processos SEI),
+  empresa (com os prepostos ativos), itens (tipo, faturamento, códigos, quantidades e valor) e a equipe vigente.
+- **Empresa:** se já existe aqui (pelo CNPJ), vem com o `id`. Se não existe, `id` é nulo e a tela oferece
+  "Cadastrar a empresa com os dados do SGI" (empresa e prepostos), sem salvar o contrato.
+- **Equipe:** convertida para os usuários daqui pelo login ou pelo id do AD. Quem não tem conta ativa fica de fora,
+  com aviso.
+- **Avisos** (`avisos[]`):
+  - a UF dos itens não existe no SGI;
+  - prorrogações do SGI (registrar depois em Prorrogação);
+  - competências e NEs do SGI não são importadas (só o cadastro);
+  - empresa não cadastrada ou inativa aqui.
+
+Corpo (`PedidoRascunhoSgi`):
+
+```json
+{ "numero": "010/2024", "senha_origem": "…" }
+```
+
+`numero` no formato `N/AAAA` a `NNNN/AAAA`; fora dele, `422`. Resposta `200` (`RascunhoContratoSgi`):
+- os campos do cabeçalho;
+- `empresa` {`id`, `cnpj`, `razao_social`, `nome_fantasia`, `endereco`, `ativa_aqui`};
+- `prepostos[]` {`cpf`, `nome`, `telefone`, `email`, `cargo`};
+- `equipe[]` {`papel`, `usuario_id`, `login`, `nome`};
+- `itens[]`, com quantidades e valores em texto decimal;
+- `avisos[]`.
+
+| HTTP | `codigo` | Quando |
+|---|---|---|
+| `400` | `senha_invalida` | Senha incorreta ou recusada pelo `sudo` do SGI |
+| `403` | `acesso_negado` | Não é a conta root |
+| `404` | `nao_encontrado` | Contrato inexistente no SGI |
+| `409` | `conflito` | O contrato (mesmo número) já está cadastrado aqui |
+| `502` | `servidor_inacessivel`, `sgi_indisponivel` | SSH inacessível ou falha na leitura |
+
+**Angular:** `ImportacaoSgiComponent` (carteira, só com `usuario.conta_root`):
+1. pede o número e a senha;
+2. chama `ContratosApiService.rascunhoSgi`;
+3. navega para `/contratos/novo` com `state.rascunhoSgi`.
+
+O `FormularioContratoComponent`:
+- preenche o cadastro, com os itens como novos e a UF em branco;
+- mostra os avisos e o botão de cadastrar a empresa;
+- tira o rascunho do histórico, para que recarregar a página volte ao cadastro em branco.
+
+## Importação completa (`GET`/`POST /api/contratos/migracao-sgi`) — sem uso na tela
+
+### Regras
 
 - **Autorização:** papel SuperRoot nas duas rotas; os demais recebem `403 acesso_negado`.
 - **Senhas:** o SuperRoot informa duas senhas a cada execução. Elas são conferidas por SSH antes de começar e

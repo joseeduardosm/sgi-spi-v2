@@ -14,6 +14,24 @@
       </div>
     </div>
 
+    @if (rascunhoSgi(); as r) {
+      <!-- Contrato lido no SGI (botão "Importar do SGI"): nada foi gravado até salvar -->
+      <div class="aviso-bloco informativo" role="status">
+        <strong>Dados carregados do contrato {{ r.numero }} do SGI. Nada foi salvo ainda:</strong> revise, complete o que faltar e clique em "Salvar contrato".
+        @if (r.avisos.length) { <ul>@for (a of r.avisos; track $index) { <li>{{ a }}</li> }</ul> }
+      </div>
+      @if (!r.empresa.id) {
+        <div class="aviso-bloco" role="alert">
+          <strong>Empresa não cadastrada aqui:</strong> {{ r.empresa.razao_social }} (CNPJ {{ r.empresa.cnpj }})@if (r.prepostos.length) {, com {{ r.prepostos.length }} preposto(s) ativo(s) no SGI}.
+          <div class="acoes-cartao esquerda" style="margin: 8px 0 0">
+            <button type="button" class="acao-secundaria acao-pequena" [disabled]="cadastrandoEmpresa()" (click)="cadastrarEmpresaSgi()">
+              {{ cadastrandoEmpresa() ? 'Cadastrando…' : 'Cadastrar a empresa com os dados do SGI' }}
+            </button>
+          </div>
+        </div>
+      }
+    }
+
     <section class="cartao-dados" aria-labelledby="bloco-dados">
       <header><h2 id="bloco-dados">Dados do contrato</h2></header>
       <div class="corpo">

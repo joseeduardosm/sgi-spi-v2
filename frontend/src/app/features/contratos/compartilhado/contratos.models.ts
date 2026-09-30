@@ -938,19 +938,29 @@ export interface PainelVigencias {
 
 // --- Importação do SGI ------------------------------------------------------------------------
 
-/** Andamento da importação do SGI (a tela consulta periodicamente). */
-export interface EstadoMigracaoSgi {
-  situacao: 'ociosa' | 'executando' | 'concluida' | 'erro';
-  etapa: string | null;
-  mensagem: string;
-  origem: string;
-  destino: string;
-  iniciada_em: string | null;
-  concluida_em: string | null;
-  iniciada_por: string | null;
-  resultado: Record<string, number> | null;
+/** Rascunho de um contrato lido no SGI (POST /contratos/migracao-sgi/rascunho): preenche o cadastro, nada é gravado. */
+export interface RascunhoContratoSgi {
+  numero: string;
+  apelido: string;
+  objeto: string;
+  data_inicio: string;
+  vigencia_inicial_meses: number;
+  vigencia_maxima_meses: number;
+  periodicidade_meses: number;
+  mes_reajuste: number;
+  sei_gestao_numero: string;
+  sei_gestao_link: string;
+  sei_execucao_numero: string;
+  sei_execucao_link: string;
+  /** `id` preenchido = empresa já cadastrada aqui (pelo CNPJ); nulo = cadastrar pela tela. */
+  empresa: { id: string | null; cnpj: string; razao_social: string; nome_fantasia: string; endereco: string; ativa_aqui: boolean };
+  prepostos: { cpf: string; nome: string; telefone: string; email: string; cargo: string }[];
+  equipe: { papel: Papel; usuario_id: number; login: string; nome: string }[];
+  itens: {
+    descricao: string; tipo: TipoItem; calcula_pro_rata: boolean; codigo_classe: string; codigo_natureza_despesa: string;
+    codigo_siafisico: string; codigo_catmat_catser: string; quantidade_mensal: string; quantidade_total: string; valor_unitario: string;
+  }[];
   avisos: string[];
-  log: string[];
 }
 
 // --- Diário de bordo --------------------------------------------------------------------------

@@ -106,6 +106,7 @@ CAMINHOS_CONTRATOS = {
     "/api/contratos/empresas/{empresa_id}/prepostos/{preposto_id}",
     "/api/contratos/modelos",
     "/api/contratos/migracao-sgi",
+    "/api/contratos/migracao-sgi/rascunho",
     "/api/contratos/importacao-xlsx",
     "/api/contratos/importacao-xlsx/previa",
     "/api/contratos/importacao-xlsx/modelo",

@@ -1,238 +1,97 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para oferecer ao SuperRoot a importação dos contratos do SGI SPI, com acompanhamento do andamento.
+// Este arquivo serve para oferecer à conta root o botão "Importar do SGI": pede o número do contrato e abre o cadastro preenchido.
 
-import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, inject, OnInit, output, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 
-import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { EstadoMigracaoSgi } from '../compartilhado/contratos.models';
-
-// Textos das etapas informadas pela API
-const ETAPAS: Record<string, string> = {
-  iniciando: 'Iniciando',
-  extraindo: 'Extraindo os dados do SGI (somente leitura)',
-  carregando: 'Carregando e conferindo os dados neste servidor',
-  concluida: 'Concluída',
-};
-
-// Nomes legíveis das quantidades importadas (as chaves vêm do resultado da API)
-const ROTULOS_RESULTADO: Record<string, string> = {
-  empresas: 'Empresas', contratos: 'Contratos', itens: 'Itens', equipe: 'Designações de equipe', documentos: 'Documentos importantes',
-  prorrogacoes: 'Prorrogações', notas_empenho: 'Notas de Empenho', competencias: 'Competências', avaliacoes: 'Avaliações',
-  reajustes: 'Reajustes', anexos: 'Anexos (PDFs)', auditoria: 'Eventos de auditoria',
-};
 
 /**
- * Botão "Importar do SGI" (somente SuperRoot): pede a senha da origem (SGI) e a deste servidor, inicia a
- * importação em segundo plano e acompanha o andamento. A carga substitui os dados do módulo.
+ * Botão "Importar do SGI" (somente a conta root). A janela pede o número do contrato no SGI e a senha do SSH de lá;
+ * a API lê o contrato (somente leitura) e a tela abre "Novo contrato" já preenchido. **Nada é gravado** até o
+ * usuário revisar e salvar o formulário.
  */
 @Component({
   selector: 'app-importacao-sgi',
-  imports: [FormsModule, DatePipe],
-  // Esc tenta fechar a janela (não fecha durante a execução)
-  host: { '(document:keydown.escape)': 'fecharSePossivel()' },
+  imports: [FormsModule],
+  host: { '(document:keydown.escape)': 'fechar()' },
   template: `
     <button type="button" class="acao-secundaria" (click)="abrir()">Importar do SGI</button>
 
     @if (aberta()) {
-      <div class="fundo-modal" role="presentation" (click)="fecharSePossivel()"></div>
+      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
       <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-sgi">
         <header>
-          <div><span class="modal-sobretitulo">SuperRoot</span><h2 id="titulo-importacao-sgi">Importar contratos do SGI</h2></div>
-          <button type="button" aria-label="Fechar" [disabled]="executando()" (click)="fecharSePossivel()">×</button>
+          <div><span class="modal-sobretitulo">Conta root</span><h2 id="titulo-importacao-sgi">Importar contrato do SGI</h2></div>
+          <button type="button" aria-label="Fechar" [disabled]="lendo()" (click)="fechar()">×</button>
         </header>
-
-        @if (estado(); as e) {
-          @if (e.situacao === 'executando' || e.situacao === 'concluida' || e.situacao === 'erro') {
-            <div class="corpo-importacao">
-              @if (e.situacao === 'executando') {
-                <p class="aviso-bloco informativo"><strong>{{ etapas[e.etapa ?? ''] ?? e.etapa }}…</strong> Isso leva alguns minutos; pode fechar a janela, a importação continua.</p>
-              } @else if (e.situacao === 'concluida') {
-                <p class="aviso-bloco informativo"><strong>Importação concluída</strong> em {{ e.concluida_em | date: 'dd/MM/yyyy HH:mm' }}.</p>
-                @if (e.resultado) {
-                  <ul class="resultado-importacao">
-                    @for (r of resultado(e); track r.chave) { <li><span>{{ r.rotulo }}</span><b>{{ r.valor }}</b></li> }
-                  </ul>
-                }
-                @for (a of e.avisos; track $index) { <p class="aviso-bloco">{{ a }}</p> }
-              } @else {
-                <p class="aviso-bloco erro"><strong>A importação falhou.</strong> {{ e.mensagem }} Os dados deste servidor não foram alterados pela etapa que falhou.</p>
-              }
-              <details [open]="e.situacao === 'erro'">
-                <summary>Registro da execução</summary>
-                <pre class="registro-importacao">{{ e.log.join('\\n') }}</pre>
-              </details>
+        <form (submit)="$event.preventDefault(); ler()">
+          <p class="dica-formulario" style="margin-top: 0">
+            O contrato é lido no SGI ({{ origem }}) e abre no cadastro de novo contrato, <b>sem salvar</b>. Revise, complete o que faltar e salve.
+          </p>
+          <div class="grade-formulario uma-coluna">
+            <div>
+              <label for="sgi-numero">Número do contrato no SGI *</label>
+              <input id="sgi-numero" name="numero" placeholder="Ex.: 010/2024" maxlength="9" autocomplete="off" [(ngModel)]="numero" autofocus />
             </div>
-            <footer>
-              @if (e.situacao !== 'executando') { <button type="button" class="acao-secundaria" (click)="novaImportacao()">Nova importação</button> }
-              <button type="button" class="acao-primaria" (click)="fecharSePossivel(true)">Fechar</button>
-            </footer>
-          } @else {
-            <form (ngSubmit)="iniciar(e)" autocomplete="off">
-              <p class="aviso-bloco erro" style="margin-top: 0">A importação <strong>substitui</strong> todos os contratos, empresas e anexos deste servidor pelos do SGI. O SGI não é alterado (leitura apenas).</p>
-              <div class="grade-formulario">
-                <div class="ocupa-duas">
-                  <label for="senha-origem">Senha de <b>{{ e.origem }}</b> (origem: SGI) *</label>
-                  <input id="senha-origem" name="senha_origem" type="password" required autocomplete="off" [(ngModel)]="senhaOrigem" />
-                  <small class="dica-formulario">Também usada no sudo do SGI, para ler o banco.</small>
-                </div>
-                <div class="ocupa-duas">
-                  <label for="senha-destino">Senha de <b>{{ e.destino }}</b> (destino: este servidor) *</label>
-                  <input id="senha-destino" name="senha_destino" type="password" required autocomplete="off" [(ngModel)]="senhaDestino" />
-                </div>
-              </div>
-              <p class="dica-formulario">As senhas são conferidas por SSH antes de começar e não são gravadas.</p>
-              @if (ultima(); as u) {
-                <p class="dica-formulario">
-                  Última importação: {{ u.concluida_em | date: 'dd/MM/yyyy HH:mm' }}{{ u.iniciada_por ? ' por ' + u.iniciada_por : '' }} —
-                  {{ u.situacao === 'concluida' ? (u.resultado?.['contratos'] ?? 0) + ' contrato(s) importado(s)' : 'falhou: ' + u.mensagem }}
-                </p>
-              }
-              <footer>
-                <button type="button" class="acao-secundaria" (click)="fecharSePossivel()">Cancelar</button>
-                <button type="submit" class="acao-primaria" [disabled]="!senhaOrigem || !senhaDestino || enviando()">
-                  {{ enviando() ? 'Conferindo as senhas…' : 'Importar' }}
-                </button>
-              </footer>
-            </form>
-          }
-        } @else {
-          <p class="estado-vazio">Carregando…</p>
-        }
+            <div>
+              <label for="sgi-senha">Senha de {{ origem }} *</label>
+              <input id="sgi-senha" name="senha" type="password" autocomplete="off" [(ngModel)]="senha" />
+              <small class="dica-formulario">Usada só nesta leitura (também no sudo do SGI); não é gravada.</small>
+            </div>
+          </div>
+          @if (erro()) { <p class="aviso-formulario erro" role="alert">{{ erro() }}</p> }
+          <footer>
+            <button type="button" class="acao-secundaria" [disabled]="lendo()" (click)="fechar()">Cancelar</button>
+            <button type="submit" class="acao-primaria" [disabled]="lendo() || !numeroValido() || !senha">{{ lendo() ? 'Lendo o SGI…' : 'Abrir no cadastro' }}</button>
+          </footer>
+        </form>
       </section>
     }
   `,
 })
-export class ImportacaoSgiComponent implements OnInit {
-  /** Emitido quando uma importação termina com sucesso (a carteira recarrega). */
-  readonly concluida = output<void>();
-
-  // Serviços; DestroyRef permite executar uma limpeza quando o componente é destruído
+export class ImportacaoSgiComponent {
   private readonly api = inject(ContratosApiService);
-  private readonly dialogos = inject(DialogosService);
-  private readonly destruir = inject(DestroyRef);
-
-  // Estado da janela, da importação e do envio das senhas
+  private readonly roteador = inject(Router);
+  protected readonly origem = 'administrador@10.23.1.220';
   protected readonly aberta = signal(false);
-  protected readonly estado = signal<EstadoMigracaoSgi | null>(null);
-  protected readonly enviando = signal(false);
-  /** Última importação terminada, resumida no formulário. */
-  protected readonly ultima = signal<EstadoMigracaoSgi | null>(null);
-  // Função (e não signal) porque só lê o estado atual
-  protected readonly executando = () => this.estado()?.situacao === 'executando';
-  protected readonly etapas = ETAPAS;
-  // Senhas digitadas (ligadas aos campos por [(ngModel)]); limpas depois do uso
-  protected senhaOrigem = '';
-  protected senhaDestino = '';
-  /** Mostra o formulário mesmo havendo resultado anterior. */
-  private formulario = false;
-  // Temporizador da consulta periódica do andamento
-  private temporizador: ReturnType<typeof setTimeout> | null = null;
+  protected readonly lendo = signal(false);
+  protected readonly erro = signal<string | null>(null);
+  protected numero = '';
+  protected senha = '';
 
-  constructor() {
-    // Ao sair da tela, para de consultar o andamento
-    this.destruir.onDestroy(() => this.pararAcompanhamento());
-  }
-
-  ngOnInit(): void {
-    // Importação em andamento (ex.: página recarregada): reabre o acompanhamento
-    this.api.estadoMigracaoSgi().subscribe({
-      next: (e) => {
-        if (e.situacao === 'executando') {
-          this.estado.set(e);
-          this.aberta.set(true);
-          this.acompanhar();
-        }
-      },
-      error: () => undefined,
-    });
-  }
-
-  /** Abre direto no formulário de senhas; só uma importação em andamento mostra o acompanhamento. */
   protected abrir(): void {
+    this.numero = '';
+    this.senha = '';
+    this.erro.set(null);
     this.aberta.set(true);
-    this.formulario = true;
-    this.consultar();
   }
 
-  /** Volta ao formulário de senhas depois de uma importação terminada. */
-  protected novaImportacao(): void {
-    this.formulario = true;
-    this.estado.update((e) => (e ? { ...e, situacao: 'ociosa' } : e));
+  protected fechar(): void {
+    if (!this.lendo()) this.aberta.set(false);
   }
 
-  /** Esc, fundo e "×" não fecham durante a execução; o botão "Fechar" fecha (a importação continua no servidor). */
-  protected fecharSePossivel(forcar = false): void {
-    if (this.enviando() || (this.executando() && !forcar)) return;
-    this.aberta.set(false);
-    this.senhaOrigem = this.senhaDestino = '';
+  protected numeroValido(): boolean {
+    return /^\s*\d{1,4}\/\d{4}\s*$/.test(this.numero);
   }
 
-  /** Confirma a substituição dos dados e inicia a importação. */
-  protected async iniciar(e: EstadoMigracaoSgi): Promise<void> {
-    const ok = await this.dialogos.confirmar({
-      titulo: 'Substituir os contratos deste servidor?',
-      mensagem: `Todos os contratos, empresas e anexos deste servidor serão apagados e substituídos pelos do SGI (${e.origem}). O que foi lançado apenas aqui será perdido.`,
-      rotuloConfirmar: 'Importar e substituir',
-      segundos: 5,
-    });
-    if (!ok) return;
-    this.enviando.set(true);
-    this.api.iniciarMigracaoSgi(this.senhaOrigem, this.senhaDestino).subscribe({
-      next: (novo) => {
-        this.enviando.set(false);
-        this.senhaOrigem = this.senhaDestino = '';
-        this.formulario = false;
-        this.estado.set(novo);
-        this.acompanhar();
+  /** Lê o contrato no SGI e abre o cadastro com o rascunho (passado pelo estado da navegação, sem gravar). */
+  protected ler(): void {
+    if (!this.numeroValido() || !this.senha) return;
+    this.lendo.set(true);
+    this.erro.set(null);
+    this.api.rascunhoSgi(this.numero.trim(), this.senha).subscribe({
+      next: (rascunho) => {
+        this.lendo.set(false);
+        this.senha = '';
+        this.aberta.set(false);
+        void this.roteador.navigate(['/contratos/novo'], { state: { rascunhoSgi: rascunho } });
       },
-      error: (erro) => {
-        this.enviando.set(false);
-        this.dialogos.mostrarErro(erro, 'Não foi possível iniciar a importação');
+      error: (e) => {
+        this.lendo.set(false);
+        this.erro.set(e?.error?.detalhe ?? 'Não foi possível ler o contrato no SGI.');
       },
     });
-  }
-
-  /** Quantidades importadas, com nomes legíveis, para a lista do resultado. */
-  protected resultado(e: EstadoMigracaoSgi): { chave: string; rotulo: string; valor: number }[] {
-    return Object.entries(e.resultado ?? {})
-      .filter(([chave]) => chave in ROTULOS_RESULTADO)
-      .map(([chave, valor]) => ({ chave, rotulo: ROTULOS_RESULTADO[chave], valor }));
-  }
-
-  /** Consulta o estado atual ao abrir a janela. */
-  private consultar(): void {
-    this.api.estadoMigracaoSgi().subscribe({
-      next: (e) => {
-        this.ultima.set(e.situacao === 'concluida' || e.situacao === 'erro' ? e : null);
-        this.estado.set(this.formulario && e.situacao !== 'executando' ? { ...e, situacao: 'ociosa' } : e);
-        if (e.situacao === 'executando') this.acompanhar();
-      },
-      error: (erro) => this.dialogos.mostrarErro(erro, 'Não foi possível consultar a importação'),
-    });
-  }
-
-  /** Consulta o andamento a cada 3 segundos enquanto a importação estiver executando. */
-  private acompanhar(): void {
-    this.pararAcompanhamento();
-    // setTimeout (e não setInterval): a próxima consulta só é agendada depois que a anterior respondeu
-    this.temporizador = setTimeout(() => {
-      this.api.estadoMigracaoSgi().subscribe({
-        next: (e) => {
-          this.estado.set(e);
-          if (e.situacao === 'executando') this.acompanhar();
-          else if (e.situacao === 'concluida') this.concluida.emit();
-        },
-        error: () => this.acompanhar(),
-      });
-    }, 3000);
-  }
-
-  /** Cancela a próxima consulta agendada. */
-  private pararAcompanhamento(): void {
-    if (this.temporizador) clearTimeout(this.temporizador);
-    this.temporizador = null;
   }
 }

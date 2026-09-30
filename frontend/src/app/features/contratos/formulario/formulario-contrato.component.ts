@@ -4,7 +4,7 @@
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
+import { concatMap, forkJoin, from, last, of, switchMap } from 'rxjs';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
@@ -14,7 +14,7 @@ import { formatarData } from '../../../shared/utilitarios/formatadores';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { DetalheContrato, GravacaoContrato, GravacaoItem, OpcaoEmpresa, Papel, Situacao, TipoItem } from '../compartilhado/contratos.models';
+import { DetalheContrato, GravacaoContrato, GravacaoItem, OpcaoEmpresa, Papel, RascunhoContratoSgi, Situacao, TipoItem } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { MESES, PAPEIS, PERIODICIDADES, paraDecimalApi, paraDecimalTela, ROTULOS_SITUACAO, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
 
@@ -76,6 +76,9 @@ export class FormularioContratoComponent implements OnInit {
   protected readonly superRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
   protected readonly itensBloqueados = computed(() => this.execucaoGerada() && !this.superRoot());
   protected readonly datasBloqueadas = computed(() => (this.original()?.vigencias.length ?? 1) > 1);
+  // Contrato lido no SGI pelo botão "Importar do SGI" (conta root): preenche o cadastro, nada foi gravado
+  protected readonly rascunhoSgi = signal<RascunhoContratoSgi | null>(null);
+  protected readonly cadastrandoEmpresa = signal(false);
 
   // Campos do cabeçalho do contrato (ligados por [(ngModel)])
   protected dados = {
@@ -122,7 +125,9 @@ export class FormularioContratoComponent implements OnInit {
       next: ({ empresas, contrato, execucao }) => {
         this.empresas.set(empresas);
         this.execucaoGerada.set(!!execucao?.geradas);
+        const rascunho = (history.state?.rascunhoSgi ?? null) as RascunhoContratoSgi | null;
         if (contrato) this.preencher(contrato);
+        else if (rascunho) this.preencherRascunho(rascunho);
         else this.sugerirNumero();
         this.carregando.set(false);
       },
@@ -156,6 +161,58 @@ export class FormularioContratoComponent implements OnInit {
         valor_unitario: paraDecimalTela(i.valor_unitario), salvo: true,
       })),
     );
+  }
+
+  /** Preenche o cadastro com o contrato lido no SGI (itens como novos; a UF não existe lá e fica em branco). */
+  private preencherRascunho(r: RascunhoContratoSgi): void {
+    this.rascunhoSgi.set(r);
+    this.dados = {
+      numero: r.numero, empresa_id: r.empresa.id ?? '', apelido: r.apelido, objeto: r.objeto, data_inicio: r.data_inicio,
+      vigencia_inicial_meses: r.vigencia_inicial_meses, vigencia_maxima_meses: r.vigencia_maxima_meses, periodicidade_meses: r.periodicidade_meses,
+      mes_reajuste: r.mes_reajuste, sei_gestao_numero: r.sei_gestao_numero, sei_gestao_link: r.sei_gestao_link,
+      sei_execucao_numero: r.sei_execucao_numero, sei_execucao_link: r.sei_execucao_link, situacao_forcada: null,
+    };
+    for (const membro of r.equipe) {
+      this.equipe[membro.papel].set([{ id: membro.usuario_id, login: membro.login, nome_completo: membro.nome, cargo: '', ativo: true }]);
+    }
+    this.itens.set(
+      r.itens.map((i) => ({
+        id: null, descricao: i.descricao, tipo: i.tipo, calcula_pro_rata: i.calcula_pro_rata, unidade_fornecimento: '',
+        codigo_classe: i.codigo_classe, codigo_natureza_despesa: i.codigo_natureza_despesa, codigo_siafisico: i.codigo_siafisico,
+        codigo_catmat_catser: i.codigo_catmat_catser, quantidade_mensal: paraDecimalTela(i.quantidade_mensal),
+        quantidade_total: i.tipo === 'sob_demanda' ? paraDecimalTela(i.quantidade_total) : '', valor_unitario: paraDecimalTela(i.valor_unitario),
+        salvo: false,
+      })),
+    );
+    // O rascunho não fica no histórico: recarregar a página volta ao cadastro em branco
+    history.replaceState({ ...history.state, rascunhoSgi: null }, '');
+  }
+
+  /** Cadastra a empresa do SGI (e os prepostos ativos) e a escolhe no formulário. O contrato continua sem salvar. */
+  protected cadastrarEmpresaSgi(): void {
+    const r = this.rascunhoSgi();
+    if (!r || r.empresa.id) return;
+    this.cadastrandoEmpresa.set(true);
+    const e = r.empresa;
+    this.api.salvarEmpresa({ cnpj: e.cnpj, razao_social: e.razao_social, nome_fantasia: e.nome_fantasia, endereco: e.endereco, ativa: true }).pipe(
+      switchMap((empresa) =>
+        r.prepostos.length
+          ? from(r.prepostos).pipe(concatMap((p) => this.api.salvarPreposto(empresa.id, { ...p, ativo: true })), last())
+          : of(empresa),
+      ),
+      switchMap((empresa) => forkJoin({ empresa: of(empresa), opcoes: this.api.opcoesEmpresas(true) })),
+    ).subscribe({
+      next: ({ empresa, opcoes }) => {
+        this.cadastrandoEmpresa.set(false);
+        this.empresas.set(opcoes);
+        this.dados.empresa_id = empresa.id;
+        this.rascunhoSgi.set({ ...r, empresa: { ...e, id: empresa.id } });
+      },
+      error: (erro) => {
+        this.cadastrandoEmpresa.set(false);
+        this.dialogos.mostrarErro(erro, 'Não foi possível cadastrar a empresa');
+      },
+    });
   }
 
   // Último número sugerido: um número digitado pelo usuário (qualquer formato) não é sobrescrito

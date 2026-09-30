@@ -87,9 +87,15 @@ como **aviso**, porque os dois sistemas contam os meses de formas diferentes.
 
 ## Pela tela (botão "Importar do SGI")
 
-O SuperRoot pode fazer a extração e a carga com substituição (seções 1 e 2) pela carteira de contratos, informando
-a senha da origem (SGI) e a deste servidor. Ver [endpoints/contratos-migracao-sgi.md](endpoints/contratos-migracao-sgi.md).
-O pacote é apagado ao final.
+O botão da carteira, visível só para a **conta root**, traz **um contrato por vez** para o cadastro:
+1. pede o número e a senha do SGI;
+2. abre "Novo contrato" preenchido, **sem salvar**;
+3. o usuário revisa e salva.
+
+Só o cadastro vem: cabeçalho, empresa, prepostos, itens e equipe. A execução, as prorrogações e os anexos não vêm; para eles, use `--contrato` (seção 2).
+Ver [endpoints/contratos-migracao-sgi.md](endpoints/contratos-migracao-sgi.md).
+
+A importação completa com substituição (seções 1 e 2) continua disponível na API (`POST /api/contratos/migracao-sgi`, SuperRoot), sem botão na tela.
 
 Para só apagar os dados do módulo (e os arquivos deles), sem carregar nada:
 

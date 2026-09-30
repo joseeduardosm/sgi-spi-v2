@@ -9,6 +9,13 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-30
 
 ### Alterado
+- **Contratos › "Importar do SGI" volta, só para a conta root, com outro fluxo:**
+  - a janela pede o número do contrato e a senha do SGI;
+  - o contrato é lido no SGI, somente leitura;
+  - abre "Novo contrato" já preenchido, **sem salvar** (cabeçalho, itens e equipe convertida para os usuários daqui); o usuário revisa e salva;
+  - se a empresa não existir aqui, a tela oferece cadastrá-la com os dados e os prepostos do SGI;
+  - avisos na tela: itens sem UF, pessoas sem conta aqui, prorrogações, e competências e NEs que não vêm.
+  - Novo endpoint `POST /api/contratos/migracao-sgi/rascunho`. A importação completa com substituição saiu da tela, mas continua na API.
 - `scripts/migrar-contratos-sgi.py`:
   - nova opção `--contrato NNN/AAAA`, que importa um contrato só do SGI (10.23.1.220) sem apagar nada daqui e reaproveita a empresa se ela já existir;
   - o script passa a gravar o campo `numero` do contrato.

@@ -34,9 +34,8 @@ export class CarteiraComponent implements OnInit {
   // `acesso` é usado no template para mostrar o botão "Novo contrato" só a quem pode modificar
   protected readonly acesso = inject(AcessoService);
   private readonly autenticacao = inject(AutenticacaoService);
-  protected readonly superRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
-  // Botão "Importar do SGI" desabilitado temporariamente (pedido do usuário em 28/09/2026); true volta a exibi-lo ao SuperRoot
-  protected readonly importacaoSgiHabilitada = false;
+  // Botão "Importar do SGI": só a conta root (abre o cadastro preenchido com um contrato do SGI, sem salvar)
+  protected readonly contaRoot = computed(() => !!this.autenticacao.usuario()?.conta_root);
 
   // Estado da lista: busca, página, itens e o menu de ações aberto (id do contrato)
   protected readonly rotulos = ROTULOS_SITUACAO;

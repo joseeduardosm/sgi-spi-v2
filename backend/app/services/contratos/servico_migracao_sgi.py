@@ -24,9 +24,11 @@ from pathlib import Path
 from typing import Any
 
 import paramiko
+from sqlalchemy import func, select
 
 from app.core.banco import FabricaSessao, agora_utc
 from app.core.configuracao import obter_configuracao
+from app.models.contratos import Contrato, EmpresaContratada
 from app.models.usuario import Usuario
 from app.services.servico_auditoria import auditar
 
@@ -219,3 +221,145 @@ def executar(autor_id: int, autor_login: str) -> None:
 # Ponto de entrada quando o módulo é executado como processo separado (ver `iniciar`)
 if __name__ == "__main__":
     executar(int(sys.argv[1]), sys.argv[2])
+
+
+# --- Rascunho de um contrato (botão "Importar do SGI" da conta root) ----------------------------
+
+PAPEIS_SGI = {
+    "Manager": "gestor", "ManagerSubstitute": "gestor_suplente",
+    "AdministrativeInspector": "fiscal_administrativo", "AdministrativeInspectorSubstitute": "fiscal_administrativo_suplente",
+    "TechnicalInspector": "fiscal_tecnico", "TechnicalInspectorSubstitute": "fiscal_tecnico_suplente",
+}
+PERIODICIDADES_SGI = {"Monthly": 1, "Bimonthly": 2, "Quarterly": 3, "Semiannual": 6, "Semiannually": 6, "Annual": 12, "Yearly": 12}
+TIPOS_ITEM_SGI = {"Continuous": "continuo", "OnDemand": "sob_demanda"}
+
+# Uma consulta, numa transação somente leitura: o contrato, a empresa, os prepostos ativos, os itens,
+# a equipe vigente e quantas prorrogações, competências e NEs ficam de fora
+CONSULTA_RASCUNHO = """begin transaction read only;
+select json_build_object(
+  'contrato', row_to_json(c),
+  'empresa', (select row_to_json(e) from sgi.contract_companies e where e."Id" = c."CompanyId"),
+  'prepostos', (select coalesce(json_agg(r order by r."Name"), '[]') from sgi.company_representatives r where r."CompanyId" = c."CompanyId" and r."Active"),
+  'itens', (select coalesce(json_agg(i order by i."Order"), '[]') from sgi.contract_items i where i."ContractId" = c."Id"),
+  'equipe', (select coalesce(json_agg(a order by a."ValidFrom"), '[]') from sgi.contract_role_assignments a
+             where a."ContractId" = c."Id" and (a."ValidUntil" is null or a."ValidUntil" > now())),
+  'prorrogacoes', (select count(*) from sgi.contract_term_extensions t where t."ContractId" = c."Id"),
+  'competencias', (select count(*) from sgi.contract_execution_competences p where p."ContractId" = c."Id"),
+  'notas_empenho', (select count(*) from sgi.contract_commitment_notes n where n."ContractId" = c."Id")
+) from sgi.contracts c where c."Sequence" = {sequencial} and c."Year" = {ano};
+commit;
+"""
+
+# Lê só os usuários pedidos do portal-data.json do SGI (sem senhas nem hashes)
+LEITURA_USUARIOS = """
+import json, sys
+pedidos = set(sys.argv[1:])
+d = json.load(open('/var/lib/sgi-spi/portal-data.json', encoding='utf-8'))
+print(json.dumps({str(u.get('Id')): {'login': u.get('Username') or '', 'externo': u.get('ExternalId') or '',
+                  'nome': (u.get('Profile') or {}).get('FullName') or ''} for u in d.get('Users', []) if str(u.get('Id')) in pedidos}))
+"""
+
+
+def _executar(cliente: paramiko.SSHClient, comando: str, entrada: str) -> str:
+    """Roda o comando no SGI com a entrada padrão e devolve a saída (erro → `ErroMigracao`)."""
+    stdin, stdout, stderr = cliente.exec_command(comando, timeout=60)
+    stdin.write(entrada)
+    stdin.channel.shutdown_write()
+    saida = stdout.read().decode()
+    if stdout.channel.recv_exit_status() != 0:
+        detalhe = stderr.read().decode().strip().splitlines()
+        if any("try again" in d or "incorrect password" in d for d in detalhe):
+            raise ErroMigracao("A senha do SGI não foi aceita pelo sudo de lá.", "senha_invalida")
+        raise ErroMigracao(f"Falha ao ler o SGI: {detalhe[-1] if detalhe else 'erro desconhecido'}", "sgi_indisponivel", 502)
+    return saida
+
+
+def _decimal_texto(valor: Any) -> str:
+    """Número do JSON do SGI como texto decimal sem zeros à direita (ex.: 12.5000 → 12.5)."""
+    texto_valor = format(float(valor or 0), "f") if not isinstance(valor, str) else valor
+    return texto_valor.rstrip("0").rstrip(".") if "." in texto_valor else texto_valor
+
+
+def rascunho_contrato(sessao, numero: str, senha_origem: str) -> dict[str, Any]:
+    """Lê no SGI (somente leitura) o contrato `NNN/AAAA` e monta o rascunho do cadastro. Nada é gravado aqui."""
+    sequencial, ano = (int(p) for p in numero.strip().split("/"))
+    numero_padrao = f"{sequencial:03d}/{ano}"
+    existente = sessao.scalar(select(Contrato).where(func.lower(Contrato.numero) == numero_padrao.lower()))
+    if existente is not None:
+        raise ErroMigracao(f"O contrato {numero_padrao} já está cadastrado neste sistema.", "conflito", 409)
+
+    configuracao = obter_configuracao()
+    cliente = _conectar(configuracao.migracao_sgi_host, configuracao.migracao_sgi_usuario, senha_origem, "SGI")
+    try:
+        # O psql lê a senha do sudo e, em seguida, o script, pela entrada padrão
+        bruto = _executar(cliente, "sudo -S -p '' -u postgres psql -d sgi_spi -X -q -v ON_ERROR_STOP=1 -At -f -",
+                          senha_origem + "\n" + CONSULTA_RASCUNHO.format(sequencial=sequencial, ano=ano))
+        # O json_agg quebra linhas entre os elementos: o JSON é a saída inteira (sem contrato, sai vazia)
+        inicio = bruto.find("{")
+        if inicio < 0:
+            raise ErroMigracao(f"O contrato {numero_padrao} não foi encontrado no SGI.", "nao_encontrado", 404)
+        dados = json.loads(bruto[inicio:])
+        ids_usuarios = sorted({str(a["UserId"]) for a in dados["equipe"] if a.get("UserId") is not None})
+        usuarios_sgi = json.loads(_executar(cliente, "python3 - " + " ".join(ids_usuarios), LEITURA_USUARIOS) or "{}") if ids_usuarios else {}
+    finally:
+        cliente.close()
+
+    c, e = dados["contrato"], dados["empresa"] or {}
+    avisos: list[str] = []
+
+    # Empresa: a daqui com o mesmo CNPJ, se houver
+    cnpj = "".join(filter(str.isdigit, e.get("Cnpj") or ""))
+    local = sessao.scalar(select(EmpresaContratada).where(EmpresaContratada.cnpj == cnpj)) if cnpj else None
+    empresa = {"id": str(local.id) if local else None, "cnpj": cnpj, "razao_social": e.get("CorporateName") or "",
+               "nome_fantasia": e.get("TradeName") or "", "endereco": e.get("Address") or "", "ativa_aqui": bool(local.ativa) if local else True}
+    if local is None:
+        avisos.append("A empresa não está cadastrada aqui: cadastre-a pelo botão da tela (os dados vêm do SGI) antes de salvar.")
+    elif not local.ativa:
+        avisos.append(f"A empresa {local.razao_social} está inativa aqui: reative-a em Empresas antes de salvar.")
+
+    # Equipe vigente: casa o login ou o id externo (AD) com os usuários daqui
+    locais = list(sessao.scalars(select(Usuario)))
+    por_login = {u.login.lower(): u for u in locais}
+    por_externo = {u.id_externo.lower(): u for u in locais if u.id_externo}
+    equipe, papeis_usados = [], set()
+    for a in dados["equipe"]:
+        papel = PAPEIS_SGI.get(a.get("Role"))
+        origem = usuarios_sgi.get(str(a.get("UserId")), {})
+        nome = a.get("UserDisplayName") or origem.get("nome") or origem.get("login") or "?"
+        usuario = por_login.get((origem.get("login") or "").lower()) or por_externo.get((origem.get("externo") or "").lower())
+        if papel is None or papel in papeis_usados:
+            continue
+        if usuario is None or not usuario.ativo:
+            avisos.append(f"{nome} ({papel.replace('_', ' ')}) não tem conta ativa aqui: escolha a pessoa na equipe.")
+            continue
+        papeis_usados.add(papel)
+        equipe.append({"papel": papel, "usuario_id": usuario.id, "login": usuario.login, "nome": usuario.nome_completo or usuario.login})
+
+    itens = [{
+        "descricao": i.get("Description") or "", "tipo": TIPOS_ITEM_SGI.get(i.get("Type"), "continuo"),
+        "calcula_pro_rata": bool(i.get("CalculatesProRata")), "codigo_classe": i.get("ClassCode") or "",
+        "codigo_natureza_despesa": i.get("ExpenseNatureCode") or "", "codigo_siafisico": i.get("SiafisicoCode") or "",
+        "codigo_catmat_catser": i.get("CatmatCatserCode") or "", "quantidade_mensal": _decimal_texto(i.get("MonthlyQuantity")),
+        "quantidade_total": _decimal_texto(i.get("TotalQuantity")), "valor_unitario": _decimal_texto(i.get("UnitPrice")),
+    } for i in dados["itens"]]
+    if itens:
+        avisos.append("O SGI não tem a Unidade de Fornecimento (UF) dos itens: informe-a em cada item.")
+    if dados["prorrogacoes"]:
+        avisos.append(f"O SGI tem {dados['prorrogacoes']} prorrogação(ões) registrada(s): depois de salvar, registre-as em Prorrogação.")
+    if dados["competencias"] or dados["notas_empenho"]:
+        avisos.append(f"Não são importados: {dados['competencias']} competência(s) e {dados['notas_empenho']} nota(s) de empenho do SGI (só o cadastro).")
+
+    periodicidade = c.get("ExecutionPeriodicity")
+    return {
+        "numero": numero_padrao, "apelido": c.get("Nickname") or "", "objeto": c.get("Object") or "",
+        "data_inicio": (c.get("StartDate") or "")[:10], "vigencia_inicial_meses": int(c.get("InitialTermMonths") or 12),
+        "vigencia_maxima_meses": int(c.get("MaximumTermMonths") or 60),
+        "periodicidade_meses": int(periodicidade) if str(periodicidade).isdigit() else PERIODICIDADES_SGI.get(periodicidade, 1),
+        "mes_reajuste": int(c.get("AdjustmentMonth") or 1),
+        "sei_gestao_numero": c.get("ManagementSeiNumber") or "", "sei_gestao_link": c.get("ManagementSeiUrl") or "",
+        "sei_execucao_numero": c.get("ExecutionSeiNumber") or "", "sei_execucao_link": c.get("ExecutionSeiUrl") or "",
+        "empresa": empresa,
+        "prepostos": [{"cpf": "".join(filter(str.isdigit, p.get("Cpf") or "")), "nome": p.get("Name") or "", "telefone": p.get("Phone") or "",
+                       "email": p.get("Email") or "", "cargo": p.get("JobTitle") or ""} for p in dados["prepostos"]],
+        "equipe": equipe, "itens": itens, "avisos": avisos,
+    }

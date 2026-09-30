@@ -8,7 +8,24 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-09-30
 
+### Removido
+- Tela "Início" com a saudação: a página inicial agora é o portal de notícias.
+
 ### Adicionado
+- **Módulo Notícias (Fases 2 a 4: telas, portal como página inicial e migração do 10.23.1.243).**
+  - **A página inicial do sistema (`/`) passa a ser o portal de notícias:**
+    - pública para visitantes, com "Entrar no SGI SPI";
+    - para quem está logado, aparece com a barra lateral;
+    - traz slider (passagem automática, setas, pontos, toque e teclado), cartões sem repetir os slides e atalhos.
+  - `/noticias` (arquivo com busca, categoria e mês) e `/noticias/:slug` (notícia com PDF incorporado e "Leia também").
+  - **Gestão** em Módulos › Notícias:
+    - lista por situação, com o total aguardando aprovação;
+    - editor com texto formatado, **recorte 2:1 da capa no próprio editor** (arrastar e zoom, ou "imagem inteira" sem cortes) e aviso de baixa resolução;
+    - publicação imediata ou agendada, aviso a setores e pessoas, comunicado com ciência, anexos e prévia;
+    - Aprovar em verde, Devolver com motivo e histórico de versões.
+  - **Configurar portal** (aprovadores): quantidade de slides, tempo, passagem automática, curadoria manual, título sobreposto, cartões, atalhos e categorias, com prévia.
+  - Rotas `GET /api/noticias/opcoes-setores` e `/opcoes-usuarios` para o público do aviso.
+  - **Migração do 10.23.1.243** (`scripts/extrair-noticias-243.py`, somente leitura, e `scripts/migrar-noticias-243.py`): 23 notícias, 3 anexos e 4 atalhos, com categorias sugeridas e capas adequadas sem cortar as artes.
 - **Módulo Notícias (Fase 1: backend)**, que traz para o SGI SPI o portal de notícias do 10.23.1.243, com melhorias.
   - **Portal público** (sem login): `GET /api/portal` (slider configurável, cartões sem repetir os slides, atalhos) e arquivo/detalhe em `/api/noticias/publicas`, com busca, categoria e mês.
   - **Fluxo de aprovação pela ACL `noticias`:** redator (MODIFICACAO) escreve e pede publicação imediata ou agendada; aprovadores (CONTROLE_TOTAL) recebem caixa + e-mail de aprovação pendente, aprovam ou devolvem com motivo. Sem regras no recurso, só o SuperRoot publica.

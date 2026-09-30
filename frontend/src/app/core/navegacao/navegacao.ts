@@ -27,6 +27,8 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           // RH: férias e licença-prêmio para todos; painel, validações e parâmetros conforme o papel
           { id: 'rh', rotulo: 'RH', rota: '/rh', destino: '/rh/ferias' },
           // Tarefas: minhas tarefas, equipes e liderança
+          // Notícias: gestão editorial do portal (a página inicial é o próprio portal)
+          { id: 'noticias', rotulo: 'Notícias', rota: '/noticias/gestao', acl: 'noticias' },
           { id: 'tarefas', rotulo: 'Tarefas', rota: '/tarefas' },
         ],
         textoVazio: 'Nenhum módulo disponível ainda',

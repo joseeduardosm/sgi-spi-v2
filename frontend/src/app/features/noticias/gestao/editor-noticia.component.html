@@ -1,0 +1,227 @@
+<app-cabecalho-noticias [titulo]="nova() ? 'Nova notícia' : (noticia()?.titulo || 'Notícia')"
+                        [trilha]="[{ rotulo: nova() ? 'Nova notícia' : 'Editar' }]" />
+
+@if (carregando()) {
+  <p class="estado-vazio">Carregando…</p>
+} @else {
+  @if (noticia(); as n) {
+    <div class="faixa-situacao" [attr.data-situacao]="n.situacao">
+      <span class="selo-noticia" [attr.data-situacao]="n.situacao">{{ rotulos[n.situacao] }}</span>
+      @switch (n.situacao) {
+        @case ('em_revisao') { <span>Enviada em {{ n.enviada_revisao_em | date: 'dd/MM/yyyy HH:mm' }} · {{ n.publicar_em ? 'publicação agendada para ' + (n.publicar_em | date: 'dd/MM/yyyy HH:mm') : 'publicação imediata ao aprovar' }}</span> }
+        @case ('aprovada') {
+          <span>Aprovada por {{ n.aprovado_por_nome }} em {{ n.aprovado_em | date: 'dd/MM/yyyy HH:mm' }} ·
+            @if (n.visivel) { no portal desde {{ n.publicar_em | date: 'dd/MM/yyyy HH:mm' }} · {{ n.visualizacoes }} visualização(ões)
+              <a [routerLink]="['/noticias', n.slug]" target="_blank">ver no portal ↗</a> }
+            @else { agendada para {{ n.publicar_em | date: 'dd/MM/yyyy HH:mm' }} }</span>
+        }
+        @case ('devolvida') { <span><strong>O que ajustar:</strong> {{ n.motivo_devolucao }}</span> }
+        @case ('arquivada') { <span>Fora do portal.</span> }
+        @default { <span>Rascunho: só você e os aprovadores veem.</span> }
+      }
+    </div>
+  }
+
+  <div class="colunas-noticia">
+    <div class="principal">
+      <section class="cartao-dados">
+        <header><h2>Texto</h2></header>
+        <div class="corpo grade-formulario">
+          <div class="ocupa-duas"><label for="nt-titulo">Título *</label>
+            <input id="nt-titulo" name="titulo" maxlength="220" [(ngModel)]="titulo" [disabled]="!editavel()" placeholder="Título da notícia" /></div>
+          <div class="ocupa-duas"><label for="nt-linha">Linha fina</label>
+            <input id="nt-linha" name="linha" maxlength="300" [(ngModel)]="linhaFina" [disabled]="!editavel()" placeholder="Resumo em uma frase (aparece nos cartões e no aviso)" /></div>
+          <div class="ocupa-duas"><label>Texto *</label>
+            @if (editavel()) { <app-editor-texto [(html)]="corpo" /> }
+            @else { <div class="corpo-noticia leitura-texto" [innerHTML]="corpo"></div> }
+          </div>
+          <div><label for="nt-categoria">Categoria</label>
+            <select id="nt-categoria" name="categoria" [(ngModel)]="categoriaId" [disabled]="!editavel()">
+              <option [ngValue]="null">Sem categoria</option>
+              @for (c of categorias(); track c.id) { <option [ngValue]="c.id">{{ c.nome }}</option> }
+            </select></div>
+        </div>
+      </section>
+
+      <section class="cartao-dados">
+        <header><div><h2>Capa</h2><small>Envie a imagem em qualquer tamanho: o sistema gera a capa 2:1 a partir do enquadramento escolhido aqui.</small></div>
+          @if (editavel()) {
+            <label class="acao-secundaria botao-arquivo">{{ capaLocal() || capaOriginal() ? 'Trocar imagem' : 'Escolher imagem' }}
+              <input type="file" accept="image/jpeg,image/png,image/webp" (change)="escolherCapa($event)" /></label>
+          }
+        </header>
+        <div class="corpo">
+          @if (capaLocal() || capaOriginal()) {
+            @if (editavel()) {
+              <app-recorte-capa [url]="capaLocal() || capaOriginal()" [modo]="modoCapa()" (modoChange)="trocarModo($event)"
+                                [inicial]="recorteInicial()" (alterado)="aoRecortar($event)" />
+            } @else if (noticia()?.capa?.['1600']) {
+              <img class="capa-leitura" [appImagemAutenticada]="noticia()!.capa['1600']" [alt]="capaAlt" />
+            }
+          } @else {
+            <p class="dica-formulario">Nenhuma imagem ainda. JPG, PNG ou WebP, até 15 MB.</p>
+          }
+          <div class="grade-formulario" style="margin-top: 14px">
+            <div class="ocupa-duas"><label for="nt-alt">Descrição da imagem (texto alternativo) *</label>
+              <input id="nt-alt" name="alt" maxlength="300" [(ngModel)]="capaAlt" [disabled]="!editavel()"
+                     placeholder="O que a imagem mostra, para quem usa leitor de tela" /></div>
+          </div>
+        </div>
+      </section>
+
+      @if (noticia(); as n) {
+        <section class="cartao-dados">
+          <header><div><h2>Anexos</h2><small>PDF, Office/LibreOffice, TXT, CSV, PNG ou JPG, até 10. O primeiro PDF aparece incorporado na notícia.</small></div>
+            @if (editavel()) { <label class="acao-secundaria botao-arquivo">Anexar arquivos
+              <input type="file" multiple accept=".pdf,.docx,.xlsx,.pptx,.odt,.ods,.odp,.doc,.xls,.ppt,.txt,.csv,.png,.jpg,.jpeg" (change)="anexar($event)" /></label> }
+          </header>
+          <div class="corpo">
+            <ul class="lista-anexos-noticia">
+              @for (a of n.anexos; track a.id) {
+                <li><button type="button" class="link-simples" (click)="abrirAnexo(a.url)">{{ a.nome }}</button> <small>{{ tamanho(a.tamanho) }}</small>
+                  @if (editavel()) { <button type="button" class="link-simples remover" [attr.aria-label]="'Remover ' + a.nome" (click)="removerAnexo(a.id)">remover</button> }</li>
+              } @empty { <li class="dica-formulario">Nenhum anexo.</li> }
+            </ul>
+          </div>
+        </section>
+      }
+    </div>
+
+    <aside class="lateral">
+      <section class="cartao-dados">
+        <header><h2>Publicação</h2></header>
+        <div class="corpo">
+          <div class="linha-caixas" style="flex-direction: column; gap: 8px">
+            <label><input type="radio" name="publicacao" value="imediata" [(ngModel)]="publicacao" [disabled]="!editavel()" /> Imediata, assim que aprovada</label>
+            <label><input type="radio" name="publicacao" value="agendada" [(ngModel)]="publicacao" [disabled]="!editavel()" /> Agendada</label>
+          </div>
+          <div class="grade-formulario uma-coluna">
+            @if (publicacao === 'agendada') {
+              <div><label for="nt-publicar">Publicar em *</label>
+                <input id="nt-publicar" type="datetime-local" name="publicar" [(ngModel)]="publicarEm" [disabled]="!editavel()" /></div>
+            }
+            <div><label for="nt-destaque">Tirar do slider em</label>
+              <input id="nt-destaque" type="datetime-local" name="destaque" [(ngModel)]="destaqueAte" [disabled]="!editavel()" />
+              <p class="dica-formulario" style="margin-top: -10px">Opcional. Depois dessa data a notícia continua em "Todas as notícias".</p></div>
+          </div>
+          <label class="caixa-opcao"><input type="checkbox" name="fixada" [(ngModel)]="fixada" [disabled]="!editavel()" /> Fixar no início do slider</label>
+        </div>
+      </section>
+
+      <section class="cartao-dados">
+        <header><div><h2>Aviso ao publicar</h2><small>Caixa de mensagens e e-mail, no momento em que a notícia aparecer no portal.</small></div></header>
+        <div class="corpo">
+          <label class="rotulo-campo" for="nt-filtro-setores">Setores ({{ setoresAviso().size }})</label>
+          <input id="nt-filtro-setores" class="filtro-setores" type="search" placeholder="Filtrar setores" [ngModel]="filtroSetoresSinal()"
+                 (ngModelChange)="filtroSetoresSinal.set($event)" [disabled]="!editavel()" />
+          <div class="lista-setores-aviso">
+            @for (s of setoresFiltrados(); track s.id) {
+              <label><input type="checkbox" [checked]="setoresAviso().has(s.id)" (change)="alternarSetor(s.id)" [disabled]="!editavel()" /> {{ s.nome }}</label>
+            }
+          </div>
+          <p class="dica-formulario">Um setor inclui os setores abaixo dele.</p>
+          <label class="rotulo-campo" for="nt-usuarios">Pessoas</label>
+          @if (editavel()) {
+            <app-seletor-usuarios idCampo="nt-usuarios" [(selecionados)]="usuariosAviso" [fonte]="api.opcoesUsuarios" textoAjuda="Pesquisar pessoa" />
+          } @else {
+            <p class="dica-formulario">{{ usuariosAviso.length ? usuariosAviso.map(u => u.nome_completo).join(', ') : 'Ninguém escolhido' }}</p>
+          }
+          <label class="caixa-opcao"><input type="checkbox" name="ciencia" [(ngModel)]="exigeCiencia" [disabled]="!editavel()" />
+            Comunicado com ciência obrigatória</label>
+          @if (noticia()?.ciencia; as c) {
+            <p class="dica-formulario">Aviso enviado: {{ c.cientes }} de {{ c.total }} deram ciência.
+              <button type="button" class="link-simples" (click)="verCiencias()">ver quem</button></p>
+          }
+        </div>
+      </section>
+
+      <section class="cartao-dados acoes-noticia">
+        <div class="corpo">
+          @if (editavel()) { <button type="button" class="acao-secundaria" (click)="salvar()">{{ nova() ? 'Salvar rascunho' : 'Salvar' }}</button> }
+          <button type="button" class="acao-secundaria" (click)="janela.set('previa')">Prévia</button>
+          @if (nova() || pode('enviar_revisao')) { <button type="button" class="acao-primaria" (click)="enviar()">Enviar para aprovação</button> }
+          @if (pode('aprovar')) { <button type="button" class="acao-positiva" (click)="abrirAprovacao()">{{ noticia()?.situacao === 'em_revisao' ? 'Aprovar' : 'Publicar' }}</button> }
+          @if (pode('devolver')) { <button type="button" class="acao-recusar" (click)="janela.set('devolver')">Devolver</button> }
+          @if (pode('arquivar')) { <button type="button" class="acao-secundaria" (click)="arquivar(true)">Arquivar</button> }
+          @if (pode('desarquivar')) { <button type="button" class="acao-secundaria" (click)="arquivar(false)">Desarquivar</button> }
+          @if (noticia()) { <button type="button" class="acao-secundaria" (click)="verHistorico()">Histórico</button> }
+          @if (pode('excluir')) { <button type="button" class="acao-secundaria botao-excluir" (click)="excluir()">Excluir</button> }
+        </div>
+      </section>
+    </aside>
+  </div>
+}
+
+@if (janela() === 'aprovar') {
+  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-aprovar">
+    <header><div><span class="modal-sobretitulo">Aprovação</span><h2 id="titulo-aprovar">Aprovar e publicar</h2></div>
+      <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
+    <form (submit)="$event.preventDefault(); aprovar()">
+      <p class="dica-formulario" style="margin-top: 0">"{{ titulo }}". Deixe a data vazia para publicar agora.</p>
+      <div class="grade-formulario uma-coluna"><div><label for="ap-data">Publicar em</label>
+        <input id="ap-data" type="datetime-local" name="data" [(ngModel)]="aprovarEm" /></div></div>
+      <footer><button type="button" class="acao-secundaria" (click)="janela.set(null)">Cancelar</button>
+        <button type="submit" class="acao-positiva">{{ aprovarEm ? 'Aprovar e agendar' : 'Aprovar e publicar agora' }}</button></footer>
+    </form>
+  </section>
+}
+
+@if (janela() === 'devolver') {
+  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-devolver">
+    <header><div><span class="modal-sobretitulo">Aprovação</span><h2 id="titulo-devolver">Devolver para ajustes</h2></div>
+      <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
+    <form (submit)="$event.preventDefault(); devolver()">
+      <div class="grade-formulario uma-coluna"><div><label for="dv-motivo">O que precisa ser ajustado? *</label>
+        <textarea id="dv-motivo" name="motivo" rows="4" maxlength="4000" [(ngModel)]="motivo"></textarea></div></div>
+      <footer><button type="button" class="acao-secundaria" (click)="janela.set(null)">Cancelar</button>
+        <button type="submit" class="acao-recusar" [disabled]="!motivo.trim()">Devolver</button></footer>
+    </form>
+  </section>
+}
+
+@if (janela() === 'previa') {
+  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section class="modal-portal modal-previa" role="dialog" aria-modal="true" aria-labelledby="titulo-previa">
+    <header><div><span class="modal-sobretitulo">Prévia</span><h2 id="titulo-previa">Como a notícia vai aparecer</h2></div>
+      <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
+    <div class="corpo-previa">
+      @if (capaLocal() && !noticia()?.capa?.['1600']) { <p class="dica-formulario">Salve para ver a capa final (o recorte é aplicado no servidor).</p> }
+      <article class="noticia-publica">
+        <header><h1>{{ titulo || 'Título da notícia' }}</h1>@if (linhaFina) { <p class="linha-fina-noticia">{{ linhaFina }}</p> }</header>
+        @if (noticia()?.capa?.['1600']) { <img class="capa-noticia" [appImagemAutenticada]="noticia()!.capa['1600']" [alt]="capaAlt" /> }
+        <div class="corpo-noticia" [innerHTML]="corpo"></div>
+      </article>
+    </div>
+  </section>
+}
+
+@if (revisoes(); as lista) {
+  <div class="fundo-modal" role="presentation" (click)="revisoes.set(null)"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-historico">
+    <header><div><span class="modal-sobretitulo">Histórico</span><h2 id="titulo-historico">Versões da notícia</h2></div>
+      <button type="button" aria-label="Fechar" (click)="revisoes.set(null)">×</button></header>
+    <div class="corpo-previa">
+      <ol class="historico-noticia">
+        @for (r of lista; track r.criado_em) {
+          <li><strong>{{ r.descricao }}</strong> <small>v{{ r.versao }} · {{ r.autor_nome }} · {{ r.criado_em | date: 'dd/MM/yyyy HH:mm' }}</small>
+            <div>{{ r.titulo }}</div></li>
+        }
+      </ol>
+    </div>
+  </section>
+}
+
+@if (ciencias(); as c) {
+  <div class="fundo-modal" role="presentation" (click)="ciencias.set(null)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-ciencias">
+    <header><div><span class="modal-sobretitulo">Aviso</span><h2 id="titulo-ciencias">{{ c.cientes }} de {{ c.total }} deram ciência</h2></div>
+      <button type="button" aria-label="Fechar" (click)="ciencias.set(null)">×</button></header>
+    <div class="corpo-previa">
+      <ul class="historico-noticia">
+        @for (p of c.pessoas; track p.nome) { <li>{{ p.nome }} <small>{{ p.ciente_em ? 'ciente em ' + (p.ciente_em | date: 'dd/MM/yyyy HH:mm') : 'ainda não' }}</small></li> }
+      </ul>
+    </div>
+  </section>
+}

@@ -1,10 +1,12 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para definir o mapa de rotas (endereços) da aplicação e quem pode acessar cada uma.
 
+import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 
 import { guardaAcl, guardaPerfil } from './core/acesso/acesso.guards';
 import { guardaAutenticacao, guardaContaRoot, guardaPapel, guardaVisitante } from './core/autenticacao/autenticacao.guards';
+import { AutenticacaoService } from './core/autenticacao/autenticacao.service';
 
 /**
  * Mapa de rotas do portal.
@@ -31,6 +33,23 @@ export const rotas: Routes = [
     ],
   },
   {
+    // Portal de notícias para visitantes (sem login): página inicial, arquivo e notícia, no layout público do portal.
+    // Quem está logado não passa por aqui (`canMatch`) e vê as mesmas telas dentro do layout com barra lateral.
+    path: '',
+    canMatch: [() => !inject(AutenticacaoService).autenticado()],
+    loadComponent: () => import('./shared/layout/layout-portal/layout-portal.component').then((m) => m.LayoutPortalComponent),
+    children: [
+      { path: '', pathMatch: 'full', title: 'Notícias | SGI SPI', loadComponent: () => import('./features/noticias/publico/portal.component').then((m) => m.PortalComponent) },
+      // A gestão exige login: o visitante vai para a tela de entrada e volta depois
+      { path: 'noticias/gestao', canActivate: [guardaAutenticacao], children: [] },
+      { path: 'noticias/gestao/**', canActivate: [guardaAutenticacao], children: [] },
+      { path: 'noticias', title: 'Todas as notícias | SGI SPI', loadComponent: () => import('./features/noticias/publico/arquivo-noticias.component').then((m) => m.ArquivoNoticiasComponent) },
+      { path: 'noticias/:slug', title: 'Notícia | SGI SPI', loadComponent: () => import('./features/noticias/publico/noticia.component').then((m) => m.NoticiaComponent) },
+      // Qualquer outra página exige login
+      { path: '**', canActivate: [guardaAutenticacao], children: [] },
+    ],
+  },
+  {
     // Rotas autenticadas, exibidas dentro do layout com barra lateral.
     // Cada módulo novo entra como filho desta rota e ganha um item em core/navegacao/navegacao.ts.
     path: '',
@@ -41,10 +60,19 @@ export const rotas: Routes = [
     canActivateChild: [guardaPerfil],
     children: [
       {
+        // Página inicial: o portal de notícias (o mesmo que o visitante vê, aqui com a barra lateral)
         path: '',
+        pathMatch: 'full',
         title: 'Início | SGI SPI',
-        loadComponent: () => import('./features/inicio/inicio.component').then((m) => m.InicioComponent),
+        loadComponent: () => import('./features/noticias/publico/portal.component').then((m) => m.PortalComponent),
       },
+      {
+        // Gestão de notícias: a API confere o papel (redator ou aprovador) na ACL `noticias`
+        path: 'noticias/gestao',
+        loadChildren: () => import('./features/noticias/noticias.routes').then((m) => m.ROTAS_GESTAO_NOTICIAS),
+      },
+      { path: 'noticias', title: 'Todas as notícias | SGI SPI', loadComponent: () => import('./features/noticias/publico/arquivo-noticias.component').then((m) => m.ArquivoNoticiasComponent) },
+      { path: 'noticias/:slug', title: 'Notícia | SGI SPI', loadComponent: () => import('./features/noticias/publico/noticia.component').then((m) => m.NoticiaComponent) },
       {
         // Caixa de mensagens: todo usuário autenticado (sem ACL)
         path: 'mensagens',

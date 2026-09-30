@@ -222,6 +222,29 @@ def criar(dados: GravacaoNoticia, sessao: Session = Depends(obter_sessao), usuar
         return _gestao(sessao, usuario, servico.criar(sessao, usuario, _dados(dados)))
 
 
+@roteador.get("/noticias/opcoes-setores", response_model=list[SetorResumo], summary="Setores para o aviso de publicação",
+              description="Redator. Setores ativos (o aviso a um setor inclui os setores abaixo dele).", responses={**RESPOSTAS_AUTENTICADAS, **SEM_PERMISSAO})
+def opcoes_setores(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> list[SetorResumo]:
+    with _traduzir():
+        if not servico.eh_redator(sessao, usuario):
+            raise ErroNoticia("Você não tem acesso à gestão de notícias.", 403, "sem_permissao")
+    return [SetorResumo(id=s.id, nome=s.nome) for s in servico.setores_opcoes(sessao)]
+
+
+@roteador.get("/noticias/opcoes-usuarios", response_model=list[Pessoa], summary="Usuários para o aviso de publicação",
+              description="Redator. Usuários ativos por nome ou login (`busca`, até 20).", responses={**RESPOSTAS_AUTENTICADAS, **SEM_PERMISSAO})
+def opcoes_usuarios(busca: str = Query("", max_length=100), sessao: Session = Depends(obter_sessao),
+                    usuario: Usuario = Depends(obter_usuario_atual)) -> list[Pessoa]:
+    from sqlalchemy import func
+    with _traduzir():
+        if not servico.eh_redator(sessao, usuario):
+            raise ErroNoticia("Você não tem acesso à gestão de notícias.", 403, "sem_permissao")
+    termo = f"%{busca.strip().lower()}%"
+    lista = sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True), func.lower(Usuario.nome_completo + " " + Usuario.login).like(termo))
+                           .order_by(Usuario.nome_completo).limit(20))
+    return [Pessoa(id=u.id, nome=u.nome_completo or u.login, login=u.login) for u in lista]
+
+
 @roteador.get("/noticias/categorias", response_model=list[CategoriaLeitura], summary="Categorias (todas, inclusive inativas)",
               responses=RESPOSTAS_AUTENTICADAS)
 def categorias(sessao: Session = Depends(obter_sessao), _usuario: Usuario = Depends(obter_usuario_atual)) -> list[CategoriaLeitura]:

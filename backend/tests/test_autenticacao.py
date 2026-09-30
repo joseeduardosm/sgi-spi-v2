@@ -249,6 +249,8 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/noticias",
         "/api/noticias/categorias",
         "/api/noticias/categorias/{categoria_id}",
+        "/api/noticias/opcoes-setores",
+        "/api/noticias/opcoes-usuarios",
         "/api/noticias/papel",
         "/api/noticias/publicas",
         "/api/noticias/publicas/{slug}",

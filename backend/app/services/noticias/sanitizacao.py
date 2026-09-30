@@ -29,10 +29,11 @@ def texto_puro(html: str) -> str:
 
 
 def texto_para_html(texto: str) -> str:
-    """Texto puro (ex.: notícias migradas) em parágrafos HTML; linhas simples viram <br>."""
+    """Texto puro (ex.: notícias migradas) em parágrafos HTML; linhas simples viram <br> e endereços viram links."""
     from html import escape
     blocos = [b.strip() for b in re.split(r"\n\s*\n", (texto or "").replace("\r\n", "\n")) if b.strip()]
-    return "".join(f"<p>{escape(b).replace(chr(10), '<br>')}</p>" for b in blocos)
+    ligar = lambda t: re.sub(r"(https?://[^\s<]+[^\s<.,;:)])", r'<a href="\1" target="_blank">\1</a>', t)
+    return limpar_html("".join(f"<p>{ligar(escape(b)).replace(chr(10), '<br>')}</p>" for b in blocos))
 
 
 def slug_de(titulo: str) -> str:

@@ -83,6 +83,9 @@ def test_permissoes_por_nivel(cliente, redacao):
     assert len(cliente.get(URL, headers=h["rita"]).json()) == 1
     # Redatora não aprova nem edita a notícia do aprovador
     assert cliente.post(f"{URL}/{n['id']}/aprovar", json={}, headers=h["rita"]).status_code == 403
+    assert [x["nome"] for x in cliente.get(f"{URL}/opcoes-setores", headers=h["rita"]).json()] == ["Coordenadoria de Gestão de Pessoas"]
+    assert cliente.get(f"{URL}/opcoes-usuarios", params={"busca": "cida"}, headers=h["rita"]).json()[0]["login"] == "cida"
+    assert cliente.get(f"{URL}/opcoes-setores", headers=h["leo"]).status_code == 403
     papel = cliente.get(f"{URL}/papel", headers=h["rita"]).json()
     assert (papel["redator"], papel["aprovador"]) == (True, False)
 

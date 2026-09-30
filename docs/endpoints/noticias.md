@@ -74,6 +74,7 @@ Leitura pública: qualquer pessoa, sem login, vê as notícias **publicadas**.
 | Método e caminho | Quem | Descrição |
 |---|---|---|
 | `GET /api/noticias/papel` | autenticado | `{nivel, redator, aprovador, aguardando_aprovacao, contagem}` |
+| `GET /api/noticias/opcoes-setores` · `GET /api/noticias/opcoes-usuarios?busca=` | redator | Opções do público do aviso (setores ativos; usuários ativos, até 20) |
 | `GET /api/noticias` | redator | Lista (`situacao`, `busca`). Redator: as próprias + aprovadas/arquivadas; aprovador: todas |
 | `POST /api/noticias` | redator | `GravacaoNoticia` → `201 NoticiaGestao` |
 | `GET /api/noticias/{id}` / `PUT` / `DELETE` | redator/aprovador | Detalhe (com `acoes` permitidas), edição, exclusão |
@@ -100,4 +101,30 @@ Leitura pública: qualquer pessoa, sem login, vê as notícias **publicadas**.
 
 ## Consumo no Angular
 
-Telas nas fases seguintes: portal em `/` (público), `/noticias` e `/noticias/:slug`; gestão em `/noticias/gestao`. As imagens da gestão exigem token e são carregadas como blob; as do portal são URLs públicas.
+Código em `frontend/src/app/features/noticias/` (`noticias-api.service.ts`, `noticias.models.ts`, `publico/`, `gestao/`).
+
+| Tela | Rota | Quem |
+|---|---|---|
+| **Página inicial = portal** (slider, cartões, atalhos) | `/` | Visitante: layout público (`LayoutPortalComponent`, com "Entrar no SGI SPI"). Logado: dentro do layout com barra lateral. A escolha é por `canMatch` em `app.routes.ts` |
+| Todas as notícias (busca, categoria, mês na URL, "Carregar mais") | `/noticias` | Público |
+| Notícia (capa, texto, anexos com PDF incorporado, "Leia também", copiar link) | `/noticias/:slug` | Público |
+| Gestão: lista com abas por situação | `/noticias/gestao` | Redator/aprovador (Módulos › Notícias). Visitante vai ao login |
+| Editor: texto formatado, capa com recorte 2:1 (arrastar e zoom) ou imagem inteira, publicação imediata/agendada, aviso a setores e pessoas, ciência, anexos, prévia, aprovar (verde) / devolver (vermelho claro), histórico | `/noticias/gestao/nova`, `/noticias/gestao/:id` | Redator/aprovador |
+| Configurar portal: parâmetros e prévia do slider, curadoria, atalhos, categorias | `/noticias/gestao/portal` | Aprovador |
+
+- As imagens e anexos da gestão exigem token: a diretiva `appImagemAutenticada` baixa como blob. As do portal são URLs públicas com cache.
+- O recorte enviado ao servidor está em pixels da imagem original (`RecorteCapaComponent`).
+
+## Migração do 10.23.1.243
+
+```bash
+SGI243_SENHA=... backend/.venv/bin/python scripts/extrair-noticias-243.py <pacote>      # somente leitura: tabelas por \copy read only e arquivos por SFTP
+cd backend && ANEXOS_DIRETORIO=/tmp/ensaio .venv/bin/python ../scripts/migrar-noticias-243.py <pacote>   # ensaio
+cd backend && .venv/bin/python ../scripts/migrar-noticias-243.py <pacote> --gravar     # grava (--substituir recarrega)
+```
+
+- `PUBLICADA` → `aprovada` com a data original (aprovador "Migração 10.23.1.243", autor "Portal 10.23.1.243"); `RASCUNHO` → `rascunho`.
+- Texto puro em parágrafos, com os endereços viram links.
+- **Capa:** proporção entre 1,9 e 2,1 → recorte 2:1 central; demais → "imagem inteira".
+- Categoria sugerida pelo título; atalhos com endereço relativo ganham o domínio da intranet antiga.
+- **Carga de 30/09/2026:** 23 notícias (22 publicadas, 1 rascunho), 3 anexos, 4 atalhos, 13 capas recortadas e 10 inteiras. Nenhum aviso foi disparado e nada foi alterado no 243.

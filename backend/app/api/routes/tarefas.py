@@ -4,7 +4,7 @@
 
 import uuid
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -21,7 +21,7 @@ from app.models.usuario import Usuario
 from app.schemas.tarefas import (
     AnexoLeitura, Contexto, EdicaoTarefa, EquipeLeitura, EquipeResumo, Etapa, EventoLeitura, GravacaoEquipe, GravacaoMarcador,
     Indicadores, ItemChecklist, LinhaDoTempo, ListaTarefas, MarcadorLeitura, Movimento, MudancaPrazo, NovaTarefa, OperacaoChecklist,
-    ContagemEquipe, Pessoa, PessoaCarga, RemocaoEvento, Reordenacao, TarefaDetalhe, TarefaResumo, Transferencia,
+    AgendaPessoa, ContagemEquipe, ItemAgenda, Pessoa, PessoaCarga, RemocaoEvento, Reordenacao, TarefaDetalhe, TarefaResumo, Transferencia,
 )
 from app.services import servico_anexos
 from app.services.tarefas import relatorio_tarefas
@@ -61,20 +61,58 @@ def _prorrogacoes(sessao: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]
     return dict(linhas.all())
 
 
+def _contagens(sessao: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, int]]:
+    """Por tarefa: prorrogações, comentários e anexos (três consultas agregadas para a lista inteira, sem N+1).
+
+    Eventos removidos pelo SuperRoot não contam nos comentários nem nos anexos.
+    """
+    resultado: dict[uuid.UUID, dict[str, int]] = {i: {"prorrogacoes": 0, "comentarios": 0, "anexos": 0} for i in ids}
+    if not ids:
+        return resultado
+    for tarefa_id, total in _prorrogacoes(sessao, ids).items():
+        resultado[tarefa_id]["prorrogacoes"] = total
+    comentarios = sessao.execute(
+        select(EventoTarefa.tarefa_id, func.count()).where(
+            EventoTarefa.tarefa_id.in_(ids), EventoTarefa.tipo == "comentario", EventoTarefa.removido_em.is_(None)
+        ).group_by(EventoTarefa.tarefa_id)
+    )
+    for tarefa_id, total in comentarios:
+        resultado[tarefa_id]["comentarios"] = total
+    anexos = sessao.execute(
+        select(EventoTarefa.tarefa_id, func.count(AnexoEventoTarefa.id)).join(AnexoEventoTarefa, AnexoEventoTarefa.evento_id == EventoTarefa.id)
+        .where(EventoTarefa.tarefa_id.in_(ids), EventoTarefa.removido_em.is_(None)).group_by(EventoTarefa.tarefa_id)
+    )
+    for tarefa_id, total in anexos:
+        resultado[tarefa_id]["anexos"] = total
+    return resultado
+
+
+def _envolvidos(sessao: Session, t: Tarefa) -> list[Pessoa]:
+    """Responsável primeiro e depois os participantes (em ordem de nome), para os avatares do cartão."""
+    outros = [p for p in (_pessoa(sessao, i) for i in servico.envolvidos(t) if i != t.responsavel_id) if p]
+    responsavel = _pessoa(sessao, t.responsavel_id)
+    return ([responsavel] if responsavel else []) + sorted(outros, key=lambda p: p.nome.lower())
+
+
 def _utc(valor: datetime | None) -> datetime | None:
     """Datas sempre com fuso (o SQLite dos testes devolve sem)."""
     return servico._comparavel(valor) if valor else None
 
 
-def _resumo(sessao: Session, t: Tarefa, prorrogacoes: dict, agora: datetime) -> dict:
+def _resumo(sessao: Session, t: Tarefa, contagens: dict, agora: datetime) -> dict:
+    """Campos do `TarefaResumo`. `contagens` vem de `_contagens` (prorrogações, comentários e anexos por tarefa)."""
+    numeros = contagens.get(t.id, {})
     return {
         "id": t.id, "numero": t.numero, "titulo": t.titulo, "status": t.status, "prioridade": t.prioridade, "prazo": _utc(t.prazo),
-        "prazo_original": _utc(t.prazo_original), "prorrogacoes": prorrogacoes.get(t.id, 0),
+        "prazo_original": _utc(t.prazo_original), "prorrogacoes": numeros.get("prorrogacoes", 0),
         "atrasada": t.status in servico.OPERACIONAIS and servico._comparavel(t.prazo) < agora,
         "equipe": EquipeResumo(id=t.equipe.id, nome=t.equipe.nome) if t.equipe else None, "responsavel": _pessoa(sessao, t.responsavel_id),
-        "participantes": len([p for p in t.participantes if p.usuario_id != t.responsavel_id]), "marcadores": [MarcadorLeitura.model_validate(m, from_attributes=True) for m in t.marcadores],
+        "participantes": len([p for p in t.participantes if p.usuario_id != t.responsavel_id]), "envolvidos": _envolvidos(sessao, t),
+        "marcadores": [MarcadorLeitura.model_validate(m, from_attributes=True) for m in t.marcadores],
         "checklist_feitos": sum(1 for i in t.checklist if i.concluido_em), "checklist_total": len(t.checklist),
-        "carga": round(servico.carga(t, agora), 1), "ordem": t.ordem, "atualizado_em": _utc(t.atualizado_em),
+        "comentarios": numeros.get("comentarios", 0), "anexos": numeros.get("anexos", 0),
+        "carga": round(servico.carga(t, agora), 1), "ordem": t.ordem, "criado_em": _utc(t.criado_em), "iniciada_em": _utc(t.iniciada_em),
+        "concluida_em": _utc(t.concluida_em), "atualizado_em": _utc(t.atualizado_em),
     }
 
 
@@ -100,11 +138,11 @@ def _etapas(sessao: Session, t: Tarefa) -> list[Etapa]:
 
 def _detalhe(sessao: Session, usuario: Usuario, t: Tarefa) -> TarefaDetalhe:
     agora = agora_utc()
-    base = _resumo(sessao, t, _prorrogacoes(sessao, [t.id]), agora)
+    base = _resumo(sessao, t, _contagens(sessao, [t.id]), agora)
     pessoas = [p for p in (_pessoa(sessao, i) for i in sorted(servico.envolvidos(t))) if p]
     em_andamento = t.segundos_em_andamento + (int((agora - servico._comparavel(t.em_andamento_desde)).total_seconds()) if t.em_andamento_desde else 0)
     return TarefaDetalhe(
-        **base, descricao=t.descricao, criado_por=_pessoa(sessao, t.criado_por_id), criado_em=_utc(t.criado_em), pessoas=pessoas,
+        **base, descricao=t.descricao, criado_por=_pessoa(sessao, t.criado_por_id), pessoas=pessoas,
         checklist=[ItemChecklist(id=i.id, texto=i.texto, concluido=i.concluido_em is not None) for i in t.checklist],
         etapas=_etapas(sessao, t), segundos_em_andamento=em_andamento, versao=t.versao, acoes=servico.acoes(sessao, usuario, t),
     )
@@ -172,8 +210,8 @@ def listar(escopo: str = Query("minhas", pattern="^(minhas|equipe|pessoa)$"), eq
     agora = agora_utc()
     tarefas, contexto, ind = _escopo(sessao, usuario, escopo, equipe_id, login, agora)
     filtradas = _filtrar(tarefas, status_, prioridade, marcador_id, busca, responsavel_id)
-    prorrogacoes = _prorrogacoes(sessao, [t.id for t in filtradas])
-    return ListaTarefas(contexto=contexto, indicadores=Indicadores(**ind), itens=[TarefaResumo(**_resumo(sessao, t, prorrogacoes, agora)) for t in filtradas])
+    contagens = _contagens(sessao, [t.id for t in filtradas])
+    return ListaTarefas(contexto=contexto, indicadores=Indicadores(**ind), itens=[TarefaResumo(**_resumo(sessao, t, contagens, agora)) for t in filtradas])
 
 
 @roteador.post("/ordem", status_code=status.HTTP_204_NO_CONTENT, summary="Reordenar tarefas (arrastar)",
@@ -236,6 +274,36 @@ def pessoas(equipe_id: uuid.UUID | None = None, busca: str = Query("", max_lengt
     lista = [PessoaCarga(id=u.id, nome=u.nome_completo or u.login, login=u.login, cargo=u.cargo or "", **cargas[u.id], **extras.get(u.id, {}))
              for u in usuarios]
     return sorted(lista, key=lambda p: (-p.carga, p.nome.lower()))
+
+
+@roteador.get("/pessoas/{usuario_id}/agenda", response_model=AgendaPessoa, summary="Agenda de uma pessoa (painel ao atribuir)",
+              description="Carga e tarefas da pessoa para o painel que aparece ao escolher responsável ou participantes: **todas** as "
+                          "abertas (a fazer, em andamento e em validação), com título, e as concluídas no período `de`–`ate` (padrão: 30 dias "
+                          "antes a 60 dias depois de hoje). Aberto a qualquer usuário logado, porque quem atribui precisa ver a agenda de "
+                          "quem recebe; `abrivel` diz se o usuário pode abrir cada tarefa. `400` se `de` > `ate`.",
+              responses=resposta_nao_encontrado("Pessoa"))
+def agenda(usuario_id: int, de: date | None = None, ate: date | None = None, sessao: Session = Depends(obter_sessao),
+           usuario: Usuario = Depends(obter_usuario_atual)) -> AgendaPessoa:
+    pessoa = sessao.get(Usuario, usuario_id)
+    if pessoa is None:
+        raise ErroApi(status.HTTP_404_NOT_FOUND, "Pessoa não encontrada.", "nao_encontrado")
+    agora = agora_utc()
+    inicio = datetime.combine(de, datetime.min.time(), agora.tzinfo) if de else agora - timedelta(days=30)
+    fim = datetime.combine(ate, datetime.max.time(), agora.tzinfo) if ate else agora + timedelta(days=60)
+    if inicio > fim:
+        raise ErroApi(status.HTTP_400_BAD_REQUEST, "O início do período é depois do fim.", "invalido")
+    carga = servico.carga_das_pessoas(sessao, {pessoa.id}, agora)[pessoa.id]
+    itens = [
+        ItemAgenda(
+            numero=t.numero, titulo=t.titulo, status=t.status, prioridade=t.prioridade, inicio=_utc(t.iniciada_em or t.criado_em),
+            prazo=_utc(t.prazo), concluida_em=_utc(t.concluida_em), atrasada=t.status in servico.OPERACIONAIS and servico._comparavel(t.prazo) < agora,
+            equipe=EquipeResumo(id=t.equipe.id, nome=t.equipe.nome) if t.equipe else None,
+            papel="responsavel" if t.responsavel_id == pessoa.id else "participante", abrivel=servico.pode_ver(sessao, usuario, t),
+        )
+        for t in servico.agenda(sessao, pessoa, inicio, fim)
+    ]
+    return AgendaPessoa(pessoa=PessoaCarga(id=pessoa.id, nome=pessoa.nome_completo or pessoa.login, login=pessoa.login, cargo=pessoa.cargo or "", **carga),
+                        de=inicio, ate=fim, itens=itens)
 
 
 # ---------------------------------------------------------------------------------------------

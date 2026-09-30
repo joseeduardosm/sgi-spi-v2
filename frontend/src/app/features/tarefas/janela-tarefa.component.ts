@@ -6,6 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
+import { AgendaPessoaComponent } from './agenda-pessoa.component';
 import { paraCampo } from './nova-tarefa.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { AcaoPipeline, PessoaCarga, TarefaDetalhe, TarefaResumo } from './tarefas.models';
@@ -26,12 +27,13 @@ const TEXTOS: Partial<Record<ModoJanela, { titulo: string; rotulo: string; botao
 /** Janela modal de uma ação da tarefa; emite a tarefa atualizada. */
 @Component({
   selector: 'app-janela-tarefa',
-  imports: [FormsModule],
+  imports: [FormsModule, AgendaPessoaComponent],
   host: { '(document:keydown.escape)': 'fechar()' },
   template: `
     @if (modo(); as m) {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-tarefa">
+      <!-- "sobre-janela": fica acima da janela da tarefa quando aberta a partir dela -->
+      <div class="fundo-modal sobre-janela" role="presentation" (click)="fechar()"></div>
+      <section class="modal-portal sobre-janela" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-tarefa">
         <header>
           <div><span class="modal-sobretitulo">Tarefa #{{ tarefa()?.numero }}</span><h2 id="titulo-janela-tarefa">{{ textos()?.titulo }}</h2></div>
           <button type="button" aria-label="Fechar" (click)="fechar()">×</button>
@@ -60,6 +62,8 @@ const TEXTOS: Partial<Record<ModoJanela, { titulo: string; rotulo: string; botao
                 @if (!tarefa()?.equipe) {
                   <input name="busca" placeholder="Pesquisar pessoa (nome ou login)" [ngModel]="busca()" (ngModelChange)="pesquisar($event)" />
                 }
+                <!-- Agenda de quem vai receber: carga e tarefas, em lista ou linha do tempo -->
+                <app-agenda-pessoa [pessoaId]="paraId()" />
               </div>
             }
             <div class="ocupa-duas"><label for="jt-texto">{{ textos()?.rotulo }}</label>
@@ -77,6 +81,8 @@ const TEXTOS: Partial<Record<ModoJanela, { titulo: string; rotulo: string; botao
 export class JanelaTarefaComponent {
   readonly modo = model<ModoJanela | null>(null);
   readonly tarefa = input<TarefaJanela | null>(null);
+  /** Novo prazo já preenchido ao abrir "Alterar prazo" (ex.: tarefa arrastada para outro dia no calendário). */
+  readonly prazoSugerido = input<Date | null>(null);
   readonly concluido = output<TarefaDetalhe>();
   private readonly api = inject(TarefasApiService);
   private readonly dialogos = inject(DialogosService);
@@ -97,7 +103,7 @@ export class JanelaTarefaComponent {
       this.texto = '';
       this.paraId.set(null);
       this.pessoas.set([]);
-      this.prazo = m === 'prazo' ? paraCampo(new Date(t.prazo)) : '';
+      this.prazo = m === 'prazo' ? paraCampo(this.prazoSugerido() ?? new Date(t.prazo)) : '';
       if (m === 'transferir' && t.equipe) this.api.pessoas(t.equipe.id).subscribe({ next: (l) => this.pessoas.set(l), error: (e) => this.dialogos.mostrarErro(e) });
     });
   }

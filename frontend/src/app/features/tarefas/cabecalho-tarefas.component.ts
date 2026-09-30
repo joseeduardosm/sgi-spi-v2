@@ -1,15 +1,14 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para exibir o cabeçalho comum das telas do Módulo Tarefas (trilha, título e atalhos).
+// Este arquivo serve para exibir o cabeçalho das telas de formulário do Módulo Tarefas (trilha, título e descrição).
 
 import { Component, computed, input } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { ItemTrilha, TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 
-/** Cabeçalho das tarefas: "Início / Tarefas / Página", título e atalhos (Minhas tarefas, Equipes, Nova tarefa). */
+/** Cabeçalho das telas de formulário: "Tarefas / Página", título e descrição (os atalhos ficam na navegação lateral do módulo). */
 @Component({
   selector: 'app-cabecalho-tarefas',
-  imports: [RouterLink, RouterLinkActive, TrilhaComponent],
+  imports: [TrilhaComponent],
   template: `
     <div class="cabecalho-modulo">
       <div class="cabecalho-pagina" style="margin: 0">
@@ -19,11 +18,6 @@ import { ItemTrilha, TrilhaComponent } from '../../shared/componentes/trilha/tri
           @if (descricao()) { <small>{{ descricao() }}</small> }
         </div>
       </div>
-      <nav aria-label="Atalhos do Módulo Tarefas">
-        <a class="acao-secundaria" routerLink="/tarefas" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">Minhas tarefas</a>
-        <a class="acao-secundaria" routerLink="/tarefas/equipes" routerLinkActive="ativo">Equipes</a>
-        <a class="acao-primaria" routerLink="/tarefas/nova"><span>+</span> Nova tarefa</a>
-      </nav>
     </div>
   `,
 })

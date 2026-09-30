@@ -51,11 +51,17 @@ class TarefaResumo(BaseModel):
     equipe: EquipeResumo | None
     responsavel: Pessoa | None
     participantes: int = Field(..., description="Quantos participantes além do responsável.")
+    envolvidos: list[Pessoa] = Field(..., description="Responsável (primeiro) e participantes, para os avatares do cartão.")
     marcadores: list[MarcadorLeitura]
     checklist_feitos: int
     checklist_total: int
+    comentarios: int = Field(..., description="Comentários na linha do tempo (sem os removidos).")
+    anexos: int = Field(..., description="Arquivos anexados aos comentários (sem os removidos).")
     carga: float = Field(..., description="Pontos de carga (0 se em validação ou concluída).")
     ordem: int
+    criado_em: datetime
+    iniciada_em: datetime | None = Field(None, description="Primeira vez em andamento (início da barra no Gantt).")
+    concluida_em: datetime | None = None
     atualizado_em: datetime
 
 
@@ -102,7 +108,6 @@ class Etapa(BaseModel):
 class TarefaDetalhe(TarefaResumo):
     descricao: str
     criado_por: Pessoa | None
-    criado_em: datetime
     pessoas: list[Pessoa] = Field(..., description="Responsável e participantes.")
     checklist: list[ItemChecklist]
     etapas: list[Etapa]
@@ -247,3 +252,28 @@ class PessoaCarga(BaseModel):
     em_andamento: int
     atrasadas: int
     na_equipe: ContagemEquipe | None = Field(None, description="Só com `equipe_id`: contagens das tarefas desta equipe.")
+
+
+# --- Agenda da pessoa (painel ao atribuir) --------------------------------------------------------
+
+class ItemAgenda(BaseModel):
+    """Tarefa em que a pessoa está envolvida, para a lista e a linha do tempo (Gantt) ao atribuir."""
+    numero: int
+    titulo: str
+    status: StatusTarefa
+    prioridade: PrioridadeTarefa
+    inicio: datetime = Field(..., description="Início da barra: quando entrou em andamento pela 1ª vez ou, se ainda não, a criação.")
+    prazo: datetime
+    concluida_em: datetime | None
+    atrasada: bool
+    equipe: EquipeResumo | None
+    papel: Literal["responsavel", "participante"]
+    abrivel: bool = Field(..., description="Quem consulta pode abrir a tarefa (senão, a tela mostra o item sem link).")
+
+
+class AgendaPessoa(BaseModel):
+    """Carga e tarefas de uma pessoa: as abertas (todas) e as concluídas no período."""
+    pessoa: PessoaCarga
+    de: datetime
+    ate: datetime
+    itens: list[ItemAgenda]

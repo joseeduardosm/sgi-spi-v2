@@ -9,7 +9,7 @@ import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { ambiente } from '../../../environments/ambiente';
 import { baixarArquivo } from '../../shared/utilitarios/download';
 import {
-  AcaoPipeline, Equipe, EventoTarefa, FiltrosTarefas, LinhaDoTempo, ListaTarefas, Marcador, PessoaCarga, PrioridadeTarefa, TarefaDetalhe,
+  AcaoPipeline, AgendaPessoa, Equipe, EventoTarefa, FiltrosTarefas, LinhaDoTempo, ListaTarefas, Marcador, PessoaCarga, PrioridadeTarefa, TarefaDetalhe,
 } from './tarefas.models';
 
 export interface Escopo { tipo: 'minhas' | 'equipe' | 'pessoa'; equipeId?: string | null; login?: string | null }
@@ -97,6 +97,14 @@ export class TarefasApiService {
     if (equipeId) p = p.set('equipe_id', equipeId);
     if (busca) p = p.set('busca', busca);
     return this.http.get<PessoaCarga[]>(`${this.base}/pessoas`, { params: p });
+  }
+
+  /** Agenda de uma pessoa (painel ao atribuir): carga e todas as tarefas abertas, com as concluídas do período. */
+  agenda(usuarioId: number, de?: string, ate?: string): Observable<AgendaPessoa> {
+    let p = new HttpParams();
+    if (de) p = p.set('de', de);
+    if (ate) p = p.set('ate', ate);
+    return this.http.get<AgendaPessoa>(`${this.base}/pessoas/${usuarioId}/agenda`, { params: p });
   }
 
   /** Fonte do seletor de usuários: a carga aparece no lugar do cargo ("Alta ocupação · 8 a fazer"). */

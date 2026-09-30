@@ -1,22 +1,22 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para exibir a tarefa em página própria: etapas, resumo, ações, checklist, comentários e linha do tempo.
+// Este arquivo serve para exibir a tarefa numa janela sobre o quadro (estilo Trello): conteúdo à esquerda, propriedades e ações à direita.
 
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, computed, effect, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 
 import { AutenticacaoService } from '../../core/autenticacao/autenticacao.service';
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
-import { CabecalhoTarefasComponent } from './cabecalho-tarefas.component';
+import { AgendaPessoaComponent } from './agenda-pessoa.component';
+import { AvataresComponent } from './avatares.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
 import { TarefasApiService } from './tarefas-api.service';
 import {
-  AcaoPipeline, AnexoEvento, duracao, EventoTarefa, Marcador, prazoRelativo, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS, StatusTarefa,
-  TarefaDetalhe, tamanhoLegivel,
+  AcaoPipeline, AnexoEvento, duracao, EventoTarefa, Marcador, Pessoa, prazoRelativo, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS,
+  situacaoPrazo, StatusTarefa, TarefaDetalhe, tamanhoLegivel,
 } from './tarefas.models';
 
 /** Filtros da linha do tempo (chips). */
@@ -50,17 +50,32 @@ export const CLIPE = 'M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.
 /** Rótulos dos campos da edição ("dados.campos"). */
 const CAMPOS: Record<string, string> = { titulo: 'Título', descricao: 'Descrição', prioridade: 'Prioridade', participantes: 'Participantes', marcadores: 'Marcadores' };
 
+/** Campos que o `PUT /api/tarefas/{numero}` grava de uma vez (a janela altera um de cada vez). */
+interface CamposEdicao { titulo: string; descricao: string; prioridade: PrioridadeTarefa; participantes_ids: number[]; marcadores_ids: string[] }
+
+/**
+ * Janela da tarefa, aberta sobre qualquer visão (`?tarefa=123` na URL).
+ * - Esquerda: título (edita no lugar), descrição, checklist, comentário e a atividade (linha do tempo).
+ * - Direita: etapa e ações do pipeline (só as permitidas em `acoes`), pessoas, prazo, prioridade,
+ *   marcadores, equipe e dados da tarefa. Cada propriedade é salva sozinha, com `versao` (409 em conflito).
+ * Emite `alterada` depois de cada gravação (o quadro recarrega) e `fechar` ao sair.
+ */
 @Component({
-  selector: 'app-detalhe-tarefa',
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, CabecalhoTarefasComponent, JanelaTarefaComponent],
-  templateUrl: './detalhe-tarefa.component.html',
+  selector: 'app-janela-detalhe-tarefa',
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
+  templateUrl: './janela-detalhe-tarefa.component.html',
+  // Esc fecha a janela, a menos que uma janela interna (prazo, motivo, remoção) esteja aberta: ela fecha primeiro
+  host: { '(document:keydown.escape)': 'aoEsc()' },
 })
-export class DetalheTarefaComponent implements OnInit {
+export class JanelaDetalheTarefaComponent {
+  /** Número da tarefa aberta (vazio: janela fechada). */
+  readonly numeroTarefa = input<number | null>(null);
+  readonly fechar = output<void>();
+  /** A tarefa mudou (o quadro recarrega); `null` quando foi excluída. */
+  readonly alterada = output<TarefaDetalhe | null>();
+
   protected readonly api = inject(TarefasApiService);
   private readonly dialogos = inject(DialogosService);
-  private readonly rota = inject(ActivatedRoute);
-  private readonly roteador = inject(Router);
-  private readonly destruir = inject(DestroyRef);
   private readonly autenticacao = inject(AutenticacaoService);
 
   protected readonly FILTROS = FILTROS;
@@ -71,6 +86,7 @@ export class DetalheTarefaComponent implements OnInit {
   protected readonly prazoRelativo = prazoRelativo;
   protected readonly duracao = duracao;
   protected readonly tamanhoLegivel = tamanhoLegivel;
+  protected readonly situacao = situacaoPrazo;
 
   protected readonly tarefa = signal<TarefaDetalhe | null>(null);
   protected readonly naoEncontrada = signal(false);
@@ -103,21 +119,30 @@ export class DetalheTarefaComponent implements OnInit {
   // Checklist
   protected novoItem = '';
 
-  // Edição
-  protected readonly editando = signal(false);
-  protected edicao = { titulo: '', descricao: '', prioridade: 'normal' as PrioridadeTarefa };
+  // Edição no lugar: qual propriedade está aberta e os valores em edição
+  protected readonly editandoCampo = signal<'titulo' | 'descricao' | 'participantes' | 'marcadores' | null>(null);
+  protected edicaoTitulo = '';
+  private readonly campoTitulo = viewChild<ElementRef<HTMLInputElement>>('campoTitulo');
+  protected edicaoDescricao = '';
   protected participantes: OpcaoUsuario[] = [];
+  /** Pessoa cuja agenda aparece ao escolher participantes (a última incluída). */
+  protected readonly pessoaAgenda = signal<number | null>(null);
   protected readonly marcadoresEquipe = signal<Marcador[]>([]);
   protected readonly marcadoresIds = signal<string[]>([]);
 
-  // Janelas
+  // Janelas internas
   protected readonly modoJanela = signal<ModoJanela | null>(null);
 
-  ngOnInit(): void {
-    this.rota.paramMap.pipe(takeUntilDestroyed(this.destruir)).subscribe((p) => {
-      const numero = Number(p.get('numero'));
+  constructor() {
+    // Abre (ou troca) a tarefa sempre que o número muda
+    effect(() => {
+      const numero = this.numeroTarefa();
       this.tarefa.set(null);
       this.naoEncontrada.set(false);
+      this.editandoCampo.set(null);
+      this.eventos.set([]);
+      this.filtro.set('');
+      if (!numero) return;
       this.api.detalhe(numero).subscribe({
         next: (t) => { this.tarefa.set(t); this.carregarEventos(true); },
         error: (e) => { if (e?.status === 404) this.naoEncontrada.set(true); else this.dialogos.mostrarErro(e); },
@@ -125,14 +150,22 @@ export class DetalheTarefaComponent implements OnInit {
     });
   }
 
+  /** Esc: fecha primeiro as janelas internas; sem elas, fecha a tarefa. */
+  protected aoEsc(): void {
+    if (!this.numeroTarefa() || this.modoJanela() || this.eventoRemover()) return;
+    if (this.editandoCampo()) { this.editandoCampo.set(null); return; }
+    this.fechar.emit();
+  }
+
   private numero(): number {
     return this.tarefa()!.numero;
   }
 
-  /** Atualiza a tarefa (depois de uma ação) e recarrega a linha do tempo. */
+  /** Atualiza a tarefa (depois de uma ação), recarrega a linha do tempo e avisa o quadro. */
   protected atualizar(t: TarefaDetalhe): void {
     this.tarefa.set(t);
     this.carregarEventos(true);
+    this.alterada.emit(t);
   }
 
   // --- Pipeline -------------------------------------------------------------------------------------
@@ -154,37 +187,94 @@ export class DetalheTarefaComponent implements OnInit {
     const t = this.tarefa()!;
     if (!(await this.dialogos.confirmar({ titulo: 'Excluir tarefa', mensagem: `A tarefa #${t.numero} e todo o histórico serão apagados. Não há como desfazer.`, rotuloConfirmar: 'Excluir', segundos: 3 }))) return;
     this.dialogos.executar(this.api.excluir(t.numero)).subscribe({
-      next: () => void this.roteador.navigate(['/tarefas']),
+      next: () => { this.alterada.emit(null); this.fechar.emit(); },
       error: (e) => this.dialogos.mostrarErro(e),
     });
   }
 
-  // --- Edição ---------------------------------------------------------------------------------------
+  // --- Edição no lugar (uma propriedade por vez) -------------------------------------------------------
 
-  protected abrirEdicao(): void {
+  /** Grava a tarefa trocando só os campos informados; os demais seguem como estão. */
+  private salvarCampos(parcial: Partial<CamposEdicao>): void {
     const t = this.tarefa()!;
-    this.edicao = { titulo: t.titulo, descricao: t.descricao, prioridade: t.prioridade };
+    const atual: CamposEdicao = {
+      titulo: t.titulo, descricao: t.descricao, prioridade: t.prioridade,
+      participantes_ids: t.pessoas.filter((p) => p.id !== t.responsavel?.id).map((p) => p.id), marcadores_ids: t.marcadores.map((m) => m.id),
+    };
+    this.dialogos.executar(this.api.editar(t.numero, { ...atual, ...parcial, versao: t.versao })).subscribe({
+      next: (n) => { this.editandoCampo.set(null); this.atualizar(n); },
+      error: (e) => this.dialogos.mostrarErro(e),
+    });
+  }
+
+  protected editarTitulo(): void {
+    if (!this.pode('editar')) return;
+    this.edicaoTitulo = this.tarefa()!.titulo;
+    this.editandoCampo.set('titulo');
+    // Foco e seleção no campo assim que ele aparece
+    setTimeout(() => this.campoTitulo()?.nativeElement.select());
+  }
+
+  protected salvarTitulo(): void {
+    const titulo = this.edicaoTitulo.trim();
+    if (this.editandoCampo() !== 'titulo') return;
+    // Fecha o campo já (Enter e a perda de foco chegam juntos; só a primeira grava)
+    this.editandoCampo.set(null);
+    if (titulo && titulo !== this.tarefa()!.titulo) this.salvarCampos({ titulo });
+  }
+
+  /** Participantes além do responsável (coluna lateral). */
+  protected participantesDe(t: TarefaDetalhe): Pessoa[] {
+    return t.pessoas.filter((p) => p.id !== t.responsavel?.id);
+  }
+
+  protected editarDescricao(): void {
+    this.edicaoDescricao = this.tarefa()!.descricao;
+    this.editandoCampo.set('descricao');
+  }
+
+  protected salvarDescricao(): void {
+    this.salvarCampos({ descricao: this.edicaoDescricao });
+  }
+
+  protected trocarPrioridade(prioridade: PrioridadeTarefa): void {
+    if (prioridade !== this.tarefa()!.prioridade) this.salvarCampos({ prioridade });
+  }
+
+  protected editarParticipantes(): void {
+    const t = this.tarefa()!;
     this.participantes = t.pessoas.filter((p) => p.id !== t.responsavel?.id)
       .map((p) => ({ id: p.id, login: p.login, nome_completo: p.nome, cargo: '', ativo: true }));
+    this.pessoaAgenda.set(null);
+    this.editandoCampo.set('participantes');
+  }
+
+  /** Ao incluir alguém, a agenda dessa pessoa aparece ao lado (para ver a carga antes de salvar). */
+  protected aoMudarParticipantes(lista: OpcaoUsuario[]): void {
+    const novo = lista.find((p) => !this.participantes.some((x) => x.id === p.id));
+    this.participantes = lista;
+    if (novo) this.pessoaAgenda.set(novo.id);
+    else if (!lista.some((p) => p.id === this.pessoaAgenda())) this.pessoaAgenda.set(lista.at(-1)?.id ?? null);
+  }
+
+  protected salvarParticipantes(): void {
+    this.salvarCampos({ participantes_ids: this.participantes.map((p) => p.id) });
+  }
+
+  protected editarMarcadores(): void {
+    const t = this.tarefa()!;
     this.marcadoresIds.set(t.marcadores.map((m) => m.id));
     this.marcadoresEquipe.set([]);
     if (t.equipe) this.api.marcadores(t.equipe.id).subscribe({ next: (m) => this.marcadoresEquipe.set(m), error: () => undefined });
-    this.editando.set(true);
+    this.editandoCampo.set('marcadores');
   }
 
   protected alternarMarcador(id: string): void {
     this.marcadoresIds.update((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
   }
 
-  protected salvarEdicao(): void {
-    const t = this.tarefa()!;
-    this.dialogos.executar(this.api.editar(t.numero, {
-      ...this.edicao, titulo: this.edicao.titulo.trim(), participantes_ids: this.participantes.map((p) => p.id),
-      marcadores_ids: this.marcadoresIds(), versao: t.versao,
-    })).subscribe({
-      next: (n) => { this.editando.set(false); this.atualizar(n); },
-      error: (e) => this.dialogos.mostrarErro(e),
-    });
+  protected salvarMarcadores(): void {
+    this.salvarCampos({ marcadores_ids: this.marcadoresIds() });
   }
 
   // --- Checklist ------------------------------------------------------------------------------------

@@ -160,7 +160,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `POST` | `/api/rh/cadastro/alteracoes/validar-lote` | CGP | Validar alterações em lote | [rh-cadastro.md](endpoints/rh-cadastro.md) |
 | `GET` | `/api/portal`, `/api/noticias/publicas[/…]` | **Público (sem token)** | Página inicial do portal, arquivo e detalhe das notícias publicadas, capas e atalhos | [noticias.md](endpoints/noticias.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/noticias[/…]`, `/api/portal/configuracao`, `/api/portal/atalhos[/…]` | Autenticado + ACL `noticias` (MODIFICACAO redator, CONTROLE_TOTAL aprovador) | Gestão editorial: notícias, aprovação, capa 2:1, anexos, categorias, atalhos e configuração do slider | [noticias.md](endpoints/noticias.md) |
-| `GET` `POST` `PUT` `DELETE` | `/api/tarefas[/…]` | Autenticado (permissões por tarefa e equipe) | Módulo Tarefas: listas, pipeline, prazo, transferência, comentários, linha do tempo, equipes e marcadores | [tarefas.md](endpoints/tarefas.md) |
+| `GET` `POST` `PUT` `DELETE` | `/api/tarefas[/…]` | Autenticado (permissões por tarefa e equipe) | Módulo Tarefas: listas, pipeline, prazo, transferência, comentários, linha do tempo, agenda da pessoa, equipes e marcadores | [tarefas.md](endpoints/tarefas.md) |
 | `GET` | `/api/rh/folha-ponto[/competencias]` | Autenticado (só a própria) | Folha de ponto em PDF / competências disponíveis | [rh-folha-ponto.md](endpoints/rh-folha-ponto.md) |
 | `GET` `PUT` | `/api/rh/parametros` | Leitura: autenticado; gravação: CGP | Regras de agendamento | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` | `/api/mensagens/resumo` | Autenticado | Contador do sino e janela a abrir | [mensagens.md](endpoints/mensagens.md) |

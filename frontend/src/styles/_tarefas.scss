@@ -1,5 +1,5 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para os estilos do Módulo Tarefas (indicadores, lista, Kanban, etapas e linha do tempo).
+// Este arquivo serve para os estilos do Módulo Tarefas (navegação, quadro estilo Trello, lista, calendário, janela da tarefa, agenda e linha do tempo).
 
 @use 'sass:list';
 
@@ -90,51 +90,6 @@ $status: (
   font-size: 12px;
 }
 
-/* --- Indicadores clicáveis ---------------------------------------------------------------------- */
-.indicadores-tarefas {
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-
-  button.indicador {
-    text-align: left;
-    cursor: pointer;
-    transition: border-color .15s, box-shadow .15s;
-
-    &:hover { border-color: #d7dadf; box-shadow: 0 4px 12px #401e200d; }
-    &.ativo { border-color: var(--spi-vermelho); box-shadow: 0 0 0 3px #c8233114; }
-  }
-
-  .indicador.alerta strong { color: var(--spi-vermelho); }
-  .indicador.validacao strong { color: $cor-validacao; }
-  .indicador.carga[data-faixa='Alta ocupação'] strong { color: #9a6400; }
-  .indicador.carga[data-faixa='Sobrecarga crítica'] strong { color: var(--spi-vermelho); }
-}
-
-/* --- Barra e filtros ---------------------------------------------------------------------------- */
-.barra-tarefas {
-  flex-wrap: wrap;
-  padding: 14px 24px;
-
-  small { color: #8c97a4; font-size: 12px; }
-}
-
-.grupo-status { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-
-.chip-status {
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid #e2e4e7;
-  border-radius: 16px;
-  color: #6a7786;
-  background: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-
-  @each $nome, $par in $status {
-    &[data-status='#{$nome}'].ativo { border-color: list.nth($par, 1); color: list.nth($par, 1); background: list.nth($par, 2); }
-  }
-}
-
 .alternar-visao {
   display: inline-flex;
   border: 1px solid #e2e4e7;
@@ -174,109 +129,6 @@ $status: (
 
     &.limpar { color: #6a7786; background: transparent; text-decoration: underline; }
   }
-}
-
-/* --- Tabela ------------------------------------------------------------------------------------- */
-.tabela-tarefas {
-  .coluna-arrastar {
-    width: 44px;
-    padding-right: 0;
-    white-space: nowrap;
-
-    .alca { color: #b3bbc4; cursor: grab; letter-spacing: -3px; user-select: none; }
-    .setas { display: none; }
-  }
-
-  tr:focus-within .coluna-arrastar .setas,
-  tr:hover .coluna-arrastar .setas { display: inline-flex; flex-direction: column; vertical-align: middle; }
-
-  .setas button { padding: 0 3px; border: 0; color: #8e99a6; background: transparent; font-size: 8px; line-height: 1.2; cursor: pointer; }
-
-  .numero-tarefa { color: #8e99a6; font-weight: 700; text-decoration: none; }
-  .coluna-titulo a { color: inherit; text-decoration: none; &:hover strong { color: var(--spi-vermelho); } }
-  .coluna-titulo small { display: block; margin-top: 3px; color: #8e99a6; font-size: 10px; }
-  .coluna-prazo { white-space: nowrap; small { display: block; margin-top: 3px; color: #8e99a6; font-size: 10px; } }
-  .coluna-prazo.atrasada strong, .coluna-prazo.atrasada small { color: var(--spi-vermelho); }
-
-  tr.arrastando { opacity: .4; }
-  tr.alvo td { box-shadow: inset 0 2px 0 var(--spi-vermelho); }
-}
-
-/* --- Kanban ------------------------------------------------------------------------------------- */
-.kanban-tarefas {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(250px, 1fr));
-  gap: 14px;
-  padding: 18px 20px;
-  overflow-x: auto;
-  background: #fafafb;
-}
-
-.coluna-kanban {
-  min-height: 200px;
-  padding: 10px;
-  border: 1px solid #eceef1;
-  border-top: 3px solid $cor-a-fazer;
-  border-radius: 10px;
-  background: #f4f5f7;
-  transition: background .15s;
-
-  @each $nome, $par in $status {
-    &[data-status='#{$nome}'] { border-top-color: list.nth($par, 1); }
-  }
-
-  &.alvo { background: #fcecee; }
-
-  > header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 2px 4px 10px;
-
-    h3 { margin: 0; color: #3d454e; font-size: 13px; font-weight: 700; }
-    .contagem { padding: 1px 8px; border-radius: 10px; background: #fff; color: #6a7786; font-size: 11px; font-weight: 700; }
-  }
-
-  .coluna-vazia { margin: 16px 0; color: #9aa4af; font-size: 12px; text-align: center; }
-}
-
-.cartao-tarefa {
-  margin-bottom: 8px;
-  padding: 10px 12px;
-  border: 1px solid #e6e8eb;
-  border-left: 3px solid #d0d5db;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 1px 3px #0000000a;
-  cursor: grab;
-
-  &[data-prioridade='alta'] { border-left-color: #e3b341; }
-  &[data-prioridade='critica'] { border-left-color: var(--spi-vermelho); }
-  &.arrastando { opacity: .4; }
-
-  .titulo-cartao {
-    display: block;
-    color: #32383f;
-    font-size: 13px;
-    font-weight: 700;
-    text-decoration: none;
-    overflow-wrap: anywhere;
-
-    span { color: #8e99a6; }
-    &:hover { color: var(--spi-vermelho); }
-  }
-
-  .meta-cartao {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    margin-top: 7px;
-    color: #6a7786;
-    font-size: 11px;
-  }
-
-  .acoes-linha { margin-top: 8px; justify-content: flex-start; }
 }
 
 /* --- Formulários -------------------------------------------------------------------------------- */
@@ -410,17 +262,6 @@ $status: (
   .principais, .secundarias { display: flex; flex-wrap: wrap; gap: 8px; }
   .botao-excluir { color: #c64c55; }
 }
-
-.colunas-tarefa {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 18px;
-  align-items: start;
-
-  .lateral { position: sticky; top: 16px; }
-}
-
-.resumo-tarefa .grade-dados { grid-template-columns: 1fr 1fr; }
 
 .descricao-tarefa { color: #3d454e; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
@@ -594,13 +435,8 @@ $eventos: (
 
 .carregar-mais { display: block; margin: 6px auto 0; }
 
-@media (max-width: 980px) {
-  .colunas-tarefa { grid-template-columns: minmax(0, 1fr); .lateral { position: static; order: -1; } }
-}
-
 @media (max-width: 640px) {
   .etapas-tarefa { padding: 12px 8px; small { display: none; } strong { font-size: 10px; } }
-  .kanban-tarefas { grid-template-columns: repeat(4, 82vw); scroll-snap-type: x mandatory; > * { scroll-snap-align: start; } }
   .barra-acoes-tarefa { flex-direction: column; }
 }
 
@@ -723,3 +559,840 @@ a.botao-link { display: inline-flex; align-items: center; text-decoration: none;
 .legenda-pessoas span::before { background: var(--c); }
 
 .numeros-pessoa { display: flex; flex-wrap: wrap; gap: 4px 10px; color: #6a7786; font-size: 11px; }
+
+/* =================================================================================================
+   Releitura estilo Trello/Asana
+   ================================================================================================= */
+
+/* --- Casca do módulo: navegação lateral própria + área das telas -------------------------------- */
+.modulo-tarefas {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+
+  &.recolhida { grid-template-columns: 44px minmax(0, 1fr); }
+}
+
+.navegacao-tarefas {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: calc(100vh - 24px);
+  padding: 12px 10px;
+  border: 1px solid #e8eaec;
+  border-radius: 12px;
+  background: #fff;
+  overflow-y: auto;
+
+  .topo-navegacao {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 4px 8px;
+
+    strong { color: var(--spi-titulo); font-size: 14px; }
+  }
+
+  .nova-tarefa-navegacao { justify-content: center; margin: 0 2px 10px; }
+
+  .item-navegacao {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: #3d454e;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+
+    &:hover { background: #f4f5f7; }
+    &.ativo { color: var(--spi-vermelho); background: var(--spi-vermelho-suave); }
+    &.discreto { margin-top: 6px; color: #8e99a6; font-weight: 700; font-size: 12px; }
+  }
+
+  .icone-navegacao { width: 16px; color: #8e99a6; text-align: center; }
+  .nome-navegacao { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ponto-equipe { flex: 0 0 8px; height: 8px; border-radius: 2px; background: #c8cdd3; }
+  .item-navegacao.ativo .ponto-equipe { background: var(--spi-vermelho); }
+
+  .contagem-navegacao {
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    color: #6a7786;
+    background: #eef0f2;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+
+    &.alerta { color: #8a5a00; background: #fff4dc; }
+  }
+
+  .secao-navegacao {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin: 14px 10px 4px;
+    color: #8e99a6;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+
+    a { color: #8e99a6; font-weight: 700; text-transform: none; letter-spacing: 0; }
+  }
+
+  .vazio-navegacao { margin: 4px 10px; color: #9aa4af; font-size: 12px; }
+}
+
+.modulo-tarefas.recolhida .navegacao-tarefas { padding: 10px 4px; .topo-navegacao { justify-content: center; margin: 0; } }
+
+.area-tarefas { min-width: 0; }
+
+/* Botão só com ícone (›, ×, «) */
+.botao-icone {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: #6a7786;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover { color: #32383f; background: #eef0f2; }
+}
+
+/* --- Avatares ------------------------------------------------------------------------------------- */
+.avatares { display: inline-flex; align-items: center; }
+
+.avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  background: #6a7786;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+
+  &.mais { color: #3d454e; background: #e3e6e9; }
+}
+
+.avatares .avatar + .avatar { margin-left: -8px; }
+.avatares.pequeno .avatar { width: 22px; height: 22px; font-size: 9px; }
+.avatares.grande .avatar { width: 38px; height: 38px; font-size: 14px; }
+
+/* --- Cabeçalho do espaço (quadro) ----------------------------------------------------------------- */
+.cabecalho-espaco {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+
+  h1 { margin: 0; color: var(--spi-titulo); font-size: 22px; font-weight: 800; }
+  small { color: #6a7786; font-size: 12px; }
+  .acoes-espaco { display: flex; flex-wrap: wrap; gap: 8px; }
+}
+
+.barra-espaco {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+
+  .busca-espaco { width: 240px; height: 34px; padding: 0 12px; border: 1px solid var(--spi-borda-campo); border-radius: 8px; font-size: 13px; }
+  .ordem-lista { height: 34px; padding: 0 10px; border: 1px solid var(--spi-borda-campo); border-radius: 8px; font-size: 12px; }
+  .alternar-raias { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: #3d454e; font-size: 12px; font-weight: 700; cursor: pointer; }
+}
+
+.alternar-visao.pequeno button { height: 28px; padding: 0 10px; font-size: 11px; }
+
+.filtro-avatares {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 2px;
+
+  .avatar { margin-left: -6px; cursor: pointer; transition: transform .12s, opacity .12s; }
+  button.avatar { padding: 0; }
+  .avatar:first-child { margin-left: 0; }
+  .avatar:hover { transform: translateY(-2px); z-index: 1; }
+  .avatar.escolhido { box-shadow: 0 0 0 2px var(--spi-vermelho); z-index: 2; }
+  .avatar.apagado { opacity: .35; }
+}
+
+.popover-filtros {
+  position: relative;
+
+  > .acao-secundaria.ativo { border-color: var(--spi-vermelho); color: var(--spi-vermelho); }
+
+  .painel-filtros {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    display: grid;
+    gap: 6px;
+    width: 260px;
+    padding: 14px;
+    border: 1px solid #e2e5e8;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 12px 30px #0000001f;
+
+    label { margin: 4px 0 0; color: #3d454e; font-size: 11px; font-weight: 800; }
+    select { height: 34px; }
+    .link-simples { justify-self: start; margin-top: 6px; font-size: 12px; }
+  }
+}
+
+.resumo-espaco {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+
+  button {
+    padding: 4px 10px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    color: #5a6673;
+    background: #eef0f2;
+    font-size: 12px;
+    cursor: pointer;
+
+    b { color: #32383f; }
+    &:disabled { opacity: .55; cursor: default; }
+    &.alerta b { color: var(--spi-vermelho); }
+    &.validacao b { color: $cor-validacao; }
+    &.ativo { border-color: var(--spi-vermelho); color: var(--spi-vermelho); background: var(--spi-vermelho-suave); }
+  }
+
+  .carga-resumo {
+    margin-left: auto;
+    color: #6a7786;
+    font-size: 12px;
+
+    &[data-faixa='Alta ocupação'] { color: #9a6400; }
+    &[data-faixa='Sobrecarga crítica'] { color: var(--spi-vermelho); font-weight: 700; }
+  }
+}
+
+.chips-filtro { padding: 0 0 10px; border-bottom: 0; }
+
+/* --- Quadro (Kanban estilo Trello) --------------------------------------------------------------- */
+.quadro {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(250px, 1fr));
+  gap: 12px;
+  align-items: start;
+  padding-bottom: 10px;
+  overflow-x: auto;
+
+  &.com-raias { margin-bottom: 18px; }
+}
+
+.lista-quadro {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 250px);
+  min-height: 120px;
+  border-radius: 12px;
+  background: #eef0f3;
+  transition: background .15s, box-shadow .15s;
+
+  &.alvo { background: #fcecee; box-shadow: inset 0 0 0 2px #c8233140; }
+
+  > header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 6px;
+
+    h3 { margin: 0; color: #3d454e; font-size: 13px; font-weight: 800; }
+    .contagem { padding: 0 7px; border-radius: 10px; color: #6a7786; background: #fff; font-size: 11px; font-weight: 700; }
+    .botao-icone { width: 24px; height: 24px; margin-left: auto; font-size: 13px; }
+
+    &::before { content: ''; flex: 0 0 10px; height: 10px; border-radius: 3px; background: $cor-a-fazer; }
+  }
+
+  @each $nome, $par in $status {
+    &[data-status='#{$nome}'] > header::before { background: list.nth($par, 1); }
+  }
+
+  .cartoes { display: flex; flex-direction: column; gap: 8px; padding: 4px 8px 8px; overflow-y: auto; }
+  .lista-vazia { margin: 10px 0; color: #9aa4af; font-size: 12px; text-align: center; }
+  .ver-todas-concluidas { align-self: center; font-size: 12px; }
+
+  // Concluída recolhida: coluna estreita só com o título
+  &.recolhida { max-width: 56px; min-height: 180px; > header { flex-direction: column; h3 { writing-mode: vertical-rl; } .botao-icone { margin: 0; } } }
+}
+
+.quadro:has(.lista-quadro.recolhida) { grid-template-columns: repeat(3, minmax(250px, 1fr)) 56px; }
+
+.envoltorio-cartao {
+  position: relative;
+  cursor: grab;
+
+  &.arrastando { opacity: .35; }
+
+  .menu-cartao {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    color: #5a6673;
+    background: #f4f5f7ee;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1;
+    opacity: 0;
+    cursor: pointer;
+
+    &:focus-visible, &[aria-expanded='true'] { opacity: 1; }
+  }
+
+  &:hover .menu-cartao { opacity: 1; }
+
+  .menu-suspenso {
+    position: absolute;
+    top: 32px;
+    right: 6px;
+    z-index: 20;
+    display: grid;
+    min-width: 190px;
+    padding: 6px;
+    border: 1px solid #e2e5e8;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 12px 30px #0000001f;
+
+    button { padding: 8px 10px; border: 0; border-radius: 6px; color: #32383f; background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
+    button:hover { background: #f4f5f7; }
+  }
+}
+
+.cartao-quadro {
+  padding: 8px 10px 8px;
+  border: 1px solid #e3e6ea;
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px #0f172a14;
+  cursor: pointer;
+  transition: box-shadow .12s, border-color .12s;
+
+  &:hover { border-color: #cfd4da; box-shadow: 0 3px 8px #0f172a1a; }
+  &:focus-visible { outline: 2px solid var(--spi-vermelho); outline-offset: 1px; }
+  &[data-prioridade='alta'] { border-left-color: #e3b341; }
+  &[data-prioridade='critica'] { border-left-color: var(--spi-vermelho); }
+  &.destacado { animation: destaque-cartao 1.2s ease-in-out 3; }
+
+  .etiquetas { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+
+  .etiqueta {
+    min-width: 36px;
+    max-width: 120px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .titulo-quadro { margin: 0 22px 8px 0; color: #22292f; font-size: 13px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+
+  .rodape-quadro {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    color: #6a7786;
+    font-size: 11px;
+
+    .numero-quadro { color: #a0a9b3; font-size: 10px; }
+    app-avatares { margin-left: auto; }
+    .selo-prioridade-tarefa { padding: 1px 6px; font-size: 9px; }
+  }
+
+  .contador { display: inline-flex; align-items: center; gap: 3px; &.completo { color: $cor-concluida; font-weight: 700; } }
+}
+
+@keyframes destaque-cartao {
+  50% { border-color: var(--spi-vermelho); box-shadow: 0 0 0 3px #c8233133; }
+}
+
+/* Ícones de traço dos cartões e chips */
+.cartao-quadro svg, .chip-prazo svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.chip-prazo {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #5a6673;
+  background: #eef0f2;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+
+  b { font-weight: 800; }
+  &[data-situacao='atrasada'] { color: #fff; background: var(--spi-vermelho); }
+  &[data-situacao='proxima'] { color: #7a4d00; background: #fde9b5; }
+  &[data-situacao='concluida'] { color: #1d6b43; background: #e5f4ec; }
+  &.grande { padding: 4px 9px; font-size: 13px; }
+}
+
+.adicionar-cartao {
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #5a6673;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover { color: #32383f; background: #e2e5e9; }
+}
+
+.criacao-rapida {
+  display: grid;
+  gap: 6px;
+  margin: 0 8px 8px;
+
+  textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 8px;
+    font-size: 13px;
+    box-shadow: 0 1px 2px #0f172a24;
+    resize: none;
+
+    &:focus { outline: 2px solid var(--spi-vermelho); }
+  }
+
+  small { color: #6a7786; font-size: 10px; }
+  .acoes-criacao { display: flex; align-items: center; gap: 6px; }
+}
+
+.cabecalho-raia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e3e6ea;
+
+  strong { color: #32383f; font-size: 14px; }
+  small { color: #8e99a6; font-size: 12px; }
+}
+
+/* --- Lista estilo Asana ------------------------------------------------------------------------- */
+.lista-asana {
+  border: 1px solid #e8eaec;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+
+  .cabecalho-lista, .linha-lista {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px 120px 90px 80px;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+  }
+
+  .cabecalho-lista { color: #8e99a6; background: #fafbfc; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+
+  .titulo-secao {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 16px 6px;
+    border: 0;
+    border-top: 1px solid #eef0f2;
+    color: #22292f;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 800;
+    text-align: left;
+    cursor: pointer;
+
+    small { color: #8e99a6; font-weight: 700; }
+    .seta { color: #8e99a6; transition: transform .15s; &.aberta { transform: rotate(90deg); } }
+  }
+
+  .linha-lista {
+    border-top: 1px solid #f1f2f4;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover { background: #fafbfc; }
+    &:focus-visible { outline: 2px solid var(--spi-vermelho); outline-offset: -2px; }
+    &.arrastando { opacity: .35; }
+    &.alvo { box-shadow: inset 0 2px 0 var(--spi-vermelho); }
+  }
+
+  .celula-titulo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    min-width: 0;
+
+    .texto-titulo { color: #22292f; font-weight: 600; overflow-wrap: anywhere; }
+    .numero-lista { color: #a0a9b3; font-size: 11px; }
+    .alca { color: #b3bbc4; cursor: grab; letter-spacing: -3px; user-select: none; }
+  }
+
+  .celula-checklist { color: #6a7786; font-size: 12px; }
+  .lista-vazia { margin: 0; padding: 8px 16px 12px 42px; color: #9aa4af; font-size: 12px; }
+}
+
+.ponto-status {
+  display: inline-block;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid $cor-a-fazer;
+  border-radius: 50%;
+
+  @each $nome, $par in $status {
+    &[data-status='#{$nome}'], [data-status='#{$nome}'] > .titulo-secao & { border-color: list.nth($par, 1); }
+  }
+
+  &[data-status='concluida'], [data-status='concluida'] > .titulo-secao & { background: $cor-concluida; }
+}
+
+/* --- Calendário ----------------------------------------------------------------------------------- */
+.barra-calendario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+
+  .navegacao-calendario { display: flex; align-items: center; gap: 6px; h3 { margin: 0 0 0 6px; color: #22292f; font-size: 16px; font-weight: 800; } }
+}
+
+.calendario {
+  border: 1px solid #e3e6ea;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+
+  .cabecalho-dias, .semana-calendario { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .cabecalho-dias span { padding: 8px; color: #8e99a6; background: #fafbfc; font-size: 11px; font-weight: 800; text-align: center; text-transform: uppercase; }
+
+  .dia-calendario {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-height: 110px;
+    padding: 4px 5px 6px;
+    border-top: 1px solid #eef0f2;
+    border-left: 1px solid #eef0f2;
+    transition: background .12s;
+
+    &:first-child { border-left: 0; }
+    &.fora { background: #fafbfc; .numero-dia { color: #c2c8cf; } }
+    &.hoje .numero-dia { color: #fff; background: var(--spi-vermelho); }
+    &.alvo { background: #fcecee; }
+  }
+
+  &.semana .dia-calendario { min-height: 360px; }
+
+  .numero-dia { align-self: flex-end; min-width: 24px; padding: 2px 6px; border-radius: 12px; color: #5a6673; font-size: 12px; font-weight: 800; text-align: center; }
+  .mais-dia { align-self: flex-start; font-size: 11px; }
+}
+
+.pilula-tarefa {
+  display: block;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  border-left: 3px solid $cor-a-fazer;
+  border-radius: 4px;
+  color: #22292f;
+  background: #eef0f2;
+  font-size: 11px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+
+  b { color: #5a6673; font-weight: 700; }
+
+  @each $nome, $par in $status {
+    &[data-status='#{$nome}'] { border-left-color: list.nth($par, 1); background: list.nth($par, 2); }
+  }
+
+  &[data-status='concluida'] { color: #6a7786; text-decoration: line-through; }
+  &.atrasada { box-shadow: inset 0 0 0 1px var(--spi-vermelho); }
+}
+
+/* --- Janela da tarefa (estilo Trello) --------------------------------------------------------------- */
+.janela-tarefa-trello {
+  position: fixed;
+  top: 4vh;
+  left: 50%;
+  z-index: 1050;
+  display: flex;
+  flex-direction: column;
+  width: min(1060px, calc(100vw - 24px));
+  max-height: 92vh;
+  border-radius: 14px;
+  background: #f4f5f7;
+  box-shadow: 0 24px 60px #0000004d;
+  transform: translateX(-50%);
+  overflow: hidden;
+
+  .topo-janela-tarefa {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 18px 22px 8px;
+
+    .identificacao { flex: 1; min-width: 0; }
+    small, small a { color: #6a7786; font-size: 12px; font-weight: 700; }
+    h2 { margin: 4px 0 0; padding: 2px 4px; border-radius: 6px; color: #17202a; font-size: 20px; font-weight: 800; overflow-wrap: anywhere; }
+    h2.editavel { cursor: text; &:hover { background: #e7e9ec; } }
+    .campo-titulo { width: 100%; margin-top: 4px; padding: 4px 8px; border: 2px solid var(--spi-vermelho); border-radius: 6px; font-size: 20px; font-weight: 800; }
+    .fechar-janela { width: 34px; height: 34px; border: 0; border-radius: 8px; color: #5a6673; background: transparent; font-size: 22px; cursor: pointer; &:hover { background: #e2e5e9; } }
+  }
+
+  .etapas-tarefa.compactas {
+    margin: 0 22px 10px;
+    padding: 8px 12px;
+
+    .marca { width: 22px; height: 22px; font-size: 10px; }
+    li:not(:first-child)::before { top: 10px; }
+    strong { margin-top: 3px; font-size: 11px; }
+  }
+
+  .corpo-janela-tarefa {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 16px;
+    padding: 0 22px 22px;
+    overflow-y: auto;
+  }
+
+  .bloco-janela {
+    margin-bottom: 14px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: #fff;
+
+    textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--spi-borda-campo); border-radius: 8px; font-size: 13px; resize: vertical; }
+  }
+
+  .titulo-bloco {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin-bottom: 8px;
+
+    h3 { margin: 0; color: #22292f; font-size: 14px; font-weight: 800; }
+    small { color: #8e99a6; font-size: 12px; }
+    .chips-linha { margin-left: auto; }
+    .acao-secundaria.pequena { margin-left: auto; height: 28px; padding: 0 10px; font-size: 12px; }
+  }
+
+  .descricao-tarefa.vazia { color: #9aa4af; font-style: italic; }
+  .anexar-discreto { display: inline-block; margin-top: 6px; font-size: 12px; cursor: pointer; input { display: none; } }
+  .formulario-comentario { margin-bottom: 12px; }
+
+  .lateral-janela { display: flex; flex-direction: column; gap: 12px; }
+
+  .grupo-lateral {
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fff;
+
+    .link-simples { justify-self: start; font-size: 12px; }
+    .acoes-formulario { margin-top: 6px; }
+  }
+
+  .rotulo-lateral { margin: 0; color: #8e99a6; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+  .titulo-lateral { display: flex; align-items: center; justify-content: space-between; }
+  .selo-status.grande { justify-self: start; padding: 5px 12px; font-size: 12px; }
+  .acoes-pipeline { display: grid; gap: 6px; button { width: 100%; justify-content: center; } }
+  .pessoa-lateral { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+  .lista-pessoas-lateral { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; li { display: flex; align-items: center; gap: 8px; } }
+  .seletor-lateral { height: 34px; }
+  .linha-caixas.vertical { display: grid; gap: 4px; }
+
+  .dados-lateral {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 12px;
+
+    dt { color: #8e99a6; font-size: 11px; font-weight: 800; }
+    dd { margin: 0; color: #3d454e; }
+  }
+
+  .largura-total { width: 100%; justify-content: center; }
+}
+
+/* Janelas abertas a partir da janela da tarefa ficam por cima dela */
+.fundo-modal.sobre-janela { z-index: 1060; }
+.modal-portal.sobre-janela { z-index: 1070; }
+
+/* --- Agenda da pessoa (ao atribuir) --------------------------------------------------------------- */
+.agenda-pessoa {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #e3e6ea;
+  border-radius: 10px;
+  background: #fbfbfc;
+
+  > header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+
+    strong { display: block; color: #22292f; font-size: 14px; }
+    small { color: #6a7786; font-size: 12px; }
+    .faixa-carga { margin-left: auto; }
+  }
+
+  .alternar-visao { justify-self: start; }
+  .grupo-agenda { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: #3d454e; font-size: 12px; font-weight: 800; small { color: #8e99a6; } }
+
+  .itens-agenda {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 12px;
+
+      > a, > span:first-child { flex: 1 1 60%; color: #22292f; font-weight: 600; }
+      small { color: #8e99a6; font-size: 11px; }
+    }
+  }
+}
+
+.gantt {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+
+  .regua-gantt {
+    position: relative;
+    height: 18px;
+    margin-left: 34%;
+    border-bottom: 1px solid #e3e6ea;
+
+    span { position: absolute; top: 0; color: #8e99a6; transform: translateX(-2px); }
+  }
+
+  .linha-gantt { display: grid; grid-template-columns: 34% minmax(0, 1fr); align-items: center; gap: 0; min-height: 22px; }
+  .rotulo-gantt { padding-right: 8px; color: #3d454e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trilho-gantt { position: relative; height: 16px; border-radius: 4px; background: repeating-linear-gradient(90deg, #f1f2f4 0 1px, transparent 1px calc(100% / 4)); }
+
+  .barra-gantt {
+    position: absolute;
+    top: 2px;
+    height: 12px;
+    border-radius: 4px;
+    background: $cor-a-fazer;
+
+    @each $nome, $par in $status {
+      &[data-status='#{$nome}'] { background: list.nth($par, 1); }
+    }
+
+    &.atrasada { box-shadow: 0 0 0 2px var(--spi-vermelho); }
+    &.cortada-inicio { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+    &.cortada-fim { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  }
+
+  .hoje-gantt { position: absolute; top: -2px; bottom: -2px; z-index: 1; width: 2px; background: var(--spi-vermelho); }
+}
+
+/* --- Nova tarefa: formulário + agenda ------------------------------------------------------------ */
+.nova-tarefa-colunas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 18px;
+  align-items: start;
+
+  .formulario-tarefa { max-width: none; }
+  .agenda-nova-tarefa { position: sticky; top: 12px; .agenda-pessoa { margin-top: 0; } }
+}
+
+/* Visão Pessoas: avatar no topo do cartão */
+.cartao-pessoa .topo-pessoa .avatar { width: 32px; height: 32px; margin-right: 4px; font-size: 12px; }
+
+/* --- Responsivo ----------------------------------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .janela-tarefa-trello .corpo-janela-tarefa { grid-template-columns: minmax(0, 1fr); }
+  .nova-tarefa-colunas { grid-template-columns: minmax(0, 1fr); .agenda-nova-tarefa { position: static; } }
+}
+
+@media (max-width: 860px) {
+  // No celular a navegação do módulo fica acima da tela, compacta
+  .modulo-tarefas, .modulo-tarefas.recolhida { grid-template-columns: minmax(0, 1fr); }
+  .navegacao-tarefas { position: static; max-height: none; }
+  .quadro { grid-template-columns: repeat(4, 82vw); scroll-snap-type: x mandatory; > * { scroll-snap-align: start; } }
+  .lista-asana .cabecalho-lista { display: none; }
+  .lista-asana .linha-lista { grid-template-columns: minmax(0, 1fr) auto auto; > :nth-child(4), > :nth-child(5) { display: none; } }
+  .calendario .dia-calendario { min-height: 70px; }
+  .pilula-tarefa b { display: none; }
+  .barra-espaco .busca-espaco { width: 100%; }
+}
+

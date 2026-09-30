@@ -236,3 +236,49 @@ def test_pessoas_da_equipe_com_contagem_na_equipe(cliente, equipe):
     assert lista["ana"]["a_fazer"] == 2 and lista["ana"]["na_equipe"]["a_fazer"] == 1
     assert lista["beto"]["na_equipe"] == {"a_fazer": 0, "em_andamento": 0, "em_validacao": 0, "concluidas": 0, "atrasadas": 0}
     assert all(p["na_equipe"] is None for p in cliente.get(f"{URL}/pessoas", params={"busca": "a"}, headers=h["lia"]).json())
+
+
+def test_resumo_traz_envolvidos_e_contagens_do_cartao(cliente, equipe):
+    """Cartão do quadro: avatares (responsável primeiro), comentários, anexos e datas para o Gantt."""
+    ids, h, equipe_id = equipe
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["beto"], participantes_ids=[ids["ana"]])
+    n = t["numero"]
+    cliente.post(f"{URL}/{n}/comentarios", data={"texto": "Primeiro"}, headers=h["ana"])
+    arquivo = ("nota.txt", BytesIO(b"conteudo"), "text/plain")
+    cliente.post(f"{URL}/{n}/comentarios", data={"texto": "Com anexo"}, files=[("arquivos", arquivo)], headers=h["beto"])
+    item = next(i for i in cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id}, headers=h["lia"]).json()["itens"] if i["numero"] == n)
+    assert [p["nome"] for p in item["envolvidos"]] == ["Beto Membro", "Ana Executora"]
+    assert (item["comentarios"], item["anexos"]) == (2, 1)
+    assert item["criado_em"] and item["iniciada_em"] is None
+    _mover(cliente, h["beto"], n, "iniciar")
+    detalhe = cliente.get(f"{URL}/{n}", headers=h["beto"]).json()
+    assert detalhe["iniciada_em"] is not None and detalhe["comentarios"] == 2
+
+
+def test_agenda_da_pessoa_mostra_todas_as_tarefas_com_titulo(cliente, equipe):
+    """Ao atribuir, qualquer usuário vê a agenda da pessoa (com títulos); `abrivel` indica se pode abrir cada tarefa."""
+    ids, h, equipe_id = equipe
+    da_equipe = _nova(cliente, h["lia"], equipe_id, titulo="Da equipe", responsavel_id=ids["ana"])
+    pessoal = _nova(cliente, h["ana"], None, titulo="Pessoal da Ana")
+    concluida = _nova(cliente, h["ana"], None, titulo="Já feita")
+    _mover(cliente, h["ana"], concluida["numero"], "iniciar")
+    _mover(cliente, h["ana"], concluida["numero"], "entregar")
+    # O Caio (de fora da equipe) consulta a agenda da Ana: vê tudo, com título, mas não pode abrir
+    r = cliente.get(f"{URL}/pessoas/{ids['ana']}/agenda", headers=h["caio"])
+    assert r.status_code == 200, r.text
+    agenda = r.json()
+    assert agenda["pessoa"]["nome"] == "Ana Executora" and agenda["pessoa"]["a_fazer"] == 2
+    titulos = {i["titulo"]: i for i in agenda["itens"]}
+    assert set(titulos) == {"Da equipe", "Pessoal da Ana", "Já feita"}
+    assert titulos["Da equipe"]["papel"] == "responsavel" and titulos["Já feita"]["status"] == "concluida"
+    assert not any(i["abrivel"] for i in agenda["itens"])
+    # A Lia (liderança) pode abrir a tarefa da equipe, mas não as pessoais da Ana
+    abriveis = {i["titulo"] for i in cliente.get(f"{URL}/pessoas/{ids['ana']}/agenda", headers=h["lia"]).json()["itens"] if i["abrivel"]}
+    assert abriveis == {"Da equipe"}
+    # Concluída fora do período não entra; período invertido e pessoa inexistente
+    antes = cliente.get(f"{URL}/pessoas/{ids['ana']}/agenda", params={"de": "2020-01-01", "ate": "2020-01-31"}, headers=h["caio"]).json()
+    assert {i["titulo"] for i in antes["itens"]} == {"Da equipe", "Pessoal da Ana"}
+    assert cliente.get(f"{URL}/pessoas/{ids['ana']}/agenda", params={"de": "2026-02-01", "ate": "2026-01-01"}, headers=h["caio"]).status_code == 400
+    assert cliente.get(f"{URL}/pessoas/999999/agenda", headers=h["caio"]).status_code == 404
+    assert pessoal and da_equipe
+

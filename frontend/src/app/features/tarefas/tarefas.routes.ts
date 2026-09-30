@@ -3,45 +3,55 @@
 
 import { Routes } from '@angular/router';
 
-/** Telas de tarefas. Filtros e visão (tabela ou Kanban) ficam na URL; as permissões são conferidas na API. */
+/**
+ * Todas as telas ficam dentro da casca do módulo (navegação lateral própria).
+ * Visão, filtros e a tarefa aberta ficam na URL (`?visao=lista&pessoas=3&tarefa=123`); as permissões são conferidas na API.
+ */
 export const ROTAS_TAREFAS: Routes = [
   {
     path: '',
-    title: 'Minhas tarefas | SGI SPI',
-    data: { escopo: 'minhas' },
-    loadComponent: () => import('./lista-tarefas.component').then((m) => m.ListaTarefasComponent),
-  },
-  {
-    path: 'nova',
-    title: 'Nova tarefa | SGI SPI',
-    loadComponent: () => import('./nova-tarefa.component').then((m) => m.NovaTarefaComponent),
-  },
-  {
-    path: 'equipes',
-    title: 'Equipes | SGI SPI',
-    loadComponent: () => import('./equipes.component').then((m) => m.EquipesComponent),
-  },
-  {
-    // Configuração: `nova` ou o id da equipe (dono ou SuperRoot; a API confere)
-    path: 'equipes/:equipeId/configurar',
-    title: 'Configurar equipe | SGI SPI',
-    loadComponent: () => import('./configuracao-equipe.component').then((m) => m.ConfiguracaoEquipeComponent),
-  },
-  {
-    path: 'equipes/:equipeId',
-    title: 'Tarefas da equipe | SGI SPI',
-    data: { escopo: 'equipe' },
-    loadComponent: () => import('./lista-tarefas.component').then((m) => m.ListaTarefasComponent),
-  },
-  {
-    path: 'pessoas/:login',
-    title: 'Tarefas da pessoa | SGI SPI',
-    data: { escopo: 'pessoa' },
-    loadComponent: () => import('./lista-tarefas.component').then((m) => m.ListaTarefasComponent),
-  },
-  {
-    path: ':numero',
-    title: 'Tarefa | SGI SPI',
-    loadComponent: () => import('./detalhe-tarefa.component').then((m) => m.DetalheTarefaComponent),
+    loadComponent: () => import('./modulo-tarefas.component').then((m) => m.ModuloTarefasComponent),
+    children: [
+      {
+        path: '',
+        title: 'Minhas tarefas | SGI SPI',
+        data: { escopo: 'minhas' },
+        loadComponent: () => import('./espaco-tarefas.component').then((m) => m.EspacoTarefasComponent),
+      },
+      {
+        path: 'nova',
+        title: 'Nova tarefa | SGI SPI',
+        loadComponent: () => import('./nova-tarefa.component').then((m) => m.NovaTarefaComponent),
+      },
+      {
+        path: 'equipes',
+        title: 'Equipes | SGI SPI',
+        loadComponent: () => import('./equipes.component').then((m) => m.EquipesComponent),
+      },
+      {
+        // Configuração: `nova` ou o id da equipe (dono ou SuperRoot; a API confere)
+        path: 'equipes/:equipeId/configurar',
+        title: 'Configurar equipe | SGI SPI',
+        loadComponent: () => import('./configuracao-equipe.component').then((m) => m.ConfiguracaoEquipeComponent),
+      },
+      {
+        path: 'equipes/:equipeId',
+        title: 'Quadro da equipe | SGI SPI',
+        data: { escopo: 'equipe' },
+        loadComponent: () => import('./espaco-tarefas.component').then((m) => m.EspacoTarefasComponent),
+      },
+      {
+        path: 'pessoas/:login',
+        title: 'Tarefas da pessoa | SGI SPI',
+        data: { escopo: 'pessoa' },
+        loadComponent: () => import('./espaco-tarefas.component').then((m) => m.EspacoTarefasComponent),
+      },
+      {
+        // Links antigos (e-mails e avisos): abrem a tarefa na janela
+        path: ':numero',
+        title: 'Tarefa | SGI SPI',
+        loadComponent: () => import('./abrir-tarefa.component').then((m) => m.AbrirTarefaComponent),
+      },
+    ],
   },
 ];

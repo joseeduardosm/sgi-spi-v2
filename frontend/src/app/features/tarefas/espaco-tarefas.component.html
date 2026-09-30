@@ -1,0 +1,205 @@
+<!-- Cabeçalho do quadro: título, ações do escopo e a barra de visões e filtros -->
+<header class="cabecalho-espaco">
+  <div class="titulo-espaco">
+    <h1>{{ titulo() }}</h1>
+    <small>
+      @switch (escopo().tipo) {
+        @case ('minhas') { Tarefas em que você é responsável ou participante, e as que você criou. }
+        @case ('equipe') { @if (equipe(); as e) { {{ e.membros.length }} membro{{ e.membros.length === 1 ? '' : 's' }} · {{ e.lideres.length + (e.dono ? 1 : 0) }} na liderança@if (e.lider) { · você lidera } } }
+        @default { Todas as tarefas da pessoa (visível à própria pessoa, à liderança das equipes dela e ao SuperRoot). }
+      }
+    </small>
+  </div>
+  <div class="acoes-espaco">
+    @if (equipe()?.pode_configurar) {
+      <a class="acao-secundaria" [routerLink]="['/tarefas/equipes', equipe()!.id, 'configurar']" title="Nome, liderança, membros e marcadores">⚙ Configurar</a>
+    }
+    <button type="button" class="acao-secundaria" (click)="abrirRelatorio()">Relatório</button>
+    <a class="acao-primaria" routerLink="/tarefas/nova" [queryParams]="escopo().equipeId ? { equipe: escopo().equipeId } : {}"><span aria-hidden="true">+</span> Nova tarefa</a>
+  </div>
+</header>
+
+<div class="barra-espaco">
+  <div class="alternar-visao" role="group" aria-label="Visão">
+    <button type="button" [class.ativo]="visao() === 'quadro'" [attr.aria-pressed]="visao() === 'quadro'" (click)="trocarVisao('quadro')">▦ Quadro</button>
+    <button type="button" [class.ativo]="visao() === 'lista'" [attr.aria-pressed]="visao() === 'lista'" (click)="trocarVisao('lista')">☰ Lista</button>
+    <button type="button" [class.ativo]="visao() === 'calendario'" [attr.aria-pressed]="visao() === 'calendario'" (click)="trocarVisao('calendario')">▤ Calendário</button>
+    @if (escopo().tipo === 'equipe' && lider()) {
+      <button type="button" [class.ativo]="visao() === 'pessoas'" [attr.aria-pressed]="visao() === 'pessoas'" (click)="trocarVisao('pessoas')">◔ Pessoas</button>
+    }
+  </div>
+
+  @if (visao() !== 'pessoas') {
+    <!-- Avatares: clique filtra pela pessoa; Shift+clique soma pessoas ao filtro -->
+    @if (pessoasDoEscopo().length > 1) {
+      <div class="filtro-avatares" role="group" aria-label="Filtrar por pessoa (Shift+clique para escolher várias)">
+        @for (p of pessoasDoEscopo().slice(0, 12); track p.id) {
+          <button type="button" class="avatar" [class.escolhido]="pessoasFiltro().includes(p.id)" [class.apagado]="pessoasFiltro().length && !pessoasFiltro().includes(p.id)"
+                  [style.background]="corAvatar(p.id)" [title]="p.nome + ' (Shift+clique para somar)'" [attr.aria-pressed]="pessoasFiltro().includes(p.id)"
+                  [attr.aria-label]="'Filtrar por ' + p.nome" (click)="alternarPessoa($event, p.id)">{{ iniciais(p.nome) }}</button>
+        }
+        @if (pessoasDoEscopo().length > 12) { <span class="avatar mais" [title]="'Mais ' + (pessoasDoEscopo().length - 12) + ' pessoas: use a busca'">+{{ pessoasDoEscopo().length - 12 }}</span> }
+      </div>
+    }
+
+    <input type="search" class="busca-espaco" aria-label="Buscar tarefas" placeholder="Buscar título, número ou pessoa" [ngModel]="busca()" (ngModelChange)="digitar($event)" />
+
+    <!-- Filtros num popover (prioridade, marcador e recortes de prazo) -->
+    <div class="popover-filtros" (click)="$event.stopPropagation()">
+      <button type="button" class="acao-secundaria" [class.ativo]="!!(prioridade() || marcador() || recorte())" [attr.aria-expanded]="filtrosAbertos()"
+              (click)="filtrosAbertos.set(!filtrosAbertos())">Filtros ▾</button>
+      @if (filtrosAbertos()) {
+        <div class="painel-filtros" role="dialog" aria-label="Filtros">
+          <label for="filtro-prazo">Prazo e situação</label>
+          <select id="filtro-prazo" [ngModel]="recorte()" (ngModelChange)="navegar({ recorte: $event || null })">
+            <option value="">Todas</option>
+            <option value="atrasadas">Atrasadas</option>
+            <option value="hoje">Vencem hoje</option>
+            <option value="semana">Vencem nesta semana</option>
+            <option value="validacao">Em validação</option>
+            <option value="criticas">Prioridade crítica</option>
+          </select>
+          <label for="filtro-prioridade">Prioridade</label>
+          <select id="filtro-prioridade" [ngModel]="prioridade()" (ngModelChange)="navegar({ prioridade: $event || null })">
+            <option value="">Todas</option>
+            @for (p of prioridades; track p) { <option [value]="p">{{ rotulosPrioridade[p] }}</option> }
+          </select>
+          @if (marcadoresDisponiveis().length) {
+            <label for="filtro-marcador">Marcador</label>
+            <select id="filtro-marcador" [ngModel]="marcador()" (ngModelChange)="navegar({ marcador: $event || null })">
+              <option value="">Todos</option>
+              @for (m of marcadoresDisponiveis(); track m.id) { <option [value]="m.id">{{ m.nome }}</option> }
+            </select>
+          }
+          <button type="button" class="link-simples" (click)="limparFiltros(); filtrosAbertos.set(false)">Limpar filtros</button>
+        </div>
+      }
+    </div>
+
+    @if (visao() === 'quadro') {
+      <label class="alternar-raias" title="Agrupar o quadro em linhas por responsável">
+        <input type="checkbox" [checked]="raias()" (change)="navegar({ raias: raias() ? null : 'pessoa' })" /> Raias por pessoa</label>
+    }
+    @if (visao() === 'lista') {
+      <select class="ordem-lista" aria-label="Ordenar" [ngModel]="ordem()" (ngModelChange)="navegar({ ordem: $event === 'manual' ? null : $event })">
+        <option value="manual">Ordem manual</option>
+        <option value="prazo">Prazo mais próximo</option>
+        <option value="prioridade">Prioridade</option>
+      </select>
+    }
+  }
+</div>
+
+@if (dados(); as d) {
+  <!-- Resumo em uma linha: cada número aplica o recorte correspondente -->
+  @if (visao() !== 'pessoas') {
+    <div class="resumo-espaco" role="group" aria-label="Resumo">
+      <button type="button" [class.ativo]="!recorte()" (click)="aplicarRecorte('')"><b>{{ d.indicadores.operacionais }}</b> em aberto</button>
+      <button type="button" class="alerta" [class.ativo]="recorte() === 'atrasadas'" [disabled]="!d.indicadores.atrasadas" (click)="aplicarRecorte('atrasadas')"><b>{{ d.indicadores.atrasadas }}</b> atrasadas</button>
+      <button type="button" [class.ativo]="recorte() === 'hoje'" [disabled]="!d.indicadores.vencem_hoje" (click)="aplicarRecorte('hoje')"><b>{{ d.indicadores.vencem_hoje }}</b> vencem hoje</button>
+      <button type="button" class="validacao" [class.ativo]="recorte() === 'validacao'" [disabled]="!d.indicadores.em_validacao" (click)="aplicarRecorte('validacao')">
+        <b>{{ d.indicadores.em_validacao }}</b> em validação{{ lider() && d.indicadores.em_validacao ? ' (sua vez)' : '' }}</button>
+      <button type="button" [class.ativo]="recorte() === 'criticas'" [disabled]="!d.indicadores.criticas" (click)="aplicarRecorte('criticas')"><b>{{ d.indicadores.criticas }}</b> críticas</button>
+      <span class="carga-resumo" [attr.data-faixa]="d.indicadores.faixa" title="Carga: prioridade × urgência do prazo">carga {{ d.indicadores.carga | number: '1.0-1' }} pts · {{ d.indicadores.faixa }}</span>
+    </div>
+
+    @if (chips().length) {
+      <div class="chips-filtro">
+        @for (c of chips(); track c.rotulo) {
+          <button type="button" (click)="navegar(c.limpar)" [attr.aria-label]="'Remover filtro ' + c.rotulo">{{ c.rotulo }} <span aria-hidden="true">×</span></button>
+        }
+        <button type="button" class="limpar" (click)="limparFiltros()">Limpar filtros</button>
+      </div>
+    }
+  }
+
+  @switch (visao()) {
+    @case ('lista') {
+      <app-lista-tarefas [itens]="filtradas()" [ordem]="ordem()" (abrir)="abrirTarefa($event)" (reordenar)="reordenar($event)" />
+    }
+    @case ('calendario') {
+      <app-calendario-tarefas [itens]="filtradas()" (abrir)="abrirTarefa($event)" (reprogramar)="reprogramar($event)" />
+    }
+    @case ('pessoas') {
+      <!-- Visão da liderança: pessoas da equipe, da maior para a menor carga -->
+      <div class="legenda-pessoas" aria-hidden="true">
+        <span data-status="a_fazer">A fazer</span><span data-status="em_andamento">Em andamento</span>
+        <span data-status="em_validacao">Em validação</span><span data-status="concluida">Concluídas</span>
+      </div>
+      <div class="grade-pessoas">
+        @for (p of pessoasCarga(); track p.id) {
+          @if (p.na_equipe; as e) {
+            <a class="cartao-pessoa" [routerLink]="['/tarefas/pessoas', p.login]">
+              <div class="topo-pessoa">
+                <span class="avatar" [style.background]="corAvatar(p.id)" aria-hidden="true">{{ iniciais(p.nome) }}</span>
+                <strong>{{ p.nome }}</strong>
+                <span class="faixa-carga" [attr.data-faixa]="p.faixa" title="Carga de todas as tarefas da pessoa">{{ p.faixa }}</span>
+              </div>
+              <small>{{ p.cargo || '@' + p.login }} · carga total {{ p.carga | number: '1.0-1' }} pts</small>
+              <div class="barra-empilhada" role="img"
+                   [attr.aria-label]="'Nesta equipe: ' + e.a_fazer + ' a fazer, ' + e.em_andamento + ' em andamento, ' + e.em_validacao + ' em validação, ' + e.concluidas + ' concluídas'">
+                <span data-status="a_fazer" [style.width.%]="largura(e.a_fazer)"></span>
+                <span data-status="em_andamento" [style.width.%]="largura(e.em_andamento)"></span>
+                <span data-status="em_validacao" [style.width.%]="largura(e.em_validacao)"></span>
+                <span data-status="concluida" [style.width.%]="largura(e.concluidas)"></span>
+              </div>
+              <div class="numeros-pessoa">
+                <span>Nesta equipe:</span><span>{{ e.a_fazer }} a fazer</span><span>{{ e.em_andamento }} em andamento</span><span>{{ e.em_validacao }} em validação</span>
+                @if (e.atrasadas) { <span class="texto-erro">{{ e.atrasadas }} atrasada{{ e.atrasadas > 1 ? 's' : '' }}</span> }
+              </div>
+            </a>
+          }
+        } @empty { <p class="estado-vazio">Carregando as pessoas da equipe…</p> }
+      </div>
+    }
+    @default {
+      @if (!d.itens.length && !podeCriar()) {
+        <p class="estado-vazio">Nenhuma tarefa por aqui.</p>
+      } @else {
+        <app-quadro-tarefas [itens]="filtradas()" [comRaias]="raias()" [cargas]="pessoasCarga()" [lider]="lider()" [podeCriar]="podeCriar()"
+                            [destacado]="destacado()" (abrir)="abrirTarefa($event)" (mover)="mover($event)" (criar)="criarRapida($event)" />
+      }
+    }
+  }
+} @else if (carregando()) {
+  <p class="estado-vazio">Carregando…</p>
+}
+
+<!-- Janela da tarefa por cima da visão (?tarefa=123) -->
+<app-janela-detalhe-tarefa [numeroTarefa]="tarefaAberta()" (fechar)="fecharTarefa()" (alterada)="carregar(true)" />
+
+<!-- Motivo de devolução/reabertura (arraste no quadro) e novo prazo (arraste no calendário) -->
+<app-janela-tarefa [(modo)]="modoJanela" [tarefa]="tarefaJanela()" [prazoSugerido]="prazoSugerido()" (concluido)="carregar(true)" />
+
+@if (relatorioAberto()) {
+  <div class="fundo-modal" role="presentation" (click)="relatorioAberto.set(false)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-relatorio" (keydown.escape)="relatorioAberto.set(false)">
+    <header>
+      <div><span class="modal-sobretitulo">{{ titulo() }}</span><h2 id="titulo-relatorio">Relatório de tarefas</h2></div>
+      <button type="button" aria-label="Fechar" (click)="relatorioAberto.set(false)">×</button>
+    </header>
+    <form (submit)="$event.preventDefault(); gerarRelatorio()">
+      <p class="dica-formulario" style="margin-top: 0">Tarefas ativas no período: criadas até o fim dele e ainda abertas ou concluídas a partir do início.
+        A planilha traz também a aba "Por pessoa".</p>
+      <div class="grade-formulario">
+        <div><label for="rel-de">De</label><input id="rel-de" name="de" type="date" [(ngModel)]="relatorio.de" /></div>
+        <div><label for="rel-ate">Até</label><input id="rel-ate" name="ate" type="date" [(ngModel)]="relatorio.ate" /></div>
+        @if (marcadoresDisponiveis().length) {
+          <div class="ocupa-duas"><label for="rel-marcador">Marcador</label>
+            <select id="rel-marcador" name="marcador" [(ngModel)]="relatorio.marcador">
+              <option value="">Todos</option>
+              @for (m of marcadoresDisponiveis(); track m.id) { <option [value]="m.id">{{ m.nome }}</option> }
+            </select></div>
+        }
+        <div class="ocupa-duas"><label for="rel-formato">Formato</label>
+          <select id="rel-formato" name="formato" [(ngModel)]="relatorio.formato">
+            <option value="xlsx">Planilha (XLSX)</option><option value="pdf">PDF</option>
+          </select></div>
+      </div>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="relatorioAberto.set(false)">Cancelar</button>
+        <button type="submit" class="acao-primaria">Gerar</button>
+      </footer>
+    </form>
+  </section>
+}

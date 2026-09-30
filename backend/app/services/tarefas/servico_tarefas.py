@@ -561,6 +561,20 @@ def minhas(sessao: Session, usuario: Usuario) -> list[Tarefa]:
     return list(sessao.scalars(select(Tarefa).where(or_(Tarefa.id.in_(envolvida), Tarefa.criado_por_id == usuario.id, Tarefa.responsavel_id == usuario.id))))
 
 
+def agenda(sessao: Session, pessoa: Usuario, de: datetime, ate: datetime) -> list[Tarefa]:
+    """Tarefas em que a pessoa está envolvida (responsável ou participante) para o painel de atribuição.
+
+    Entram todas as abertas (a fazer, em andamento e em validação), qualquer que seja o prazo, e as
+    concluídas dentro do período. Por decisão do usuário, quem atribui vê o título de todas elas.
+    """
+    envolvida = select(ParticipanteTarefa.tarefa_id).where(ParticipanteTarefa.usuario_id == pessoa.id)
+    consulta = select(Tarefa).where(
+        or_(Tarefa.id.in_(envolvida), Tarefa.responsavel_id == pessoa.id),
+        or_(Tarefa.status != "concluida", Tarefa.concluida_em.between(de, ate)),
+    )
+    return sorted(sessao.scalars(consulta), key=lambda t: (_comparavel(t.prazo), t.numero))
+
+
 def da_equipe(sessao: Session, usuario: Usuario, equipe_id: uuid.UUID) -> tuple[EquipeTarefas, list[Tarefa]]:
     equipe = sessao.get(EquipeTarefas, equipe_id)
     if equipe is None or equipe not in equipes_visiveis(sessao, usuario):

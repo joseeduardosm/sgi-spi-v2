@@ -81,6 +81,7 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 | `DELETE /api/tarefas/{numero}` | `204` |
 | `POST /api/tarefas/ordem` | `{numeros: [...]}`: ordem manual (arrastar); ignora o que o usuário não pode editar |
 | `GET /api/tarefas/pessoas` | `PessoaCarga[]`: carga, faixa, a fazer, em andamento e atrasadas de **todas** as tarefas da pessoa. Com `equipe_id`, os membros e a liderança da equipe, mais `na_equipe` (`a_fazer`, `em_andamento`, `em_validacao`, `concluidas`, `atrasadas` só das tarefas da equipe); sem, busca (`busca`, até 20) e `na_equipe` nulo |
+| `GET /api/tarefas/pessoas/{usuario_id}/agenda` | `AgendaPessoa`: painel que aparece ao escolher responsável ou participantes. Traz `pessoa` (como em `PessoaCarga`), `de`, `ate` e `itens[]` (`ItemAgenda`: `numero`, `titulo`, `status`, `prioridade`, `inicio` = 1ª vez em andamento ou criação, `prazo`, `concluida_em`, `atrasada`, `equipe`, `papel` = `responsavel`/`participante`, `abrivel`). Entram **todas** as tarefas abertas da pessoa e as concluídas no período `de`–`ate` (padrão: 30 dias antes a 60 dias depois de hoje). **Aberto a qualquer usuário logado, com os títulos**: por decisão do usuário, quem atribui vê a agenda completa de quem recebe. `abrivel` diz se quem consulta pode abrir a tarefa. `400` se `de` > `ate`; `404` se a pessoa não existe |
 | `GET /api/tarefas/relatorio` | Arquivo XLSX (abas **Tarefas** e **Por pessoa**) ou PDF (resumo, pessoas, lista). `formato` (`xlsx` padrão ou `pdf`), `escopo`/`equipe_id`/`login` (mesmas permissões da lista), `marcador_id`, `de` e `ate` (aaaa-mm-dd). Entram as tarefas ativas no período: criadas até `ate` e abertas ou concluídas a partir de `de`. `400` se `de` > `ate` |
 | `GET /api/tarefas/equipes` | `EquipeLeitura[]` visíveis (membro ou liderança; SuperRoot: todas), com indicadores, `lider` e `pode_configurar` |
 | `POST /api/tarefas/equipes` | `GravacaoEquipe` → `201`: quem cria é o dono |
@@ -92,10 +93,12 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 **`TarefaResumo`:**
 - identificação: `numero`, `titulo`, `status`, `prioridade`, `equipe`, `responsavel`, `participantes` (quantos, além do responsável), `marcadores`;
 - prazo: `prazo`, `prazo_original`, `prorrogacoes`, `atrasada`;
-- andamento: `checklist_feitos`/`checklist_total`, `carga`, `ordem`, `atualizado_em`.
+- pessoas: `envolvidos` (responsável primeiro e depois os participantes, para os avatares);
+- andamento: `checklist_feitos`/`checklist_total`, `comentarios` e `anexos` (sem os removidos), `carga`, `ordem`;
+- datas: `criado_em`, `iniciada_em` (1ª vez em andamento), `concluida_em` e `atualizado_em`.
 
 **`TarefaDetalhe`** acrescenta:
-- `descricao`, `criado_por`, `criado_em`, `pessoas`, `checklist[]`;
+- `descricao`, `criado_por`, `pessoas`, `checklist[]`;
 - **`etapas[]`**: para cada etapa do pipeline, `rotulo`, `em` (quando chegou), `por`, `atual` e `alcancada`;
 - `segundos_em_andamento`, `versao` e `acoes`.
 
@@ -130,22 +133,55 @@ cd backend && .venv/bin/python ../scripts/migrar-tarefas-sgi.py <pacote> --grava
 
 ## Consumo no Angular
 
-Código em `frontend/src/app/features/tarefas/` (rotas em `tarefas.routes.ts`, chamadas em `tarefas-api.service.ts`, tipos em `tarefas.models.ts`):
+Código em `frontend/src/app/features/tarefas/`: rotas em `tarefas.routes.ts`, chamadas em `tarefas-api.service.ts`, tipos e funções das visões em `tarefas.models.ts`.
+
+Todas as telas ficam dentro da **casca do módulo** (`modulo-tarefas.component.ts`). Ela tem uma navegação lateral própria, no estilo dos espaços do Trello/ClickUp:
+- "+ Nova tarefa";
+- Minhas tarefas;
+- **Para validar** (liderança), com o total de entregas pendentes;
+- a árvore de **equipes** (subequipes recuadas), com as tarefas em aberto e as entregas a validar;
+- "+ Nova equipe".
+
+Ela é recolhível, e a preferência fica no navegador. A barra lateral do sistema continua com um só item "Tarefas".
 
 | Tela | Rota | Endpoints |
 |---|---|---|
-| Minhas tarefas / equipe / pessoa | `/tarefas`, `/tarefas/equipes/:equipeId`, `/tarefas/pessoas/:login` | `GET /api/tarefas` (uma carga, filtros aplicados na tela), `POST /ordem`, `POST /{numero}/mover` (Kanban) |
-| Nova tarefa | `/tarefas/nova` (`?equipe=<id>` já escolhe a equipe) | `GET /equipes`, `GET /pessoas?equipe_id=`, `GET /equipes/{id}/marcadores`, `POST /api/tarefas` |
-| Equipes | `/tarefas/equipes` | `GET /equipes` (cartões com totais; subequipes abaixo da equipe pai) |
+| Espaço: Minhas tarefas / equipe / pessoa | `/tarefas`, `/tarefas/equipes/:equipeId`, `/tarefas/pessoas/:login` | `GET /api/tarefas` (uma carga; filtros aplicados na tela), `POST /api/tarefas` (criação rápida), `POST /ordem`, `POST /{numero}/mover`, `POST /{numero}/prazo`, `GET /pessoas?equipe_id=` (visão Pessoas e raias) |
+| Janela da tarefa | `?tarefa=<número>` sobre qualquer visão | `GET /{numero}`, `PUT`, `DELETE`, `/prazo`, `/mover`, `/transferir`, `/comentarios`, `/linha-do-tempo`, `/anexos/{id}`, `/eventos/{id}/remover`, `/checklist`, `GET /equipes/{id}/marcadores` |
+| Link antigo | `/tarefas/:numero` (e-mails e avisos) | Redireciona para `/tarefas?tarefa=<número>` |
+| Nova tarefa | `/tarefas/nova` (`?equipe=<id>` já escolhe a equipe) | `GET /equipes`, `GET /pessoas?equipe_id=`, `GET /pessoas?busca=`, `GET /pessoas/{id}/agenda`, `GET /equipes/{id}/marcadores`, `POST /api/tarefas` |
+| Equipes (visão geral) | `/tarefas/equipes` | `GET /equipes` |
 | Configurar equipe | `/tarefas/equipes/nova/configurar`, `/tarefas/equipes/:equipeId/configurar` | `POST`/`PUT`/`DELETE /equipes`, `GET`/`POST /equipes/{id}/marcadores`, `DELETE /marcadores/{id}` |
-| Pessoas (liderança) | `/tarefas/equipes/:equipeId?visao=pessoas` | `GET /pessoas?equipe_id=` (barras empilhadas com `na_equipe`) |
-| Relatório (janela na lista) | qualquer lista | `GET /relatorio` |
-| Detalhe | `/tarefas/:numero` | `GET /{numero}`, `PUT`, `DELETE`, `/prazo`, `/mover`, `/transferir`, `/comentarios`, `/linha-do-tempo`, `/anexos/{id}`, `/eventos/{id}/remover`, `/checklist` |
+| Relatório (janela no espaço) | qualquer espaço | `GET /relatorio` |
 
-- Estado da lista na URL: `visao` (`kanban`, `pessoas` para a liderança da equipe; vazio = tabela), `status` (lista separada por vírgula ou `todas`; vazio = em aberto e em validação), `prioridade`, `marcador`, `responsavel`, `busca`, `recorte` (`atrasadas` ou `hoje`) e `ordem` (`prazo` ou `prioridade`; vazio = manual).
-- Kanban: a tela converte o movimento entre colunas na `acao` do pipeline (ex.: Em validação → Em andamento = `devolver`, que abre a janela do motivo). O servidor decide; em `403` o cartão volta.
-- Botões do detalhe: só os de `acoes`. Envie `versao` nas gravações para receber `409` em caso de alteração concorrente.
-- Seletor de pessoas: `GET /pessoas?busca=` (a faixa de carga aparece junto ao nome).
+**Espaço** (`espaco-tarefas.component.*`). Estado na URL:
+- `visao`: vazio = **Quadro** (padrão), `lista`, `calendario` ou `pessoas` (liderança da equipe);
+- filtros: `pessoas` (ids separados por vírgula, escolhidos nos avatares: clique filtra, Shift+clique soma), `busca`, `prioridade`, `marcador` e `recorte` (`atrasadas`, `hoje`, `semana`, `validacao` ou `criticas`, também escolhido na linha de resumo);
+- `raias=pessoa`: quadro agrupado por responsável;
+- `ordem` (`prazo` ou `prioridade`; vazio = manual), na lista;
+- `tarefa`: a tarefa aberta na janela. Abrir empilha no histórico: o "voltar" do navegador fecha a janela.
+
+**Visões:**
+- **Quadro** (`quadro-tarefas.component.ts`, `cartao-tarefa.component.ts`):
+  - colunas A fazer, Em andamento, Em validação e Concluída;
+  - a Concluída mostra as 10 mais recentes, com "ver todas", e pode ser recolhida;
+  - o cartão traz as etiquetas (marcadores), o título, o chip do prazo (vermelho se atrasado, âmbar se vence hoje ou amanhã), o checklist, os comentários, os anexos, o número e os avatares de `envolvidos`, com a borda da prioridade;
+  - arrastar entre colunas ou usar o menu "⋯" vira a `acao` do pipeline (Em validação → Em andamento = `devolver`, que pede o motivo). O servidor decide e, em `403`, o cartão volta;
+  - **"+ Adicionar tarefa"** na coluna A fazer (fora da tela de outra pessoa) cria só com o título. Padrões: responsável = quem cria, prioridade normal, prazo em 7 dias às 18:00, equipe do quadro (em Minhas tarefas, pessoal);
+  - em raias, cada responsável ganha uma linha com a carga.
+- **Lista** (`lista-tarefas.component.ts`): seções recolhíveis por situação, estilo Asana (a Concluída começa fechada), com a ordem manual por arraste dentro da seção.
+- **Calendário** (`calendario-tarefas.component.ts`): mês ou semana, com as tarefas no dia do prazo. Arrastar para outro dia abre "Alterar prazo" já com o novo dia, e a justificativa continua obrigatória.
+- **Pessoas:** cartões com a carga e as barras por situação na equipe.
+
+**Janela da tarefa** (`janela-detalhe-tarefa.component.*`):
+- à esquerda: título editável no lugar, descrição, checklist e atividade (comentário com anexos e linha do tempo com filtros);
+- à direita: situação e ações (só as de `acoes`), responsável (Transferir), participantes, prazo (Alterar), prioridade, marcadores, carga e dados;
+- cada propriedade é gravada sozinha pelo `PUT`, com `versao`.
+
+**Agenda da pessoa** (`agenda-pessoa.component.ts`, `GET /pessoas/{id}/agenda`):
+- aparece ao escolher o responsável ou os participantes na Nova tarefa, ao editar participantes na janela e na transferência;
+- mostra a carga e as tarefas da pessoa em **Lista** (por situação) ou **Linha do tempo** (Gantt de 4 semanas, com a marca de hoje);
+- a aba escolhida fica guardada no navegador.
 
 ## Erros
 

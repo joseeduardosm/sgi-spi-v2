@@ -1,5 +1,5 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para cadastrar uma tarefa (página própria, com o seletor de responsável mostrando a carga).
+// Este arquivo serve para cadastrar uma tarefa completa: formulário à esquerda e, à direita, a agenda de quem vai recebê-la.
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -9,6 +9,7 @@ import { AutenticacaoService } from '../../core/autenticacao/autenticacao.servic
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
+import { AgendaPessoaComponent } from './agenda-pessoa.component';
 import { CabecalhoTarefasComponent } from './cabecalho-tarefas.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { Equipe, Marcador, PessoaCarga, PrioridadeTarefa, ROTULOS_PRIORIDADE } from './tarefas.models';
@@ -29,11 +30,12 @@ export function paraCampo(d: Date): string {
 
 @Component({
   selector: 'app-nova-tarefa',
-  imports: [FormsModule, RouterLink, SeletorUsuariosComponent, CabecalhoTarefasComponent],
+  imports: [FormsModule, RouterLink, SeletorUsuariosComponent, CabecalhoTarefasComponent, AgendaPessoaComponent],
   template: `
     <app-cabecalho-tarefas titulo="Nova tarefa" [trilha]="[{ rotulo: 'Nova tarefa' }]"
                            descricao="Quem recebe a tarefa é avisado na caixa de mensagens e por e-mail." />
 
+    <div class="nova-tarefa-colunas">
     <form class="cartao-dados formulario-tarefa" (submit)="$event.preventDefault(); salvar()">
       <div class="corpo">
         <div class="grade-formulario">
@@ -62,7 +64,7 @@ export function paraCampo(d: Date): string {
               <div class="lista-carga" role="radiogroup" aria-label="Responsável">
                 @for (p of pessoas(); track p.id) {
                   <label class="opcao-carga" [class.selecionada]="responsavelId() === p.id">
-                    <input type="radio" name="responsavel" [value]="p.id" [checked]="responsavelId() === p.id" (change)="responsavelId.set(p.id)" />
+                    <input type="radio" name="responsavel" [value]="p.id" [checked]="responsavelId() === p.id" (change)="responsavelId.set(p.id); pessoaAgenda.set(p.id)" />
                     <span class="nome">{{ p.nome }}</span>
                     <span class="faixa-carga" [attr.data-faixa]="p.faixa">{{ p.faixa }}</span>
                     <small>{{ p.a_fazer }} a fazer · {{ p.em_andamento }} em andamento{{ p.atrasadas ? ' · ' + p.atrasadas + ' atrasada(s)' : '' }}</small>
@@ -73,13 +75,13 @@ export function paraCampo(d: Date): string {
                 <p class="aviso-formulario">{{ escolhido()!.nome }} está com sobrecarga crítica. Considere outra pessoa ou um prazo maior.</p>
               }
             } @else {
-              <app-seletor-usuarios idCampo="nt-responsavel" [multiplo]="false" [(selecionados)]="responsavel" [fonte]="api.opcoesPessoas"
-                                    textoAjuda="Vazio: você mesmo" />
+              <app-seletor-usuarios idCampo="nt-responsavel" [multiplo]="false" [selecionados]="responsavel" (selecionadosChange)="aoEscolherResponsavel($event)"
+                                    [fonte]="api.opcoesPessoas" textoAjuda="Vazio: você mesmo" />
             }
           </div>
           <div class="ocupa-duas"><label for="nt-participantes">Participantes</label>
-            <app-seletor-usuarios idCampo="nt-participantes" [(selecionados)]="participantes" [fonte]="api.opcoesPessoas"
-                                  textoAjuda="Quem mais trabalha na tarefa (a carga conta para cada um)" /></div>
+            <app-seletor-usuarios idCampo="nt-participantes" [selecionados]="participantes" (selecionadosChange)="aoMudarParticipantes($event)"
+                                  [fonte]="api.opcoesPessoas" textoAjuda="Quem mais trabalha na tarefa (a carga conta para cada um)" /></div>
           @if (marcadores().length) {
             <div class="ocupa-duas"><label>Marcadores</label>
               <div class="linha-caixas">
@@ -96,6 +98,16 @@ export function paraCampo(d: Date): string {
         </div>
       </div>
     </form>
+
+    <!-- Agenda de quem recebe: muda conforme o responsável ou o último participante escolhido -->
+    <aside class="cartao-dados agenda-nova-tarefa">
+      <header><h2>Agenda de quem recebe</h2><small>Escolha o responsável ou um participante para ver a carga e as tarefas da pessoa.</small></header>
+      <div class="corpo">
+        @if (pessoaAgenda()) { <app-agenda-pessoa [pessoaId]="pessoaAgenda()" /> }
+        @else { <p class="dica-formulario">Ninguém escolhido ainda. Sem responsável, a tarefa fica com você.</p> }
+      </div>
+    </aside>
+    </div>
   `,
 })
 export class NovaTarefaComponent implements OnInit {
@@ -121,6 +133,8 @@ export class NovaTarefaComponent implements OnInit {
   protected readonly marcadoresIds = signal<string[]>([]);
   protected readonly salvando = signal(false);
   protected readonly escolhido = computed(() => this.pessoas().find((p) => p.id === this.responsavelId()) ?? null);
+  /** Pessoa cuja agenda aparece à direita (responsável escolhido ou último participante incluído). */
+  protected readonly pessoaAgenda = signal<number | null>(null);
 
   ngOnInit(): void {
     this.api.equipes().subscribe({
@@ -146,10 +160,24 @@ export class NovaTarefaComponent implements OnInit {
         // Padrão: o próprio usuário, se for da equipe
         const eu = this.autenticacao.usuario()?.id;
         this.responsavelId.set(lista.some((p) => p.id === eu) ? eu! : null);
+        this.pessoaAgenda.set(this.responsavelId());
       },
       error: (e) => this.dialogos.mostrarErro(e),
     });
     this.api.marcadores(id).subscribe({ next: (m) => this.marcadores.set(m), error: () => undefined });
+  }
+
+  /** Responsável fora de equipe (seletor de busca): mostra a agenda da pessoa escolhida. */
+  protected aoEscolherResponsavel(lista: OpcaoUsuario[]): void {
+    this.responsavel = lista;
+    this.pessoaAgenda.set(lista[0]?.id ?? null);
+  }
+
+  /** Ao incluir um participante, a agenda passa a ser a dele. */
+  protected aoMudarParticipantes(lista: OpcaoUsuario[]): void {
+    const novo = lista.find((p) => !this.participantes.some((x) => x.id === p.id));
+    this.participantes = lista;
+    if (novo) this.pessoaAgenda.set(novo.id);
   }
 
   protected alternarMarcador(id: string): void {
@@ -164,7 +192,8 @@ export class NovaTarefaComponent implements OnInit {
       titulo: this.titulo.trim(), descricao: this.descricao, prazo: new Date(this.prazo).toISOString(), prioridade: this.prioridade,
       equipe_id: equipe, responsavel_id: responsavel, participantes_ids: this.participantes.map((p) => p.id), marcadores_ids: this.marcadoresIds(),
     }), 'Criando a tarefa…').subscribe({
-      next: (t) => void this.roteador.navigate(['/tarefas', t.numero]),
+      // Volta ao quadro (da equipe ou Minhas tarefas) com a tarefa nova aberta na janela
+      next: (t) => void this.roteador.navigate(equipe ? ['/tarefas/equipes', equipe] : ['/tarefas'], { queryParams: { tarefa: t.numero } }),
       error: (e) => { this.salvando.set(false); this.dialogos.mostrarErro(e); },
     });
   }

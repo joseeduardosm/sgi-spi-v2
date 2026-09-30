@@ -9,6 +9,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-30
 
 ### Corrigido
+- Notícias › Configurar portal: a caixa "Incluir notícia publicada" da curadoria volta para "Escolha…" depois de incluir.
 - Notícias: na janela "Aprovar e publicar", deixar a data vazia não publicava na hora quando o redator tinha pedido publicação agendada; agora data vazia publica imediatamente.
 
 ### Alterado

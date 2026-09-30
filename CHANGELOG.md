@@ -9,6 +9,10 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-09-30
 
 ### Alterado
+- `scripts/migrar-contratos-sgi.py`:
+  - nova opção `--contrato NNN/AAAA`, que importa um contrato só do SGI (10.23.1.220) sem apagar nada daqui e reaproveita a empresa se ela já existir;
+  - o script passa a gravar o campo `numero` do contrato.
+  - Com essa opção, o **contrato 010/2024** (Suporte e infraestrutura - PD24008, PRODESP) foi importado.
 - **HTTPS em `portal.spi.sp.gov.br`**, com o certificado emitido pela SPI-AD01-CA.
   - Com o DNS já apontando para o 10.23.0.254, todo acesso por HTTP, pelo IP ou por outro nome redireciona para `https://portal.spi.sp.gov.br`, com o mesmo caminho (favoritos e e-mails antigos com o IP continuam funcionando).
   - `nginx/sgi-spi.conf` e `scripts/instalar.sh` ganharam o HTTPS e a opção `--dominio`, com a conferência dos arquivos do certificado.

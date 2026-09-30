@@ -35,6 +35,8 @@ cd /home/administrador/projeto/backend
 .venv/bin/python ../scripts/migrar-contratos-sgi.py /caminho/do/pacote                         # ensaio
 .venv/bin/python ../scripts/migrar-contratos-sgi.py /caminho/do/pacote --gravar                # carga
 .venv/bin/python ../scripts/migrar-contratos-sgi.py /caminho/do/pacote --gravar --substituir   # recarga (virada)
+.venv/bin/python ../scripts/migrar-contratos-sgi.py /caminho/do/pacote --contrato 010/2024          # ensaio de um contrato só
+.venv/bin/python ../scripts/migrar-contratos-sgi.py /caminho/do/pacote --contrato 010/2024 --gravar # importa um contrato só
 ```
 
 - **Ensaio** (padrão): carrega tudo numa transação, confere e **desfaz**. Não copia arquivos.
@@ -43,6 +45,11 @@ cd /home/administrador/projeto/backend
   desfaz tudo.
 - `--substituir`: apaga antes contratos, empresas, anexos do módulo e a auditoria migrada (`sgi.*`), na mesma
   transação. Sem essa opção, a carga só roda com o módulo vazio.
+- `--contrato NNN/AAAA`: importa **um contrato só**, sem apagar nada daqui, para trazer um contrato que ficou de fora.
+  - Traz o contrato e o que depende dele: equipe, itens, documentos, prorrogações, previsão, NEs, checklists, formulários, competências e etapas, reajustes, alterações, processos de prorrogação, os anexos referenciados e a auditoria do contrato.
+  - A empresa que já existe aqui, pelo mesmo id ou pelo CNPJ, é **reaproveitada**; nesse caso, empresa e prepostos do pacote ficam de fora. Se a empresa não existir, ela entra com os prepostos.
+  - Se o contrato já existir aqui, pelo id ou pelo número, a carga é interrompida.
+  - Não combina com `--substituir` nem com `--apenas-limpar`.
 
 ### De-para
 
@@ -103,4 +110,5 @@ cd /home/administrador/projeto/backend
 
 | Data | Pacote | Resultado |
 |---|---|---|
+| 30/09/2026 | extração somente leitura do 10.23.1.220, carga com `--contrato 010/2024` | Contrato 010/2024 (Suporte e infraestrutura - PD24008, PRODESP, empresa já existente): 18 itens, 6 designações, 1 documento (DFD), 10 reajustes cancelados (como no SGI), 43 anexos, 78 eventos de auditoria. Conferência sem divergências. |
 | 24/09/2026 | extração somente leitura do 10.23.1.220 | 38 empresas, 40 contratos, 78 competências, 8 NEs, 14 reajustes, 5 prorrogações, 565 anexos (SHA-256 conferido), 1.128 eventos de auditoria. Conferência sem divergências. |

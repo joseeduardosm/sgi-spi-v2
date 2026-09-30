@@ -17,6 +17,7 @@ Uso (como o usuário do projeto, na pasta backend/):
     .venv/bin/python ../scripts/migrar-contratos-sgi.py <pacote>            # ensaio: carrega, confere e desfaz
     .venv/bin/python ../scripts/migrar-contratos-sgi.py <pacote> --gravar   # grava de verdade
     ... --gravar --substituir   # virada: apaga os dados do módulo aqui e recarrega (mesma transação)
+    ... --contrato 010/2024 [--gravar]   # só esse contrato (e o que depende dele), sem apagar nada daqui
 """
 
 import argparse
@@ -107,6 +108,83 @@ class Pacote:
             return []
         with open(arquivos[0], encoding="utf-8", newline="") as f:
             return list(csv.DictReader(f))
+
+
+class PacoteContrato(Pacote):
+    """Recorte do pacote com um contrato e o que depende dele (para `--contrato`).
+
+    Cada tabela é filtrada pela chave que a liga ao contrato (contrato, competência, NE, previsão, checklist,
+    reajuste, alteração ou processo de prorrogação). Anexos: só os referenciados pelas linhas do recorte.
+    Se a empresa já existe aqui (mesmo id ou CNPJ), ela e os prepostos ficam de fora e o contrato aponta para ela.
+    """
+
+    CHAVES = (("CommitmentNoteId", "notas"), ("CompetenceId", "competencias"), ("ForecastId", "previsoes"),
+              ("ChecklistId", "checklists"), ("AdjustmentId", "reajustes"), ("QuantityChangeId", "alteracoes"),
+              ("ProcessId", "processos"))
+
+    def __init__(self, pasta: Path, numero: str, sessao):
+        super().__init__(pasta)
+        base = Pacote(pasta)
+        sequencial, ano = numero.split("/")
+        linha = next((r for r in base.tabela("contracts") if int(r["Sequence"]) == int(sequencial) and r["Year"] == ano), None)
+        if linha is None:
+            sys.exit(f"ERRO: o contrato {numero} não está no pacote.")
+        self.contrato_id = linha["Id"]
+        numero_padrao = f"{int(sequencial):03d}/{ano}"
+        if sessao.get(Contrato, id_(linha["Id"])) or sessao.scalar(
+                select(Contrato).where(func.lower(Contrato.numero) == numero_padrao.lower())):
+            sys.exit(f"ERRO: o contrato {numero} já existe neste sistema.")
+        empresa = next(r for r in base.tabela("contract_companies") if r["Id"] == linha["CompanyId"])
+        cnpj = "".join(filter(str.isdigit, empresa["Cnpj"]))
+        local = sessao.get(EmpresaContratada, id_(empresa["Id"])) or sessao.scalar(select(EmpresaContratada).where(EmpresaContratada.cnpj == cnpj))
+        self.empresa_existente = local
+        self.linha_contrato = dict(linha, CompanyId=str(local.id) if local else linha["CompanyId"])
+        self.empresa_id = linha["CompanyId"]
+        ids = {"contrato": {linha["Id"]}}
+        for tabela, chave_ids in (("contract_execution_competences", "competencias"), ("contract_commitment_notes", "notas"),
+                                  ("contract_forecast_vigencies", "previsoes"), ("contract_execution_checklists", "checklists"),
+                                  ("contract_adjustments", "reajustes"), ("contract_quantity_changes", "alteracoes"),
+                                  ("contract_extension_processes", "processos")):
+            ids[chave_ids] = {r["Id"] for r in base.tabela(tabela) if r["ContractId"] == linha["Id"]}
+        self.ids = ids
+        self._cache: dict[str, list[dict]] = {}
+        # Anexos referenciados por qualquer coluna *AttachmentId das linhas do recorte
+        referenciados = set()
+        for nome in {Path(a).stem.split("_", 1)[1] for a in glob.glob(str(pasta / "dados" / "*_*.csv"))} - {"stored_attachments", "audit_events"}:
+            for r in self.tabela(nome):
+                referenciados |= {v for k, v in r.items() if k.endswith("AttachmentId") and v}
+        self.anexos = referenciados
+
+    def tabela(self, nome: str) -> list[dict[str, str]]:
+        if nome in self._cache:
+            return self._cache[nome]
+        linhas = super().tabela(nome)
+        if nome in ("usuarios",):
+            filtradas = linhas
+        elif nome == "contracts":
+            filtradas = [self.linha_contrato]
+        elif nome == "contract_companies":
+            filtradas = [] if self.empresa_existente else [r for r in linhas if r["Id"] == self.empresa_id]
+        elif nome == "company_representatives":
+            filtradas = [] if self.empresa_existente else [r for r in linhas if r["CompanyId"] == self.empresa_id]
+        elif nome == "stored_attachments":
+            filtradas = [r for r in linhas if r["Id"] in self.anexos]
+        elif nome == "audit_events":
+            alvos = {self.contrato_id} | (set() if self.empresa_existente else {self.empresa_id})
+            filtradas = [r for r in linhas if r["ResourceId"] in alvos]
+        elif linhas and "ContractId" in linhas[0]:
+            filtradas = [r for r in linhas if r["ContractId"] == self.contrato_id]
+        else:
+            chave_linha = next(((c, k) for c, k in self.CHAVES if linhas and c in linhas[0]), None)
+            if chave_linha is None:
+                if linhas:
+                    avisos.append(f"tabela {nome} sem ligação conhecida com o contrato: ignorada no recorte")
+                filtradas = []
+            else:
+                coluna, grupo = chave_linha
+                filtradas = [r for r in linhas if r[coluna] in self.ids[grupo]]
+        self._cache[nome] = filtradas
+        return filtradas
 
 
 def texto(v: str | None) -> str:
@@ -288,7 +366,8 @@ def migrar(pacote: Pacote, sessao, gravar: bool) -> dict:
         fotografia_vale = reajustada.get(r["Id"]) == vigencia_atual[r["Id"]] + 1
         periodicidade = r["ExecutionPeriodicity"]
         c = Contrato(
-            id=id_(r["Id"]), sequencial=int(r["Sequence"]), ano=int(r["Year"]), empresa_id=id_(r["CompanyId"]),
+            id=id_(r["Id"]), numero=f"{int(r['Sequence']):03d}/{r['Year']}", sequencial=int(r["Sequence"]), ano=int(r["Year"]),
+            empresa_id=id_(r["CompanyId"]),
             apelido=texto(r["Nickname"]), objeto=r["Object"], data_inicio=dia(r["StartDate"]), data_fim=dia(r["EndDate"]),
             vigencia_inicial_meses=int(r["InitialTermMonths"]), vigencia_maxima_meses=int(r["MaximumTermMonths"]),
             periodicidade_meses=int(periodicidade) if periodicidade.isdigit() else PERIODICIDADES[periodicidade],
@@ -690,12 +769,20 @@ def main() -> None:
     parser.add_argument("--gravar", action="store_true", help="grava; sem esta opção é só um ensaio (tudo é desfeito)")
     parser.add_argument("--substituir", action="store_true", help="apaga antes os contratos, empresas, anexos e a auditoria migrada")
     parser.add_argument("--apenas-limpar", action="store_true", help="só apaga os dados do módulo (e os arquivos deles); o pacote é ignorado")
+    parser.add_argument("--contrato", metavar="NNN/AAAA", help="carrega só esse contrato (e o que depende dele), sem apagar nada daqui")
     args = parser.parse_args()
+    if args.contrato and (args.substituir or args.apenas_limpar):
+        sys.exit("ERRO: --contrato não combina com --substituir nem com --apenas-limpar.")
     pacote = Pacote(args.pacote)
     antigas: set[str] = set()
 
     with FabricaSessao() as sessao:
         existentes = sessao.scalar(select(func.count()).select_from(Contrato))
+        if args.contrato:
+            pacote = PacoteContrato(args.pacote, args.contrato, sessao)
+            if pacote.empresa_existente:
+                print(f"Empresa já cadastrada aqui: {pacote.empresa_existente.razao_social} (o contrato aponta para ela).")
+            existentes = 0
         if args.apenas_limpar:
             antigas = limpar_modulo(sessao)
             sessao.commit()

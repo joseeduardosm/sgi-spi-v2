@@ -8,6 +8,9 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-09-30
 
+### Alterado
+- Contratos: o e-mail da medição concluída pede à contratada a nota fiscal **em PDF e em XML** (o XML é lido automaticamente na etapa Nota fiscal).
+
 ### Removido
 - Tela "Início" com a saudação: a página inicial agora é o portal de notícias.
 

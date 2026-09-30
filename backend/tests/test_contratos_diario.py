@@ -183,6 +183,8 @@ def test_medicao_concluida_envia_memoria_e_diario_pedindo_nf_em_48h(cliente, adm
     assert mensagem["Reply-To"] == "gestora@sp.gov.br, fiscal@sp.gov.br"
     texto = mensagem.get_body(("plain",)).get_content()
     assert "em até 48 horas" in texto and "ACME" in texto
+    html = mensagem.get_body(("html",)).get_content()
+    assert "o PDF e o arquivo XML" in texto and "o PDF e o arquivo XML" in html
     anexos = {a.get_filename(): a.get_content() for a in mensagem.iter_attachments()}
     assert set(anexos) == {"memoria_medicao_001_2026_2026-01.pdf", "diario_de_bordo_001_2026_2026-01.pdf"}
     assert all(conteudo[:5] == b"%PDF-" for conteudo in anexos.values())

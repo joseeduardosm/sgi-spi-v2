@@ -49,7 +49,7 @@ Configurar a execução (checklist de documentos mensais e formulário de avalia
   - qualquer alteração apaga as ciências;
   - a conclusão exige **ao menos uma ciência de integrante da equipe** (as demais são opcionais) e gera a memória de cálculo em PDF (nova versão só se os dados mudaram);
   - concluir soma o medido na quantidade executada dos itens;
-  - **e-mail da medição concluída** (em segundo plano, pelo [servidor SMTP](smtp.md) ativo): vai à equipe vigente e aos prepostos ativos da contratada, com a memória de cálculo e o [diário de bordo](contratos-diario.md) do período em PDF, pedindo a emissão da nota fiscal com base na medição **em até 48 horas** (a data e a hora limite vão no texto). "Responder para" = equipe vigente (as respostas não voltam à caixa de envio). O resultado fica em `email_medicao`; `POST /competencias/{id}/reenviar-email-medicao` reenvia.
+  - **e-mail da medição concluída** (em segundo plano, pelo [servidor SMTP](smtp.md) ativo): vai à equipe vigente e aos prepostos ativos da contratada, com a memória de cálculo e o [diário de bordo](contratos-diario.md) do período em PDF, pedindo a emissão da nota fiscal com base na medição **em até 48 horas** (a data e a hora limite vão no texto), **com o envio da nota em PDF e em XML**. "Responder para" = equipe vigente (as respostas não voltam à caixa de envio). O resultado fica em `email_medicao`; `POST /competencias/{id}/reenviar-email-medicao` reenvia.
 
 ### Medição: saldo, glosas e saldo líquido
 

@@ -309,7 +309,7 @@ def notificar_ocorrencia(ocorrencia_id: uuid.UUID) -> None:
 # --- Medição concluída ---------------------------------------------------------------------------
 
 def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -> tuple[str, str, str]:
-    """Assunto, texto e HTML do e-mail da medição concluída (pede a NF em até 48 h)."""
+    """Assunto, texto e HTML do e-mail da medição concluída (pede a NF em PDF e XML em até 48 h)."""
     from app.services.contratos.servico_competencias import saldos_da_medicao, total_medido
 
     rotulo = competencia.numero_competencia
@@ -323,7 +323,8 @@ def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -
     assunto = f"Contrato {contrato.numero} — medição {rotulo} concluída: emitir nota fiscal"
     pedido = (
         f"Solicitamos à {contrato.empresa.razao_social} a emissão da nota fiscal com base nesta medição, "
-        f"no valor de {moeda(total)}, em até 48 horas (até {data_hora(limite)})."
+        f"no valor de {moeda(total)}, em até 48 horas (até {data_hora(limite)}). "
+        "Envie a nota fiscal nos dois formatos: o PDF e o arquivo XML."
     )
     texto = "\n".join([
         f"Contrato: {contrato.numero}{' — ' + contrato.apelido if contrato.apelido else ''}",

@@ -51,7 +51,7 @@ import { CabecalhoNoticiasComponent } from './cabecalho-noticias.component';
                   } @empty { <li class="dica-formulario">Nenhuma escolhida: o slider fica vazio.</li> }
                 </ol>
                 <label for="cp-add">Incluir notícia publicada</label>
-                <select id="cp-add" name="add" [ngModel]="''" (ngModelChange)="incluir($event)">
+                <select id="cp-add" (change)="incluir($any($event.target).value); $any($event.target).value = ''">
                   <option value="">Escolha…</option>
                   @for (n of candidatasLivres(); track n.id) { <option [value]="n.id">{{ n.titulo }} ({{ data(n.publicada_em) }})</option> }
                 </select>

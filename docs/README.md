@@ -19,6 +19,7 @@ Esta pasta é parte do código-fonte. Ela é a referência para o desenvolviment
 | [endpoints/rh-cadastro.md](endpoints/rh-cadastro.md) | `/api/rh/cadastro/*`, `/api/rh/papeis`: Módulo RH, atualização cadastral validada pela CGP |
 | [endpoints/rh-afastamentos.md](endpoints/rh-afastamentos.md) | `/api/rh/afastamentos/*`, `/api/rh/parametros`, `/api/rh/feriados`: férias, licença-prêmio, feriados e pontos facultativos |
 | [endpoints/noticias.md](endpoints/noticias.md) | `/api/portal`, `/api/noticias/*`: portal de notícias (público) e gestão editorial com aprovação, capa 2:1, slider configurável |
+| [endpoints/melhorias.md](endpoints/melhorias.md) | `/api/melhorias/*`: sugestões de melhoria (botão flutuante), minhas sugestões, triagem, tarefa, XLSX e PDF |
 | [endpoints/tarefas.md](endpoints/tarefas.md) | `/api/tarefas/*`: Módulo Tarefas (pipeline com validação, linha do tempo, equipes, avisos) |
 | [endpoints/rh-folha-ponto.md](endpoints/rh-folha-ponto.md) | `/api/rh/folha-ponto`: folha de ponto do usuário em PDF |
 | [endpoints/mensagens.md](endpoints/mensagens.md) | `/api/mensagens/*`: mensageria (caixa de mensagens, avisos automáticos, e-mail e lembretes) |

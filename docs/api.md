@@ -60,6 +60,7 @@ Navegador
 | `mensagens`, `mensagens_entregas` | Mensageria: mensagens (avulsas e automáticas) e a entrega a cada destinatário (lida, ciência, encerrada, e-mail) |
 | `noticias`, `noticias_revisoes`, `noticias_anexos`, `noticias_categorias`, `portal_atalhos`, `portal_configuracao` | Módulo Notícias: notícias com fluxo de aprovação, histórico, anexos, categorias, atalhos e parâmetros do slider do portal |
 | `tarefas`, `tarefas_equipes` (+ `_membros`, `_lideres`), `tarefas_participantes`, `tarefas_eventos` (+ `_anexos`), `tarefas_marcadores` (+ `_vinculos`), `tarefas_checklist` | Módulo Tarefas: tarefas com pipeline de validação, equipes, envolvidos, linha do tempo, marcadores e checklist |
+| `melhorias_sugestoes`, `melhorias_anexos`, `melhorias_eventos` | Módulo Melhorias: sugestões dos usuários (com a tela de origem), prints anexados e histórico da triagem |
 | `mensageria_envios_changelog` | Mensageria: e-mails de changelog enviados pela conta root (texto, destino, até que data do CHANGELOG e resultado) |
 | `setores`, `membros_setor` | Setores e seus membros |
 | `acl_recursos`, `acl_regras`, `acl_regras_usuarios`, `acl_regras_setores` | Controle de acesso |
@@ -161,6 +162,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/portal`, `/api/noticias/publicas[/…]` | **Público (sem token)** | Página inicial do portal, arquivo e detalhe das notícias publicadas, capas e atalhos | [noticias.md](endpoints/noticias.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/noticias[/…]`, `/api/portal/configuracao`, `/api/portal/atalhos[/…]` | Autenticado + ACL `noticias` (MODIFICACAO redator, CONTROLE_TOTAL aprovador) | Gestão editorial: notícias, aprovação, capa 2:1, anexos, categorias, atalhos e configuração do slider | [noticias.md](endpoints/noticias.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/tarefas[/…]` | Autenticado (permissões por tarefa e equipe) | Módulo Tarefas: listas, pipeline, prazo, transferência, comentários, linha do tempo, agenda da pessoa, equipes e marcadores | [tarefas.md](endpoints/tarefas.md) |
+| `GET` `POST` `PUT` | `/api/melhorias[/…]` | Autenticado (triagem: SuperRoot ou CONTROLE_TOTAL em `melhorias`) | Módulo Melhorias: envio de sugestões com prints, minhas sugestões, triagem, conversão em tarefa, XLSX e PDF | [melhorias.md](endpoints/melhorias.md) |
 | `GET` | `/api/rh/folha-ponto[/competencias]` | Autenticado (só a própria) | Folha de ponto em PDF / competências disponíveis | [rh-folha-ponto.md](endpoints/rh-folha-ponto.md) |
 | `GET` `PUT` | `/api/rh/parametros` | Leitura: autenticado; gravação: CGP | Regras de agendamento | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` | `/api/mensagens/resumo` | Autenticado | Contador do sino e janela a abrir | [mensagens.md](endpoints/mensagens.md) |

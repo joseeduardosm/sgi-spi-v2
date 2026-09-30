@@ -60,7 +60,18 @@ Ubuntu 24.04 com:
    # URL_BANCO_DADOS=postgresql+psycopg://usuario:senha@localhost:5432/banco
    ```
 
-2. Execute a instalação (idempotente):
+2. Instale o certificado HTTPS de `portal.spi.sp.gov.br`, emitido pela SPI-AD01-CA:
+
+   - **Chave privada:** `/etc/ssl/private/portal.spi.sp.gov.br.key`, só para o root (`chmod 600`). Ela é gerada no próprio servidor junto com o pedido (`openssl req -new … -keyout`); o `.csr` vai à equipe de servidores.
+   - **Certificado com a cadeia:** `/etc/ssl/certs/portal.spi.sp.gov.br.fullchain.crt`, com o certificado do site seguido do certificado da CA, com fim de linha Unix:
+
+     ```bash
+     { tr -d '\r' < portal.spi.sp.gov.br.crt; echo; tr -d '\r' < SPI-AD01-CA.crt; } | sed '/^$/d' | sudo tee /etc/ssl/certs/portal.spi.sp.gov.br.fullchain.crt >/dev/null
+     ```
+
+   Outro nome: `--dominio NOME`, com os arquivos `NOME.fullchain.crt` e `NOME.key`.
+
+3. Execute a instalação (idempotente):
 
    ```bash
    sudo scripts/instalar.sh                        # porta 80 (interrompe se já houver site padrão nela)
@@ -72,10 +83,13 @@ Ubuntu 24.04 com:
    - libera apenas a travessia (`chmod o+x`) de `/home/administrador` e `projeto`, para o Nginx ler o build do Angular;
    - cria o virtualenv, instala as dependências, roda os testes, aplica as migrações do banco e compila o Angular (`scripts/deploy.sh`);
    - encerra processos manuais (uvicorn na 8000, `ng serve` na 4200), instala e inicia `sgi-spi-api.service`;
-   - gera `/etc/nginx/sites-available/sgi-spi` a partir de `nginx/sgi-spi.conf`, ativa o site, valida (`nginx -t`) e recarrega o Nginx;
-   - verifica `GET /api/saude` pelo Nginx.
+   - gera `/etc/nginx/sites-available/sgi-spi` a partir de `nginx/sgi-spi.conf`, ativa o site, valida (`nginx -t`) e recarrega o Nginx:
+     - **HTTPS (443)** em `portal.spi.sp.gov.br`;
+     - `http://portal.spi.sp.gov.br` redireciona para o HTTPS;
+     - pelo IP, o HTTP (80) continua atendendo;
+   - verifica `GET /api/saude` pelo Nginx, em HTTP e em HTTPS.
 
-3. Acesse `http://<servidor>/` e entre com o administrador configurado.
+4. Acesse `https://portal.spi.sp.gov.br/` (ou `http://<IP do servidor>/`) e entre com o administrador configurado.
 
 ## Atualização (deploy)
 
@@ -125,6 +139,7 @@ npx ng build              # produção → dist/sgi-spi/browser (servido pelo Ng
 | `NOME_ADMIN` | Nome exibido, aplicado se a conta ainda não tiver nome |
 | `ORIGENS_CORS` | Lista JSON. Só é necessária se o frontend for servido por outra origem |
 | `ANEXOS_DIRETORIO` | Onde os PDFs são gravados. Padrão `/home/administrador/projeto/dados/anexos`. O usuário do serviço precisa de permissão de escrita |
+| `URL_PUBLICA` | Endereço usado nos links dos e-mails (ex.: link direto para a etapa da competência). Produção: `https://portal.spi.sp.gov.br` |
 | `ANEXOS_TAMANHO_MAXIMO_MB` | Tamanho máximo de cada PDF. Padrão 20. Mantenha o `client_max_body_size` do Nginx um pouco acima deste valor |
 
 ## Manutenção

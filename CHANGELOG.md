@@ -8,7 +8,28 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-09-30
 
+### Alterado
+- **HTTPS em `portal.spi.sp.gov.br`**, com o certificado emitido pela SPI-AD01-CA.
+  - `http://portal.spi.sp.gov.br` redireciona para o HTTPS; o acesso HTTP pelo IP continua.
+  - `nginx/sgi-spi.conf` e `scripts/instalar.sh` ganharam o HTTPS e a opção `--dominio`, com a conferência dos arquivos do certificado.
+- `URL_PUBLICA` passa a ser `https://portal.spi.sp.gov.br`: os links dos e-mails usam o novo endereço.
+
 ### Adicionado
+- **Módulo Melhorias**, trazido do "Banco de melhorias" do 10.23.1.220 e ampliado.
+  - **Envio:** o botão flutuante **"Sugerir melhoria"** aparece em todas as telas autenticadas.
+    - Pode ser **arrastado** para não cobrir o que importa.
+    - O **"×"** esconde o botão só na aba atual; uma aba nova traz o botão de volta ao canto inferior direito.
+    - O envio leva o texto, a tela de origem e até 3 prints (arquivo ou Ctrl+V).
+  - **Minhas sugestões** (`/melhorias`, item em Módulos): o autor acompanha a situação e a resposta da equipe e recebe aviso na caixa de Mensagens, com e-mail, quando elas mudam.
+  - **Triagem** (`/melhorias/triagem`), para o SuperRoot ou quem tem CONTROLE_TOTAL no novo recurso `melhorias` da ACL:
+    - filtros por situação, módulo, período e busca;
+    - resposta ao autor e observação interna (o autor não vê);
+    - histórico;
+    - **converter em tarefa** no Módulo Tarefas;
+    - **exportar planilha** e **relatório em PDF** com os prints.
+  - Quem faz a triagem recebe aviso a cada sugestão nova.
+  - Migração `11d8a496ccab`: tabelas `melhorias_sugestoes`, `melhorias_anexos` e `melhorias_eventos`, e o recurso `melhorias` na ACL, sem regras.
+  - Endpoints `/api/melhorias/…` (ver `docs/endpoints/melhorias.md`).
 - **Contratos › Diário de bordo: anexos.** Até 5 arquivos por ocorrência, com o formato conferido pelo conteúdo. Os arquivos vão anexados ao e-mail da ocorrência (acima de 15 MB no total, o e-mail só lista os nomes) e aparecem no PDF do diário e na conversa, com download.
 - **Contratos › Diário de bordo: a ocorrência pode impactar a avaliação da qualidade.** A pergunta "Esta ocorrência impacta a avaliação da qualidade?" vincula a ocorrência a itens do formulário de avaliação ativo. Na avaliação da competência do período:
   - os itens mostram as ocorrências;

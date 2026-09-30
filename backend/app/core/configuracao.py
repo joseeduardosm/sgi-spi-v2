@@ -69,7 +69,7 @@ class Configuracao(BaseSettings):
     anexos_tamanho_maximo_mb: int = Field(25, gt=0, le=200)
 
     # Endereço do sistema usado nos links dos e-mails (ex.: link direto para a etapa da competência)
-    url_publica: str = "http://10.23.0.254"
+    url_publica: str = "https://portal.spi.sp.gov.br"
     # Tomador que deve constar nas notas fiscais (SPI) e setor do Financeiro, que confere as retenções
     tomador_cnpj: str = "96480850000103"
     setor_financeiro: str = "Diretoria de Orçamento e Finanças"

@@ -12,13 +12,17 @@ import { JanelaMensagemComponent } from '../../../features/mensagens/janela-mens
 import { FolhaPontoDialogoComponent } from '../../../features/rh/folha-ponto-dialogo.component';
 import { DialogosComponent } from '../../componentes/dialogos/dialogos.component';
 import { IconeComponent } from '../../componentes/icone/icone.component';
+import { BotaoMelhoriasComponent } from '../../componentes/botao-melhorias/botao-melhorias.component';
 import { BarraLateralComponent } from '../barra-lateral/barra-lateral.component';
 import { LayoutService } from '../layout.service';
 
 /** Layout das rotas autenticadas: barra lateral, barra superior e área de conteúdo. */
 @Component({
   selector: 'app-layout-autenticado',
-  imports: [RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaMensagemComponent, FolhaPontoDialogoComponent],
+  imports: [
+    RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaMensagemComponent, FolhaPontoDialogoComponent,
+    BotaoMelhoriasComponent,
+  ],
   templateUrl: './layout-autenticado.component.html',
   styleUrl: './layout-autenticado.component.scss',
   // Esc fecha menus abertos; clique fora do menu do usuário o fecha

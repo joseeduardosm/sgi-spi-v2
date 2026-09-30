@@ -30,6 +30,8 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           // Notícias: gestão editorial do portal (a página inicial é o próprio portal)
           { id: 'noticias', rotulo: 'Notícias', rota: '/noticias/gestao', acl: 'noticias' },
           { id: 'tarefas', rotulo: 'Tarefas', rota: '/tarefas' },
+          // Melhorias: minhas sugestões para todos; triagem para quem tem CONTROLE_TOTAL em `melhorias`
+          { id: 'melhorias', rotulo: 'Melhorias', rota: '/melhorias' },
         ],
         textoVazio: 'Nenhum módulo disponível ainda',
       },

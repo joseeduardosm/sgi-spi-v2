@@ -1,0 +1,311 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para os estilos do Módulo Melhorias (botão flutuante, janela de envio, minhas sugestões e triagem).
+
+/* Botão flutuante: fica sobre o conteúdo, pode ser arrastado e fechado na aba */
+.botao-melhorias {
+  position: fixed;
+  z-index: 150;
+  display: flex;
+  align-items: flex-start;
+  touch-action: none;
+  user-select: none;
+
+  &.arrastando .botao-melhorias-principal {
+    cursor: grabbing;
+    box-shadow: 0 16px 34px #401e2040;
+  }
+}
+
+.botao-melhorias-principal {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 17px 0 14px;
+  border: 0;
+  border-radius: 22px;
+  color: #fff;
+  background: var(--spi-vermelho);
+  box-shadow: 0 10px 24px #401e2033;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: grab;
+
+  svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  &:hover { background: var(--spi-vermelho-escuro); }
+  &:focus-visible { outline: 3px solid #f5b9bf; outline-offset: 2px; }
+}
+
+.botao-melhorias-fechar {
+  width: 20px;
+  height: 20px;
+  margin: -6px 0 0 -8px;
+  padding: 0;
+  border: 1px solid #e2e5e8;
+  border-radius: 50%;
+  color: #586372;
+  background: #fff;
+  box-shadow: 0 2px 6px #18222e22;
+  font-size: 13px;
+  line-height: 17px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  &:hover { color: var(--spi-vermelho); }
+}
+
+// O "×" aparece ao passar o mouse ou ao navegar pelo teclado; no toque fica sempre visível
+.botao-melhorias:hover .botao-melhorias-fechar,
+.botao-melhorias-fechar:focus-visible { opacity: 1; }
+@media (hover: none) { .botao-melhorias-fechar { opacity: 1; } }
+
+.aviso-melhorias {
+  position: fixed;
+  right: 20px;
+  bottom: 76px;
+  z-index: 160;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 12px 16px;
+  border-left: 3px solid #2f9e67;
+  border-radius: 8px;
+  color: #1d4d35;
+  background: #e9f6ef;
+  box-shadow: 0 10px 24px #18222e22;
+  font-size: 13px;
+
+  a { margin-left: 6px; color: #1d6b43; font-weight: 700; }
+}
+
+@media print { .botao-melhorias, .aviso-melhorias { display: none; } }
+
+/* Janelas (envio e tratamento) */
+.janela-melhorias {
+  > form { padding: 0; }
+
+  .corpo-janela-melhorias {
+    padding: 20px 25px;
+
+    form { padding: 0; }
+  }
+
+  > form > footer { padding: 0 25px 22px; }
+
+  label { display: block; margin: 0 0 7px; color: #464f5a; font-size: 12px; font-weight: 700; }
+
+  textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e2e5e8;
+    border-radius: 8px;
+    font-size: 13px;
+    resize: vertical;
+  }
+}
+
+.tela-melhorias {
+  margin: 0 0 14px;
+  color: #586372;
+  font-size: 12px;
+
+  span { margin-right: 6px; color: #7c8998; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.08em; }
+  code { color: #3d454e; word-break: break-all; }
+}
+
+.contador-melhorias { display: block; margin-top: 4px; color: #8e99a6; font-size: 11px; text-align: right; }
+
+.prints-melhorias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+
+  figure {
+    margin: 0;
+    text-align: center;
+
+    img { display: block; width: 130px; height: 82px; object-fit: cover; border: 1px solid #e2e5e8; border-radius: 6px; }
+  }
+
+  .adicionar-print {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 130px;
+    height: 82px;
+    border: 1px dashed #c4ccd4;
+    border-radius: 6px;
+    color: #586372;
+    background: #f7f8fa;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+
+    small { color: #8e99a6; font-weight: 400; font-size: 10px; }
+    &:hover { border-color: var(--spi-vermelho); color: var(--spi-vermelho); }
+  }
+}
+
+/* Situação da sugestão */
+.selo-sugestao {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 10px;
+  color: #6a7786;
+  background: #eef0f2;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  &[data-situacao='nova'] { color: #2b4468; background: #e6eefb; }
+  &[data-situacao='em_analise'] { color: #9a6400; background: #fff4dc; }
+  &[data-situacao='aceita'] { color: #1d6b43; background: #e5f4ec; }
+  &[data-situacao='concluida'] { color: #fff; background: #2f9e67; }
+  &[data-situacao='recusada'] { color: #a63942; background: var(--spi-vermelho-suave); }
+}
+
+/* Minhas sugestões */
+.lista-sugestoes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+}
+
+.cartao-sugestao {
+  padding: 14px 16px;
+  border: 1px solid #e3e6e9;
+  border-radius: 10px;
+  background: #fff;
+
+  &.destacada { border-color: var(--spi-vermelho); box-shadow: 0 0 0 3px #c8233122; }
+
+  > header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    font-size: 12px;
+
+    time { margin-left: auto; color: #8e99a6; font-size: 11px; }
+  }
+}
+
+.modulo-sugestao { color: #586372; }
+.texto-sugestao { margin: 8px 0 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+
+.prints-sugestao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+
+  button { padding: 0; border: 1px solid #e2e5e8; border-radius: 6px; background: #f7f8fa; cursor: zoom-in; overflow: hidden; }
+  img { display: block; width: 120px; height: 76px; object-fit: cover; }
+
+  &.grandes img { width: 180px; height: 112px; }
+}
+
+.resposta-sugestao {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid #3b5b8a;
+  border-radius: 6px;
+  background: #eef3fb;
+  color: #2b4468;
+  font-size: 13px;
+
+  span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+  p { margin: 4px 0 0; white-space: pre-wrap; }
+  small { color: #6a7f9c; font-size: 11px; }
+}
+
+/* Triagem */
+.filtros-melhorias {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+
+  input[type='search'] { flex: 1 1 260px; }
+  label { display: flex; align-items: center; gap: 6px; margin: 0; color: #586372; font-size: 12px; }
+  .espacador { flex: 1; }
+}
+
+.tabela-melhorias {
+  .linha-clicavel { cursor: pointer; }
+  .linha-clicavel:hover td { background: #fbf6f6; }
+
+  .resumo-sugestao {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: 520px;
+  }
+
+  td small { display: block; margin-top: 3px; color: #8e99a6; font-size: 10px; word-break: break-all; }
+}
+
+.paginacao-melhorias {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px;
+  color: #586372;
+  font-size: 12px;
+}
+
+.dados-sugestao {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 18px;
+  margin: 0 0 12px;
+
+  .inteira { grid-column: 1 / -1; }
+  dt { color: #7c8998; font-size: 11px; font-weight: 700; }
+  dd { margin: 2px 0 0; color: #3d454e; font-size: 13px; }
+  code { word-break: break-all; }
+}
+
+.conversao-tarefa {
+  margin-top: 14px;
+  padding: 14px 16px !important;
+  border: 1px solid #e3e6e9;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.historico-sugestao {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid #eef0f2;
+    font-size: 12px;
+
+    small { color: #8e99a6; }
+  }
+}
+
+@media (max-width: 640px) {
+  .dados-sugestao { grid-template-columns: 1fr; }
+  .filtros-melhorias .espacador { display: none; }
+}

@@ -66,3 +66,5 @@
 <app-janela-mensagem />
 <!-- Folha de ponto (menu do usuário): escolha da competência e download do PDF -->
 @if (folhaPontoAberta()) { <app-folha-ponto-dialogo [(aberta)]="folhaPontoAberta" /> }
+<!-- Botão flutuante "Sugerir melhoria" (arrastável; fechado vale só nesta aba). Com o perfil pendente, não aparece -->
+@if (autenticacao.usuario() && !autenticacao.usuario()!.perfil_restrito) { <app-botao-melhorias /> }

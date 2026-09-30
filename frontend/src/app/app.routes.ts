@@ -113,6 +113,11 @@ export const rotas: Routes = [
         loadChildren: () => import('./features/rh/rh.routes').then((m) => m.ROTAS_RH),
       },
       {
+        // Módulo Melhorias: todo usuário vê as próprias sugestões; a triagem confere o acesso na API (ACL `melhorias`)
+        path: 'melhorias',
+        loadChildren: () => import('./features/melhorias/melhorias.routes').then((m) => m.ROTAS_MELHORIAS),
+      },
+      {
         // Módulo Tarefas: todo usuário autenticado (a API confere o papel em cada tarefa e equipe)
         path: 'tarefas',
         loadChildren: () => import('./features/tarefas/tarefas.routes').then((m) => m.ROTAS_TAREFAS),

@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 # Instalação no servidor (idempotente). O projeto roda no próprio diretório (/home/administrador/projeto).
 # Executar com sudo:
-#   sudo scripts/instalar.sh [--porta 80] [--substituir-default]
+#   sudo scripts/instalar.sh [--porta 80] [--dominio portal.spi.sp.gov.br] [--substituir-default]
 #
-# --porta N              porta do Nginx (padrão 80)
+# --porta N              porta HTTP do Nginx (padrão 80); o HTTPS fica na 443
+# --dominio NOME         nome do site no HTTPS (padrão portal.spi.sp.gov.br). Exige o certificado com a cadeia em
+#                        /etc/ssl/certs/NOME.fullchain.crt e a chave em /etc/ssl/private/NOME.key
 # --substituir-default   torna o sgi-spi o site padrão da porta e desativa os demais
 #                        sites em sites-enabled que usam default_server nessa porta
 #                        (sem esta opção, a instalação é interrompida se houver conflito)
 set -euo pipefail
 
 PORTA=80
+DOMINIO=portal.spi.sp.gov.br
 SUBSTITUIR=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --porta) PORTA="$2"; shift 2 ;;
+    --dominio) DOMINIO="$2"; shift 2 ;;
     --substituir-default) SUBSTITUIR=1; shift ;;
     *) echo "Opção desconhecida: $1" >&2; exit 1 ;;
   esac
@@ -76,7 +80,10 @@ if (( SUBSTITUIR )); then
     fi
   done
 fi
-sed -e "s/__PORTA__/$PORTA/g" -e "s/ __DEFAULT__/${DEFAULT:+ $DEFAULT}/g" -e "s|__PROJETO__|$PROJETO|g" \
+for arquivo in "/etc/ssl/certs/$DOMINIO.fullchain.crt" "/etc/ssl/private/$DOMINIO.key"; do
+  [[ -f "$arquivo" ]] || { echo "ERRO: falta $arquivo (certificado de $DOMINIO; ver docs/README.md, seção HTTPS)." >&2; exit 1; }
+done
+sed -e "s/__PORTA__/$PORTA/g" -e "s/ __DEFAULT__/${DEFAULT:+ $DEFAULT}/g" -e "s|__PROJETO__|$PROJETO|g" -e "s/__DOMINIO__/$DOMINIO/g" \
     "$PROJETO/nginx/sgi-spi.conf" > /etc/nginx/sites-available/sgi-spi
 ln -sfn /etc/nginx/sites-available/sgi-spi /etc/nginx/sites-enabled/sgi-spi
 nginx -t
@@ -86,4 +93,5 @@ echo "==> Verificação"
 sleep 2
 curl -fsS "http://127.0.0.1:$PORTA/api/saude" && echo
 curl -fsS -o /dev/null "http://127.0.0.1:$PORTA/" && echo "frontend OK"
-echo "Aplicação: http://$(hostname -I | awk '{print $1}'):$PORTA/"
+curl -fsS -o /dev/null --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/api/saude" --cacert "/etc/ssl/certs/$DOMINIO.fullchain.crt" && echo "HTTPS OK"
+echo "Aplicação: https://$DOMINIO/ (e http://$(hostname -I | awk '{print $1}'):$PORTA/ pelo IP)"

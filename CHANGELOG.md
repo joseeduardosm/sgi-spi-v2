@@ -8,6 +8,16 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-09-30
 
+### Adicionado
+- **Módulo Notícias (Fase 1: backend)**, que traz para o SGI SPI o portal de notícias do 10.23.1.243, com melhorias.
+  - **Portal público** (sem login): `GET /api/portal` (slider configurável, cartões sem repetir os slides, atalhos) e arquivo/detalhe em `/api/noticias/publicas`, com busca, categoria e mês.
+  - **Fluxo de aprovação pela ACL `noticias`:** redator (MODIFICACAO) escreve e pede publicação imediata ou agendada; aprovadores (CONTROLE_TOTAL) recebem caixa + e-mail de aprovação pendente, aprovam ou devolvem com motivo. Sem regras no recurso, só o SuperRoot publica.
+  - **Agendamento sem cron:** a visibilidade é calculada pela data; a rotina de e-mails (2 min) só dispara os avisos das notícias que acabaram de aparecer.
+  - **Aviso ao público** (usuários e setores, com os setores abaixo) e **comunicado com ciência**, pela mensageria.
+  - **Capa 2:1 sem ajuste manual:** recorte enviado pelo editor ou modo "imagem inteira" (fundo desfocado); versões WebP 1600/800/400.
+  - Corpo em HTML **sanitizado** (`nh3`), histórico de versões, anexos conferidos pelo conteúdo, categorias, atalhos e configuração do slider.
+  - Migração `aef1af3a69ff`: tabelas `noticias*` e `portal_*`, categorias iniciais, configuração e recurso `noticias` na ACL. Dependências `pillow` e `nh3` fixadas em `requirements.txt`. Ver `docs/endpoints/noticias.md`.
+
 ### Corrigido
 - Contratos › Minhas pendências e Alertas de risco: a busca e os seletores de filtro apareciam sem o estilo do site.
 

@@ -6,7 +6,8 @@ Uso (pelos timers do systemd, ou à mão para testar):
     backend/.venv/bin/python -m app.tarefas.mensageria emails      # a cada 2 minutos
     backend/.venv/bin/python -m app.tarefas.mensageria lembretes   # todo dia às 07:00
 
-- **emails:** envia por e-mail os avisos automáticos marcados para e-mail (ex.: designação na equipe,
+- **emails:** gera os avisos das notícias agendadas que acabaram de aparecer no portal e envia por e-mail os avisos
+  automáticos marcados para e-mail (ex.: designação na equipe,
   vencimento), entregues nos últimos 2 dias e ainda não enviados. As mensagens avulsas saem na hora.
 - **lembretes:** gera na caixa (e por e-mail) os avisos de vencimento do contrato (90, 60 e 30 dias),
   de competência com medição atrasada e o lembrete de ciência pendente; por fim, manda o resumo diário
@@ -189,6 +190,9 @@ def main(argumentos: list[str]) -> int:
     comando = argumentos[0] if argumentos else ""
     with FabricaSessao() as sessao:
         if comando == "emails":
+            # Notícias agendadas que acabaram de aparecer no portal: gera os avisos antes de enviar a fila de e-mails
+            from app.services.noticias.servico_noticias import processar_publicacoes
+            log.info("Avisos de notícias publicadas: %s", processar_publicacoes(sessao))
             log.info("E-mails de avisos enviados: %s", enviar_emails_pendentes(sessao))
         elif comando == "lembretes":
             log.info("Lembretes: %s", gerar_lembretes(sessao))

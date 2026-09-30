@@ -20,6 +20,7 @@ from app.models.contratos import (
 from app.models.diretorio_ldap import DiretorioLdap
 from app.models.envio_changelog import EnvioChangelog
 from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.noticias import AnexoNoticia, AtalhoPortal, CategoriaNoticia, ConfiguracaoPortal, Noticia, RevisaoNoticia
 from app.models.rh import AlteracaoCadastral, Afastamento, DadosFuncionais, EventoAfastamento, Feriado, ParametrosRh, PeriodoAquisitivo
 from app.models.servidor_smtp import ServidorSmtp
 from app.models.setor import MembroSetor, Setor
@@ -31,6 +32,12 @@ from app.models.usuario import OrigemUsuario, Papel, Usuario
 
 # Nomes exportados por `from app.models import *`
 __all__ = [
+    "AnexoNoticia",
+    "AtalhoPortal",
+    "CategoriaNoticia",
+    "ConfiguracaoPortal",
+    "Noticia",
+    "RevisaoNoticia",
     "Anexo",
     "Contrato",
     "DesignacaoEquipe",

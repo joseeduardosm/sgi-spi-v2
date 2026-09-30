@@ -94,4 +94,4 @@ sleep 2
 curl -fsS "http://127.0.0.1:$PORTA/api/saude" && echo
 curl -fsS -o /dev/null "http://127.0.0.1:$PORTA/" && echo "frontend OK"
 curl -fsS -o /dev/null --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/api/saude" --cacert "/etc/ssl/certs/$DOMINIO.fullchain.crt" && echo "HTTPS OK"
-echo "Aplicação: https://$DOMINIO/ (e http://$(hostname -I | awk '{print $1}'):$PORTA/ pelo IP)"
+echo "Aplicação: https://$DOMINIO/ (os demais endereços redirecionam para ele)"

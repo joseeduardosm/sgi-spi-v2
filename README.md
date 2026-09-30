@@ -85,11 +85,11 @@ Ubuntu 24.04 com:
    - encerra processos manuais (uvicorn na 8000, `ng serve` na 4200), instala e inicia `sgi-spi-api.service`;
    - gera `/etc/nginx/sites-available/sgi-spi` a partir de `nginx/sgi-spi.conf`, ativa o site, valida (`nginx -t`) e recarrega o Nginx:
      - **HTTPS (443)** em `portal.spi.sp.gov.br`;
-     - `http://portal.spi.sp.gov.br` redireciona para o HTTPS;
-     - pelo IP, o HTTP (80) continua atendendo;
+     - qualquer outro acesso (HTTP, pelo IP ou por outro nome) redireciona para `https://portal.spi.sp.gov.br`, com o mesmo caminho;
+     - só `127.0.0.1`/`localhost`, no próprio servidor, continua em HTTP (verificações);
    - verifica `GET /api/saude` pelo Nginx, em HTTP e em HTTPS.
 
-4. Acesse `https://portal.spi.sp.gov.br/` (ou `http://<IP do servidor>/`) e entre com o administrador configurado.
+4. Acesse `https://portal.spi.sp.gov.br/` e entre com o administrador configurado.
 
 ## Atualização (deploy)
 

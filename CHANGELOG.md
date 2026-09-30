@@ -10,7 +10,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ### Alterado
 - **HTTPS em `portal.spi.sp.gov.br`**, com o certificado emitido pela SPI-AD01-CA.
-  - `http://portal.spi.sp.gov.br` redireciona para o HTTPS; o acesso HTTP pelo IP continua.
+  - Com o DNS já apontando para o 10.23.0.254, todo acesso por HTTP, pelo IP ou por outro nome redireciona para `https://portal.spi.sp.gov.br`, com o mesmo caminho (favoritos e e-mails antigos com o IP continuam funcionando).
   - `nginx/sgi-spi.conf` e `scripts/instalar.sh` ganharam o HTTPS e a opção `--dominio`, com a conferência dos arquivos do certificado.
 - `URL_PUBLICA` passa a ser `https://portal.spi.sp.gov.br`: os links dos e-mails usam o novo endereço.
 

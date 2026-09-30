@@ -8,6 +8,9 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-09-30
 
+### Corrigido
+- Notícias: na janela "Aprovar e publicar", deixar a data vazia não publicava na hora quando o redator tinha pedido publicação agendada; agora data vazia publica imediatamente.
+
 ### Alterado
 - Contratos: o e-mail da medição concluída pede à contratada a nota fiscal **em PDF e em XML** (o XML é lido automaticamente na etapa Nota fiscal).
 

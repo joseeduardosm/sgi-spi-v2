@@ -196,7 +196,10 @@ export class EditorNoticiaComponent implements OnInit {
 
   protected aprovar(): void {
     const eraNova = this.nova();
-    const operacao = this.gravar().pipe(concatMap((n) => this.api.aprovar(n.id, deCampo(this.aprovarEm))));
+    // Data vazia na janela = publicar agora (mesmo que o redator tenha pedido outra data)
+    const quando = deCampo(this.aprovarEm) ?? new Date().toISOString();
+    if (!this.aprovarEm && this.editavel()) this.publicacao = 'imediata';
+    const operacao = this.gravar().pipe(concatMap((n) => this.api.aprovar(n.id, quando)));
     this.dialogos.executar(operacao, 'Aprovando…').subscribe({
       next: (n) => { this.janela.set(null); this.aplicar(n); if (eraNova) void this.roteador.navigate(['/noticias/gestao', n.id], { replaceUrl: true }); },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível aprovar'),

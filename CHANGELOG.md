@@ -8,7 +8,35 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-09-30
 
+### Corrigido
+- Contratos › Minhas pendências e Alertas de risco: a busca e os seletores de filtro apareciam sem o estilo do site.
+
 ### Adicionado
+- **Módulo Tarefas: releitura da interface, estilo Trello (com lista estilo Asana como alternativa).**
+  - **Navegação lateral do módulo:**
+    - traz Nova tarefa, Minhas tarefas, "Para validar" (liderança, com o total) e a árvore de equipes com as contagens;
+    - é recolhível;
+    - a barra lateral do sistema continua com um só item.
+  - **Quadro como tela principal:**
+    - colunas do pipeline com cartões compactos: etiquetas coloridas, título, chip de prazo colorido, checklist, comentários, anexos e avatares;
+    - arrastar entre colunas ou usar o menu "⋯";
+    - coluna Concluída recolhível, com as 10 mais recentes;
+    - **criação rápida** "+ Adicionar tarefa" (só o título; você como responsável, prazo em 7 dias às 18:00);
+    - **raias por pessoa**.
+  - **Cabeçalho do quadro:**
+    - visões Quadro, Lista, Calendário e Pessoas;
+    - **avatares que filtram por pessoa** (Shift+clique soma);
+    - busca e filtros num popover;
+    - linha de resumo clicável no lugar dos seis cartões de indicadores.
+  - **Lista estilo Asana:** seções recolhíveis por situação, com ordem manual por arraste.
+  - **Calendário** (mês ou semana): tarefas no dia do prazo; arrastar para outro dia abre "Alterar prazo" com a justificativa.
+  - **Janela da tarefa sobre o quadro** (`?tarefa=123`) no lugar da página separada:
+    - título e propriedades editáveis no lugar;
+    - ações do pipeline na coluna direita;
+    - atividade com comentários e linha do tempo;
+    - o link `/tarefas/123` dos e-mails continua funcionando.
+  - **Agenda da pessoa ao atribuir** (Nova tarefa, participantes e transferência): carga e tarefas da pessoa em lista ou **linha do tempo estilo Gantt** (4 semanas). Novo endpoint `GET /api/tarefas/pessoas/{usuario_id}/agenda`, aberto a quem atribui e **com os títulos de todas as tarefas da pessoa**, por decisão do usuário.
+  - `TarefaResumo` ganhou `envolvidos`, `comentarios`, `anexos`, `criado_em`, `iniciada_em` e `concluida_em`, com contagens agregadas e sem consulta por tarefa. Sem migração.
 - **Módulo Tarefas (Fase 4: migração do 10.23.1.220).** `scripts/extrair-tarefas-sgi.py` (somente leitura) e `scripts/migrar-tarefas-sgi.py` (ensaio por padrão, `--gravar`, `--substituir`, conferência que impede gravar com divergência). Carga feita: 159 tarefas, 971 eventos, 66 anexos (SHA-256 conferido), 5 equipes e 20 marcadores, com números, autores e datas preservados. Mapeamento em `docs/endpoints/tarefas.md`.
   - Migração `9639d1d834db`: `tarefas_marcadores.nome` passa de 60 para 120 caracteres.
 

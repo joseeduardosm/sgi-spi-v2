@@ -882,6 +882,24 @@ a.acao-primaria {
   gap: 10px;
   margin-bottom: 18px;
 
+  // Mesmo visual dos filtros das telas de gestão
+  input[type="search"],
+  select {
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid #e2e5e8;
+    border-radius: 7px;
+    outline: 0;
+    color: #3d454e;
+    background: #fcfcfc;
+    font-size: 13px;
+
+    &:focus {
+      border-color: #bc3843;
+      box-shadow: 0 0 0 3px #af374112;
+    }
+  }
+
   input[type="search"] {
     flex: 1 1 260px;
     max-width: 420px;

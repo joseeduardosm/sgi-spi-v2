@@ -8,6 +8,28 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-09-30
 
+### Adicionado
+- **Contratos › Diário de bordo: anexos.** Até 5 arquivos por ocorrência, com o formato conferido pelo conteúdo. Os arquivos vão anexados ao e-mail da ocorrência (acima de 15 MB no total, o e-mail só lista os nomes) e aparecem no PDF do diário e na conversa, com download.
+- **Contratos › Diário de bordo: a ocorrência pode impactar a avaliação da qualidade.** A pergunta "Esta ocorrência impacta a avaliação da qualidade?" vincula a ocorrência a itens do formulário de avaliação ativo. Na avaliação da competência do período:
+  - os itens mostram as ocorrências;
+  - **nota máxima nesses itens exige justificativa** (avaliação inicial e do gestor);
+  - o PDF ganha a seção "Ocorrências do diário de bordo consideradas";
+  - uma ocorrência registrada depois de salva a avaliação gera aviso para revisar as notas.
+- **Contratos › Avaliação dos serviços: envio à contratada por e-mail.** Ao gerar o PDF, o relatório vai aos prepostos, com cópia para a equipe, pedindo a devolução assinada. A tela mostra o resultado e tem "Reenviar e-mail".
+- Migração `57c0f7e1349f`:
+  - tabelas `contratos_diario_anexos` e `contratos_diario_itens_avaliacao`;
+  - coluna `impacta_avaliacao` na ocorrência;
+  - colunas `email_enviado_em`, `email_ok`, `email_destinatarios` e `email_erro` na avaliação da competência.
+- Migração `b3d91e7a0c24`: avaliações com PDF gerado antes desta versão ficam com o e-mail "não enviado", com a explicação, e podem ser reenviadas.
+- Endpoints:
+  - `GET /api/contratos/{id}/diario/{ocorrencia_id}/anexos/{anexo_id}`;
+  - `POST /api/contratos/{id}/competencias/{cid}/reenviar-email-avaliacao`.
+
+### Alterado
+- `POST /api/contratos/{id}/diario` passa a receber `multipart/form-data`: o campo `dados` leva o JSON da ocorrência, agora com `impacta_avaliacao` e `itens_avaliacao`, e o campo `arquivos` leva os anexos.
+- `DiarioContrato` ganha `itens_avaliacao`. `LeituraOcorrencia` ganha `anexos`, `impacta_avaliacao` e `itens_avaliacao`. `LeituraAvaliacao` ganha `ocorrencias` e `email`.
+- A tela da competência consulta de novo, em instantes, enquanto o e-mail da medição ou o da avaliação ainda está sendo enviado.
+
 ### Corrigido
 - Notícias › Configurar portal: a caixa "Incluir notícia publicada" da curadoria volta para "Escolha…" depois de incluir.
 - Notícias: na janela "Aprovar e publicar", deixar a data vazia não publicava na hora quando o redator tinha pedido publicação agendada; agora data vazia publica imediatamente.

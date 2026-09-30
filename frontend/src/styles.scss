@@ -498,6 +498,15 @@ body {
   font-size: 11px;
 }
 
+/* Ocorrência do diário de bordo sob o item da avaliação */
+.tabela-gestao td small.ocorrencia-item {
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-left: 2px solid #d08a1e;
+  color: #7a4c06;
+  background: #fdf6e9;
+}
+
 .texto-erro,
 .tabela-gestao td strong.texto-erro,
 .tabela-gestao td small.texto-erro {

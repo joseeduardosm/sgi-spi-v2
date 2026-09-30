@@ -270,6 +270,11 @@ def mensagem_ocorrencia(contrato: Contrato, ocorrencia: OcorrenciaDiario) -> tup
     ]
     if competencia and ocorrencia.possui_glosa:
         linhas_texto.append(f"Competência afetada: {competencia.numero_competencia}")
+    impacto = [f"{i.item_nome}" + (f" ({i.grupo_nome})" if i.grupo_nome else "") for i in ocorrencia.itens_avaliacao]
+    linhas_texto.append(f"Impacta a avaliação da qualidade: {'Sim — ' + '; '.join(impacto) if ocorrencia.impacta_avaliacao else 'Não'}")
+    nomes_anexos = [a.anexo.nome_original for a in ocorrencia.anexos]
+    if nomes_anexos:
+        linhas_texto += ["", "Anexos: " + ", ".join(nomes_anexos)]
     if aviso:
         linhas_texto += ["", aviso]
     blocos = [
@@ -285,9 +290,28 @@ def mensagem_ocorrencia(contrato: Contrato, ocorrencia: OcorrenciaDiario) -> tup
     ]
     if glosas:
         blocos.append(_tabela_html(["Item", "Quantidade glosada"], glosas))
+    blocos.append(f"<p><b>Impacta a avaliação da qualidade:</b> {'Sim' if ocorrencia.impacta_avaliacao else 'Não'}</p>")
+    if impacto:
+        blocos.append(_tabela_html(["Item do formulário de avaliação"], [[i] for i in impacto]))
+    if nomes_anexos:
+        blocos.append(f"<p><b>Anexos:</b> {escape(', '.join(nomes_anexos))}</p>")
     if aviso:
         blocos.append(f"<p style=\"color:#7a2129\">{escape(aviso)}</p>")
     return assunto, "\n".join(linhas_texto), _html(f"Diário de bordo — contrato {contrato.numero}", blocos)
+
+
+# Anexos acima deste total não vão no e-mail (ficam no sistema, e o e-mail avisa)
+LIMITE_ANEXOS_EMAIL = 15 * 1024 * 1024
+
+
+def anexos_ocorrencia(ocorrencia: OcorrenciaDiario) -> list[AnexoEmail]:
+    """Arquivos da ocorrência para o e-mail (vazio se passarem do limite somados ou se algum não for lido)."""
+    if sum(a.anexo.tamanho for a in ocorrencia.anexos) > LIMITE_ANEXOS_EMAIL:
+        return []
+    try:
+        return [AnexoEmail(a.anexo.nome_original, servico_anexos.caminho(a.anexo).read_bytes(), a.anexo.tipo_conteudo) for a in ocorrencia.anexos]
+    except OSError:
+        return []
 
 
 def notificar_ocorrencia(ocorrencia_id: uuid.UUID) -> None:
@@ -298,7 +322,12 @@ def notificar_ocorrencia(ocorrencia_id: uuid.UUID) -> None:
             return
         contrato = obter_contrato(sessao, ocorrencia.contrato_id)
         assunto, texto, html = mensagem_ocorrencia(contrato, ocorrencia)
-        para, resultado = _enviar(sessao, contrato, assunto, texto, html)
+        anexos = anexos_ocorrencia(ocorrencia)
+        if ocorrencia.anexos and not anexos:
+            aviso = "Os anexos não foram incluídos neste e-mail (tamanho acima do limite); estão disponíveis no SGI SPI."
+            texto += "\n\n" + aviso
+            html = html.replace("</body>", f"<p>{aviso}</p></body>") if "</body>" in html else html + f"<p>{aviso}</p>"
+        para, resultado = _enviar(sessao, contrato, assunto, texto, html, anexos or None)
         ocorrencia.email_enviado_em = agora_utc()
         ocorrencia.email_ok = resultado.sucesso
         ocorrencia.email_destinatarios = para
@@ -404,3 +433,83 @@ def notificar_medicao(competencia_id: uuid.UUID) -> None:
         competencia.email_medicao_destinatarios = para
         competencia.email_medicao_erro = None if resultado.sucesso else resultado.mensagem
         sessao.commit()
+
+
+# --- Relatório de avaliação à contratada ---------------------------------------------------------
+
+
+def mensagem_avaliacao(contrato: Contrato, competencia: Competencia) -> tuple[str, str, str]:
+    """Assunto, texto e HTML do e-mail que leva o relatório de avaliação à contratada, para assinatura e devolução."""
+    from app.services.contratos.servico_competencias import nota_final, percentual_liberado
+
+    rotulo = competencia.numero_competencia
+    nota = nota_final(competencia.avaliacao)
+    percentual = percentual_liberado(competencia)
+    assunto = f"Contrato {contrato.numero} — avaliação dos serviços {rotulo}: assinar e devolver"
+    pedido = (
+        f"Encaminhamos à {contrato.empresa.razao_social} o relatório de avaliação dos serviços da competência {rotulo}. "
+        "Solicitamos que o preposto assine o relatório e o devolva respondendo a este e-mail."
+    )
+    texto = "\n".join([
+        f"Contrato: {contrato.numero}{' — ' + contrato.apelido if contrato.apelido else ''}",
+        f"Contratada: {contrato.empresa.razao_social}",
+        f"Competência: {rotulo} (período {competencia.periodo_inicio:%d/%m/%Y} a {competencia.periodo_fim:%d/%m/%Y})",
+        f"Nota final: {nota if nota is not None else '—'}",
+        f"Pagamento liberado: {percentual}%",
+        "",
+        pedido,
+        "",
+        "Anexo: relatório de avaliação dos serviços (PDF).",
+    ])
+    html = _html(f"Avaliação dos serviços {rotulo} — contrato {contrato.numero}", [
+        _tabela_html(["Campo", "Valor"], [
+            ["Contrato", contrato.numero + (f" — {contrato.apelido}" if contrato.apelido else "")],
+            ["Contratada", contrato.empresa.razao_social],
+            ["Competência", f"{rotulo} ({competencia.periodo_inicio:%d/%m/%Y} a {competencia.periodo_fim:%d/%m/%Y})"],
+            ["Nota final", f"{nota}" if nota is not None else "—"],
+            ["Pagamento liberado", f"{percentual}%"],
+        ]),
+        f"<p style=\"background:#fff8e6;border-left:3px solid #e0a526;padding:10px 12px\"><b>{escape(pedido)}</b></p>",
+        "<p>Anexo: relatório de avaliação dos serviços (PDF).</p>",
+    ])
+    return assunto, texto, html
+
+
+def notificar_avaliacao(competencia_id: uuid.UUID) -> None:
+    """Envia o relatório de avaliação aos prepostos (cópia para a equipe) e grava o resultado (segundo plano)."""
+    with FabricaSessao() as sessao:
+        competencia = sessao.get(Competencia, competencia_id)
+        if competencia is None or competencia.avaliacao is None or competencia.avaliacao.pdf_gerado_anexo_id is None:
+            return
+        contrato = obter_contrato(sessao, competencia.contrato_id)
+        competencia = next(c for c in contrato.competencias if c.id == competencia_id)
+        avaliacao = competencia.avaliacao
+        assunto, texto, html = mensagem_avaliacao(contrato, competencia)
+        prepostos = emails_dos_prepostos(contrato)
+        try:
+            pdf = servico_anexos.caminho(avaliacao.pdf_gerado_anexo).read_bytes()
+        except OSError as erro:
+            para, resultado = [], ResultadoSmtp(False, 0, f"Não foi possível ler o PDF da avaliação: {erro}")
+        else:
+            if not prepostos:
+                para, resultado = [], ResultadoSmtp(False, 0, "Nenhum preposto ativo com e-mail: cadastre o e-mail do preposto na empresa.")
+            else:
+                nome = f"avaliacao_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf"
+                para, resultado = _enviar(sessao, contrato, assunto, texto, html, [AnexoEmail(nome, pdf)], para=prepostos,
+                                          cc=emails_da_equipe(sessao, contrato))
+        avaliacao.email_enviado_em = agora_utc()
+        avaliacao.email_ok = resultado.sucesso
+        avaliacao.email_destinatarios = para
+        avaliacao.email_erro = None if resultado.sucesso else resultado.mensagem
+        sessao.commit()
+
+
+def exigir_reenvio_avaliacao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, autor: Usuario) -> None:
+    """Reenvio: quem pode editar o contrato, e só com o PDF da avaliação gerado."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = next((c for c in contrato.competencias if c.id == competencia_id), None)
+    if competencia is None:
+        raise RegistroNaoEncontrado("Competência")
+    if competencia.avaliacao is None or competencia.avaliacao.pdf_gerado_anexo_id is None:
+        raise ErroRegraContrato("Gere o PDF da avaliação antes de enviá-lo à contratada.")

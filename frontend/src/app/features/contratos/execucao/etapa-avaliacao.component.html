@@ -12,6 +12,9 @@
   </header>
   <div class="corpo">
     <p class="dica-formulario">Escala: @for (n of a.definicao.escala; track $index) { <b>{{ n.valor }}</b> {{ n.legenda }}{{ $last ? '' : ' · ' }} }</p>
+    @if (a.ocorrencias.length) {
+      <p class="aviso-bloco">{{ a.ocorrencias.length }} ocorrência(s) do diário de bordo no período impactam itens desta avaliação (marcados abaixo). Nota máxima nesses itens exige justificativa.</p>
+    }
 
     <p class="secao-formulario">1. Avaliação inicial @if (a.avaliacao_inicial_em) { <small class="dica-formulario" style="display: inline">— salva em {{ a.avaliacao_inicial_em | date: 'dd/MM/yyyy HH:mm' }}</small> }</p>
     @for (g of a.definicao.grupos; track g.id) {
@@ -20,7 +23,11 @@
         <tbody>
           @for (i of g.itens; track i.id) {
             <tr>
-              <td><strong>{{ i.nome }}</strong>@if (i.descricao) { <small>{{ i.descricao }}</small> }</td>
+              <td><strong>{{ i.nome }}</strong>@if (i.descricao) { <small>{{ i.descricao }}</small> }
+                @for (o of ocorrenciasPorItem()[i.id] ?? []; track o.id) {
+                  <small class="ocorrencia-item" [title]="'Registrada por ' + o.registrada_por_nome">Diário {{ o.data_ocorrencia | dataBr }}: {{ o.descricao }}</small>
+                }
+              </td>
               <td class="num">{{ i.peso }}%</td>
               <td style="width: 150px">
                 <select class="campo-tabela" [attr.aria-label]="'Nota inicial de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="iniciais[i.id].nota">
@@ -29,7 +36,8 @@
                 </select>
               </td>
               <td>
-                <input class="campo-tabela" style="text-align: left" [class.invalido]="abaixo(iniciais[i.id].nota) && !iniciais[i.id].justificativa.trim()"
+                <input class="campo-tabela" style="text-align: left" [class.invalido]="exigeJustificativa(i.id, iniciais[i.id].nota) && !iniciais[i.id].justificativa.trim()"
+                       [placeholder]="ocorrenciasPorItem()[i.id]?.length ? 'Obrigatória (ocorrência no diário)' : ''"
                        [attr.aria-label]="'Justificativa de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="iniciais[i.id].justificativa" />
               </td>
             </tr>
@@ -53,7 +61,7 @@
           <tbody>
             @for (i of g.itens; track i.id) {
               <tr>
-                <td><strong>{{ i.nome }}</strong></td>
+                <td><strong>{{ i.nome }}</strong>@if (ocorrenciasPorItem()[i.id]?.length) { <small class="ocorrencia-item">{{ ocorrenciasPorItem()[i.id].length }} ocorrência(s) no diário</small> }</td>
                 <td>{{ iniciais[i.id].nota || '—' }}@if (iniciais[i.id].justificativa) { <small>{{ iniciais[i.id].justificativa }}</small> }</td>
                 <td style="width: 150px">
                   <select class="campo-tabela" [attr.aria-label]="'Nota do gestor de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="gestor[i.id].nota">
@@ -61,7 +69,7 @@
                   </select>
                 </td>
                 <td>
-                  <input class="campo-tabela" style="text-align: left" [class.invalido]="abaixo(gestor[i.id].nota) && !gestor[i.id].justificativa.trim()"
+                  <input class="campo-tabela" style="text-align: left" [class.invalido]="exigeJustificativa(i.id, gestor[i.id].nota) && !gestor[i.id].justificativa.trim()"
                          [attr.aria-label]="'Complemento de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="gestor[i.id].justificativa" />
                 </td>
               </tr>
@@ -106,6 +114,20 @@
             <button type="button" class="acao-primaria" [disabled]="!temAssinada()" (click)="enviarAssinada()">Enviar relatório assinado pela contratada</button>
           }
         </div>
+      }
+    }
+
+    @if (a.pdf_gerado) {
+      <p class="secao-formulario">E-mail à contratada</p>
+      @if (a.email.enviado_em === null) {
+        <p class="dica-formulario">Enviando o relatório aos prepostos, com o pedido de devolução assinada…</p>
+      } @else if (a.email.ok) {
+        <p class="aviso-bloco informativo">Enviado em {{ a.email.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ a.email.destinatarios.join(', ') }}, com o relatório de avaliação para assinatura do preposto e devolução.</p>
+      } @else {
+        <p class="aviso-bloco erro">O e-mail não foi enviado: {{ a.email.erro }}</p>
+      }
+      @if (d.pode_editar && a.email.enviado_em !== null && !a.concluida_em) {
+        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Reenviando…' : 'Reenviar e-mail' }}</button>
       }
     }
 

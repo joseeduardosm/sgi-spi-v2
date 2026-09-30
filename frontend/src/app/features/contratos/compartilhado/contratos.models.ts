@@ -588,6 +588,20 @@ export interface Avaliacao {
   concluida_em: string | null;
   reconsideracoes: number;
   reconsideracao: Arquivo | null;
+  /** Ocorrências do diário (no período) que impactam itens desta avaliação: nota máxima nesses itens exige justificativa. */
+  ocorrencias: OcorrenciaAvaliacao[];
+  /** E-mail do relatório aos prepostos (cópia para a equipe), enviado ao gerar o PDF. */
+  email: EnvioEmail;
+}
+
+/** Ocorrência do diário de bordo que impacta itens da avaliação. */
+export interface OcorrenciaAvaliacao {
+  id: string;
+  data_ocorrencia: string;
+  descricao: string;
+  registrada_por_nome: string;
+  /** Ids dos itens do formulário desta avaliação. */
+  itens: string[];
 }
 
 /** Consulta ao CADIN (etapa 4). */
@@ -947,12 +961,30 @@ export interface GlosaOcorrencia {
   quantidade: Decimal;
 }
 
+/** Arquivo anexado à ocorrência do diário. */
+export interface AnexoOcorrencia {
+  id: string;
+  nome: string;
+  tamanho: number;
+  tipo: string;
+}
+
+/** Item do formulário de avaliação que a ocorrência impacta (retrato do nome e do grupo no registro). */
+export interface ItemAvaliacaoOcorrencia {
+  item_id: string;
+  item_nome: string;
+  grupo_nome: string;
+}
+
 export interface OcorrenciaDiario {
   id: string;
   data_ocorrencia: string;
   descricao: string;
   possui_glosa: boolean;
   glosas: GlosaOcorrencia[];
+  anexos: AnexoOcorrencia[];
+  impacta_avaliacao: boolean;
+  itens_avaliacao: ItemAvaliacaoOcorrencia[];
   registrada_por_id: number | null;
   registrada_por_nome: string;
   registrada_por_papel: string;
@@ -966,6 +998,8 @@ export interface DiarioContrato {
   ocorrencias: OcorrenciaDiario[];
   pode_registrar: boolean;
   itens: { id: string; ordem: number; descricao: string; tipo: TipoItem }[];
+  /** Itens do formulário de avaliação ativo (vazio sem formulário ativo). */
+  itens_avaliacao: { id: string; nome: string; grupo: string }[];
 }
 
 export interface GravacaoOcorrencia {
@@ -973,6 +1007,8 @@ export interface GravacaoOcorrencia {
   descricao: string;
   possui_glosa: boolean;
   glosas: { item_id: string; quantidade: string }[];
+  impacta_avaliacao: boolean;
+  itens_avaliacao: string[];
 }
 
 // --- Importação por XLSX ----------------------------------------------------------------------

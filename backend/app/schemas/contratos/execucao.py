@@ -357,6 +357,15 @@ class RespostaAvaliacao(BaseModel):
     justificativa: Texto = Field("", max_length=4000)
 
 
+class OcorrenciaAvaliacao(BaseModel):
+    """Ocorrência do diário de bordo (no período da competência) que impacta itens da avaliação."""
+    id: uuid.UUID
+    data_ocorrencia: date
+    descricao: str
+    registrada_por_nome: str
+    itens: list[str] = Field(..., description="Ids dos itens do formulário desta avaliação impactados.")
+
+
 class LeituraAvaliacao(BaseModel):
     """Avaliação da competência (etapa 2)."""
     definicao: dict[str, Any]
@@ -378,6 +387,10 @@ class LeituraAvaliacao(BaseModel):
     concluida_em: datetime | None
     reconsideracoes: int
     reconsideracao: LeituraArquivo | None
+    ocorrencias: list[OcorrenciaAvaliacao] = Field(
+        default_factory=list, description="Ocorrências do diário no período que impactam itens: nota máxima nesses itens exige justificativa.")
+    email: EmailMedicao = Field(default_factory=EmailMedicao,
+                                description="E-mail do relatório à contratada (enviado ao gerar o PDF, para devolução assinada).")
 
 
 class DescontoReajuste(BaseModel):

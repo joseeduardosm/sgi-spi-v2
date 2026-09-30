@@ -5,6 +5,9 @@
 As ocorrências são registro histórico: não são editadas nem excluídas. Uma ocorrência com glosa indica
 itens e quantidades a glosar; as glosas valem na competência cujo período contém a data da ocorrência e
 limitam o que pode ser medido nela (saldo líquido = saldo − glosas).
+
+A ocorrência pode trazer anexos (fotos, documentos) e pode impactar a avaliação da qualidade: fica ligada a itens do
+formulário de avaliação, e esses itens, na avaliação da competência do período, exigem justificativa para a nota máxima.
 """
 
 import uuid
@@ -31,6 +34,8 @@ class OcorrenciaDiario(Base):
     data_ocorrencia: Mapped[date] = mapped_column(Date, index=True)
     descricao: Mapped[str] = mapped_column(Text)
     possui_glosa: Mapped[bool] = mapped_column(Boolean, default=False)
+    # A ocorrência pesa na avaliação da qualidade (itens do formulário em `itens_avaliacao`)
+    impacta_avaliacao: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Quem registrou (fotografia do nome e do papel no momento do registro)
     registrada_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     registrada_por_nome: Mapped[str] = mapped_column(String(250))
@@ -46,6 +51,12 @@ class OcorrenciaDiario(Base):
     contrato: Mapped[Contrato] = relationship(back_populates="ocorrencias")
     glosas: Mapped[list["GlosaOcorrencia"]] = relationship(
         back_populates="ocorrencia", cascade="all, delete-orphan", order_by="GlosaOcorrencia.descricao_item"
+    )
+    anexos: Mapped[list["AnexoOcorrencia"]] = relationship(
+        back_populates="ocorrencia", cascade="all, delete-orphan", order_by="AnexoOcorrencia.ordem"
+    )
+    itens_avaliacao: Mapped[list["ItemAvaliacaoOcorrencia"]] = relationship(
+        back_populates="ocorrencia", cascade="all, delete-orphan", order_by="ItemAvaliacaoOcorrencia.item_nome"
     )
 
 
@@ -66,3 +77,32 @@ class GlosaOcorrencia(Base):
     quantidade: Mapped[Decimal] = mapped_column(Numeric(18, 4))
 
     ocorrencia: Mapped[OcorrenciaDiario] = relationship(back_populates="glosas")
+
+
+class AnexoOcorrencia(Base):
+    """Arquivo anexado à ocorrência (foto, documento), guardado pelo `servico_anexos`."""
+
+    __tablename__ = "contratos_diario_anexos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ocorrencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_diario_ocorrencias.id", ondelete="CASCADE"), index=True)
+    anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    ordem: Mapped[int] = mapped_column(default=0)
+
+    ocorrencia: Mapped[OcorrenciaDiario] = relationship(back_populates="anexos")
+    anexo: Mapped["Anexo"] = relationship(lazy="joined")  # noqa: F821
+
+
+class ItemAvaliacaoOcorrencia(Base):
+    """Item do formulário de avaliação que a ocorrência impacta (id do item e retrato do nome e do grupo)."""
+
+    __tablename__ = "contratos_diario_itens_avaliacao"
+    __table_args__ = (UniqueConstraint("ocorrencia_id", "item_id", name="contratos_diario_itens_avaliacao_ocorrencia_item_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ocorrencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_diario_ocorrencias.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[str] = mapped_column(String(64))
+    item_nome: Mapped[str] = mapped_column(String(500))
+    grupo_nome: Mapped[str] = mapped_column(String(500), default="")
+
+    ocorrencia: Mapped[OcorrenciaDiario] = relationship(back_populates="itens_avaliacao")

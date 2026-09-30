@@ -1,15 +1,15 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para controlar a etapa 2 (avaliação dos serviços): notas, ateste, PDF assinado e reconsideração.
+// Este arquivo serve para controlar a etapa 2 (avaliação dos serviços): notas, ocorrências do diário, ateste, PDF, e-mail à contratada e reconsideração.
 
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, input, OnChanges, output } from '@angular/core';
+import { Component, computed, inject, input, OnChanges, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
-import { DetalheCompetencia, RespostaAvaliacao } from '../compartilhado/contratos.models';
+import { DetalheCompetencia, OcorrenciaAvaliacao, RespostaAvaliacao } from '../compartilhado/contratos.models';
 import { ROTULOS_PAPEL } from '../compartilhado/rotulos';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 
@@ -45,6 +45,13 @@ export class EtapaAvaliacaoComponent implements OnChanges {
   protected readonly avaliacao = computed(() => this.detalhe().avaliacao!);
   // Maior nota da escala: abaixo dela, a justificativa é obrigatória
   protected readonly notaMaxima = computed(() => Math.max(...this.avaliacao().definicao.escala.map((n) => Number(n.valor))));
+  // Ocorrências do diário por item impactado
+  protected readonly ocorrenciasPorItem = computed(() => {
+    const mapa: Record<string, OcorrenciaAvaliacao[]> = {};
+    for (const o of this.avaliacao().ocorrencias ?? []) for (const id of o.itens) (mapa[id] ??= []).push(o);
+    return mapa;
+  });
+  protected readonly reenviando = signal(false);
   // O usuário logado já registrou ciência no ateste?
   protected readonly jaRegistrei = computed(() => this.avaliacao().ciencias.some((c) => c.usuario_id === this.autenticacao.usuario()?.id));
   // Notas fechadas: avaliação inicial salva e, se alguma nota ficou abaixo da máxima, a do gestor também
@@ -71,6 +78,11 @@ export class EtapaAvaliacaoComponent implements OnChanges {
     return nota !== '' && Number(nota) < this.notaMaxima();
   }
 
+  /** Justificativa obrigatória: nota abaixo da máxima ou nota máxima em item com ocorrência do diário. */
+  protected exigeJustificativa(itemId: string, nota: string): boolean {
+    return this.abaixo(nota) || (nota !== '' && !!this.ocorrenciasPorItem()[itemId]?.length);
+  }
+
   /** Converte as respostas da tela para o formato da API. */
   private respostas(origem: Record<string, Resposta>): RespostaAvaliacao[] {
     return Object.entries(origem).map(([item_id, r]) => ({ item_id, nota: r.nota, justificativa: r.justificativa.trim() }));
@@ -78,7 +90,23 @@ export class EtapaAvaliacaoComponent implements OnChanges {
 
   /** Todas as notas preenchidas e as abaixo da máxima com justificativa. */
   protected completas(origem: Record<string, Resposta>): boolean {
-    return Object.values(origem).every((r) => r.nota !== '' && (!this.abaixo(r.nota) || r.justificativa.trim()));
+    return Object.entries(origem).every(([id, r]) => r.nota !== '' && (!this.exigeJustificativa(id, r.nota) || r.justificativa.trim()));
+  }
+
+  /** Reenvia o relatório de avaliação à contratada. */
+  protected reenviarEmail(): void {
+    const d = this.detalhe();
+    this.reenviando.set(true);
+    this.api.reenviarEmailAvaliacao(d.contrato_id, d.id).subscribe({
+      next: (novo) => {
+        this.reenviando.set(false);
+        this.atualizado.emit(novo);
+      },
+      error: (e) => {
+        this.reenviando.set(false);
+        this.dialogos.mostrarErro(e, 'Não foi possível reenviar o e-mail');
+      },
+    });
   }
 
   /** Executa a chamada (com a janela "Executando" se houver mensagem) e devolve a competência atualizada. */

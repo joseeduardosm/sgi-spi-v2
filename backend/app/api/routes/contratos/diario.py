@@ -9,12 +9,15 @@ equipe vigente ou SuperRoot, com ACL ≥ MODIFICACAO). As ocorrências não são
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, Response, UploadFile, status
+from fastapi.responses import FileResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.respostas import INVALIDO, RESPOSTAS_AUTENTICADAS, resposta_nao_encontrado
 from app.api.routes.contratos.comum import SEM_VINCULO, pode_ler, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
+from app.core.erros import ErroApi
 from app.models.usuario import Usuario
 from app.schemas.contratos.diario import DiarioContrato, GravacaoOcorrencia, LeituraOcorrencia
 from app.services.contratos import servico_diario, servico_notificacoes
@@ -40,19 +43,41 @@ def listar_diario(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao
     status_code=status.HTTP_201_CREATED,
     summary="Registrar ocorrência",
     description=(
-        "Registra a ocorrência (data não futura, relato e, se houver, itens e quantidades a glosar). As glosas valem na competência "
-        "cujo período contém a data. Em segundo plano, envia o registro por e-mail à equipe vigente e aos prepostos ativos "
-        "(respostas vão para a equipe)."
+        "`multipart/form-data`: `dados` (JSON de `GravacaoOcorrencia`: data não futura, relato, glosas e, se a ocorrência impactar a "
+        "avaliação da qualidade, os itens do formulário ativo) e até 5 `arquivos` (PDF, Office/LibreOffice, TXT, CSV, PNG ou JPG, "
+        "conferidos pelo conteúdo). As glosas valem na competência cujo período contém a data. Em segundo plano, envia o registro por "
+        "e-mail à equipe vigente e aos prepostos ativos, com os anexos (respostas vão para a equipe)."
     ),
     responses={**NAO_ENCONTRADO, **ESCRITA},
 )
-def registrar_ocorrencia(contrato_id: uuid.UUID, dados: GravacaoOcorrencia, tarefas: BackgroundTasks,
-                         sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
-    """Registra e agenda o e-mail."""
+async def registrar_ocorrencia(contrato_id: uuid.UUID, tarefas: BackgroundTasks, dados: str = Form(..., description="JSON de `GravacaoOcorrencia`."),
+                               arquivos: list[UploadFile] = File(default_factory=list), sessao: Session = Depends(obter_sessao),
+                               autor: Usuario = Depends(pode_modificar)):
+    """Registra (com os anexos) e agenda o e-mail."""
+    try:
+        gravacao = GravacaoOcorrencia.model_validate_json(dados)
+    except ValidationError as erro:
+        mensagem = erro.errors()[0].get("msg", "Dados inválidos.").removeprefix("Value error, ")
+        raise ErroApi(status.HTTP_422_UNPROCESSABLE_CONTENT, mensagem, "validacao") from erro
+    conteudos = [(a.filename or "arquivo", await a.read()) for a in arquivos if a.filename]
     with traduzir_erros(sessao):
-        ocorrencia = servico_diario.registrar(sessao, contrato_id, dados, autor)
+        ocorrencia = servico_diario.registrar(sessao, contrato_id, gravacao, autor, conteudos)
         tarefas.add_task(servico_notificacoes.notificar_ocorrencia, ocorrencia.id)
         return servico_diario.leitura(obter_contrato(sessao, contrato_id), ocorrencia)
+
+
+@roteador.get("/{ocorrencia_id}/anexos/{anexo_id}", response_class=FileResponse, summary="Baixar anexo da ocorrência",
+              responses=NAO_ENCONTRADO)
+def baixar_anexo(contrato_id: uuid.UUID, ocorrencia_id: uuid.UUID, anexo_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                 _usuario: Usuario = Depends(pode_ler)):
+    """Arquivo anexado a uma ocorrência (quem pode ler o contrato)."""
+    from app.services import servico_anexos
+    with traduzir_erros(sessao):
+        anexo = servico_diario.anexo_da_ocorrencia(obter_contrato(sessao, contrato_id), ocorrencia_id, anexo_id)
+    try:
+        return servico_anexos.resposta_download(anexo)
+    except servico_anexos.ErroAnexo as erro:
+        raise ErroApi(status.HTTP_404_NOT_FOUND, str(erro), "nao_encontrado") from erro
 
 
 @roteador.post("/{ocorrencia_id}/reenviar", response_model=LeituraOcorrencia, summary="Reenviar o e-mail da ocorrência",

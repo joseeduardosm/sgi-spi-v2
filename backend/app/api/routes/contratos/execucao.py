@@ -308,11 +308,28 @@ def ciencia_ateste(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Se
 
 
 @roteador.post("/competencias/{competencia_id}/avaliacao/pdf", response_model=DetalheCompetencia, summary="Exportar PDF da avaliação",
-               description="Exige ao menos uma ciência da equipe no ateste (as demais podem ser registradas depois).", responses={**NAO_ENCONTRADA, **ESCRITA})
-def pdf_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
-    """Etapa 2: gera o PDF do relatório de avaliação para a contratada assinar."""
+               description="Exige ao menos uma ciência da equipe no ateste (as demais podem ser registradas depois). Em segundo plano, envia o "
+               "PDF aos prepostos ativos (cópia para a equipe) pedindo a devolução assinada; o resultado fica em `avaliacao.email`.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def pdf_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, tarefas: BackgroundTasks, sessao: Session = Depends(obter_sessao),
+                  autor: Usuario = Depends(pode_modificar)):
+    """Etapa 2: gera o PDF do relatório de avaliação e, em segundo plano, o envia aos prepostos para assinatura."""
     with traduzir_erros(sessao):
         competencias.gerar_pdf_avaliacao(sessao, contrato_id, competencia_id, autor)
+        tarefas.add_task(servico_notificacoes.notificar_avaliacao, competencia_id)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/reenviar-email-avaliacao", response_model=DetalheCompetencia,
+               summary="Reenviar o relatório de avaliação à contratada",
+               description="Envia de novo aos prepostos (cópia para a equipe) o PDF da avaliação para assinatura. Exige o PDF gerado. "
+               "Mesma permissão de edição do contrato.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def reenviar_email_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                             autor: Usuario = Depends(pode_modificar)):
+    """Reenvio síncrono (a tela mostra o resultado na hora)."""
+    with traduzir_erros(sessao):
+        servico_notificacoes.exigir_reenvio_avaliacao(sessao, contrato_id, competencia_id, autor)
+        servico_notificacoes.notificar_avaliacao(competencia_id)
+        sessao.expire_all()
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 

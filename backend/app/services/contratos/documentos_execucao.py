@@ -237,6 +237,18 @@ def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Deci
         documento.secao(grupo["nome"]).tabela(
             ["Item", "Peso", "Nota inicial", "Justificativa", "Nota do gestor", "Complemento"], linhas, larguras=[3, 0.8, 1.4, 3, 1.4, 3]
         )
+    # Ocorrências do diário de bordo no período que impactam itens desta avaliação
+    from app.services.contratos.servico_diario import itens_impactados
+    nomes = {item["id"]: item["nome"] for grupo in definicao["grupos"] for item in grupo["itens"]}
+    impacto: dict = {}
+    for item_id, ocorrencias in itens_impactados(contrato, competencia, definicao).items():
+        for o in ocorrencias:
+            impacto.setdefault(o.id, (o, []))[1].append(nomes.get(item_id, item_id))
+    if impacto:
+        linhas = [[f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, o.descricao, "; ".join(itens)]
+                  for o, itens in sorted(impacto.values(), key=lambda par: (par[0].data_ocorrencia, par[0].criado_em))]
+        documento.secao("Ocorrências do diário de bordo consideradas").tabela(
+            ["Data", "Registrada por", "Ocorrência", "Itens impactados"], linhas, larguras=[1.1, 2.2, 6, 3])
     documento.secao("Resultado").campos(
         [("Nota final", f"{nota}" if nota is not None else "—"), ("Pagamento liberado", f"{percentual}%"),
          ("Complemento geral do gestor", avaliacao.complemento_gestor or "—")],

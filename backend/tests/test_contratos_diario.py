@@ -50,9 +50,11 @@ def _itens(contrato):
     return {i["descricao"]: i["id"] for i in contrato["itens"]}
 
 
-def _ocorrencia(cliente, contrato, h, **extras):
+def _ocorrencia(cliente, contrato, h, arquivos=None, **extras):
+    """Registra a ocorrência (multipart: `dados` em JSON e, se houver, `arquivos`)."""
+    import json
     corpo = {"data_ocorrencia": "2026-01-10", "descricao": "Posto descoberto das 8h às 12h.", "possui_glosa": False, "glosas": [], **extras}
-    return cliente.post(_url(contrato, "/diario"), json=corpo, headers=h)
+    return cliente.post(_url(contrato, "/diario"), data={"dados": json.dumps(corpo)}, files=[("arquivos", a) for a in (arquivos or [])], headers=h)
 
 
 # --- Registro -------------------------------------------------------------------------------------
@@ -192,3 +194,77 @@ def test_medicao_concluida_envia_memoria_e_diario_pedindo_nf_em_48h(cliente, adm
     # Reenvio manual
     r = cliente.post(f"{base}/reenviar-email-medicao", headers=gestora)
     assert r.status_code == 200 and len(SmtpSimulado.enviadas) == 2
+
+
+# --- Anexos, impacto na avaliação e e-mail da avaliação ----------------------------------------------
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 100
+
+
+def test_anexos_e_impacto_na_avaliacao_e_email_do_relatorio(cliente, admin, cenario):
+    """Anexos no registro e no e-mail; ocorrência que impacta item da avaliação exige justificativa da nota máxima;
+    o PDF da avaliação vai aos prepostos (cópia para a equipe) ao ser gerado, e pode ser reenviado."""
+    import io
+    from pypdf import PdfReader
+    from tests.test_contratos_execucao import FORMULARIO, PDF
+
+    contrato, gestora, fiscal = cenario
+    _preparar_execucao(cliente, contrato, gestora)
+    # Sem formulário ativo, não há itens para marcar o impacto
+    assert _ocorrencia(cliente, contrato, gestora, impacta_avaliacao=True, itens_avaliacao=["x"]).status_code == 400
+    formularios = cliente.post(_url(contrato, "/formularios"), json=FORMULARIO, headers=gestora).json()
+    cliente.post(_url(contrato, f"/formularios/{formularios[0]['id']}/ativar"), headers=gestora)
+    opcoes = {i["nome"]: i["id"] for i in cliente.get(_url(contrato, "/diario"), headers=gestora).json()["itens_avaliacao"]}
+    assert set(opcoes) == {"Pontualidade", "Limpeza"}
+    # Impacto sem item → 422; arquivo de formato não aceito → 400
+    assert _ocorrencia(cliente, contrato, gestora, impacta_avaliacao=True).status_code == 422
+    ruim = _ocorrencia(cliente, contrato, gestora, arquivos=[("pagina.html", b"<script>", "text/html")])
+    assert ruim.status_code == 400
+    SmtpSimulado.enviadas.clear()
+    r = _ocorrencia(cliente, contrato, gestora, impacta_avaliacao=True, itens_avaliacao=[opcoes["Limpeza"]],
+                    arquivos=[("foto.png", PNG, "image/png"), ("relatorio.pdf", PDF, "application/pdf")])
+    assert r.status_code == 201, r.text
+    ocorrencia = r.json()
+    assert [a["nome"] for a in ocorrencia["anexos"]] == ["foto.png", "relatorio.pdf"]
+    assert ocorrencia["impacta_avaliacao"] is True and ocorrencia["itens_avaliacao"][0]["item_nome"] == "Limpeza"
+    anexo = ocorrencia["anexos"][0]
+    baixado = cliente.get(_url(contrato, f"/diario/{ocorrencia['id']}/anexos/{anexo['id']}"), headers=fiscal)
+    assert baixado.status_code == 200 and baixado.content == PNG
+    mensagem, _, _, _ = SmtpSimulado.enviadas[0]
+    assert {a.get_filename() for a in mensagem.iter_attachments()} == {"foto.png", "relatorio.pdf"}
+    assert "Impacta a avaliação da qualidade: Sim — Limpeza" in mensagem.get_body(("plain",)).get_content()
+
+    # Competência 01/2026: medição e avaliação
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["saldo_liquido"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
+    assert cliente.put(f"{base}/medicao", json=medicao, headers=gestora).status_code == 200
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
+    detalhe = cliente.get(base, headers=gestora).json()
+    itens = {i["nome"]: i["id"] for g in detalhe["avaliacao"]["definicao"]["grupos"] for i in g["itens"]}
+    assert [o["itens"] for o in detalhe["avaliacao"]["ocorrencias"]] == [[itens["Limpeza"]]]
+    toda_maxima = {"respostas": [{"item_id": itens["Pontualidade"], "nota": "10"}, {"item_id": itens["Limpeza"], "nota": "10"}]}
+    r = cliente.put(f"{base}/avaliacao/inicial", json=toda_maxima, headers=fiscal)
+    assert r.status_code == 400 and "justifique a nota máxima" in r.json()["detalhe"]
+    toda_maxima["respostas"][1]["justificativa"] = "Ocorrência pontual, resolvida no mesmo dia."
+    assert cliente.put(f"{base}/avaliacao/inicial", json=toda_maxima, headers=fiscal).status_code == 200
+
+    # PDF: seção das ocorrências e e-mail aos prepostos com cópia para a equipe
+    cliente.post(f"{base}/avaliacao/ciencia", headers=gestora)
+    SmtpSimulado.enviadas.clear()
+    r = cliente.post(f"{base}/avaliacao/pdf", headers=gestora)
+    assert r.status_code == 200
+    email = cliente.get(base, headers=gestora).json()["avaliacao"]["email"]
+    assert email["ok"] is True and "paulo@acme.com" in email["destinatarios"] and "gestora@sp.gov.br" in email["destinatarios"]
+    mensagem, _, _, _ = SmtpSimulado.enviadas[0]
+    assert "avaliação dos serviços 01/2026: assinar e devolver" in mensagem["Subject"] and mensagem["To"] == "paulo@acme.com"
+    pdf = next(a.get_content() for a in mensagem.iter_attachments())
+    texto_pdf = " ".join(p.extract_text() for p in PdfReader(io.BytesIO(pdf)).pages)
+    assert "Ocorrências do diário de bordo consideradas" in texto_pdf
+    # Reenvio
+    SmtpSimulado.enviadas.clear()
+    assert cliente.post(f"{base}/reenviar-email-avaliacao", headers=gestora).status_code == 200
+    assert len(SmtpSimulado.enviadas) == 1

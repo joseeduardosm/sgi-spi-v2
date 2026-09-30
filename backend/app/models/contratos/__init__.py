@@ -32,7 +32,7 @@ from app.models.contratos.contrato import (
     DocumentoContrato,
     ItemContrato,
 )
-from app.models.contratos.diario import GlosaOcorrencia, OcorrenciaDiario
+from app.models.contratos.diario import AnexoOcorrencia, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
 from app.models.contratos.empresa import EmpresaContratada, PrepostoEmpresa
 from app.models.contratos.execucao import (
     ETAPAS,
@@ -59,6 +59,8 @@ from app.models.contratos.orcamento import (
 
 __all__ = [
     "AbatimentoReajuste",
+    "AnexoOcorrencia",
+    "ItemAvaliacaoOcorrencia",
     "ETAPAS",
     "PAPEIS_EQUIPE",
     "AlteracaoQuantidade",

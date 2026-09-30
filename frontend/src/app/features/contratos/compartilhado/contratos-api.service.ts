@@ -226,8 +226,16 @@ export class ContratosApiService {
     return this.http.get<DiarioContrato>(`${this.base}/${id}/diario`);
   }
 
-  registrarOcorrencia(id: string, dados: GravacaoOcorrencia): Observable<OcorrenciaDiario> {
-    return this.http.post<OcorrenciaDiario>(`${this.base}/${id}/diario`, dados);
+  /** Registro em multipart: `dados` (JSON da ocorrência) e até 5 `arquivos`. */
+  registrarOcorrencia(id: string, dados: GravacaoOcorrencia, arquivos: File[] = []): Observable<OcorrenciaDiario> {
+    const corpo = new FormData();
+    corpo.append('dados', JSON.stringify(dados));
+    for (const a of arquivos) corpo.append('arquivos', a, a.name);
+    return this.http.post<OcorrenciaDiario>(`${this.base}/${id}/diario`, corpo);
+  }
+
+  baixarAnexoOcorrencia(id: string, ocorrenciaId: string, anexo: { id: string; nome: string }) {
+    return baixarArquivo(this.http, `${this.base}/${id}/diario/${ocorrenciaId}/anexos/${anexo.id}`, anexo.nome);
   }
 
   reenviarOcorrencia(id: string, ocorrenciaId: string): Observable<OcorrenciaDiario> {

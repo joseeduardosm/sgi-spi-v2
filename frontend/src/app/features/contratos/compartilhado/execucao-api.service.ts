@@ -194,4 +194,9 @@ export class ExecucaoApiService {
   reenviarEmailMedicao(id: string, competenciaId: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, competenciaId, '/reenviar-email-medicao'), null);
   }
+
+  /** Reenvia o relatório de avaliação aos prepostos (cópia para a equipe), pedindo a devolução assinada. */
+  reenviarEmailAvaliacao(id: string, competenciaId: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, competenciaId, '/reenviar-email-avaliacao'), null);
+  }
 }

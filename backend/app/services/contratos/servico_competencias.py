@@ -16,7 +16,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import BinaryIO
 
@@ -54,6 +54,7 @@ from app.schemas.contratos.execucao import (
     LeituraArquivo,
     LeituraAvaliacao,
     LeituraCiencia,
+    OcorrenciaAvaliacao,
     LeituraConsultaCadin,
     LeituraDocumentoMensal,
     LeituraItemMedicao,
@@ -552,7 +553,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         ciencias_minimas=CIENCIAS_MINIMAS,
         memorias=[LeituraMemoria(versao=m.versao, criada_em=m.criado_em, arquivo=_arquivo(m.anexo)) for m in competencia.memorias],
         medicao_concluida_em=competencia.medicao_concluida_em,
-        avaliacao=_leitura_avaliacao(competencia.avaliacao, anexos) if competencia.avaliacao else None,
+        avaliacao=_leitura_avaliacao(competencia.avaliacao, anexos, contrato) if competencia.avaliacao else None,
         percentual_autorizado=percentual,
         valor_autorizado=valor_autorizado(competencia),
         desconto_reajuste=desconto_reajuste(competencia),
@@ -561,7 +562,8 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
             for a in competencia.abatimentos_reajuste if a.valor > 0
         ],
         valor_a_pagar=valor_a_pagar(competencia),
-        avisos=excedentes_da_medicao(contrato, competencia) if competencia.medicao_concluida_em is None else [],
+        avisos=(excedentes_da_medicao(contrato, competencia) if competencia.medicao_concluida_em is None else [])
+        + avisos_de_impacto_tardio(contrato, competencia),
         reaberturas_permitidas=pode_reabrir(sessao, contrato, usuario),
         glosas_periodo=glosas_periodo,
         email_nf=EmailMedicao(enviado_em=competencia.email_nf_enviado_em, ok=competencia.email_nf_ok,
@@ -854,10 +856,12 @@ def _nota_maxima(definicao: dict) -> Decimal:
     return max(Decimal(str(n["valor"])) for n in definicao["escala"])
 
 
-def _validar_respostas(definicao: dict, respostas: list[RespostaAvaliacao], exigir_justificativa: str) -> list[dict]:
+def _validar_respostas(definicao: dict, respostas: list[RespostaAvaliacao], exigir_justificativa: str,
+                       impactados: set[str] | frozenset[str] = frozenset()) -> list[dict]:
     """Confere as respostas e as devolve no formato gravado em JSON.
 
-    Exige nota para todos os itens, só valores da escala e justificativa quando a nota é abaixo da máxima.
+    Exige nota para todos os itens, só valores da escala e justificativa quando a nota é abaixo da máxima — ou quando é a
+    máxima num item com ocorrências do diário de bordo no período (`impactados`).
     """
     itens = _itens_formulario(definicao)
     escala = {Decimal(str(n["valor"])) for n in definicao["escala"]}
@@ -870,6 +874,9 @@ def _validar_respostas(definicao: dict, respostas: list[RespostaAvaliacao], exig
             raise ErroRegraContrato(f"A nota {resposta.nota} não pertence à escala do formulário.")
         if resposta.nota < maxima and not resposta.justificativa:
             raise ErroRegraContrato(f"{exigir_justificativa} \"{itens[item_id]['nome']}\" (nota abaixo da máxima).")
+        if resposta.nota == maxima and item_id in impactados and not (resposta.justificativa or "").strip():
+            raise ErroRegraContrato(f"O item \"{itens[item_id]['nome']}\" tem ocorrências no diário de bordo no período: "
+                                    "justifique a nota máxima.")
     return [{"item_id": r.item_id, "nota": str(r.nota), "justificativa": r.justificativa} for r in respostas]
 
 
@@ -935,7 +942,39 @@ def percentual_liberado(competencia: Competencia) -> Decimal:
     return CEM if nota is None else percentual_da_nota(avaliacao.definicao, nota, maximo_de_notas_minimas_por_grupo(avaliacao))
 
 
-def _leitura_avaliacao(avaliacao: AvaliacaoCompetencia, anexos: dict) -> LeituraAvaliacao:
+def ocorrencias_da_avaliacao(contrato: Contrato, competencia: Competencia) -> list[OcorrenciaAvaliacao]:
+    """Ocorrências do período que impactam itens do formulário desta avaliação (com os ids desses itens)."""
+    avaliacao = competencia.avaliacao
+    if avaliacao is None:
+        return []
+    por_item = servico_diario.itens_impactados(contrato, competencia, avaliacao.definicao)
+    itens_da: dict[uuid.UUID, list[str]] = {}
+    ocorrencias: dict[uuid.UUID, object] = {}
+    for item_id, lista in por_item.items():
+        for o in lista:
+            ocorrencias[o.id] = o
+            itens_da.setdefault(o.id, []).append(item_id)
+    return [OcorrenciaAvaliacao(id=o.id, data_ocorrencia=o.data_ocorrencia, descricao=o.descricao, registrada_por_nome=o.registrada_por_nome,
+                                itens=itens_da[o.id]) for o in sorted(ocorrencias.values(), key=lambda x: (x.data_ocorrencia, x.criado_em))]
+
+
+def _utc(valor: datetime) -> datetime:
+    """Data com fuso UTC (o SQLite dos testes devolve datas sem fuso)."""
+    return valor if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
+
+
+def avisos_de_impacto_tardio(contrato: Contrato, competencia: Competencia) -> list[str]:
+    """Ocorrência que impacta a avaliação registrada depois de salva a avaliação (as notas foram dadas sem ela)."""
+    avaliacao = competencia.avaliacao
+    if avaliacao is None or avaliacao.avaliacao_inicial_em is None or avaliacao.concluida_em is not None:
+        return []
+    limite = _utc(avaliacao.avaliacao_gestor_em or avaliacao.avaliacao_inicial_em)
+    tardias = [o for o in servico_diario.ocorrencias_que_impactam(contrato, competencia) if _utc(o.criado_em) > limite]
+    return [f"Ocorrência de {o.data_ocorrencia:%d/%m/%Y} registrada no diário depois da avaliação impacta itens avaliados: revise as notas."
+            for o in tardias]
+
+
+def _leitura_avaliacao(avaliacao: AvaliacaoCompetencia, anexos: dict, contrato: Contrato | None = None) -> LeituraAvaliacao:
     """Converte a avaliação para o formato de leitura (com nota final e % liberado calculados)."""
     nota = nota_final(avaliacao)
     return LeituraAvaliacao(
@@ -954,6 +993,9 @@ def _leitura_avaliacao(avaliacao: AvaliacaoCompetencia, anexos: dict) -> Leitura
         pdf_gerado=_arquivo(anexos.get(avaliacao.pdf_gerado_anexo_id)), pdf_assinado=_arquivo(anexos.get(avaliacao.pdf_assinado_anexo_id)),
         concluida_em=avaliacao.concluida_em, reconsideracoes=avaliacao.reconsideracoes,
         reconsideracao=_arquivo(anexos.get(avaliacao.reconsideracao_anexo_id)),
+        ocorrencias=ocorrencias_da_avaliacao(contrato, avaliacao.competencia) if contrato is not None else [],
+        email=EmailMedicao(enviado_em=avaliacao.email_enviado_em, ok=avaliacao.email_ok,
+                           destinatarios=avaliacao.email_destinatarios or [], erro=avaliacao.email_erro),
     )
 
 
@@ -1007,7 +1049,8 @@ def _invalidar_documento(avaliacao: AvaliacaoCompetencia) -> None:
 def salvar_avaliacao_inicial(sessao: Session, contrato_id, competencia_id, dados: GravacaoAvaliacaoInicial, autor: Usuario) -> None:
     """Etapa 2: grava as notas da avaliação inicial (qualquer integrante da equipe)."""
     contrato, competencia, avaliacao = _avaliacao_aberta(sessao, contrato_id, competencia_id, autor)
-    avaliacao.respostas_iniciais = _validar_respostas(avaliacao.definicao, dados.respostas, "Justifique a nota do item")
+    impactados = set(servico_diario.itens_impactados(contrato, competencia, avaliacao.definicao))
+    avaliacao.respostas_iniciais = _validar_respostas(avaliacao.definicao, dados.respostas, "Justifique a nota do item", impactados)
     avaliacao.avaliador_inicial_id, avaliacao.avaliacao_inicial_em = autor.id, agora_utc()
     # Todas as notas na máxima: a avaliação do gestor deixa de ser necessária, e uma feita antes
     # (sobre notas iniciais que mudaram) é descartada para não sobrepor as novas notas
@@ -1027,7 +1070,8 @@ def salvar_avaliacao_gestor(sessao: Session, contrato_id, competencia_id, dados:
     # Só há avaliação do gestor quando alguma nota inicial ficou abaixo da máxima
     if not precisa_avaliacao_gestor(avaliacao):
         raise ErroRegraContrato("Todas as notas iniciais estão na máxima: a avaliação do gestor não é necessária.")
-    avaliacao.respostas_gestor = _validar_respostas(avaliacao.definicao, dados.respostas, "Complemente a nota do item")
+    impactados = set(servico_diario.itens_impactados(contrato, competencia, avaliacao.definicao))
+    avaliacao.respostas_gestor = _validar_respostas(avaliacao.definicao, dados.respostas, "Complemente a nota do item", impactados)
     avaliacao.complemento_gestor = dados.complemento
     avaliacao.gestor_id, avaliacao.avaliacao_gestor_em = autor.id, agora_utc()
     _invalidar_documento(avaliacao)

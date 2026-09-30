@@ -454,6 +454,11 @@ class AvaliacaoCompetencia(Base):
     # A contratada pode pedir reconsideração uma única vez
     reconsideracoes: Mapped[int] = mapped_column(Integer, default=0)
     reconsideracao_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    # E-mail do relatório de avaliação à contratada (enviado ao gerar o PDF), para devolução assinada
+    email_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_ok: Mapped[bool | None] = mapped_column(Boolean)
+    email_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list, server_default=text("'[]'"))
+    email_erro: Mapped[str | None] = mapped_column(Text)
 
     competencia: Mapped[Competencia] = relationship(back_populates="avaliacao")
     pdf_gerado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[pdf_gerado_anexo_id])

@@ -65,6 +65,10 @@ export class CompetenciaComponent implements OnInit {
     // A etapa em tela acabou de ser concluída (ex.: CADIN feito enquanto a retenção segue aberta)?
     const concluiuAEmTela = !!this.detalhe()?.etapas_abertas.includes(this.selecionada()) && !detalhe.etapas_abertas.includes(this.selecionada());
     this.detalhe.set(detalhe);
+    // E-mail em segundo plano (medição concluída ou PDF da avaliação gerado) ainda sem resultado: consulta de novo em instantes
+    const enviando = (!!detalhe.medicao_concluida_em && detalhe.email_medicao.enviado_em === null)
+      || (!!detalhe.avaliacao?.pdf_gerado && detalhe.avaliacao.email.enviado_em === null);
+    if (enviando) setTimeout(() => this.api.porIdentificador(this.id(), this.competencia()).subscribe({ next: (d) => this.detalhe() && this.aplicar(d) }), 2500);
     // Ao avançar de etapa, a tela acompanha a próxima etapa aberta
     if (reposicionar || anterior !== detalhe.etapa_atual || concluiuAEmTela) {
       const proxima = detalhe.etapas_abertas.find((e) => e !== 'retencao' || detalhe.pode_conferir_retencao) ?? detalhe.etapas_abertas[0];

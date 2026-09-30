@@ -70,7 +70,7 @@ Navegador
 | `contratos_notas_empenho`, `contratos_notas_empenho_movimentos` | Notas de Empenho e extrato (débitos das OBs) |
 | `contratos_checklists`, `contratos_checklists_itens`, `contratos_formularios`, `contratos_modelos` | Versões de checklist e de formulário de avaliação; modelos globais |
 | `contratos_competencias` e `contratos_competencias_*` (`itens`, `notas`, `ciencias`, `memorias`, `cadin`, `documentos`, `avaliacoes`) | Competências de execução e tudo o que cada etapa registra |
-| `contratos_diario_ocorrencias`, `contratos_diario_glosas` | Diário de bordo: ocorrências (imutáveis, com o resultado do e-mail) e glosas por item |
+| `contratos_diario_ocorrencias`, `contratos_diario_glosas`, `contratos_diario_anexos`, `contratos_diario_itens_avaliacao` | Diário de bordo: ocorrências (imutáveis, com o resultado do e-mail), glosas por item, anexos (até 5) e itens da avaliação impactados |
 | `contratos_prorrogacoes`, `contratos_prorrogacoes_processos`, `contratos_prorrogacoes_ciencias` | Termos aditivos de prorrogação e o rascunho com parecer e ciências |
 | `contratos_reajustes`, `contratos_reajustes_itens`, `contratos_reajustes_memorias` | Reajustes e memórias versionadas |
 | `contratos_abatimentos_reajuste` | Crédito de desconto de reajuste retroativo abatido no valor autorizado das competências (`competencia_id` nulo = pendente) |
@@ -196,8 +196,10 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` `POST` `PUT` `DELETE` | `/api/contratos/modelos[/{modelo_id}]` | LEITURA / SuperRoot | Modelos globais de checklist e formulário | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` `POST` | `/api/contratos/{contrato_id}/diario` | LEITURA / edição do contrato | Diário de bordo: lista / registra ocorrência (e-mail à equipe e ao preposto) | [contratos-diario.md](endpoints/contratos-diario.md) |
 | `POST` | `/api/contratos/{contrato_id}/diario/{ocorrencia_id}/reenviar` | Edição do contrato | Reenvia o e-mail da ocorrência | [contratos-diario.md](endpoints/contratos-diario.md) |
+| `GET` | `/api/contratos/{contrato_id}/diario/{ocorrencia_id}/anexos/{anexo_id}` | LEITURA | Baixa um anexo da ocorrência | [contratos-diario.md](endpoints/contratos-diario.md) |
 | `GET` | `/api/contratos/{contrato_id}/diario/pdf` | LEITURA | Diário de bordo em PDF | [contratos-diario.md](endpoints/contratos-diario.md) |
 | `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-medicao` | Edição do contrato | Reenvia o e-mail da medição concluída | [contratos-execucao.md](endpoints/contratos-execucao.md) |
+| `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-avaliacao` | Edição do contrato | Reenvia o relatório de avaliação à contratada | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | `PUT` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/retencao` | Financeiro, equipe ou SuperRoot | Retenção de tributos (conferência da NF lida do XML) | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-nf` | Edição do contrato | Reenvia o e-mail da NF ao Financeiro | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-retencao` | Financeiro, equipe ou SuperRoot | Reenvia o e-mail da retenção à equipe | [contratos-execucao.md](endpoints/contratos-execucao.md) |

@@ -76,6 +76,59 @@ describe('AutenticacaoService', () => {
     expect(autenticacao.autenticado()).toBe(false);
   });
 
+  it('renova o token quando a API devolve os cabeçalhos e passa a usar o novo', () => {
+    autenticacao.entrar({ login: 'root', senha: 'x' }).subscribe();
+    http.expectOne('/api/autenticacao/login').flush(respostaToken(10));
+    const antes = JSON.parse(localStorage.getItem('sgi-spi.sessao')!).expiraEm as number;
+
+    autenticacao.validarSessao().subscribe();
+    const novaExpiracao = new Date(Date.now() + 60 * 60_000).toISOString();
+    http.expectOne('/api/autenticacao/sessao').flush(
+      { id: 1, login: 'root', nome_completo: 'Administrador', papeis: ['SuperRoot'], origem: 'local' },
+      { headers: { 'X-Token-Renovado': 'jwt-renovado', 'X-Token-Expira-Em': novaExpiracao } },
+    );
+
+    const guardada = JSON.parse(localStorage.getItem('sgi-spi.sessao')!);
+    expect(autenticacao.token).toBe('jwt-renovado');
+    expect(guardada.tokenAcesso).toBe('jwt-renovado');
+    expect(guardada.expiraEm).toBeGreaterThan(antes);
+
+    // As chamadas seguintes já levam o token renovado
+    autenticacao.validarSessao().subscribe();
+    const seguinte = http.expectOne('/api/autenticacao/sessao');
+    expect(seguinte.request.headers.get('Authorization')).toBe('Bearer jwt-renovado');
+    seguinte.flush({ id: 1, login: 'root', nome_completo: 'Administrador', papeis: ['SuperRoot'], origem: 'local' });
+  });
+
+  it('ignora um token renovado que não adia o vencimento', () => {
+    autenticacao.entrar({ login: 'root', senha: 'x' }).subscribe();
+    http.expectOne('/api/autenticacao/login').flush(respostaToken(60));
+    autenticacao.renovar('outro', new Date(Date.now() + 5 * 60_000).toISOString());
+    expect(autenticacao.token).toBe('jwt-teste');
+  });
+
+  it('acompanha a renovação feita em outra aba (evento storage)', () => {
+    autenticacao.entrar({ login: 'root', senha: 'x' }).subscribe();
+    http.expectOne('/api/autenticacao/login').flush(respostaToken(10));
+    const sessao = JSON.parse(localStorage.getItem('sgi-spi.sessao')!);
+    const outra = { ...sessao, tokenAcesso: 'jwt-da-outra-aba', expiraEm: Date.now() + 60 * 60_000 };
+    window.dispatchEvent(new StorageEvent('storage', { key: 'sgi-spi.sessao', newValue: JSON.stringify(outra) }));
+    expect(autenticacao.token).toBe('jwt-da-outra-aba');
+    // Outra aba saiu: esta também perde a sessão
+    window.dispatchEvent(new StorageEvent('storage', { key: 'sgi-spi.sessao', newValue: null }));
+    expect(autenticacao.autenticado()).toBe(false);
+  });
+
+  it('sessão expirada guarda a tela de origem para o login voltar a ela', async () => {
+    const roteador = TestBed.inject(Router);
+    await roteador.navigateByUrl('/contratos/painel');
+    autenticacao.entrar({ login: 'root', senha: 'x' }).subscribe();
+    http.expectOne('/api/autenticacao/login').flush(respostaToken(60));
+    const navegar = vi.spyOn(roteador, 'navigate');
+    autenticacao.sair('expirada');
+    expect(navegar).toHaveBeenCalledWith(['/login'], { queryParams: { sessao: 'expirada', retorno: '/contratos/painel' } });
+  });
+
   it('guardaAutenticacao redireciona visitantes para /login com o destino', () => {
     const resultado = TestBed.runInInjectionContext(() =>
       guardaAutenticacao({} as ActivatedRouteSnapshot, { url: '/contratos' } as RouterStateSnapshot),

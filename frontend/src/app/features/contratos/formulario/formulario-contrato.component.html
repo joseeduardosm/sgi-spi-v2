@@ -174,7 +174,7 @@
                 <td class="num">{{ numero(i.quantidade_mensal) | quantidade }}</td>
                 <!-- Contínuo: mensal × meses da vigência; sob demanda: o limite informado -->
                 <td class="num">{{ quantidadeTotal(i) | quantidade }}@if (i.tipo === 'continuo') { <small>{{ mesesVigencia() }} meses</small> }</td>
-                <td class="num">{{ numero(i.valor_unitario) | moeda }}</td>
+                <td class="num">{{ numero(i.valor_unitario) | moedaUnitaria }}</td>
                 <td class="num">{{ (i.tipo === 'continuo' ? numero(i.quantidade_mensal) * numero(i.valor_unitario) : null) | moeda }}</td>
                 <td>
                   <div class="acoes-linha">
@@ -279,7 +279,9 @@
           }
           <div>
             <label for="item-valor">Valor unitário (R$) *</label>
-            <input id="item-valor" name="valor_unitario" inputmode="decimal" [(ngModel)]="item.valor_unitario" placeholder="0,00" />
+            <input id="item-valor" name="valor_unitario" inputmode="decimal" [(ngModel)]="item.valor_unitario" placeholder="0,00"
+                   [class.invalido]="item.valor_unitario !== '' && !casasValidas(item.valor_unitario)" />
+            <small class="dica-formulario">Até 4 casas decimais (ex.: 0,075).</small>
           </div>
         </div>
         <footer>

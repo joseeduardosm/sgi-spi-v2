@@ -78,7 +78,7 @@ Lê e valida a planilha **sem gravar nada**.
 | `contrato` | `ContratoPrevia` | Campos lidos (`numero`, `apelido`, `objeto`, `data_inicio`, `data_fim` calculada, `vigencia_inicial_meses`, `vigencia_maxima_meses`, `periodicidade_meses`, `mes_reajuste`, `sei_*`); nulos quando vazios ou inválidos |
 | `empresa` | `EmpresaPrevia` \| null | `existente`, `id` (se existente), `cnpj`, `razao_social`, `nome_fantasia`, `endereco`. Na existente, os dados são os **cadastrados** |
 | `preposto` | `PrepostoPrevia` \| null | `existente`, `cpf`, `nome`, `email`, `telefone`; nulo se o bloco estiver vazio |
-| `itens` | `ItemPrevia[]` | `linha`, `descricao`, `tipo`, `calcula_pro_rata`, códigos, `quantidade_mensal`, `quantidade_total` (só sob demanda), `valor_unitario` |
+| `itens` | `ItemPrevia[]` | `linha`, `descricao`, `tipo`, `calcula_pro_rata`, códigos, `quantidade_mensal`, `quantidade_total` (só sob demanda), `valor_unitario` (até 4 casas) |
 | `valor_global_estimado` | string decimal \| null | Contínuos: mensal × preço × vigência inicial; sob demanda: teto × preço |
 | `erros` | `ErroImportacao[]` | `linha` (nula para erros do arquivo), `campo` (rótulo da planilha, ex.: `Item 2 · Classe`) e `mensagem`, em ordem de linha |
 | `avisos` | string[] | Informações que não impedem a importação |

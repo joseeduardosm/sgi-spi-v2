@@ -1,12 +1,16 @@
 # Autenticação e autorização
 
+## Renovação da sessão
+
+O login é um JWT sem estado. Em **toda rota autenticada**, quando faltam menos de `MINUTOS_RENOVACAO_TOKEN` minutos para o token vencer, a resposta traz os cabeçalhos **`X-Token-Renovado`** (token novo, com a validade de `MINUTOS_EXPIRACAO_TOKEN` a partir de agora) e **`X-Token-Expira-Em`** (ISO 8601, UTC). O token novo mantém o usuário e o instante do login (`ini`). Com `HORAS_SESSAO_MAXIMA` > 0, a renovação para quando a sessão atinge esse total desde o login. Token vencido continua dando `401`, e usuário desativado ou excluído perde o acesso **na hora**, mesmo com token ainda renovável. Reiniciar a API não derruba sessões (a chave `CHAVE_SECRETA_JWT` é a mesma).
+
 ## Visão geral
 
 A API usa **JWT (JSON Web Token)** do tipo Bearer, assinado com HS256.
 
 1. O cliente envia login e senha para `POST /api/autenticacao/login`.
 2. A API valida as credenciais: primeiro no diretório LDAP ativo, depois na conta local (ver [Fluxo de login](#fluxo-de-login)).
-3. A API devolve um `token_acesso` com validade definida (padrão: 60 minutos).
+3. A API devolve um `token_acesso` com validade definida (padrão: 60 minutos). **A sessão é renovada enquanto há uso** (ver "Renovação da sessão"): só cai quem fica 60 minutos sem usar o sistema.
 4. O cliente envia o token em cada chamada protegida: `Authorization: Bearer <token_acesso>`.
 5. Quando o token expira, a API responde `401` e o cliente precisa autenticar de novo.
 
@@ -99,7 +103,7 @@ Todas as respostas `401` têm `codigo = nao_autenticado` e o cabeçalho `WWW-Aut
 
 Todo usuário (inclusive os SuperRoot; só a conta root é dispensada) precisa manter o perfil institucional **completo** e **confirmá-lo uma vez por mês civil** (no primeiro acesso de cada mês, horário de São Paulo). Na tela, um modal bloqueante pede para confirmar ou atualizar os dados.
 
-- **Campos obrigatórios:** `nome_completo`, `email`, `ramal`, `cargo`, `departamento`, `andar` e `predio`.
+- **Campos obrigatórios:** `nome_completo`, `email`, `ramal`, `cargo`, `departamento`, `andar` (Subsolo a 13) e `predio` (lado, A ou B).
 - **Superior imediato (`gestor_id`):** obrigatório no envio, exceto para a conta root e para quem a CGP marcar como topo da hierarquia. Não pode ser o próprio usuário nem formar ciclo (A superior de B e B superior de A, direta ou indiretamente).
 - **Campos opcionais:** `celular` e `data_nascimento`.
 - **Validação da CGP (Módulo RH):** cada campo alterado pelo usuário comum fica **pendente** até a Coordenadoria de Gestão de Pessoas validar ou recusar com correção. Até lá, valem os dados anteriores, mas os valores pendentes já contam como preenchidos para liberar o acesso. Ver [endpoints/rh-cadastro.md](endpoints/rh-cadastro.md).
@@ -163,7 +167,9 @@ Novos papéis devem ser incluídos em `Papel` (`backend/app/models/usuario.py`),
 |---|---|---|
 | `CHAVE_SECRETA_JWT` | (obrigatória) | Chave de assinatura, mínimo 32 caracteres. Trocar a chave invalida todos os tokens emitidos |
 | `ALGORITMO_JWT` | `HS256` | Algoritmo de assinatura |
-| `MINUTOS_EXPIRACAO_TOKEN` | `60` | Validade do token |
+| `MINUTOS_EXPIRACAO_TOKEN` | `60` | Validade do token (minutos de inatividade que derrubam a sessão) |
+| `MINUTOS_RENOVACAO_TOKEN` | `30` | A API entrega um token novo quando faltam menos de N minutos para o atual vencer |
+| `HORAS_SESSAO_MAXIMA` | `0` | Duração máxima da sessão desde o login, mesmo com uso contínuo (`0` = sem limite) |
 | `CHAVE_CIFRA_LDAP` | (obrigatória) | Chave Fernet que cifra a senha de bind dos diretórios |
 | `INTERVALO_SINCRONIZACAO_LDAP_MINUTOS` | `15` | Intervalo da sincronização automática (`0` desativa) |
 | `TEMPO_LIMITE_LDAP_SEGUNDOS` | `5` | Tempo limite de conexão com o diretório |
@@ -183,7 +189,8 @@ Arquivos em `frontend/src/app/core/autenticacao/` e `frontend/src/app/core/acess
 Comportamento:
 
 - **Armazenamento:** a sessão (`tokenAcesso`, `expiraEm`, `usuario`) fica em `localStorage`, na chave `sgi-spi.sessao`.
-- **Expiração:** o logout automático é agendado para `expira_em`. Ao expirar, redireciona para `/login?sessao=expirada`.
+- **Expiração:** o logout automático é agendado para `expira_em`. Ao expirar, redireciona para `/login?sessao=expirada&retorno=<tela onde estava>`; depois de entrar, a pessoa volta a essa tela.
+- **Renovação da sessão:** o interceptador lê `X-Token-Renovado` e `X-Token-Expira-Em` das respostas da API, guarda o token novo e reagenda o vencimento. As abas abertas se sincronizam pelo evento `storage` do navegador (renovação e saída). Dois minutos antes de vencer sem renovação (aba parada), aparece "Sua sessão vai expirar" com **Continuar conectado**.
 - **Inicialização:** com sessão salva, `validarSessao()` chama `GET /api/autenticacao/sessao`. Se o token não for mais aceito, a sessão é encerrada.
 - **Logout:** descarta o token localmente e redireciona para `/login`. O JWT é stateless, então não há chamada ao backend.
 - **Rotas:** toda rota autenticada é filha da rota `''` (layout `LayoutAutenticadoComponent`) em `app.routes.ts`, com `guardaAutenticacao` e `guardaPerfil`. Módulos usam `guardaAcl`; telas administrativas usam `guardaPapel` com `data: { papeis: ['SuperRoot'] }`; a Mensageria usa `guardaContaRoot` (só a conta root, pelo `conta_root` da sessão), e o item da barra lateral tem `somenteRoot: true`.

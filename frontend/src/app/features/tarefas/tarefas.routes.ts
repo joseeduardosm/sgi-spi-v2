@@ -5,7 +5,7 @@ import { Routes } from '@angular/router';
 
 /**
  * Todas as telas ficam dentro da casca do módulo (navegação lateral própria).
- * Visão, filtros e a tarefa aberta ficam na URL (`?visao=lista&pessoas=3&tarefa=123`); as permissões são conferidas na API.
+ * Visão e filtros ficam na URL (`?visao=lista&pessoas=3`); cada tarefa tem a própria tela em `/tarefas/123`; as permissões são conferidas na API.
  */
 export const ROTAS_TAREFAS: Routes = [
   {
@@ -47,10 +47,10 @@ export const ROTAS_TAREFAS: Routes = [
         loadComponent: () => import('./espaco-tarefas.component').then((m) => m.EspacoTarefasComponent),
       },
       {
-        // Links antigos (e-mails e avisos): abrem a tarefa na janela
+        // Tela própria da tarefa (também é o link dos e-mails e avisos)
         path: ':numero',
         title: 'Tarefa | SGI SPI',
-        loadComponent: () => import('./abrir-tarefa.component').then((m) => m.AbrirTarefaComponent),
+        loadComponent: () => import('./pagina-tarefa.component').then((m) => m.PaginaTarefaComponent),
       },
     ],
   },

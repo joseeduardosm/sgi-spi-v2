@@ -179,6 +179,14 @@ def gerar_lembretes(sessao: Session, dia: date | None = None) -> dict[str, int]:
     from app.services.tarefas import servico_tarefas
 
     resultado["tarefas"] = servico_tarefas.lembrar(sessao, dia)
+    # Protocolo: reservas sem documento há alguns dias
+    from app.services import servico_protocolo
+
+    resultado["protocolo"] = servico_protocolo.lembrar_reservas(sessao, dia)
+    # Contratações: revisões e propostas sem resposta
+    from app.services.contratacoes import conferencia
+
+    resultado["contratacoes"] = conferencia.lembrar_revisoes_paradas(sessao, dia)
     resultado["emails_rh"] = enviar_emails_pendentes(sessao)
     resultado["resumos_diarios"] = _resumos_diarios(sessao, dia)
     sessao.commit()

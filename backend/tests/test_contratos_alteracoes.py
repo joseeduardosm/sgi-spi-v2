@@ -118,9 +118,9 @@ def test_reajuste_de_5_por_cento_mantem_competencias_medidas(cliente, admin, equ
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
     itens = [{"item_id": i["item_id"], "indice_percentual": "5"} for i in reajuste["itens"]]
     reajuste = cliente.put(f"{url}/memoria", json={"itens": itens}, headers=gestora).json()["em_andamento"]
-    assert [i["valor_unitario_reajustado"] for i in reajuste["itens"]] == ["1050.00", "11.03"]
+    assert [i["valor_unitario_reajustado"] for i in reajuste["itens"]] == ["1050.0000", "11.0250"]  # 10,50 × 1,05 com 4 casas (antes arredondava para 11,03)
     # Os novos preços valem desde a referência, inclusive nos meses já medidos (a diferença vira competência complementar)
-    assert reajuste["base_reajustada"] == "2100.00" and reajuste["valor_global_reajustado"] == "26303.00"
+    assert reajuste["base_reajustada"] == "2100.00" and reajuste["valor_global_reajustado"] == "26302.50"  # sob demanda a 11,025 (4 casas)
     assert cliente.post(f"{url}/concluir", files={"arquivo": ("ap.pdf", PDF)}, headers=gestora).status_code == 400
     cliente.post(f"{url}/evidencia", files={"arquivo": ("ev.pdf", PDF)}, headers=gestora)
     memorias = cliente.post(f"{url}/memoria/arquivos", headers=gestora).json()["em_andamento"]["memorias"]
@@ -131,11 +131,11 @@ def test_reajuste_de_5_por_cento_mantem_competencias_medidas(cliente, admin, equ
     assert painel["em_andamento"] is None and painel["vigencias_disponiveis"] == []
 
     detalhe = cliente.get(_url(contrato), headers=gestora).json()
-    assert detalhe["itens"][0]["valor_unitario"] == "1050.00" and detalhe["valor_global"] == "26303.00"
-    assert cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()["itens"][0]["valor_unitario"] == "1000.00"
-    assert cliente.get(_url(contrato, "/competencias/identificador/2026-02"), headers=gestora).json()["itens"][0]["valor_unitario"] == "1050.00"
+    assert detalhe["itens"][0]["valor_unitario"] == "1050.0000" and detalhe["valor_global"] == "26302.50"
+    assert cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()["itens"][0]["valor_unitario"] == "1000.0000"
+    assert cliente.get(_url(contrato, "/competencias/identificador/2026-02"), headers=gestora).json()["itens"][0]["valor_unitario"] == "1050.0000"
     previsao = cliente.get(_url(contrato, "/previsao"), headers=gestora).json()
-    assert previsao["meses"][1]["itens"][0]["valor_unitario"] == "1050.00"
+    assert previsao["meses"][1]["itens"][0]["valor_unitario"] == "1050.0000"
 
 
 # --- MVP 7: aditamento e supressão ------------------------------------------------------------------
@@ -219,7 +219,10 @@ def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkey
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
     # Depois de gerar: pendências de medição e um risco de atraso agregado por contrato
     painel = cliente.get("/api/contratos/painel", params={"exercicio": 2026}, headers=gestora).json()
-    assert any(p["tipo"] == "medicao" and "01/2026" in p["descricao"] for p in painel["minhas_pendencias"])
+    # Competências de antes de 09/2026 foram "limpas" e não aparecem mais; a partir de 09/2026 seguem sendo cobradas
+    medicoes = [p["descricao"] for p in painel["minhas_pendencias"] if p["tipo"] == "medicao"]
+    assert medicoes and not any(f"0{mes}/2026" in d for d in medicoes for mes in range(1, 9))
+    assert any("09/2026" in d for d in medicoes)
     atrasos = [r for g in painel["alertas"] for r in g["riscos"] if r["tipo"] == "competencias_atrasadas"]
     assert len(atrasos) == 1  # um risco agregado por contrato, não um por competência
     assert painel["execucao"]["total_previsto"] == "24105.00" and painel["execucao"]["empenhado"] == "51000.00"

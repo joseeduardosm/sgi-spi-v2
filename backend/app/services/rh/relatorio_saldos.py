@@ -20,7 +20,7 @@ from app.services.rh.papeis import dados_funcionais, exigir_cgp, setor_do_usuari
 from app.services.rh.servico_afastamentos import saldos
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-TITULOS = ["Servidor", "Login", "Setor", "Autorizador", "Período aquisitivo", "Creditados", "Agendados", "Disponíveis",
+TITULOS = ["Servidor", "Login", "Setor", "Autorizador", "Exercício (período de gozo)", "Creditados", "Agendados", "Disponíveis",
            "Expira em", "Pedir até", "LP (ano)", "LP saldo", "LP usado", "LP disponível"]
 
 
@@ -43,7 +43,7 @@ def linhas(sessao: Session, referencia: date) -> list[list]:
         periodo = servico_periodos.vigente(sessao, u.id, referencia)
         if periodo is not None:
             s = servico_periodos.situacao(sessao, periodo, referencia)
-            ferias = [f"{_data(periodo.inicio)} a {_data(periodo.fim)}", periodo.dias_creditados, s.usado, s.disponivel,
+            ferias = [f"{servico_periodos.exercicio_do_periodo(periodo.inicio, periodo.fim)} · {_data(periodo.inicio)} a {_data(periodo.fim)}", periodo.dias_creditados, s.usado, s.disponivel,
                       _data(periodo.fim), _data(s.data_limite_pedido)]
         else:
             ferias = ["não informado", None, None, None, "—", "—"]
@@ -64,11 +64,11 @@ def gerar(sessao: Session, autor: Usuario, formato: str, referencia: date) -> tu
         from app.services.documentos.planilha import Aba, Coluna, gerar_planilha
 
         colunas = [Coluna("Servidor", largura=34), Coluna("Login", largura=18), Coluna("Setor", largura=40), Coluna("Autorizador", largura=30),
-                   Coluna("Período aquisitivo", largura=24), Coluna("Creditados", "0", 11), Coluna("Agendados", "0", 11),
+                   Coluna("Exercício (período de gozo)", largura=34), Coluna("Creditados", "0", 11), Coluna("Agendados", "0", 11),
                    Coluna("Disponíveis", "0", 11), Coluna("Expira em", largura=12), Coluna("Pedir até", largura=12),
                    Coluna("LP (ano)", "0", 9), Coluna("LP saldo", "0", 9), Coluna("LP usado", "0", 9), Coluna("LP disponível", "0", 12)]
         conteudo = gerar_planilha([Aba("Saldos", colunas, dados, titulo=titulo, observacoes=[
-            "Período aquisitivo \"não informado\": a CGP ainda não preencheu o início do período aquisitivo nos dados funcionais.",
+            "Exercício \"não informado\": a CGP ainda não preencheu o início do período aquisitivo nos dados funcionais.",
             "Agendados: férias pendentes, aprovadas e gozadas que começam no período. \"Pedir até\": última data para pedir todo o saldo.",
         ])])
         return conteudo, f"saldos-ferias-lp-{sufixo}.xlsx", XLSX
@@ -79,7 +79,7 @@ def gerar(sessao: Session, autor: Usuario, formato: str, referencia: date) -> tu
 
     documento = DocumentoPdf("Saldos de férias e licença-prêmio", titulo, paisagem=True, autor=_nome(autor))
     documento.secao(f"Servidores ({len(dados)})").tabela(
-        ["Servidor", "Setor", "Período aquisitivo", "Cred.", "Agend.", "Disp.", "Pedir até", "LP disp."],
+        ["Servidor", "Setor", "Exercício (período)", "Cred.", "Agend.", "Disp.", "Pedir até", "LP disp."],
         [[l[0], l[2], l[4], numero(l[5]), numero(l[6]), numero(l[7]), l[9], numero(l[13])] for l in dados],
         larguras=[3.2, 3.6, 2.2, 0.7, 0.7, 0.7, 1.1, 0.8], alinhar_direita=[3, 4, 5, 7],
     )

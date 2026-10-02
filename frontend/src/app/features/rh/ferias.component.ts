@@ -172,7 +172,7 @@ export class FeriasComponent implements OnInit {
       next: () => {
         this.dialogos.avisar(
           alterando ? 'Alteração enviada' : 'Pedido enviado',
-          `${ROTULOS_TIPO[tipo]} de ${dataBr(inicio)} a ${dataBr(fim)} aguarda aprovação. Você receberá um e-mail a cada mudança de status.`,
+          `${ROTULOS_TIPO[tipo]} de ${dataBr(inicio)} a ${dataBr(fim)} segue para o ciente e de acordo do seu superior imediato e, depois, para a aprovação (sem superior, vai direto à aprovação). Você receberá um e-mail a cada mudança de status.`,
         );
         this.alterando.set(null);
         this.limparSelecao();
@@ -204,9 +204,18 @@ export class FeriasComponent implements OnInit {
     });
   }
 
-  /** Saldo de férias do período em que a seleção começa: o vigente ou o próximo. */
+  /** A seleção começa no ano seguinte e o agendamento antecipado já abriu (vale o limite de dias, sem exigir saldo). */
+  protected antecipadoDoPedido(d: MeusAfastamentos): boolean {
+    const i = this.intervalo();
+    const a = d.agendamento_antecipado;
+    // Só vale o limite por ano para quem não tem o início do período informado; com ele, o saldo normal da janela já abate o pedido
+    return !!i && !!a && a.inicio === null && a.aberto && Number(i[0].slice(0, 4)) === a.exercicio;
+  }
+
+  /** Saldo de férias do período em que a seleção começa: o vigente ou o próximo (ou o limite do ano seguinte, se aberto). */
   protected saldoFeriasDoPedido(d: MeusAfastamentos): number {
     const i = this.intervalo();
+    if (this.antecipadoDoPedido(d)) return d.agendamento_antecipado!.limite_dias - d.agendamento_antecipado!.agendados;
     const pv = d.periodo_vigente;
     if (!pv) return 0;
     if (i && d.proximo_periodo && i[0] > pv.fim) return d.proximo_periodo.dias_creditados_previstos - d.proximo_periodo.usado;

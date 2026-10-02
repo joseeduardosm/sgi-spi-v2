@@ -1,0 +1,175 @@
+/* Módulo Protocolo: grade de números, painel e administração (identidade do SGI SPI). */
+$livre: #e8eaec;
+$reservado: #f0b429;
+$utilizado: #2e9d5b;
+$anulado: #9aa4af;
+
+.protocolo {
+  /* O painel de gestão não tem padding próprio: sem isto o conteúdo encosta nas bordas */
+  padding: 22px 24px 8px;
+
+  .barra-protocolo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px 18px;
+    margin-bottom: 18px;
+
+    .espacador { flex: 1; }
+    .resumo-protocolo { align-self: center; color: #5a6673; font-size: 13px; }
+  }
+
+  .campo {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 200px;
+
+    &.curto { min-width: 120px; }
+    label { color: #464f5a; font-size: 12px; font-weight: 700; }
+
+    /* Mesmo visual dos campos de .grade-formulario (42 px de altura, borda e foco) */
+    input:not([type='checkbox']):not([type='file']),
+    select {
+      width: 100%;
+      height: 42px;
+      padding: 0 12px;
+      border: 1px solid #e2e5e8;
+      border-radius: 7px;
+      outline: 0;
+      color: #3d454e;
+      background: #fcfcfc;
+      font-size: 13px;
+
+      &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; }
+    }
+  }
+
+  .legenda-protocolo {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 0 0 12px;
+    color: #5a6673;
+    font-size: 12px;
+
+    span::before {
+      content: '';
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      margin-right: 6px;
+      border-radius: 3px;
+      vertical-align: -1px;
+      background: $livre;
+    }
+
+    .reservado::before { background: $reservado; }
+    .utilizado::before { background: $utilizado; }
+    .anulado::before { background: $anulado; }
+  }
+
+  .grade-numeros {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+    gap: 8px;
+
+    .numero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 10px 6px;
+      border: 1px solid #dfe3e7;
+      border-radius: 9px;
+      color: #32383f;
+      background: #fff;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.15s;
+
+      strong { font-size: 17px; }
+      small { color: #6a7786; font-size: 10.5px; }
+      &:hover { transform: translateY(-1px); box-shadow: 0 4px 12px #401e2014; }
+
+      &.livre { background: #fff; border-style: dashed; }
+      &.reservado { background: #fff7e0; border-color: $reservado; }
+      &.utilizado { background: #e8f6ee; border-color: $utilizado; }
+      &.anulado { color: #8a949f; background: #f1f2f4; border-color: $anulado; text-decoration: line-through; }
+    }
+  }
+
+
+  /* Painel */
+  .grafico-meses {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 8px;
+    align-items: end;
+    height: 220px;
+  }
+
+  .coluna-mes {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    gap: 2px;
+
+    .barras { display: flex; flex-direction: column; justify-content: flex-end; flex: 1; width: 100%; max-width: 38px; i { display: block; width: 100%; min-height: 0; border-radius: 3px 3px 0 0; } }
+    .reservado { background: $reservado; }
+    .utilizado { background: $utilizado; }
+    b { color: #464f5a; font-size: 11.5px; }
+    small { color: #8c97a4; font-size: 11px; }
+  }
+
+  .grade-painel-protocolo { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; align-items: start; .cartao-dados { margin-bottom: 0; } }
+
+  .linha-pessoa {
+    display: grid;
+    grid-template-columns: minmax(150px, 1.4fr) 1fr 1fr;
+    gap: 10px 14px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid #f1f2f4;
+
+    .nome-pessoa { display: flex; align-items: center; gap: 8px; font-size: 13px; i { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fff; background: #8d1f2b; font-size: 10.5px; font-style: normal; font-weight: 700; } }
+    .metrica { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; i { flex: 1; height: 8px; border-radius: 99px; background: #eef0f2; overflow: hidden; b { display: block; height: 100%; border-radius: 99px; } } }
+    .metrica.reservado b { background: $reservado; }
+    .metrica.utilizado b { background: $utilizado; }
+  }
+
+  /* Administração */
+  .linha-sequencia {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f2f4;
+
+    strong { min-width: 110px; }
+    .faixa { display: inline-flex; align-items: center; gap: 8px; color: #5a6673; font-size: 13px; input { width: 90px; padding: 7px 10px; border: 1px solid #e2e5e8; border-radius: 7px; } }
+    small { flex: 1 1 260px; color: #8c97a4; font-size: 11.5px; }
+    &.nova { border-bottom: 0; background: #fafbfc; margin-top: 8px; padding: 12px; border-radius: 9px; }
+  }
+}
+
+/* Modais do Protocolo (renderizados fora da seção .protocolo) */
+.form-protocolo {
+  padding: 8px 24px 4px;
+
+  footer { display: flex; justify-content: flex-end; gap: 8px; padding: 6px 0 18px; }
+  .grade-formulario { grid-template-columns: 1fr; }
+  .grade-formulario textarea { width: 100%; min-height: 96px; margin-bottom: 16px; padding: 10px 12px; border: 1px solid #e2e5e8; border-radius: 7px; background: #fcfcfc; font-size: 13px; resize: vertical; }
+}
+
+.corpo-numero {
+  padding: 4px 24px 22px;
+
+  .dados-numero { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px 20px; margin: 6px 0 14px; dt { margin-bottom: 3px; color: #8e99a6; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; } dd { margin: 0; color: #32383f; font-size: 13.5px; overflow-wrap: anywhere; } .inteira { grid-column: 1 / -1; } }
+  .documento-numero { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 14px; border: 1px solid #e8eaec; border-radius: 9px; background: #fcfcfc; }
+  .acoes-numero { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 8px; .seletor-arquivo { position: relative; cursor: pointer; input { position: absolute; inset: 0; opacity: 0; cursor: pointer; } } .opcao-sigilo { display: flex; align-items: center; gap: 8px; color: #464f5a; font-size: 12.5px; input { accent-color: #af3741; } } }
+  .form-motivo { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 10px 0 14px; .grade-formulario { flex: 1; min-width: 240px; grid-template-columns: 1fr; input { margin-bottom: 0; } } }
+  .subtitulo-numero { margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid #eff0f2; color: #361a1c; font-size: 14px; }
+  .linha-do-tempo-protocolo { margin: 0; padding-left: 18px; border-left: 2px solid #e8eaec; list-style: none; li { position: relative; margin: 0 0 12px; padding-left: 12px; font-size: 13px; color: #32383f; } li::before { content: ''; position: absolute; left: -24px; top: 5px; width: 10px; height: 10px; border: 2px solid #fff; border-radius: 50%; background: #bc3843; box-shadow: 0 0 0 1px #e3b9bd; } small { display: block; color: #8c97a4; font-size: 11.5px; } }
+}

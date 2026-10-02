@@ -8,6 +8,10 @@
 - **Status:** pendente → aprovado | recusado; aprovado → cancelado | gozado (automático após o fim).
   Alteração de um aprovado cria um novo pedido pendente (`substitui_id`); ao ser aprovado, o anterior é
   cancelado. Cancelar/alterar: o usuário até o prazo da CGP; a CGP a qualquer momento.
+- **Duas etapas:** (1) o superior imediato dá o "ciente e de acordo" (não aprova: só registra a ciência; ele
+  também pode recusar com justificativa) e o solicitante recebe e-mail; (2) só então o aprovador recebe o
+  pedido. A etapa 1 é dispensada quando não há superior ou ele é o próprio aprovador.
+- **Cancelamento:** o dono do pedido, a CGP e o superior imediato são avisados (e o aprovador, se o pedido estava na etapa de aprovação).
 - **Aprovação:** o autorizador, o substituto (se o autorizador estiver afastado) ou a CGP. Recusa exige
   justificativa. O usuário recebe e-mail a cada mudança de status.
 - **Painel:** CGP vê todos; autorizador vê os autorizados e a si mesmo; o usuário comum, só a si.
@@ -126,6 +130,46 @@ def saldos(sessao: Session, usuario_id: int, exercicio: int) -> dict[str, Saldo]
     return {"ferias": ferias, "licenca_premio": Saldo(dados.saldo_lp_dias if vale_lp else 0, usado_lp)}
 
 
+def _dias_ferias_no_ano(sessao: Session, usuario_id: int, ano: int, ignorar=()) -> int:
+    """Dias de férias ativas (pendentes, aprovadas e gozadas) do usuário que começam no ano civil."""
+    return sum(a.dias for a in sessao.scalars(select(Afastamento).where(
+        Afastamento.usuario_id == usuario_id, Afastamento.tipo == "ferias", Afastamento.status.in_(ATIVOS),
+        Afastamento.inicio >= date(ano, 1, 1), Afastamento.inicio <= date(ano, 12, 31))) if a.id not in ignorar)
+
+
+def agendamento_antecipado(sessao: Session, usuario_id: int) -> dict | None:
+    """Agendamento das férias do **próximo exercício**: abre na data do parâmetro `abertura_agendamento_ferias`.
+
+    Cada período é a janela de gozo de um exercício (30 dias que podem ser agendados e usufruídos dentro dela). A regra vale
+    quando a data cai na janela vigente (ex.: 15/10/2026, com a janela do servidor virando em 31/12/2026): antes dela, o
+    próximo exercício não pode ser agendado; depois, qualquer servidor agenda até o crédito previsto (30 dias), mesmo antes
+    de o saldo ser implantado, e o pedido já **abate** dele (`usado` conta pela data de início). Com a nova janela em curso
+    a regra deixa de valer (devolve None). Sem o início do período informado, vale o ano civil seguinte ao da data
+    (`fallback`: limite de 30 dias por ano, sem vínculo com período).
+    """
+    p = parametros(sessao)
+    abertura = p.abertura_agendamento_ferias
+    if abertura is None:
+        return None
+    dados = dados_funcionais(sessao, usuario_id)
+    if dados and dados.inicio_aquisitivo_dia:
+        dia, mes = dados.inicio_aquisitivo_dia, dados.inicio_aquisitivo_mes
+        atual_inicio, atual_fim = servico_periodos.limites(dia, mes, hoje())
+        inicio, fim = servico_periodos.limites(dia, mes, atual_fim + timedelta(days=1))
+        if not atual_inicio <= abertura <= inicio:
+            return None
+        registro = servico_periodos.obter(sessao, usuario_id, inicio, fim, criar=False)
+        return {"exercicio": servico_periodos.exercicio_do_periodo(inicio, fim), "inicio": inicio, "fim": fim, "abertura": abertura,
+                "aberto": hoje() >= abertura, "fallback": False,
+                "limite_dias": registro.dias_creditados if registro else p.dias_ferias_por_periodo,
+                "agendados": servico_periodos.usado(sessao, usuario_id, inicio, fim)}
+    if hoje().year != abertura.year:
+        return None
+    exercicio = abertura.year + 1
+    return {"exercicio": exercicio, "inicio": None, "fim": None, "abertura": abertura, "aberto": hoje() >= abertura, "fallback": True,
+            "limite_dias": p.dias_ferias_por_periodo, "agendados": _dias_ferias_no_ano(sessao, usuario_id, exercicio)}
+
+
 def periodo_do_pedido(sessao: Session, usuario_id: int, inicio: date) -> tuple[date, date, int, PeriodoAquisitivo | None]:
     """Período aquisitivo que as férias debitam (o vigente ou o próximo): (início, fim, dias creditados, registro)."""
     dados = dados_funcionais(sessao, usuario_id)
@@ -184,6 +228,21 @@ def validar_pedido(sessao: Session, usuario: Usuario, tipo: str, inicio: date, f
         if encosta and not p.permite_emenda and outro.tipo != tipo:
             raise ErroAfastamento("Não é permitido emendar férias e licença-prêmio em sequência.")
     if tipo == "ferias":
+        # Próximo exercício: só depois da abertura definida pela CGP; aberta, vale o saldo normal da janela (que o pedido já abate)
+        antecipado = agendamento_antecipado(sessao, usuario.id)
+        if antecipado and not antecipado["fallback"] and inicio >= antecipado["inicio"] and not antecipado["aberto"] and not cgp:
+            raise ErroAfastamento(f"O agendamento das férias do exercício {antecipado['exercicio']} abre em {_data(antecipado['abertura'])}.")
+        if antecipado and antecipado["fallback"] and inicio.year == antecipado["exercicio"]:
+            # Sem o início do período aquisitivo informado: até o limite de dias por ano civil, sem exigir saldo
+            if not antecipado["aberto"] and not cgp:
+                raise ErroAfastamento(f"O agendamento das férias de {inicio.year} abre em {_data(antecipado['abertura'])}.")
+            if antecipado["aberto"]:
+                ja = _dias_ferias_no_ano(sessao, usuario.id, inicio.year, ignorar)
+                if ja + dias > antecipado["limite_dias"]:
+                    raise ErroAfastamento(
+                        f"Para o exercício {inicio.year} o limite é de {antecipado['limite_dias']} dias de férias "
+                        f"({ja} já agendado(s), pedido de {dias}).")
+                return dias
         # Férias: saldo do período aquisitivo em que o pedido começa (vigente ou próximo)
         p_inicio, p_fim, creditados, _ = periodo_do_pedido(sessao, usuario.id, inicio)
         disponivel = creditados - servico_periodos.usado(sessao, usuario.id, p_inicio, p_fim, ignorar)
@@ -226,11 +285,68 @@ def _avisar_aprovadores(sessao: Session, usuario: Usuario, a: Afastamento) -> No
     )
 
 
+def _superior_da_ciencia(sessao: Session, usuario: Usuario) -> int | None:
+    """Superior imediato que precisa dar o ciente e de acordo; None quando a etapa 1 é dispensada.
+
+    Dispensa: sem superior, superior inativo ou superior que já é o aprovador (autorizador ou substituto em exercício).
+    """
+    gestor_id = usuario.gestor_id
+    if gestor_id is None or gestor_id == usuario.id:
+        return None
+    gestor = sessao.get(Usuario, gestor_id)
+    if gestor is None or not gestor.ativo:
+        return None
+    dados = dados_funcionais(sessao, usuario.id)
+    aprovadores = set(aprovadores_de(sessao, usuario.id, hoje()))
+    if dados is not None and dados.autorizador_id is not None:
+        aprovadores.add(dados.autorizador_id)
+    return None if gestor_id in aprovadores else gestor_id
+
+
+def _avisar_superior(sessao: Session, usuario: Usuario, a: Afastamento) -> None:
+    """Etapa 1: o superior imediato recebe o pedido para dar o ciente e de acordo (encerrado na ciência ou na recusa)."""
+    servico_mensagens.notificar(
+        sessao, [usuario.gestor_id], f"{_nome(usuario)} agendou {ROTULOS_TIPO[a.tipo]}: ciente e de acordo",
+        f"{_nome(usuario)} ({setor_do_usuario(usuario)}) agendou {_descricao(a)}. Dê o ciente e de acordo para o pedido seguir à aprovação "
+        "(isso não aprova o pedido).",
+        chave=f"afastamento:{a.id}:ciencia", categoria="pendencia", prioridade="alta", link="/rh/painel-afastamentos", email=True,
+    )
+
+
+def _iniciar_fluxo(sessao: Session, usuario: Usuario, a: Afastamento) -> None:
+    """Pedido novo ou alterado: começa na etapa 1 (se houver superior distinto do aprovador) ou direto na aprovação."""
+    a.ciencia_por_id = a.ciencia_por_nome = a.ciencia_em = None
+    a.aguarda_ciencia = _superior_da_ciencia(sessao, usuario) is not None
+    if a.aguarda_ciencia:
+        _avisar_superior(sessao, usuario, a)
+    else:
+        _avisar_aprovadores(sessao, usuario, a)
+
+
 def _avisar_usuario(sessao: Session, usuario_id: int, a: Afastamento, titulo: str, texto: str) -> None:
     servico_mensagens.notificar(
         sessao, [usuario_id], titulo, texto, chave=f"afastamento-status:{a.id}:{a.status}:{agora_utc():%Y%m%d%H%M%S%f}",
         categoria="comunicado", prioridade="normal", link="/rh/ferias", email=True,
     )
+
+
+def _avisar_cancelamento(sessao: Session, usuario: Usuario, a: Afastamento, autor: Usuario, estado_anterior: str, aguardava_ciencia: bool,
+                         texto: str) -> None:
+    """Cancelamento: a CGP e o superior imediato sempre sabem; o aprovador só se o pedido estava na etapa de aprovação."""
+    ids = {u.id for u in usuarios_cgp(sessao)}
+    if usuario.gestor_id:
+        ids.add(usuario.gestor_id)
+    if estado_anterior == "pendente" and not aguardava_ciencia:
+        ids |= set(aprovadores_de(sessao, a.usuario_id, hoje()))
+    # Quem cancelou e o dono do pedido já têm o próprio aviso
+    ids -= {autor.id, a.usuario_id}
+    if ids:
+        servico_mensagens.notificar(
+            sessao, list(ids), f"Cancelamento: {_nome(usuario)} cancelou {ROTULOS_TIPO[a.tipo]}",
+            f"{texto.replace(_nome(autor) + ' cancelou', 'O pedido foi cancelado por ' + _nome(autor) + ':', 1)}\n\nServidor: {_nome(usuario)} ({setor_do_usuario(usuario)}).",
+            chave=f"afastamento-cancelado:{a.id}:{agora_utc():%Y%m%d%H%M%S%f}", categoria="comunicado", prioridade="normal",
+            link="/rh/painel-afastamentos", email=True,
+        )
 
 
 # --- Ações --------------------------------------------------------------------------------------
@@ -246,7 +362,14 @@ def _vincular_periodo(sessao: Session, usuario_id: int, tipo: str, inicio: date)
     """Férias: id do período aquisitivo que o pedido debita (criado se ainda não existir)."""
     if tipo != "ferias":
         return None
-    p_inicio, p_fim, _, _ = periodo_do_pedido(sessao, usuario_id, inicio)
+    try:
+        p_inicio, p_fim, _, _ = periodo_do_pedido(sessao, usuario_id, inicio)
+    except ErroAfastamento:
+        # Agendamento antecipado do ano seguinte pode cair além do próximo período (ou sem período informado): sem vínculo por enquanto
+        antecipado = agendamento_antecipado(sessao, usuario_id)
+        if antecipado and antecipado["fallback"] and antecipado["aberto"] and inicio.year == antecipado["exercicio"]:
+            return None
+        raise
     return servico_periodos.obter(sessao, usuario_id, p_inicio, p_fim).id
 
 
@@ -314,7 +437,7 @@ def agendar(sessao: Session, usuario: Usuario, tipo: str, inicio: date, fim: dat
     _evento(a, None, "pendente", usuario)
     sessao.add(a)
     sessao.flush()
-    _avisar_aprovadores(sessao, usuario, a)
+    _iniciar_fluxo(sessao, usuario, a)
     auditar(sessao, usuario.login, "rh.afastamento.agendar", _descricao(a), autor_id=usuario.id, alvo_tipo="afastamento", alvo_id=a.id)
     sessao.commit()
     return a
@@ -354,7 +477,7 @@ def alterar(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID, tipo: st
         _evento(novo, None, "pendente", autor, f"Alteração do período aprovado de {_data(a.inicio)} a {_data(a.fim)}")
         sessao.add(novo)
     sessao.flush()
-    _avisar_aprovadores(sessao, usuario, novo)
+    _iniciar_fluxo(sessao, usuario, novo)
     auditar(sessao, autor.login, "rh.afastamento.alterar", _descricao(novo), autor_id=autor.id, alvo_tipo="afastamento", alvo_id=novo.id)
     sessao.commit()
     return novo
@@ -366,32 +489,70 @@ def cancelar(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID, justifi
         raise ErroAfastamento("Só pedidos pendentes ou aprovados podem ser cancelados.")
     _exigir_prazo(sessao, a, autor)
     anterior, a.status = a.status, "cancelado"
+    aguardava_ciencia, usuario = a.aguarda_ciencia, sessao.get(Usuario, a.usuario_id)
+    a.aguarda_ciencia = False
     _evento(a, anterior, "cancelado", autor, justificativa)
     servico_mensagens.encerrar(sessao, prefixo=f"afastamento:{a.id}:")
-    _avisar_usuario(sessao, a.usuario_id, a, f"Afastamento cancelado: {ROTULOS_TIPO[a.tipo]}",
-                    f"{_nome(autor)} cancelou {_descricao(a)}." + (f"\n\nJustificativa: {justificativa}" if justificativa else ""))
+    texto = f"{_nome(autor)} cancelou {_descricao(a)}." + (f"\n\nJustificativa: {justificativa}" if justificativa else "")
+    _avisar_usuario(sessao, a.usuario_id, a, f"Afastamento cancelado: {ROTULOS_TIPO[a.tipo]}", texto)
+    _avisar_cancelamento(sessao, usuario, a, autor, anterior, aguardava_ciencia, texto)
     auditar(sessao, autor.login, "rh.afastamento.cancelar", _descricao(a), autor_id=autor.id, alvo_tipo="afastamento", alvo_id=a.id)
     sessao.commit()
     return a
 
 
+def pode_dar_ciencia(sessao: Session, autor: Usuario, a: Afastamento, usuario: Usuario | None = None) -> bool:
+    """Etapa 1: só o superior imediato do solicitante dá o ciente e de acordo (ou recusa)."""
+    if a.status != "pendente" or not a.aguarda_ciencia:
+        return False
+    usuario = usuario or sessao.get(Usuario, a.usuario_id)
+    return usuario is not None and usuario.gestor_id == autor.id and a.usuario_id != autor.id
+
+
 def pode_decidir(sessao: Session, autor: Usuario, a: Afastamento, cgp: bool | None = None) -> bool:
+    """Etapa 2: aprovar ou recusar. Os aprovadores só decidem depois do ciente; a CGP pode decidir a qualquer momento."""
     if a.status != "pendente":
         return False
     if cgp if cgp is not None else eh_cgp(sessao, autor):
         return True
+    if a.aguarda_ciencia:
+        return False
     return a.usuario_id != autor.id and autor.id in aprovadores_de(sessao, a.usuario_id, hoje())
+
+
+def dar_ciencia(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID) -> Afastamento:
+    """Ciente e de acordo do superior imediato: não aprova; avisa o solicitante e libera o pedido para o aprovador."""
+    a = _carregar(sessao, afastamento_id)
+    if a.status != "pendente" or not a.aguarda_ciencia:
+        raise ErroAfastamento("Este pedido não está aguardando o ciente e de acordo do superior imediato.")
+    if not pode_dar_ciencia(sessao, autor, a):
+        raise SemPermissaoRh("Só o superior imediato do solicitante pode dar o ciente e de acordo.")
+    usuario = sessao.get(Usuario, a.usuario_id)
+    a.aguarda_ciencia = False
+    a.ciencia_por_id, a.ciencia_por_nome, a.ciencia_em = autor.id, _nome(autor), agora_utc()
+    _evento(a, "pendente", "pendente", autor, "Ciente e de acordo do superior imediato")
+    servico_mensagens.encerrar(sessao, prefixo=f"afastamento:{a.id}:ciencia")
+    _avisar_usuario(sessao, a.usuario_id, a, f"Ciente e de acordo: {ROTULOS_TIPO[a.tipo]}",
+                    f"{_nome(autor)} deu o ciente e de acordo em {_descricao(a)}. O pedido segue para aprovação (ainda não está aprovado).")
+    _avisar_aprovadores(sessao, usuario, a)
+    auditar(sessao, autor.login, "rh.afastamento.ciencia", _descricao(a), autor_id=autor.id, alvo_tipo="afastamento", alvo_id=a.id)
+    sessao.commit()
+    return a
 
 
 def decidir(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID, aprovar: bool, justificativa: str | None) -> Afastamento:
     a = _carregar(sessao, afastamento_id)
     if a.status != "pendente":
         raise ErroAfastamento("Este pedido não está aguardando aprovação.")
-    if not pode_decidir(sessao, autor, a):
+    # Na etapa 1 o superior imediato pode recusar (não aprovar); a aprovação só depois do ciente
+    if not pode_decidir(sessao, autor, a) and (aprovar or not pode_dar_ciencia(sessao, autor, a)):
+        if a.aguarda_ciencia and autor.id != a.usuario_id and autor.id in aprovadores_de(sessao, a.usuario_id, hoje()):
+            raise ErroAfastamento("Este pedido ainda aguarda o ciente e de acordo do superior imediato.", 409, "aguarda_ciencia")
         raise SemPermissaoRh("Só o autorizador (ou o substituto, se ele estiver afastado) e a CGP podem decidir este pedido.")
     justificativa = (justificativa or "").strip() or None
     if not aprovar and not justificativa:
         raise ErroAfastamento("Informe a justificativa da recusa.")
+    a.aguarda_ciencia = False
     a.status = "aprovado" if aprovar else "recusado"
     a.decidido_por_id, a.decidido_por_nome, a.decidido_em, a.justificativa = autor.id, _nome(autor), agora_utc(), justificativa
     _evento(a, "pendente", a.status, autor, justificativa)
@@ -432,11 +593,16 @@ def lembrar_pendentes(sessao: Session, dia: date | None = None, dias_espera: int
         if a.solicitado_em.date() != dia - timedelta(days=dias_espera):
             continue
         usuario = sessao.get(Usuario, a.usuario_id)
-        ids = set(aprovadores_de(sessao, a.usuario_id, dia)) | {u.id for u in usuarios_cgp(sessao)}
+        if a.aguarda_ciencia:
+            # Etapa 1: o lembrete vai só ao superior imediato
+            ids, etapa = {usuario.gestor_id}, "o seu ciente e de acordo"
+        else:
+            ids = set(aprovadores_de(sessao, a.usuario_id, dia)) | {u.id for u in usuarios_cgp(sessao)}
+            etapa = "aprovação"
         ids.discard(a.usuario_id)
         if servico_mensagens.notificar(
-            sessao, list(ids), f"Lembrete: {_nome(usuario)} aguarda aprovação de {ROTULOS_TIPO[a.tipo]}",
-            f"O pedido de {_descricao(a)} de {_nome(usuario)} aguarda aprovação há {dias_espera} dias.",
+            sessao, list(ids), f"Lembrete: {_nome(usuario)} aguarda {etapa} de {ROTULOS_TIPO[a.tipo]}",
+            f"O pedido de {_descricao(a)} de {_nome(usuario)} aguarda {etapa} há {dias_espera} dias.",
             chave=f"afastamento:{a.id}:lembrete:{dia:%Y%m%d}", categoria="pendencia", prioridade="alta", link="/rh/painel-afastamentos", email=True,
         ):
             lembrados += 1
@@ -532,11 +698,11 @@ def alertas_setor(sessao: Session, periodos: list[Afastamento], usuarios: dict[i
 
 
 def aprovacoes(sessao: Session, autor: Usuario) -> list[tuple[Afastamento, Usuario]]:
-    """Pedidos pendentes que o usuário pode decidir."""
+    """Pedidos pendentes que o usuário pode decidir ou aos quais pode dar o ciente e de acordo (etapa 1)."""
     cgp = eh_cgp(sessao, autor)
     pendentes = list(sessao.scalars(select(Afastamento).where(Afastamento.status == "pendente").order_by(Afastamento.solicitado_em)))
     usuarios = {u.id: u for u in sessao.scalars(select(Usuario).where(Usuario.id.in_({a.usuario_id for a in pendentes})))} if pendentes else {}
-    return [(a, usuarios[a.usuario_id]) for a in pendentes if pode_decidir(sessao, autor, a, cgp) and a.usuario_id in usuarios]
+    return [(a, usuarios[a.usuario_id]) for a in pendentes if a.usuario_id in usuarios and (pode_decidir(sessao, autor, a, cgp) or pode_dar_ciencia(sessao, autor, a, usuarios[a.usuario_id]))]
 
 
 def papeis(sessao: Session, usuario: Usuario) -> dict[str, bool]:

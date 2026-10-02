@@ -22,8 +22,8 @@ class DadosPerfil(BaseModel):
     celular: str = Field("", max_length=30, description="Celular.")
     cargo: str = Field("", max_length=150, description="Cargo.")
     departamento: str = Field("", max_length=150, description="Departamento.")
-    andar: str = Field("", max_length=30, description="Andar.")
-    predio: str = Field("", max_length=100, description="Prédio.")
+    andar: str = Field("", max_length=30, description="Andar: Subsolo ou 1 a 13.")
+    predio: str = Field("", max_length=100, description="Lado do andar: A ou B (campo `predio`).")
     data_nascimento: date | None = Field(None, description="Data de nascimento (AAAA-MM-DD).")
     gestor_id: int | None = Field(None, description="ID do gestor imediato.")
 

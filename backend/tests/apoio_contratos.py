@@ -2,6 +2,7 @@
 # Este arquivo serve para oferecer dados e funções de apoio aos testes do módulo de contratos.
 """Apoio aos testes do módulo de contratos: documentos válidos, empresa, contrato e ACL."""
 
+import json
 from datetime import date
 
 from fastapi.testclient import TestClient
@@ -121,18 +122,26 @@ def xml_nfe(valor: str, numero: str = "1", cnpj_emitente: str = CNPJ_CONTRATADA,
 
 
 def juntar_nf(cliente, base: str, h: dict, valor: str, numero: str = "1", adicional: tuple[str, str] | None = None,
-              recebida_em: str = "2026-02-05", prazo: str = "30", **xml_extras):
-    """Etapa 3: envia PDF + XML (e a adicional, se `adicional=(valor, numero)`); devolve a resposta."""
-    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo}
-    arquivos = {"arquivo": ("nf.pdf", PDF, "application/pdf"), "xml": ("nf.xml", xml_nfe(valor, numero, **xml_extras), "application/xml")}
-    if adicional:
-        dados["possui_adicional"] = "true"
-        arquivos["arquivo_adicional"] = ("nf2.pdf", PDF, "application/pdf")
-        arquivos["xml_adicional"] = ("nf2.xml", xml_nfe(adicional[0], adicional[1]), "application/xml")
+              recebida_em: str = "2026-02-05", prazo: str = "30", extras: tuple[tuple[str, str], ...] = (), **xml_extras):
+    """Etapa 3: envia PDF + XML da nota e, se houver, de outras notas (`adicional=(valor, numero)` e `extras=[(valor, numero), …]`)."""
+    notas = [(valor, numero, xml_extras)] + ([(*adicional, {})] if adicional else []) + [(v, n, {}) for v, n in extras]
+    arquivos = []
+    for i, (v, n, extra) in enumerate(notas):
+        nome = "nf" if i == 0 else f"nf{i + 1}"
+        arquivos.append(("arquivos", (f"{nome}.pdf", PDF, "application/pdf")))
+        arquivos.append(("xmls", (f"{nome}.xml", xml_nfe(v, n, **extra), "application/xml")))
+    corpo = json.dumps([{"arquivo": i, "xml": i} for i in range(len(notas))])
+    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo, "notas": corpo}
     return cliente.post(f"{base}/nota-fiscal", data=dados, files=arquivos, headers=h)
 
 
-def conferir_retencao(cliente, base: str, h: dict, principal: dict | None = None, adicional: dict | None = None, discriminacao: bool = True):
-    """Etapa 4: salva a retenção de tributos; devolve a resposta."""
-    corpo = {"principal": principal or {}, "adicional": adicional, "discriminacao_conferida": discriminacao}
+def conferir_retencao(cliente, base: str, h: dict, principal: dict | None = None, adicional: dict | None = None, discriminacao: bool = True,
+                      outras: tuple[dict, ...] = ()):
+    """Etapa 4: salva a retenção de tributos (principal, adicional e `outras` notas, na ordem); devolve a resposta.
+
+    Uma nota para a qual não se informou retenção (ex.: `adicional=None` com duas notas) fica de fora da gravação.
+    """
+    notas = cliente.get(base, headers=h).json()["notas_fiscais"]
+    informadas = [principal or {}, adicional, *outras]
+    corpo = {"notas": [{"nota_id": n["id"], **r} for n, r in zip(notas, informadas) if r is not None], "discriminacao_conferida": discriminacao}
     return cliente.put(f"{base}/retencao", json=corpo, headers=h)

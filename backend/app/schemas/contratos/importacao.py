@@ -12,7 +12,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from app.schemas.contratos.tipos import ValorMonetario, ValorQuantidade
+from app.schemas.contratos.tipos import ValorMonetario, ValorQuantidade, ValorUnitario
 
 
 class ErroImportacao(BaseModel):
@@ -76,7 +76,7 @@ class ItemPrevia(BaseModel):
     codigo_catmat_catser: str = ""
     quantidade_mensal: ValorQuantidade | None = None
     quantidade_total: ValorQuantidade | None = Field(None, description="Só para sob demanda: teto da vigência inicial.")
-    valor_unitario: ValorMonetario | None = None
+    valor_unitario: ValorUnitario | None = None
 
 
 class PreviaImportacao(BaseModel):

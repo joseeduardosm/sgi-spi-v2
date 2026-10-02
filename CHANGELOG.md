@@ -6,6 +6,38 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-02
+
+### Adicionado
+- **Módulo Contratações (ETP e TR)**, trazido do 10.23.1.220 e ampliado. Endpoints `/api/contratacoes/...` (documentação em `docs/endpoints/contratacoes.md`); migração `e5b8c3d7a921`.
+  - Árvore de seções e itens (item, subitem, inciso, alínea, subseção) com editor de texto formatado (TipTap), entrada em lote com prévia, tabela do item 1.1 do TR, duplicar e mover.
+  - **Acesso por documento:** criador, editores e revisores (o revisor só comenta e propõe). No 1.220 todos viam todos os documentos; aqui só o criador e a administração, e o criador compartilha.
+  - **Versões no estilo BookStack:** cada versão guarda o documento inteiro e mostra o que foi incluído, retirado, alterado (diferença por palavra) e movido; dá para visualizar e restaurar. Existe também o **histórico de cada item**, com restauração só do item. Antes da primeira edição de uma sessão grava-se uma versão automática.
+  - Revisões (comentário ou proposta, aplicar, resolver), com aviso ao criador e aos editores e lembrete diário de revisão parada.
+  - Conferência antes de concluir, vínculo com contrato (aba na ficha do contrato), exportação em Word (sobre os modelos originais) e PDF, importação de Word com prévia.
+  - Dados migrados do 1.220: 10 documentos, 122 seções, 1.547 itens, 2 linhas da tabela do TR e 30 revisões (3 aplicadas), cada documento com a versão "Migrado do SGI". Recurso ACL `contratacoes` criado com uma regra para os 5 autores.
+  - Scripts `extrair-contratacoes-sgi.py` e `migrar-contratacoes-sgi.py`. Dependências novas: `python-docx`, `lxml` e `@tiptap/*`.
+- **`scripts/conferir-sgi.py`:** conferência somente leitura entre o 1.220 e o sistema novo (ids por tabela, contratos por número, usuários por login), para o dia do desligamento do 1.220.
+- **Módulo Protocolo** (numeração institucional por tipo e exercício), migrado do 1.220 com melhorias (próximo número, linha do tempo, sigilo, vínculo com contrato, painel, exportação). Migração `d4a7b2c6e815`; ver `docs/endpoints/protocolo.md`.
+- Assinatura de e-mail (`/api/assinatura-email`), com `docs/endpoints/assinatura-email.md`.
+- Migrações pendentes do repositório incluídas nesta entrega: `3f23277d8a5a`, `78fca44765aa`, `a7d3c91e5b20`, `b8e41f6a2c93`, `c1f2a8d94e57`.
+
+### Alterado
+- **Notícias:** a janela de prévia abre bem mais larga.
+
+### Corrigido
+- **Notícias:** editar uma notícia já aprovada com o campo "publicar em" vazio apagava a data de publicação e a notícia sumia do portal e do slider. Agora a data é mantida. A notícia "Outubro Rosa" foi restaurada.
+- **Protocolo:** margens internas zeradas nas telas e campo "Contrato (opcional)" quebrado.
+
+## 2026-10-01
+
+### Alterado
+- **Contratos: o valor unitário dos itens aceita até 4 casas decimais** (ex.: R$ 0,075 por página). Antes, o banco arredondava para 2 casas (0,075 virava 0,08).
+  - Vale para o cadastro e a edição do contrato, a importação por XLSX, a medição, o reajuste (o novo preço passa a ter 4 casas, e o teto também aceita 4) e o aditamento/supressão.
+  - Telas, PDFs e planilhas mostram o preço unitário com 2 a 4 casas (R$ 0,075; R$ 171,22). Subtotais, base mensal, valor global e medição continuam em centavos.
+  - Migração `3f23277d8a5a`: `valor_unitario` de `contratos_itens`, `contratos_competencias_itens` e `contratos_alteracoes_itens`, e `valor_unitario_atual`, `valor_unitario_reajustado` e `valor_referencial` de `contratos_reajustes_itens`, de 2 para 4 casas. Nenhum valor existente muda.
+  - Valores já gravados arredondados (ex.: 0,08) precisam ser corrigidos editando o contrato.
+
 ## 2026-09-30
 
 ### Alterado

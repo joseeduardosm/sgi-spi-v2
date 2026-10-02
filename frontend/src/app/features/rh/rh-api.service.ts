@@ -134,6 +134,11 @@ export class RhApiService {
     return this.http.post<Afastamento>(`${this.base}/afastamentos/${id}/cancelar`, { justificativa });
   }
 
+  /** Etapa 1: ciente e de acordo do superior imediato (não aprova o pedido). */
+  darCiencia(id: string): Observable<Afastamento> {
+    return this.http.post<Afastamento>(`${this.base}/afastamentos/${id}/ciencia`, {});
+  }
+
   aprovar(id: string): Observable<Afastamento> {
     return this.http.post<Afastamento>(`${this.base}/afastamentos/${id}/aprovar`, {});
   }

@@ -90,7 +90,7 @@ def obter_meu_perfil(sessao: Session = Depends(obter_sessao), usuario: Usuario =
     description=(
         "Confirma o perfil no mês civil. Usuário comum: cada campo alterado fica **pendente de validação da CGP** "
         "(o valor em vigor continua o anterior) e a CGP recebe um e-mail; os valores pendentes já contam como preenchidos. "
-        "CGP e SuperRoot: vale na hora. Exige nome completo, e-mail, ramal, cargo, departamento, andar, prédio e "
+        "CGP e SuperRoot: vale na hora. Exige nome completo, e-mail, ramal, cargo, departamento, andar (Subsolo a 13), lado (A ou B) e "
         "superior imediato (sem ser o próprio usuário nem formar ciclo na hierarquia). "
         "Retorna a sessão atualizada, com `perfil_restrito` recalculado."
     ),

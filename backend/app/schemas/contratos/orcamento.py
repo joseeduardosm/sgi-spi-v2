@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 from app.schemas.contratos.empresas import TextoObrigatorio
-from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade
+from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade, ValorUnitario
 
 
 class ItemMesPrevisao(BaseModel):
@@ -23,7 +23,7 @@ class ItemMesPrevisao(BaseModel):
     descricao: str
     tipo: Literal["continuo", "sob_demanda"]
     quantidade: ValorQuantidade
-    valor_unitario: ValorMonetario
+    valor_unitario: ValorUnitario
     fator: ValorFator = Field(..., description="Fração do mês (pró-rata 30/360); 1 para itens sempre integrais.")
     subtotal: ValorMonetario
 

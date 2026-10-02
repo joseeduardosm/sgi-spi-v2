@@ -80,7 +80,7 @@ if config.origens_cors:
         allow_methods=["*"],
         allow_headers=["*"],
         # Permite ao navegador ler o código de correlação das respostas
-        expose_headers=[CABECALHO_CORRELACAO],
+        expose_headers=[CABECALHO_CORRELACAO, "X-Token-Renovado", "X-Token-Expira-Em"],
     )
 
 # Código de correlação em todas as respostas

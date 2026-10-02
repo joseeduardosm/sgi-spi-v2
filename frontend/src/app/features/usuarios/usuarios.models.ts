@@ -97,10 +97,28 @@ export const ROTULOS_PERFIL: Record<string, string> = {
   cargo: 'Cargo',
   departamento: 'Departamento',
   andar: 'Andar',
-  predio: 'Prédio',
+  predio: 'Lado',
   data_nascimento: 'Data de nascimento',
   gestor_id: 'Superior imediato',
 };
 
 /** Campos que precisam estar preenchidos para o perfil ficar "em dia". */
 export const CAMPOS_OBRIGATORIOS_PERFIL = ['nome_completo', 'email', 'ramal', 'cargo', 'departamento', 'andar', 'predio'];
+
+/** Opções do andar (Subsolo a 13) e do lado do andar (A ou B); o campo `predio` guarda o lado. */
+export const ANDARES = ['Subsolo', ...Array.from({ length: 13 }, (_, i) => String(i + 1))];
+export const LADOS = ['A', 'B'];
+
+/** Converte valores antigos de texto livre ("5º Andar", "Ala B") para a opção equivalente; sem correspondência, vazio. */
+export function normalizarAndar(valor: string): string {
+  const v = (valor ?? '').trim();
+  if (ANDARES.includes(v)) return v;
+  if (/sub/i.test(v)) return 'Subsolo';
+  const n = v.match(/\d+/)?.[0];
+  return n && ANDARES.includes(String(Number(n))) ? String(Number(n)) : '';
+}
+
+export function normalizarLado(valor: string): string {
+  const v = (valor ?? '').trim().toUpperCase();
+  return LADOS.includes(v) ? v : (v.match(/\b([AB])$/)?.[1] ?? '');
+}

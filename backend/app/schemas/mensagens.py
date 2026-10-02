@@ -131,5 +131,29 @@ class EnviadaDetalhe(EnviadaResumo):
     situacao: list[SituacaoDestinatario]
 
 
+class LoteMensagens(BaseModel):
+    """Ação sobre várias mensagens da própria caixa de uma vez."""
+    ids: list[uuid.UUID] = Field(..., min_length=1, max_length=500, description="Entregas (ids da caixa) afetadas.")
+    acao: Literal["lida", "nao_lida", "ciente"] = Field(
+        ..., description="`lida`: marca como visualizada; `nao_lida`: remove a visualização (a ciência já registrada não muda); "
+        "`ciente`: registra a ciência (também marca como visualizada).")
+
+
+class RespostaLote(BaseModel):
+    atualizadas: int = Field(..., description="Mensagens que mudaram de situação (as demais já estavam assim ou não são suas).")
+
+
+class PreviaMensagem(BaseModel):
+    """Texto de uma mensagem para ver no layout do e-mail."""
+    assunto: str = Field("", max_length=300)
+    corpo: str = Field("", max_length=12000, description="Aceita `## título`, `- item` (2 espaços por subnível) e `**negrito**`.")
+    link: str | None = Field(None, max_length=300)
+    autor_nome: str | None = Field(None, max_length=200, description="Quem enviou (padrão: o próprio usuário).")
+
+
+class RespostaPrevia(BaseModel):
+    html: str = Field(..., description="E-mail completo no layout oficial, com o brasão embutido (`data:`).")
+
+
 class RespostaLembrete(BaseModel):
     lembrados: int = Field(..., description="Destinatários sem ciência que receberão o e-mail de lembrete.")

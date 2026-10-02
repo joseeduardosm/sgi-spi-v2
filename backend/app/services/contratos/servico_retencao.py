@@ -89,8 +89,13 @@ def _cnpj(valor: str | None) -> str:
     return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}" if len(d) == 14 else (d or "não informado")
 
 
-def conferencias(contrato: Contrato, competencia: Competencia, dados: dict | None, valor_esperado: Decimal | None) -> list[Conferencia]:
-    """Conferências de uma nota (dados lidos do XML). `valor_esperado`: valor autorizado, só para a nota principal."""
+def conferencias(contrato: Contrato, competencia: Competencia, dados: dict | None, valor_esperado: Decimal | None,
+                 valor_total: Decimal | None = None) -> list[Conferencia]:
+    """Conferências de uma nota (dados lidos do XML).
+
+    `valor_esperado`: valor autorizado, só para a primeira nota. Ele é comparado com `valor_total` (a soma de todas as
+    notas da competência) ou, sem ele, com o bruto desta nota.
+    """
     if not dados:
         return []
     lista = []
@@ -111,10 +116,10 @@ def conferencias(contrato: Contrato, competencia: Competencia, dados: dict | Non
         dados.get("situacao") or ("Sem protocolo de autorização no XML" if autorizada is None else ""),
     ))
     if valor_esperado is not None:
-        bruto = Decimal(dados.get("valor_bruto") or "0")
+        bruto = valor_total if valor_total is not None else Decimal(dados.get("valor_bruto") or "0")
         lista.append(Conferencia(
             "Valor × valor autorizado da medição", "ok" if bruto == valor_esperado else "alerta",
-            f"Nota: {documentos_execucao.moeda(bruto)}; autorizado (medido × % da avaliação): {documentos_execucao.moeda(valor_esperado)}"
+            f"{'Notas' if valor_total is not None else 'Nota'}: {documentos_execucao.moeda(bruto)}; autorizado (medido × % da avaliação): {documentos_execucao.moeda(valor_esperado)}"
             + (f"; diferença {documentos_execucao.moeda(bruto - valor_esperado)}" if bruto != valor_esperado else ""),
         ))
     competencia_nota = dados.get("competencia")
@@ -141,10 +146,10 @@ def valor_autorizado(competencia: Competencia) -> Decimal:
 
 # --- Gravação ------------------------------------------------------------------------------------
 
-def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, principal: dict[str, Decimal],
-                    adicional: dict[str, Decimal] | None, discriminacao_conferida: bool, autor: Usuario) -> Competencia:
-    """Grava as retenções conferidas, gera o PDF da conferência e conclui a etapa (CADIN e checklist correm em paralelo)."""
-    from app.services.contratos.servico_competencias import _carregar_competencia, _validar_retencoes, concluir_etapa_paralela, etapas_abertas
+def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, retencoes: dict[uuid.UUID, dict[str, Decimal]],
+                    discriminacao_conferida: bool, autor: Usuario) -> Competencia:
+    """Grava as retenções conferidas de cada nota, gera o PDF da conferência e conclui a etapa (CADIN e checklist correm em paralelo)."""
+    from app.services.contratos.servico_competencias import _carregar_competencia, _validar_retencoes, concluir_etapa_paralela, etapas_abertas, total_bruto_notas
 
     contrato = obter_contrato(sessao, contrato_id)
     if not pode_conferir(sessao, contrato, autor):
@@ -154,22 +159,23 @@ def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uui
         raise ErroRegraContrato("A retenção de tributos não está aberta nesta competência (já conferida ou a nota fiscal ainda não foi juntada).")
     if not discriminacao_conferida:
         raise ErroRegraContrato("Confirme que a discriminação dos serviços é compatível com o objeto do contrato.")
-    _validar_retencoes(principal, competencia.nf_valor_bruto or ZERO, "principal")
-    for tributo in TRIBUTOS:
-        setattr(competencia, f"nf_retencao_{tributo}", principal.get(tributo, ZERO))
-    if competencia.nf_adicional_valor_bruto is not None:
-        if adicional is None:
-            raise ErroRegraContrato("Informe as retenções da nota fiscal adicional.")
-        _validar_retencoes(adicional, competencia.nf_adicional_valor_bruto, "adicional")
+    notas = {n.id: n for n in competencia.notas_fiscais}
+    if set(retencoes) - set(notas):
+        raise ErroRegraContrato("Há retenções de uma nota que não pertence a esta competência.")
+    for nota in notas.values():
+        if nota.id not in retencoes:
+            raise ErroRegraContrato(f"Informe as retenções da {nota.rotulo}.")
+        _validar_retencoes(retencoes[nota.id], nota.valor_bruto or ZERO, nota.rotulo)
+    for nota in notas.values():
         for tributo in TRIBUTOS:
-            setattr(competencia, f"nf_adicional_retencao_{tributo}", adicional.get(tributo, ZERO))
+            setattr(nota, f"retencao_{tributo}", retencoes[nota.id].get(tributo, ZERO))
     competencia.retencao_discriminacao_conferida = True
     competencia.retencao_por_id, competencia.retencao_por_nome = autor.id, autor.nome_completo or autor.login
     competencia.retencao_concluida_em = agora_utc()
+    total, esperado = total_bruto_notas(competencia), valor_autorizado(competencia)
     pdf = documentos_execucao.relatorio_retencao(
         contrato, competencia,
-        conferencias(contrato, competencia, competencia.nf_dados_xml, valor_autorizado(competencia)),
-        conferencias(contrato, competencia, competencia.nf_adicional_dados_xml, None),
+        [conferencias(contrato, competencia, n.dados_xml, esperado if i == 0 else None, total) for i, n in enumerate(competencia.notas_fiscais)],
         autor.nome_completo or autor.login,
     )
     competencia.retencao_pdf_anexo = servico_anexos.guardar_pdf_gerado(
@@ -183,7 +189,7 @@ def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uui
     auditar(
         sessao, autor.login, "contrato.execucao.retencao", f"Contrato {contrato.numero} · {competencia.numero_competencia}", autor_id=autor.id,
         alvo_tipo="contrato", alvo_id=contrato.id,
-        dados={"competencia": competencia.competencia, "principal": principal, "adicional": adicional},
+        dados={"competencia": competencia.competencia, "notas": {nota.rotulo: retencoes[nota.id] for nota in competencia.notas_fiscais}},
     )
     sessao.commit()
     return competencia

@@ -1,6 +1,6 @@
 @if (numeroTarefa()) {
-  <div class="fundo-modal" role="presentation" (click)="fechar.emit()"></div>
-  <section class="janela-tarefa-trello" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-detalhe">
+  @if (!pagina()) { <div class="fundo-modal" role="presentation" (click)="fechar.emit()"></div> }
+  <section class="janela-tarefa-trello" [class.pagina-tarefa]="pagina()" [attr.role]="pagina() ? null : 'dialog'" [attr.aria-modal]="pagina() ? null : 'true'" aria-labelledby="titulo-janela-detalhe">
     @if (tarefa(); as t) {
       <!-- Cabeçalho: número, equipe, título editável no lugar e a etapa atual -->
       <header class="topo-janela-tarefa">
@@ -14,7 +14,7 @@
                 [title]="pode('editar') ? 'Clique para editar o título' : ''" (click)="editarTitulo()" (keydown.enter)="editarTitulo()">{{ t.titulo }}</h2>
           }
         </div>
-        <button type="button" class="fechar-janela" aria-label="Fechar" (click)="fechar.emit()">×</button>
+        <button type="button" class="fechar-janela" [attr.aria-label]="pagina() ? 'Voltar' : 'Fechar'" [title]="pagina() ? 'Voltar às tarefas' : 'Fechar'" (click)="fechar.emit()">×</button>
       </header>
 
       <!-- Etapas do pipeline em linha (a validação só existe em tarefa de equipe) -->
@@ -270,7 +270,7 @@
         </aside>
       </div>
 
-      <app-janela-tarefa [(modo)]="modoJanela" [tarefa]="t" (concluido)="atualizar($event)" />
+      <app-janela-tarefa [(modo)]="modoJanela" [tarefa]="t" (concluido)="atualizar($event)" (falhou)="recarregar()" />
 
       @if (eventoRemover(); as ev) {
         <div class="fundo-modal sobre-janela" role="presentation" (click)="eventoRemover.set(null)"></div>

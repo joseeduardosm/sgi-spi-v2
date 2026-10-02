@@ -29,7 +29,7 @@ from app.services.servico_auditoria import auditar
 CAMPOS = ("nome_completo", "email", "ramal", "celular", "cargo", "departamento", "andar", "predio", "data_nascimento", "gestor_id")
 ROTULOS = {
     "nome_completo": "Nome completo", "email": "E-mail", "ramal": "Ramal", "celular": "Celular", "cargo": "Cargo",
-    "departamento": "Departamento", "andar": "Andar", "predio": "Prédio", "data_nascimento": "Data de nascimento",
+    "departamento": "Departamento", "andar": "Andar", "predio": "Lado", "data_nascimento": "Data de nascimento",
     "gestor_id": "Superior imediato",
 }
 PADRAO_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -147,6 +147,11 @@ def revisar_perfil(sessao: Session, usuario: Usuario, dados: DadosPerfil) -> Usu
     Usuário comum: cada campo diferente do valor em vigor vira alteração pendente (o valor em vigor não muda);
     voltar ao valor em vigor descarta a pendência do campo. CGP e SuperRoot: vale na hora.
     """
+    from app.services.servico_perfil import validar_localizacao
+
+    erro_local = validar_localizacao(dados.andar, dados.predio, usuario.andar or "", usuario.predio or "")
+    if erro_local:
+        raise ErroCadastro(erro_local)
     validar_superior(sessao, usuario.id, dados.gestor_id, superior_obrigatorio(sessao, usuario))
     direto = eh_cgp(sessao, usuario)
     novas: list[AlteracaoCadastral] = []

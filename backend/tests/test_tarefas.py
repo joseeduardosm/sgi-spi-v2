@@ -282,3 +282,16 @@ def test_agenda_da_pessoa_mostra_todas_as_tarefas_com_titulo(cliente, equipe):
     assert cliente.get(f"{URL}/pessoas/999999/agenda", headers=h["caio"]).status_code == 404
     assert pessoal and da_equipe
 
+
+
+def test_tarefa_concluida_nao_altera_prazo_e_a_mensagem_explica(cliente, equipe):
+    """Tela desatualizada: ao tentar mudar o prazo de uma tarefa já concluída, a API diz o motivo (e que a liderança pode reabrir)."""
+    ids, h, equipe_id = equipe
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    n = t["numero"]
+    assert _mover(cliente, h["lia"], n, "concluir").status_code == 200
+    r = cliente.post(f"{URL}/{n}/prazo", json={"prazo": _prazo(20), "justificativa": "Mais tempo"}, headers=h["ana"])
+    assert r.status_code == 403 and r.json()["codigo"] == "tarefa_concluida" and "já foi concluída" in r.json()["detalhe"]
+    # Depois de reaberta, o prazo volta a poder mudar
+    assert _mover(cliente, h["lia"], n, "reabrir", "Faltou um item").status_code == 200
+    assert cliente.post(f"{URL}/{n}/prazo", json={"prazo": _prazo(20), "justificativa": "Mais tempo"}, headers=h["ana"]).status_code == 200

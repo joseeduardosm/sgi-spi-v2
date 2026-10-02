@@ -269,7 +269,9 @@ def _aplicar(sessao: Session, noticia: Noticia, dados: DadosNoticia) -> None:
         noticia.slug = _slug_unico(sessao, titulo, noticia.id)
     noticia.titulo, noticia.linha_fina = titulo[:220], dados.linha_fina.strip()[:300]
     noticia.corpo_html = limpar_html(dados.corpo_html)
-    noticia.categoria_id, noticia.publicar_em, noticia.destaque_ate = dados.categoria_id, dados.publicar_em, dados.destaque_ate
+    # Notícia aprovada sempre tem data de publicação: sem ela (campo vazio na edição) sairia do portal, pois só aparece com `publicar_em <= agora`
+    publicar_em = dados.publicar_em or (noticia.publicar_em if noticia.situacao == "aprovada" else None)
+    noticia.categoria_id, noticia.publicar_em, noticia.destaque_ate = dados.categoria_id, publicar_em, dados.destaque_ate
     noticia.fixada, noticia.exige_ciencia = dados.fixada, dados.exige_ciencia
     publico = {"usuarios_ids": sorted(set(dados.usuarios_aviso)), "setores_ids": sorted(set(dados.setores_aviso))}
     noticia.publico_aviso = publico if (publico["usuarios_ids"] or publico["setores_ids"]) else None

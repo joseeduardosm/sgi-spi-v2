@@ -173,6 +173,35 @@ def test_ob_debita_nf_e_nf_adicional_e_saldo_fica_comprometido(cliente, admin, e
     assert lidas["2026NE00002"]["comprometido"] == "0.00"
 
 
+def test_varias_notas_fiscais_na_mesma_medicao(cliente, admin, equipe):  # noqa: F811
+    """Uma medição aceita três notas (PDF + XML cada); a retenção é conferida por nota e o total é a soma dos brutos."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = {n["numero"]: n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
+    base, r = _medir_e_concluir(cliente, contrato, gestora, fiscal, "2026-01", [notas["2026NE00001"], notas["2026NE00002"]])
+    assert r.status_code == 200
+    # A mesma nota (mesma chave) não entra duas vezes na medição
+    repetida = juntar_nf(cliente, base, gestora, "2105.00", "10", adicional=("2105.00", "10"))
+    assert repetida.status_code == 400 and "mesma" in repetida.json()["detalhe"]
+    r = juntar_nf(cliente, base, gestora, "2105.00", "10", adicional=("500.00", "11"), extras=(("300.00", "12"),))
+    assert r.status_code == 200, r.text
+    registradas = r.json()["notas_fiscais"]
+    assert [n["numero"] for n in registradas] == ["10", "11", "12"] and [n["ordem"] for n in registradas] == [1, 2, 3]
+    assert r.json()["valor_a_pagar"] == "2905.00"
+    # Retenção: precisa informar todas as notas
+    assert conferir_retencao(cliente, base, gestora, adicional={}).status_code == 400
+    # Reabre a nota fiscal e corrige mantendo a 2ª nota pelo id (sem reenviar arquivos) e removendo as demais
+    import json
+
+    assert cliente.post(f"{base}/reabrir", json={"etapa": "nota_fiscal", "justificativa": "Notas lançadas a mais"}, headers=gestora).status_code == 200
+    corpo = {"recebida_em": "2026-02-05", "prazo_pagamento_dias": "30", "notas": json.dumps([{"id": registradas[1]["id"]}])}
+    r = cliente.post(f"{base}/nota-fiscal", data=corpo, headers=gestora)
+    assert r.status_code == 200, r.text
+    assert [n["numero"] for n in r.json()["notas_fiscais"]] == ["11"] and r.json()["valor_a_pagar"] == "500.00"
+    assert conferir_retencao(cliente, base, gestora).status_code == 200
+
+
 def test_nf_que_passa_do_saldo_livre_das_nes_e_recusada(cliente, admin, equipe):  # noqa: F811
     """NF maior que o saldo livre das NEs escolhidas é recusada."""
     contrato, gestora, fiscal = equipe

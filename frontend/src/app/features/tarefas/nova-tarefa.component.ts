@@ -192,8 +192,8 @@ export class NovaTarefaComponent implements OnInit {
       titulo: this.titulo.trim(), descricao: this.descricao, prazo: new Date(this.prazo).toISOString(), prioridade: this.prioridade,
       equipe_id: equipe, responsavel_id: responsavel, participantes_ids: this.participantes.map((p) => p.id), marcadores_ids: this.marcadoresIds(),
     }), 'Criando a tarefa…').subscribe({
-      // Volta ao quadro (da equipe ou Minhas tarefas) com a tarefa nova aberta na janela
-      next: (t) => void this.roteador.navigate(equipe ? ['/tarefas/equipes', equipe] : ['/tarefas'], { queryParams: { tarefa: t.numero } }),
+      // Abre a tela da tarefa nova (no lugar do formulário, para o "voltar" não reabrir a criação)
+      next: (t) => void this.roteador.navigate(['/tarefas', t.numero], { replaceUrl: true }),
       error: (e) => { this.salvando.set(false); this.dialogos.mostrarErro(e); },
     });
   }

@@ -143,14 +143,23 @@ export class ExecucaoApiService {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/avaliacao/${tipo}`), this.formulario({ arquivo }));
   }
 
-  /** Etapa 3: registra a nota fiscal (campos + PDFs). */
-  notaFiscal(id: string, c: string, campos: Record<string, string | boolean | File | null>): Observable<DetalheCompetencia> {
-    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/nota-fiscal'), this.formulario(campos));
+  /**
+   * Etapa 3: registra as notas fiscais (uma ou mais). `notas` é a lista final, na ordem desejada: `id` mantém uma nota já
+   * registrada, e `arquivo`/`xml` são posições nas listas `arquivos` e `xmls` (os PDFs e XMLs novos).
+   */
+  notaFiscal(id: string, c: string, dados: {
+    recebida_em: string; prazo_pagamento_dias: number; notas: { id: string | null; arquivo: number | null; xml: number | null }[];
+    arquivos: File[]; xmls: File[];
+  }): Observable<DetalheCompetencia> {
+    const corpo = this.formulario({ recebida_em: dados.recebida_em, prazo_pagamento_dias: dados.prazo_pagamento_dias, notas: JSON.stringify(dados.notas) });
+    dados.arquivos.forEach((a) => corpo.append('arquivos', a));
+    dados.xmls.forEach((x) => corpo.append('xmls', x));
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/nota-fiscal'), corpo);
   }
 
   /** Etapa 4: salva a retenção de tributos conferida (Financeiro, equipe ou SuperRoot). */
   salvarRetencao(id: string, c: string, dados: {
-    principal: Record<string, string>; adicional: Record<string, string> | null; discriminacao_conferida: boolean;
+    notas: ({ nota_id: string } & Record<string, string>)[]; discriminacao_conferida: boolean;
   }): Observable<DetalheCompetencia> {
     return this.http.put<DetalheCompetencia>(this.competencia(id, c, '/retencao'), dados);
   }

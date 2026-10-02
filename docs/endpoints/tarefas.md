@@ -189,6 +189,7 @@ Ela é recolhível, e a preferência fica no navegador. A barra lateral do siste
 |---|---|---|
 | `400` | `invalido` | Regra violada: justificativa ou motivo vazio, pessoa fora da equipe, formato de arquivo, equipe com tarefas abertas |
 | `403` | `sem_permissao` | Ação fora do papel ou da etapa |
+| `403` | `tarefa_concluida` | Alterar prazo, editar ou transferir uma tarefa já concluída (a mensagem orienta a liderança a reabri-la). A tela se atualiza sozinha ao receber `403`/`409` e ao voltar para a aba |
 | `404` | `nao_encontrado` | Tarefa, equipe ou anexo inexistente, ou sem permissão para ver |
 | `409` | `conflito` | `versao` desatualizada ou marcador repetido |
 | `422` | `validacao` | Campos fora do formato |

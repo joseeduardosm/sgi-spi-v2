@@ -12,7 +12,7 @@
 
 @if (aprovacoes().length) {
   <section class="cartao-dados" aria-labelledby="titulo-aprovacoes">
-    <header><div><h2 id="titulo-aprovacoes">Aguardando sua aprovação ({{ aprovacoes().length }})</h2></div></header>
+    <header><div><h2 id="titulo-aprovacoes">Aguardando você ({{ aprovacoes().length }})</h2></div></header>
     <div class="tabela-gestao-envoltorio">
       <table class="tabela-gestao">
         <thead><tr><th>Pessoa</th><th>Tipo</th><th>Período</th><th class="num">Dias</th><th></th></tr></thead>
@@ -24,7 +24,11 @@
               <td>{{ data(a.inicio) }} a {{ data(a.fim) }}</td>
               <td class="num">{{ a.dias }}</td>
               <td class="acoes-linha">
-                <button type="button" class="acao-aprovar" (click)="aprovar(a)">Aprovar</button>
+                @if (a.pode_dar_ciencia) {
+                  <button type="button" class="acao-aprovar" (click)="darCiencia(a)">Ciente e de acordo</button>
+                } @else {
+                  <button type="button" class="acao-aprovar" (click)="aprovar(a)">Aprovar</button>
+                }
                 <button type="button" class="acao-secundaria acao-pequena" (click)="recusando.set(a)">Recusar</button>
               </td>
             </tr>
@@ -41,7 +45,7 @@
       <small>Saldo de férias não agendado com o período aquisitivo terminando em até 90 dias; o saldo expira no início do período seguinte.</small></div></header>
     <div class="tabela-gestao-envoltorio">
       <table class="tabela-gestao">
-        <thead><tr><th>Pessoa</th><th>Período aquisitivo</th><th class="num">Dias não agendados</th><th>Pedir até</th></tr></thead>
+        <thead><tr><th>Pessoa</th><th>Exercício</th><th class="num">Dias não agendados</th><th>Pedir até</th></tr></thead>
         <tbody>
           @for (x of painel()!.ferias_a_vencer; track x.usuario_id) {
             <tr><td><strong>{{ x.nome }}</strong><small> – {{ x.setor }}</small></td><td>{{ data(x.periodo_inicio) }} a {{ data(x.periodo_fim) }}</td>
@@ -157,14 +161,20 @@
       <dt>Período</dt><dd>{{ data(a.inicio) }} a {{ data(a.fim) }} ({{ a.dias }} dias)@if (a.substitui_id) { · alteração de pedido aprovado }</dd>
       <dt>Situação</dt><dd><span [class]="'selo-afastamento ' + a.status">{{ status[a.status] }}</span></dd>
       @if (a.decidido_por_nome) { <dt>Decisão</dt><dd>{{ a.decidido_por_nome }} em {{ a.decidido_em | date: 'dd/MM/yyyy HH:mm' }}</dd> }
+      @if (a.ciencia_por_nome) { <dt>Ciente e de acordo</dt><dd>{{ a.ciencia_por_nome }} em {{ a.ciencia_em | date: 'dd/MM/yyyy HH:mm' }}</dd> }
       @if (a.justificativa) { <dt>Justificativa</dt><dd>{{ a.justificativa }}</dd> }
     </dl>
-    @if (a.status === 'pendente' && !a.pode_decidir) {
-      <p class="dica-formulario" style="margin: 0 25px 12px">Aguardando a decisão do autorizador (ou do substituto) ou da CGP.</p>
+    @if (a.status === 'pendente' && a.aguarda_ciencia) {
+      <p class="dica-formulario" style="margin: 0 25px 12px">Etapa 1: aguardando o ciente e de acordo do superior imediato. Depois disso o pedido segue para aprovação.</p>
+    } @else if (a.status === 'pendente' && !a.pode_decidir) {
+      <p class="dica-formulario" style="margin: 0 25px 12px">Etapa 2: aguardando a decisão do autorizador (ou do substituto) ou da CGP.</p>
     }
     <footer>
       <button type="button" class="acao-secundaria" (click)="detalhe.set(null)">Fechar</button>
-      @if (a.pode_decidir) {
+      @if (a.pode_dar_ciencia) {
+        <button type="button" class="acao-recusar" (click)="detalhe.set(null); recusando.set(a)">Recusar</button>
+        <button type="button" class="acao-aprovar-janela" (click)="darCienciaDoDetalhe(a)">Ciente e de acordo</button>
+      } @else if (a.pode_decidir) {
         <button type="button" class="acao-recusar" (click)="detalhe.set(null); recusando.set(a)">Recusar</button>
         <button type="button" class="acao-aprovar-janela" (click)="aprovarDoDetalhe(a)">Aprovar</button>
       }

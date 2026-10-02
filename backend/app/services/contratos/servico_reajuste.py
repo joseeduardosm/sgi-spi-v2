@@ -37,13 +37,13 @@ from app.schemas.contratos.alteracoes import (
 from app.schemas.contratos.execucao import LeituraArquivo
 from app.services import servico_anexos
 from app.services.contratos import calculos, valores
-from app.services.contratos.documentos_execucao import moeda, quantidade
+from app.services.contratos.documentos_execucao import moeda, moeda_unitaria, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist
 from app.services.contratos.servico_competencias import proxima_competencia_a_medir, registrar_credito_reajuste
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
-from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
+from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_MOEDA_UNITARIA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
 from app.services.servico_auditoria import auditar
 
 ZERO = Decimal(0)
@@ -168,7 +168,7 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
     # Preço unitário da diferença = valor total da diferença ÷ quantidade total (média ponderada)
     for item_id, total_medido in quantidades.items():
         item = itens[item_id]
-        unitario = calculos.arredondar(valores_diferenca[item_id] / total_medido)
+        unitario = (valores_diferenca[item_id] / total_medido).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
         competencia.itens.append(
             ItemMedicao(
                 item_id=item_id, ordem=item.ordem, descricao=f"{item.descricao} (diferença de reajuste)", tipo=item.tipo,
@@ -300,8 +300,8 @@ def anexar_evidencia(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.
 
 
 def reajustar_preco(atual: Decimal, indice: Decimal, referencial: Decimal | None) -> Decimal:
-    """Preço × (1 + índice/100), com 2 casas; o valor referencial, quando informado, é o teto."""
-    novo = (atual * (1 + indice / CEM)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    """Preço × (1 + índice/100), com 4 casas (como o preço unitário); o valor referencial, quando informado, é o teto."""
+    novo = (atual * (1 + indice / CEM)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
     return min(novo, referencial) if referencial is not None else novo
 
 
@@ -360,9 +360,9 @@ def _percentual(valor: Decimal) -> str:
     return ("+" if valor > 0 else "-" if valor < 0 else "") + texto
 
 
-def _moeda_com_sinal(valor: Decimal) -> str:
-    """+R$ 0,53 / -R$ 100,00 / R$ 0,00."""
-    return ("+" if valor > 0 else "-" if valor < 0 else "") + moeda(abs(valor))
+def _moeda_com_sinal(valor: Decimal, unitario: bool = False) -> str:
+    """+R$ 0,53 / -R$ 100,00 / R$ 0,00 (`unitario`: de 2 a 4 casas, como o preço unitário)."""
+    return ("+" if valor > 0 else "-" if valor < 0 else "") + (moeda_unitaria if unitario else moeda)(abs(valor))
 
 
 def _texto_diferenca(contrato: Contrato, reajuste: Reajuste) -> str:
@@ -387,8 +387,8 @@ def _pdf_memoria(contrato: Contrato, reajuste: Reajuste, versao: int, autor: Usu
     ])
     documento.secao("Itens (percentual positivo = reajuste; negativo = desconto)").tabela(
         ["Item", "Descrição", "Qtd. mensal", "Valor atual", "Índice (%)", "Referencial", "Valor reajustado", "Variação", "Subtotal reajustado"],
-        [[str(l[0]), l[1], quantidade(l[2]), moeda(l[3]), _percentual(l[4]), moeda(l[5]) if l[5] is not None else "—", moeda(l[6]),
-          _moeda_com_sinal(l[7]), moeda(l[8])]
+        [[str(l[0]), l[1], quantidade(l[2]), moeda_unitaria(l[3]), _percentual(l[4]), moeda_unitaria(l[5]) if l[5] is not None else "—",
+          moeda_unitaria(l[6]), _moeda_com_sinal(l[7], unitario=True), moeda(l[8])]
          for l in _linhas(reajuste)],
         larguras=[0.5, 3.6, 1.1, 1.3, 1.1, 1.3, 1.4, 1.2, 1.5], alinhar_direita=[2, 3, 4, 5, 6, 7, 8],
     )
@@ -404,9 +404,9 @@ def _xlsx_memoria(contrato: Contrato, reajuste: Reajuste) -> bytes:
     """Monta a planilha da memória de cálculo com as mesmas colunas do PDF."""
     return gerar_planilha([Aba(
         "Reajuste",
-        [Coluna("Item", largura=6), Coluna("Descrição", largura=40), Coluna("Qtd. mensal", FORMATO_QUANTIDADE), Coluna("Valor atual", FORMATO_MOEDA),
-         Coluna("Índice (%)", "+0.0000;-0.0000;0.0000"), Coluna("Referencial", FORMATO_MOEDA), Coluna("Valor reajustado", FORMATO_MOEDA),
-         Coluna("Variação", FORMATO_MOEDA), Coluna("Subtotal reajustado", FORMATO_MOEDA, 20)],
+        [Coluna("Item", largura=6), Coluna("Descrição", largura=40), Coluna("Qtd. mensal", FORMATO_QUANTIDADE), Coluna("Valor atual", FORMATO_MOEDA_UNITARIA),
+         Coluna("Índice (%)", "+0.0000;-0.0000;0.0000"), Coluna("Referencial", FORMATO_MOEDA_UNITARIA), Coluna("Valor reajustado", FORMATO_MOEDA_UNITARIA),
+         Coluna("Variação", FORMATO_MOEDA_UNITARIA), Coluna("Subtotal reajustado", FORMATO_MOEDA, 20)],
         _linhas(reajuste),
         titulo=f"Memória de cálculo do reajuste — Contrato {contrato.numero} — referência {reajuste.mes_referencia:%m/%Y}",
         observacoes=["Índice: percentual positivo = reajuste; negativo = desconto.",

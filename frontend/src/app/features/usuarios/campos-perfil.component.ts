@@ -11,7 +11,7 @@ import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { FormularioPerfil } from './formulario-perfil';
 import { UsuariosApiService } from './usuarios-api.service';
-import { OpcaoDepartamento, SituacaoCampo } from './usuarios.models';
+import { ANDARES, LADOS, OpcaoDepartamento, SituacaoCampo } from './usuarios.models';
 
 /** Campos do perfil institucional (grade de 2 colunas), usados em "Meu perfil" e no cadastro de usuários. */
 @Component({
@@ -60,12 +60,19 @@ import { OpcaoDepartamento, SituacaoCampo } from './usuarios.models';
       </div>
       <div>
         <label for="perfil-andar">Andar {{ marca }}</label>
-        <input id="perfil-andar" formControlName="andar" />
+        <select id="perfil-andar" formControlName="andar">
+          <option value="">Selecione o andar</option>
+          @for (a of andares; track a) { <option [value]="a">{{ a === 'Subsolo' ? a : a + 'º andar' }}</option> }
+        </select>
         <ng-container *ngTemplateOutlet="situacaoCampo; context: { $implicit: 'andar' }" />
       </div>
       <div>
-        <label for="perfil-predio">Prédio {{ marca }}</label>
-        <input id="perfil-predio" formControlName="predio" />
+        <label id="rotulo-lado">Lado {{ marca }}</label>
+        <div class="grupo-radio" role="radiogroup" aria-labelledby="rotulo-lado">
+          @for (l of lados; track l) {
+            <label class="opcao-radio"><input type="radio" formControlName="predio" [value]="l" /> {{ l }}</label>
+          }
+        </div>
         <ng-container *ngTemplateOutlet="situacaoCampo; context: { $implicit: 'predio' }" />
       </div>
       <div>
@@ -94,6 +101,8 @@ import { OpcaoDepartamento, SituacaoCampo } from './usuarios.models';
   `,
 })
 export class CamposPerfilComponent implements OnInit {
+  protected readonly andares = ANDARES;
+  protected readonly lados = LADOS;
   // O formulário vem de fora (a tela dona dele decide validações e envio); o gestor é de mão dupla
   readonly formulario = input.required<FormularioPerfil>();
   readonly gestor = model<OpcaoUsuario[]>([]);

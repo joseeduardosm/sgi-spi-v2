@@ -547,6 +547,9 @@ export interface ConferenciaNota {
 }
 
 export interface NotaFiscal {
+  id: string;
+  /** Posição da nota na competência (1, 2, …). */
+  ordem: number;
   numero: string;
   arquivo: Arquivo | null;
   xml: Arquivo | null;
@@ -663,8 +666,8 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   /** Etapas que aceitam gravação agora (depois da NF: retenção, CADIN e checklist em paralelo). */
   etapas_abertas: Etapa[];
   etapas_concluidas: Etapa[];
-  nota_fiscal: NotaFiscal | null;
-  nota_fiscal_adicional: NotaFiscal | null;
+  /** Notas fiscais juntadas na etapa 3 (uma ou mais), em ordem. */
+  notas_fiscais: NotaFiscal[];
   nf_recebida_em: string | null;
   prazo_pagamento_dias: number | null;
   vencimento_pagamento: string | null;

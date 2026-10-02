@@ -178,7 +178,8 @@ class ItemContrato(Base):
     quantidade_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal(0))
     # Soma das medições concluídas (MVP 3)
     quantidade_executada: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal(0))
-    valor_unitario: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    # Preço unitário com até 4 casas (ex.: 0,075 por página)
+    valor_unitario: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 

@@ -108,7 +108,7 @@
                   <td class="num">{{ i.quantidade_mensal | quantidade }}</td>
                   <td class="num">{{ i.quantidade_executada | quantidade }}</td>
                   <td class="num">{{ i.quantidade_disponivel | quantidade }}</td>
-                  <td class="num">{{ i.valor_unitario | moeda }}</td>
+                  <td class="num">{{ i.valor_unitario | moedaUnitaria }}</td>
                   <td class="num">{{ (i.tipo === 'continuo' ? i.subtotal_mensal : null) | moeda }}</td>
                   <td class="num">{{ i.vigencia_meses }} m</td>
                 </tr>

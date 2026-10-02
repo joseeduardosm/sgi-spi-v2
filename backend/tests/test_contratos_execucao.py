@@ -173,13 +173,13 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     assert cliente.get(_url(contrato), headers=gestora).json()["itens"][1]["quantidade_executada"] == "10.0000"
 
     # 3 Nota fiscal: PDF + XML; número e valor vêm do XML
-    sem_xml = cliente.post(f"{base}/nota-fiscal", data={"recebida_em": "2026-02-05", "prazo_pagamento_dias": "30"},
-                           files={"arquivo": ("nf.pdf", PDF, "application/pdf")}, headers=gestora)
+    sem_xml = cliente.post(f"{base}/nota-fiscal", data={"recebida_em": "2026-02-05", "prazo_pagamento_dias": "30", "notas": '[{"arquivo": 0}]'},
+                           files=[("arquivos", ("nf.pdf", PDF, "application/pdf"))], headers=gestora)
     assert sem_xml.status_code == 400 and "XML" in sem_xml.json()["detalhe"]
     r = juntar_nf(cliente, base, gestora, "2105.00", "123")
     assert r.status_code == 200, r.text
     detalhe = r.json()
-    assert detalhe["nota_fiscal"]["numero"] == "123" and detalhe["nota_fiscal"]["valor_bruto"] == "2105.00"
+    assert detalhe["notas_fiscais"][0]["numero"] == "123" and detalhe["notas_fiscais"][0]["valor_bruto"] == "2105.00"
     assert detalhe["vencimento_pagamento"] == "2026-03-07" and detalhe["etapa_atual"] == "retencao"
 
     # 4 Retenção de tributos: soma acima do bruto e discriminação não conferida são recusadas
@@ -188,7 +188,7 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     r = conferir_retencao(cliente, base, gestora, {"ir": "31.58"})
     assert r.status_code == 200, r.text
     detalhe = r.json()
-    assert detalhe["nota_fiscal"]["valor_liquido"] == "2073.42" and detalhe["etapa_atual"] == "cadin"
+    assert detalhe["notas_fiscais"][0]["valor_liquido"] == "2073.42" and detalhe["etapa_atual"] == "cadin"
     assert detalhe["retencao"]["por_nome"] and detalhe["retencao"]["pdf"]
 
     # 4 CADIN: com pendência continua aberta; sem pendência conclui

@@ -9,6 +9,10 @@ gerar as migrações, e os testes o usam para criar as tabelas no SQLite.
 from app.models.acl import NivelAcl, RecursoAcl, RegraAcl, acl_regras_setores, acl_regras_usuarios
 from app.models.anexo import Anexo
 from app.models.auditoria import RegistroAuditoria
+from app.models.contratacoes import (
+    ComentarioImportado, DocumentoContratacao, HistoricoItem, ItemContratacao, LinhaTabelaTr, MembroDocumento, RevisaoItem, SecaoContratacao,
+    VersaoDocumento,
+)
 from app.models.contratos import (
     Contrato,
     DesignacaoEquipe,
@@ -22,6 +26,7 @@ from app.models.envio_changelog import EnvioChangelog
 from app.models.melhorias import AnexoSugestao, EventoSugestao, SugestaoMelhoria
 from app.models.mensagem import EntregaMensagem, Mensagem
 from app.models.noticias import AnexoNoticia, AtalhoPortal, CategoriaNoticia, ConfiguracaoPortal, Noticia, RevisaoNoticia
+from app.models.protocolo import EventoProtocolo, NumeroProtocolo, SequenciaProtocolo, TipoProtocolo
 from app.models.rh import AlteracaoCadastral, Afastamento, DadosFuncionais, EventoAfastamento, Feriado, ParametrosRh, PeriodoAquisitivo
 from app.models.servidor_smtp import ServidorSmtp
 from app.models.setor import MembroSetor, Setor
@@ -33,6 +38,19 @@ from app.models.usuario import OrigemUsuario, Papel, Usuario
 
 # Nomes exportados por `from app.models import *`
 __all__ = [
+    "ComentarioImportado",
+    "DocumentoContratacao",
+    "HistoricoItem",
+    "ItemContratacao",
+    "LinhaTabelaTr",
+    "MembroDocumento",
+    "RevisaoItem",
+    "SecaoContratacao",
+    "VersaoDocumento",
+    "EventoProtocolo",
+    "NumeroProtocolo",
+    "SequenciaProtocolo",
+    "TipoProtocolo",
     "AnexoSugestao",
     "EventoSugestao",
     "SugestaoMelhoria",

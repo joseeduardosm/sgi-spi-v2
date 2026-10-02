@@ -9,6 +9,8 @@
 
 // Formatadores do navegador (Intl) configurados uma vez e reutilizados
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+// Preço unitário: de 2 a 4 casas (ex.: R$ 0,075)
+const moedaUnitaria = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 4 });
 const quantidade = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 const percentual = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
@@ -26,6 +28,12 @@ function numero(valor: Numerico): number | null {
 export function formatarMoeda(valor: Numerico, vazio = 'R$ -'): string {
   const n = numero(valor);
   return n === null ? vazio : moeda.format(n);
+}
+
+/** Preço unitário em reais com 2 a 4 casas (ex.: "0.0750" → "R$ 0,075"; "171.2200" → "R$ 171,22"). */
+export function formatarMoedaUnitaria(valor: Numerico, vazio = 'R$ -'): string {
+  const n = numero(valor);
+  return n === null ? vazio : moedaUnitaria.format(n);
 }
 
 /** Quantidade com até 4 casas, sem zeros desnecessários (ex.: "2.5000" → "2,5"). */

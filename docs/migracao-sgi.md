@@ -118,3 +118,18 @@ cd /home/administrador/projeto/backend
 |---|---|---|
 | 30/09/2026 | extração somente leitura do 10.23.1.220, carga com `--contrato 010/2024` | Contrato 010/2024 (Suporte e infraestrutura - PD24008, PRODESP, empresa já existente): 18 itens, 6 designações, 1 documento (DFD), 10 reajustes cancelados (como no SGI), 43 anexos, 78 eventos de auditoria. Conferência sem divergências. |
 | 24/09/2026 | extração somente leitura do 10.23.1.220 | 38 empresas, 40 contratos, 78 competências, 8 NEs, 14 reajustes, 5 prorrogações, 565 anexos (SHA-256 conferido), 1.128 eventos de auditoria. Conferência sem divergências. |
+
+## Outros módulos: Protocolo e Contratações
+
+Cada módulo tem o seu par de scripts (extração somente leitura + carga com ensaio por padrão, `--gravar` e `--substituir`):
+
+| Módulo | Extração | Carga |
+|---|---|---|
+| Protocolo | `scripts/extrair-protocolo-sgi.py` | `scripts/migrar-protocolo-sgi.py` |
+| Contratações (ETP e TR) | `scripts/extrair-contratacoes-sgi.py` | `scripts/migrar-contratacoes-sgi.py` |
+
+**Contratações:** traz documentos, seções, itens (HTML sanitizado), tabela do TR, revisões (aplicadas ou não) e comentários importados do Word. Cada documento ganha a versão "Migrado do SGI" (o sistema antigo não guardava o conteúdo anterior; o histórico começa aí). O recurso ACL `contratacoes` é criado com **uma regra** (MODIFICACAO para quem criou documentos), porque recurso sem regra fica aberto a todos. No sistema antigo todos viam todos os documentos; no novo só o criador e a administração, e o criador compartilha. Carga conferida: 10 documentos, 122 seções, 1.547 itens, 2 linhas da tabela do TR, 30 revisões (3 aplicadas). Auditoria, mensagens e código-fonte não são migrados.
+
+### Conferência antes do desligamento
+
+`scripts/conferir-sgi.py` (somente leitura nos dois lados) compara, por tabela, os ids do SGI antigo com os do novo e lista o que só existe em cada lado; usuários são comparados pelo login e contratos pelo número `NNN/AAAA`. Use-o no dia do corte e recarregue com `--substituir` os módulos que mostrarem pendência.

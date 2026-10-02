@@ -310,7 +310,7 @@ export class FormularioContratoComponent implements OnInit {
     const codigos = [i.codigo_classe, i.codigo_natureza_despesa, i.codigo_siafisico, i.codigo_catmat_catser].every((c) => c.trim());
     const quantidades = i.tipo === 'continuo' ? this.numero(i.quantidade_mensal) > 0 : this.numero(i.quantidade_total) > 0;
     // A UF também é exigida aqui: itens antigos (sem UF) precisam recebê-la ao serem editados
-    return codigos && quantidades && !!i.unidade_fornecimento.trim() && i.valor_unitario !== '' && this.numero(i.valor_unitario) >= 0;
+    return codigos && quantidades && !!i.unidade_fornecimento.trim() && i.valor_unitario !== '' && this.casasValidas(i.valor_unitario) && this.numero(i.valor_unitario) >= 0;
   }
 
   /** Remove o item da lista (pede confirmação se ele já estava salvo). */
@@ -349,6 +349,11 @@ export class FormularioContratoComponent implements OnInit {
     lista.splice(indice, 0, movido);
     this.itens.set(lista);
     this.arrastando = null;
+  }
+
+  /** Valor com no máximo 4 casas decimais (preço unitário; a API recusa mais que isso). */
+  protected casasValidas(valor: string | number): boolean {
+    return /^\d+(\.\d{1,4})?$/.test(paraDecimalApi(valor).trim());
   }
 
   /** Texto do tipo de item. */

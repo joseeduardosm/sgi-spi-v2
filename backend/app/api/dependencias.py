@@ -13,13 +13,13 @@ Se qualquer etapa falhar, a rota nem é executada e o usuário recebe 401 ou 403
 from collections.abc import Callable
 
 import jwt
-from fastapi import Depends, status
+from fastapi import Depends, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
-from app.core.seguranca import decodificar_token_acesso
+from app.core.seguranca import decodificar_token_acesso, renovar_token
 from app.models.acl import NivelAcl
 from app.models.usuario import Usuario
 from app.services import servico_acl, servico_perfil
@@ -38,7 +38,13 @@ def _nao_autenticado(detalhe: str) -> ErroApi:
     return ErroApi(status.HTTP_401_UNAUTHORIZED, detalhe, "nao_autenticado")
 
 
+# Cabeçalhos de resposta com o token renovado (renovação deslizante); o frontend os guarda e passa a usar o novo token
+CABECALHO_TOKEN_RENOVADO = "X-Token-Renovado"
+CABECALHO_TOKEN_EXPIRA_EM = "X-Token-Expira-Em"
+
+
 def obter_usuario_autenticado(
+    resposta: Response,
     credenciais: HTTPAuthorizationCredentials | None = Depends(esquema_bearer),
     sessao: Session = Depends(obter_sessao),
 ) -> Usuario:
@@ -66,6 +72,10 @@ def obter_usuario_autenticado(
     # Usuário excluído ou desativado depois da emissão do token perde o acesso imediatamente
     if usuario is None or not usuario.ativo:
         raise _nao_autenticado("Usuário inválido ou inativo.")
+    # Quem está usando o sistema não cai: perto do vencimento, a resposta traz um token novo (só para usuário ativo)
+    renovado = renovar_token(conteudo)
+    if renovado:
+        resposta.headers[CABECALHO_TOKEN_RENOVADO], resposta.headers[CABECALHO_TOKEN_EXPIRA_EM] = renovado[0], renovado[1].isoformat()
     return usuario
 
 

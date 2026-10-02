@@ -153,6 +153,12 @@ def acoes(sessao: Session, usuario: Usuario, tarefa: Tarefa) -> list[str]:
     return lista
 
 
+def _exigir_nao_concluida(tarefa: Tarefa, acao: str) -> None:
+    """Tarefa concluída não aceita mudança de prazo, edição ou transferência: é preciso reabri-la (mensagem clara para telas desatualizadas)."""
+    if tarefa.status == "concluida":
+        raise ErroTarefa(f"A tarefa #{tarefa.numero} já foi concluída: não é possível {acao}. Peça a quem lidera a equipe para reabri-la.", 403, "tarefa_concluida")
+
+
 def _exigir(condicao: bool, detalhe: str) -> None:
     if not condicao:
         raise ErroTarefa(detalhe, 403, "sem_permissao")
@@ -270,7 +276,8 @@ def _versao(tarefa: Tarefa, versao: int | None) -> None:
 
 def editar(sessao: Session, autor: Usuario, tarefa: Tarefa, titulo: str, descricao: str, prioridade: str,
            participantes_ids: tuple[int, ...], marcadores_ids: tuple[uuid.UUID, ...], versao: int | None) -> Tarefa:
-    _exigir(pode_editar(sessao, autor, tarefa) and tarefa.status != "concluida", "Você não pode editar esta tarefa.")
+    _exigir_nao_concluida(tarefa, "editá-la")
+    _exigir(pode_editar(sessao, autor, tarefa), "Você não pode editar esta tarefa.")
     _versao(tarefa, versao)
     novos = {tarefa.responsavel_id, *participantes_ids} - {None}
     _conferir_pessoas(sessao, autor, tarefa.equipe, novos - envolvidos(tarefa))
@@ -301,7 +308,8 @@ def editar(sessao: Session, autor: Usuario, tarefa: Tarefa, titulo: str, descric
 
 
 def alterar_prazo(sessao: Session, autor: Usuario, tarefa: Tarefa, novo: datetime, justificativa: str, versao: int | None) -> Tarefa:
-    _exigir(pode_editar(sessao, autor, tarefa) and tarefa.status != "concluida", "Você não pode alterar o prazo desta tarefa.")
+    _exigir_nao_concluida(tarefa, "alterar o prazo")
+    _exigir(pode_editar(sessao, autor, tarefa), "Você não pode alterar o prazo desta tarefa.")
     _versao(tarefa, versao)
     if not justificativa.strip():
         raise ErroTarefa("Informe a justificativa da mudança de prazo.")
@@ -407,6 +415,7 @@ def _avisos_pipeline(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str,
 
 def transferir(sessao: Session, autor: Usuario, tarefa: Tarefa, para_id: int, justificativa: str, novo_prazo: datetime | None,
                versao: int | None) -> Tarefa:
+    _exigir_nao_concluida(tarefa, "transferi-la")
     _exigir("transferir" in acoes(sessao, autor, tarefa), "Você não pode transferir esta tarefa.")
     _versao(tarefa, versao)
     if not justificativa.strip():

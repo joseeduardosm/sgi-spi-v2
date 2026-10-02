@@ -129,9 +129,9 @@ def test_nf_envia_email_ao_financeiro_com_copia_para_a_equipe(cliente, cenario):
     r = juntar_nf(cliente, base, gestora, "2105.00", "123", retencoes={"vIRRF": "31.58"})
     assert r.status_code == 200, r.text
     detalhe = r.json()
-    assert detalhe["etapa_atual"] == "retencao" and detalhe["nota_fiscal"]["retencao_ir"] == "31.58"  # sugestão lida do XML
-    assert detalhe["nota_fiscal"]["xml"]["nome"] == "nf.xml" and detalhe["nota_fiscal"]["dados_xml"]["numero"] == "123"
-    conferencias = {c["descricao"]: c["situacao"] for c in detalhe["nota_fiscal"]["conferencias"]}
+    assert detalhe["etapa_atual"] == "retencao" and detalhe["notas_fiscais"][0]["retencao_ir"] == "31.58"  # sugestão lida do XML
+    assert detalhe["notas_fiscais"][0]["xml"]["nome"] == "nf.xml" and detalhe["notas_fiscais"][0]["dados_xml"]["numero"] == "123"
+    conferencias = {c["descricao"]: c["situacao"] for c in detalhe["notas_fiscais"][0]["conferencias"]}
     assert conferencias["Tomador = SPI"] == "ok" and conferencias["Emitente = empresa contratada"] == "ok"
     assert conferencias["Valor × valor autorizado da medição"] == "ok" and conferencias["Nota autorizada"] == "ok"
 
@@ -160,12 +160,14 @@ def test_mesma_nota_nao_entra_em_duas_competencias(cliente, cenario):
     assert r.status_code == 400 and "já foi juntada à competência 01/2026" in r.json()["detalhe"]
 
 
-def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, cenario):
+def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, cenario, monkeypatch):
+    # A competência do cenário é de 01/2026: sem o corte de pendências antigas (09/2026), ela aparece em "Minhas pendências"
+    monkeypatch.setattr("app.services.contratos.servico_painel.PENDENCIAS_A_PARTIR_DE", date(2000, 1, 1))
     contrato, base, gestora = cenario
     juntar_nf(cliente, base, gestora, "2105.00", "123", cnpj_emitente="99888777000100")
     detalhe = cliente.get(base, headers=cabecalho(cliente, "financeiro1")).json()
     assert detalhe["pode_conferir_retencao"] is True and detalhe["pode_editar"] is False
-    assert {c["descricao"]: c["situacao"] for c in detalhe["nota_fiscal"]["conferencias"]}["Emitente = empresa contratada"] == "alerta"
+    assert {c["descricao"]: c["situacao"] for c in detalhe["notas_fiscais"][0]["conferencias"]}["Emitente = empresa contratada"] == "alerta"
     r = conferir_retencao(cliente, base, cabecalho(cliente, "outro"), {"ir": "31.58"})
     assert r.status_code == 403 and "Financeiro" in r.json()["detalhe"]
 
@@ -179,7 +181,7 @@ def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, ce
     assert r.status_code == 200, r.text
     detalhe = r.json()
     assert detalhe["etapa_atual"] == "cadin" and detalhe["retencao"]["por_nome"] == "Fin Departamento"
-    assert detalhe["nota_fiscal"]["retencao_csll"] == "10.00" and detalhe["nota_fiscal"]["valor_liquido"] == "2063.42"
+    assert detalhe["notas_fiscais"][0]["retencao_csll"] == "10.00" and detalhe["notas_fiscais"][0]["valor_liquido"] == "2063.42"
     pdf = cliente.get(f"{base}/arquivos/{detalhe['retencao']['pdf']['anexo_id']}", headers=gestora)
     assert pdf.content[:5] == b"%PDF-"
     mensagem, _, destinatarios, _ = SmtpSimulado.enviadas[0]

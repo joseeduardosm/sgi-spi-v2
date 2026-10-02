@@ -66,7 +66,7 @@ def test_previa_converte_os_valores_e_nao_grava(cliente, admin):
     assert p["preposto"] == {"existente": False, "cpf": CPF, "nome": "João Preposto", "email": "joao@limpatudo.com", "telefone": "(11) 99999-0000"}
     assert [(i["tipo"], i["calcula_pro_rata"], i["codigo_natureza_despesa"]) for i in p["itens"]] == [
         ("continuo", True, "339039"), ("sob_demanda", False, "339030")]
-    assert p["itens"][0]["valor_unitario"] == "1000.00" and p["itens"][1]["quantidade_total"] == "100.0000"
+    assert p["itens"][0]["valor_unitario"] == "1000.0000" and p["itens"][1]["quantidade_total"] == "100.0000"
     # 2 × 1.000 × 12 + 100 × 10,50
     assert p["valor_global_estimado"] == "25050.00"
     with FabricaSessao() as sessao:
@@ -144,7 +144,7 @@ def test_acl_da_importacao_e_modelo(cliente, admin):
 
 
 def test_quantidades_grandes_e_dizimas_do_excel_sao_arredondadas(cliente, admin):
-    """Célula numérica do Excel (ponto flutuante) é arredondada: 4 casas na quantidade, 2 no preço.
+    """Célula numérica do Excel (ponto flutuante) é arredondada: 4 casas na quantidade e no preço unitário.
 
     999.999.999.999,9999 não cabe exatamente num double e chega como 999999999999.99988; 1/3 vem de fórmula.
     """
@@ -156,7 +156,7 @@ def test_quantidades_grandes_e_dizimas_do_excel_sao_arredondadas(cliente, admin)
     assert r.status_code == 200, r.text
     p = r.json()
     assert p["erros"] == [], p["erros"]
-    assert (p["itens"][0]["quantidade_mensal"], p["itens"][0]["valor_unitario"]) == ("999999999999.9999", "0.30")
+    assert (p["itens"][0]["quantidade_mensal"], p["itens"][0]["valor_unitario"]) == ("999999999999.9999", "0.3000")
     assert (p["itens"][1]["quantidade_mensal"], p["itens"][1]["quantidade_total"]) == ("0.3333", "999000000000.1234")
 
 

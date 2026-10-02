@@ -4,7 +4,7 @@
 import { FormGroup, NonNullableFormBuilder, Validators } from '@angular/forms';
 
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
-import { CAMPOS_OBRIGATORIOS_PERFIL, DadosPerfil, PerfilLeitura } from './usuarios.models';
+import { CAMPOS_OBRIGATORIOS_PERFIL, DadosPerfil, normalizarAndar, normalizarLado, PerfilLeitura } from './usuarios.models';
 
 /** Formulário do perfil institucional, compartilhado por "Meu perfil" e pelo cadastro de usuários. */
 export function criarFormularioPerfil(construtor: NonNullableFormBuilder, exigirObrigatorios: boolean) {
@@ -36,8 +36,8 @@ export function preencherFormularioPerfil(formulario: FormularioPerfil, perfil: 
     celular: perfil?.celular ?? '',
     cargo: perfil?.cargo ?? '',
     departamento: perfil?.departamento ?? '',
-    andar: perfil?.andar ?? '',
-    predio: perfil?.predio ?? '',
+    andar: normalizarAndar(perfil?.andar ?? ''),
+    predio: normalizarLado(perfil?.predio ?? ''),
     data_nascimento: perfil?.data_nascimento ?? '',
   });
 }

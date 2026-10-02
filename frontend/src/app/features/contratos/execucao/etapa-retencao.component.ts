@@ -53,10 +53,8 @@ export class EtapaRetencaoComponent implements OnChanges {
       titulo, nota,
       retencoes: Object.fromEntries(TRIBUTOS.map((t) => [t.chave, paraDecimalTela(nota[`retencao_${t.chave}`])])) as Record<Tributo, string>,
     });
-    this.notas = [
-      ...(d.nota_fiscal ? [montar('Nota fiscal', d.nota_fiscal)] : []),
-      ...(d.nota_fiscal_adicional ? [montar('Nota fiscal adicional', d.nota_fiscal_adicional)] : []),
-    ];
+    const varias = d.notas_fiscais.length > 1;
+    this.notas = d.notas_fiscais.map((n) => montar(varias ? `Nota fiscal ${n.ordem}` : 'Nota fiscal', n));
     this.discriminacaoConferida = d.retencao?.discriminacao_conferida ?? false;
   }
 
@@ -99,8 +97,7 @@ export class EtapaRetencaoComponent implements OnChanges {
     const d = this.detalhe();
     const valores = (n: NotaEmConferencia) => Object.fromEntries(TRIBUTOS.map((t) => [t.chave, paraDecimalApi(n.retencoes[t.chave]) || '0']));
     const corpo = {
-      principal: valores(this.notas[0]),
-      adicional: this.notas[1] ? valores(this.notas[1]) : null,
+      notas: this.notas.map((n) => ({ nota_id: n.nota.id, ...valores(n) })),
       discriminacao_conferida: this.discriminacaoConferida,
     };
     this.dialogos.executar(this.api.salvarRetencao(d.contrato_id, d.id, corpo), 'Salvando a retenção e gerando o PDF…').subscribe({

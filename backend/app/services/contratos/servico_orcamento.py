@@ -42,7 +42,7 @@ from app.services.contratos import calculos, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, ordem_contratos, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
-from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
+from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_MOEDA_UNITARIA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
 from app.services.servico_auditoria import auditar
 
 # Atalho para Decimal(0), muito usado nas somas
@@ -226,7 +226,7 @@ def planilha_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int) -
             Aba(
                 "Itens por competência",
                 [Coluna("Competência", largura=13), Coluna("Item", largura=40), Coluna("Tipo", largura=14),
-                 Coluna("Quantidade", FORMATO_QUANTIDADE), Coluna("Valor unitário", FORMATO_MOEDA),
+                 Coluna("Quantidade", FORMATO_QUANTIDADE), Coluna("Valor unitário", FORMATO_MOEDA_UNITARIA),
                  Coluna("Fator (pró-rata)", "0.0000"), Coluna("Subtotal", FORMATO_MOEDA)],
                 linhas_itens,
             ),

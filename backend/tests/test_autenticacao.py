@@ -6,7 +6,10 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
+from app.core.banco import FabricaSessao
 from app.core.configuracao import obter_configuracao
+from app.models import Usuario
+from tests.conftest import criar_usuario
 
 
 def test_login_valido(cliente):
@@ -229,6 +232,7 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/rh/afastamentos/painel/exportar",
         "/api/rh/afastamentos/{afastamento_id}",
         "/api/rh/afastamentos/{afastamento_id}/aprovar",
+        "/api/rh/afastamentos/{afastamento_id}/ciencia",
         "/api/rh/afastamentos/{afastamento_id}/cancelar",
         "/api/rh/afastamentos/{afastamento_id}/recusar",
         "/api/rh/cadastro/alteracoes/{alteracao_id}/recusar",
@@ -305,6 +309,62 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/rh/folha-ponto/competencias",
         "/api/mensagens",
         "/api/mensagens/resumo",
+        "/api/mensagens/lote",
+        "/api/mensagens/previa",
+        "/api/assinatura-email/dados",
+        "/api/assinatura-email/previa",
+        "/api/assinatura-email/png",
+        "/api/assinatura-email/html",
+        "/api/protocolo/contratos/{contrato_id}",
+        "/api/protocolo/exportar",
+        "/api/protocolo/numeros/{numero_id}",
+        "/api/protocolo/numeros/{numero_id}/anexo",
+        "/api/protocolo/numeros/{numero_id}/anular",
+        "/api/protocolo/numeros/{numero_id}/contrato",
+        "/api/protocolo/numeros/{numero_id}/liberar",
+        "/api/protocolo/numeros/{numero_id}/reservar",
+        "/api/protocolo/numeros/{numero_id}/sigilo",
+        "/api/protocolo/painel",
+        "/api/protocolo/sequencias/{sequencia_id}/faixa",
+        "/api/protocolo/sequencias/{sequencia_id}/numeros",
+        "/api/protocolo/sequencias/{sequencia_id}/proximo",
+        "/api/protocolo/tipos",
+        "/api/protocolo/tipos/{tipo_id}",
+        "/api/protocolo/tipos/{tipo_id}/sequencias",
+        "/api/contratacoes/documentos",
+        "/api/contratacoes/documentos/{documento_id}",
+        "/api/contratacoes/documentos/{documento_id}/conferencia",
+        "/api/contratacoes/documentos/{documento_id}/contrato",
+        "/api/contratacoes/documentos/{documento_id}/duplicar",
+        "/api/contratacoes/documentos/{documento_id}/exportar/pdf",
+        "/api/contratacoes/documentos/{documento_id}/exportar/word",
+        "/api/contratacoes/documentos/{documento_id}/historico/{historico_id}/restaurar",
+        "/api/contratacoes/documentos/{documento_id}/itens",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}/duplicar",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}/historico",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}/limpar-filhos",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}/linhas-tr",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}/mover",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}/revisoes",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}/revisoes/{revisao_id}/aplicar",
+        "/api/contratacoes/documentos/{documento_id}/itens/{item_id}/revisoes/{revisao_id}/resolver",
+        "/api/contratacoes/documentos/{documento_id}/linhas-tr/{linha_id}",
+        "/api/contratacoes/documentos/{documento_id}/lote",
+        "/api/contratacoes/documentos/{documento_id}/lote/previa",
+        "/api/contratacoes/documentos/{documento_id}/membros/{usuario_id}",
+        "/api/contratacoes/documentos/{documento_id}/secoes",
+        "/api/contratacoes/documentos/{documento_id}/secoes/{secao_id}",
+        "/api/contratacoes/documentos/{documento_id}/secoes/{secao_id}/ordem",
+        "/api/contratacoes/documentos/{documento_id}/situacao",
+        "/api/contratacoes/documentos/{documento_id}/versoes",
+        "/api/contratacoes/documentos/{documento_id}/versoes/{numero}",
+        "/api/contratacoes/documentos/{documento_id}/versoes/{numero}/alteracoes",
+        "/api/contratacoes/documentos/{documento_id}/versoes/{numero}/restaurar",
+        "/api/contratacoes/importar-word",
+        "/api/contratacoes/opcoes-usuarios",
+        "/api/contratacoes/painel",
+        "/api/contratacoes/por-contrato/{contrato_id}",
         "/api/mensageria/changelog/rascunho",
         "/api/mensageria/changelog/previa",
         "/api/mensageria/changelog/envios",
@@ -326,3 +386,76 @@ def test_openapi_documenta_endpoints(cliente):
     assert especificacao["paths"]["/api/autenticacao/sessao"]["get"]["security"] == [{"TokenBearer": []}]
     esquemas = especificacao["components"]["schemas"]
     assert "HTTPValidationError" not in esquemas and "RespostaErroValidacao" in esquemas
+
+
+# --- Renovação deslizante do token ---------------------------------------------------------------
+
+def _token(cliente, id_usuario: int, restam_minutos: float, inicio_horas_atras: float = 0.1, **extras) -> str:
+    """Token de acesso do usuário com `restam_minutos` de validade (a sessão começou `inicio_horas_atras` horas atrás)."""
+    config = obter_configuracao()
+    agora = datetime.now(UTC)
+    corpo = {"sub": str(id_usuario), "iat": agora - timedelta(hours=inicio_horas_atras), "ini": int((agora - timedelta(hours=inicio_horas_atras)).timestamp()),
+             "exp": agora + timedelta(minutes=restam_minutos), "tipo": "acesso", **extras}
+    return jwt.encode(corpo, config.chave_secreta_jwt.get_secret_value(), algorithm=config.algoritmo_jwt)
+
+
+def _sessao(cliente, token: str):
+    return cliente.get("/api/autenticacao/sessao", headers={"Authorization": f"Bearer {token}"})
+
+
+def test_token_com_bastante_validade_nao_e_renovado(cliente, admin):
+    uid = cliente.get("/api/autenticacao/sessao", headers=admin).json()["id"]
+    r = _sessao(cliente, _token(cliente, uid, restam_minutos=50))
+    assert r.status_code == 200 and "x-token-renovado" not in r.headers
+
+
+def test_token_perto_de_vencer_e_renovado_e_o_novo_funciona(cliente, admin):
+    uid = cliente.get("/api/autenticacao/sessao", headers=admin).json()["id"]
+    r = _sessao(cliente, _token(cliente, uid, restam_minutos=10, login="root"))
+    assert r.status_code == 200
+    novo, expira_em = r.headers["x-token-renovado"], r.headers["x-token-expira-em"]
+    # A validade recomeça (60 min), o início da sessão e as demais declarações se mantêm
+    conteudo = jwt.decode(novo, obter_configuracao().chave_secreta_jwt.get_secret_value(), algorithms=["HS256"])
+    assert conteudo["sub"] == str(uid) and conteudo["login"] == "root" and conteudo["tipo"] == "acesso"
+    assert 55 * 60 < conteudo["exp"] - datetime.now(UTC).timestamp() <= 60 * 60 and expira_em.startswith(str(datetime.now(UTC).year))
+    assert conteudo["ini"] < conteudo["iat"]
+    assert _sessao(cliente, novo).status_code == 200
+
+
+def test_sessao_maxima_para_a_renovacao(cliente, admin, monkeypatch):
+    monkeypatch.setenv("HORAS_SESSAO_MAXIMA", "12")
+    obter_configuracao.cache_clear()
+    try:
+        uid = cliente.get("/api/autenticacao/sessao", headers=admin).json()["id"]
+        # Sessão de 13 horas: não renova mais (o token ainda vale até vencer); sessão de 2 horas renova
+        assert "x-token-renovado" not in _sessao(cliente, _token(cliente, uid, restam_minutos=10, inicio_horas_atras=13)).headers
+        assert "x-token-renovado" in _sessao(cliente, _token(cliente, uid, restam_minutos=10, inicio_horas_atras=2)).headers
+    finally:
+        monkeypatch.undo()
+        obter_configuracao.cache_clear()
+
+
+def test_token_antigo_sem_inicio_continua_valendo_e_renova(cliente, admin):
+    uid = cliente.get("/api/autenticacao/sessao", headers=admin).json()["id"]
+    agora = datetime.now(UTC)
+    config = obter_configuracao()
+    antigo = jwt.encode({"sub": str(uid), "iat": agora - timedelta(minutes=50), "exp": agora + timedelta(minutes=10), "tipo": "acesso"},
+                        config.chave_secreta_jwt.get_secret_value(), algorithm=config.algoritmo_jwt)
+    assert "x-token-renovado" in _sessao(cliente, antigo).headers
+
+
+def test_usuario_desativado_perde_o_acesso_mesmo_com_token_renovavel(cliente, admin):
+    uid = criar_usuario("saiu")
+    token = _token(cliente, uid, restam_minutos=10)
+    assert _sessao(cliente, token).status_code == 200
+    with FabricaSessao() as sessao:
+        sessao.get(Usuario, uid).ativo = False
+        sessao.commit()
+    r = _sessao(cliente, token)
+    assert r.status_code == 401 and "x-token-renovado" not in r.headers
+
+
+def test_token_expirado_nao_e_renovado(cliente, admin):
+    uid = cliente.get("/api/autenticacao/sessao", headers=admin).json()["id"]
+    r = _sessao(cliente, _token(cliente, uid, restam_minutos=-1))
+    assert r.status_code == 401 and "x-token-renovado" not in r.headers

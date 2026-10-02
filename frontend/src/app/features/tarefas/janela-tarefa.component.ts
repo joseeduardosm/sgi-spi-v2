@@ -84,6 +84,8 @@ export class JanelaTarefaComponent {
   /** Novo prazo já preenchido ao abrir "Alterar prazo" (ex.: tarefa arrastada para outro dia no calendário). */
   readonly prazoSugerido = input<Date | null>(null);
   readonly concluido = output<TarefaDetalhe>();
+  /** A ação foi recusada (403) ou deu conflito (409): a tela de quem chamou deve se atualizar. */
+  readonly falhou = output<void>();
   private readonly api = inject(TarefasApiService);
   private readonly dialogos = inject(DialogosService);
 
@@ -137,7 +139,13 @@ export class JanelaTarefaComponent {
     else operacao = this.api.mover(t.numero, m, texto, t.versao);
     this.dialogos.executar(operacao).subscribe({
       next: (atualizada) => { this.modo.set(null); this.concluido.emit(atualizada); },
-      error: (e) => this.dialogos.mostrarErro(e),
+      error: (e) => {
+        this.dialogos.mostrarErro(e);
+        if (e?.status === 403 || e?.status === 409) {
+          this.modo.set(null);
+          this.falhou.emit();
+        }
+      },
     });
   }
 }

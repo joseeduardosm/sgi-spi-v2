@@ -20,7 +20,7 @@
           <tr>
             <td>{{ i.ordem }}</td>
             <td><strong>{{ i.descricao }}</strong><small>{{ i.tipo === 'continuo' ? 'Contínuo' : 'Sob demanda' }}{{ detalhe().tipo === 'regular' && i.tipo === 'continuo' && i.calcula_pro_rata && i.fator_meses !== '1.00000000' ? ' · fração ' + (i.fator_meses | quantidade) : '' }}</small></td>
-            <td class="num">{{ i.valor_unitario | moeda }}</td>
+            <td class="num">{{ i.valor_unitario | moedaUnitaria }}</td>
             <td class="num">{{ i.saldo | quantidade }}</td>
             <td class="num" [class.texto-erro]="i.glosas !== '0.0000'">{{ i.glosas !== '0.0000' ? '− ' : '' }}{{ i.glosas | quantidade }}</td>
             <td class="num"><strong>{{ i.saldo_liquido | quantidade }}</strong></td>

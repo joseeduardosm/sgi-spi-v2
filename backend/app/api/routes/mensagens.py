@@ -29,9 +29,13 @@ from app.schemas.mensagens import (
     EnvioMensagem,
     OpcaoDestinatario,
     PaginaEntregas,
+    LoteMensagens,
     PaginaEnviadas,
+    PreviaMensagem,
     RespostaEnvio,
     RespostaLembrete,
+    RespostaPrevia,
+    RespostaLote,
     ResumoCaixa,
     SituacaoDestinatario,
 )
@@ -159,6 +163,21 @@ def enviar(dados: EnvioMensagem, tarefas: BackgroundTasks, sessao: Session = Dep
     if mensagem.enviar_email:
         tarefas.add_task(servico.enviar_emails, mensagem.id)
     return RespostaEnvio(mensagem_id=mensagem.id, destinatarios=len(mensagem.entregas))
+
+
+@roteador.post("/previa", response_model=RespostaPrevia, summary="Prévia da mensagem no layout do e-mail",
+               description="Devolve o HTML do e-mail oficial (o mesmo do changelog) com o texto formatado: `## título`, `- lista` e `**negrito**`. "
+               "A caixa de mensagens e a tela de nova mensagem exibem esse HTML.", responses=INVALIDO)
+def previa(dados: PreviaMensagem, usuario: Usuario = Depends(obter_usuario_atual)) -> RespostaPrevia:
+    autor = dados.autor_nome or usuario.nome_completo or usuario.login
+    return RespostaPrevia(html=servico.previa_mensagem(dados.assunto.strip() or "(sem assunto)", dados.corpo or " ", autor, dados.link))
+
+
+@roteador.post("/lote", response_model=RespostaLote, summary="Marcar várias mensagens",
+               description="Marca as mensagens selecionadas da própria caixa como lidas, não lidas ou cientes. Ids de outras pessoas são ignorados.",
+               responses=INVALIDO)
+def marcar_lote(dados: LoteMensagens, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> RespostaLote:
+    return RespostaLote(atualizadas=servico.marcar_em_lote(sessao, usuario, dados.ids, dados.acao))
 
 
 @roteador.get("/{entrega_id}", response_model=EntregaDetalhe, summary="Abrir mensagem",

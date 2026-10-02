@@ -21,6 +21,7 @@ Férias (`ferias`) e licença-prêmio (`licenca_premio`) são administradas junt
 | Folga do 1º aviso de expiração (dias) | `folga_aviso_ferias_dias` | 15 |
 | Enviar os avisos de férias a vencer | `aviso_ferias_ativo` | sim |
 | Períodos não podem começar em feriado ou ponto facultativo cadastrado | `inicio_vedado_feriado` | não |
+| Data em que abre o agendamento das férias do ano seguinte (vazio = sem a regra) | `abertura_agendamento_ferias` | vazio |
 
 A leitura dos parâmetros traz também `membros_cgp` (só leitura): a quantidade de pessoas no setor da CGP. Com `0`, a tela Parâmetros alerta que os avisos destinados à CGP não chegam a ninguém.
 
@@ -47,7 +48,19 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
 - **Sem sobreposição** com outro afastamento ativo, de qualquer tipo.
 - As mensagens de erro são claras: "Saldo de férias do período aquisitivo 15/03/2026 a 14/03/2027 insuficiente: 12 dia(s) disponível(is), pedido de 20", "O período de férias não pode começar numa segunda-feira" etc.
 
-## Período aquisitivo de férias
+## Exercício e agendamento do próximo exercício
+
+**Exercício = janela de gozo de 12 meses.** Quando o período aquisitivo do servidor vira (ex.: 31/12/2026), os 30 dias podem ser **agendados e usufruídos nos 12 meses seguintes** (01/01/2027 a 31/12/2027). Cada linha de `rh_periodos_aquisitivos` é essa janela: os dias entram no início dela, as férias debitam a janela em que **começam** e o saldo que sobra expira no fim. O `exercicio` é o ano em que cai a maior parte da janela (`servico_periodos.exercicio_do_periodo`: 31/12/2026 a 30/12/2027 = 2027; 15/03/2027 a 14/03/2028 = 2027) e vem em `PeriodoAtual`, `ProximoPeriodo` e `PeriodoLeitura`.
+
+**Data de abertura** (`abertura_agendamento_ferias`, migração `c1f2a8d94e57`; só CGP/SuperRoot em Parâmetros). Vale quando a data cai na janela vigente do servidor (ex.: 15/10/2026, janela virando em 31/12/2026) e governa o **próximo exercício**:
+
+- **Antes da data:** férias que começam no próximo exercício não podem ser agendadas (`400` "O agendamento das férias do exercício 2027 abre em 15/10/2026."). A CGP é isenta.
+- **Depois da data:** qualquer servidor agenda até o crédito previsto (`dias_ferias_por_periodo`, 30) para o próximo exercício, **mesmo antes de o saldo ser implantado**. O pedido usa o saldo normal da janela (`creditados − usado`), então já **abate** quando o exercício começa; passar de 30 → `400` "Saldo de férias do período aquisitivo … insuficiente".
+- **Com a janela nova em curso** a regra deixa de valer (`agendamento_antecipado = null`).
+- **Sem o início do período aquisitivo informado** (`fallback`): vale o ano civil seguinte ao da data, com limite de 30 dias por ano e sem vínculo com período.
+- `GET /afastamentos/meus` traz `agendamento_antecipado`: `exercicio`, `inicio`, `fim` (nulos no fallback), `abertura`, `aberto`, `limite_dias`, `agendados`.
+
+## Período aquisitivo de férias (janela do exercício)
 
 - A CGP informa, nos dados funcionais, o **início do período aquisitivo** só como dia e mês (`"DD/MM"`, ex.: `"15/03"`); ele se repete todo ano. Ver [rh-cadastro.md](rh-cadastro.md).
 - Cada período dura **12 meses**: começa no dd/mm e termina na véspera do mesmo dd/mm do ano seguinte. 29/02 vira 28/02 nos anos comuns.
@@ -66,9 +79,21 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
 - Cada aviso sai uma vez por período (chave `ferias-periodo:{usuario}:{inicio}:{marco}`); se a tarefa pular dias, sai só o marco mais recente.
 - **Novo período:** a pessoa recebe "Novo período aquisitivo: N dias de férias disponíveis" (até 7 dias depois do início).
 
+## Fluxo em duas etapas (ciente do superior e aprovação)
+
+1. **Etapa 1: ciente e de acordo do superior imediato** (`gestor_id` do solicitante). Ao agendar ou alterar, só o superior recebe a mensagem e o e-mail "[Nome] agendou [férias/licença-prêmio]: ciente e de acordo". O pedido fica `pendente` com `aguarda_ciencia = true`.
+   - **Ciente e de acordo** (`POST /afastamentos/{id}/ciencia`) **não aprova**: registra a ciência (`ciencia_por_nome`, `ciencia_em`, evento "Ciente e de acordo do superior imediato"), envia e-mail ao solicitante e libera o pedido.
+   - O superior também pode **recusar** com justificativa (`/recusar`): o pedido encerra como `recusado`.
+   - Só o superior imediato dá o ciente (nem o autorizador, a não ser que seja o superior, nem a CGP). Ninguém dá ciente ao próprio pedido (`403`).
+2. **Etapa 2: aprovação.** Só depois do ciente o autorizador (ou substituto) e a CGP recebem o e-mail para aprovar ou recusar.
+   - Aprovar antes do ciente devolve `409 aguarda_ciencia`. A CGP continua podendo decidir a qualquer momento.
+   - **Etapa 1 dispensada:** o pedido vai direto à etapa 2 quando o solicitante não tem superior, o superior está inativo ou o superior já é o aprovador (autorizador ou substituto em exercício).
+   - Alterar um pedido pendente reinicia o fluxo (novo ciente para as novas datas); alterar um aprovado cria um novo pedido que também começa pela etapa 1.
+   - Lembrete de 3 dias: na etapa 1 vai só ao superior; na etapa 2, aos aprovadores e à CGP.
+
 ## Status
 
-`pendente` → `aprovado` | `recusado`; `aprovado` → `cancelado` | `gozado`. O `gozado` é automático, pela tarefa diária das 07:00, depois do fim do período.
+`pendente` (etapa 1, ciente do superior, e etapa 2, aprovação) → `aprovado` | `recusado`; `aprovado` → `cancelado` | `gozado`. O `gozado` é automático, pela tarefa diária das 07:00, depois do fim do período.
 
 - **Alterar um pendente:** muda o próprio pedido.
 - **Alterar um aprovado:** cria um novo pedido `pendente` com `substitui_id`. Ao ser aprovado, o anterior vira `cancelado`; se for recusado, o anterior continua aprovado.
@@ -81,6 +106,7 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
 - **E-mails** (caixa de mensagens + fila de e-mail):
   - **ao agendar ou alterar:** autorizador (ou substituto) e CGP recebem "[Nome] agendou [férias/licença-prêmio] e aguarda aprovação". O aviso se encerra na decisão;
   - **a cada mudança de status** (aprovado, recusado com a justificativa, cancelado, gozado): o usuário recebe e-mail;
+  - **ao cancelar** (`POST /afastamentos/{id}/cancelar`): além do dono do pedido, a **CGP** e o **superior imediato** recebem "Cancelamento: [Nome] cancelou [férias/licença-prêmio]" (mensagem e e-mail, com quem cancelou, o período e a justificativa); o **autorizador (ou substituto)** também, mas só se o pedido estava na etapa de aprovação (não na do ciente do superior nem já aprovado). Quem cancelou não recebe o aviso duplicado; os avisos de pedido pendente continuam sendo encerrados;
   - **pedido pendente há 3 dias:** lembrete aos aprovadores (tarefa diária).
 
 ## Endpoints
@@ -93,9 +119,10 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
 | `POST /api/rh/afastamentos` | Todos | `{ "tipo", "inicio", "fim" }` → `201 AfastamentoLeitura`; `400` com a regra violada |
 | `PUT /api/rh/afastamentos/{id}` | Dono (no prazo) ou CGP | Alteração (ver acima) |
 | `POST /api/rh/afastamentos/{id}/cancelar` | Dono (no prazo) ou CGP | `{ "justificativa" }` opcional |
-| `POST /api/rh/afastamentos/{id}/aprovar` | Autorizador, substituto ou CGP | Aprova |
-| `POST /api/rh/afastamentos/{id}/recusar` | Autorizador, substituto ou CGP | `{ "justificativa" }` obrigatória (`400` sem ela) |
-| `GET /api/rh/afastamentos/aprovacoes` | Todos | Pendentes que o usuário pode decidir (CGP: todos) |
+| `POST /api/rh/afastamentos/{id}/ciencia` | Superior imediato do solicitante | Etapa 1: ciente e de acordo (não aprova); `400` se o pedido não aguarda ciência; `403` para os demais |
+| `POST /api/rh/afastamentos/{id}/aprovar` | Autorizador, substituto ou CGP | Aprova (`409 aguarda_ciencia` antes do ciente, exceto CGP) |
+| `POST /api/rh/afastamentos/{id}/recusar` | Autorizador, substituto ou CGP; na etapa 1, também o superior imediato | `{ "justificativa" }` obrigatória (`400` sem ela) |
+| `GET /api/rh/afastamentos/aprovacoes` | Todos | Pendentes que o usuário pode decidir ou aos quais pode dar o ciente (`pode_dar_ciencia`); CGP: todos |
 | `GET /api/rh/afastamentos/painel` | Todos (escopo abaixo) | `visao=mensal\|anual`, `ano`, `mes`, `pessoa_id`, `setor_id`, `tipo` |
 | `GET /api/rh/afastamentos/painel/exportar` | Todos (escopo abaixo) | Mesmos filtros + `formato=pdf\|xlsx` |
 | `GET /api/rh/parametros` | Todos | Regras em vigor |
@@ -109,6 +136,7 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
 - identificação: `id`, `usuario_id`, `nome`, `setor` (o Departamento em vigor);
 - período: `tipo`, `inicio`, `fim`, `dias`, `exercicio`;
 - situação: `status`, `solicitado_em`, `decidido_por_nome`, `decidido_em`, `justificativa`, `substitui_id`;
+- etapa 1: `aguarda_ciencia`, `ciencia_por_nome`, `ciencia_em`, `pode_dar_ciencia`;
 - permissões: `pode_decidir`, `pode_alterar` (dono, pendente/aprovado, no prazo);
 - `eventos[]`.
 

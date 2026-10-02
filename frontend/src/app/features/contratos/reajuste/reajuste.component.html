@@ -58,15 +58,15 @@
                 <tr>
                   <td>{{ i.ordem }}</td><td><strong>{{ i.descricao }}</strong></td>
                   <td class="num">{{ i.quantidade_mensal | quantidade }}</td>
-                  <td class="num">{{ i.valor_unitario_atual | moeda }}</td>
+                  <td class="num">{{ i.valor_unitario_atual | moedaUnitaria }}</td>
                   <td class="num" style="width: 110px"><input class="campo-tabela" inputmode="decimal" [class.invalido]="!indiceValido(indices[i.item_id])"
                          [attr.aria-invalid]="!indiceValido(indices[i.item_id])" [attr.aria-label]="'Percentual de ' + i.descricao" [disabled]="!p.pode_editar"
                          [(ngModel)]="indices[i.item_id]" placeholder="0" /></td>
                   <td class="num" style="width: 130px"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Valor referencial de ' + i.descricao" [disabled]="!p.pode_editar" [(ngModel)]="referenciais[i.item_id]" placeholder="opcional" /></td>
                   @let novo = precoNovo(i);
-                  <td class="num"><strong>{{ novo | moeda }}</strong></td>
+                  <td class="num"><strong>{{ novo | moedaUnitaria }}</strong></td>
                   <td class="num" [class.variacao-positiva]="novo > +i.valor_unitario_atual" [class.variacao-negativa]="novo < +i.valor_unitario_atual">
-                    {{ novo > +i.valor_unitario_atual ? '+' : '' }}{{ novo - +i.valor_unitario_atual | moeda }}</td>
+                    {{ novo > +i.valor_unitario_atual ? '+' : '' }}{{ novo - +i.valor_unitario_atual | moedaUnitaria }}</td>
                   <td class="num">{{ novo * +i.quantidade_mensal | moeda }}</td>
                 </tr>
               }

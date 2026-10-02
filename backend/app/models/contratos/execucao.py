@@ -164,39 +164,13 @@ class Competencia(Base):
     medicao_iniciada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     medicao_concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    # Etapa 3 — nota fiscal (principal e adicional)
-    nf_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
-    nf_numero: Mapped[str] = mapped_column(String(100), default="")
+    # Etapa 3 — nota fiscal (uma ou mais)
+    # As notas fiscais (uma ou mais, cada uma com PDF e XML) ficam em `notas_fiscais`
     # Data de recebimento da NF: com o prazo de pagamento, define o vencimento
     nf_recebida_em: Mapped[date | None] = mapped_column(Date)
     prazo_pagamento_dias: Mapped[int | None] = mapped_column(Integer)
     # De onde veio o valor bruto: calculado pela medição ou digitado (manual)
     origem_valor_nf: Mapped[str | None] = mapped_column(String(20))
-    nf_valor_bruto: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
-    # Retenções de tributos na NF principal (IR, INSS, ISS, PIS/PASEP e COFINS)
-    nf_retencao_ir: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_retencao_inss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_retencao_iss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_retencao_pis: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_retencao_cofins: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_retencao_csll: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0), server_default=text("0"))
-    # XML da nota (obrigatório junto com o PDF) e os dados lidos dele (ver leitor_nota_xml)
-    nf_xml_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
-    nf_dados_xml: Mapped[dict[str, Any] | None] = mapped_column(TipoJson)
-    nf_chave: Mapped[str | None] = mapped_column(String(60), index=True)
-    # NF adicional (opcional), com as mesmas informações
-    nf_adicional_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
-    nf_adicional_numero: Mapped[str] = mapped_column(String(100), default="")
-    nf_adicional_valor_bruto: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
-    nf_adicional_retencao_ir: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_adicional_retencao_inss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_adicional_retencao_iss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_adicional_retencao_pis: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_adicional_retencao_cofins: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
-    nf_adicional_retencao_csll: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0), server_default=text("0"))
-    nf_adicional_xml_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
-    nf_adicional_dados_xml: Mapped[dict[str, Any] | None] = mapped_column(TipoJson)
-    nf_adicional_chave: Mapped[str | None] = mapped_column(String(60), index=True)
     nf_concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Etapa 4 — retenção de tributos (conferida pelo Financeiro ou pela equipe)
@@ -252,6 +226,9 @@ class Competencia(Base):
     consultas_cadin: Mapped[list["ConsultaCadin"]] = relationship(
         back_populates="competencia", cascade="all, delete-orphan", order_by="ConsultaCadin.criado_em"
     )
+    notas_fiscais: Mapped[list["NotaFiscalCompetencia"]] = relationship(
+        back_populates="competencia", cascade="all, delete-orphan", order_by="NotaFiscalCompetencia.ordem"
+    )
     documentos: Mapped[list["DocumentoMensal"]] = relationship(
         back_populates="competencia", cascade="all, delete-orphan", order_by="DocumentoMensal.ordem"
     )
@@ -261,10 +238,6 @@ class Competencia(Base):
         back_populates="competencia", order_by="AbatimentoReajuste.criado_em"
     )
     # Os anexos têm várias FKs para a mesma tabela `anexos`; `foreign_keys` diz qual coluna usar em cada uma
-    nf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_anexo_id])
-    nf_adicional_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_adicional_anexo_id])
-    nf_xml_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_xml_anexo_id])
-    nf_adicional_xml_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[nf_adicional_xml_anexo_id])
     retencao_pdf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[retencao_pdf_anexo_id])
     consolidado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[consolidado_anexo_id])
     ob_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[ob_anexo_id])
@@ -312,11 +285,12 @@ class ItemMedicao(Base):
     descricao: Mapped[str] = mapped_column(String(1000))
     tipo: Mapped[str] = mapped_column(String(20))
     calcula_pro_rata: Mapped[bool] = mapped_column(Boolean, default=True)
-    valor_unitario: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    valor_unitario: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     # Meses equivalentes do período (ex.: 0,5333 em mês parcial com pró-rata)
     fator_meses: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal(1))
     quantidade_prevista: Mapped[Decimal] = mapped_column(Numeric(18, 4))
-    quantidade_medida: Mapped[Decimal] = mapped_column(Numeric(18, 10), default=Decimal(0))
+    # 28 dígitos (18 inteiros + 10 casas), como o schema: contratos com quantidades na casa dos bilhões
+    quantidade_medida: Mapped[Decimal] = mapped_column(Numeric(28, 10), default=Decimal(0))
 
     competencia: Mapped[Competencia] = relationship(back_populates="itens")
 
@@ -464,3 +438,38 @@ class AvaliacaoCompetencia(Base):
     pdf_gerado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[pdf_gerado_anexo_id])
     pdf_assinado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[pdf_assinado_anexo_id])
     reconsideracao_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[reconsideracao_anexo_id])
+
+
+class NotaFiscalCompetencia(Base):
+    """Nota fiscal juntada à competência (etapa 3): PDF, XML, valores lidos do XML e retenções conferidas.
+
+    Uma medição pode ter várias notas (`ordem` 1, 2, …); o valor a pagar é a soma dos brutos.
+    """
+    __tablename__ = "contratos_competencias_notas_fiscais"
+    __table_args__ = (UniqueConstraint("competencia_id", "ordem", name="uq_contratos_notas_fiscais_competencia_ordem"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer)
+    anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    xml_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    numero: Mapped[str] = mapped_column(String(100), default="")
+    chave: Mapped[str | None] = mapped_column(String(60), index=True)
+    valor_bruto: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    # Retenções de tributos (sugeridas pelo XML e conferidas na etapa de retenção)
+    retencao_ir: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    retencao_inss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    retencao_iss: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    retencao_pis: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    retencao_cofins: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    retencao_csll: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0), server_default=text("0"))
+    dados_xml: Mapped[dict[str, Any] | None] = mapped_column(TipoJson)
+
+    competencia: Mapped["Competencia"] = relationship(back_populates="notas_fiscais")
+    anexo: Mapped[Anexo | None] = relationship(foreign_keys=[anexo_id])
+    xml_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[xml_anexo_id])
+
+    @property
+    def rotulo(self) -> str:
+        """"NF 123" (ou "NF 2" pela ordem, se o XML não trouxe número)."""
+        return f"NF {self.numero}" if self.numero else f"NF {self.ordem}"

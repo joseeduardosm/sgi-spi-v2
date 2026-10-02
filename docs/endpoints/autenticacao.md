@@ -31,6 +31,8 @@ Valida login e senha e emite um token JWT de acesso. Com um diretório LDAP ativ
 | `tipo_token` | string | Sempre `bearer` |
 | `expira_em_segundos` | integer | Validade em segundos a partir da emissão |
 | `expira_em` | string (date-time, UTC) | Instante de expiração |
+
+**Renovação:** nas rotas autenticadas, perto do vencimento a resposta traz os cabeçalhos `X-Token-Renovado` (token novo) e `X-Token-Expira-Em` (ISO 8601, UTC); o frontend os guarda. Ver [../autenticacao.md](../autenticacao.md).
 | `usuario` | `UsuarioSessao` | Usuário autenticado |
 
 `UsuarioSessao`:
@@ -114,8 +116,8 @@ Perfil institucional do usuário autenticado.
 | `celular` | string | Celular |
 | `cargo` | string | Cargo |
 | `departamento` | string | Departamento |
-| `andar` | string | Andar |
-| `predio` | string | Prédio |
+| `andar` | string | Andar: `Subsolo` ou `1` a `13` (lista fixa na tela) |
+| `predio` | string | Lado do andar: `A` ou `B` (na tela, "Lado"; o nome do campo continua `predio`) |
 | `data_nascimento` | string (date) \| null | `AAAA-MM-DD` |
 | `gestor_id` | integer \| null | Superior imediato (em vigor) |
 | `gestor_nome` | string \| null | Nome do gestor |
@@ -135,6 +137,7 @@ Confirma o próprio perfil no mês civil (grava `perfil_revisado_em`). Operaçã
 - **Autorização:** Bearer.
 - **Requisição: `RevisaoPerfil`**. Mesmos campos de `PerfilLeitura`, sem `gestor_nome` e `perfil_revisado_em`.
   - **Obrigatórios, não podem ser vazios:** `nome_completo`, `email` (formato válido), `ramal`, `cargo`, `departamento`, `andar`, `predio`.
+  - `andar` aceita só `Subsolo` ou `1` a `13`, e `predio` (lado) só `A` ou `B`; outro valor devolve `400` (`Andar inválido…`/`Lado inválido…`). Valores antigos de texto livre continuam aceitos enquanto não forem alterados.
   - **Opcionais:** `celular`, `data_nascimento`; `gestor_id` (ver acima).
 
 ```json
@@ -146,7 +149,7 @@ Confirma o próprio perfil no mês civil (grava `perfil_revisado_em`). Operaçã
   "cargo": "Analista",
   "departamento": "Coordenadoria de Contratos",
   "andar": "5",
-  "predio": "Sede",
+  "predio": "A",
   "data_nascimento": null,
   "gestor_id": 42
 }

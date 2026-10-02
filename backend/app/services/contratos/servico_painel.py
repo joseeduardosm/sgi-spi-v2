@@ -88,6 +88,15 @@ def _medir_desde(competencia: Competencia) -> date:
     return competencia.periodo_fim if competencia.tipo == "regular" else competencia.criado_em.date()
 
 
+# Pendências de execução (competências) anteriores a esta data foram "limpas" e não aparecem mais em "Minhas pendências"
+PENDENCIAS_A_PARTIR_DE = date(2026, 9, 1)
+
+
+def _anterior_ao_corte(competencia: Competencia) -> bool:
+    """Competência de antes de 09/2026: a pendência dela não é mais cobrada."""
+    return _medir_desde(competencia) < PENDENCIAS_A_PARTIR_DE
+
+
 def _rota_competencia(contrato: Contrato, competencia: Competencia) -> str:
     """Endereço (rota do Angular) da tela de execução da competência."""
     return f"/contratos/{contrato.id}/execucao/{competencia.identificador}"
@@ -112,9 +121,9 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
         membro = any(d.usuario_id == usuario.id for d in designacoes_vigentes(contrato))
         if not (membro or contrato.criador_id == usuario.id):
             if financeiro:
-                for competencia in (c for c in contrato.competencias if c.etapa_atual == "retencao"):
+                for competencia in (c for c in contrato.competencias if c.etapa_atual == "retencao" and not _anterior_ao_corte(c)):
                     lista.append(_pendencia(
-                        contrato, "retencao", f"{_nome(competencia)}: conferir a retenção de tributos da NF {competencia.nf_numero}",
+                        contrato, "retencao", f"{_nome(competencia)}: conferir a retenção de tributos da NF {', '.join(n.numero or str(n.ordem) for n in competencia.notas_fiscais)}",
                         f"/contratos/{contrato.id}/execucao/{competencia.identificador}", competencia.nf_recebida_em or competencia.periodo_fim,
                     ))
             continue
@@ -125,7 +134,7 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
             lista.append(_pendencia(contrato, "base_execucao", descricao, f"/contratos/{contrato.id}", contrato.data_inicio))
         # Competências já encerradas e não concluídas: cada uma gera uma pendência
         for competencia in contrato.competencias:
-            if competencia.etapa_atual == "concluida" or referencia <= competencia.periodo_fim:
+            if competencia.etapa_atual == "concluida" or referencia <= competencia.periodo_fim or _anterior_ao_corte(competencia):
                 continue
             rota = _rota_competencia(contrato, competencia)
             mes = _nome(competencia)

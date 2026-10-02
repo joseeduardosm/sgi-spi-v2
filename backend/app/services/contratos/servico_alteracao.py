@@ -30,13 +30,13 @@ from app.schemas.contratos.alteracoes import (
 from app.schemas.contratos.execucao import LeituraArquivo, LeituraCiencia
 from app.services import servico_anexos
 from app.services.contratos import calculos, valores
-from app.services.contratos.documentos_execucao import PAPEIS, data_hora, moeda, quantidade
+from app.services.contratos.documentos_execucao import PAPEIS, data_hora, moeda, moeda_unitaria, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_competencias import CIENCIAS_MINIMAS
 from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, integra_equipe, obter_contrato, pode_editar, vigencias
 from app.services.contratos.servico_orcamento import obter_ou_criar_previsao
 from app.services.documentos.pdf import DocumentoPdf, mesclar_pdfs
-from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
+from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_MOEDA_UNITARIA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
 from app.services.servico_auditoria import auditar
 
 ZERO = Decimal(0)
@@ -302,7 +302,7 @@ def gerar_memoria(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UU
     ])
     documento.secao("Quantitativos").tabela(
         ["Item", "Descrição", "Tipo", "Valor unitário", "Qtd. atual", "Executado", "Nova qtd.", "Impacto"],
-        [[str(l[0]), l[1], l[2], moeda(l[3]), quantidade(l[4]), quantidade(l[5]), quantidade(l[6]), moeda(l[7])] for l in _linhas(alteracao)],
+        [[str(l[0]), l[1], l[2], moeda_unitaria(l[3]), quantidade(l[4]), quantidade(l[5]), quantidade(l[6]), moeda(l[7])] for l in _linhas(alteracao)],
         larguras=[0.5, 4, 1.2, 1.4, 1.2, 1.2, 1.2, 1.5], alinhar_direita=[3, 4, 5, 6, 7],
         rodape=["", "Impacto total", "", "", "", "", f"{alteracao.impacto_percentual:.2f}%".replace(".", ","), moeda(alteracao.impacto_valor)],
     )
@@ -312,7 +312,7 @@ def gerar_memoria(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UU
     pdf = servico_anexos.guardar_pdf_gerado(sessao, documento.gerar(), f"{base}.pdf", "contrato-alteracao-memoria", autor.id, contrato_id=contrato.id)
     xlsx = servico_anexos.guardar_arquivo_gerado(sessao, gerar_planilha([Aba(
         rotulo,
-        [Coluna("Item", largura=6), Coluna("Descrição", largura=40), Coluna("Tipo", largura=14), Coluna("Valor unitário", FORMATO_MOEDA),
+        [Coluna("Item", largura=6), Coluna("Descrição", largura=40), Coluna("Tipo", largura=14), Coluna("Valor unitário", FORMATO_MOEDA_UNITARIA),
          Coluna("Qtd. atual", FORMATO_QUANTIDADE), Coluna("Executado", FORMATO_QUANTIDADE), Coluna("Nova qtd.", FORMATO_QUANTIDADE), Coluna("Impacto", FORMATO_MOEDA)],
         _linhas(alteracao), titulo=f"{rotulo} — Contrato {contrato.numero}", rodape=["", "Total", "", "", "", "", "", alteracao.impacto_valor],
     )]), f"{base}.xlsx", XLSX, "contrato-alteracao-memoria", autor.id, contrato_id=contrato.id)

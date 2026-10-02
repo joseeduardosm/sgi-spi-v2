@@ -1,5 +1,5 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para exibir a tarefa numa janela sobre o quadro (estilo Trello): conteúdo à esquerda, propriedades e ações à direita.
+// Este arquivo serve para exibir o detalhe da tarefa (estilo Trello) na tela própria /tarefas/:numero: conteúdo à esquerda, propriedades e ações à direita.
 
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, effect, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
@@ -54,7 +54,7 @@ const CAMPOS: Record<string, string> = { titulo: 'Título', descricao: 'Descriç
 interface CamposEdicao { titulo: string; descricao: string; prioridade: PrioridadeTarefa; participantes_ids: number[]; marcadores_ids: string[] }
 
 /**
- * Janela da tarefa, aberta sobre qualquer visão (`?tarefa=123` na URL).
+ * Detalhe da tarefa, exibido na tela própria `/tarefas/:numero` (`pagina`) ou, se preciso, como janela.
  * - Esquerda: título (edita no lugar), descrição, checklist, comentário e a atividade (linha do tempo).
  * - Direita: etapa e ações do pipeline (só as permitidas em `acoes`), pessoas, prazo, prioridade,
  *   marcadores, equipe e dados da tarefa. Cada propriedade é salva sozinha, com `versao` (409 em conflito).
@@ -65,11 +65,13 @@ interface CamposEdicao { titulo: string; descricao: string; prioridade: Priorida
   imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
   templateUrl: './janela-detalhe-tarefa.component.html',
   // Esc fecha a janela, a menos que uma janela interna (prazo, motivo, remoção) esteja aberta: ela fecha primeiro
-  host: { '(document:keydown.escape)': 'aoEsc()' },
+  host: { '(document:keydown.escape)': 'aoEsc()', '(window:focus)': 'recarregarAoVoltar()' },
 })
 export class JanelaDetalheTarefaComponent {
   /** Número da tarefa aberta (vazio: janela fechada). */
   readonly numeroTarefa = input<number | null>(null);
+  /** Tela própria (`/tarefas/:numero`): sem fundo escurecido nem comportamento de janela modal. */
+  readonly pagina = input(false);
   readonly fechar = output<void>();
   /** A tarefa mudou (o quadro recarrega); `null` quando foi excluída. */
   readonly alterada = output<TarefaDetalhe | null>();
@@ -150,6 +152,27 @@ export class JanelaDetalheTarefaComponent {
     });
   }
 
+  /** Recarrega a tarefa e a linha do tempo (a tela pode estar desatualizada: outra pessoa pode ter mudado a tarefa). */
+  protected recarregar(): void {
+    const numero = this.numeroTarefa();
+    if (!numero) return;
+    this.api.detalhe(numero).subscribe({
+      next: (t) => { this.tarefa.set(t); this.carregarEventos(true); this.alterada.emit(t); },
+      error: () => undefined,
+    });
+  }
+
+  /** Ao voltar para a aba: se a tarefa mudou enquanto ela estava em segundo plano, a tela atualiza (sem atrapalhar quem edita). */
+  protected recarregarAoVoltar(): void {
+    if (this.numeroTarefa() && !this.modoJanela() && !this.editandoCampo() && !this.eventoRemover()) this.recarregar();
+  }
+
+  /** Erro numa ação: mostra a mensagem e, se for recusa ou conflito (tela desatualizada), atualiza a tarefa para mostrar as ações de agora. */
+  protected falha(e: { status?: number }): void {
+    this.dialogos.mostrarErro(e);
+    if (e?.status === 403 || e?.status === 409) this.recarregar();
+  }
+
   /** Esc: fecha primeiro as janelas internas; sem elas, fecha a tarefa. */
   protected aoEsc(): void {
     if (!this.numeroTarefa() || this.modoJanela() || this.eventoRemover()) return;
@@ -179,7 +202,7 @@ export class JanelaDetalheTarefaComponent {
     const t = this.tarefa()!;
     this.dialogos.executar(this.api.mover(t.numero, acao, '', t.versao)).subscribe({
       next: (n) => this.atualizar(n),
-      error: (e) => this.dialogos.mostrarErro(e),
+      error: (e) => this.falha(e),
     });
   }
 
@@ -188,7 +211,7 @@ export class JanelaDetalheTarefaComponent {
     if (!(await this.dialogos.confirmar({ titulo: 'Excluir tarefa', mensagem: `A tarefa #${t.numero} e todo o histórico serão apagados. Não há como desfazer.`, rotuloConfirmar: 'Excluir', segundos: 3 }))) return;
     this.dialogos.executar(this.api.excluir(t.numero)).subscribe({
       next: () => { this.alterada.emit(null); this.fechar.emit(); },
-      error: (e) => this.dialogos.mostrarErro(e),
+      error: (e) => this.falha(e),
     });
   }
 
@@ -203,7 +226,7 @@ export class JanelaDetalheTarefaComponent {
     };
     this.dialogos.executar(this.api.editar(t.numero, { ...atual, ...parcial, versao: t.versao })).subscribe({
       next: (n) => { this.editandoCampo.set(null); this.atualizar(n); },
-      error: (e) => this.dialogos.mostrarErro(e),
+      error: (e) => this.falha(e),
     });
   }
 
@@ -284,7 +307,7 @@ export class JanelaDetalheTarefaComponent {
     if (acao === 'incluir' && !texto) return;
     this.api.checklist(this.numero(), acao, texto, itemId).subscribe({
       next: (n) => { if (acao === 'incluir') this.novoItem = ''; this.atualizar(n); },
-      error: (e) => this.dialogos.mostrarErro(e),
+      error: (e) => this.falha(e),
     });
   }
 

@@ -238,3 +238,43 @@ def test_email_no_layout_oficial_com_brasao(cliente, admin, pessoas):
     assert "cid:brasao-spi" in html and "GOVERNO DO ESTADO DE SÃO PAULO" in html and "SGI SPI – Sistema de Gestão Integrada" in html
     imagens = [p for p in mensagem.walk() if p.get_content_type() == "image/png"]
     assert len(imagens) == 1 and imagens[0]["Content-ID"] == "<brasao-spi>" and imagens[0].get_content()[:4] == b"\x89PNG"
+
+
+def test_marcar_varias_como_lidas_nao_lidas_e_cientes(cliente, admin, pessoas):
+    ids, h = pessoas
+    for assunto in ("Um", "Dois", "Três"):
+        _enviar(cliente, admin, usuarios_ids=[ids["ana"], ids["bruno"]], assunto=assunto)
+    ana = cliente.get(URL, headers=h["ana"]).json()["itens"]
+    todos = [m["id"] for m in ana]
+    assert len(todos) == 3 and cliente.get(f"{URL}/resumo", headers=h["ana"]).json()["nao_lidas"] == 3
+    r = cliente.post(f"{URL}/lote", json={"ids": todos, "acao": "lida"}, headers=h["ana"])
+    assert r.status_code == 200 and r.json()["atualizadas"] == 3
+    assert cliente.get(f"{URL}/resumo", headers=h["ana"]).json()["nao_lidas"] == 0
+    assert cliente.post(f"{URL}/lote", json={"ids": todos[:2], "acao": "nao_lida"}, headers=h["ana"]).json()["atualizadas"] == 2
+    assert cliente.get(f"{URL}/resumo", headers=h["ana"]).json()["nao_lidas"] == 2
+    assert cliente.post(f"{URL}/lote", json={"ids": todos, "acao": "ciente"}, headers=h["ana"]).json()["atualizadas"] == 3
+    assert cliente.get(f"{URL}/resumo", headers=h["ana"]).json()["pendentes"] == 0
+    # Mensagens de outra pessoa são ignoradas
+    assert cliente.post(f"{URL}/lote", json={"ids": todos, "acao": "lida"}, headers=h["bruno"]).json()["atualizadas"] == 0
+    assert cliente.get(f"{URL}/resumo", headers=h["bruno"]).json()["nao_lidas"] == 3
+
+
+def test_mensagem_aparece_formatada_como_o_email_do_changelog(cliente, admin, pessoas):
+    """A prévia e o e-mail usam o layout oficial, com `## título`, `- lista` e `**negrito**` renderizados (e HTML do texto escapado)."""
+    ids, h = pessoas
+    corpo = "## Novidades\nVeja o **ciente** do superior.\n- primeiro item\n- segundo <b>item</b>"
+    r = cliente.post(f"{URL}/previa", json={"assunto": "Mudanças nas férias", "corpo": corpo}, headers=h["ana"])
+    assert r.status_code == 200
+    html = r.json()["html"]
+    assert "<h2" in html and "<strong>ciente</strong>" in html and html.count("<li") == 2
+    assert "&lt;b&gt;item&lt;/b&gt;" in html and "data:image/png;base64," in html and "cid:brasao-spi" not in html
+    assert "Enviada por Ana da Silva." in html
+    # O e-mail enviado carrega o mesmo corpo formatado
+    SmtpSimulado.enviadas.clear()
+    assert cliente.post("/api/smtp/servidores", json=dados_servidor(), headers=admin).status_code == 201
+    _enviar(cliente, admin, usuarios_ids=[ids["ana"]], assunto="Mudanças nas férias", corpo=corpo, enviar_email=True)
+    with FabricaSessao() as sessao:
+        mensageria.enviar_emails_pendentes(sessao)
+    mensagem = next(m for m, _, para, _ in SmtpSimulado.enviadas if para == ["ana@sp.gov.br"])
+    html_email = next(parte.get_content() for parte in mensagem.walk() if parte.get_content_type() == "text/html")
+    assert "<strong>ciente</strong>" in html_email and html_email.count("<li") == 2

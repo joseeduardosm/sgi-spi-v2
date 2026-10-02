@@ -12,7 +12,7 @@ Exige ACL `contratos` ≥ `LEITURA`. Parâmetros opcionais: `exercicio` (padrão
 
 Resposta `Painel`:
 - `hoje`.
-- `minhas_pendencias[]`: o que o usuário precisa fazer nos contratos em que é **criador ou integrante vigente da equipe**.
+- `minhas_pendencias[]`: o que o usuário precisa fazer nos contratos em que é **criador ou integrante vigente da equipe**. **Competências de antes de 09/2026 não geram mais pendência** (medição, ciências, nota fiscal, retenção, CADIN etc.; vale o fim do período, ou a criação, na diferença de reajuste). O corte é a constante `PENDENCIAS_A_PARTIR_DE` em `servico_painel.py`; prorrogação, reajuste, aditamento/supressão e a geração da execução não mudam.
   - Campos: `tipo`, `contrato_numero`, `contrato_apelido`, `descricao`, `rota` (tela do Angular) e `desde` (para ordenar por urgência).
   - Tipos:
     - competências liberadas e não concluídas: a etapa atual, `ciencia_medicao` ou `ciencia_ateste` (para os integrantes da equipe, só enquanto ninguém deu ciência; no ateste, depois das notas fechadas. Após a primeira ciência, a pendência volta a ser a etapa);

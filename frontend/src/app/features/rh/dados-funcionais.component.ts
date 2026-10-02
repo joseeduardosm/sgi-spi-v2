@@ -69,7 +69,7 @@ function dataBr(texto: string): string {
             <input [id]="id('inicio')" inputmode="numeric" maxlength="5" placeholder="dd/mm" [class.invalido]="!inicioValido()"
                    [ngModel]="inicio()" (ngModelChange)="digitarInicio($event)" [ngModelOptions]="{ standalone: true }" />
             <small class="dica-formulario" [class.texto-erro]="!inicioValido()">{{ inicioValido()
-              ? 'Todo ano, nesta data, entram os dias de férias do novo período; o saldo não usado expira.'
+              ? 'Todo ano, nesta data, começa um novo exercício: entram os dias de férias dele e o saldo não usado do anterior expira.'
               : 'Use dd/mm com uma data válida (ex.: 15/03).' }}</small></div>
           <div class="linha-caixas" style="align-self: center"><label><input type="checkbox" [(ngModel)]="funcionais.sem_superior" [ngModelOptions]="{ standalone: true }" />
             Topo da hierarquia (sem superior imediato)</label></div>
@@ -111,7 +111,7 @@ function dataBr(texto: string): string {
 
         @if (vigente(); as v) {
           <div class="cartao-periodo">
-            <div><small>Período aquisitivo vigente</small><strong>{{ data(v.inicio) }} a {{ data(v.fim) }}</strong></div>
+            <div><small>Exercício vigente ({{ v.exercicio }})</small><strong>{{ data(v.inicio) }} a {{ data(v.fim) }}</strong></div>
             <div><small>Creditados</small><strong>{{ v.dias_creditados }}</strong>@if (v.origem === 'ajuste_cgp') { <em>ajustado</em> }</div>
             <div><small>Agendados</small><strong>{{ v.usado }}</strong></div>
             <div class="destaque"><small>Disponíveis</small><strong>{{ v.disponivel }}</strong></div>
@@ -129,11 +129,11 @@ function dataBr(texto: string): string {
           <details class="historico-periodos">
             <summary>Períodos anteriores</summary>
             <table class="tabela-gestao">
-              <thead><tr><th>Período</th><th class="num">Creditados</th><th class="num">Usados</th><th class="num">Expirados</th></tr></thead>
+              <thead><tr><th>Exercício</th><th class="num">Creditados</th><th class="num">Usados</th><th class="num">Expirados</th></tr></thead>
               <tbody>
                 @for (per of c.funcionais.periodos; track per.inicio) {
                   @if (!per.vigente) {
-                    <tr><td>{{ data(per.inicio) }} a {{ data(per.fim) }}</td><td class="num">{{ per.dias_creditados }}</td><td class="num">{{ per.usado }}</td>
+                    <tr><td>{{ per.exercicio }} · {{ data(per.inicio) }} a {{ data(per.fim) }}</td><td class="num">{{ per.dias_creditados }}</td><td class="num">{{ per.usado }}</td>
                       <td class="num">{{ per.dias_expirados ?? '—' }}</td></tr>
                   }
                 }

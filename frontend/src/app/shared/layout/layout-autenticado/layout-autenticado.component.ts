@@ -71,6 +71,11 @@ export class LayoutAutenticadoComponent {
     void this.roteador.navigate(['/perfil']);
   }
 
+  protected abrirAssinatura(): void {
+    this.layout.fecharSobreposicoes();
+    void this.roteador.navigate(['/assinatura-email']);
+  }
+
   /** Janela da folha de ponto (criada ao abrir: a lista de competências é sempre a do mês atual). */
   protected readonly folhaPontoAberta = signal(false);
 

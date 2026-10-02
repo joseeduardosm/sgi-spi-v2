@@ -91,7 +91,7 @@ const TAMANHO_MAXIMO_MB = 5;
                       <td>{{ i.calcula_pro_rata === null ? '—' : i.calcula_pro_rata ? 'Pró-rata' : 'Sempre integral' }}</td>
                       <td class="num">{{ i.quantidade_mensal | quantidade }}</td>
                       <td class="num">{{ i.quantidade_total | quantidade }}</td>
-                      <td class="num">{{ i.valor_unitario | moeda }}</td>
+                      <td class="num">{{ i.valor_unitario | moedaUnitaria }}</td>
                     </tr>
                   } @empty {
                     <tr><td class="estado-vazio" colspan="7">Nenhum item na planilha.</td></tr>

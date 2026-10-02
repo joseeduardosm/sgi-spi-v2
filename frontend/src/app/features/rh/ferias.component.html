@@ -5,7 +5,7 @@
   <section class="cartao-dados" aria-labelledby="titulo-saldos">
     <header>
       <div><h2 id="titulo-saldos">Exercício {{ d.exercicio }}</h2>
-        <small>Férias pelo período aquisitivo ({{ d.parametros.dias_ferias_por_periodo }} dias a cada 12 meses; o saldo não usado expira). Mínimo de {{ d.parametros.minimo_dias_ferias }} dias (férias) e {{ d.parametros.minimo_dias_lp }} dias (licença-prêmio);
+        <small>Férias por exercício ({{ d.parametros.dias_ferias_por_periodo }} dias a cada 12 meses, agendados e usufruídos dentro do exercício; o saldo não usado expira no fim dele). Mínimo de {{ d.parametros.minimo_dias_ferias }} dias (férias) e {{ d.parametros.minimo_dias_lp }} dias (licença-prêmio);
           antecedência de {{ d.parametros.antecedencia_minima_dias }} dias; o período não pode começar em: {{ diasSemana(d.parametros.inicio_vedado_ferias) }}.
           Alterar ou cancelar: até {{ d.parametros.prazo_cancelamento_dias }} dia(s) antes do início.</small></div>
       <div class="acoes-formulario">
@@ -14,6 +14,12 @@
       </div>
     </header>
     <div class="corpo">
+      @if (d.agendamento_antecipado; as ag) {
+        <p class="aviso-bloco informativo">
+          @if (ag.aberto) { O agendamento das férias do exercício <b>{{ ag.exercicio }}</b> está aberto: você pode agendar até <b>{{ ag.limite_dias }} dias</b>, mesmo antes de o saldo ser implantado ({{ ag.agendados }} já agendado(s)). Quando o exercício começar, esses dias já estarão abatidos do saldo. }
+          @else { O agendamento das férias do exercício <b>{{ ag.exercicio }}</b> abre em <b>{{ data(ag.abertura) }}</b>. }
+        </p>
+      }
       @if (d.periodo_vigente; as pv) {
         @if (pv.alerta_expiracao && pv.data_limite_pedido) {
           <p class="aviso-bloco">Você tem <b>{{ pv.disponivel }} dia(s) de férias</b> que expiram em {{ data(pv.fim) }}.
@@ -21,12 +27,12 @@
         }
         <div class="indicadores">
           <div class="indicador destaque"><span>Férias disponíveis</span><strong>{{ pv.disponivel }} dias</strong>
-            <small>período aquisitivo {{ data(pv.inicio) }} a {{ data(pv.fim) }} · expira em {{ pv.expira_em_dias }} dia(s)</small></div>
+            <small>exercício {{ pv.exercicio }} · {{ data(pv.inicio) }} a {{ data(pv.fim) }} · expira em {{ pv.expira_em_dias }} dia(s)</small></div>
           @if (d.proximo_periodo; as pp) {
-            <div class="indicador"><span>Próximo período</span><strong>{{ pp.dias_creditados_previstos - pp.usado }} dias</strong>
+            <div class="indicador"><span>Próximo exercício ({{ pp.exercicio }})</span><strong>{{ pp.dias_creditados_previstos - pp.usado }} dias</strong>
               <small>a partir de {{ data(pp.inicio) }} · já agendados {{ pp.usado }}</small></div>
           }
-          <div class="indicador"><span>Licença-prêmio disponível ({{ d.exercicio }})</span><strong>{{ d.saldos.licenca_premio.disponivel }} dias</strong>
+          <div class="indicador"><span>Licença-prêmio (ano civil {{ d.exercicio }})</span><strong>{{ d.saldos.licenca_premio.disponivel }} dias</strong>
             <small>saldo {{ d.saldos.licenca_premio.saldo }} · agendados {{ d.saldos.licenca_premio.usado }}</small></div>
         </div>
       } @else {
@@ -83,7 +89,9 @@
               <td><span [class]="'etiqueta-afastamento ' + a.tipo">[{{ siglas[a.tipo] }}]</span> {{ tipos[a.tipo] }}</td>
               <td>{{ data(a.inicio) }} a {{ data(a.fim) }}@if (a.substitui_id) { <small> · alteração</small> }</td>
               <td class="num">{{ a.dias }}</td>
-              <td><span [class]="'selo-afastamento ' + a.status">{{ status[a.status] }}</span></td>
+              <td><span [class]="'selo-afastamento ' + a.status">{{ status[a.status] }}</span>
+                @if (a.aguarda_ciencia) { <small>Aguardando o ciente e de acordo do superior imediato</small> }
+                @else if (a.status === 'pendente' && a.ciencia_por_nome) { <small>Ciente: {{ a.ciencia_por_nome }}; aguardando aprovação</small> }</td>
               <td>@if (a.decidido_por_nome) { {{ a.decidido_por_nome }} em {{ a.decidido_em | date: 'dd/MM/yyyy' }} }
                 @if (a.justificativa) { <small class="texto-erro">{{ a.justificativa }}</small> }</td>
               <td class="acoes-linha">
@@ -113,9 +121,9 @@
       <button type="button" aria-label="Fechar" (click)="limparSelecao()">×</button>
     </header>
     <div class="escolha-tipo">
-      <button type="button" class="opcao-tipo ferias" [disabled]="!d.periodo_vigente || dias() > saldoFeriasDoPedido(d)" (click)="agendar('ferias')">
-        <strong>[F] Férias</strong><span>{{ saldoFeriasDoPedido(d) }} dia(s) disponível(is) no período aquisitivo</span>
-        @if (d.periodo_vigente && dias() > saldoFeriasDoPedido(d)) { <small class="texto-erro">Saldo insuficiente para {{ dias() }} dias</small> }
+      <button type="button" class="opcao-tipo ferias" [disabled]="(!d.periodo_vigente && !antecipadoDoPedido(d)) || dias() > saldoFeriasDoPedido(d)" (click)="agendar('ferias')">
+        <strong>[F] Férias</strong><span>{{ saldoFeriasDoPedido(d) }} dia(s) disponível(is) {{ antecipadoDoPedido(d) ? 'para o exercício ' + d.agendamento_antecipado!.exercicio : 'no exercício' }}</span>
+        @if ((d.periodo_vigente || antecipadoDoPedido(d)) && dias() > saldoFeriasDoPedido(d)) { <small class="texto-erro">Saldo insuficiente para {{ dias() }} dias</small> }
       </button>
       <button type="button" class="opcao-tipo licenca_premio" [disabled]="dias() > d.saldos.licenca_premio.disponivel" (click)="agendar('licenca_premio')">
         <strong>[LP] Licença-prêmio</strong><span>{{ d.saldos.licenca_premio.disponivel }} dia(s) disponível(is)</span>

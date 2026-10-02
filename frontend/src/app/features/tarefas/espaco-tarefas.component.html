@@ -165,9 +165,6 @@
   <p class="estado-vazio">Carregando…</p>
 }
 
-<!-- Janela da tarefa por cima da visão (?tarefa=123) -->
-<app-janela-detalhe-tarefa [numeroTarefa]="tarefaAberta()" (fechar)="fecharTarefa()" (alterada)="carregar(true)" />
-
 <!-- Motivo de devolução/reabertura (arraste no quadro) e novo prazo (arraste no calendário) -->
 <app-janela-tarefa [(modo)]="modoJanela" [tarefa]="tarefaJanela()" [prazoSugerido]="prazoSugerido()" (concluido)="carregar(true)" />
 

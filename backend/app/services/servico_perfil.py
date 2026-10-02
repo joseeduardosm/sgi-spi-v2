@@ -29,8 +29,21 @@ CAMPOS_OBRIGATORIOS: dict[str, str] = {
     "cargo": "cargo",
     "departamento": "departamento",
     "andar": "andar",
-    "predio": "prédio",
+    "predio": "lado",
 }
+
+# Opções fixas de localização: andar (lista) e lado do andar (A ou B). O campo `predio` guarda o lado.
+ANDARES: tuple[str, ...] = ("Subsolo", *(str(n) for n in range(1, 14)))
+LADOS: tuple[str, ...] = ("A", "B")
+
+
+def validar_localizacao(andar: str, predio: str, atual_andar: str = "", atual_predio: str = "") -> str | None:
+    """Mensagem de erro se o andar ou o lado não estiver nas opções (vazio vale; valor antigo mantido sem mudança também)."""
+    if andar and andar not in ANDARES and andar != atual_andar:
+        return "Andar inválido: escolha Subsolo ou de 1 a 13."
+    if predio and predio not in LADOS and predio != atual_predio:
+        return "Lado inválido: escolha A ou B."
+    return None
 
 
 def _valores_pendentes(usuario: Usuario) -> dict:

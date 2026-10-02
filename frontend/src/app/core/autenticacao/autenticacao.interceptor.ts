@@ -4,10 +4,10 @@
 // Interceptador é uma função pela qual passam todas as requisições do HttpClient, antes de sair e
 // na volta da resposta.
 
-import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
+import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, throwError } from 'rxjs';
+import { catchError, tap, throwError } from 'rxjs';
 
 import { ambiente } from '../../../environments/ambiente';
 import { AutenticacaoService } from './autenticacao.service';
@@ -33,6 +33,13 @@ export const interceptadorAutenticacao: HttpInterceptorFn = (requisicao, proximo
 
   // Encaminha a requisição e observa erros na resposta
   return proximo(comToken).pipe(
+    // Renovação deslizante: perto do vencimento a API devolve um token novo nos cabeçalhos da resposta
+    tap((evento) => {
+      if (!(evento instanceof HttpResponse) || !ehApi || ehLogin) return;
+      const renovado = evento.headers.get('X-Token-Renovado');
+      const expiraEm = evento.headers.get('X-Token-Expira-Em');
+      if (renovado && expiraEm) autenticacao.renovar(renovado, expiraEm);
+    }),
     catchError((erro: unknown) => {
       if (erro instanceof HttpErrorResponse && ehApi && !ehLogin && autenticacao.autenticado()) {
         if (erro.status === 401) {

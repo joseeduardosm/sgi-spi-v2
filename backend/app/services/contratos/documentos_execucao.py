@@ -36,6 +36,16 @@ def moeda(valor: Decimal | None) -> str:
     return f"R$ {texto}"
 
 
+def moeda_unitaria(valor: Decimal | None) -> str:
+    """Preço unitário em reais com 2 a 4 casas (R$ 0,075; R$ 171,22); vazio vira "R$ -"."""
+    if valor is None:
+        return "R$ -"
+    texto = f"{Decimal(valor).quantize(Decimal('0.0001')):,.4f}"
+    inteiro, casas = texto.split(".")
+    casas = casas.rstrip("0").ljust(2, "0")
+    return f"R$ {inteiro.replace(',', '.')},{casas}"
+
+
 def quantidade(valor: Decimal) -> str:
     """Até 4 casas, sem zeros à direita, no formato brasileiro (ex.: 1.234,5)."""
     texto = f"{Decimal(valor):,.4f}".rstrip("0").rstrip(".")
@@ -81,7 +91,7 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
         total += subtotal
         saldo = saldos[item.id]
         linhas.append(
-            [str(item.ordem), item.descricao, "Contínuo" if item.tipo == "continuo" else "Sob demanda", moeda(item.valor_unitario),
+            [str(item.ordem), item.descricao, "Contínuo" if item.tipo == "continuo" else "Sob demanda", moeda_unitaria(item.valor_unitario),
              quantidade(saldo.saldo), quantidade(saldo.glosas), quantidade(saldo.saldo_liquido), quantidade(item.quantidade_medida), moeda(subtotal)]
         )
     documento.secao("Medição do serviço").tabela(
@@ -183,18 +193,17 @@ def _secao_desconto_reajuste(documento: DocumentoPdf, competencia: Competencia, 
     )
 
 
-def relatorio_retencao(contrato: Contrato, competencia: Competencia, conferencias_principal: list, conferencias_adicional: list, autor: str) -> bytes:
+def relatorio_retencao(contrato: Contrato, competencia: Competencia, conferencias_por_nota: list[list], autor: str) -> bytes:
     """PDF da etapa de retenção: a(s) nota(s) renderizada(s) do XML, conferências, retenções e quem conferiu."""
     documento = DocumentoPdf(
         "Retenção de tributos", f"Contrato {contrato.numero} · Competência {competencia.numero_competencia}", autor=autor,
     )
     _cabecalho_contrato(documento, contrato, competencia)
     tributos = ("ir", "inss", "iss", "pis", "cofins", "csll")
-    _secao_nota(documento, "Nota fiscal (dados do XML)", competencia.nf_dados_xml or {}, conferencias_principal,
-                {t: getattr(competencia, f"nf_retencao_{t}") or Decimal(0) for t in tributos}, competencia.nf_valor_bruto or Decimal(0))
-    if competencia.nf_adicional_valor_bruto is not None:
-        _secao_nota(documento, "Nota fiscal adicional (dados do XML)", competencia.nf_adicional_dados_xml or {}, conferencias_adicional,
-                    {t: getattr(competencia, f"nf_adicional_retencao_{t}") or Decimal(0) for t in tributos}, competencia.nf_adicional_valor_bruto)
+    varias = len(competencia.notas_fiscais) > 1
+    for nota, conferencias in zip(competencia.notas_fiscais, conferencias_por_nota):
+        _secao_nota(documento, f"Nota fiscal{f' {nota.ordem}' if varias else ''} (dados do XML)", nota.dados_xml or {}, conferencias,
+                    {t: getattr(nota, f"retencao_{t}") or Decimal(0) for t in tributos}, nota.valor_bruto or Decimal(0))
     documento.secao("Conferência").campos(
         [
             ("Conferido por", competencia.retencao_por_nome or "—"),
@@ -298,11 +307,9 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             documentos.append(("Avaliação dos serviços", "Relatório de avaliação assinado pela contratada", avaliacao.pdf_assinado_anexo_id, False, []))
         elif avaliacao.pdf_gerado_anexo_id:
             documentos.append(("Avaliação dos serviços", "Relatório de avaliação dos serviços", avaliacao.pdf_gerado_anexo_id, True, []))
-    if competencia.nf_anexo_id:
-        documentos.append(("Nota fiscal", f"Nota fiscal {competencia.nf_numero or ''}".strip(), competencia.nf_anexo_id, False, []))
-    if competencia.nf_adicional_anexo_id:
-        documentos.append(("Nota fiscal", f"Nota fiscal adicional {competencia.nf_adicional_numero or ''}".strip(),
-                           competencia.nf_adicional_anexo_id, False, []))
+    for nota in competencia.notas_fiscais:
+        if nota.anexo_id:
+            documentos.append(("Nota fiscal", f"Nota fiscal {nota.numero or nota.ordem}".strip(), nota.anexo_id, False, []))
     if competencia.retencao_pdf_anexo_id:
         documentos.append(("Avaliação de retenção", "Retenção de tributos", competencia.retencao_pdf_anexo_id, True, []))
     for consulta in competencia.consultas_cadin:
@@ -350,9 +357,8 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             ("% autorizado pela avaliação", f"{detalhe.percentual_autorizado}%"),
             *([("Desconto de reajuste", "-" + moeda(detalhe.desconto_reajuste))] if detalhe.desconto_reajuste > 0 else []),
             ("Valor autorizado", moeda(detalhe.valor_autorizado)),
-            ("Nota fiscal", detalhe.nota_fiscal.numero if detalhe.nota_fiscal else "—"),
-            ("Valor líquido da NF", moeda(detalhe.nota_fiscal.valor_liquido) if detalhe.nota_fiscal else "—"),
-            ("NF adicional", detalhe.nota_fiscal_adicional.numero if detalhe.nota_fiscal_adicional else "—"),
+            ("Nota(s) fiscal(is)", ", ".join(n.numero or str(n.ordem) for n in detalhe.notas_fiscais) or "—"),
+            ("Valor líquido das NFs", moeda(sum((n.valor_liquido for n in detalhe.notas_fiscais), Decimal(0))) if detalhe.notas_fiscais else "—"),
             ("Vencimento do pagamento", f"{detalhe.vencimento_pagamento:%d/%m/%Y}" if detalhe.vencimento_pagamento else "—"),
             ("Notas de Empenho", ", ".join(n.numero for n in detalhe.notas_selecionadas) or "—"),
             ("Avaliação (nota final)", f"{detalhe.avaliacao.nota_final}" if detalhe.avaliacao and detalhe.avaliacao.nota_final is not None else "Sem avaliação"),

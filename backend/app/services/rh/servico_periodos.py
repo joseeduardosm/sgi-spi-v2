@@ -7,6 +7,8 @@
   (29/02 vira 28/02 nos anos comuns). No início de cada período são creditados `dias_ferias_por_periodo`
   (parâmetro, padrão 30) e o saldo não usado do período anterior **expira**.
 - As férias debitam o saldo do período em que **começam**. Dá para agendar no período vigente ou no próximo.
+- Cada período é a **janela de gozo de um exercício**: os 30 dias entram no início dela e podem ser agendados e usufruídos
+  dentro dela (ver `exercicio_do_periodo`).
 - **Aviso de expiração** (e-mail oficial à pessoa, ao autorizador/substituto e à CGP), enquanto houver saldo
   não agendado:
   - data-limite para começar = fim do período − saldo não agendado + 1 (para caber todo o saldo);
@@ -46,6 +48,15 @@ def limites(dia_inicio: int, mes_inicio: int, referencia: date) -> tuple[date, d
         inicio = aniversario(referencia.year - 1, dia_inicio, mes_inicio)
     fim = aniversario(inicio.year + 1, dia_inicio, mes_inicio) - timedelta(days=1)
     return inicio, fim
+
+
+def exercicio_do_periodo(inicio: date, fim: date) -> int:
+    """Exercício da janela de gozo: o ano em que cai a maior parte dos seus 12 meses.
+
+    Janela 01/01/2027 a 31/12/2027 → 2027; 31/12/2026 a 30/12/2027 → 2027; 15/03/2027 a 14/03/2028 → 2027.
+    Os 30 dias creditados no início da janela podem ser agendados e usufruídos dentro dela; o que sobra expira no fim.
+    """
+    return (inicio + (fim - inicio) / 2).year
 
 
 def texto_inicio(dados: DadosFuncionais | None) -> str | None:

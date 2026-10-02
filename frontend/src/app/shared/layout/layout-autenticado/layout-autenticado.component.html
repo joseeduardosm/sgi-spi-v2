@@ -44,6 +44,9 @@
               @if (!usuario.perfil_restrito && !usuario.conta_root) {
                 <button type="button" role="menuitem" (click)="abrirFolhaPonto()"><app-icone nome="arquivo" /> Folha de ponto</button>
               }
+              @if (!usuario.perfil_restrito) {
+                <button type="button" role="menuitem" (click)="abrirAssinatura()"><app-icone nome="envelope" /> Assinatura de e-mail</button>
+              }
               <button class="acao-sair" type="button" role="menuitem" (click)="sair()"><app-icone nome="sair" /> Sair</button>
             </div>
           }

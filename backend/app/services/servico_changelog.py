@@ -14,7 +14,6 @@ Fluxo:
    data do próximo rascunho.
 """
 
-import base64
 import re
 import uuid
 from dataclasses import dataclass
@@ -31,6 +30,7 @@ from app.models.envio_changelog import EnvioChangelog
 from app.models.setor import Setor
 from app.models.usuario import Usuario
 from app.services import modelo_email, servico_smtp
+from app.services.modelo_email import corpo_html, corpo_texto
 from app.services.cliente_smtp import Mensagem as EmailSmtp
 from app.services.servico_auditoria import auditar
 from app.services.servico_smtp import SemServidorAtivo
@@ -138,51 +138,6 @@ def rascunho(sessao: Session, arquivo: Path | None = None) -> Rascunho:
 # HTML
 # ---------------------------------------------------------------------------------------------
 
-ESTILO_P = "margin:0 0 12px;font-size:14px;line-height:1.6;color:#2b3137"
-ESTILO_H2 = f"margin:20px 0 8px;font-size:15px;color:{modelo_email.VERMELHO}"
-ESTILO_UL = "margin:0 0 12px;padding-left:20px;font-size:14px;line-height:1.55;color:#2b3137"
-
-
-def _inline(texto: str) -> str:
-    """Escapa o HTML e aplica `**negrito**`."""
-    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escape(texto))
-
-
-def corpo_html(corpo: str) -> str:
-    """Texto editado → HTML do e-mail: `## ` vira subtítulo, `- ` vira lista (2 espaços por nível), o resto parágrafo."""
-    partes: list[str] = []
-    nivel = 0  # listas abertas
-    for linha in corpo.splitlines():
-        item = re.match(r"^(\s*)[-*]\s+(.*)$", linha)
-        if item:
-            alvo = len(item.group(1).replace("\t", "  ")) // 2 + 1
-            while nivel < alvo:
-                partes.append(f'<ul style="{ESTILO_UL}">')
-                nivel += 1
-            while nivel > alvo:
-                partes.append("</ul>")
-                nivel -= 1
-            partes.append(f'<li style="margin:0 0 4px">{_inline(item.group(2))}</li>')
-            continue
-        while nivel:
-            partes.append("</ul>")
-            nivel -= 1
-        if not linha.strip():
-            continue
-        titulo = re.match(r"^#{1,3}\s+(.*)$", linha)
-        if titulo:
-            partes.append(f'<h2 style="{ESTILO_H2}">{_inline(titulo.group(1))}</h2>')
-        else:
-            partes.append(f'<p style="{ESTILO_P}">{_inline(linha.strip())}</p>')
-    partes += ["</ul>"] * nivel
-    return "".join(partes)
-
-
-def corpo_texto(corpo: str) -> str:
-    """Versão em texto simples (leitores sem HTML): sem as marcas de negrito e de título."""
-    return re.sub(r"^#{1,3}\s+", "", corpo.replace("**", ""), flags=re.MULTILINE)
-
-
 def html_email(assunto: str, corpo: str) -> str:
     """E-mail completo no layout oficial."""
     return modelo_email.pagina(
@@ -194,9 +149,7 @@ def html_email(assunto: str, corpo: str) -> str:
 
 def html_previa(assunto: str, corpo: str) -> str:
     """O mesmo e-mail, com o brasão embutido como `data:` (o navegador não conhece `cid:`)."""
-    imagem = modelo_email.imagem_brasao()
-    dados = f"data:{imagem.tipo};base64,{base64.b64encode(imagem.conteudo).decode()}"
-    return html_email(assunto, corpo).replace(f"cid:{modelo_email.CID_BRASAO}", dados)
+    return modelo_email.para_previa(html_email(assunto, corpo))
 
 
 # ---------------------------------------------------------------------------------------------

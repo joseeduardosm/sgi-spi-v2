@@ -196,9 +196,150 @@ def test_relatorio_de_saldos(cliente, equipe):
     folha = load_workbook(BytesIO(r.content)).active
     linhas = {row[1]: row for row in folha.iter_rows(values_only=True) if row and row[1] in ids}
     ana = linhas["ana"]
-    assert ana[3] == "Chefe Silva" and ana[4] == "01/01/2026 a 31/12/2026" and (ana[5], ana[6], ana[7]) == (30, 10, 20)
+    assert ana[3] == "Chefe Silva" and ana[4] == "2026 · 01/01/2026 a 31/12/2026" and (ana[5], ana[6], ana[7]) == (30, 10, 20)
     assert (ana[10], ana[11], ana[13]) == (2026, 10, 10)
     # Sem início do período aquisitivo: "não informado"
     assert linhas["rh"][4] == "não informado"
     pdf = cliente.get(url, params={"formato": "pdf"}, headers=h["rh"])
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+
+def _definir_superior(login_usuario: str, login_superior: str) -> None:
+    with FabricaSessao() as sessao:
+        from sqlalchemy import select
+
+        superior = sessao.scalar(select(Usuario).where(Usuario.login == login_superior))
+        sessao.scalar(select(Usuario).where(Usuario.login == login_usuario)).gestor_id = superior.id
+        sessao.commit()
+
+
+def _assuntos_enviados() -> list[tuple[str, list[str]]]:
+    SmtpSimulado.enviadas.clear()
+    with FabricaSessao() as sessao:
+        mensageria.enviar_emails_pendentes(sessao)
+    return [(m["Subject"], para) for m, _, para, _ in SmtpSimulado.enviadas]
+
+
+def test_pedido_em_duas_etapas_ciente_do_superior_e_depois_aprovacao(cliente, equipe):
+    ids, h, _ = equipe
+    _definir_superior("ana", "sub")  # Sílvia é superior da Ana, mas quem aprova é o chefe
+    SmtpSimulado.enviadas.clear()
+    pedido = _pedir(cliente, h["ana"], "2026-11-03", "2026-11-12").json()
+    assert pedido["aguarda_ciencia"] is True
+    # Etapa 1: só o superior imediato é avisado (nem o aprovador nem a CGP)
+    assert _assuntos_enviados() == [("Ana Souza agendou férias: ciente e de acordo", ["sub@sp.gov.br"])]
+    # O aprovador ainda não vê o pedido nem aprova; a Ana não dá o próprio ciente; outro colega não dá ciente
+    assert cliente.get(f"{URL}/aprovacoes", headers=h["chefe"]).json() == []
+    r = cliente.post(f"{URL}/{pedido['id']}/aprovar", headers=h["chefe"])
+    assert r.status_code == 409 and r.json()["codigo"] == "aguarda_ciencia"
+    assert cliente.post(f"{URL}/{pedido['id']}/ciencia", headers=h["ana"]).status_code == 403
+    assert cliente.post(f"{URL}/{pedido['id']}/ciencia", headers=h["bia"]).status_code == 403
+    pendentes = cliente.get(f"{URL}/aprovacoes", headers=h["sub"]).json()
+    assert [(p["id"], p["pode_dar_ciencia"], p["pode_decidir"]) for p in pendentes] == [(pedido["id"], True, False)]
+    # Ciente e de acordo: não aprova; avisa a Ana e libera o pedido ao aprovador e à CGP
+    dado = cliente.post(f"{URL}/{pedido['id']}/ciencia", headers=h["sub"]).json()
+    assert dado["status"] == "pendente" and dado["aguarda_ciencia"] is False and dado["ciencia_por_nome"] == "Sílvia Substituta"
+    assert cliente.post(f"{URL}/{pedido['id']}/ciencia", headers=h["sub"]).status_code == 400  # já deu
+    enviados = _assuntos_enviados()
+    assert ("Ciente e de acordo: férias", ["ana@sp.gov.br"]) in enviados
+    assert sorted(para[0] for assunto, para in enviados if "aguarda aprovação" in assunto) == ["chefe@sp.gov.br", "rh@sp.gov.br"]
+    # Etapa 2
+    assert [p["id"] for p in cliente.get(f"{URL}/aprovacoes", headers=h["chefe"]).json()] == [pedido["id"]]
+    assert cliente.post(f"{URL}/{pedido['id']}/aprovar", headers=h["chefe"]).json()["status"] == "aprovado"
+    historico = [e["justificativa"] for e in cliente.get(f"{URL}/meus", headers=h["ana"]).json()["afastamentos"][0]["eventos"]]
+    assert "Ciente e de acordo do superior imediato" in historico
+
+
+def test_superior_recusa_na_etapa_1_e_etapa_dispensada(cliente, equipe):
+    ids, h, _ = equipe
+    _definir_superior("ana", "sub")
+    pedido = _pedir(cliente, h["ana"], "2026-11-03", "2026-11-12").json()
+    assert cliente.post(f"{URL}/{pedido['id']}/recusar", json={"justificativa": ""}, headers=h["sub"]).status_code == 400
+    recusado = cliente.post(f"{URL}/{pedido['id']}/recusar", json={"justificativa": "Equipe desfalcada"}, headers=h["sub"]).json()
+    assert recusado["status"] == "recusado" and recusado["justificativa"] == "Equipe desfalcada"
+    # Superior que é o próprio aprovador (chefe) ou ausência de superior: vai direto à aprovação, como antes
+    _definir_superior("ana", "chefe")
+    assert _pedir(cliente, h["ana"], "2026-11-17", "2026-11-26").json()["aguarda_ciencia"] is False
+    assert _pedir(cliente, h["bia"], "2026-11-17", "2026-11-26").json()["aguarda_ciencia"] is False
+
+
+def _abrir_agendamento(data: date | None) -> None:
+    with FabricaSessao() as sessao:
+        servico_afastamentos.parametros(sessao).abertura_agendamento_ferias = data
+        sessao.commit()
+
+
+def test_agendamento_do_proximo_exercicio_abre_na_data_e_abate_da_janela(cliente, equipe, monkeypatch):
+    ids, h, _ = equipe
+    # Sem a regra, vale o comportamento de sempre
+    assert cliente.get(f"{URL}/meus", headers=h["ana"]).json()["agendamento_antecipado"] is None
+    _abrir_agendamento(date(2026, 10, 15))
+    meus = cliente.get(f"{URL}/meus", headers=h["ana"]).json()
+    assert meus["periodo_vigente"]["exercicio"] == 2026 and meus["proximo_periodo"]["exercicio"] == 2027
+    assert meus["agendamento_antecipado"] == {"exercicio": 2027, "inicio": "2027-01-01", "fim": "2027-12-31", "abertura": "2026-10-15",
+                                              "aberto": False, "limite_dias": 30, "agendados": 0}
+    # Antes da data: o próximo exercício não pode ser agendado; o exercício vigente segue as regras normais
+    r = _pedir(cliente, h["ana"], "2027-02-02", "2027-02-11")
+    assert r.status_code == 400 and "exercício 2027 abre em 15/10/2026" in r.json()["detalhe"]
+    assert _pedir(cliente, h["ana"], "2026-12-01", "2026-12-10").status_code == 201
+    # A CGP lança/altera mesmo antes da abertura (não passa pela trava)
+    # Depois da data: até 30 dias para o exercício 2027, mesmo antes de o saldo ser implantado, abatendo da janela de 2027
+    monkeypatch.setattr("app.services.rh.servico_afastamentos.hoje", lambda: date(2026, 10, 20))
+    assert cliente.get(f"{URL}/meus", headers=h["bia"]).json()["agendamento_antecipado"]["aberto"] is True
+    assert _pedir(cliente, h["bia"], "2027-02-02", "2027-02-21").status_code == 201  # 20 dias
+    r = _pedir(cliente, h["bia"], "2027-06-01", "2027-06-15")  # +15 passaria de 30
+    assert r.status_code == 400 and "Saldo de férias do período aquisitivo 01/01/2027 a 31/12/2027 insuficiente" in r.json()["detalhe"]
+    assert _pedir(cliente, h["bia"], "2027-06-01", "2027-06-10").status_code == 201  # +10 = 30
+    assert cliente.get(f"{URL}/meus", headers=h["bia"]).json()["agendamento_antecipado"]["agendados"] == 30
+    # Quem ainda não tem período aquisitivo informado agenda o ano seguinte pelo limite por ano civil
+    criar_usuario("novo", nome_completo="Novo Servidor", email="novo@sp.gov.br")
+    novo = cabecalho(cliente, "novo")
+    assert cliente.get(f"{URL}/meus", headers=novo).json()["agendamento_antecipado"]["exercicio"] == 2027
+    assert _pedir(cliente, novo, "2027-03-02", "2027-03-11").status_code == 201
+    # Em 2027, com a janela nova em curso, a regra deixa de valer e os dias agendados contam como usados da janela
+    monkeypatch.setattr("app.services.rh.servico_afastamentos.hoje", lambda: date(2027, 1, 5))
+    meus = cliente.get(f"{URL}/meus", headers=h["bia"]).json()
+    assert meus["agendamento_antecipado"] is None and meus["periodo_vigente"]["exercicio"] == 2027
+    assert (meus["periodo_vigente"]["usado"], meus["periodo_vigente"]["disponivel"]) == (30, 0)
+
+
+def test_janela_virando_em_15_03_debita_a_janela_de_cada_pedido(cliente, equipe, monkeypatch):
+    """Quem tem a janela virando em 15/03: fevereiro debita o exercício vigente e abril o próximo, cada um com 30 dias."""
+    ids, h, _ = equipe
+    funcionais(ids["bia"], autorizador_id=ids["chefe"], exercicio=2026, inicio_aquisitivo_dia=15, inicio_aquisitivo_mes=3, saldo_lp_dias=10)
+    _abrir_agendamento(date(2026, 10, 15))
+    monkeypatch.setattr("app.services.rh.servico_afastamentos.hoje", lambda: date(2026, 10, 20))
+    ag = cliente.get(f"{URL}/meus", headers=h["bia"]).json()["agendamento_antecipado"]
+    assert (ag["exercicio"], ag["inicio"], ag["fim"]) == (2027, "2027-03-15", "2028-03-14")
+    assert _pedir(cliente, h["bia"], "2027-02-02", "2027-03-01").status_code == 201  # 28 dias na janela vigente (2026/27)
+    assert _pedir(cliente, h["bia"], "2027-04-06", "2027-05-05").status_code == 201  # 30 dias na janela seguinte
+    meus = cliente.get(f"{URL}/meus", headers=h["bia"]).json()
+    assert meus["periodo_vigente"]["usado"] == 28 and meus["proximo_periodo"]["usado"] == 30
+
+
+def test_cancelamento_avisa_cgp_superior_e_aprovador_na_etapa_de_aprovacao(cliente, equipe):
+    ids, h, _ = equipe
+    _definir_superior("ana", "sub")  # Sílvia é a superior; o chefe é o aprovador; Rita é da CGP
+    # Etapa 1 (aguardando o ciente do superior): cancelar avisa a CGP e o superior, mas não o aprovador
+    pedido = _pedir(cliente, h["ana"], "2026-11-03", "2026-11-12").json()
+    _assuntos_enviados()
+    assert cliente.post(f"{URL}/{pedido['id']}/cancelar", json={"justificativa": "Mudança de planos"}, headers=h["ana"]).status_code == 200
+    enviados = [(a, p[0]) for a, p in _assuntos_enviados() if "Cancelamento" in a]
+    assert sorted(p for _, p in enviados) == ["rh@sp.gov.br", "sub@sp.gov.br"]
+    assert enviados[0][0] == "Cancelamento: Ana Souza cancelou férias"
+    # Etapa 2 (aguardando o aprovador): o aprovador também é avisado
+    pedido = _pedir(cliente, h["ana"], "2026-11-17", "2026-11-26").json()
+    assert cliente.post(f"{URL}/{pedido['id']}/ciencia", headers=h["sub"]).status_code == 200
+    _assuntos_enviados()
+    assert cliente.post(f"{URL}/{pedido['id']}/cancelar", json={}, headers=h["ana"]).status_code == 200
+    destinos = sorted(p[0] for a, p in _assuntos_enviados() if "Cancelamento" in a)
+    assert destinos == ["chefe@sp.gov.br", "rh@sp.gov.br", "sub@sp.gov.br"]
+    # Pedido aprovado: avisa a CGP e o superior (o aprovador já decidiu); a própria Ana só recebe a confirmação
+    pedido = _pedir(cliente, h["ana"], "2026-12-01", "2026-12-10").json()
+    cliente.post(f"{URL}/{pedido['id']}/ciencia", headers=h["sub"])
+    assert cliente.post(f"{URL}/{pedido['id']}/aprovar", headers=h["chefe"]).status_code == 200
+    _assuntos_enviados()
+    assert cliente.post(f"{URL}/{pedido['id']}/cancelar", json={}, headers=h["ana"]).status_code == 200
+    todos = _assuntos_enviados()
+    assert sorted(p[0] for a, p in todos if "Cancelamento" in a) == ["rh@sp.gov.br", "sub@sp.gov.br"]
+    assert [p[0] for a, p in todos if a.startswith("Afastamento cancelado")] == ["ana@sp.gov.br"]

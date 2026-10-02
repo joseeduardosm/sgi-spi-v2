@@ -12,7 +12,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models.usuario import Usuario
-from app.services.contratos.documentos_execucao import moeda, quantidade
+from app.services.contratos.documentos_execucao import moeda, moeda_unitaria, quantidade
 from app.services.contratos.servico_contratos import detalhar_contrato
 from app.services.documentos.pdf import DocumentoPdf
 
@@ -62,7 +62,7 @@ def relatorio_itens(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -
             quantidade(i.quantidade_mensal),
             quantidade(i.quantidade_executada),
             quantidade(i.quantidade_disponivel),
-            moeda(i.valor_unitario),
+            moeda_unitaria(i.valor_unitario),
             moeda(i.subtotal_mensal) if i.tipo == "continuo" else "—",
             str(i.vigencia_meses),
         ]

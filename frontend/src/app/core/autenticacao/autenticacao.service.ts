@@ -7,6 +7,7 @@ import { Router } from '@angular/router';
 import { catchError, map, Observable, of, tap } from 'rxjs';
 
 import { ambiente } from '../../../environments/ambiente';
+import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { Papel, Usuario } from '../modelos/usuario.model';
 import { MotivoSaida, RequisicaoLogin, RespostaToken, SessaoAutenticada } from './autenticacao.models';
 
@@ -16,6 +17,8 @@ const CHAVE_ARMAZENAMENTO = 'sgi-spi.sessao';
 const CHAVE_ANTIGA = 'contratos-spi.sessao';
 // setTimeout aceita no máximo ~24,8 dias
 const ESPERA_MAXIMA_MS = 2_147_483_647;
+// Quanto tempo antes do vencimento (sem renovação, ex.: aba ociosa) o sistema avisa que a sessão vai expirar
+const AVISO_ANTES_DE_EXPIRAR_MS = 2 * 60_000;
 
 /**
  * Serviço único (`providedIn: 'root'`) que guarda a sessão.
@@ -27,10 +30,12 @@ const ESPERA_MAXIMA_MS = 2_147_483_647;
 export class AutenticacaoService {
   private readonly http = inject(HttpClient);
   private readonly roteador = inject(Router);
+  private readonly dialogos = inject(DialogosService);
 
   // Sessão atual (null = ninguém logado) e o temporizador que encerra a sessão quando o token vence
   private readonly sessao = signal<SessaoAutenticada | null>(null);
   private temporizadorExpiracao?: ReturnType<typeof setTimeout>;
+  private temporizadorAviso?: ReturnType<typeof setTimeout>;
 
   // Valores derivados (computed): recalculados automaticamente a partir de `sessao`
   readonly usuario = computed<Usuario | null>(() => this.sessao()?.usuario ?? null);
@@ -39,6 +44,8 @@ export class AutenticacaoService {
   /** Ao criar o serviço (abertura do sistema), tenta recuperar a sessão salva no navegador. */
   constructor() {
     this.restaurar();
+    // Outra aba renovou a sessão ou saiu: esta aba acompanha (senão ela venceria com o token antigo e derrubaria as demais)
+    if (typeof window !== 'undefined') window.addEventListener('storage', (evento) => this.aoMudarArmazenamento(evento));
   }
 
   /** Token JWT atual, usado pelo interceptador. */
@@ -62,9 +69,25 @@ export class AutenticacaoService {
 
   /** Encerra a sessão local. O JWT é stateless: basta descartá-lo no cliente. */
   sair(motivo: MotivoSaida = 'usuario'): void {
+    // Sessão expirada: guarda a tela de onde a pessoa saiu para o login devolvê-la a ela
+    const atual = this.roteador.url;
     this.limpar();
-    const parametros = motivo === 'expirada' ? { sessao: 'expirada' } : {};
+    const parametros = motivo === 'expirada' ? { sessao: 'expirada', ...(atual && !atual.startsWith('/login') && atual !== '/' ? { retorno: atual } : {}) } : {};
     void this.roteador.navigate(['/login'], { queryParams: parametros });
+  }
+
+  /**
+   * Token renovado pela API (cabeçalho `X-Token-Renovado`): guarda e adia o vencimento. A pessoa que continua usando o
+   * sistema não cai; só quem fica parado até o vencimento é deslogado.
+   */
+  renovar(tokenAcesso: string, expiraEm: string): void {
+    const sessao = this.sessao();
+    const instante = new Date(expiraEm).getTime();
+    if (!sessao || Number.isNaN(instante) || instante <= sessao.expiraEm) return;
+    const nova = { ...sessao, tokenAcesso, expiraEm: instante };
+    this.sessao.set(nova);
+    this.persistir(nova);
+    this.agendarExpiracao(instante);
   }
 
   /** Confirma no backend que o token armazenado ainda é válido e atualiza os dados do usuário. */
@@ -121,9 +144,49 @@ export class AutenticacaoService {
     }
   }
 
-  /** Programa o logout automático para o momento em que o token vence. */
+  /** Reage a mudanças do `localStorage` feitas em outra aba: token renovado ou saída. */
+  private aoMudarArmazenamento(evento: StorageEvent): void {
+    if (evento.key !== CHAVE_ARMAZENAMENTO) return;
+    if (evento.newValue === null) {
+      // Outra aba saiu (ou a sessão expirou lá): esta também volta ao login
+      if (this.sessao()) {
+        clearTimeout(this.temporizadorExpiracao);
+        clearTimeout(this.temporizadorAviso);
+        this.sessao.set(null);
+        void this.roteador.navigate(['/login']);
+      }
+      return;
+    }
+    try {
+      const nova = JSON.parse(evento.newValue) as SessaoAutenticada;
+      if (nova.expiraEm > Date.now()) {
+        this.sessao.set(nova);
+        this.agendarExpiracao(nova.expiraEm);
+      }
+    } catch {
+      // valor inválido: ignora
+    }
+  }
+
+  /** Aviso "sua sessão vai expirar" (só se nada foi renovado até lá); "Continuar conectado" faz uma chamada que renova. */
+  private async avisarExpiracao(): Promise<void> {
+    const atual = this.sessao();
+    // Não atropela outra confirmação aberta (ex.: excluir) nem avisa se a sessão já foi renovada
+    if (!atual || atual.expiraEm - Date.now() > AVISO_ANTES_DE_EXPIRAR_MS + 1000 || this.dialogos.confirmacao()) return;
+    const continuar = await this.dialogos.confirmar({
+      titulo: 'Sua sessão vai expirar',
+      mensagem: 'Por segurança, a sessão termina depois de um tempo sem uso. Deseja continuar conectado?',
+      rotuloConfirmar: 'Continuar conectado',
+    });
+    if (continuar) this.validarSessao().subscribe();
+  }
+
+  /** Programa o logout automático para o momento em que o token vence (e o aviso pouco antes). */
   private agendarExpiracao(expiraEm: number): void {
     clearTimeout(this.temporizadorExpiracao);
+    clearTimeout(this.temporizadorAviso);
+    const ateAviso = expiraEm - Date.now() - AVISO_ANTES_DE_EXPIRAR_MS;
+    if (ateAviso > 0 && ateAviso < ESPERA_MAXIMA_MS) this.temporizadorAviso = setTimeout(() => void this.avisarExpiracao(), ateAviso);
     // Tempo até o vencimento (nunca negativo e dentro do limite do setTimeout)
     const espera = Math.min(Math.max(expiraEm - Date.now(), 0), ESPERA_MAXIMA_MS);
     this.temporizadorExpiracao = setTimeout(() => {
@@ -146,6 +209,7 @@ export class AutenticacaoService {
   /** Apaga a sessão da memória e do navegador e cancela o temporizador. */
   private limpar(): void {
     clearTimeout(this.temporizadorExpiracao);
+    clearTimeout(this.temporizadorAviso);
     this.sessao.set(null);
     try {
       localStorage.removeItem(CHAVE_ARMAZENAMENTO);

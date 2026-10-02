@@ -3,7 +3,7 @@
 
 import { Pipe, PipeTransform } from '@angular/core';
 
-import { formatarCompetencia, formatarData, formatarMoeda, formatarPercentual, formatarQuantidade, formatarTamanho } from './formatadores';
+import { formatarCompetencia, formatarData, formatarMoeda, formatarMoedaUnitaria, formatarPercentual, formatarQuantidade, formatarTamanho } from './formatadores';
 
 /** Pipes de formatação brasileira para os templates (valores da API chegam como texto). */
 // Pipe é uma função usada no HTML com "|", ex.: {{ contrato.valor_global | moeda }}
@@ -12,6 +12,14 @@ import { formatarCompetencia, formatarData, formatarMoeda, formatarPercentual, f
 export class MoedaPipe implements PipeTransform {
   transform(valor: string | number | null | undefined, vazio = 'R$ -'): string {
     return formatarMoeda(valor, vazio);
+  }
+}
+
+/** Preço unitário (2 a 4 casas): {{ item.valor_unitario | moedaUnitaria }} */
+@Pipe({ name: 'moedaUnitaria' })
+export class MoedaUnitariaPipe implements PipeTransform {
+  transform(valor: string | number | null | undefined, vazio = 'R$ -'): string {
+    return formatarMoedaUnitaria(valor, vazio);
   }
 }
 
@@ -51,4 +59,4 @@ export class TamanhoPipe implements PipeTransform {
 }
 
 // Lista pronta para importar todos os pipes de uma vez nos componentes: imports: [...PIPES_FORMATACAO]
-export const PIPES_FORMATACAO = [MoedaPipe, QuantidadePipe, PercentualPipe, DataBrPipe, CompetenciaPipe, TamanhoPipe] as const;
+export const PIPES_FORMATACAO = [MoedaPipe, MoedaUnitariaPipe, QuantidadePipe, PercentualPipe, DataBrPipe, CompetenciaPipe, TamanhoPipe] as const;

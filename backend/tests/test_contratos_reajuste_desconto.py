@@ -79,7 +79,7 @@ def test_percentuais_por_item_positivo_negativo_e_limite(cliente, cenario):
     url, r = _abrir(cliente, contrato, h, "2026-02-01", ["5", "-3"])
     reajuste = r.json()["em_andamento"]
     assert [(i["indice_percentual"], i["valor_unitario_reajustado"]) for i in reajuste["itens"]] == [
-        ("5.00000000", "1050.00"), ("-3.00000000", "10.19")]
+        ("5.00000000", "1050.0000"), ("-3.00000000", "10.1850")]  # preço unitário com 4 casas
     assert reajuste["diferenca_retroativa"] == "0.00" and reajuste["competencia_credito"] is None
     # Desconto geral de 10% ("aplicar a todos"): o mesmo percentual em todos os itens reduz a base
     itens = [{"item_id": i["item_id"], "indice_percentual": "-10"} for i in reajuste["itens"]]
@@ -104,7 +104,7 @@ def test_desconto_retroativo_vira_credito_abatido_na_proxima_medicao(cliente, ce
     assert cliente.get(_url(contrato, "/competencias/identificador/2026-01-dif"), headers=h).status_code == 404
 
     fevereiro = _competencia(cliente, contrato, h, "2026-02")
-    assert fevereiro["itens"][0]["valor_unitario"] == "900.00"
+    assert fevereiro["itens"][0]["valor_unitario"] == "900.0000"
     assert fevereiro["desconto_reajuste"] == "200.00" and fevereiro["descontos_reajuste"][0]["mes_referencia"] == "2026-01-01"
     medida = _medir(cliente, contrato, h, notas, "2026-02")
     # 2 × 900 = 1.800 medidos − 200 de crédito
@@ -153,4 +153,4 @@ def test_reajuste_misto_com_diferenca_liquida_positiva_gera_competencia_de_difer
     _concluir(cliente, h, url)
     diferenca = _competencia(cliente, contrato, h, "2026-01-dif")
     assert diferenca["total_medido"] == "189.50"
-    assert [i["valor_unitario"] for i in diferenca["itens"]] == ["100.00", "-1.05"]
+    assert [i["valor_unitario"] for i in diferenca["itens"]] == ["100.0000", "-1.0500"]

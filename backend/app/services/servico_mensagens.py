@@ -256,6 +256,22 @@ def registrar_ciencia(sessao: Session, usuario: Usuario, entrega_id: uuid.UUID) 
     return entrega
 
 
+def marcar_em_lote(sessao: Session, usuario: Usuario, ids: list[uuid.UUID], acao: str) -> int:
+    """Marca várias mensagens do próprio usuário como lidas, não lidas ou cientes. Devolve quantas mudaram."""
+    entregas = list(sessao.scalars(select(EntregaMensagem).where(EntregaMensagem.destinatario_id == usuario.id, EntregaMensagem.id.in_(set(ids)))))
+    agora, mudaram = agora_utc(), 0
+    for e in entregas:
+        if acao == "lida" and e.visualizada_em is None:
+            e.visualizada_em, mudaram = agora, mudaram + 1
+        elif acao == "nao_lida" and e.visualizada_em is not None:
+            e.visualizada_em, mudaram = None, mudaram + 1
+        elif acao == "ciente" and e.ciente_em is None:
+            e.visualizada_em, e.ciente_em, mudaram = e.visualizada_em or agora, agora, mudaram + 1
+            auditar(sessao, usuario.login, "mensagem.ciencia", e.assunto_copia, autor_id=usuario.id, alvo_tipo="mensagem", alvo_id=e.mensagem_id)
+    sessao.commit()
+    return mudaram
+
+
 def destinatarios_disponiveis(sessao: Session, usuario: Usuario) -> tuple[list[Usuario], list[Setor], bool]:
     """Usuários ativos e, se o usuário puder, os setores ativos."""
     usuarios = list(sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True))))
@@ -318,6 +334,20 @@ def html_email(titulo: str, paragrafos: list[str], link: str | None, rotulo_link
     )
 
 
+def html_mensagem(assunto: str, corpo: str, autor_nome: str, link: str | None) -> str:
+    """E-mail da mensagem no mesmo layout do changelog: o texto aceita `## título`, `- lista` e `**negrito**`."""
+    return modelo_email.pagina(
+        assunto, modelo_email.corpo_html(corpo) + modelo_email.paragrafos([f"Enviada por {autor_nome}."]), link_url=_url(link),
+        rotulo_link="Abrir no SGI SPI", sobretitulo="Comunicação institucional",
+        nota_rodape="Mensagem do SGI SPI. Leia e registre sua ciência na caixa de mensagens do sistema; não responda a este e-mail.",
+    )
+
+
+def previa_mensagem(assunto: str, corpo: str, autor_nome: str, link: str | None) -> str:
+    """O e-mail da mensagem para exibir na tela (brasão embutido): a caixa de mensagens mostra o mesmo layout."""
+    return modelo_email.para_previa(html_mensagem(assunto, corpo, autor_nome, link))
+
+
 def enviar_email_da_entrega(sessao: Session, entrega: EntregaMensagem, prefixo_assunto: str = "") -> None:
     """Envia a entrega por e-mail ao destinatário e grava o resultado (sem commit)."""
     usuario = sessao.get(Usuario, entrega.destinatario_id)
@@ -327,8 +357,8 @@ def enviar_email_da_entrega(sessao: Session, entrega: EntregaMensagem, prefixo_a
         return
     mensagem = entrega.mensagem
     assunto = f"{prefixo_assunto}{entrega.assunto_copia}"
-    texto = f"{entrega.corpo_copia}\n\nEnviada por {mensagem.autor_nome}.\n{_url(mensagem.link)}"
-    html = html_email(entrega.assunto_copia, [entrega.corpo_copia, f"Enviada por {mensagem.autor_nome}."], mensagem.link)
+    texto = f"{modelo_email.corpo_texto(entrega.corpo_copia)}\n\nEnviada por {mensagem.autor_nome}.\n{_url(mensagem.link)}"
+    html = html_mensagem(entrega.assunto_copia, entrega.corpo_copia, mensagem.autor_nome, mensagem.link)
     try:
         resultado = servico_smtp.enviar_email(sessao, EmailSmtp(para=[usuario.email.strip()], assunto=assunto, texto=texto, html=html))
         entrega.email_ok, entrega.email_erro = resultado.sucesso, None if resultado.sucesso else resultado.mensagem

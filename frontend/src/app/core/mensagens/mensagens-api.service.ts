@@ -3,7 +3,7 @@
 
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 
 import { ambiente } from '../../../environments/ambiente';
 import {
@@ -19,8 +19,8 @@ export class MensagensApiService {
     return this.http.get<ResumoCaixa>(`${this.base}/resumo`);
   }
 
-  listar(estado: string, busca: string, pagina: number): Observable<Pagina<EntregaResumo>> {
-    const params = new HttpParams().set('estado', estado).set('busca', busca).set('pagina', pagina);
+  listar(estado: string, busca: string, pagina: number, tamanho = 20): Observable<Pagina<EntregaResumo>> {
+    const params = new HttpParams().set('estado', estado).set('busca', busca).set('pagina', pagina).set('tamanho_pagina', tamanho);
     return this.http.get<Pagina<EntregaResumo>>(this.base, { params });
   }
 
@@ -30,6 +30,16 @@ export class MensagensApiService {
 
   ciencia(id: string): Observable<EntregaDetalhe> {
     return this.http.post<EntregaDetalhe>(`${this.base}/${id}/ciencia`, {});
+  }
+
+  /** Prévia do e-mail da mensagem (HTML no layout oficial, igual ao do changelog): `## título`, `- lista` e `**negrito**`. */
+  previa(assunto: string, corpo: string, link: string | null, autorNome: string | null = null): Observable<string> {
+    return this.http.post<{ html: string }>(`${this.base}/previa`, { assunto, corpo, link: link || null, autor_nome: autorNome }).pipe(map((r) => r.html));
+  }
+
+  /** Marca várias mensagens de uma vez: lidas, não lidas ou cientes. */
+  marcarLote(ids: string[], acao: 'lida' | 'nao_lida' | 'ciente'): Observable<{ atualizadas: number }> {
+    return this.http.post<{ atualizadas: number }>(`${this.base}/lote`, { ids, acao });
   }
 
   destinatarios(): Observable<Destinatarios> {

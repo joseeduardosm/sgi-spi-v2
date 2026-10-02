@@ -1,7 +1,7 @@
 @let d = detalhe();
 <section class="cartao-dados" aria-labelledby="titulo-nf">
   <header>
-    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Junte o PDF e o XML da nota. Os valores são lidos do XML; as retenções são conferidas pelo Financeiro na etapa seguinte. Valor autorizado pela medição: {{ d.valor_autorizado | moeda }}@if (+d.desconto_reajuste > 0) { (já descontado o crédito de reajuste de {{ d.desconto_reajuste | moeda }}) }.</small></div>
+    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Junte o PDF e o XML de cada nota (pode haver mais de uma por medição). Os valores são lidos dos XMLs; as retenções são conferidas pelo Financeiro na etapa seguinte. Valor autorizado pela medição: {{ d.valor_autorizado | moeda }}@if (+d.desconto_reajuste > 0) { (já descontado o crédito de reajuste de {{ d.desconto_reajuste | moeda }}) }.</small></div>
     @if (d.nf_concluida_em) { <span class="selo-situacao">Concluída</span> }
   </header>
   <div class="corpo">
@@ -11,42 +11,33 @@
       <div><label>Vencimento do pagamento</label><input [value]="vencimento()" disabled /></div>
     </div>
 
-    <p class="secao-formulario">Nota fiscal *</p>
-    @if (d.nota_fiscal?.dados_xml; as x) {
-      <p class="dica-formulario" style="margin-top: 0">
-        {{ x.modelo_rotulo }} nº <b>{{ x.numero }}</b> · {{ x.emitente.razao_social }} · valor <b>{{ d.nota_fiscal?.valor_bruto | moeda }}</b>
-      </p>
-    }
-    <div class="acoes-cartao esquerda arquivos-nf">
-      @if (d.nota_fiscal?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">PDF: {{ a.nome }}</button> }
-      @if (d.nota_fiscal?.xml; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">XML: {{ a.nome }}</button> }
-      @if (editavel()) {
-        <app-envio-pdf [rotulo]="d.nota_fiscal?.arquivo ? 'Substituir PDF da nota' : 'Selecionar PDF da nota'" (selecionado)="arquivo = $event" />
-        <label class="acao-secundaria acao-pequena seletor-xml">
-          {{ xml ? 'XML: ' + xml.name : (d.nota_fiscal?.xml ? 'Substituir XML da nota' : 'Selecionar XML da nota') }}
-          <input type="file" accept=".xml,application/xml,text/xml" (change)="escolherXml($event, false)" />
-        </label>
-      }
-    </div>
-
-    <div class="linha-caixas" style="margin-top: 18px">
-      <label><input type="checkbox" [disabled]="!editavel()" [(ngModel)]="possuiAdicional" /> Há nota fiscal adicional</label>
-    </div>
-    @if (possuiAdicional) {
-      @if (d.nota_fiscal_adicional?.dados_xml; as x) {
-        <p class="dica-formulario">{{ x.modelo_rotulo }} nº <b>{{ x.numero }}</b> · valor <b>{{ d.nota_fiscal_adicional?.valor_bruto | moeda }}</b></p>
+    @for (l of linhas; track l; let i = $index) {
+      <p class="secao-formulario">Nota fiscal @if (linhas.length > 1) { {{ i + 1 }} } *
+        @if (editavel() && linhas.length > 1) { <button type="button" class="acao-secundaria acao-pequena" (click)="removerNota(l)">Remover</button> }</p>
+      @if (l.existente?.dados_xml; as x) {
+        <p class="dica-formulario" style="margin-top: 0">
+          {{ x.modelo_rotulo }} nº <b>{{ x.numero }}</b> · {{ x.emitente.razao_social }} · valor <b>{{ l.existente?.valor_bruto | moeda }}</b>
+        </p>
       }
       <div class="acoes-cartao esquerda arquivos-nf">
-        @if (d.nota_fiscal_adicional?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">PDF: {{ a.nome }}</button> }
-        @if (d.nota_fiscal_adicional?.xml; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">XML: {{ a.nome }}</button> }
+        @if (l.existente?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">PDF: {{ a.nome }}</button> }
+        @if (l.existente?.xml; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">XML: {{ a.nome }}</button> }
         @if (editavel()) {
-          <app-envio-pdf rotulo="Selecionar PDF da nota adicional" (selecionado)="arquivoAdicional = $event" />
+          <app-envio-pdf [rotulo]="l.existente?.arquivo ? 'Substituir PDF da nota' : 'Selecionar PDF da nota'" (selecionado)="l.arquivo = $event" />
           <label class="acao-secundaria acao-pequena seletor-xml">
-            {{ xmlAdicional ? 'XML: ' + xmlAdicional.name : 'Selecionar XML da nota adicional' }}
-            <input type="file" accept=".xml,application/xml,text/xml" (change)="escolherXml($event, true)" />
+            {{ l.xml ? 'XML: ' + l.xml.name : (l.existente?.xml ? 'Substituir XML da nota' : 'Selecionar XML da nota') }}
+            <input type="file" accept=".xml,application/xml,text/xml" (change)="escolherXml($event, l)" />
           </label>
         }
       </div>
+    }
+    @if (editavel()) {
+      <div class="acoes-cartao esquerda" style="margin-top: 12px">
+        <button type="button" class="acao-secundaria" (click)="adicionarNota()">+ Adicionar outra nota fiscal</button>
+      </div>
+    }
+    @if (d.notas_fiscais.length > 1) {
+      <p class="dica-formulario">Total das {{ d.notas_fiscais.length }} notas: <b>{{ totalRegistrado() | moeda }}</b>. É esse valor que a Ordem Bancária debita nas NEs.</p>
     }
 
     @if (editavel()) {

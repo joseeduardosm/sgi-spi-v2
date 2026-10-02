@@ -108,9 +108,7 @@ def mensagem_nf(contrato: Contrato, competencia: Competencia) -> tuple[str, str,
     """E-mail ao Financeiro: "Foi juntada a nota fiscal para conferência de tributação pelo setor competente"."""
     link = _link(contrato, competencia, "retencao")
     assunto = _assunto_competencia(contrato, competencia, "Nota fiscal anexada no sistema")
-    notas = [[f"NF {competencia.nf_numero}", moeda(competencia.nf_valor_bruto)]]
-    if competencia.nf_adicional_valor_bruto is not None:
-        notas.append([f"NF adicional {competencia.nf_adicional_numero}", moeda(competencia.nf_adicional_valor_bruto)])
+    notas = [[nota.rotulo, moeda(nota.valor_bruto)] for nota in competencia.notas_fiscais]
     texto = "\n".join([
         "Foi juntada a nota fiscal para conferência de tributação pelo setor competente:",
         link,
@@ -163,14 +161,12 @@ def mensagem_retencao(contrato: Contrato, competencia: Competencia) -> tuple[str
     assunto = _assunto_competencia(contrato, competencia, "Retenções tributárias conferidas")
     tributos = ("ir", "inss", "iss", "pis", "cofins", "csll")
     linhas = []
-    for prefixo, rotulo, bruto in (("nf_", f"NF {competencia.nf_numero}", competencia.nf_valor_bruto),
-                                   ("nf_adicional_", f"NF adicional {competencia.nf_adicional_numero}", competencia.nf_adicional_valor_bruto)):
-        if bruto is None:
+    for nota in competencia.notas_fiscais:
+        if nota.valor_bruto is None:
             continue
-        retido = sum((getattr(competencia, f"{prefixo}retencao_{t}") or 0 for t in tributos), 0)
-        detalhe = ", ".join(f"{t.upper()} {moeda(getattr(competencia, f'{prefixo}retencao_{t}'))}" for t in tributos
-                            if getattr(competencia, f"{prefixo}retencao_{t}"))
-        linhas.append([rotulo, moeda(bruto), detalhe or "sem retenções", moeda(bruto - retido)])
+        retido = sum((getattr(nota, f"retencao_{t}") or 0 for t in tributos), 0)
+        detalhe = ", ".join(f"{t.upper()} {moeda(getattr(nota, f'retencao_{t}'))}" for t in tributos if getattr(nota, f"retencao_{t}"))
+        linhas.append([nota.rotulo, moeda(nota.valor_bruto), detalhe or "sem retenções", moeda(nota.valor_bruto - retido)])
     texto = "\n".join([
         f"As retenções tributárias da competência {competencia.numero_competencia} do contrato {contrato.numero} já foram conferidas "
         f"e salvas no sistema por {competencia.retencao_por_nome} em {data_hora(competencia.retencao_concluida_em)}.",

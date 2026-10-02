@@ -108,9 +108,25 @@ export const rotas: Routes = [
         loadComponent: () => import('./features/setores/setores.component').then((m) => m.SetoresComponent),
       },
       {
+        // Assinatura de e-mail institucional: todo usuário autenticado (os dados vêm do perfil em vigor)
+        path: 'assinatura-email',
+        title: 'Assinatura de e-mail | SGI SPI',
+        loadComponent: () => import('./features/assinatura/assinatura-email.component').then((m) => m.AssinaturaEmailComponent),
+      },
+      {
         // Módulo RH: todo usuário autenticado (as telas de CGP e autorizador conferem o papel na API)
         path: 'rh',
         loadChildren: () => import('./features/rh/rh.routes').then((m) => m.ROTAS_RH),
+      },
+      {
+        // Módulo Protocolo: numeração institucional; cada rota confere o recurso ACL `protocolo` e a API confere em toda ação
+        path: 'protocolo',
+        loadChildren: () => import('./features/protocolo/protocolo.routes').then((m) => m.ROTAS_PROTOCOLO),
+      },
+      {
+        // Módulo Contratações (ETP e TR): cada rota confere o recurso ACL `contratacoes`; o papel em cada documento é conferido pela API
+        path: 'contratacoes',
+        loadChildren: () => import('./features/contratacoes/contratacoes.routes').then((m) => m.ROTAS_CONTRATACOES),
       },
       {
         // Módulo Melhorias: todo usuário vê as próprias sugestões; a triagem confere o acesso na API (ACL `melhorias`)

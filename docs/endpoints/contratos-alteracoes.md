@@ -63,7 +63,7 @@ Implementação:
   - Aceita de −100 (exclusive, o preço não pode zerar) a 1000, com até 8 casas. Fora disso: `422`.
   - A tela tem "Aplicar a todos", que preenche o mesmo percentual em todos os itens antes de salvar. Na API, basta enviar o mesmo valor em cada item.
   - `valor_referencial` é opcional e funciona como teto do novo preço (útil no reajuste positivo);
-  - novo preço = preço × (1 + índice/100), com 2 casas;
+  - novo preço = preço × (1 + índice/100), com **4 casas** (como o preço unitário); o valor referencial (teto) também aceita até 4 casas;
   - totais: base atual × nova base; valor global atual × novo valor global, ambos somados mês a mês (ver [contratos-cadastro.md](contratos-cadastro.md)), com os preços reajustados a partir do mês de referência — inclusive nos meses já medidos, que serão pagos pela competência de diferença.
 - **Evidência:** um único PDF para o reajuste, mesmo com percentuais diferentes por item.
 - **Arquivos da memória:** PDF + XLSX versionados; nova versão só se os dados mudaram.

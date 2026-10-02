@@ -16,6 +16,7 @@ from app.models.setor import MembroSetor, Setor
 from app.models.usuario import OrigemUsuario, Usuario
 from app.schemas.usuarios import AlteracaoUsuario, CriacaoUsuario, DadosPerfil, DetalheUsuario, OpcaoUsuario, PerfilLeitura
 from app.services import servico_perfil
+from app.services.servico_perfil import validar_localizacao
 from app.services.servico_auditoria import auditar
 from app.services.servico_usuarios import buscar_por_login
 
@@ -162,7 +163,10 @@ def para_detalhe(sessao: Session, usuario: Usuario) -> DetalheUsuario:
 
 
 def _aplicar_perfil(sessao: Session, usuario: Usuario, perfil: DadosPerfil) -> None:
-    """Valida o gestor e copia os campos do perfil para o usuário."""
+    """Valida a localização e o gestor e copia os campos do perfil para o usuário."""
+    erro_local = validar_localizacao(perfil.andar, perfil.predio, usuario.andar or "", usuario.predio or "")
+    if erro_local:
+        raise ErroRegraUsuario(erro_local)
     if perfil.gestor_id is not None:
         if perfil.gestor_id == usuario.id:
             raise ErroRegraUsuario("O usuário não pode ser gestor de si mesmo.")
@@ -205,7 +209,8 @@ def alterar_usuario(sessao: Session, usuario_id: int, dados: AlteracaoUsuario, a
     # Regras de proteção contra perder o acesso administrativo
     if eh_admin_principal(usuario) and (not dados.ativo or not dados.superusuario):
         raise ErroRegraUsuario("A conta administrativa principal não pode ser desativada nem perder o papel SuperRoot.")
-    if usuario.id == autor.id and (not dados.ativo or not dados.superusuario):
+    # Só perde o papel quem o tem: quem não é SuperRoot (ex.: CGP) pode editar o próprio cadastro normalmente
+    if usuario.id == autor.id and (not dados.ativo or (usuario.superusuario and not dados.superusuario)):
         raise ErroRegraUsuario("Você não pode desativar a própria conta nem remover o próprio papel SuperRoot.")
     # Lista do que mudou, para a linha de auditoria
     alteracoes = []

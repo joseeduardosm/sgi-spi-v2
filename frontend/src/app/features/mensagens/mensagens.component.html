@@ -22,12 +22,26 @@
       <input type="search" name="busca" aria-label="Pesquisar mensagens" placeholder="Pesquisar no assunto, no texto ou no remetente" [(ngModel)]="busca" />
       <button type="submit" class="acao-secundaria">Buscar</button>
     </form>
+    @if (selecionadas().size) {
+      <div class="filtros-gestao" role="toolbar" aria-label="Ações nas mensagens selecionadas">
+        <strong>{{ selecionadas().size }} selecionada(s)</strong>
+        <button type="button" class="acao-secundaria acao-pequena" [disabled]="ocupado()" (click)="marcarSelecionadas('lida')">Marcar como lida</button>
+        <button type="button" class="acao-secundaria acao-pequena" [disabled]="ocupado()" (click)="marcarSelecionadas('nao_lida')">Marcar como não lida</button>
+        <button type="button" class="acao-aprovar acao-pequena" [disabled]="ocupado()" (click)="marcarSelecionadas('ciente')">Registrar ciência</button>
+        <button type="button" class="acao-secundaria acao-pequena" (click)="limparSelecao()">Limpar seleção</button>
+      </div>
+    }
+    @if (todasDaPaginaMarcadas() && (recebidas()?.total ?? 0) > (recebidas()?.itens?.length ?? 0) && selecionadas().size < (recebidas()?.total ?? 0)) {
+      <p class="dica-formulario">Todas as {{ recebidas()?.itens?.length }} mensagens desta página estão selecionadas.
+        <button type="button" class="link-arquivo" (click)="selecionarTodasDoFiltro()">Selecionar as {{ recebidas()?.total }} mensagens deste filtro</button></p>
+    }
     <div class="tabela-gestao-envoltorio">
       <table class="tabela-gestao tabela-mensagens">
-        <thead><tr><th>Situação</th><th>Prioridade</th><th>Assunto</th><th>Categoria</th><th>Remetente</th><th>Recebida em</th></tr></thead>
+        <thead><tr><th><input type="checkbox" aria-label="Selecionar todas as mensagens da página" [checked]="todasDaPaginaMarcadas()" (change)="alternarPagina()" /></th><th>Situação</th><th>Prioridade</th><th>Assunto</th><th>Categoria</th><th>Remetente</th><th>Recebida em</th></tr></thead>
         <tbody>
           @for (m of recebidas()?.itens ?? []; track m.id) {
             <tr tabindex="0" class="linha-clicavel" [class.nao-lida]="m.estado === 'nao_visualizada'" (click)="abrir(m)" (keydown.enter)="abrir(m)">
+              <td (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()"><input type="checkbox" [attr.aria-label]="'Selecionar ' + m.assunto" [checked]="selecionadas().has(m.id)" (change)="alternarSelecao(m.id)" /></td>
               <td><span class="selo-situacao" [class.pendente]="m.estado === 'nao_visualizada'" [class.amarelo]="m.estado === 'visualizada'">{{ estados[m.estado] }}</span></td>
               <td><span [class]="'selo-prioridade ' + m.prioridade">{{ prioridades[m.prioridade] }}</span></td>
               <td><strong>{{ m.assunto }}</strong></td>
@@ -36,7 +50,7 @@
               <td>{{ m.entregue_em | date: 'dd/MM/yyyy HH:mm' }}</td>
             </tr>
           } @empty {
-            <tr><td class="estado-vazio" colspan="6">{{ recebidas() ? 'Nenhuma mensagem aqui.' : 'Carregando…' }}</td></tr>
+            <tr><td class="estado-vazio" colspan="7">{{ recebidas() ? 'Nenhuma mensagem aqui.' : 'Carregando…' }}</td></tr>
           }
         </tbody>
       </table>
@@ -77,7 +91,10 @@
       <button type="button" aria-label="Fechar" (click)="aberta.set(null)">×</button>
     </header>
     <p class="dica-formulario" style="margin: 0 24px">Enviada por {{ m.autor_nome }} em {{ m.entregue_em | date: 'dd/MM/yyyy HH:mm' }}</p>
-    <div class="corpo-janela-mensagem">{{ m.corpo }}</div>
+    <div class="previa-mensagem">
+      @if (htmlAberta(); as html) { <iframe title="Texto da mensagem" [srcdoc]="html"></iframe> }
+      @else { <p class="estado-vazio">Carregando a mensagem…</p> }
+    </div>
     <footer>
       @if (m.link) { <button type="button" class="acao-secundaria" (click)="irPara(m.link)">Abrir</button> }
       @if (m.ciente_em) {
@@ -102,9 +119,19 @@
     <form class="corpo-nova-mensagem" (ngSubmit)="enviar()">
       <div class="grade-formulario">
         <div class="ocupa-duas"><label for="msg-assunto">Assunto *</label>
-          <input id="msg-assunto" name="assunto" maxlength="300" required [(ngModel)]="envio.assunto" /></div>
+          <input id="msg-assunto" name="assunto" maxlength="300" required [(ngModel)]="envio.assunto" (ngModelChange)="atualizarPreviaNova()" /></div>
         <div class="ocupa-duas"><label for="msg-corpo">Mensagem *</label>
-          <textarea id="msg-corpo" name="corpo" rows="6" maxlength="12000" required [(ngModel)]="envio.corpo"></textarea></div>
+          <textarea id="msg-corpo" name="corpo" rows="6" maxlength="12000" required [(ngModel)]="envio.corpo" (ngModelChange)="atualizarPreviaNova()"></textarea>
+          <div class="barra-previa">
+            <small class="dica-formulario">Formato: <code>## Título</code>, <code>- item</code> para lista e <code>**negrito**</code>. O destinatário vê a mensagem no mesmo layout do e-mail do changelog.</small>
+            <button type="button" class="acao-secundaria acao-pequena" (click)="alternarPreviaNova()">{{ previaNova() ? 'Esconder prévia' : 'Ver prévia' }}</button>
+          </div>
+          @if (previaNova()) {
+            <div class="previa-mensagem previa-nova">
+              @if (htmlNova(); as html) { <iframe title="Prévia da mensagem" [srcdoc]="html"></iframe> } @else { <p class="estado-vazio">Gerando a prévia…</p> }
+            </div>
+          }
+        </div>
       </div>
       <div class="grade-formulario tres-colunas">
         <div><label for="msg-prioridade">Prioridade</label>
@@ -159,7 +186,10 @@
         <h2 id="titulo-acompanhamento">{{ d.assunto }}</h2></div>
       <button type="button" aria-label="Fechar" (click)="acompanhamento.set(null)">×</button>
     </header>
-    <div class="corpo-janela-mensagem">{{ d.corpo }}</div>
+    <div class="previa-mensagem">
+      @if (htmlAcompanhamento(); as html) { <iframe title="Texto da mensagem enviada" [srcdoc]="html"></iframe> }
+      @else { <p class="estado-vazio">Carregando a mensagem…</p> }
+    </div>
     <div class="tabela-gestao-envoltorio">
       <table class="tabela-gestao">
         <thead><tr><th>Destinatário</th><th>Lida em</th><th>Ciência em</th>@if (d.enviar_email) { <th>E-mail</th> }</tr></thead>

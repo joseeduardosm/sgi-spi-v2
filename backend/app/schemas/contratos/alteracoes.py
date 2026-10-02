@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.contratos.empresas import Texto
 from app.schemas.contratos.execucao import LeituraArquivo, LeituraCiencia
-from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade
+from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade, ValorUnitario
 
 # Quantidade de entrada: não negativa, até 4 casas decimais
 Quantidade = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]
@@ -118,7 +118,7 @@ class ItemReajusteGravacao(BaseModel):
     indice_percentual: Annotated[Decimal, Field(gt=-100, le=1000, max_digits=18, decimal_places=8)] = Field(
         ..., description="Em pontos percentuais: 2 = reajuste de 2%; −3 = desconto de 3%; 0 = item sem alteração. Maior que −100."
     )
-    valor_referencial: Annotated[Decimal | None, Field(None, ge=0, max_digits=18, decimal_places=2)] = Field(
+    valor_referencial: Annotated[Decimal | None, Field(None, ge=0, max_digits=18, decimal_places=4)] = Field(
         None, description="Teto opcional do preço reajustado (útil no reajuste positivo)."
     )
 
@@ -135,10 +135,10 @@ class ItemReajusteLeitura(BaseModel):
     descricao: str
     tipo: str
     quantidade_mensal: ValorQuantidade
-    valor_unitario_atual: ValorMonetario
+    valor_unitario_atual: ValorUnitario
     indice_percentual: ValorFator
-    valor_referencial: ValorMonetario | None
-    valor_unitario_reajustado: ValorMonetario
+    valor_referencial: ValorUnitario | None
+    valor_unitario_reajustado: ValorUnitario
     subtotal_reajustado: ValorMonetario
 
 
@@ -237,7 +237,7 @@ class ItemAlteracaoLeitura(BaseModel):
     ordem: int
     descricao: str
     tipo: str
-    valor_unitario: ValorMonetario
+    valor_unitario: ValorUnitario
     quantidade_original: ValorQuantidade
     quantidade_executada: ValorQuantidade
     quantidade_nova: ValorQuantidade

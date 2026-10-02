@@ -13,6 +13,8 @@ HTML em tabelas e estilos inline (compatível com Outlook e webmails). `servico_
 brasão sempre que o HTML o referencia.
 """
 
+import base64
+import re
 from functools import lru_cache
 from html import escape
 from pathlib import Path
@@ -29,6 +31,60 @@ NOTA_PADRAO = "Mensagem automática do SGI SPI. Não responda a este e-mail."
 def imagem_brasao() -> ImagemEmbutida:
     """Brasão do Estado para o cabeçalho (embutido no e-mail)."""
     return ImagemEmbutida(cid=CID_BRASAO, conteudo=ARQUIVO_BRASAO.read_bytes(), tipo="image/png")
+
+
+# --- Texto formatado (`## título`, `- lista`, `**negrito**`) → HTML do e-mail -------------------------------------------
+
+ESTILO_P = "margin:0 0 12px;font-size:14px;line-height:1.6;color:#2b3137"
+ESTILO_H2 = f"margin:20px 0 8px;font-size:15px;color:{VERMELHO}"
+ESTILO_UL = "margin:0 0 12px;padding-left:20px;font-size:14px;line-height:1.55;color:#2b3137"
+
+
+def _inline(texto: str) -> str:
+    """Escapa o HTML e aplica `**negrito**`."""
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escape(texto))
+
+
+def corpo_html(corpo: str) -> str:
+    """Texto editado → HTML do e-mail: `## ` vira subtítulo, `- ` vira lista (2 espaços por nível), o resto parágrafo."""
+    partes: list[str] = []
+    nivel = 0  # listas abertas
+    for linha in corpo.splitlines():
+        item = re.match(r"^(\s*)[-*]\s+(.*)$", linha)
+        if item:
+            alvo = len(item.group(1).replace("\t", "  ")) // 2 + 1
+            while nivel < alvo:
+                partes.append(f'<ul style="{ESTILO_UL}">')
+                nivel += 1
+            while nivel > alvo:
+                partes.append("</ul>")
+                nivel -= 1
+            partes.append(f'<li style="margin:0 0 4px">{_inline(item.group(2))}</li>')
+            continue
+        while nivel:
+            partes.append("</ul>")
+            nivel -= 1
+        if not linha.strip():
+            continue
+        titulo = re.match(r"^#{1,3}\s+(.*)$", linha)
+        if titulo:
+            partes.append(f'<h2 style="{ESTILO_H2}">{_inline(titulo.group(1))}</h2>')
+        else:
+            partes.append(f'<p style="{ESTILO_P}">{_inline(linha.strip())}</p>')
+    partes += ["</ul>"] * nivel
+    return "".join(partes)
+
+
+def corpo_texto(corpo: str) -> str:
+    """Versão em texto simples (leitores sem HTML): sem as marcas de negrito e de título."""
+    return re.sub(r"^#{1,3}\s+", "", corpo.replace("**", ""), flags=re.MULTILINE)
+
+
+def para_previa(html: str) -> str:
+    """O mesmo e-mail com o brasão embutido como `data:` (o navegador não conhece `cid:`), para exibir na tela."""
+    imagem = imagem_brasao()
+    dados = f"data:{imagem.tipo};base64,{base64.b64encode(imagem.conteudo).decode()}"
+    return html.replace(f"cid:{CID_BRASAO}", dados)
 
 
 def paragrafos(textos: list[str]) -> str:

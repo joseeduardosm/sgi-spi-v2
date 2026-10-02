@@ -117,11 +117,12 @@ export class ReajusteComponent implements OnInit {
     return r.itens.some((i) => this.alteradoItem(i));
   }
 
-  /** Novo preço: o salvo, ou a prévia com o que foi digitado (preço × (1 + %/100), 2 casas, limitado ao teto). */
+  /** Novo preço: o salvo, ou a prévia com o que foi digitado (preço × (1 + %/100), 4 casas, limitado ao teto). */
   protected precoNovo(i: ItemReajuste): number {
     if (!this.alteradoItem(i) || !this.indiceValido(this.indices[i.item_id])) return Number(i.valor_unitario_reajustado);
     const indice = Number(paraDecimalApi(this.indices[i.item_id] || '0'));
-    const novo = Math.round((Number(i.valor_unitario_atual) * (1 + indice / 100) + Number.EPSILON) * 100) / 100;
+    // 4 casas, como o preço unitário (a API arredonda igual)
+    const novo = Math.round((Number(i.valor_unitario_atual) * (1 + indice / 100) + Number.EPSILON) * 10000) / 10000;
     const teto = this.referenciais[i.item_id] ? Number(paraDecimalApi(this.referenciais[i.item_id])) : null;
     return teto !== null && Number.isFinite(teto) ? Math.min(novo, teto) : novo;
   }

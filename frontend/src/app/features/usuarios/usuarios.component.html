@@ -68,7 +68,7 @@
             </td>
             <td>
               {{ u.perfil.cargo || '—' }}
-              <small>{{ u.perfil.departamento }}{{ u.perfil.andar ? ' · ' + u.perfil.andar + 'º andar' : '' }}{{ u.perfil.predio ? ' · ' + u.perfil.predio : '' }}</small>
+              <small>{{ u.perfil.departamento }}{{ u.perfil.andar ? ' · ' + (u.perfil.andar === 'Subsolo' ? 'Subsolo' : u.perfil.andar + 'º andar') : '' }}{{ u.perfil.predio ? ' · Lado ' + u.perfil.predio : '' }}</small>
             </td>
             <td>
               @if (!u.perfil_completo) {

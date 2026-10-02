@@ -32,7 +32,7 @@ def verificar_senha(senha: str, hash_senha: str) -> bool:
         return False
 
 
-def criar_token_acesso(sujeito: str, declaracoes_extras: dict[str, Any] | None = None) -> tuple[str, datetime]:
+def criar_token_acesso(sujeito: str, declaracoes_extras: dict[str, Any] | None = None, inicio_sessao: datetime | None = None) -> tuple[str, datetime]:
     """Gera um JWT assinado e retorna o token e a data de expiração (UTC).
 
     `sujeito` é o id do usuário (vai no campo padrão `sub`). As `declaracoes_extras` permitem
@@ -44,12 +44,32 @@ def criar_token_acesso(sujeito: str, declaracoes_extras: dict[str, Any] | None =
     conteudo: dict[str, Any] = {
         "sub": sujeito,  # quem é o usuário
         "iat": agora,  # quando o token foi emitido
+        "ini": int((inicio_sessao or agora).timestamp()),  # quando a sessão começou (o login); a renovação preserva este instante
         "exp": expira_em,  # até quando vale
         "tipo": "acesso",  # distingue de outros tipos de token que venham a existir
         **(declaracoes_extras or {}),
     }
     token = jwt.encode(conteudo, config.chave_secreta_jwt.get_secret_value(), algorithm=config.algoritmo_jwt)
     return token, expira_em
+
+
+def renovar_token(conteudo: dict[str, Any], agora: datetime | None = None) -> tuple[str, datetime] | None:
+    """Token novo para quem está usando o sistema; None se ainda não é hora ou a sessão atingiu o limite.
+
+    Renova quando faltam menos de `minutos_renovacao_token` para o vencimento. O token novo mantém quem é o usuário, o login
+    (`ini`) e as demais declarações; só a validade recomeça. Com `horas_sessao_maxima` > 0, a sessão não passa desse total
+    desde o login (tokens antigos, sem `ini`, contam a partir de `iat`).
+    """
+    config = obter_configuracao()
+    agora = agora or datetime.now(UTC)
+    expira = datetime.fromtimestamp(conteudo["exp"], UTC)
+    if expira - agora > timedelta(minutes=config.minutos_renovacao_token):
+        return None
+    inicio = datetime.fromtimestamp(conteudo.get("ini", conteudo["iat"]), UTC)
+    if config.horas_sessao_maxima and agora - inicio >= timedelta(hours=config.horas_sessao_maxima):
+        return None
+    extras = {k: v for k, v in conteudo.items() if k not in {"sub", "iat", "exp", "ini", "tipo"}}
+    return criar_token_acesso(conteudo["sub"], extras, inicio_sessao=inicio)
 
 
 def decodificar_token_acesso(token: str) -> dict[str, Any]:

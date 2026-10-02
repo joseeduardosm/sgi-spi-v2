@@ -33,8 +33,8 @@ Perfil institucional usado na criação e na alteração. Os textos são aparado
 | `celular` | string | até 30 |
 | `cargo` | string | até 150 |
 | `departamento` | string | até 150 |
-| `andar` | string | até 30 |
-| `predio` | string | até 100 |
+| `andar` | string | `Subsolo` ou `1` a `13` (vazio permitido) |
+| `predio` | string | Lado do andar: `A` ou `B` (vazio permitido) |
 | `data_nascimento` | date \| null | `AAAA-MM-DD` |
 | `gestor_id` | integer \| null | Usuário existente e diferente do próprio |
 

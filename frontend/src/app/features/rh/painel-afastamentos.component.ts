@@ -108,6 +108,30 @@ export class PainelAfastamentosComponent implements OnInit {
     });
   }
 
+  /** Etapa 1: o superior imediato dá o ciente e de acordo (não aprova); o pedido segue para o aprovador. */
+  protected async darCiencia(a: Afastamento): Promise<void> {
+    const ok = await this.dialogos.confirmar({
+      titulo: 'Ciente e de acordo?',
+      mensagem: `${ROTULOS_TIPO[a.tipo]} de ${a.nome} (${a.setor}), de ${dataBr(a.inicio)} a ${dataBr(a.fim)} (${a.dias} dias). Isso não aprova o pedido: ele segue para a aprovação.`,
+      rotuloConfirmar: 'Ciente e de acordo',
+    });
+    if (!ok) return;
+    this.dialogos.executar(this.api.darCiencia(a.id), 'Registrando…').subscribe({
+      next: () => this.carregar(),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível registrar o ciente e de acordo'),
+    });
+  }
+
+  protected darCienciaDoDetalhe(a: Afastamento): void {
+    this.dialogos.executar(this.api.darCiencia(a.id), 'Registrando…').subscribe({
+      next: () => {
+        this.detalhe.set(null);
+        this.carregar();
+      },
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível registrar o ciente e de acordo'),
+    });
+  }
+
   protected async aprovar(a: Afastamento): Promise<void> {
     const ok = await this.dialogos.confirmar({
       titulo: 'Aprovar pedido?',

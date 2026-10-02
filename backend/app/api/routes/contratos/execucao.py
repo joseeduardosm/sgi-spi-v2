@@ -20,6 +20,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile, status
 from fastapi.responses import FileResponse
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.respostas import INVALIDO, RESPOSTAS_AUTENTICADAS, resposta_nao_encontrado
@@ -28,6 +29,7 @@ from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
+    ItemNotaFiscal,
     ConclusaoMedicao,
     GravacaoRetencao,
     DetalheCompetencia,
@@ -358,10 +360,11 @@ def reconsideracao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: U
 # --- Etapa 3: nota fiscal --------------------------------------------------------------------
 
 @roteador.post("/competencias/{competencia_id}/nota-fiscal", response_model=DetalheCompetencia, summary="Juntar nota fiscal (PDF + XML)",
-               description="`multipart/form-data`: NF em PDF (`arquivo`) e XML (`xml`, NF-e ou NFS-e), ambos obrigatórios; data de "
-               "recebimento e prazo de pagamento (1 a 3650 dias). NF adicional opcional (`possui_adicional`, `arquivo_adicional`, "
-               "`xml_adicional`). Número, chave, valor e as retenções sugeridas vêm do XML; o saldo livre das NEs precisa cobrir as "
-               "notas. Conclui a etapa (próxima: retenção de tributos) e envia, em segundo plano, o e-mail ao Financeiro com cópia à "
+               description="`multipart/form-data`: uma ou mais notas (até 20). `notas` é um JSON com a lista final, na ordem desejada: "
+               "cada item traz `id` (nota já registrada, que mantém os arquivos não trocados), `arquivo` e `xml` (posições nas listas de "
+               "arquivos `arquivos` e `xmls`). PDF e XML (NF-e ou NFS-e) são obrigatórios em cada nota; notas fora da lista são removidas. "
+               "Data de recebimento e prazo de pagamento (1 a 3650 dias). Número, chave, valor e as retenções sugeridas vêm dos XMLs; "
+               "o saldo livre das NEs precisa cobrir a soma. Conclui a etapa (próxima: retenção de tributos) e envia, em segundo plano, o e-mail ao Financeiro com cópia à "
                "equipe.", responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def nota_fiscal(
     contrato_id: uuid.UUID,
@@ -369,26 +372,24 @@ def nota_fiscal(
     tarefas: BackgroundTasks,
     recebida_em: Annotated[date, Form(description="Data em que a Administração recebeu a NF.")],
     prazo_pagamento_dias: Annotated[int, Form(ge=1, le=3650)],
-    possui_adicional: Annotated[bool, Form()] = False,
-    arquivo: UploadFile | None = File(None),
-    xml: UploadFile | None = File(None),
-    arquivo_adicional: UploadFile | None = File(None),
-    xml_adicional: UploadFile | None = File(None),
+    notas: Annotated[str, Form(description='JSON: lista de {"id": uuid|null, "arquivo": posição|null, "xml": posição|null}.')],
+    arquivos: Annotated[list[UploadFile], File(description="PDFs das notas (referenciados por posição em `notas`).")] = [],
+    xmls: Annotated[list[UploadFile], File(description="XMLs das notas (referenciados por posição em `notas`).")] = [],
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ):
-    """Etapa 3: junta a nota fiscal (e a adicional, se houver); os valores são lidos do XML."""
-    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo_pagamento_dias, "possui_adicional": possui_adicional}
-
-    def arquivo_xml(upload: UploadFile | None, padrao: str) -> tuple | None:
-        return (upload.file, upload.filename or padrao) if upload else None
+    """Etapa 3: junta uma ou mais notas fiscais; os valores são lidos dos XMLs."""
+    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo_pagamento_dias}
+    try:
+        itens = [i.model_dump() for i in TypeAdapter(list[ItemNotaFiscal]).validate_json(notas)]
+    except ValidationError as erro:
+        raise ErroApi(422, "O campo `notas` precisa ser uma lista JSON de {id, arquivo, xml}.", "validacao") from erro
 
     with traduzir_erros(sessao):
-        # Os arquivos são opcionais na chamada: ao corrigir depois de reabrir, os anteriores podem ser mantidos
+        # Os arquivos são opcionais por nota: ao corrigir depois de reabrir, os anteriores podem ser mantidos
         competencias.registrar_nota_fiscal(
-            sessao, contrato_id, competencia_id, dados, arquivo_pdf(arquivo) if arquivo else None, arquivo_xml(xml, "nota_fiscal.xml"),
-            arquivo_pdf(arquivo_adicional) if possui_adicional and arquivo_adicional else None,
-            arquivo_xml(xml_adicional, "nota_fiscal_adicional.xml") if possui_adicional else None, autor,
+            sessao, contrato_id, competencia_id, dados, itens, [arquivo_pdf(a) for a in arquivos],
+            [(x.file, x.filename or "nota_fiscal.xml") for x in xmls], autor,
         )
         tarefas.add_task(servico_notificacoes.notificar_nf, competencia_id)
         return _depois(sessao, contrato_id, competencia_id, autor)
@@ -409,7 +410,7 @@ def reenviar_email_nf(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao:
 # --- Etapa 4: retenção de tributos -----------------------------------------------------------
 
 @roteador.put("/competencias/{competencia_id}/retencao", response_model=DetalheCompetencia, summary="Salvar retenção de tributos",
-              description="Retenções conferidas (IR, INSS, ISS, PIS, COFINS e CSLL; ≥ 0 e soma ≤ bruto) da NF e da adicional, se houver, "
+              description="Retenções conferidas (IR, INSS, ISS, PIS, COFINS e CSLL; ≥ 0 e soma ≤ bruto) de cada nota fiscal, "
               "e a confirmação de que a discriminação é compatível com o objeto. Permitido ao Financeiro (setor configurado em "
               "`SETOR_FINANCEIRO` e filhos), à equipe do contrato e ao SuperRoot. Gera o PDF da conferência, avança para o CADIN e "
               "envia, em segundo plano, o e-mail à equipe.", responses={**NAO_ENCONTRADA, **ESCRITA})
@@ -418,8 +419,8 @@ def salvar_retencao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Gr
     """Etapa 4: conferência do Financeiro."""
     with traduzir_erros(sessao):
         servico_retencao.salvar_retencao(
-            sessao, contrato_id, competencia_id, dados.principal.model_dump(), dados.adicional.model_dump() if dados.adicional else None,
-            dados.discriminacao_conferida, autor,
+            sessao, contrato_id, competencia_id,
+            {n.nota_id: n.model_dump(exclude={"nota_id"}) for n in dados.notas}, dados.discriminacao_conferida, autor,
         )
         tarefas.add_task(servico_notificacoes.notificar_retencao, competencia_id)
         return _depois(sessao, contrato_id, competencia_id, autor)

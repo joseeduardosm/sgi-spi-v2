@@ -188,12 +188,12 @@ class ItemReajuste(Base):
     tipo: Mapped[str] = mapped_column(String(20))
     # Dados do item copiados na abertura do reajuste
     quantidade_mensal: Mapped[Decimal] = mapped_column(Numeric(18, 4))
-    valor_unitario_atual: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    valor_unitario_atual: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     # Em pontos percentuais: 2 = 2%
     indice_percentual: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal(0))
     # Teto opcional do preço reajustado
-    valor_referencial: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
-    valor_unitario_reajustado: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    valor_referencial: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    valor_unitario_reajustado: Mapped[Decimal] = mapped_column(Numeric(18, 4))
 
     reajuste: Mapped[Reajuste] = relationship(back_populates="itens")
 
@@ -313,7 +313,7 @@ class ItemAlteracao(Base):
     ordem: Mapped[int] = mapped_column(Integer)
     descricao: Mapped[str] = mapped_column(String(1000))
     tipo: Mapped[str] = mapped_column(String(20))
-    valor_unitario: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    valor_unitario: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     # Contínuo: quantidade mensal; sob demanda: limite da vigência
     quantidade_original: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     quantidade_nova: Mapped[Decimal] = mapped_column(Numeric(18, 4))

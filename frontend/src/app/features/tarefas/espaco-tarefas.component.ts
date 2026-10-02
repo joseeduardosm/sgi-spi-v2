@@ -11,7 +11,6 @@ import { combineLatest, debounceTime, Subject } from 'rxjs';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CalendarioTarefasComponent, Reprogramacao } from './calendario-tarefas.component';
 import { EstadoTarefasService } from './estado-tarefas.service';
-import { JanelaDetalheTarefaComponent } from './janela-detalhe-tarefa.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
 import { ListaTarefasComponent, OrdemLista } from './lista-tarefas.component';
 import { MovimentoQuadro, QuadroTarefasComponent } from './quadro-tarefas.component';
@@ -35,13 +34,13 @@ const SEGUNDOS_DESTAQUE = 4;
  * Tela de trabalho do módulo, como um quadro do Trello:
  * - cabeçalho: título, visões (Quadro | Lista | Calendário | Pessoas), avatares que filtram por pessoa,
  *   busca, filtros e a linha de resumo (em aberto, atrasadas, vencem hoje…), tudo guardado na URL;
- * - a tarefa abre numa janela por cima (`?tarefa=123`), sem sair do quadro.
+ * - a tarefa abre na tela própria (`/tarefas/123`).
  */
 @Component({
   selector: 'app-espaco-tarefas',
   imports: [
     FormsModule, RouterLink, DecimalPipe, QuadroTarefasComponent, ListaTarefasComponent, CalendarioTarefasComponent,
-    JanelaDetalheTarefaComponent, JanelaTarefaComponent,
+    JanelaTarefaComponent,
   ],
   templateUrl: './espaco-tarefas.component.html',
   // Clique fora do popover de filtros o fecha
@@ -76,7 +75,6 @@ export class EspacoTarefasComponent implements OnInit {
   protected readonly raias = signal(false);
   protected readonly ordem = signal<OrdemLista>('manual');
   /** Número da tarefa aberta na janela. */
-  protected readonly tarefaAberta = signal<number | null>(null);
   private readonly digitacao = new Subject<string>();
 
   // --- Estado da tela ---------------------------------------------------------------------------------
@@ -167,7 +165,8 @@ export class EspacoTarefasComponent implements OnInit {
       this.recorte.set((q.get('recorte') ?? '') as Recorte);
       this.raias.set(q.get('raias') === 'pessoa');
       this.ordem.set((q.get('ordem') ?? 'manual') as OrdemLista);
-      this.tarefaAberta.set(q.get('tarefa') ? Number(q.get('tarefa')) : null);
+      // Links antigos (?tarefa=123) seguem para a tela própria da tarefa
+      if (Number(q.get('tarefa')) > 0) void this.roteador.navigate(['/tarefas', Number(q.get('tarefa'))], { replaceUrl: true });
       if (this.visao() === 'pessoas' || this.raias()) this.carregarPessoas();
     });
     // Busca com atraso: a URL muda 300 ms depois da última tecla
@@ -241,15 +240,10 @@ export class EspacoTarefasComponent implements OnInit {
     this.navegar({ recorte: null, prioridade: null, marcador: null, pessoas: null, busca: null });
   }
 
-  // --- Janela da tarefa (?tarefa=123) -------------------------------------------------------------------
+  // --- Tela da tarefa (/tarefas/123) ---------------------------------------------------------------------
 
   protected abrirTarefa(numero: number): void {
-    // Sem replaceUrl: o "voltar" do navegador fecha a janela
-    void this.roteador.navigate([], { relativeTo: this.rota, queryParams: { tarefa: numero }, queryParamsHandling: 'merge' });
-  }
-
-  protected fecharTarefa(): void {
-    this.navegar({ tarefa: null });
+    void this.roteador.navigate(['/tarefas', numero]);
   }
 
   // --- Ações vindas das visões ----------------------------------------------------------------------------

@@ -44,6 +44,11 @@ class Configuracao(BaseSettings):
     algoritmo_jwt: str = "HS256"
     # Validade do token de acesso (depois disso o usuário precisa entrar de novo)
     minutos_expiracao_token: int = Field(60, gt=0)
+    # Renovação deslizante: quem usa o sistema recebe um token novo quando faltam menos de N minutos para vencer
+    # (a sessão só cai depois de `minutos_expiracao_token` de inatividade). `horas_sessao_maxima` > 0 limita a duração
+    # total da sessão mesmo com uso contínuo (0 = sem limite).
+    minutos_renovacao_token: int = Field(30, ge=1)
+    horas_sessao_maxima: int = Field(0, ge=0)
 
     # Banco de dados (PostgreSQL). Ex.: postgresql+psycopg://usuario:senha@localhost:5432/banco
     url_banco_dados: str
@@ -75,6 +80,21 @@ class Configuracao(BaseSettings):
     setor_financeiro: str = "Diretoria de Orçamento e Finanças"
     # Setor da CGP (Coordenadoria de Gestão de Pessoas): administra o Módulo RH (inclui os setores filhos)
     setor_cgp: str = "Coordenadoria de Gestão de Pessoas"
+
+    # Contratações (ETP e TR): versões guardadas por documento, minutos sem edição que abrem uma "sessão" nova (a versão automática
+    # guarda o estado de antes da primeira edição) e dias de revisão parada até o aviso ao criador
+    contratacoes_limite_versoes: int = Field(100, ge=10)
+    contratacoes_sessao_minutos: int = Field(30, ge=1)
+    contratacoes_dias_aviso: int = Field(5, ge=1)
+
+    # Protocolo: dias de reserva sem documento anexado até o aviso ao responsável (e de novo ao dobro)
+    protocolo_dias_aviso: int = Field(5, ge=1)
+
+    # Assinatura de e-mail institucional (imagem e HTML): textos fixos e prefixo do telefone (ramal = últimos dígitos)
+    assinatura_secretaria: str = "Secretaria de Parcerias em Investimentos – SPI"
+    assinatura_endereco: str = "Rua Iaiá, 126 - Itaim Bibi"
+    assinatura_cidade: str = "São Paulo/SP – CEP 04542-906"
+    assinatura_telefone_prefixo: str = "(11) 3702-"
 
     # Importação do Módulo de Contratos do SGI SPI (botão do SuperRoot em /contratos). As senhas são
     # digitadas na tela a cada execução e nunca gravadas.

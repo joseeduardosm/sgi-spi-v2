@@ -12,7 +12,7 @@
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint, Uuid, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.banco import Base, agora_utc
@@ -122,6 +122,11 @@ class Afastamento(Base):
     decidido_por_nome: Mapped[str | None] = mapped_column(String(200))
     decidido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     justificativa: Mapped[str | None] = mapped_column(Text)
+    # Etapa 1 (ciente e de acordo do superior imediato): enquanto `aguarda_ciencia`, o aprovador ainda não recebe o pedido
+    aguarda_ciencia: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    ciencia_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    ciencia_por_nome: Mapped[str | None] = mapped_column(String(200))
+    ciencia_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Férias: período aquisitivo em que o afastamento começa (debita o saldo dele)
     periodo_aquisitivo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rh_periodos_aquisitivos.id", ondelete="SET NULL"), index=True)
     # Alteração: o novo pedido aponta o anterior (cancelado quando o novo é aprovado)
@@ -192,6 +197,8 @@ class ParametrosRh(Base):
     aviso_ferias_ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     # Períodos (férias e LP) não podem começar em feriado ou ponto facultativo cadastrado
     inicio_vedado_feriado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Data em que abre o agendamento das férias do ano seguinte (nulo = sem a regra); ver `servico_afastamentos.agendamento_antecipado`
+    abertura_agendamento_ferias: Mapped[date | None] = mapped_column(Date)
     atualizado_por_nome: Mapped[str | None] = mapped_column(String(200))
     atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

@@ -8,7 +8,7 @@ from app.models.setor import MembroSetor, Setor
 from tests.conftest import cabecalho, criar_usuario
 
 PERFIL = {"nome_completo": "Nova Pessoa", "email": "nova@sp.gov.br", "ramal": "1234", "cargo": "Analista", "departamento": "Diretoria A",
-          "andar": "3", "predio": "Sede"}
+          "andar": "3", "predio": "A"}
 
 
 def _cgp_com_controle_total() -> tuple[int, int]:
@@ -83,3 +83,18 @@ def test_cgp_administra_setores_menos_os_sistemicos(cliente, admin):
     grupo = cliente.post("/api/setores", json={"nome": "Auditores", "sistemico": True}, headers=admin).json()["id"]
     assert cliente.put(f"/api/setores/{grupo}", json={"nome": "Auditores", "sistemico": False, "membros_ids": [rita]}, headers=h).status_code == 403
     assert cliente.delete(f"/api/setores/{grupo}", headers=h).status_code == 403
+
+
+def test_cgp_edita_o_proprio_cadastro_e_dados_funcionais(cliente):
+    """Quem não é SuperRoot (ex.: CGP) edita o próprio cadastro; só não pode se desativar."""
+    rita, _ = _cgp_com_controle_total()
+    h = cabecalho(cliente, "rita")
+    alteracao = {"senha": None, "ativo": True, "superusuario": False, "perfil": PERFIL}
+    assert cliente.put(f"/api/usuarios/{rita}", json=alteracao, headers=h).status_code == 200
+    funcionais = {"jornada_semanal_horas": 40, "horario_trabalho_inicio": "09:00", "horario_trabalho_fim": "18:00",
+                  "intervalo_inicio": "12:00", "intervalo_fim": "13:00", "rg_cin": "12.345.678-9", "rs_pv": "1.234.567/8"}
+    r = cliente.put(f"/api/rh/cadastro/usuarios/{rita}/funcionais", json=funcionais, headers=h)
+    assert r.status_code == 200, r.text
+    assert cliente.get(f"/api/rh/cadastro/usuarios/{rita}", headers=h).json()["funcionais"]["rg_cin"] == "12.345.678-9"
+    # Continua proibido desativar a própria conta
+    assert cliente.put(f"/api/usuarios/{rita}", json={**alteracao, "ativo": False}, headers=h).status_code == 400

@@ -15,7 +15,7 @@ from typing import Annotated, Any, Literal
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 from app.schemas.contratos.empresas import Texto, TextoObrigatorio
-from app.schemas.contratos.tipos import ValorMonetario, ValorQuantidade
+from app.schemas.contratos.tipos import ValorMonetario, ValorQuantidade, ValorUnitario
 from app.schemas.contratos.empresas import OpcaoEmpresa as EmpresaDoContrato
 
 # Valores aceitos em campos de escolha (o Pydantic recusa qualquer outro com erro 422)
@@ -32,6 +32,8 @@ Papel = Literal[
 # Números decimais de entrada: não negativos, com limite de dígitos e de casas decimais
 Quantidade = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]
 Dinheiro = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)]
+# Preço unitário: até 4 casas decimais (ex.: 0,075)
+PrecoUnitario = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]
 
 
 def _link(valor: str) -> str:
@@ -57,7 +59,7 @@ class GravacaoItem(BaseModel):
     codigo_catmat_catser: TextoObrigatorio = Field(..., max_length=80)
     quantidade_mensal: Quantidade = Field(..., description="Contínuo: > 0. Sob demanda: estimativa mensal (pode ser 0).")
     quantidade_total: Quantidade = Field(Decimal(0), description="Só sob demanda: teto da vigência (> 0).")
-    valor_unitario: Dinheiro
+    valor_unitario: PrecoUnitario = Field(..., description="Preço unitário, até 4 casas decimais (ex.: 0.075).")
 
     @model_validator(mode="after")
     def _quantidades(self) -> "GravacaoItem":
@@ -130,7 +132,7 @@ class LeituraItem(BaseModel):
     quantidade_original: ValorQuantidade = Field(..., description="Sob demanda: teto da vigência inicial (o valor editável no cadastro).")
     quantidade_executada: ValorQuantidade
     quantidade_disponivel: ValorQuantidade
-    valor_unitario: ValorMonetario
+    valor_unitario: ValorUnitario
     subtotal_mensal: ValorMonetario = Field(..., description="Quantidade mensal × valor unitário.")
     vigencia_meses: int
 

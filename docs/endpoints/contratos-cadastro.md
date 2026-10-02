@@ -33,7 +33,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
   - depois de geradas as competências de execução, só o SuperRoot altera itens e ordem.
 - **Equipe:** um usuário ativo por papel (`gestor`, `gestor_suplente`, `fiscal_administrativo`, `fiscal_administrativo_suplente`, `fiscal_tecnico`, `fiscal_tecnico_suplente`). Trocar o designado encerra a designação anterior, que fica no histórico.
 - **Concorrência:** o `PUT` exige a `versao` lida no detalhe. Se outra pessoa salvou antes: `409 conflito`.
-- **Valores decimais** são enviados e recebidos como **texto** (`"1234.50"`): dinheiro com 2 casas e quantidades com 4.
+- **Valores decimais** são enviados e recebidos como **texto** (`"1234.50"`): dinheiro com 2 casas, **preço unitário dos itens com até 4** (sai com 4, ex.: `"0.0750"`) e quantidades com 4.
 - **Auditoria:** `contrato.criar`, `contrato.alterar` (campos "de → para"), `contrato.equipe.alterar`, `contrato.itens.alterar`, `contrato.documento.enviar` e `contrato.excluir`, com `alvo_tipo = contrato`.
 
 ## Schemas
@@ -58,7 +58,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 | `itens` | `GravacaoItem[]` | não | Lista completa, na ordem de exibição |
 | `versao` | integer | no `PUT` | Versão lida no detalhe |
 
-`GravacaoItem`: `id` (nulo = novo), `descricao` (1 a 1000), `tipo` (`continuo`/`sob_demanda`), `calcula_pro_rata` (`true` = com pró-rata, `false` = sempre integral), `unidade_fornecimento` (Unidade de Fornecimento - UF, opcional, até 50), `codigo_classe`, `codigo_natureza_despesa`, `codigo_siafisico`, `codigo_catmat_catser` (obrigatórios, até 80), `quantidade_mensal`, `quantidade_total` (até 4 casas), `valor_unitario` (2 casas).
+`GravacaoItem`: `id` (nulo = novo), `descricao` (1 a 1000), `tipo` (`continuo`/`sob_demanda`), `calcula_pro_rata` (`true` = com pró-rata, `false` = sempre integral), `unidade_fornecimento` (Unidade de Fornecimento - UF, opcional, até 50), `codigo_classe`, `codigo_natureza_despesa`, `codigo_siafisico`, `codigo_catmat_catser` (obrigatórios, até 80), `quantidade_mensal`, `quantidade_total` (até 4 casas), `valor_unitario` (até **4 casas**, ex.: `0.075`; 5 ou mais → `422`). Os totais (subtotal, base mensal, valor global, medição) continuam arredondados em centavos.
 
 ### Respostas
 

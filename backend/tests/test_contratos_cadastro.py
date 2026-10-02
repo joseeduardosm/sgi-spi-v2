@@ -272,3 +272,18 @@ def test_relatorio_dos_itens_em_pdf(cliente, admin):
     assert cliente.get(f"/api/contratos/{contrato['id']}/itens/pdf", headers=cabecalho(cliente, "leitor")).status_code == 200
     assert cliente.get(f"/api/contratos/{contrato['id']}/itens/pdf", headers=cabecalho(cliente, "sem_acesso")).status_code == 403
     assert cliente.get("/api/contratos/00000000-0000-0000-0000-000000000000/itens/pdf", headers=admin).status_code == 404
+
+
+def test_valor_unitario_com_4_casas(cliente, admin):
+    """Preço unitário aceita até 4 casas e volta sem arredondar; 5 casas → 422."""
+    empresa = criar_empresa(cliente, admin)
+    r = cliente.post("/api/contratos", json=dados_contrato(empresa["id"], itens=[item("Impressão", quantidade_mensal="10000", valor_unitario="0.075")]),
+                     headers=admin)
+    assert r.status_code == 201, r.text
+    i = r.json()["itens"][0]
+    assert Decimal(i["valor_unitario"]) == Decimal("0.075") and i["valor_unitario"] == "0.0750"
+    assert cliente.post("/api/contratos", json=dados_contrato(empresa["id"], "002/2026", itens=[item(valor_unitario="0.07501")]),
+                        headers=admin).status_code == 422
+    # A planilha de itens mostra o preço com as casas do valor (R$ 0,075)
+    from app.services.contratos.documentos_execucao import moeda_unitaria
+    assert moeda_unitaria(Decimal(i["valor_unitario"])) == "R$ 0,075"

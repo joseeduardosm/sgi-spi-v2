@@ -146,7 +146,7 @@ def _periodos(sessao: Session, usuario_id: int) -> list[PeriodoLeitura]:
     resultado = []
     for per in lista:
         usado = servico_periodos.usado(sessao, usuario_id, per.inicio, per.fim)
-        resultado.append(PeriodoLeitura(inicio=per.inicio, fim=per.fim, dias_creditados=per.dias_creditados, usado=usado,
+        resultado.append(PeriodoLeitura(exercicio=servico_periodos.exercicio_do_periodo(per.inicio, per.fim), inicio=per.inicio, fim=per.fim, dias_creditados=per.dias_creditados, usado=usado,
                                         disponivel=max(per.dias_creditados - usado, 0) if per.fim >= hoje else 0,
                                         dias_expirados=per.dias_expirados, origem=per.origem, vigente=vigente is not None and per.id == vigente.id))
     sessao.commit()
@@ -398,7 +398,8 @@ def _afastamento(sessao: Session, a: Afastamento, usuario: Usuario | None, autor
         id=a.id, usuario_id=a.usuario_id, nome=_nome(usuario), setor=setor_do_usuario(usuario) if usuario else "—", tipo=a.tipo,
         inicio=a.inicio, fim=a.fim, dias=a.dias, exercicio=a.exercicio, status=a.status, solicitado_em=a.solicitado_em,
         decidido_por_nome=a.decidido_por_nome, decidido_em=a.decidido_em, justificativa=a.justificativa, substitui_id=a.substitui_id,
-        pode_decidir=pode_decidir, pode_alterar=a.status in ("pendente", "aprovado") and a.usuario_id == autor.id and no_prazo,
+        aguarda_ciencia=a.aguarda_ciencia, ciencia_por_nome=a.ciencia_por_nome, ciencia_em=a.ciencia_em,
+        pode_dar_ciencia=afastamentos.pode_dar_ciencia(sessao, autor, a, usuario), pode_decidir=pode_decidir, pode_alterar=a.status in ("pendente", "aprovado") and a.usuario_id == autor.id and no_prazo,
         eventos=[EventoLeitura(de=e.de, para=e.para, autor_nome=e.autor_nome, justificativa=e.justificativa, ocorrido_em=e.ocorrido_em)
                  for e in a.eventos] if eventos else [],
     )
@@ -416,16 +417,16 @@ def meus_afastamentos(exercicio: int | None = Query(None, ge=2000, le=2100), ses
     atual = proximo = None
     if periodo:
         s_atual = servico_periodos.situacao(sessao, periodo, hoje)
-        atual = PeriodoAtual(inicio=periodo.inicio, fim=periodo.fim, dias_creditados=periodo.dias_creditados, usado=s_atual.usado,
+        atual = PeriodoAtual(exercicio=servico_periodos.exercicio_do_periodo(periodo.inicio, periodo.fim), inicio=periodo.inicio, fim=periodo.fim, dias_creditados=periodo.dias_creditados, usado=s_atual.usado,
                              disponivel=s_atual.disponivel, expira_em_dias=s_atual.expira_em_dias, data_limite_inicio=s_atual.data_limite_inicio,
                              data_limite_pedido=s_atual.data_limite_pedido, alerta_expiracao=s_atual.em_alerta)
         p_inicio, p_fim, creditados, _ = afastamentos.periodo_do_pedido(sessao, usuario.id, periodo.fim + timedelta(days=1))
-        proximo = ProximoPeriodo(inicio=p_inicio, fim=p_fim, dias_creditados_previstos=creditados,
+        proximo = ProximoPeriodo(exercicio=servico_periodos.exercicio_do_periodo(p_inicio, p_fim), inicio=p_inicio, fim=p_fim, dias_creditados_previstos=creditados,
                                  usado=servico_periodos.usado(sessao, usuario.id, p_inicio, p_fim))
     sessao.commit()
     return MeusAfastamentos(
         exercicio=ano, saldos={t: SaldoLeitura(saldo=s.saldo, usado=s.usado, disponivel=s.disponivel) for t, s in saldos.items()},
-        periodo_vigente=atual, proximo_periodo=proximo,
+        periodo_vigente=atual, proximo_periodo=proximo, agendamento_antecipado=afastamentos.agendamento_antecipado(sessao, usuario.id),
         afastamentos=[_afastamento(sessao, a, usuario, usuario, eventos=True) for a in lista],
         parametros=ParametrosLeitura.model_validate(p, from_attributes=True),
         feriados=_feriados(sessao, date(ano, 1, 1), date(ano, 12, 31)),
@@ -454,7 +455,8 @@ def lancar_afastamento(dados: LancamentoAfastamento, sessao: Session = Depends(o
 
 @roteador.post("/afastamentos", response_model=AfastamentoLeitura, status_code=status.HTTP_201_CREATED, summary="Agendar férias ou licença-prêmio",
                description="Valida as regras da CGP (mínimo de dias, início vedado, antecedência, exercício, saldo do tipo, sobreposição e "
-               "emenda). O autorizador (ou substituto) e a CGP recebem e-mail.", responses={**INVALIDO})
+               "emenda). Em duas etapas: o superior imediato recebe o pedido para o ciente e de acordo; só depois o autorizador (ou substituto) e a CGP "
+               "recebem e-mail para aprovar. Sem superior, ou se ele for o próprio aprovador, vai direto à aprovação.", responses={**INVALIDO})
 def agendar(dados: PedidoAfastamento, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> AfastamentoLeitura:
     with _traduzir():
         a = afastamentos.agendar(sessao, usuario, dados.tipo, dados.inicio, dados.fim)
@@ -482,8 +484,19 @@ def cancelar(afastamento_id: uuid.UUID, dados: Decisao, sessao: Session = Depend
     return _afastamento(sessao, a, sessao.get(Usuario, a.usuario_id), autor, eventos=True)
 
 
+@roteador.post("/afastamentos/{afastamento_id}/ciencia", response_model=AfastamentoLeitura, summary="Ciente e de acordo do superior imediato",
+               description="Etapa 1: só o superior imediato do solicitante. Não aprova o pedido: registra a ciência, avisa o solicitante por e-mail e "
+               "libera o pedido para o aprovador. `400` se o pedido não aguarda ciência.",
+               responses={**INVALIDO, **SEM_PERMISSAO, **resposta_nao_encontrado("Afastamento")})
+def dar_ciencia(afastamento_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(obter_usuario_atual)) -> AfastamentoLeitura:
+    with _traduzir():
+        a = afastamentos.dar_ciencia(sessao, autor, afastamento_id)
+    return _afastamento(sessao, a, sessao.get(Usuario, a.usuario_id), autor, eventos=True)
+
+
 @roteador.post("/afastamentos/{afastamento_id}/aprovar", response_model=AfastamentoLeitura, summary="Aprovar pedido",
-               description="Autorizador, substituto (com o autorizador afastado) ou CGP. O usuário recebe e-mail.",
+               description="Etapa 2: autorizador, substituto (com o autorizador afastado) ou CGP, depois do ciente do superior imediato (`409 aguarda_ciencia` antes "
+               "disso, exceto para a CGP). O usuário recebe e-mail.",
                responses={**INVALIDO, **SEM_PERMISSAO, **resposta_nao_encontrado("Afastamento")})
 def aprovar(afastamento_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(obter_usuario_atual)) -> AfastamentoLeitura:
     with _traduzir():
@@ -492,7 +505,7 @@ def aprovar(afastamento_id: uuid.UUID, sessao: Session = Depends(obter_sessao), 
 
 
 @roteador.post("/afastamentos/{afastamento_id}/recusar", response_model=AfastamentoLeitura, summary="Recusar pedido",
-               description="Justificativa obrigatória. O usuário recebe e-mail com a justificativa.",
+               description="Justificativa obrigatória. Quem pode: o autorizador, o substituto ou a CGP; na etapa 1, também o superior imediato. O usuário recebe e-mail com a justificativa.",
                responses={**INVALIDO, **SEM_PERMISSAO, **resposta_nao_encontrado("Afastamento")})
 def recusar(afastamento_id: uuid.UUID, dados: Decisao, sessao: Session = Depends(obter_sessao),
             autor: Usuario = Depends(obter_usuario_atual)) -> AfastamentoLeitura:
@@ -502,9 +515,9 @@ def recusar(afastamento_id: uuid.UUID, dados: Decisao, sessao: Session = Depends
 
 
 @roteador.get("/afastamentos/aprovacoes", response_model=list[AfastamentoLeitura], summary="Aguardando minha aprovação",
-              description="Pedidos pendentes que o usuário pode decidir (CGP: todos).")
+              description="Pedidos pendentes que o usuário pode decidir ou aos quais pode dar o ciente e de acordo (`pode_dar_ciencia`); CGP: todos.")
 def listar_aprovacoes(sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(obter_usuario_atual)) -> list[AfastamentoLeitura]:
-    return [_afastamento(sessao, a, u, autor, pode_decidir=True) for a, u in afastamentos.aprovacoes(sessao, autor)]
+    return [_afastamento(sessao, a, u, autor, pode_decidir=afastamentos.pode_decidir(sessao, autor, a)) for a, u in afastamentos.aprovacoes(sessao, autor)]
 
 
 Visao = Literal["mensal", "anual"]

@@ -4,6 +4,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 
 import { CaixaMensagensService } from '../../core/mensagens/caixa-mensagens.service';
@@ -43,6 +44,7 @@ export class MensagensComponent implements OnInit {
   private readonly caixa = inject(CaixaMensagensService);
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
+  private readonly sanitizador = inject(DomSanitizer);
 
   protected readonly prioridades = ROTULOS_PRIORIDADE;
   protected readonly categorias = ROTULOS_CATEGORIA;
@@ -61,6 +63,18 @@ export class MensagensComponent implements OnInit {
   protected readonly novaAberta = signal(false);
   protected readonly acompanhamento = signal<EnviadaDetalhe | null>(null);
   protected readonly ocupado = signal(false);
+  // Texto da mensagem exibido como o e-mail (layout oficial, igual ao do changelog)
+  protected readonly htmlAberta = signal<SafeHtml | null>(null);
+  protected readonly htmlAcompanhamento = signal<SafeHtml | null>(null);
+  protected readonly htmlNova = signal<SafeHtml | null>(null);
+  protected readonly previaNova = signal(false);
+  private temporizadorPrevia: ReturnType<typeof setTimeout> | undefined;
+  // Seleção para marcar várias de uma vez
+  protected readonly selecionadas = signal<ReadonlySet<string>>(new Set());
+  protected readonly todasDaPaginaMarcadas = computed(() => {
+    const itens = this.recebidas()?.itens ?? [];
+    return itens.length > 0 && itens.every((m) => this.selecionadas().has(m.id));
+  });
   // Nova mensagem
   protected envio = envioVazio();
   protected expiraEm = '';
@@ -89,7 +103,12 @@ export class MensagensComponent implements OnInit {
   protected carregar(pagina: number): void {
     if (this.aba() === 'recebidas') {
       this.api.listar(this.estado, this.busca.trim(), pagina).subscribe({
-        next: (p) => this.recebidas.set(p),
+        next: (p) => {
+          this.recebidas.set(p);
+          // Some da seleção o que não está mais na lista (ex.: mudou de filtro)
+          const visiveis = new Set(p.itens.map((m) => m.id));
+          this.selecionadas.update((s) => new Set([...s].filter((id) => visiveis.has(id) || this.todasSelecionadasNoFiltro())));
+        },
         error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar as mensagens'),
       });
     } else {
@@ -100,11 +119,76 @@ export class MensagensComponent implements OnInit {
     }
   }
 
+  /** Todas as mensagens do filtro (de todas as páginas) foram selecionadas? */
+  private readonly todasSelecionadasNoFiltro = signal(false);
+
+  protected alternarSelecao(id: string): void {
+    this.todasSelecionadasNoFiltro.set(false);
+    this.selecionadas.update((s) => {
+      const novo = new Set(s);
+      if (!novo.delete(id)) novo.add(id);
+      return novo;
+    });
+  }
+
+  /** Marca ou desmarca todas as mensagens da página exibida. */
+  protected alternarPagina(): void {
+    this.todasSelecionadasNoFiltro.set(false);
+    const ids = (this.recebidas()?.itens ?? []).map((m) => m.id);
+    this.selecionadas.set(this.todasDaPaginaMarcadas() ? new Set() : new Set(ids));
+  }
+
+  /** Seleciona todas as mensagens do filtro atual, de todas as páginas (busca em páginas de 100). */
+  protected selecionarTodasDoFiltro(): void {
+    const total = this.recebidas()?.total ?? 0;
+    const paginas = Math.ceil(total / 100);
+    const ids = new Set<string>();
+    const buscar = (pagina: number): void => {
+      this.api.listar(this.estado, this.busca.trim(), pagina, 100).subscribe({
+        next: (p) => {
+          p.itens.forEach((m) => ids.add(m.id));
+          if (pagina < paginas) buscar(pagina + 1);
+          else {
+            this.selecionadas.set(ids);
+            this.todasSelecionadasNoFiltro.set(true);
+          }
+        },
+        error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível selecionar as mensagens'),
+      });
+    };
+    buscar(1);
+  }
+
+  protected limparSelecao(): void {
+    this.todasSelecionadasNoFiltro.set(false);
+    this.selecionadas.set(new Set());
+  }
+
+  /** Aplica a ação às mensagens selecionadas. */
+  protected marcarSelecionadas(acao: 'lida' | 'nao_lida' | 'ciente'): void {
+    const ids = [...this.selecionadas()];
+    if (!ids.length) return;
+    this.ocupado.set(true);
+    this.api.marcarLote(ids, acao).subscribe({
+      next: () => {
+        this.ocupado.set(false);
+        this.limparSelecao();
+        this.carregar(this.recebidas()?.pagina ?? 1);
+        this.caixa.atualizar();
+      },
+      error: (e) => {
+        this.ocupado.set(false);
+        this.dialogos.mostrarErro(e, 'Não foi possível atualizar as mensagens');
+      },
+    });
+  }
+
   /** Abre a mensagem (conta como lida). */
   protected abrir(item: EntregaResumo): void {
     this.api.abrir(item.id).subscribe({
       next: (m) => {
         this.aberta.set(m);
+        this.carregarPrevia(m.assunto, m.corpo, m.link, m.autor_nome, this.htmlAberta);
         this.carregar(this.recebidas()?.pagina ?? 1);
         this.caixa.atualizar();
       },
@@ -179,7 +263,10 @@ export class MensagensComponent implements OnInit {
 
   protected acompanhar(item: EnviadaResumo): void {
     this.api.enviada(item.id).subscribe({
-      next: (d) => this.acompanhamento.set(d),
+      next: (d) => {
+        this.acompanhamento.set(d);
+        this.carregarPrevia(d.assunto, d.corpo, null, null, this.htmlAcompanhamento);
+      },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível abrir o acompanhamento'),
     });
   }
@@ -202,9 +289,36 @@ export class MensagensComponent implements OnInit {
     return item.destinatarios ? Math.round((item.cientes * 100) / item.destinatarios) : 0;
   }
 
+  /** Busca o HTML do e-mail da mensagem e entrega ao `<iframe srcdoc>` (o HTML vem do servidor, com o texto escapado). */
+  private carregarPrevia(assunto: string, corpo: string, link: string | null, autor: string | null, destino: { set(v: SafeHtml | null): void }): void {
+    destino.set(null);
+    this.api.previa(assunto, corpo, link, autor).subscribe({
+      next: (html) => destino.set(this.sanitizador.bypassSecurityTrustHtml(html)),
+      error: () => destino.set(null),
+    });
+  }
+
+  /** Mostra ou esconde a prévia do e-mail na nova mensagem. */
+  protected alternarPreviaNova(): void {
+    const ligar = !this.previaNova();
+    this.previaNova.set(ligar);
+    if (ligar) this.atualizarPreviaNova(0);
+  }
+
+  /** Atualiza a prévia 400 ms depois da última tecla (só com a prévia aberta). */
+  protected atualizarPreviaNova(atraso = 400): void {
+    if (!this.previaNova()) return;
+    clearTimeout(this.temporizadorPrevia);
+    this.temporizadorPrevia = setTimeout(
+      () => this.carregarPrevia(this.envio.assunto.trim() || '(sem assunto)', this.envio.corpo.trim() || ' ', this.envio.link || null, null, this.htmlNova),
+      atraso,
+    );
+  }
+
   protected fecharJanelas(): void {
     this.aberta.set(null);
     this.acompanhamento.set(null);
+    this.previaNova.set(false);
     if (!this.ocupado()) this.novaAberta.set(false);
   }
 }

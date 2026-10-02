@@ -79,7 +79,7 @@
                       <tbody>
                         @for (i of m.itens; track i.item_id) {
                           <tr><td>{{ i.descricao }}</td><td>{{ rotulosTipo[i.tipo] }}</td><td class="num">{{ i.quantidade | quantidade }}</td>
-                            <td class="num">{{ i.valor_unitario | moeda }}</td><td class="num">{{ i.fator | quantidade }}</td><td class="num">{{ i.subtotal | moeda }}</td></tr>
+                            <td class="num">{{ i.valor_unitario | moedaUnitaria }}</td><td class="num">{{ i.fator | quantidade }}</td><td class="num">{{ i.subtotal | moeda }}</td></tr>
                         }
                       </tbody>
                       <tfoot><tr><td colspan="5">Total da competência</td><td class="num">{{ m.valor | moeda }}</td></tr></tfoot>

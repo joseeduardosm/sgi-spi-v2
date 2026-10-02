@@ -84,7 +84,8 @@ class Recusa(BaseModel):
 
 
 class PeriodoLeitura(BaseModel):
-    """Período aquisitivo de férias (12 meses)."""
+    """Janela de gozo de um exercício (12 meses): os 30 dias podem ser agendados e usufruídos dentro dela."""
+    exercicio: int = Field(..., description="Ano em que cai a maior parte da janela (ex.: 31/12/2026 a 30/12/2027 = 2027).")
     inicio: date
     fim: date
     dias_creditados: int
@@ -230,6 +231,10 @@ class AfastamentoLeitura(BaseModel):
     decidido_em: datetime | None
     justificativa: str | None
     substitui_id: uuid.UUID | None
+    aguarda_ciencia: bool = Field(False, description="Etapa 1: pendente do ciente e de acordo do superior imediato (o aprovador ainda não recebeu o pedido).")
+    ciencia_por_nome: str | None = Field(None, description="Quem deu o ciente e de acordo.")
+    ciencia_em: datetime | None = None
+    pode_dar_ciencia: bool = Field(False, description="O usuário é o superior imediato e pode dar o ciente e de acordo (ou recusar).")
     pode_decidir: bool = False
     pode_alterar: bool = False
     eventos: list[EventoLeitura] = Field(default_factory=list)
@@ -242,7 +247,8 @@ class SaldoLeitura(BaseModel):
 
 
 class PeriodoAtual(BaseModel):
-    """Período aquisitivo vigente, com as datas do aviso de expiração."""
+    """Exercício vigente (janela de gozo), com as datas do aviso de expiração."""
+    exercicio: int
     inicio: date
     fim: date
     dias_creditados: int
@@ -255,6 +261,7 @@ class PeriodoAtual(BaseModel):
 
 
 class ProximoPeriodo(BaseModel):
+    exercicio: int
     inicio: date
     fim: date
     dias_creditados_previstos: int
@@ -295,11 +302,24 @@ class GravacaoFeriado(BaseModel):
         return valor.strip()
 
 
+class AgendamentoAntecipado(BaseModel):
+    """Agendamento das férias do ano seguinte (parâmetro `abertura_agendamento_ferias`)."""
+    exercicio: int = Field(..., description="Exercício (janela de gozo) cujo agendamento abre na data.")
+    inicio: date | None = Field(None, description="Início da janela do exercício (nulo sem início do período aquisitivo informado).")
+    fim: date | None = None
+    abertura: date
+    aberto: bool = Field(..., description="Já passou da abertura: qualquer servidor agenda até `limite_dias` dias, sem exigir saldo.")
+    limite_dias: int
+    agendados: int = Field(..., description="Dias de férias do exercício já agendados pelo usuário.")
+
+
 class MeusAfastamentos(BaseModel):
     exercicio: int
     saldos: dict[str, SaldoLeitura] = Field(..., description="`ferias`: período aquisitivo vigente; `licenca_premio`: exercício (ano civil).")
     periodo_vigente: PeriodoAtual | None = Field(None, description="Nulo se a CGP ainda não informou o início do período aquisitivo.")
     proximo_periodo: ProximoPeriodo | None = None
+    agendamento_antecipado: AgendamentoAntecipado | None = Field(
+        None, description="Presente no ano da abertura definida pela CGP; traz se o agendamento das férias do ano seguinte já abriu.")
     afastamentos: list[AfastamentoLeitura]
     parametros: "ParametrosLeitura"
     feriados: list[FeriadoLeitura] = Field(default_factory=list, description="Feriados e pontos facultativos do exercício (calendário).")
@@ -360,6 +380,9 @@ class ParametrosLeitura(BaseModel):
     folga_aviso_ferias_dias: int = Field(..., description="Folga do aviso de expiração: 1º aviso = saldo + antecedência mínima + folga antes do fim.")
     aviso_ferias_ativo: bool
     inicio_vedado_feriado: bool = Field(False, description="Períodos não podem começar em feriado ou ponto facultativo cadastrado.")
+    abertura_agendamento_ferias: date | None = Field(
+        None, description="Data em que abre o agendamento das férias do ano seguinte (ano da data + 1): a partir dela, qualquer servidor "
+        "agenda até `dias_ferias_por_periodo` dias para esse exercício, mesmo sem saldo. Nulo: sem a regra.")
     membros_cgp: int | None = Field(None, description="Pessoas no setor da CGP (0 = ninguém recebe os avisos destinados à CGP). Só leitura.")
     atualizado_por_nome: str | None = None
     atualizado_em: datetime | None = None
@@ -378,6 +401,8 @@ class GravacaoParametros(BaseModel):
     folga_aviso_ferias_dias: int = Field(15, ge=0, le=180)
     aviso_ferias_ativo: bool = True
     inicio_vedado_feriado: bool = False
+    abertura_agendamento_ferias: date | None = Field(
+        None, description="Abertura do agendamento das férias do ano seguinte (ano da data + 1); nulo desliga a regra.")
 
     @field_validator("inicio_vedado_ferias", "inicio_vedado_lp")
     @classmethod

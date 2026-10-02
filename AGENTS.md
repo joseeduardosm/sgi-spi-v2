@@ -24,9 +24,9 @@ Qualquer criação, alteração ou remoção de endpoint, parâmetro, schema, re
 
 ## Changelog e commits (obrigatório)
 
-- **Toda alteração** é registrada no `CHANGELOG.md` da raiz **assim que é feita**, mesmo que ainda não vá para o Git. A entrada fica na seção da data (a mais recente no topo), em pt-BR, dividida em Adicionado / Alterado / Corrigido / Removido. Ela descreve o que mudou para o usuário e cita as migrações do banco e os endpoints criados ou alterados.
-- **Commit e push só quando o usuário mandar.** Ao terminar uma tarefa, deixe as alterações no working tree, com o changelog atualizado, e avise que estão prontas. Não faça `git commit` nem `git push` por iniciativa própria.
-- Quando o commit for pedido, ele leva junto as entradas do changelog correspondentes. Commit sem entrada no changelog não deve ser feito.
+- **CHANGELOG, BookStack e GitHub só quando o usuário mandar.** Não atualize o `CHANGELOG.md` da raiz, o BookStack nem faça `git commit`/`git push` por iniciativa própria. Ao terminar uma tarefa, deixe as alterações no working tree e avise que estão prontas. Foque no que foi pedido.
+- Quando o usuário mandar atualizar o changelog, a entrada fica na seção da data (a mais recente no topo), em pt-BR, dividida em Adicionado / Alterado / Corrigido / Removido, descrevendo o que mudou para o usuário e citando as migrações do banco e os endpoints criados ou alterados.
+- Quando o commit for pedido, ele leva junto as entradas do changelog correspondentes (se o usuário pediu o changelog).
 
 ## Escopo
 

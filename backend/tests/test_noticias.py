@@ -217,3 +217,4 @@ def test_atalhos_e_anexos(cliente, redacao):
     assert r.status_code == 200 and r.json()["anexos"][0]["nome"] == "edital.pdf"
     ruim = cliente.post(f"{URL}/{n['id']}/anexos", files={"arquivo": ("pagina.html", b"<script>", "text/html")}, headers=h["rita"])
     assert ruim.status_code == 400
+

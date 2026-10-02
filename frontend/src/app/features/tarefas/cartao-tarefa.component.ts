@@ -7,10 +7,17 @@ import { Component, computed, input, output } from '@angular/core';
 import { AvataresComponent } from './avatares.component';
 import { ROTULOS_PRIORIDADE, situacaoPrazo, TarefaResumo } from './tarefas.models';
 
+/** "Fabiana Tucilio Fanizzi de Morais" → "Fabiana Morais" (primeiro e último nome, sem partículas como "de"). */
+export function nomeCurto(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  return partes.length <= 2 ? partes.join(' ') : `${partes[0]} ${partes[partes.length - 1]}`;
+}
+
 /**
  * Cartão do quadro. Clicar abre a tarefa (evento `abrir`); o arraste é controlado pela coluna.
  * - faixas coloridas no topo: os marcadores (o nome aparece ao passar o mouse);
  * - borda esquerda: a cor da prioridade (alta e crítica chamam atenção);
+ * - nomes (até 2, com "+N") das pessoas envolvidas, abaixo do título;
  * - rodapé: chip do prazo colorido, checklist, comentários, anexos e os avatares dos envolvidos.
  */
 @Component({
@@ -26,6 +33,9 @@ import { ROTULOS_PRIORIDADE, situacaoPrazo, TarefaResumo } from './tarefas.model
         </div>
       }
       <p class="titulo-quadro">{{ t.titulo }}</p>
+      @if (t.envolvidos.length) {
+        <p class="nomes-quadro" [title]="nomesTodos()">{{ nomesCurtos() }}@if (outros()) { <b> +{{ outros() }}</b> }</p>
+      }
       <div class="rodape-quadro">
         <span class="chip-prazo" [attr.data-situacao]="situacao()" [title]="'Prazo: ' + (t.prazo | date: 'dd/MM/yyyy HH:mm')">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
@@ -61,4 +71,9 @@ export class CartaoTarefaComponent {
 
   protected readonly rotulosPrioridade = ROTULOS_PRIORIDADE;
   protected readonly situacao = computed(() => situacaoPrazo(this.tarefa()));
+  /** Quantos nomes aparecem no cartão antes do "+N" (os demais ficam na dica). */
+  private readonly maximoNomes = 2;
+  protected readonly nomesCurtos = computed(() => this.tarefa().envolvidos.slice(0, this.maximoNomes).map((p) => nomeCurto(p.nome)).join(', '));
+  protected readonly outros = computed(() => Math.max(0, this.tarefa().envolvidos.length - this.maximoNomes));
+  protected readonly nomesTodos = computed(() => this.tarefa().envolvidos.map((p) => p.nome).join(', '));
 }

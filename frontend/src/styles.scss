@@ -9,6 +9,10 @@
 @use 'styles/tarefas';
 @use 'styles/noticias';
 @use 'styles/melhorias';
+@use 'styles/rh';
+@use 'styles/assinatura';
+@use 'styles/protocolo';
+@use 'styles/contratacoes';
 
 :root {
   --spi-fundo: #f6f7f8;
@@ -1664,4 +1668,35 @@ button.gantt-barra {
 @media (max-width: 1000px) {
   .colunas-pagina-usuario.com-rh:has(.bloco-dados-funcionais) { grid-template-columns: minmax(0, 1fr); }
   .coluna-rh-usuario { position: static; }
+}
+
+/* Mensagens: texto exibido como o e-mail (iframe com o layout oficial) e a prévia ao escrever */
+.previa-mensagem {
+  margin: 0 24px 14px;
+
+  iframe {
+    display: block;
+    width: 100%;
+    height: min(56vh, 520px);
+    border: 1px solid #e3e5e8;
+    border-radius: 8px;
+    background: #f1f2f4;
+  }
+
+  &.previa-nova {
+    margin: 10px 0 4px;
+
+    iframe { height: 380px; }
+  }
+}
+
+.barra-previa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  margin-top: 6px;
+
+  .dica-formulario { margin: 0; flex: 1 1 280px; }
 }

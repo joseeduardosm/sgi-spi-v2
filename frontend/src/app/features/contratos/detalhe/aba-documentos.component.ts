@@ -2,17 +2,22 @@
 // Este arquivo serve para exibir e anexar os documentos importantes do contrato (aba "Documentos Importantes").
 
 import { Component, inject, input, OnInit, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { DocumentoContrato } from '../compartilhado/contratos.models';
+import { ContratacoesApiService } from '../../contratacoes/contratacoes-api.service';
+import { DocumentoResumo } from '../../contratacoes/contratacoes.models';
+import { ProtocoloApiService } from '../../protocolo/protocolo-api.service';
+import { NumeroProtocolo } from '../../protocolo/protocolo.models';
 
 /** Aba "Documentos Importantes": repositório opcional (001 a 023 + termos aditivos 024+). */
 @Component({
   selector: 'app-aba-documentos',
-  imports: [EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [EnvioPdfComponent, RouterLink, ...PIPES_FORMATACAO],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-documentos">
       <header>
@@ -50,6 +55,42 @@ import { DocumentoContrato } from '../compartilhado/contratos.models';
         </table>
       </div>
     </section>
+
+    <!-- Documentos do Protocolo (portarias, ofícios…) vinculados a este contrato; só aparece para quem tem acesso ao Protocolo -->
+    @if (protocolo().length) {
+      <section class="cartao-dados" aria-labelledby="titulo-protocolo-contrato">
+        <header><div><h2 id="titulo-protocolo-contrato">Documentos do Protocolo</h2><small>Números vinculados a este contrato. Documentos sigilosos só abrem para quem reservou o número e para o SuperRoot.</small></div>
+          <a class="acao-secundaria acao-pequena" routerLink="/protocolo">Abrir o Protocolo</a></header>
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>Número</th><th>Tipo</th><th>Finalidade</th><th>Responsável</th><th>Situação</th></tr></thead>
+            <tbody>
+              @for (n of protocolo(); track n.id) {
+                <tr><td><strong>{{ n.numero_formatado }}</strong></td><td>{{ n.tipo_nome }}</td><td>{{ n.finalidade }}</td><td>{{ n.reservado_por_nome }}</td>
+                  <td>{{ n.estado === 'utilizado' ? 'Utilizado' : n.estado === 'anulado' ? 'Anulado' : 'Reservado' }}@if (n.sigiloso) { 🔒 }</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+    @if (contratacoes().length) {
+      <section class="painel-gestao" aria-labelledby="titulo-contratacoes-contrato" style="margin-top: 18px">
+        <header><div><h2 id="titulo-contratacoes-contrato">ETP e TR deste contrato</h2><small>Documentos de Contratações vinculados a este contrato.</small></div>
+          <a class="acao-secundaria acao-pequena" routerLink="/contratacoes">Abrir Contratações</a></header>
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>Tipo</th><th>Nome</th><th>Processo SEI</th><th>Situação</th><th>Responsável</th></tr></thead>
+            <tbody>
+              @for (c of contratacoes(); track c.id) {
+                <tr><td>{{ c.tipo.toUpperCase() }}</td><td><a [routerLink]="['/contratacoes', c.id]">{{ c.nome }}</a></td><td>{{ c.processo || '—' }}</td>
+                  <td>{{ c.situacao === 'concluido' ? 'Concluído' : c.situacao === 'em_revisao' ? 'Em revisão' : 'Rascunho' }}</td><td>{{ c.criador_nome }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
   `,
 })
 export class AbaDocumentosComponent implements OnInit {
@@ -58,12 +99,20 @@ export class AbaDocumentosComponent implements OnInit {
   readonly podeEditar = input(false);
 
   private readonly api = inject(ContratosApiService);
+  private readonly protocoloApi = inject(ProtocoloApiService);
+  protected readonly protocolo = signal<NumeroProtocolo[]>([]);
+  private readonly contratacoesApi = inject(ContratacoesApiService);
+  protected readonly contratacoes = signal<DocumentoResumo[]>([]);
   private readonly dialogos = inject(DialogosService);
   protected readonly documentos = signal<DocumentoContrato[]>([]);
 
   /** Carrega o catálogo de documentos ao abrir a aba. */
   ngOnInit(): void {
     this.api.documentos(this.contratoId()).subscribe({ next: (d) => this.documentos.set(d), error: (e) => this.dialogos.mostrarErro(e) });
+    // Sem acesso ao Protocolo (403) a seção simplesmente não aparece
+    this.protocoloApi.doContrato(this.contratoId()).subscribe({ next: (n) => this.protocolo.set(n), error: () => this.protocolo.set([]) });
+    // Sem acesso a Contratações (403) a seção simplesmente não aparece
+    this.contratacoesApi.doContrato(this.contratoId()).subscribe({ next: (c) => this.contratacoes.set(c), error: () => this.contratacoes.set([]) });
   }
 
   /** Envia o PDF escolhido e atualiza a lista com a resposta da API. */

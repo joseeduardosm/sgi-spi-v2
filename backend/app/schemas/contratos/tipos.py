@@ -2,7 +2,7 @@
 # Este arquivo serve para padronizar como valores em dinheiro e quantidades saem nas respostas da API.
 """Tipos decimais das respostas: sempre texto com casas fixas, igual em PostgreSQL e SQLite.
 
-Dinheiro sai com 2 casas ("1234.50"), quantidade com 4 ("2.5000") e fatores/índices com 8.
+Dinheiro sai com 2 casas ("1234.50"), preço unitário e quantidade com 4 ("0.0750", "2.5000") e fatores/índices com 8.
 Texto evita a perda de precisão de números de ponto flutuante no navegador.
 """
 
@@ -25,5 +25,7 @@ _TEXTO_DECIMAL = WithJsonSchema({"type": "string", "pattern": r"^-?\d+(\.\d+)?$"
 
 # Tipos prontos para usar nos schemas de resposta: dinheiro, quantidade e fator/índice
 ValorMonetario = Annotated[Decimal, _fixo("0.01"), _TEXTO_DECIMAL]
+# Preço unitário dos itens: até 4 casas (ex.: R$ 0,075 por página); totais continuam em centavos
+ValorUnitario = Annotated[Decimal, _fixo("0.0001"), _TEXTO_DECIMAL]
 ValorQuantidade = Annotated[Decimal, _fixo("0.0001"), _TEXTO_DECIMAL]
 ValorFator = Annotated[Decimal, _fixo("0.00000001"), _TEXTO_DECIMAL]

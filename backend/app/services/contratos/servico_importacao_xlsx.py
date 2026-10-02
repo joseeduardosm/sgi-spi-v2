@@ -370,7 +370,7 @@ def _ler_itens(folha, linha_titulos: int, leitura: Leitura) -> None:
         # Casas aceitas pela API: 4 nas quantidades e 2 no preço
         "quantidade_mensal": partial(converter_decimal, casas=4),
         "quantidade_total": partial(converter_decimal, casas=4),
-        "valor_unitario": partial(converter_decimal, casas=2),
+        "valor_unitario": partial(converter_decimal, casas=4),
     }
     for linha in range(linha_titulos + 1, folha.max_row + 1):
         descricao = texto(folha.cell(linha, colunas["descricao"][0]).value)

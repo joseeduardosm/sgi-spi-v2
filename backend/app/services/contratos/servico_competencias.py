@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.banco import agora_utc
 from app.models.anexo import Anexo
 from app.models.contratos import (
+    NotaFiscalCompetencia,
     ETAPAS,
     AbatimentoReajuste,
     AvaliacaoCompetencia,
@@ -152,12 +153,17 @@ def valor_autorizado(competencia: Competencia) -> Decimal:
 def valor_a_pagar(competencia: Competencia) -> Decimal:
     """Valor que a Ordem Bancária debita nas NEs apontadas.
 
-    Com a nota fiscal concluída: NF principal + NF adicional (valores brutos). Antes disso, a estimativa é
+    Com a nota fiscal concluída: a soma dos valores brutos de todas as notas. Antes disso, a estimativa é
     o valor autorizado da medição (medido × % liberado pela avaliação − desconto de reajuste).
     """
-    if competencia.nf_concluida_em is not None and competencia.nf_valor_bruto is not None:
-        return calculos.arredondar(competencia.nf_valor_bruto + (competencia.nf_adicional_valor_bruto or ZERO))
+    if competencia.nf_concluida_em is not None and competencia.notas_fiscais:
+        return total_bruto_notas(competencia)
     return valor_autorizado(competencia)
+
+
+def total_bruto_notas(competencia: Competencia) -> Decimal:
+    """Soma dos valores brutos das notas fiscais juntadas."""
+    return calculos.arredondar(sum((n.valor_bruto or ZERO for n in competencia.notas_fiscais), ZERO))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -475,26 +481,23 @@ def localizar_competencia(sessao: Session, contrato_id: uuid.UUID, identificador
 # Detalhe
 # ---------------------------------------------------------------------------------------------
 
-def _nota_fiscal(contrato: Contrato, competencia: Competencia, adicional: bool) -> LeituraNotaFiscal | None:
-    """Dados da nota fiscal principal ou da adicional (os campos têm o mesmo nome com prefixos diferentes)."""
-    # Mesmo código para as duas notas: só muda o prefixo dos campos (nf_ ou nf_adicional_)
-    prefixo = "nf_adicional_" if adicional else "nf_"
-    anexo = competencia.nf_adicional_anexo if adicional else competencia.nf_anexo
-    xml = competencia.nf_adicional_xml_anexo if adicional else competencia.nf_xml_anexo
-    dados_xml = getattr(competencia, f"{prefixo}dados_xml")
-    bruto = getattr(competencia, f"{prefixo}valor_bruto")
-    if anexo is None and bruto is None:
-        return None
-    # Valor líquido = bruto − retenções (nunca negativo)
-    retencoes = {r: getattr(competencia, f"{prefixo}retencao_{r}") or ZERO for r in ("ir", "inss", "iss", "pis", "cofins", "csll")}
-    esperado = None if adicional else servico_retencao.valor_autorizado(competencia)
-    return LeituraNotaFiscal(
-        numero=getattr(competencia, f"{prefixo}numero"), arquivo=_arquivo(anexo), xml=_arquivo(xml), dados_xml=dados_xml,
-        conferencias=[ConferenciaNota(**c.__dict__) for c in servico_retencao.conferencias(contrato, competencia, dados_xml, esperado)],
-        valor_bruto=bruto,
-        **{f"retencao_{r}": v for r, v in retencoes.items()},
-        valor_liquido=max(ZERO, (bruto or ZERO) - sum(retencoes.values(), ZERO)),
-    )
+def _notas_fiscais(contrato: Contrato, competencia: Competencia) -> list[LeituraNotaFiscal]:
+    """Notas fiscais juntadas (em ordem), com as conferências automáticas e o valor líquido de cada uma."""
+    total = total_bruto_notas(competencia)
+    esperado = servico_retencao.valor_autorizado(competencia)
+    leituras = []
+    for nota in competencia.notas_fiscais:
+        # Valor líquido = bruto − retenções (nunca negativo)
+        retencoes = {r: getattr(nota, f"retencao_{r}") or ZERO for r in ("ir", "inss", "iss", "pis", "cofins", "csll")}
+        # A conferência "valor × autorizado" compara o total das notas e aparece só na primeira
+        conferencias = servico_retencao.conferencias(contrato, competencia, nota.dados_xml, esperado if nota.ordem == competencia.notas_fiscais[0].ordem else None, total)
+        leituras.append(LeituraNotaFiscal(
+            id=nota.id, ordem=nota.ordem, numero=nota.numero, arquivo=_arquivo(nota.anexo), xml=_arquivo(nota.xml_anexo), dados_xml=nota.dados_xml,
+            conferencias=[ConferenciaNota(**c.__dict__) for c in conferencias], valor_bruto=nota.valor_bruto,
+            **{f"retencao_{r}": v for r, v in retencoes.items()},
+            valor_liquido=max(ZERO, (nota.valor_bruto or ZERO) - sum(retencoes.values(), ZERO)),
+        ))
+    return leituras
 
 
 def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, usuario: Usuario) -> DetalheCompetencia:
@@ -581,8 +584,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
             enviado_em=competencia.email_medicao_enviado_em, ok=competencia.email_medicao_ok,
             destinatarios=competencia.email_medicao_destinatarios or [], erro=competencia.email_medicao_erro,
         ),
-        nota_fiscal=_nota_fiscal(contrato, competencia, False),
-        nota_fiscal_adicional=_nota_fiscal(contrato, competencia, True),
+        notas_fiscais=_notas_fiscais(contrato, competencia),
         nf_recebida_em=competencia.nf_recebida_em, prazo_pagamento_dias=competencia.prazo_pagamento_dias,
         vencimento_pagamento=vencimento, origem_valor_nf=competencia.origem_valor_nf, nf_concluida_em=competencia.nf_concluida_em,
         consultas_cadin=[
@@ -605,8 +607,8 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
 
 def _ids_anexos(competencia: Competencia) -> set[uuid.UUID]:
     """Todos os anexos da competência (usados no detalhe e para autorizar downloads)."""
-    ids = {competencia.nf_anexo_id, competencia.nf_adicional_anexo_id, competencia.consolidado_anexo_id, competencia.ob_anexo_id,
-           competencia.nf_xml_anexo_id, competencia.nf_adicional_xml_anexo_id, competencia.retencao_pdf_anexo_id}
+    ids = {competencia.consolidado_anexo_id, competencia.ob_anexo_id, competencia.retencao_pdf_anexo_id}
+    ids |= {n.anexo_id for n in competencia.notas_fiscais} | {n.xml_anexo_id for n in competencia.notas_fiscais}
     ids |= {m.anexo_id for m in competencia.memorias}
     ids |= {c.certidao_anexo_id for c in competencia.consultas_cadin} | {c.email_anexo_id for c in competencia.consultas_cadin}
     ids |= {d.anexo_id for d in competencia.documentos}
@@ -1176,73 +1178,88 @@ def _exigir_nota_inedita(sessao: Session, competencia: Competencia, chave: str |
     if not chave:
         return
     outra = sessao.scalar(
-        select(Competencia).where(
-            Competencia.id != competencia.id, (Competencia.nf_chave == chave) | (Competencia.nf_adicional_chave == chave)
-        )
+        select(NotaFiscalCompetencia).where(NotaFiscalCompetencia.competencia_id != competencia.id, NotaFiscalCompetencia.chave == chave)
     )
     if outra is not None:
         raise ErroRegraContrato(
-            f"A nota fiscal {qual} (chave {chave}) já foi juntada à competência {outra.numero_competencia} do contrato {outra.contrato.numero}."
+            f"A nota fiscal {qual} (chave {chave}) já foi juntada à competência {outra.competencia.numero_competencia} "
+            f"do contrato {outra.competencia.contrato.numero}."
         )
 
 
-def registrar_nota_fiscal(
-    sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: dict, arquivo: tuple | None, xml: tuple | None,
-    arquivo_adicional: tuple | None, xml_adicional: tuple | None, autor: Usuario,
-) -> None:
-    """Etapa 3: junta a NF (PDF + XML obrigatórios) e, opcionalmente, a NF adicional; os valores vêm do XML.
+MAXIMO_NOTAS = 20
 
-    `dados`: recebida_em, prazo_pagamento_dias e possui_adicional. As retenções lidas do XML ficam como sugestão
-    para a etapa de retenção de tributos, onde o Financeiro confere e confirma.
+
+def registrar_nota_fiscal(
+    sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: dict, notas: list[dict], arquivos: list[tuple],
+    xmls: list[tuple], autor: Usuario,
+) -> None:
+    """Etapa 3: junta uma ou mais notas fiscais (PDF + XML obrigatórios em cada); os valores vêm dos XMLs.
+
+    `dados`: recebida_em e prazo_pagamento_dias. `notas`: a lista final, na ordem desejada; cada item traz `id` (nota já
+    registrada, que mantém os arquivos que não forem trocados) e/ou `arquivo` e `xml` (posições nas listas `arquivos` e `xmls`).
+    Notas que ficam fora da lista são removidas. As retenções lidas dos XMLs ficam como sugestão para a etapa de retenção
+    de tributos, onde o Financeiro confere e confirma.
     """
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     _exigir_etapa(competencia, "nota_fiscal", "A nota fiscal")
-    # PDF e XML são obrigatórios (na correção depois de reabrir, os arquivos anteriores podem ser mantidos)
-    if arquivo is None and competencia.nf_anexo_id is None:
-        raise ErroRegraContrato("Selecione a nota fiscal em PDF.")
-    if xml is None and competencia.nf_xml_anexo_id is None:
-        raise ErroRegraContrato("Selecione o XML da nota fiscal.")
-    principal = _ler_xml(xml) if xml else (None, competencia.nf_dados_xml)
-    _exigir_nota_inedita(sessao, competencia, principal[1].get("chave"), "principal")
-    adicional = None
-    if dados.get("possui_adicional"):
-        if arquivo_adicional is None and competencia.nf_adicional_anexo_id is None:
-            raise ErroRegraContrato("Selecione o PDF da nota fiscal adicional.")
-        if xml_adicional is None and competencia.nf_adicional_xml_anexo_id is None:
-            raise ErroRegraContrato("Selecione o XML da nota fiscal adicional.")
-        adicional = _ler_xml(xml_adicional) if xml_adicional else (None, competencia.nf_adicional_dados_xml)
-        if adicional[1].get("chave") and adicional[1].get("chave") == principal[1].get("chave"):
-            raise ErroRegraContrato("A nota fiscal adicional é a mesma da principal.")
-        _exigir_nota_inedita(sessao, competencia, adicional[1].get("chave"), "adicional")
-    # As duas notas são pagas pelas NEs apontadas na medição: o saldo livre delas precisa cobrir o total
-    bruto = Decimal(principal[1]["valor_bruto"])
-    bruto_adicional = Decimal(adicional[1]["valor_bruto"]) if adicional else ZERO
-    notas = _resolver_notas(contrato, [n.nota_id for n in competencia.notas])
-    _exigir_saldo(notas, calculos.arredondar(bruto + bruto_adicional), compromissos(contrato, exceto=competencia.id))
+    if not notas:
+        raise ErroRegraContrato("Junte pelo menos uma nota fiscal.")
+    if len(notas) > MAXIMO_NOTAS:
+        raise ErroRegraContrato(f"No máximo {MAXIMO_NOTAS} notas fiscais por competência.")
+    existentes = {n.id: n for n in competencia.notas_fiscais}
+    preparadas = []  # (nota existente | None, posição do PDF, posição do XML, conteúdo e dados lidos do XML | None, rótulo)
+    chaves: dict[str, int] = {}
+    for posicao, item in enumerate(notas, start=1):
+        existente = existentes.get(item.get("id")) if item.get("id") else None
+        if item.get("id") and existente is None:
+            raise ErroRegraContrato(f"A nota fiscal {posicao} não pertence a esta competência.")
+        ipdf, ixml = item.get("arquivo"), item.get("xml")
+        for indice, lista, qual in ((ipdf, arquivos, "PDF"), (ixml, xmls, "XML")):
+            if indice is not None and not 0 <= indice < len(lista):
+                raise ErroRegraContrato(f"Arquivo {qual} da nota fiscal {posicao} não foi enviado.")
+        # PDF e XML são obrigatórios em cada nota (na correção depois de reabrir, os arquivos anteriores podem ser mantidos)
+        if ipdf is None and (existente is None or existente.anexo_id is None):
+            raise ErroRegraContrato(f"Selecione a nota fiscal {posicao} em PDF.")
+        if ixml is None and (existente is None or existente.xml_anexo_id is None):
+            raise ErroRegraContrato(f"Selecione o XML da nota fiscal {posicao}.")
+        lido = _ler_xml(xmls[ixml]) if ixml is not None else (None, existente.dados_xml)
+        chave = lido[1].get("chave")
+        if chave:
+            if chave in chaves:
+                raise ErroRegraContrato(f"A nota fiscal {posicao} é a mesma da nota {chaves[chave]}.")
+            chaves[chave] = posicao
+            _exigir_nota_inedita(sessao, competencia, chave, str(posicao))
+        preparadas.append((existente, ipdf, ixml, lido, posicao))
+    # Todas as notas são pagas pelas NEs apontadas na medição: o saldo livre delas precisa cobrir o total
+    total = calculos.arredondar(sum((Decimal(lido[1]["valor_bruto"]) for _, _, _, lido, _ in preparadas), ZERO))
+    ne = _resolver_notas(contrato, [n.nota_id for n in competencia.notas])
+    _exigir_saldo(ne, total, compromissos(contrato, exceto=competencia.id))
 
+    # Remove as notas que ficaram de fora e libera a ordem (a restrição de unicidade é por competência e ordem)
+    mantidas = {e.id for e, *_ in preparadas if e is not None}
+    for nota in list(competencia.notas_fiscais):
+        if nota.id not in mantidas:
+            competencia.notas_fiscais.remove(nota)
+    sessao.flush()
+    for nota in competencia.notas_fiscais:
+        nota.ordem += 1000
+    sessao.flush()
     categoria_xml = "contrato-execucao-nf-xml"
-    if arquivo:
-        competencia.nf_anexo = servico_anexos.guardar_pdf(sessao, arquivo[0], arquivo[1], "contrato-execucao-nf", autor.id, contrato_id=contrato.id)
-    if xml:
-        competencia.nf_xml_anexo = servico_anexos.guardar_arquivo_gerado(
-            sessao, principal[0], xml[1] or "nota_fiscal.xml", "application/xml", categoria_xml, autor.id, contrato_id=contrato.id)
-    _aplicar_nota(competencia, "nf_", principal[1])
-    if adicional:
-        if arquivo_adicional:
-            competencia.nf_adicional_anexo = servico_anexos.guardar_pdf(
-                sessao, arquivo_adicional[0], arquivo_adicional[1], "contrato-execucao-nf-adicional", autor.id, contrato_id=contrato.id)
-        if xml_adicional:
-            competencia.nf_adicional_xml_anexo = servico_anexos.guardar_arquivo_gerado(
-                sessao, adicional[0], xml_adicional[1] or "nota_fiscal_adicional.xml", "application/xml", categoria_xml, autor.id,
-                contrato_id=contrato.id)
-        _aplicar_nota(competencia, "nf_adicional_", adicional[1])
-    else:
-        # Sem nota adicional nesta gravação: limpa uma adicional registrada antes (ex.: após reabertura)
-        competencia.nf_adicional_numero, competencia.nf_adicional_valor_bruto = "", None
-        competencia.nf_adicional_dados_xml, competencia.nf_adicional_chave = None, None
-        competencia.nf_adicional_anexo_id = competencia.nf_adicional_xml_anexo_id = None
+    for existente, ipdf, ixml, lido, posicao in preparadas:
+        nota = existente
+        if nota is None:
+            nota = NotaFiscalCompetencia(competencia_id=competencia.id, ordem=posicao)
+            competencia.notas_fiscais.append(nota)
+        nota.ordem = posicao
+        if ipdf is not None:
+            nota.anexo = servico_anexos.guardar_pdf(sessao, arquivos[ipdf][0], arquivos[ipdf][1], "contrato-execucao-nf", autor.id, contrato_id=contrato.id)
+        if ixml is not None:
+            nota.xml_anexo = servico_anexos.guardar_arquivo_gerado(
+                sessao, lido[0], xmls[ixml][1] or "nota_fiscal.xml", "application/xml", categoria_xml, autor.id, contrato_id=contrato.id)
+        _aplicar_nota(nota, lido[1])
     competencia.nf_recebida_em, competencia.prazo_pagamento_dias = dados["recebida_em"], dados["prazo_pagamento_dias"]
     competencia.origem_valor_nf = None
     competencia.nf_concluida_em = agora_utc()
@@ -1250,20 +1267,21 @@ def registrar_nota_fiscal(
     competencia.retencao_concluida_em, competencia.retencao_pdf_anexo_id = None, None
     competencia.retencao_por_id, competencia.retencao_por_nome, competencia.retencao_discriminacao_conferida = None, "", False
     competencia.etapa_atual = proxima_etapa(competencia, "nota_fiscal")
-    _auditar(sessao, autor, "contrato.execucao.nota_fiscal.concluir", contrato, competencia, numero=competencia.nf_numero, bruto=bruto,
-             chave=competencia.nf_chave)
+    sessao.flush()
+    _auditar(sessao, autor, "contrato.execucao.nota_fiscal.concluir", contrato, competencia,
+             notas=[{"numero": n.numero, "chave": n.chave, "bruto": n.valor_bruto} for n in competencia.notas_fiscais], bruto=total)
     avisos.nota_fiscal_juntada(sessao, contrato, competencia, autor)
     sessao.commit()
 
 
-def _aplicar_nota(competencia: Competencia, prefixo: str, dados: dict) -> None:
+def _aplicar_nota(nota: NotaFiscalCompetencia, dados: dict) -> None:
     """Grava número, chave, bruto e dados do XML; as retenções do XML ficam como sugestão para a conferência."""
-    setattr(competencia, f"{prefixo}numero", (dados.get("numero") or "")[:100])
-    setattr(competencia, f"{prefixo}chave", dados.get("chave"))
-    setattr(competencia, f"{prefixo}valor_bruto", Decimal(dados["valor_bruto"]))
-    setattr(competencia, f"{prefixo}dados_xml", dados)
-    for tributo, valor in (dados.get("retencoes") or {}).items():
-        setattr(competencia, f"{prefixo}retencao_{tributo}", Decimal(valor or "0"))
+    nota.numero = (dados.get("numero") or "")[:100]
+    nota.chave = dados.get("chave")
+    nota.valor_bruto = Decimal(dados["valor_bruto"])
+    nota.dados_xml = dados
+    for tributo in ("ir", "inss", "iss", "pis", "cofins", "csll"):
+        setattr(nota, f"retencao_{tributo}", Decimal((dados.get("retencoes") or {}).get(tributo) or "0"))
 
 
 def _validar_retencoes(retencoes: dict[str, Decimal], bruto: Decimal, qual: str) -> None:

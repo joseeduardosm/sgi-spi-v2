@@ -119,7 +119,7 @@ def criar(sessao) -> dict:
     usuarios: dict[str, Usuario] = {}
     for login, nome, cargo, setor, _, _ in PESSOAS:
         u = Usuario(login=login, nome_completo=f"{MARCA} {nome}", cargo=cargo, departamento=setores[setor], email="", ativo=True,
-                    ramal="0000", andar="1", predio="Fictício", perfil_revisado_em=agora_utc())
+                    ramal="0000", andar="1", predio="A", perfil_revisado_em=agora_utc())
         sessao.add(u)
         usuarios[login] = u
     sessao.flush()

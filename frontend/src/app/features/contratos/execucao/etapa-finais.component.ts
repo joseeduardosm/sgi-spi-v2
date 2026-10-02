@@ -78,10 +78,10 @@ import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
           <header><h2 id="titulo-ob">8. Ordem Bancária</h2></header>
           <div class="corpo">
             @if (d.ordem_bancaria) {
-              <p class="aviso-bloco informativo">Competência concluída em {{ d.concluida_em | date: 'dd/MM/yyyy HH:mm' }}. O valor de {{ d.valor_a_pagar | moeda }} (NF + NF adicional) foi debitado nas NEs.</p>
+              <p class="aviso-bloco informativo">Competência concluída em {{ d.concluida_em | date: 'dd/MM/yyyy HH:mm' }}. O valor de {{ d.valor_a_pagar | moeda }} (soma das NFs) foi debitado nas NEs.</p>
               <button type="button" class="acao-secundaria" (click)="baixar(d.ordem_bancaria.anexo_id)">Baixar Ordem Bancária</button>
             } @else {
-              <p class="dica-formulario" style="margin: 0 0 12px">Ao anexar a OB, {{ d.valor_a_pagar | moeda }} (NF + NF adicional, brutos) será debitado nas NEs {{ d.notas_selecionadas.map(n => n.numero).join(', ') }}, nessa ordem, e a competência será concluída.</p>
+              <p class="dica-formulario" style="margin: 0 0 12px">Ao anexar a OB, {{ d.valor_a_pagar | moeda }} (soma das NFs, brutos) será debitado nas NEs {{ d.notas_selecionadas.map(n => n.numero).join(', ') }}, nessa ordem, e a competência será concluída.</p>
               @if (editavel()) {
                 <div class="acoes-cartao esquerda">
                   <app-envio-pdf rotulo="Selecionar OB em PDF" (selecionado)="ob = $event" />

@@ -8,7 +8,7 @@ caminhos podem coincidir (ver comentário abaixo).
 
 from fastapi import APIRouter
 
-from app.api.routes import acl, autenticacao, ldap, melhorias, mensageria, mensagens, noticias, rh, tarefas, saude, setores, smtp, usuarios
+from app.api.routes import acl, assinatura_email, autenticacao, contratacoes, ldap, melhorias, mensageria, mensagens, noticias, protocolo, rh, tarefas, saude, setores, smtp, usuarios
 from app.api.routes.contratos import alteracoes, contratos, diario, empresas, execucao, importacao, migracao, modelos, orcamento, relatorios
 
 roteador_api = APIRouter()
@@ -26,6 +26,9 @@ roteador_api.include_router(rh.roteador)
 roteador_api.include_router(tarefas.roteador)
 roteador_api.include_router(noticias.roteador)
 roteador_api.include_router(melhorias.roteador)
+roteador_api.include_router(assinatura_email.roteador)
+roteador_api.include_router(protocolo.roteador)
+roteador_api.include_router(contratacoes.roteador)
 # Módulo de contratos
 # Caminhos fixos antes de contratos: `/contratos/empresas` não pode cair em `/contratos/{contrato_id}`
 roteador_api.include_router(empresas.roteador)

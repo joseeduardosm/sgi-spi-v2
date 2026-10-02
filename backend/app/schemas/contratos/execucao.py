@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.contratos.empresas import Texto, TextoObrigatorio
-from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade
+from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade, ValorUnitario
 
 # Etapas da competência (iguais às do modelo) e a situação resumida mostrada na aba Execução
 Etapa = Literal["medicao", "avaliacao", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida"]
@@ -219,7 +219,7 @@ class LeituraItemMedicao(BaseModel):
     descricao: str
     tipo: str
     calcula_pro_rata: bool
-    valor_unitario: ValorMonetario
+    valor_unitario: ValorUnitario
     fator_meses: ValorFator
     quantidade_prevista: ValorQuantidade
     quantidade_medida: Annotated[Decimal, Field(description="Até 10 casas.")]
@@ -287,7 +287,9 @@ class ConferenciaNota(BaseModel):
 
 
 class LeituraNotaFiscal(BaseModel):
-    """Dados de uma nota fiscal registrada (principal ou adicional)."""
+    """Dados de uma nota fiscal registrada (a competência pode ter várias, em `ordem`)."""
+    id: uuid.UUID
+    ordem: int = Field(..., description="Posição da nota na competência (1, 2, …).")
     numero: str
     arquivo: LeituraArquivo | None
     xml: LeituraArquivo | None = Field(None, description="XML da nota (NF-e ou NFS-e).")
@@ -313,10 +315,21 @@ class RetencoesNota(BaseModel):
     csll: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)] = Decimal(0)
 
 
+class RetencoesDaNota(RetencoesNota):
+    """Retenções conferidas de uma das notas da competência."""
+    nota_id: uuid.UUID = Field(..., description="`id` da nota fiscal (de `notas_fiscais` no detalhe da competência).")
+
+
+class ItemNotaFiscal(BaseModel):
+    """Uma nota fiscal na gravação da etapa 3 (a lista inteira, na ordem final)."""
+    id: uuid.UUID | None = Field(None, description="Nota já registrada, que mantém os arquivos que não forem trocados; vazio para uma nota nova.")
+    arquivo: int | None = Field(None, ge=0, description="Posição, na lista `arquivos`, do PDF desta nota.")
+    xml: int | None = Field(None, ge=0, description="Posição, na lista `xmls`, do XML desta nota.")
+
+
 class GravacaoRetencao(BaseModel):
-    """Conferência da etapa 4: retenções da NF (e da adicional, se houver) e a confirmação da discriminação."""
-    principal: RetencoesNota
-    adicional: RetencoesNota | None = None
+    """Conferência da etapa 4: retenções de cada nota fiscal e a confirmação da discriminação."""
+    notas: list[RetencoesDaNota] = Field(..., min_length=1, description="Uma entrada para cada nota fiscal da competência.")
     discriminacao_conferida: bool = Field(..., description="A discriminação dos serviços é compatível com o objeto (obrigatório = true).")
 
 
@@ -430,7 +443,7 @@ class DetalheCompetencia(ResumoCompetencia):
     )
     descontos_reajuste: list[DescontoReajuste] = Field(default_factory=list, description="Origem de cada desconto abatido.")
     valor_a_pagar: ValorMonetario = Field(
-        ..., description="Valor que a OB debita nas NEs apontadas: NF + NF adicional (brutos) depois da etapa da NF; antes, o valor autorizado."
+        ..., description="Valor que a OB debita nas NEs apontadas: soma das NFs (brutos) depois da etapa da NF; antes, o valor autorizado."
     )
     avisos: list[str] = Field(default_factory=list, description="Alertas da medição (ex.: item medido acima do saldo líquido).")
     glosas_periodo: list[GlosaDoPeriodo] = Field(default_factory=list, description="Glosas do diário de bordo que valem nesta competência.")
@@ -442,8 +455,7 @@ class DetalheCompetencia(ResumoCompetencia):
     etapas_abertas: list[Etapa] = Field(default_factory=list, description="Etapas que aceitam gravação agora (retenção, CADIN e checklist em paralelo).")
     etapas_concluidas: list[Etapa] = Field(default_factory=list, description="Etapas já concluídas.")
     reaberturas_permitidas: bool = Field(False, description="O usuário pode reabrir etapas (SuperRoot ou gestor vigente do contrato).")
-    nota_fiscal: LeituraNotaFiscal | None
-    nota_fiscal_adicional: LeituraNotaFiscal | None
+    notas_fiscais: list[LeituraNotaFiscal] = Field(default_factory=list, description="Notas fiscais juntadas na etapa 3 (uma ou mais), em ordem.")
     nf_recebida_em: date | None
     prazo_pagamento_dias: int | None
     vencimento_pagamento: date | None = Field(..., description="Recebimento da NF + prazo (dias corridos).")

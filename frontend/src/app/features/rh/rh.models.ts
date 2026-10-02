@@ -36,6 +36,8 @@ export interface UsuarioPendente {
 }
 
 export interface PeriodoAquisitivo {
+  /** Ano em que cai a maior parte da janela de gozo (ex.: 31/12/2026 a 30/12/2027 = 2027). */
+  exercicio: number;
   inicio: string;
   fim: string;
   dias_creditados: number;
@@ -107,6 +109,11 @@ export interface Afastamento {
   decidido_em: string | null;
   justificativa: string | null;
   substitui_id: string | null;
+  /** Etapa 1: aguarda o ciente e de acordo do superior imediato (o aprovador ainda não recebeu o pedido). */
+  aguarda_ciencia: boolean;
+  ciencia_por_nome: string | null;
+  ciencia_em: string | null;
+  pode_dar_ciencia: boolean;
   pode_decidir: boolean;
   pode_alterar: boolean;
   eventos: EventoAfastamento[];
@@ -132,6 +139,8 @@ export interface ParametrosRh {
   aviso_ferias_ativo: boolean;
   /** Períodos não podem começar em feriado ou ponto facultativo cadastrado. */
   inicio_vedado_feriado: boolean;
+  /** Abertura do agendamento das férias do ano seguinte (ano da data + 1); vazio desliga a regra. */
+  abertura_agendamento_ferias: string | null;
   /** Só leitura: pessoas no setor da CGP (0 = ninguém recebe os avisos da CGP). */
   membros_cgp?: number | null;
   atualizado_por_nome?: string | null;
@@ -139,6 +148,7 @@ export interface ParametrosRh {
 }
 
 export interface PeriodoAtual {
+  exercicio: number;
   inicio: string;
   fim: string;
   dias_creditados: number;
@@ -150,11 +160,24 @@ export interface PeriodoAtual {
   alerta_expiracao: boolean;
 }
 
+/** Agendamento das férias do ano seguinte: depois da abertura, até `limite_dias` dias, sem exigir saldo. */
+export interface AgendamentoAntecipado {
+  exercicio: number;
+  /** Janela do exercício; nulos quando o servidor ainda não tem o início do período informado. */
+  inicio: string | null;
+  fim: string | null;
+  abertura: string;
+  aberto: boolean;
+  limite_dias: number;
+  agendados: number;
+}
+
 export interface MeusAfastamentos {
   exercicio: number;
   saldos: Record<TipoAfastamento, Saldo>;
   periodo_vigente: PeriodoAtual | null;
-  proximo_periodo: { inicio: string; fim: string; dias_creditados_previstos: number; usado: number } | null;
+  proximo_periodo: { exercicio: number; inicio: string; fim: string; dias_creditados_previstos: number; usado: number } | null;
+  agendamento_antecipado: AgendamentoAntecipado | null;
   afastamentos: Afastamento[];
   parametros: ParametrosRh;
   feriados: Feriado[];

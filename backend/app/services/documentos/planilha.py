@@ -19,6 +19,8 @@ from openpyxl.utils import get_column_letter
 
 # Formatos numéricos do Excel: moeda em reais, quantidade com 4 casas, percentual e data
 FORMATO_MOEDA = '"R$" #,##0.00'
+# Preço unitário: de 2 a 4 casas (ex.: R$ 0,075)
+FORMATO_MOEDA_UNITARIA = '"R$" #,##0.00##'
 FORMATO_QUANTIDADE = "#,##0.0000"
 FORMATO_PERCENTUAL = "0.00%"
 FORMATO_DATA = "dd/mm/yyyy"

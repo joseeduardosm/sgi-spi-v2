@@ -9,6 +9,7 @@ mandam e-mail (ex.: mensageria) por meio do servidor ativo.
 
 import uuid
 from dataclasses import replace
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -129,7 +130,7 @@ def testar_servidor(sessao: Session, servidor_id: uuid.UUID, senha: str | None) 
 def enviar_teste(sessao: Session, servidor_id: uuid.UUID, destinatario: str, autor: str) -> ResultadoSmtp:
     """Envia um e-mail de teste pelo servidor salvo e registra o resultado (prova de ponta a ponta)."""
     servidor = obter_servidor(sessao, servidor_id)
-    agora = agora_utc()
+    agora = agora_utc().astimezone(ZoneInfo("America/Sao_Paulo"))  # o e-mail mostra o horário de Brasília
     mensagem = Mensagem(
         para=[destinatario],
         assunto=f"Teste de envio — {servidor.nome}",
@@ -138,7 +139,7 @@ def enviar_teste(sessao: Session, servidor_id: uuid.UUID, destinatario: str, aut
             f"Servidor: {servidor.servidor}:{servidor.porta} ({servidor.seguranca})\n"
             f"Remetente: {servidor.remetente_email}\n"
             f"Enviada por: {autor}\n"
-            f"Data: {agora:%d/%m/%Y %H:%M} (UTC)\n\n"
+            f"Data: {agora:%d/%m/%Y %H:%M} (horário de Brasília)\n\n"
             "Se você recebeu este e-mail, o envio pelo portal está funcionando."
         ),
         html=modelo_email.pagina(
@@ -146,7 +147,7 @@ def enviar_teste(sessao: Session, servidor_id: uuid.UUID, destinatario: str, aut
             modelo_email.paragrafos([
                 "Esta é uma mensagem de teste do SGI SPI.",
                 f"Servidor: {servidor.servidor}:{servidor.porta} ({servidor.seguranca})\nRemetente: {servidor.remetente_email}\n"
-                f"Enviada por: {autor}\nData: {agora:%d/%m/%Y %H:%M} (UTC)",
+                f"Enviada por: {autor}\nData: {agora:%d/%m/%Y %H:%M} (horário de Brasília)",
                 "Se você recebeu este e-mail, o envio pelo sistema está funcionando.",
             ]),
             sobretitulo="Servidores SMTP",

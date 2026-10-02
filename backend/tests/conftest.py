@@ -54,7 +54,7 @@ PERFIL_COMPLETO = {
     "cargo": "Analista",
     "departamento": "Contratos",
     "andar": "5",
-    "predio": "Sede",
+    "predio": "A",
 }
 
 
@@ -104,16 +104,22 @@ class AdSimulado:
         return Connection(self.servidor, user=usuario, password=senha, client_strategy=MOCK_SYNC, raise_exceptions=False)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _esquema():
+    """Cria as tabelas uma única vez por processo de teste (recriar a cada teste era o gargalo da suíte)."""
+    Base.metadata.create_all(motor)
+    yield
+
+
 @pytest.fixture(autouse=True)
-def _banco():
-    """Banco limpo em todo teste (`autouse=True`: vale mesmo sem o teste pedir)."""
-    # Recria o banco a cada teste; a verificação de chaves estrangeiras fica desligada só durante a remoção
+def _banco(_esquema):
+    """Banco limpo em todo teste (`autouse=True`): apaga as linhas de todas as tabelas, sem recriar o esquema."""
     with motor.connect() as conexao:
         conexao.exec_driver_sql("PRAGMA foreign_keys=OFF")
-        Base.metadata.drop_all(conexao)
+        for tabela in reversed(Base.metadata.sorted_tables):
+            conexao.execute(tabela.delete())
+        conexao.commit()  # o PRAGMA só vale fora de transação: sem o commit, a conexão voltaria ao pool com as chaves desligadas
         conexao.exec_driver_sql("PRAGMA foreign_keys=ON")
-        conexao.commit()
-    Base.metadata.create_all(motor)
     yield
 
 

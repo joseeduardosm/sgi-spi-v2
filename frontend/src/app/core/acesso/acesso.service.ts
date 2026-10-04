@@ -3,7 +3,7 @@
 
 import { HttpClient } from '@angular/common/http';
 import { effect, inject, Injectable, signal } from '@angular/core';
-import { catchError, map, Observable, of, shareReplay, tap } from 'rxjs';
+import { catchError, map, Observable, of, shareReplay, switchMap, tap } from 'rxjs';
 
 import { ambiente } from '../../../environments/ambiente';
 import { AutenticacaoService } from '../autenticacao/autenticacao.service';
@@ -42,6 +42,11 @@ export class AcessoService {
   // Mapa slug → nível do usuário; `carregado` indica se a resposta da API já chegou
   private readonly niveis = signal<ReadonlyMap<string, NivelAcl>>(new Map());
   readonly carregado = signal(false);
+  /**
+   * Acesso ao Painel Executivo. Fica fora do mapa de níveis porque, sem regras, esse recurso NÃO é aberto a todos
+   * (diferente dos demais): quem diz é `GET /painel-executivo/acesso`.
+   */
+  readonly painelExecutivo = signal(false);
   // Requisição em andamento, compartilhada entre chamadas simultâneas (evita pedir duas vezes)
   private carregamentoPendente?: Observable<void>;
 
@@ -69,8 +74,12 @@ export class AcessoService {
       tap((itens) => {
         // Guarda só os recursos com algum nível (nulo = sem acesso)
         this.niveis.set(new Map(itens.filter((i) => i.nivel).map((i) => [i.slug, i.nivel!])));
-        this.carregado.set(true);
       }),
+      switchMap(() => this.http.get<{ pode: boolean }>(`${ambiente.urlApi}/painel-executivo/acesso`).pipe(
+        tap((r) => this.painelExecutivo.set(r.pode)),
+        catchError(() => of({ pode: false })),
+      )),
+      tap(() => this.carregado.set(true)),
       map(() => undefined),
       // Erro na API não trava a tela: considera carregado (sem acessos)
       catchError(() => {
@@ -87,6 +96,7 @@ export class AcessoService {
   /** Esquece os acessos (logout ou perfil pendente). */
   private reiniciar(): void {
     this.niveis.set(new Map());
+    this.painelExecutivo.set(false);
     this.carregado.set(false);
   }
 }

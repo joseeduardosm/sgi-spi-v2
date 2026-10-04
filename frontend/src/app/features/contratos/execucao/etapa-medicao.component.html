@@ -111,6 +111,7 @@
         @if (d.integra_equipe && !jaRegistrei()) {
           <button type="button" class="acao-secundaria" [disabled]="alterado() || !d.medicao_concluida_em && !d.itens.length" (click)="ciencia()">Registrar minha ciência</button>
         }
+        <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Memória e diário de bordo à equipe e aos prepostos escolhidos, pedindo a NF em 48 h" />
         <button type="button" class="acao-primaria" [disabled]="alterado() || d.ciencias.length < d.ciencias_minimas" (click)="concluir()">Concluir medição e gerar relatório</button>
       </div>
     }

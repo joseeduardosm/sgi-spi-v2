@@ -41,7 +41,8 @@
     }
 
     @if (editavel()) {
-      <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!valido()" (click)="concluir()">Juntar nota fiscal</button></div>
+      <div class="acoes-cartao"><app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="financeiroIds" [fonte]="fonteFinanceiro" rotuloLista="Financeiro" vazio="Nenhum usuário do Financeiro com e-mail." descricao="Aviso ao Financeiro (escolha quem recebe, por subsetor), com cópia à equipe" />
+        <button type="button" class="acao-primaria" [disabled]="!valido()" (click)="concluir()">Juntar nota fiscal</button></div>
     }
 
     @if (d.nf_concluida_em) {

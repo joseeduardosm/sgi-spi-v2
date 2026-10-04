@@ -108,6 +108,7 @@
       </div>
       @if (editavel() && !a.concluida_em) {
         <div class="acoes-cartao esquerda">
+          <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail." descricao="PDF aos prepostos escolhidos, pedindo a devolução assinada" />
           <button type="button" class="acao-secundaria" (click)="exportarPdf()">Exportar novo PDF</button>
           @if (a.pdf_gerado) {
             <app-envio-pdf rotulo="Selecionar via assinada" (selecionado)="escolherAssinada($event)" />

@@ -82,6 +82,18 @@ export function paraCampo(d: Date): string {
           <div class="ocupa-duas"><label for="nt-participantes">Participantes</label>
             <app-seletor-usuarios idCampo="nt-participantes" [selecionados]="participantes" (selecionadosChange)="aoMudarParticipantes($event)"
                                   [fonte]="api.opcoesPessoas" textoAjuda="Quem mais trabalha na tarefa (a carga conta para cada um)" /></div>
+          <div class="ocupa-duas"><label for="nt-anexos">Anexos (até 5)</label>
+            <label class="acao-secundaria botao-arquivo" for="nt-anexos">📎 Anexar documentos
+              <input id="nt-anexos" type="file" multiple accept=".pdf,.docx,.xlsx,.pptx,.odt,.ods,.odp,.doc,.xls,.ppt,.png,.jpg,.jpeg,.txt,.csv" (change)="escolherArquivos($event)" /></label>
+            @if (arquivos().length) {
+              <ul class="arquivos-escolhidos">
+                @for (a of arquivos(); track $index) {
+                  <li>📄 {{ a.name }} <small>{{ tamanhoLegivel(a.size) }}</small>
+                    <button type="button" class="link-simples" [attr.aria-label]="'Remover ' + a.name" (click)="removerArquivo($index)">×</button></li>
+                }
+              </ul>
+            }
+            <small class="dica-formulario">Ficam na linha do tempo da tarefa, no evento "Tarefa criada". Quem recebe a tarefa já os vê.</small></div>
           @if (marcadores().length) {
             <div class="ocupa-duas"><label>Marcadores</label>
               <div class="linha-caixas">
@@ -132,6 +144,7 @@ export class NovaTarefaComponent implements OnInit {
   protected readonly marcadores = signal<Marcador[]>([]);
   protected readonly marcadoresIds = signal<string[]>([]);
   protected readonly salvando = signal(false);
+  protected readonly arquivos = signal<File[]>([]);
   protected readonly escolhido = computed(() => this.pessoas().find((p) => p.id === this.responsavelId()) ?? null);
   /** Pessoa cuja agenda aparece à direita (responsável escolhido ou último participante incluído). */
   protected readonly pessoaAgenda = signal<number | null>(null);
@@ -184,14 +197,33 @@ export class NovaTarefaComponent implements OnInit {
     this.marcadoresIds.update((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
   }
 
+  /** Soma os arquivos escolhidos aos anteriores (máximo 5, como na API). */
+  protected escolherArquivos(evento: Event): void {
+    const entrada = evento.target as HTMLInputElement;
+    const todos = [...this.arquivos(), ...Array.from(entrada.files ?? [])];
+    if (todos.length > 5) this.dialogos.avisar('Muitos arquivos', 'Anexe no máximo 5 arquivos.');
+    this.arquivos.set(todos.slice(0, 5));
+    entrada.value = '';
+  }
+
+  protected removerArquivo(indice: number): void {
+    this.arquivos.update((l) => l.filter((_, i) => i !== indice));
+  }
+
+  protected tamanhoLegivel(bytes: number): string {
+    return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
   protected salvar(): void {
     const equipe = this.equipeId() || null;
     const responsavel = equipe ? this.responsavelId() : (this.responsavel[0]?.id ?? null);
     this.salvando.set(true);
-    this.dialogos.executar(this.api.criar({
+    const dados = {
       titulo: this.titulo.trim(), descricao: this.descricao, prazo: new Date(this.prazo).toISOString(), prioridade: this.prioridade,
       equipe_id: equipe, responsavel_id: responsavel, participantes_ids: this.participantes.map((p) => p.id), marcadores_ids: this.marcadoresIds(),
-    }), 'Criando a tarefa…').subscribe({
+    };
+    const chamada = this.arquivos().length ? this.api.criarComAnexos(dados, this.arquivos()) : this.api.criar(dados);
+    this.dialogos.executar(chamada, this.arquivos().length ? 'Criando a tarefa e enviando os anexos…' : 'Criando a tarefa…').subscribe({
       // Abre a tela da tarefa nova (no lugar do formulário, para o "voltar" não reabrir a criação)
       next: (t) => void this.roteador.navigate(['/tarefas', t.numero], { replaceUrl: true }),
       error: (e) => { this.salvando.set(false); this.dialogos.mostrarErro(e); },

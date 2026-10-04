@@ -32,6 +32,7 @@
           <div><dt>Data final (vigência atual) <app-historico-campo campo="data_fim" rotulo="data final" [historico]="historico()" /></dt><dd>{{ c.data_fim | dataBr }}</dd></div>
           <div><dt>Periodicidade de execução <app-historico-campo campo="periodicidade_meses" rotulo="periodicidade" [historico]="historico()" /></dt><dd>{{ periodicidade() }}</dd></div>
           <div><dt>Mês de reajuste <app-historico-campo campo="mes_reajuste" rotulo="mês de reajuste" [historico]="historico()" /></dt><dd>{{ meses[c.mes_reajuste - 1] }}</dd></div>
+          <div><dt>Liberar todas as competências <app-historico-campo campo="liberar_todas_competencias" rotulo="liberar todas as competências" [historico]="historico()" /></dt><dd>{{ c.liberar_todas_competencias ? 'Sim: medição liberada antes do fim do período' : 'Não: só após o fim do período' }}</dd></div>
           <div><dt>Base mensal</dt><dd>{{ c.base_mensal | moeda }}</dd></div>
           <div><dt>Valor global (vigência atual) <app-historico-campo campo="valor_global" rotulo="valor global" [historico]="historico()" /></dt><dd><strong>{{ c.valor_global | moeda }}</strong></dd></div>
           <div><dt>Aditamento acumulado</dt><dd>{{ c.aditamento_acumulado_percentual | percentual }}</dd></div>
@@ -157,6 +158,7 @@
 
     @case ('documentos') { <app-aba-documentos [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
     @case ('checklists') { <app-aba-checklists [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
+    @case ('correcoes') { <app-aba-correcoes [contratoId]="c.id" [itens]="c.itens" (aplicada)="carregar()" /> }
     @case ('formularios') { <app-aba-formularios [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
     @case ('notas') { <app-aba-notas [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
     @case ('diario') { <app-aba-diario [contratoId]="c.id" [usuarioId]="usuarioId()" /> }

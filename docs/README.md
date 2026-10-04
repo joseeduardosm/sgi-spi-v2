@@ -20,11 +20,14 @@ Esta pasta é parte do código-fonte. Ela é a referência para o desenvolviment
 | [endpoints/rh-afastamentos.md](endpoints/rh-afastamentos.md) | `/api/rh/afastamentos/*`, `/api/rh/parametros`, `/api/rh/feriados`: férias, licença-prêmio, feriados e pontos facultativos |
 | [endpoints/noticias.md](endpoints/noticias.md) | `/api/portal`, `/api/noticias/*`: portal de notícias (público) e gestão editorial com aprovação, capa 2:1, slider configurável |
 | [endpoints/melhorias.md](endpoints/melhorias.md) | `/api/melhorias/*`: sugestões de melhoria (botão flutuante), minhas sugestões, triagem, tarefa, XLSX e PDF |
+| [endpoints/diretorio.md](endpoints/diretorio.md) | `/api/diretorio/*`: ramais em cartões, aniversariantes (dia/semana/mês), mural de parabéns, favoritos, vCard/QR Code, foto e selo de férias |
+| [endpoints/painel-executivo.md](endpoints/painel-executivo.md) | `/api/painel-executivo/*`: slides de contratos, RH e tarefas para a Diretoria, PDF e verificação de acesso (ACL `painel-executivo`) |
 | [endpoints/tarefas.md](endpoints/tarefas.md) | `/api/tarefas/*`: Módulo Tarefas (pipeline com validação, linha do tempo, equipes, avisos) |
 | [endpoints/rh-folha-ponto.md](endpoints/rh-folha-ponto.md) | `/api/rh/folha-ponto`: folha de ponto do usuário em PDF |
 | [endpoints/assinatura-email.md](endpoints/assinatura-email.md) | `/api/assinatura-email`: assinatura de e-mail institucional (PNG em alta resolução e HTML) |
 | [endpoints/protocolo.md](endpoints/protocolo.md) | `/api/protocolo`: numeração institucional por tipo e exercício (reserva do próximo número, sigilo, painel, exportação) |
 | [endpoints/contratacoes.md](endpoints/contratacoes.md) | `/api/contratacoes`: ETP e TR (árvore de itens, revisões, versões com diferença, conferência, Word/PDF) |
+| [endpoints/contratos-correcao-itens.md](endpoints/contratos-correcao-itens.md) | `/api/contratos/{id}/itens/correcoes`: correção de preço e quantidade dos itens com dois olhos; competências abertas seguem o cadastro e as concluídas congelam |
 | [endpoints/mensagens.md](endpoints/mensagens.md) | `/api/mensagens/*`: mensageria (caixa de mensagens, avisos automáticos, e-mail e lembretes) |
 | [endpoints/mensageria.md](endpoints/mensageria.md) | `/api/mensageria/*`: tela Mensageria da conta root (e-mail de changelog) |
 | [endpoints/sistema.md](endpoints/sistema.md) | `/api/saude` |

@@ -9,6 +9,8 @@
 @use 'styles/tarefas';
 @use 'styles/noticias';
 @use 'styles/melhorias';
+@use 'styles/diretorio';
+@use 'styles/painel-executivo';
 @use 'styles/rh';
 @use 'styles/assinatura';
 @use 'styles/protocolo';
@@ -1012,7 +1014,7 @@ $rh-aprovado-fundo: #e5f4ec;
 }
 
 .gantt-cabecalho {
-  border-bottom: 1px solid var(--spi-borda);
+  border-bottom: 1px solid #b9c2cc;
 
   .gantt-rotulo { color: #8e99a6; font-size: 10px; font-weight: 700; text-transform: uppercase; }
 }
@@ -1021,8 +1023,24 @@ $rh-aprovado-fundo: #e5f4ec;
   position: relative;
   height: 32px;
 
-  .gantt-fds { position: absolute; top: 0; bottom: 0; background: #fafbfc; }
-  .gantt-fds.feriado { background: #eef3fb; }
+  /* Fins de semana e feriados em faixa translúcida, para a grade de linhas aparecer por baixo */
+  .gantt-fds { position: absolute; top: 0; bottom: 0; background: #f6f7f9aa; }
+  .gantt-fds.feriado { background: #e9f0faaa; }
+
+  /* Grade vertical: linha suave por dia (visão mensal) e linha mais marcada na segunda-feira e na virada do mês */
+  .gantt-grade { position: absolute; top: 0; bottom: 0; z-index: 1; width: 1px; background: #e2e6ea; pointer-events: none; &.mes { background: #c6ced7; } }
+  .gantt-hoje { position: absolute; top: 0; bottom: 0; z-index: 2; width: 2px; background: var(--spi-vermelho); opacity: .55; pointer-events: none; }
+}
+
+.gantt-afastamentos:not(.anual) .gantt-trilho {
+  background-image: linear-gradient(90deg, #f0f2f5 1px, transparent 1px);
+  background-size: calc(100% / var(--dias, 1)) 100%;
+}
+
+/* Eixo (régua): linha de base e marcas sob os rótulos */
+.gantt-eixo {
+  .gantt-tick { position: absolute; bottom: 0; width: 1px; height: 6px; background: #c6ced7; &.mes { height: 12px; background: #9aa4af; } }
+  .gantt-hoje { position: absolute; top: 0; bottom: 0; z-index: 2; width: 2px; background: var(--spi-vermelho); opacity: .55; }
 }
 
 .gantt-eixo span {
@@ -1037,6 +1055,7 @@ $rh-aprovado-fundo: #e5f4ec;
 
 .gantt-barra {
   position: absolute;
+  z-index: 3;
   top: 5px;
   height: 22px;
   overflow: hidden;

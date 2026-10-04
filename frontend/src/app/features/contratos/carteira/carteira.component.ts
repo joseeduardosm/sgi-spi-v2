@@ -20,6 +20,12 @@ import { ImportacaoSgiComponent } from './importacao-sgi.component';
 import { ImportacaoXlsxComponent } from './importacao-xlsx.component';
 
 /** Tela 1: carteira de contratos, com busca e paginação no servidor. */
+const CHAVE_MEUS = 'contratos.meus';
+
+function lerMeus(): boolean {
+  try { return localStorage.getItem(CHAVE_MEUS) === '1'; } catch { return false; }
+}
+
 @Component({
   selector: 'app-carteira',
   imports: [FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent, ImportacaoSgiComponent, ImportacaoXlsxComponent, ...PIPES_FORMATACAO],
@@ -62,10 +68,19 @@ export class CarteiraComponent implements OnInit {
     this.pesquisa$.next();
   }
 
+  /** "Meus contratos": só onde a pessoa integra a equipe vigente; a escolha fica lembrada neste navegador. */
+  protected readonly meus = signal(lerMeus());
+
+  protected alternarMeus(valor: boolean): void {
+    this.meus.set(valor);
+    try { localStorage.setItem(CHAVE_MEUS, valor ? '1' : '0'); } catch { /* sem armazenamento: só não lembra */ }
+    this.carregar(1);
+  }
+
   /** Busca uma página da carteira na API. */
   protected carregar(pagina: number): void {
     this.carregando.set(true);
-    this.api.listar(this.busca.trim(), pagina, this.tamanhoPagina).subscribe({
+    this.api.listar(this.busca.trim(), pagina, this.tamanhoPagina, this.meus()).subscribe({
       next: (resposta) => {
         this.itens.set(resposta.itens);
         this.total.set(resposta.total);

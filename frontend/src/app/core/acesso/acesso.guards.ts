@@ -32,3 +32,11 @@ export const guardaAcl: CanActivateFn = (rota) => {
   // Se os acessos ainda não foram carregados, espera o carregamento antes de decidir
   return acesso.carregado() ? of(verificar()) : acesso.carregar().pipe(map(verificar));
 };
+
+/** Painel Executivo: libera só quem a API diz que pode (sem regras na ACL, apenas o SuperRoot). */
+export const guardaPainelExecutivo: CanActivateFn = () => {
+  const acesso = inject(AcessoService);
+  const roteador = inject(Router);
+  const verificar = () => (acesso.painelExecutivo() ? true : roteador.createUrlTree(['/'], { queryParams: { acesso: 'negado' } }));
+  return acesso.carregado() ? of(verificar()) : acesso.carregar().pipe(map(verificar));
+};

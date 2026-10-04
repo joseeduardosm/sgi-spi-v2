@@ -21,7 +21,7 @@ from app.services.servico_auditoria import auditar
 from app.services.servico_usuarios import buscar_por_login
 
 # Campos do perfil institucional copiados entre o schema e o modelo
-CAMPOS_PERFIL = ("nome_completo", "email", "ramal", "celular", "cargo", "departamento", "andar", "predio", "data_nascimento", "gestor_id")
+CAMPOS_PERFIL = ("nome_completo", "email", "ramal", "celular", "linkedin", "cargo", "departamento", "andar", "predio", "data_nascimento", "gestor_id")
 # Campos pesquisados pela busca livre da listagem de usuários
 CAMPOS_BUSCA = ("login", "nome_completo", "email", "ramal", "celular", "cargo", "departamento", "predio")
 

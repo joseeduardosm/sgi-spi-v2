@@ -25,6 +25,8 @@ class GravacaoOcorrencia(BaseModel):
     possui_glosa: bool = Field(False, description="A ocorrência implicará glosa?")
     glosas: list[GravacaoGlosa] = Field(default_factory=list, description="Itens e quantidades a glosar (só com `possui_glosa`).")
     impacta_avaliacao: bool = Field(False, description="A ocorrência impacta a avaliação da qualidade?")
+    enviar_email: bool = Field(False, description="Envia o e-mail desta etapa (equipe, prepostos ou Financeiro). Padrão `false`: só envia quem marcar.")
+    prepostos_ids: list[uuid.UUID] | None = Field(None, description="Prepostos que recebem o e-mail (só com `enviar_email`). `null` = todos os ativos; lista vazia = nenhum (só a equipe).")
     itens_avaliacao: list[str] = Field(default_factory=list, max_length=50,
                                        description="Ids dos itens do formulário de avaliação ativo impactados (só com `impacta_avaliacao`).")
 

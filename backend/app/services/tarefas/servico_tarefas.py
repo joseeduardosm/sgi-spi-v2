@@ -240,7 +240,11 @@ def _marcadores(sessao: Session, equipe: EquipeTarefas | None, ids: tuple[uuid.U
     return lista
 
 
-def criar(sessao: Session, autor: Usuario, dados: DadosTarefa) -> Tarefa:
+def criar(sessao: Session, autor: Usuario, dados: DadosTarefa, arquivos: list[tuple[str, BinaryIO]] | None = None) -> Tarefa:
+    """Cria a tarefa. Os `arquivos` (até 5) entram anexados ao evento "Tarefa criada", na mesma transação: se um deles for recusado, nada é criado."""
+    arquivos = arquivos or []
+    if len(arquivos) > MAXIMO_ANEXOS:
+        raise ErroTarefa(f"Envie no máximo {MAXIMO_ANEXOS} arquivos por vez.")
     equipe = sessao.get(EquipeTarefas, dados.equipe_id) if dados.equipe_id else None
     if dados.equipe_id and (equipe is None or not equipe.ativa):
         raise ErroTarefa("Equipe inexistente ou inativa.")
@@ -260,10 +264,20 @@ def criar(sessao: Session, autor: Usuario, dados: DadosTarefa) -> Tarefa:
     tarefa.marcadores = _marcadores(sessao, equipe, dados.marcadores_ids)
     sessao.add(tarefa)
     sessao.flush()
-    _evento(sessao, tarefa, "criada", autor, "Tarefa criada", prazo=dados.prazo.isoformat(), responsavel=_nome(sessao.get(Usuario, responsavel)))
+    evento = _evento(sessao, tarefa, "criada", autor, "Tarefa criada", prazo=dados.prazo.isoformat(), responsavel=_nome(sessao.get(Usuario, responsavel)))
+    if arquivos:
+        sessao.flush()
+        try:
+            for nome, conteudo in arquivos:
+                anexo = servico_anexos.guardar_arquivo(sessao, conteudo, nome, "tarefa-comentario", autor.id)
+                sessao.add(AnexoEventoTarefa(evento_id=evento.id, anexo_id=anexo.id))
+        except servico_anexos.ErroAnexo as erro:
+            sessao.rollback()
+            raise ErroTarefa(str(erro)) from erro
+    anexos_txt = f" Ela já tem {len(arquivos)} arquivo(s) anexado(s)." if arquivos else ""
     _avisar(sessao, pessoas, f"Nova tarefa: {_rotulo(tarefa)}",
             f"{_nome(autor)} atribuiu a você a tarefa {_rotulo(tarefa)}, com prazo em {_data_hora(dados.prazo)} "
-            f"(prioridade {ROTULOS_PRIORIDADE[dados.prioridade].lower()}).", tarefa, f"tarefa-criada:{tarefa.id}", autor=autor)
+            f"(prioridade {ROTULOS_PRIORIDADE[dados.prioridade].lower()}).{anexos_txt}", tarefa, f"tarefa-criada:{tarefa.id}", autor=autor)
     auditar(sessao, autor.login, "tarefas.criar", _rotulo(tarefa), autor_id=autor.id, alvo_tipo="tarefa", alvo_id=tarefa.id)
     sessao.commit()
     return tarefa

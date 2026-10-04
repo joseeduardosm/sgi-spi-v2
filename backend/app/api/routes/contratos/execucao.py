@@ -18,7 +18,7 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
@@ -29,6 +29,8 @@ from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
+    GrupoFinanceiro,
+    PrepostoDoEmail,
     ItemNotaFiscal,
     ConclusaoMedicao,
     GravacaoRetencao,
@@ -43,6 +45,7 @@ from app.schemas.contratos.execucao import (
     PainelExecucao,
     Reabertura,
 )
+from app.services.contratos.servico_contratos import obter_contrato
 from app.services.contratos import servico_competencias as competencias
 from app.services.contratos import servico_notificacoes, servico_retencao
 from app.services.contratos import servico_configuracao_execucao as configuracao
@@ -154,6 +157,16 @@ def duplicar_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, sessao
         return configuracao.listar_formularios(sessao, contrato_id)
 
 
+@roteador.delete("/formularios/{formulario_id}", response_model=list[LeituraFormulario], summary="Excluir formulário inativo",
+                 description="Exclusão lógica; versões ativas não são excluídas (`400`). As avaliações que já usaram a versão guardam a própria cópia. Devolve a lista.",
+                 responses={**NAO_ENCONTRADO, **ESCRITA})
+def excluir_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Exclusão lógica de uma versão inativa do formulário."""
+    with traduzir_erros(sessao):
+        configuracao.excluir_formulario(sessao, contrato_id, formulario_id, autor)
+        return configuracao.listar_formularios(sessao, contrato_id)
+
+
 @roteador.post("/formularios/{formulario_id}/ativar", response_model=list[LeituraFormulario], summary="Ativar formulário",
                description="Desativa as demais versões e aplica esta às competências ainda na medição (sem avaliação iniciada).",
                responses={**NAO_ENCONTRADO, **ESCRITA})
@@ -245,17 +258,36 @@ def ciencia_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: S
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
+@roteador.get("/prepostos", response_model=list[PrepostoDoEmail], summary="Prepostos que podem receber os e-mails da execução",
+              description="Prepostos **ativos com e-mail** da empresa contratada, para a escolha de quem recebe o comunicado quando a caixa \"Enviar por e-mail\" é marcada. Exige ACL `contratos` ≥ LEITURA.",
+              responses=NAO_ENCONTRADA)
+def prepostos_do_email(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    with traduzir_erros():
+        contrato = obter_contrato(sessao, contrato_id)
+        return [PrepostoDoEmail(id=p.id, nome=p.nome, email=p.email, cargo=p.cargo) for p in contrato.empresa.prepostos if p.ativo and p.email]
+
+
+@roteador.get("/financeiro", response_model=list[GrupoFinanceiro], summary="Usuários do Financeiro por subsetor",
+              description="Usuários ativos **com e-mail** do setor do Financeiro (`SETOR_FINANCEIRO`) e dos subsetores, agrupados por setor, para escolher quem recebe o aviso da nota fiscal. "
+              "Exige ACL `contratos` ≥ LEITURA.", responses=NAO_ENCONTRADA)
+def financeiro_do_email(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    with traduzir_erros():
+        obter_contrato(sessao, contrato_id)
+        return servico_retencao.grupos_financeiro(sessao)
+
+
 @roteador.post("/competencias/{competencia_id}/medicao/concluir", response_model=DetalheCompetencia, summary="Concluir medição e gerar memória",
                description="Exige ao menos uma ciência de integrante da equipe, a mesma seleção de NEs salva e nenhum item acima do saldo "
                "líquido. Gera a memória de cálculo (nova versão só se os dados mudaram), soma o executado nos itens e avança a etapa. "
-               "Em segundo plano, envia à equipe e aos prepostos o e-mail com a memória e o diário de bordo do período em PDF, "
-               "pedindo a nota fiscal em até 48 horas.", responses={**NAO_ENCONTRADA, **ESCRITA})
+               "Com `enviar_email = true` (padrão `false`), envia em segundo plano à equipe e aos prepostos o e-mail com a memória e o diário de bordo "
+               "do período em PDF, pedindo a nota fiscal em até 48 horas; sem ele, o e-mail pode ser enviado depois pelo reenvio.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def concluir_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: ConclusaoMedicao, tarefas: BackgroundTasks,
                      sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Etapa 1: conclui a medição, gera a memória de cálculo em PDF, libera a etapa seguinte e avisa equipe e preposto."""
     with traduzir_erros(sessao):
         competencias.concluir_medicao(sessao, contrato_id, competencia_id, dados.notas_empenho_ids, autor)
-        tarefas.add_task(servico_notificacoes.notificar_medicao, competencia_id)
+        if dados.enviar_email:
+            tarefas.add_task(servico_notificacoes.notificar_medicao, competencia_id, dados.prepostos_ids)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
@@ -311,13 +343,14 @@ def ciencia_ateste(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Se
 
 @roteador.post("/competencias/{competencia_id}/avaliacao/pdf", response_model=DetalheCompetencia, summary="Exportar PDF da avaliação",
                description="Exige ao menos uma ciência da equipe no ateste (as demais podem ser registradas depois). Em segundo plano, envia o "
-               "PDF aos prepostos ativos (cópia para a equipe) pedindo a devolução assinada; o resultado fica em `avaliacao.email`.", responses={**NAO_ENCONTRADA, **ESCRITA})
-def pdf_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, tarefas: BackgroundTasks, sessao: Session = Depends(obter_sessao),
-                  autor: Usuario = Depends(pode_modificar)):
+               "PDF aos prepostos ativos (cópia para a equipe) pedindo a devolução assinada, **só com `enviar_email=true`** (query, padrão `false`); o resultado fica em `avaliacao.email`.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def pdf_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, tarefas: BackgroundTasks, enviar_email: bool = False,
+                  prepostos_ids: Annotated[list[uuid.UUID] | None, Query(description="Prepostos que recebem (`null` = todos os ativos).")] = None, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Etapa 2: gera o PDF do relatório de avaliação e, em segundo plano, o envia aos prepostos para assinatura."""
     with traduzir_erros(sessao):
         competencias.gerar_pdf_avaliacao(sessao, contrato_id, competencia_id, autor)
-        tarefas.add_task(servico_notificacoes.notificar_avaliacao, competencia_id)
+        if enviar_email:
+            tarefas.add_task(servico_notificacoes.notificar_avaliacao, competencia_id, prepostos_ids)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
@@ -364,8 +397,8 @@ def reconsideracao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: U
                "cada item traz `id` (nota já registrada, que mantém os arquivos não trocados), `arquivo` e `xml` (posições nas listas de "
                "arquivos `arquivos` e `xmls`). PDF e XML (NF-e ou NFS-e) são obrigatórios em cada nota; notas fora da lista são removidas. "
                "Data de recebimento e prazo de pagamento (1 a 3650 dias). Número, chave, valor e as retenções sugeridas vêm dos XMLs; "
-               "o saldo livre das NEs precisa cobrir a soma. Conclui a etapa (próxima: retenção de tributos) e envia, em segundo plano, o e-mail ao Financeiro com cópia à "
-               "equipe.", responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
+               "o saldo livre das NEs precisa cobrir a soma. Conclui a etapa (próxima: retenção de tributos) e, **só com `enviar_email = true`** (padrão `false`), envia em segundo plano "
+               "o e-mail ao Financeiro com cópia à equipe.", responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def nota_fiscal(
     contrato_id: uuid.UUID,
     competencia_id: uuid.UUID,
@@ -373,6 +406,8 @@ def nota_fiscal(
     recebida_em: Annotated[date, Form(description="Data em que a Administração recebeu a NF.")],
     prazo_pagamento_dias: Annotated[int, Form(ge=1, le=3650)],
     notas: Annotated[str, Form(description='JSON: lista de {"id": uuid|null, "arquivo": posição|null, "xml": posição|null}.')],
+    enviar_email: Annotated[bool, Form(description="Envia o e-mail ao Financeiro (cópia à equipe). Padrão `false`.")] = False,
+    financeiro_ids: Annotated[str | None, Form(description="Ids dos usuários do Financeiro que recebem, separados por vírgula. Ausente = todos; vazio = ninguém do Financeiro. Só vale com `enviar_email`.")] = None,
     arquivos: Annotated[list[UploadFile], File(description="PDFs das notas (referenciados por posição em `notas`).")] = [],
     xmls: Annotated[list[UploadFile], File(description="XMLs das notas (referenciados por posição em `notas`).")] = [],
     sessao: Session = Depends(obter_sessao),
@@ -391,7 +426,8 @@ def nota_fiscal(
             sessao, contrato_id, competencia_id, dados, itens, [arquivo_pdf(a) for a in arquivos],
             [(x.file, x.filename or "nota_fiscal.xml") for x in xmls], autor,
         )
-        tarefas.add_task(servico_notificacoes.notificar_nf, competencia_id)
+        if enviar_email:
+            tarefas.add_task(servico_notificacoes.notificar_nf, competencia_id, None if financeiro_ids is None else [int(i) for i in financeiro_ids.split(",") if i.strip().isdigit()])
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
@@ -413,7 +449,7 @@ def reenviar_email_nf(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao:
               description="Retenções conferidas (IR, INSS, ISS, PIS, COFINS e CSLL; ≥ 0 e soma ≤ bruto) de cada nota fiscal, "
               "e a confirmação de que a discriminação é compatível com o objeto. Permitido ao Financeiro (setor configurado em "
               "`SETOR_FINANCEIRO` e filhos), à equipe do contrato e ao SuperRoot. Gera o PDF da conferência, avança para o CADIN e "
-              "envia, em segundo plano, o e-mail à equipe.", responses={**NAO_ENCONTRADA, **ESCRITA})
+              "envia, em segundo plano e **só com `enviar_email = true`** (padrão `false`), o e-mail à equipe.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def salvar_retencao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoRetencao, tarefas: BackgroundTasks,
                     sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):
     """Etapa 4: conferência do Financeiro."""
@@ -422,7 +458,8 @@ def salvar_retencao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Gr
             sessao, contrato_id, competencia_id,
             {n.nota_id: n.model_dump(exclude={"nota_id"}) for n in dados.notas}, dados.discriminacao_conferida, autor,
         )
-        tarefas.add_task(servico_notificacoes.notificar_retencao, competencia_id)
+        if dados.enviar_email:
+            tarefas.add_task(servico_notificacoes.notificar_retencao, competencia_id)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
@@ -479,13 +516,14 @@ def concluir_checklist(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao
 
 
 @roteador.post("/competencias/{competencia_id}/checklist/{documento_id}", response_model=DetalheCompetencia, summary="Anexar documento do checklist",
-               description="`multipart/form-data` (`arquivo`, PDF). Com todos os documentos anexados, a etapa conclui sozinha; com os obrigatórios, use `/checklist/concluir`.",
+               description="`multipart/form-data` (`arquivo`, PDF; `validade`, data, **obrigatória** para documento com validade). Com todos os documentos anexados, a etapa conclui sozinha; com os obrigatórios, use `/checklist/concluir`. "
+               "Ao concluir o checklist, os documentos com validade ainda válidos (até o último dia do período) são reaproveitados na competência seguinte.",
                responses={**resposta_nao_encontrado("Competência ou documento"), **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def documento_mensal(contrato_id: uuid.UUID, competencia_id: uuid.UUID, documento_id: uuid.UUID, arquivo: UploadFile = File(...),
-                     sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+                     validade: date | None = Form(None), sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Etapa 5: anexa o PDF de um documento do checklist mensal."""
     with traduzir_erros(sessao):
-        competencias.enviar_documento_mensal(sessao, contrato_id, competencia_id, documento_id, *arquivo_pdf(arquivo), autor)
+        competencias.enviar_documento_mensal(sessao, contrato_id, competencia_id, documento_id, *arquivo_pdf(arquivo), autor, validade)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 

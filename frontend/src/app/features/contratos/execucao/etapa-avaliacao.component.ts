@@ -12,6 +12,7 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { DetalheCompetencia, OcorrenciaAvaliacao, RespostaAvaliacao } from '../compartilhado/contratos.models';
 import { ROTULOS_PAPEL } from '../compartilhado/rotulos';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 
 /** Nota e justificativa digitadas para um item. */
 type Resposta = { nota: string; justificativa: string };
@@ -19,7 +20,7 @@ type Resposta = { nota: string; justificativa: string };
 /** Etapa 2: avaliação inicial, avaliação do gestor, ateste, PDF assinado e reconsideração. */
 @Component({
   selector: 'app-etapa-avaliacao',
-  imports: [FormsModule, DatePipe, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-avaliacao.component.html',
 })
 export class EtapaAvaliacaoComponent implements OnChanges {
@@ -52,6 +53,10 @@ export class EtapaAvaliacaoComponent implements OnChanges {
     return mapa;
   });
   protected readonly reenviando = signal(false);
+  // "Enviar por e-mail" começa desmarcado: só envia quem marcar
+  protected readonly enviarEmail = signal(false);
+  protected readonly prepostosIds = signal<(string | number)[] | null>(null);
+  protected readonly fontePrepostos = () => this.api.gruposPrepostos(this.detalhe().contrato_id);
   // O usuário logado já registrou ciência no ateste?
   protected readonly jaRegistrei = computed(() => this.avaliacao().ciencias.some((c) => c.usuario_id === this.autenticacao.usuario()?.id));
   // Notas fechadas: avaliação inicial salva e, se alguma nota ficou abaixo da máxima, a do gestor também
@@ -136,7 +141,7 @@ export class EtapaAvaliacaoComponent implements OnChanges {
   /** Gera o PDF do relatório de avaliação. */
   protected exportarPdf(): void {
     const d = this.detalhe();
-    this.emitir(this.api.acaoAvaliacao(d.contrato_id, d.id, 'pdf'), 'Não foi possível gerar o PDF', 'Gerando o relatório de avaliação…');
+    this.emitir(this.api.acaoAvaliacao(d.contrato_id, d.id, 'pdf', this.enviarEmail(), this.prepostosIds() as string[] | null), 'Não foi possível gerar o PDF', 'Gerando o relatório de avaliação…');
   }
 
   // Guardam os PDFs escolhidos nos campos de envio

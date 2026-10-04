@@ -40,6 +40,8 @@ Configurar a execução (checklist de documentos mensais e formulário de avalia
   - `tipo`: `regular` ou `diferenca_reajuste` — competência **complementar** criada ao concluir um reajuste cujo mês de referência alcança competências já medidas. Ela traz, por item, a quantidade já medida desde a referência × (preço reajustado − preço pago). As quantidades não podem ser alteradas; o fluxo é o normal (NEs e ciências, NF, CADIN, checklist, consolidado e OB), sem avaliação, e ela não conta como execução do item.
 - **Situação** (não gravada): `pendente` (o período ainda não terminou), `disponivel`, `em_andamento` (medição salva ou etapa posterior) e `concluida`.
 - **Etapas:** 1 `medicao` → 2 `avaliacao` (só com formulário) → 3 `nota_fiscal` → 4 `retencao` (retenção de tributos) → 5 `cadin` → 6 `checklist` → 7 `consolidado` → 8 `ordem_bancaria` → `concluida`. Competências que já tinham passado da nota fiscal antes da etapa de retenção existir ficaram com a retenção dada como conferida.
+- **Envio de e-mail é opcional (`enviar_email`, padrão `false`).** As etapas que disparam SMTP só enviam quando a caixa "Enviar por e-mail" é marcada: concluir a medição (`enviar_email` no corpo de `POST …/medicao/concluir`), exportar o PDF da avaliação (`?enviar_email=true` em `POST …/avaliacao/pdf`), juntar a nota fiscal (campo `enviar_email` do `multipart` de `POST …/nota-fiscal`) e salvar a retenção (`enviar_email` no corpo de `PUT …/retencao`). Sem marcar, nada é enviado, e os reenvios manuais (`POST …/reenviar-email-*`) continuam disponíveis. O mesmo vale para o registro de ocorrência do diário (`enviar_email` dentro de `dados`).
+  - **Quem recebe:** ao marcar, a tela abre a lista de destinatários (todos marcados, com "Selecionar todos"). Prepostos: `GET /prepostos` (ativos com e-mail) e `prepostos_ids` no corpo da conclusão da medição, em `?prepostos_ids=` do PDF da avaliação e em `dados` da ocorrência (`null` = todos os ativos; lista vazia = só a equipe). Financeiro: `GET /financeiro` (usuários ativos com e-mail do setor `SETOR_FINANCEIRO` e subsetores, agrupados por setor, ex.: `DOF › Contabilidade`) e `financeiro_ids` (ids separados por vírgula; ausente = todos; vazio = ninguém do Financeiro, a equipe segue em cópia) no `multipart` da nota fiscal. Os reenvios manuais usam o padrão (todos).
 - **Etapas em paralelo:** depois da nota fiscal, **retenção, CADIN e checklist ficam abertos ao mesmo tempo** e podem ser concluídos em qualquer ordem (o Financeiro confere a retenção enquanto a equipe faz o CADIN e o checklist). O **documento consolidado só é liberado com as três concluídas**; antes disso, `400` com "Falta concluir: …". `etapa_atual` fica na primeira etapa paralela ainda aberta; use `etapas_abertas` e `etapas_concluidas` para saber o estado de cada uma.
   - Cada ação exige a competência na sua etapa (senão `400`).
   - A medição só é liberada depois do fim do período.
@@ -90,6 +92,7 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
   - cada documento é **obrigatório** ou **opcional** (`obrigatorio`, padrão `true`; os documentos anteriores a esta opção são obrigatórios);
   - a etapa conclui sozinha quando todos os documentos estão anexados;
   - com os obrigatórios anexados, `POST …/checklist/concluir` conclui a etapa mesmo com opcionais sem anexo.
+  - **Documento com validade** (`com_validade`, padrão `false`): o envio (`POST …/checklist/{documento_id}`, `multipart`) exige o campo `validade` (data); sem ele, `400` "Informe até quando o documento é válido.". Ao **concluir o checklist** de uma competência (manual ou pela conclusão automática), os documentos com validade dela passam para a **competência regular seguinte** (a de menor início depois do fim desta, ainda sem checklist concluído) quando o documento de mesmo nome dela está **sem anexo** e `validade_ate` é igual ou depois do **último dia do período** da seguinte. O arquivo é o mesmo (e entra no consolidado normalmente), vêm junto `validade_ate` e `reaproveitado_de` (mês da competência de origem), e a etapa **não** conclui sozinha: a pessoa confere e conclui, o que estende a cadeia. Um envio novo substitui o arquivo e limpa `reaproveitado_de`. Na leitura, cada documento traz `com_validade`, `validade_ate` e `reaproveitado_de`; a tela destaca o que vence em até 30 dias. Migração `ab80abb2f10d`.
 - **Consolidado:** um PDF só.
   - **Quem gera:** a primeira geração é de quem pode editar o contrato. **Gerar novamente** (substituir o consolidado existente) é só do **gestor do contrato** (titular vigente) ou do **SuperRoot**, inclusive depois da OB, para refazer consolidados antigos. Os demais recebem `403`. `pode_gerar_consolidado_novamente` diz se o usuário vê o botão.
   - **Ordem de execução:** 1 medição (última memória de cálculo) → 2 avaliação (via assinada; sem ela, o relatório gerado), quando houver → 3 notas fiscais → 4 retenção de tributos (PDF gerado) → 5 CADIN (certidão e, se houver, e-mail de notificação, por consulta) → 6 documentos do checklist → 7 **resumo executivo, por último**, com a tabela "Composição deste documento" (nº, etapa, documento e páginas).
@@ -98,7 +101,7 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
 - **PDFs gerados pelo sistema:** todos em **A4 paisagem** (memórias, avaliação, retenção, parecer de prorrogação, relatórios, contracapas e resumo).
 - **Ordem Bancária:** debita nas NEs apontadas, na ordem escolhida, o **valor a pagar** = soma das notas fiscais (valores brutos), e conclui a competência. O lançamento (`pagamento`) registra o autor.
 - **Reabrir (SuperRoot ou gestor):** volta para uma etapa anterior com justificativa e desfaz as conclusões posteriores. Se a competência estava paga, cada débito ganha um lançamento de **`estorno`** (valor negativo, com autor e justificativa) no extrato da NE; o pagamento original **permanece** no extrato. Anexos e histórico ficam guardados.
-- **Auditoria:** `contrato.checklist.*`, `contrato.formulario.*`, `contrato.execucao.gerar`, `contrato.execucao.medicao.*`, `contrato.execucao.avaliacao.*`, `contrato.execucao.nota_fiscal.concluir`, `contrato.execucao.cadin`, `contrato.execucao.checklist.enviar`, `contrato.execucao.consolidado`, `contrato.execucao.ordem_bancaria` e `contrato.execucao.reabrir`.
+- **Auditoria:** `contrato.checklist.*`, `contrato.formulario.*`, `contrato.execucao.gerar`, `contrato.execucao.medicao.*`, `contrato.execucao.avaliacao.*`, `contrato.execucao.nota_fiscal.concluir`, `contrato.execucao.cadin`, `contrato.execucao.checklist.enviar`, `contrato.execucao.checklist.reaproveitar`, `contrato.execucao.consolidado`, `contrato.execucao.ordem_bancaria` e `contrato.execucao.reabrir`.
 
 ---
 
@@ -107,7 +110,7 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
 | Método e caminho | Descrição |
 |---|---|
 | `GET /checklists` | Versões (mais recente primeiro), sem as excluídas |
-| `POST /checklists` | Cria versão inativa: `{ "nome", "itens": [{ "nome", "observacao", "obrigatorio" }] }` (`obrigatorio` padrão `true`) |
+| `POST /checklists` | Cria versão inativa: `{ "nome", "itens": [{ "nome", "observacao", "obrigatorio", "com_validade" }] }` (`obrigatorio` padrão `true`, `com_validade` padrão `false`; os modelos globais de checklist guardam o mesmo campo) |
 | `PUT /checklists/{checklist_id}` | Edita versão inativa |
 | `POST /checklists/{checklist_id}/duplicar` | Nova versão inativa com o mesmo conteúdo |
 | `POST /checklists/{checklist_id}/ativar` | Ativa e aplica às competências abertas |
@@ -124,6 +127,7 @@ Todas devolvem `LeituraChecklist[]` (`id`, `versao`, `nome`, `ativo`, `itens[]` 
 | `PUT /formularios/{formulario_id}` | Edita versão inativa |
 | `POST /formularios/{formulario_id}/duplicar` | Nova versão inativa |
 | `POST /formularios/{formulario_id}/ativar` | Ativa e aplica às competências na medição |
+| `DELETE /formularios/{formulario_id}` | Exclusão lógica de versão **inativa** (a ativa devolve `400`); devolve a lista. As avaliações que usaram a versão guardam a própria cópia. Migração `8396ea301194` (`excluido_em`) |
 
 A API gera `id` para grupos e itens. As respostas da avaliação referenciam o `id` do item.
 

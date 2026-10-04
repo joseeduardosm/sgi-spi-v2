@@ -2,12 +2,14 @@
 // Este arquivo serve para controlar a aba "Diário de bordo": registro de ocorrências (com glosa, anexos e impacto na avaliação) e lista em forma de chat.
 
 import { DatePipe } from '@angular/common';
+import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 import { Component, computed, ElementRef, inject, input, OnInit, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
+import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { AnexoOcorrencia, DiarioContrato, OcorrenciaDiario } from '../compartilhado/contratos.models';
 import { paraDecimalApi, ROTULOS_PAPEL } from '../compartilhado/rotulos';
 
@@ -22,7 +24,7 @@ interface LinhaGlosa {
 /** Aba "Diário de bordo": a equipe relata ocorrências; cada uma é enviada por e-mail à equipe e ao preposto. */
 @Component({
   selector: 'app-aba-diario',
-  imports: [FormsModule, DatePipe, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-diario">
       <header>
@@ -164,7 +166,8 @@ interface LinhaGlosa {
           </div>
           @if (erro()) { <p class="aviso-formulario erro" role="alert">{{ erro() }}</p> }
           <div class="acoes-cartao">
-            <small class="dica-formulario">Ao salvar, o registro é enviado por e-mail à equipe e aos prepostos. Ocorrências não podem ser editadas depois.</small>
+            <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Registro e anexos à equipe e aos prepostos escolhidos" />
+            <small class="dica-formulario">Ocorrências não podem ser editadas depois.</small>
             <button type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Registrar ocorrência' }}</button>
           </div>
         </form>
@@ -178,11 +181,16 @@ export class AbaDiarioComponent implements OnInit {
   readonly usuarioId = input<number | null>(null);
 
   private readonly api = inject(ContratosApiService);
+  private readonly execucao = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly chat = viewChild<ElementRef<HTMLElement>>('chat');
 
   protected readonly diario = signal<DiarioContrato | null>(null);
   protected readonly salvando = signal(false);
+  // "Enviar por e-mail" começa desmarcado: só envia quem marcar
+  protected readonly enviarEmail = signal(false);
+  protected readonly prepostosIds = signal<(string | number)[] | null>(null);
+  protected readonly fontePrepostos = () => this.execucao.gruposPrepostos(this.contratoId());
   protected readonly reenviando = signal<string | null>(null);
   protected readonly erro = signal<string | null>(null);
   protected readonly glosas = signal<LinhaGlosa[]>([]);
@@ -287,6 +295,8 @@ export class AbaDiarioComponent implements OnInit {
       glosas,
       impacta_avaliacao: this.impactaAvaliacao,
       itens_avaliacao: this.impactaAvaliacao ? [...this.itensMarcados()] : [],
+      enviar_email: this.enviarEmail(),
+      prepostos_ids: this.enviarEmail() ? (this.prepostosIds() as string[] | null) : null,
     };
     this.api
       .registrarOcorrencia(this.contratoId(), dados, this.arquivos())

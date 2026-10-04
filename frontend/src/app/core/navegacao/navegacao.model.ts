@@ -28,6 +28,8 @@ export interface ItemNavegacao {
   somenteRoot?: boolean;
   /** Slug do recurso de ACL: o item só aparece se o usuário tiver ao menos LEITURA. */
   acl?: string;
+  /** Só quem pode ver o Painel Executivo (a API decide; sem regras na ACL, apenas o SuperRoot). */
+  painelExecutivo?: boolean;
   filhos?: ItemNavegacao[];
   /** Texto exibido quando o grupo não possui filhos visíveis. */
   textoVazio?: string;

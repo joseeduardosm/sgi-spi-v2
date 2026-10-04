@@ -3,6 +3,7 @@
 
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
@@ -14,7 +15,7 @@ import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
 /** Etapas 5 (checklist mensal), 6 (documento consolidado) e 7 (Ordem Bancária). */
 @Component({
   selector: 'app-etapa-finais',
-  imports: [DatePipe, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [DatePipe, FormsModule, EnvioPdfComponent, ...PIPES_FORMATACAO],
   template: `
     @let d = detalhe();
     @switch (etapa()) {
@@ -34,12 +35,22 @@ import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
               <tbody>
                 @for (doc of d.documentos; track doc.id) {
                   <tr>
-                    <td>{{ doc.ordem }}</td>
+                    <td>{{ $index + 1 }}</td>
                     <td><strong>{{ doc.nome }}</strong>@if (doc.observacao) { <small>{{ doc.observacao }}</small> }</td>
-                    <td>{{ doc.obrigatorio ? 'Obrigatório' : 'Opcional' }}</td>
+                    <td>{{ doc.obrigatorio ? 'Obrigatório' : 'Opcional' }}@if (doc.com_validade) { <small>Com validade</small> }</td>
                     <td><span class="selo-situacao" [class.pendente]="!doc.arquivo" [class.vermelho]="!doc.arquivo && doc.obrigatorio">{{ doc.arquivo ? 'Anexado' : doc.obrigatorio ? 'Pendente' : 'Não anexado' }}</span></td>
                     <td>
                       @if (doc.arquivo) { <button type="button" class="link-arquivo" (click)="baixar(doc.arquivo.anexo_id)">Baixar</button> }
+                      @if (doc.com_validade && doc.arquivo && doc.validade_ate) {
+                        <small [style.color]="vencimento(doc.validade_ate) === 'vencido' ? '#b3261e' : vencimento(doc.validade_ate) === 'perto' ? '#8a6d00' : '#6a7786'">
+                          Válido até {{ doc.validade_ate | dataBr }}@if (vencimento(doc.validade_ate) === 'perto') { (vence em até 30 dias) }@if (vencimento(doc.validade_ate) === 'vencido') { (vencido) }
+                        </small>
+                      }
+                      @if (doc.reaproveitado_de) { <small style="color: #2f6f9f">Reaproveitado da competência de {{ doc.reaproveitado_de | date: 'MM/yyyy' }}: confira e conclua</small> }
+                      @if (editavel() && doc.com_validade) {
+                        <label class="campo-validade">Válido até *
+                          <input type="date" [name]="'validade-' + doc.id" [ngModel]="validades[doc.id] ?? doc.validade_ate ?? ''" (ngModelChange)="validades[doc.id] = $event" /></label>
+                      }
                       @if (editavel()) { <app-envio-pdf [rotulo]="doc.arquivo ? 'Substituir' : 'Selecionar documento PDF'" (selecionado)="enviarDocumento(doc, $event)" /> }
                     </td>
                   </tr>
@@ -104,14 +115,27 @@ export class EtapaFinaisComponent {
 
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
+  // Validade digitada para cada documento com validade (por id), antes de escolher o arquivo
+  protected validades: Record<string, string> = {};
   // PDF da OB escolhido
   protected ob: File | null = null;
+
+  /** Situação da validade: vencida, a vencer em até 30 dias ou em dia. */
+  protected vencimento(validade: string): 'vencido' | 'perto' | 'ok' {
+    const dias = (new Date(validade + 'T00:00:00').getTime() - new Date().setHours(0, 0, 0, 0)) / 86_400_000;
+    return dias < 0 ? 'vencido' : dias <= 30 ? 'perto' : 'ok';
+  }
 
   /** Anexa o PDF de um documento do checklist. */
   protected enviarDocumento(documento: DocumentoMensal, arquivo: File | null): void {
     if (!arquivo) return;
     const d = this.detalhe();
-    this.dialogos.executar(this.api.documentoMensal(d.contrato_id, d.id, documento.id, arquivo), 'Enviando o documento…').subscribe({
+    const validade = this.validades[documento.id] ?? '';
+    if (documento.com_validade && !validade) {
+      this.dialogos.avisar('Informe a validade', 'Este é um documento com validade: preencha "Válido até" e escolha o arquivo de novo.');
+      return;
+    }
+    this.dialogos.executar(this.api.documentoMensal(d.contrato_id, d.id, documento.id, arquivo, documento.com_validade ? validade : undefined), 'Enviando o documento…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível anexar o documento'),
     });

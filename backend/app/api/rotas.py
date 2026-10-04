@@ -8,8 +8,8 @@ caminhos podem coincidir (ver comentário abaixo).
 
 from fastapi import APIRouter
 
-from app.api.routes import acl, assinatura_email, autenticacao, contratacoes, ldap, melhorias, mensageria, mensagens, noticias, protocolo, rh, tarefas, saude, setores, smtp, usuarios
-from app.api.routes.contratos import alteracoes, contratos, diario, empresas, execucao, importacao, migracao, modelos, orcamento, relatorios
+from app.api.routes import acl, assinatura_email, autenticacao, contratacoes, diretorio, ldap, melhorias, painel_executivo, mensageria, mensagens, noticias, protocolo, rh, tarefas, saude, setores, smtp, usuarios
+from app.api.routes.contratos import alteracoes, contratos, correcoes, diario, empresas, execucao, importacao, importacao_modelos, migracao, modelos, orcamento, relatorios
 
 roteador_api = APIRouter()
 # Módulos do portal: saúde, autenticação, usuários, setores, ACL, diretórios LDAP e servidores SMTP
@@ -26,6 +26,8 @@ roteador_api.include_router(rh.roteador)
 roteador_api.include_router(tarefas.roteador)
 roteador_api.include_router(noticias.roteador)
 roteador_api.include_router(melhorias.roteador)
+roteador_api.include_router(diretorio.roteador)
+roteador_api.include_router(painel_executivo.roteador)
 roteador_api.include_router(assinatura_email.roteador)
 roteador_api.include_router(protocolo.roteador)
 roteador_api.include_router(contratacoes.roteador)
@@ -35,6 +37,7 @@ roteador_api.include_router(empresas.roteador)
 roteador_api.include_router(modelos.roteador)
 roteador_api.include_router(migracao.roteador)
 roteador_api.include_router(importacao.roteador)
+roteador_api.include_router(importacao_modelos.roteador)
 roteador_api.include_router(relatorios.roteador)
 roteador_api.include_router(relatorios.roteador_painel)
 roteador_api.include_router(contratos.roteador)
@@ -42,4 +45,5 @@ roteador_api.include_router(contratos.roteador)
 roteador_api.include_router(orcamento.roteador)
 roteador_api.include_router(execucao.roteador)
 roteador_api.include_router(alteracoes.roteador)
+roteador_api.include_router(correcoes.roteador)
 roteador_api.include_router(diario.roteador)

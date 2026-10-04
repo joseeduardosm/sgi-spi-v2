@@ -31,6 +31,7 @@ Perfil institucional usado na criação e na alteração. Os textos são aparado
 | `email` | string | até 254, formato de e-mail quando preenchido |
 | `ramal` | string | até 20 |
 | `celular` | string | até 30 |
+| `linkedin` | string | até 200; opcional. Aceita `linkedin.com/in/fulano` ou a URL completa e grava `https://…`; domínio diferente de `linkedin.com` → `422` |
 | `cargo` | string | até 150 |
 | `departamento` | string | até 150 |
 | `andar` | string | `Subsolo` ou `1` a `13` (vazio permitido) |

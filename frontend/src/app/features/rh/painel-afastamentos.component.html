@@ -87,6 +87,13 @@
     <p class="aviso-bloco erro">Alerta: {{ x.pessoas }} pessoas de <b>{{ x.setor }}</b> afastadas ao mesmo tempo de {{ data(x.inicio) }} a {{ data(x.fim) }}.</p>
   }
 
+  @if (p.visao === 'anual' && p.periodos.length) {
+    <section class="cartao-dados" aria-labelledby="titulo-grafico-rh">
+      <header><div><h2 id="titulo-grafico-rh">Pessoas afastadas por mês</h2><small>Pessoas distintas com férias ou licença-prêmio em cada mês de {{ filtros.ano }}.</small></div></header>
+      <div class="corpo"><app-grafico tipo="bar" titulo="Pessoas afastadas por mês" [rotulos]="meses" [series]="serieAnual()" [empilhado]="true" [altura]="220" /></div>
+    </section>
+  }
+
   <section class="cartao-dados" aria-labelledby="titulo-calendario-rh">
     <header>
       <div><h2 id="titulo-calendario-rh">{{ filtros.visao === 'anual' ? 'Ano de ' + filtros.ano : meses[(filtros.mes ?? 1) - 1] + ' de ' + filtros.ano }} · {{ p.periodos.length }} período(s)</h2></div>
@@ -100,7 +107,9 @@
       <div class="gantt-linha gantt-cabecalho">
         <div class="gantt-rotulo">Pessoa – setor</div>
         <div class="gantt-trilho gantt-eixo">
+          @for (m of eixo(); track $index) { @if (m.marca) { <i class="gantt-tick" [class.mes]="m.mes" [style.left.%]="m.posicao"></i> } }
           @for (m of eixo(); track $index) { <span [style.left.%]="m.posicao" [class.fim-de-semana]="m.fimDeSemana" [class.feriado]="!!m.feriado" [attr.title]="m.feriado">{{ m.rotulo }}</span> }
+          @if (hojePosicao() !== null) { <i class="gantt-hoje" [style.left.%]="hojePosicao()" title="Hoje"></i> }
         </div>
       </div>
       @for (a of p.periodos; track a.id) {
@@ -109,7 +118,9 @@
           <div class="gantt-rotulo" [title]="a.nome + ' – ' + a.setor">
             <span [class]="'etiqueta-afastamento ' + a.tipo">[{{ siglas[a.tipo] }}]</span> <strong>{{ a.nome }}</strong> – {{ a.setor }}
           </div>
-          <div class="gantt-trilho">
+          <div class="gantt-trilho" [style.--dias]="eixo().length">
+            @for (m of eixo(); track $index) { @if (m.marca) { <i class="gantt-grade" [class.mes]="m.mes" [style.left.%]="m.posicao"></i> } }
+            @if (hojePosicao() !== null) { <i class="gantt-hoje" [style.left.%]="hojePosicao()"></i> }
             @for (m of eixo(); track $index) { @if (m.fimDeSemana || m.feriado) { <i class="gantt-fds" [class.feriado]="!!m.feriado" [style.left.%]="m.posicao" [style.width.%]="100 / eixo().length"></i> } }
             <!-- Cada período abre o detalhe (com Aprovar/Recusar quando o usuário pode decidir) -->
             <button type="button" [class]="'gantt-barra ' + (a.status === 'pendente' ? 'pendente' : 'aprovado')" [style.left.%]="b.esquerda" [style.width.%]="b.largura"

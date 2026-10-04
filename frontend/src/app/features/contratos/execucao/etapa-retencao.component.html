@@ -78,7 +78,8 @@
         <input type="checkbox" [(ngModel)]="discriminacaoConferida" />
         Conferi que a <b>discriminação dos serviços</b> é compatível com o que foi contratado e medido no processo.
       </label>
-      <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!valido()" (click)="salvar()">Salvar retenção</button></div>
+      <div class="acoes-cartao"><app-opcao-email [(marcado)]="enviarEmail" descricao="PDF da conferência à equipe" />
+        <button type="button" class="acao-primaria" [disabled]="!valido()" (click)="salvar()">Salvar retenção</button></div>
     }
 
     @if (d.retencao; as r) {

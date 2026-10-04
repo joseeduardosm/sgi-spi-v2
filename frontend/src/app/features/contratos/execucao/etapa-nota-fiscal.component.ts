@@ -10,6 +10,7 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { DetalheCompetencia, NotaFiscal } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 
 /** Linha do formulário: uma nota fiscal (registrada e/ou com arquivos novos escolhidos). */
 interface LinhaNota {
@@ -21,10 +22,14 @@ interface LinhaNota {
 /** Etapa 3: a equipe junta uma ou mais NFs (PDF + XML de cada). Os valores vêm dos XMLs; as retenções são conferidas na etapa 4. */
 @Component({
   selector: 'app-etapa-nota-fiscal',
-  imports: [FormsModule, DatePipe, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-nota-fiscal.component.html',
 })
 export class EtapaNotaFiscalComponent implements OnChanges {
+  // "Enviar por e-mail" começa desmarcado: só envia quem marcar
+  protected readonly enviarEmail = signal(false);
+  protected readonly financeiroIds = signal<(string | number)[] | null>(null);
+  protected readonly fonteFinanceiro = () => this.api.gruposFinanceiro(this.detalhe().contrato_id);
   readonly detalhe = input.required<DetalheCompetencia>();
   readonly editavel = input(false);
   readonly atualizado = output<DetalheCompetencia>();
@@ -101,7 +106,7 @@ export class EtapaNotaFiscalComponent implements OnChanges {
       arquivo: l.arquivo ? arquivos.push(l.arquivo) - 1 : null,
       xml: l.xml ? xmls.push(l.xml) - 1 : null,
     }));
-    const dados = { recebida_em: this.recebidaEm, prazo_pagamento_dias: this.prazo, notas, arquivos, xmls };
+    const dados = { recebida_em: this.recebidaEm, prazo_pagamento_dias: this.prazo, notas, arquivos, xmls, enviar_email: this.enviarEmail(), financeiro_ids: this.financeiroIds() };
     this.dialogos.executar(this.api.notaFiscal(d.contrato_id, d.id, dados), 'Lendo os XMLs e enviando as notas fiscais…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível juntar a nota fiscal'),

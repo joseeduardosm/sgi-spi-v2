@@ -10,7 +10,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Uuid, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Uuid, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.banco import Base, agora_utc
@@ -55,12 +55,19 @@ class Usuario(Base):
     email: Mapped[str] = mapped_column(String(254), default="")
     ramal: Mapped[str] = mapped_column(String(20), default="")
     celular: Mapped[str] = mapped_column(String(30), default="")
+    # Link do perfil no LinkedIn (opcional; sempre https://…linkedin.com/…). Não passa pela validação da CGP
+    linkedin: Mapped[str] = mapped_column(String(200), default="", server_default="")
     cargo: Mapped[str] = mapped_column(String(150), default="")
     departamento: Mapped[str] = mapped_column(String(150), default="")
     andar: Mapped[str] = mapped_column(String(30), default="")
     predio: Mapped[str] = mapped_column(String(100), default="")
     data_nascimento: Mapped[date | None] = mapped_column(Date)
     gestor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    # Foto do cartão de ramais (anexo em imagem). `foto_origem`: "upload" (enviada pelo usuário) ou "ldap" (thumbnailPhoto do AD)
+    foto_anexo_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("anexos.id", ondelete="SET NULL", use_alter=True, name="fk_usuarios_foto_anexo_id"))
+    foto_origem: Mapped[str | None] = mapped_column(String(10))
+    # Opt-out: quando verdadeiro, o usuário não aparece nas listas de aniversariantes nem recebe recados no mural
+    ocultar_aniversario: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Data da última revalidação do perfil; vazia ou antiga demais = perfil pendente
     perfil_revisado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

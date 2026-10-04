@@ -3,7 +3,7 @@
 
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 
 import { ambiente } from '../../../../environments/ambiente';
 import { baixarArquivo } from '../../../shared/utilitarios/download';
@@ -11,11 +11,16 @@ import {
   Checklist,
   DefinicaoFormulario,
   DetalheCompetencia,
+  CorrecaoItens,
   Etapa,
   Formulario,
+  HistoricoItemContrato,
+  ListaCorrecoes,
+  PreviaCorrecao,
   PainelExecucao,
   RespostaAvaliacao,
 } from './contratos.models';
+import { GrupoDestinatarios } from './opcao-email.component';
 
 /** Checklists, formulários de avaliação e competências (docs/endpoints/contratos-execucao.md). */
 @Injectable({ providedIn: 'root' })
@@ -64,7 +69,48 @@ export class ExecucaoApiService {
     return this.http.delete<Checklist[]>(this.url(id, `/checklists/${checklistId}`));
   }
 
+  // --- Destinatários dos e-mails da execução ---
+  /** Prepostos ativos com e-mail, em um grupo só. */
+  gruposPrepostos(id: string): Observable<GrupoDestinatarios[]> {
+    return this.http.get<{ id: string; nome: string; email: string; cargo: string }[]>(this.url(id, '/prepostos')).pipe(
+      map((l) => [{ titulo: 'Prepostos da empresa contratada', itens: l }]),
+    );
+  }
+
+  /** Usuários do Financeiro agrupados por setor (DOF e subsetores). */
+  gruposFinanceiro(id: string): Observable<GrupoDestinatarios[]> {
+    return this.http.get<{ setor: string; usuarios: { id: number; nome: string; email: string; cargo: string }[] }[]>(this.url(id, '/financeiro')).pipe(
+      map((l) => l.map((g) => ({ titulo: g.setor, itens: g.usuarios }))),
+    );
+  }
+
+  // --- Correção de itens ---
+  correcoes(id: string): Observable<ListaCorrecoes> {
+    return this.http.get<ListaCorrecoes>(this.url(id, '/itens/correcoes'));
+  }
+
+  historicoItens(id: string): Observable<HistoricoItemContrato[]> {
+    return this.http.get<HistoricoItemContrato[]>(this.url(id, '/itens/historico'));
+  }
+
+  previaCorrecao(id: string, dados: { justificativa: string; itens: Record<string, string>[] }): Observable<PreviaCorrecao> {
+    return this.http.post<PreviaCorrecao>(this.url(id, '/itens/correcoes/previa'), dados);
+  }
+
+  proporCorrecao(id: string, dados: { justificativa: string; itens: Record<string, string>[] }): Observable<CorrecaoItens> {
+    return this.http.post<CorrecaoItens>(this.url(id, '/itens/correcoes'), dados);
+  }
+
+  decidirCorrecao(id: string, correcaoId: string, acao: 'confirmar' | 'recusar' | 'cancelar', motivo = ''): Observable<CorrecaoItens> {
+    return this.http.post<CorrecaoItens>(this.url(id, `/itens/correcoes/${correcaoId}/${acao}`), acao === 'recusar' ? { motivo } : {});
+  }
+
   // --- Formulários ---
+  /** Exclui (logicamente) uma versão inativa do formulário de avaliação. */
+  excluirFormulario(id: string, formularioId: string): Observable<Formulario[]> {
+    return this.http.delete<Formulario[]>(this.url(id, `/formularios/${formularioId}`));
+  }
+
   /** Versões do formulário de avaliação. */
   formularios(id: string): Observable<Formulario[]> {
     return this.http.get<Formulario[]>(this.url(id, '/formularios'));
@@ -119,8 +165,8 @@ export class ExecucaoApiService {
   }
 
   /** Etapa 1: conclui a medição (as NEs precisam ser as mesmas da última gravação). */
-  concluirMedicao(id: string, c: string, notas: string[]): Observable<DetalheCompetencia> {
-    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/medicao/concluir'), { notas_empenho_ids: notas });
+  concluirMedicao(id: string, c: string, notas: string[], enviarEmail = false, prepostosIds: string[] | null = null): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/medicao/concluir'), { notas_empenho_ids: notas, enviar_email: enviarEmail, prepostos_ids: enviarEmail ? prepostosIds : null });
   }
 
   /** Etapa 2: notas da avaliação inicial. */
@@ -134,8 +180,9 @@ export class ExecucaoApiService {
   }
 
   /** Etapa 2: ciência no ateste ou geração do PDF. */
-  acaoAvaliacao(id: string, c: string, acao: 'ciencia' | 'pdf'): Observable<DetalheCompetencia> {
-    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/avaliacao/${acao}`), {});
+  acaoAvaliacao(id: string, c: string, acao: 'ciencia' | 'pdf', enviarEmail = false, prepostosIds: string[] | null = null): Observable<DetalheCompetencia> {
+    const params: Record<string, string | string[]> = acao === 'pdf' && enviarEmail ? { enviar_email: 'true', ...(prepostosIds ? { prepostos_ids: prepostosIds } : {}) } : {};
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/avaliacao/${acao}`), {}, { params });
   }
 
   /** Etapa 2: envia a via assinada ou o pedido de reconsideração. */
@@ -149,9 +196,11 @@ export class ExecucaoApiService {
    */
   notaFiscal(id: string, c: string, dados: {
     recebida_em: string; prazo_pagamento_dias: number; notas: { id: string | null; arquivo: number | null; xml: number | null }[];
-    arquivos: File[]; xmls: File[];
+    arquivos: File[]; xmls: File[]; enviar_email?: boolean; financeiro_ids?: (string | number)[] | null;
   }): Observable<DetalheCompetencia> {
-    const corpo = this.formulario({ recebida_em: dados.recebida_em, prazo_pagamento_dias: dados.prazo_pagamento_dias, notas: JSON.stringify(dados.notas) });
+    const corpo = this.formulario({ recebida_em: dados.recebida_em, prazo_pagamento_dias: dados.prazo_pagamento_dias, notas: JSON.stringify(dados.notas), enviar_email: !!dados.enviar_email });
+    // Ids separados por vírgula; vazio = ninguém do Financeiro (ausente = todos)
+    if (dados.enviar_email && dados.financeiro_ids) corpo.append('financeiro_ids', dados.financeiro_ids.join(','));
     dados.arquivos.forEach((a) => corpo.append('arquivos', a));
     dados.xmls.forEach((x) => corpo.append('xmls', x));
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/nota-fiscal'), corpo);
@@ -159,7 +208,7 @@ export class ExecucaoApiService {
 
   /** Etapa 4: salva a retenção de tributos conferida (Financeiro, equipe ou SuperRoot). */
   salvarRetencao(id: string, c: string, dados: {
-    notas: ({ nota_id: string } & Record<string, string>)[]; discriminacao_conferida: boolean;
+    notas: ({ nota_id: string } & Record<string, string>)[]; discriminacao_conferida: boolean; enviar_email?: boolean;
   }): Observable<DetalheCompetencia> {
     return this.http.put<DetalheCompetencia>(this.competencia(id, c, '/retencao'), dados);
   }
@@ -180,8 +229,8 @@ export class ExecucaoApiService {
   }
 
   /** Etapa 5: anexa um documento do checklist mensal. */
-  documentoMensal(id: string, c: string, documentoId: string, arquivo: File): Observable<DetalheCompetencia> {
-    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/checklist/${documentoId}`), this.formulario({ arquivo }));
+  documentoMensal(id: string, c: string, documentoId: string, arquivo: File, validade?: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/checklist/${documentoId}`), this.formulario({ arquivo, validade }));
   }
 
   /** Etapa 6: gera o documento consolidado. */

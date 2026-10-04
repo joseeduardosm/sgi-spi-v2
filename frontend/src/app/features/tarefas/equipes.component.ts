@@ -5,6 +5,7 @@ import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { GraficoComponent, SerieGrafico } from '../../shared/componentes/grafico/grafico.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CabecalhoTarefasComponent } from './cabecalho-tarefas.component';
 import { TarefasApiService } from './tarefas-api.service';
@@ -13,7 +14,7 @@ import { Equipe } from './tarefas.models';
 /** Cartões das equipes visíveis (membro, liderança ou SuperRoot), com as subequipes logo abaixo da equipe pai. */
 @Component({
   selector: 'app-equipes',
-  imports: [RouterLink, DecimalPipe, CabecalhoTarefasComponent],
+  imports: [RouterLink, DecimalPipe, GraficoComponent, CabecalhoTarefasComponent],
   template: `
     <app-cabecalho-tarefas titulo="Equipes" [trilha]="[{ rotulo: 'Equipes' }]"
                            descricao="Acompanhe as equipes de que você participa ou lidera. A liderança vê também as equipes abaixo." />
@@ -21,6 +22,14 @@ import { Equipe } from './tarefas.models';
       <div class="principais"></div>
       <div class="secundarias"><a class="acao-secundaria" routerLink="/tarefas/equipes/nova/configurar">+ Nova equipe</a></div>
     </div>
+
+    @if (comTarefas().length) {
+      <section class="cartao-dados" aria-labelledby="titulo-situacao-equipes" style="margin-bottom: 16px">
+        <header><div><h2 id="titulo-situacao-equipes">Situação por equipe</h2><small>Tarefas em aberto, separando as atrasadas.</small></div></header>
+        <div class="corpo"><app-grafico tipo="bar" titulo="Tarefas em dia e atrasadas por equipe" [rotulos]="nomesEquipes()" [series]="serieEquipes()"
+                                        [empilhado]="true" [horizontal]="true" [altura]="alturaGrafico()" /></div>
+      </section>
+    }
 
     <div class="grade-equipes">
       @for (e of ordenadas(); track e.id) {
@@ -75,6 +84,15 @@ export class EquipesComponent implements OnInit {
     todas.filter((e) => !e.equipe_pai_id || !ids.has(e.equipe_pai_id)).forEach(incluir);
     return resultado;
   });
+
+  // Gráfico: equipes que têm tarefas em aberto (em dia × atrasadas)
+  protected readonly comTarefas = computed(() => this.ordenadas().filter((e) => e.indicadores.operacionais > 0));
+  protected readonly nomesEquipes = computed(() => this.comTarefas().map((e) => e.nome));
+  protected readonly alturaGrafico = computed(() => Math.max(140, this.comTarefas().length * 38 + 60));
+  protected readonly serieEquipes = computed<SerieGrafico[]>(() => [
+    { nome: 'Em dia', dados: this.comTarefas().map((e) => e.indicadores.operacionais - e.indicadores.atrasadas), cor: '#2f9e6b' },
+    { nome: 'Atrasadas', dados: this.comTarefas().map((e) => e.indicadores.atrasadas), cor: '#c82331' },
+  ]);
 
   ngOnInit(): void {
     this.api.equipes().subscribe({

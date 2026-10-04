@@ -68,6 +68,7 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 |---|---|
 | `GET /api/tarefas` | `ListaTarefas`. `escopo`: `minhas` (padrão), `equipe` (`equipe_id`) ou `pessoa` (`login`). Filtros: `status` (repetível), `prioridade`, `marcador_id`, `responsavel_id`, `busca` (título, descrição ou número). Os indicadores são do escopo inteiro |
 | `POST /api/tarefas` | `NovaTarefa` → `201 TarefaDetalhe` |
+| `POST /api/tarefas/com-anexos` | `multipart/form-data`: `dados` (JSON de `NovaTarefa`, como texto) e até 5 `arquivos` (PDF, Office/LibreOffice, TXT, CSV, PNG, JPG) → `201 TarefaDetalhe`. Os arquivos ficam anexados ao evento "Tarefa criada" da linha do tempo e o aviso aos envolvidos informa a quantidade. Arquivo recusado (tipo, tamanho ou vazio) ou mais de 5 → `400` e **nenhuma tarefa é criada**; `dados` inválido → `422`. Mesmas regras de permissão do `POST /api/tarefas` |
 | `GET /api/tarefas/{numero}` | `TarefaDetalhe` |
 | `PUT /api/tarefas/{numero}` | `EdicaoTarefa`: título, descrição, prioridade, participantes, marcadores |
 | `POST /api/tarefas/{numero}/prazo` | `{prazo, justificativa, versao?}` |

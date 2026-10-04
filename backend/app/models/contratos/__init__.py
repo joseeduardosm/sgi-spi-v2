@@ -32,6 +32,7 @@ from app.models.contratos.contrato import (
     DocumentoContrato,
     ItemContrato,
 )
+from app.models.contratos.correcoes import CorrecaoItens, HistoricoItemContrato
 from app.models.contratos.diario import AnexoOcorrencia, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
 from app.models.contratos.empresa import EmpresaContratada, PrepostoEmpresa
 from app.models.contratos.execucao import (
@@ -74,6 +75,8 @@ __all__ = [
     "Competencia",
     "ConsultaCadin",
     "Contrato",
+    "CorrecaoItens",
+    "HistoricoItemContrato",
     "DesignacaoEquipe",
     "DocumentoContrato",
     "DocumentoMensal",

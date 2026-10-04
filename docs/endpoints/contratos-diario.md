@@ -116,3 +116,6 @@ curl -X POST .../api/contratos/{contrato_id}/diario \
 - Lista em forma de chat: quem registrou (nome e papel), data da ocorrência, data e hora do registro, relato,
   glosas, o selo "Impacta a avaliação" com os itens, os anexos (links de download,
   `ContratosApiService.baixarAnexoOcorrencia`) e o resultado do e-mail, com **Reenviar** em caso de falha. Botão **Baixar PDF**.
+
+
+**E-mail da ocorrência:** o envio por e-mail à equipe e aos prepostos só acontece com `enviar_email = true` em `dados` (padrão `false`); o reenvio manual continua disponível.

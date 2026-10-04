@@ -133,6 +133,7 @@ npx ng build              # produção → dist/sgi-spi/browser (servido pelo Ng
 | `URL_BANCO_DADOS` | Conexão PostgreSQL (`postgresql+psycopg://usuario:senha@host:5432/banco`) |
 | `CHAVE_CIFRA_LDAP` | Chave Fernet que cifra a senha de bind LDAP. Trocar exige informar as senhas de novo |
 | `INTERVALO_SINCRONIZACAO_LDAP_MINUTOS` | Sincronização automática do diretório ativo. Padrão 15; `0` desativa |
+| `HORA_PARABENS_ANIVERSARIO` | Hora (0 a 23) do parabéns automático de aniversário. Padrão 8; `-1` desativa |
 | `TEMPO_LIMITE_LDAP_SEGUNDOS` | Tempo limite de conexão LDAP. Padrão 5 |
 | `LOGIN_ADMIN` | Conta administrativa principal, SuperRoot local (`root` no desenvolvimento) |
 | `HASH_SENHA_ADMIN` | Hash bcrypt da senha, reaplicado à conta a cada inicialização. Nunca grave a senha em texto puro |

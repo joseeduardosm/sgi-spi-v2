@@ -23,6 +23,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    false,
     text,
     true,
 )
@@ -64,7 +65,7 @@ class Checklist(Base):
 
     contrato: Mapped[Contrato] = relationship(back_populates="checklists")
     itens: Mapped[list["ItemChecklist"]] = relationship(
-        back_populates="checklist", cascade="all, delete-orphan", order_by="ItemChecklist.ordem"
+        back_populates="checklist", cascade="all, delete-orphan", order_by="[ItemChecklist.obrigatorio.desc(), ItemChecklist.ordem]"
     )
 
 
@@ -80,6 +81,8 @@ class ItemChecklist(Base):
     observacao: Mapped[str] = mapped_column(String(1000), default="")
     # Obrigatório: precisa estar anexado para concluir a etapa; opcional: pode ficar sem anexo
     obrigatorio: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Documento com validade (certidões, apólices…): informa-se até quando vale e, se ainda valer, vira o documento da competência seguinte
+    com_validade: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     checklist: Mapped[Checklist] = relationship(back_populates="itens")
 
@@ -104,6 +107,8 @@ class FormularioAvaliacao(Base):
     ativado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criado_por_nome: Mapped[str] = mapped_column(String(250))
+    # Exclusão lógica (só versões inativas): a versão some da lista, mas continua nas avaliações que a usaram
+    excluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     contrato: Mapped[Contrato] = relationship(back_populates="formularios")
@@ -163,6 +168,8 @@ class Competencia(Base):
     # Etapa 1 — medição
     medicao_iniciada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     medicao_concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Enquanto a medição não é concluída, a competência regular acompanha o cadastro dos itens: guarda com qual `Contrato.versao_cadastro` foi calculada
+    versao_cadastro_sincronizada: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     # Etapa 3 — nota fiscal (uma ou mais)
     # As notas fiscais (uma ou mais, cada uma com PDF e XML) ficam em `notas_fiscais`
@@ -230,7 +237,7 @@ class Competencia(Base):
         back_populates="competencia", cascade="all, delete-orphan", order_by="NotaFiscalCompetencia.ordem"
     )
     documentos: Mapped[list["DocumentoMensal"]] = relationship(
-        back_populates="competencia", cascade="all, delete-orphan", order_by="DocumentoMensal.ordem"
+        back_populates="competencia", cascade="all, delete-orphan", order_by="[DocumentoMensal.obrigatorio.desc(), DocumentoMensal.ordem]"
     )
     avaliacao: Mapped["AvaliacaoCompetencia | None"] = relationship(back_populates="competencia", cascade="all, delete-orphan", uselist=False)
     # Créditos de desconto de reajuste abatidos no valor autorizado desta competência
@@ -385,6 +392,11 @@ class DocumentoMensal(Base):
     observacao: Mapped[str] = mapped_column(String(1000), default="")
     # Copiado do item do checklist; os opcionais não bloqueiam a conclusão da etapa
     obrigatorio: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Copiado do item do checklist; `validade_ate` é informada no envio. Um documento ainda válido é reaproveitado na competência seguinte
+    # e `reaproveitado_de` guarda a competência (mês) de onde veio o arquivo
+    com_validade: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    validade_ate: Mapped[date | None] = mapped_column(Date)
+    reaproveitado_de: Mapped[date | None] = mapped_column(Date)
     # PDF anexado pelo usuário (vazio enquanto não enviado)
     anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -31,6 +31,7 @@ from app.core.erros import (
     tratar_erro_inesperado,
     tratar_erro_validacao,
 )
+from app.services.agendador_aniversarios import AgendadorParabens
 from app.services.agendador_ldap import AgendadorSincronizacaoLdap
 from app.services.servico_usuarios import garantir_conta_admin
 
@@ -49,9 +50,13 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     # Inicia a sincronização periódica dos usuários do LDAP em segundo plano
     agendador = AgendadorSincronizacaoLdap()
     agendador.iniciar()
+    # Parabéns automático de aniversário (mensagem interna + e-mail, uma vez por dia)
+    agendador_parabens = AgendadorParabens()
+    agendador_parabens.iniciar()
     yield
-    # Encerramento: para a rotina de sincronização
+    # Encerramento: para as rotinas em segundo plano
     agendador.parar()
+    agendador_parabens.parar()
 
 
 app = FastAPI(

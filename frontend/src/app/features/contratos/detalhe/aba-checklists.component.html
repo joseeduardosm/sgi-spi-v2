@@ -1,17 +1,29 @@
 <section class="cartao-dados" aria-labelledby="titulo-checklists">
   <header>
     <div><h2 id="titulo-checklists">Checklists</h2><small>Documentos mensais exigidos na etapa 5 de cada competência.</small></div>
-    @if (podeEditar()) { <button type="button" class="acao-primaria" (click)="abrir()"><span>+</span> Criar checklist</button> }
+    @if (podeEditar()) {
+      <div class="acoes-cartao">
+        <app-importacao-modelo-xlsx tipo="checklist" [contratoId]="contratoId()" (importado)="recarregar()" />
+        <button type="button" class="acao-primaria" (click)="abrir()"><span>+</span> Criar checklist</button>
+      </div>
+    }
   </header>
   <div class="corpo">
+    @if (checklists().length > 1) {
+      <div class="barra-dobrar"><button type="button" class="link-arquivo" (click)="expandirTodos(true)">Expandir todos</button><button type="button" class="link-arquivo" (click)="expandirTodos(false)">Recolher todos</button></div>
+    }
     @for (c of checklists(); track c.id) {
-      <article class="indicador" style="margin-bottom: 12px">
-        <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
+      <article class="indicador cartao-dobravel" style="margin-bottom: 12px">
+        <button type="button" class="cabecalho-dobravel" [attr.aria-expanded]="aberta(c)" [attr.aria-controls]="'checklist-' + c.id" (click)="alternar(c)">
+          <span class="seta" [class.aberta]="aberta(c)" aria-hidden="true">▸</span>
           <strong style="font-size: 14px">v{{ c.versao }} · {{ c.nome }}</strong>
+          <small>{{ c.itens.length }} documento(s)</small>
           <span class="selo-situacao" [class.inativo]="!c.ativo">{{ c.ativo ? 'Ativo' : 'Inativo' }}</span>
-        </div>
+        </button>
+        @if (aberta(c)) {
+        <div [id]="'checklist-' + c.id">
         <ol style="margin: 10px 0; padding-left: 20px; font-size: 12px; color: #3d454e">
-          @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — {{ i.observacao }}</small> }</li> }
+          @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.com_validade) { <span class="etiqueta">Com validade</span> }@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — {{ i.observacao }}</small> }</li> }
         </ol>
         <small>Criado por {{ c.criado_por_nome }} em {{ c.criado_em | date: 'dd/MM/yyyy HH:mm' }}{{ c.ativado_em ? ' · ativado em ' + (c.ativado_em | date: 'dd/MM/yyyy HH:mm') : '' }}</small>
         @if (podeEditar()) {
@@ -24,6 +36,8 @@
             <button type="button" class="acao-secundaria acao-pequena" (click)="duplicar(c)">Duplicar</button>
           </div>
         }
+        </div>
+        }
       </article>
     } @empty {
       <p class="estado-vazio">Nenhum checklist cadastrado. Um checklist ativo é necessário para gerar as competências.</p>
@@ -33,7 +47,7 @@
 
 @if (aberto()) {
   <div class="fundo-modal" role="presentation" (click)="aberto.set(false)"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-form-checklist">
+  <section class="modal-portal modal-largo modal-checklist" role="dialog" aria-modal="true" aria-labelledby="titulo-form-checklist">
     <header>
       <div><span class="modal-sobretitulo">{{ emEdicao ? 'Versão v' + emEdicao.versao : 'Nova versão' }}</span><h2 id="titulo-form-checklist">{{ emEdicao ? 'Editar checklist' : 'Criar checklist' }}</h2></div>
       <button type="button" aria-label="Fechar" (click)="aberto.set(false)">×</button>
@@ -60,7 +74,7 @@
       <p class="secao-formulario">Documentos ({{ itens.length }})</p>
       <div class="tabela-gestao-envoltorio lista-documentos-checklist">
         <table class="tabela-gestao">
-          <thead><tr><th>Nº</th><th>Documento</th><th>Na execução</th><th class="coluna-acoes">Ações</th></tr></thead>
+          <thead><tr><th>Nº</th><th>Documento</th><th>Na execução</th><th>Validade</th><th class="coluna-acoes">Ações</th></tr></thead>
           <tbody>
             @for (i of itens; track $index) {
               <tr>
@@ -73,6 +87,12 @@
                   </div>
                 </td>
                 <td>
+                  <div class="seletor-segmentado pequeno" role="radiogroup" [attr.aria-label]="'Validade do documento ' + i.nome">
+                    <button type="button" role="radio" [attr.aria-checked]="!i.com_validade" [class.ativo]="!i.com_validade" (click)="i.com_validade = false">Sem validade</button>
+                    <button type="button" role="radio" [attr.aria-checked]="i.com_validade" [class.ativo]="i.com_validade" (click)="i.com_validade = true">Com validade</button>
+                  </div>
+                </td>
+                <td>
                   <div class="acoes-linha">
                     <button type="button" aria-label="Subir" [disabled]="$first" (click)="mover($index, -1)">↑</button>
                     <button type="button" aria-label="Descer" [disabled]="$last" (click)="mover($index, 1)">↓</button>
@@ -81,7 +101,7 @@
                 </td>
               </tr>
             } @empty {
-              <tr><td class="estado-vazio" colspan="4">Nenhum documento ainda. Adicione abaixo{{ modelos().length && !emEdicao ? ' ou parta de um modelo global' : '' }}.</td></tr>
+              <tr><td class="estado-vazio" colspan="5">Nenhum documento ainda. Adicione abaixo{{ modelos().length && !emEdicao ? ' ou parta de um modelo global' : '' }}.</td></tr>
             }
           </tbody>
         </table>
@@ -104,9 +124,16 @@
             <button type="button" role="radio" [attr.aria-checked]="!novoObrigatorio" [class.ativo]="!novoObrigatorio" (click)="novoObrigatorio = false">Opcional</button>
           </div>
         </div>
+        <div>
+          <span class="rotulo-campo" id="rotulo-novo-validade">Validade</span>
+          <div class="seletor-segmentado" role="radiogroup" aria-labelledby="rotulo-novo-validade">
+            <button type="button" role="radio" [attr.aria-checked]="!novoComValidade" [class.ativo]="!novoComValidade" (click)="novoComValidade = false">Sem validade</button>
+            <button type="button" role="radio" [attr.aria-checked]="novoComValidade" [class.ativo]="novoComValidade" (click)="novoComValidade = true">Com validade</button>
+          </div>
+        </div>
         <button type="button" class="acao-secundaria" [disabled]="!novoDocumento.trim()" (click)="adicionar()"><span>+</span> Adicionar</button>
       </div>
-      <p class="dica-formulario">Obrigatório: precisa ser anexado para concluir o checklist da competência. Opcional: pode ficar sem anexo.</p>
+      <p class="dica-formulario">Obrigatório: precisa ser anexado para concluir o checklist da competência. Opcional: pode ficar sem anexo. Documento com validade: informa-se até quando vale e, se ainda valer no fim do período da competência seguinte, ele é preenchido automaticamente nela.</p>
 
       <footer>
         <small class="dica-formulario resumo-checklist">{{ itens.length }} documento(s) · {{ obrigatorios() }} obrigatório(s)</small>

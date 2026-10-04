@@ -9,6 +9,7 @@ export interface DadosPerfil {
   email: string;
   ramal: string;
   celular: string;
+  linkedin: string;
   cargo: string;
   departamento: string;
   andar: string;

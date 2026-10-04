@@ -32,6 +32,10 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           { id: 'tarefas', rotulo: 'Tarefas', rota: '/tarefas' },
           // Melhorias: minhas sugestões para todos; triagem para quem tem CONTROLE_TOTAL em `melhorias`
           { id: 'melhorias', rotulo: 'Melhorias', rota: '/melhorias' },
+          // Painel Executivo: gráficos de contratos, RH e tarefas para a Diretoria (acesso decidido pela API)
+          { id: 'painel-executivo', rotulo: 'Painel Executivo', rota: '/painel-executivo', painelExecutivo: true },
+          // Ramais: diretório em cartões de visita, para todos
+          { id: 'ramais', rotulo: 'Ramais', rota: '/ramais' },
           // Protocolo: numeração institucional (ofícios, portarias, resoluções); aparece para quem tem o recurso ACL `protocolo`
           { id: 'protocolo', rotulo: 'Protocolo', rota: '/protocolo', acl: 'protocolo' },
           // Contratações: ETP e TR com revisão e versões; aparece para quem tem o recurso ACL `contratacoes`

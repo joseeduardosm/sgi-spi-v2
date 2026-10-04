@@ -85,6 +85,8 @@ class Contrato(Base):
     vigencia_inicial_meses: Mapped[int] = mapped_column(Integer)
     vigencia_maxima_meses: Mapped[int] = mapped_column(Integer)
     periodicidade_meses: Mapped[int] = mapped_column(Integer, default=1)
+    # Quando ligado, as competências podem ser medidas sem esperar o fim do período (sem a trava do 1º dia do mês seguinte)
+    liberar_todas_competencias: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Mês do ano em que o contrato pode ser reajustado
     mes_reajuste: Mapped[int] = mapped_column(Integer)
     # Processos SEI de gestão e de execução (número e link)
@@ -99,6 +101,8 @@ class Contrato(Base):
     criador_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     # Controle de concorrência: cada gravação incrementa; quem salvou uma versão antiga recebe 409
     versao: Mapped[int] = mapped_column(Integer, default=1)
+    # Sobe a cada mudança nos itens (preço, quantidades, inclusão, exclusão). As competências abertas guardam com qual versão foram calculadas
+    versao_cadastro: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 

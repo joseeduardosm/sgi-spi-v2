@@ -3,6 +3,7 @@
 """Formatos de entrada e saída das rotas de usuários e do perfil institucional."""
 
 import re
+from urllib.parse import urlsplit, urlunsplit
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -20,6 +21,7 @@ class DadosPerfil(BaseModel):
     email: str = Field("", max_length=254, description="E-mail institucional.")
     ramal: str = Field("", max_length=20, description="Ramal.")
     celular: str = Field("", max_length=30, description="Celular.")
+    linkedin: str = Field("", max_length=200, description="Link do perfil no LinkedIn (opcional). Aceita `linkedin.com/in/fulano`; é gravado como `https://…`. Outro domínio → 422.")
     cargo: str = Field("", max_length=150, description="Cargo.")
     departamento: str = Field("", max_length=150, description="Departamento.")
     andar: str = Field("", max_length=30, description="Andar: Subsolo ou 1 a 13.")
@@ -27,11 +29,23 @@ class DadosPerfil(BaseModel):
     data_nascimento: date | None = Field(None, description="Data de nascimento (AAAA-MM-DD).")
     gestor_id: int | None = Field(None, description="ID do gestor imediato.")
 
-    @field_validator("nome_completo", "email", "ramal", "celular", "cargo", "departamento", "andar", "predio")
+    @field_validator("nome_completo", "email", "ramal", "celular", "linkedin", "cargo", "departamento", "andar", "predio")
     @classmethod
     def _aparar(cls, valor: str) -> str:
         """Remove espaços das pontas de todos os campos de texto."""
         return valor.strip()
+
+    @field_validator("linkedin")
+    @classmethod
+    def _validar_linkedin(cls, valor: str) -> str:
+        """Vazio é permitido; preenchido, precisa ser um endereço do domínio linkedin.com (guardado com https://)."""
+        if not valor:
+            return valor
+        url = urlsplit(valor if "://" in valor else "https://" + valor)
+        host = (url.hostname or "").lower()
+        if url.scheme not in ("http", "https") or not (host == "linkedin.com" or host.endswith(".linkedin.com")) or not url.path.strip("/"):
+            raise ValueError("informe o link do seu perfil, como https://www.linkedin.com/in/seu-nome")
+        return urlunsplit(("https", url.netloc.lower(), url.path.rstrip("/"), "", ""))[:200]
 
     @field_validator("email")
     @classmethod

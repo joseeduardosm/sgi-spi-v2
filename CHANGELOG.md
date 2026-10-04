@@ -6,6 +6,18 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-04
+
+### Adicionado
+- **Importação de checklists e formulários de avaliação por planilha XLSX**, no mesmo fluxo da importação de contratos (modelo, prévia com erros por linha e campo, confirmação). Documentação em `docs/endpoints/contratos-importacao-modelos-xlsx.md`.
+  - No contrato (abas Checklists e Formulários): cria uma versão **inativa**. `GET`/`POST /api/contratos/{contrato_id}/{checklists|formularios}/importacao-xlsx/{modelo|previa}`, `POST /api/contratos/{contrato_id}/checklists/importacao-xlsx` e `POST /api/contratos/{contrato_id}/formularios/importacao-xlsx`.
+  - Nos modelos globais (SuperRoot): `GET`/`POST /api/contratos/modelos/importacao-xlsx/{checklist|formulario}[/modelo|/previa]`.
+  - O modelo da planilha é gerado pela API, com exemplo preenchido. As regras são as do cadastro manual (escala crescente, pesos de cada grupo somando 100).
+  - Migração `e5a8c3d7f2b1`: recurso de ACL `importacao-modelos`, que nasce fechado (só a conta administrativa); o SuperRoot libera os demais.
+
+### Alterado
+- **Ramais:** a página usa toda a largura da janela (antes limitada a 1280 px), com mais colunas em telas largas (cartões a partir de 270 px) e 60 contatos por página (antes 24).
+
 ## 2026-10-02
 
 ### Adicionado

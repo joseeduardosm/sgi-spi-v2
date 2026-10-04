@@ -171,6 +171,8 @@ def revisar_perfil(sessao: Session, usuario: Usuario, dados: DadosPerfil) -> Usu
         novas.append(_registrar(sessao, usuario, campo, novo, usuario, "validada" if direto else "pendente"))
         if direto:
             setattr(usuario, campo, novo)
+    # LinkedIn é divulgação voluntária do próprio usuário: vale na hora, sem validação da CGP
+    usuario.linkedin = dados.linkedin
     usuario.perfil_revisado_em = agora_utc()
     auditar(sessao, usuario.login, "usuario.revisar-perfil", usuario.login,
             dados={"alteracoes": [a.campo for a in novas], "pendentes": not direto and bool(novas)})

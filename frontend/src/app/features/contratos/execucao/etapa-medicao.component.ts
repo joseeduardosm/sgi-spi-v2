@@ -10,12 +10,13 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { DetalheCompetencia, NotaSelecionada } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 import { paraDecimalApi, paraDecimalTela, ROTULOS_PAPEL } from '../compartilhado/rotulos';
 
 /** Etapa 1: medição, NEs em ordem de consumo, ciências (uma já basta) e memória de cálculo. */
 @Component({
   selector: 'app-etapa-medicao',
-  imports: [FormsModule, DatePipe, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-medicao.component.html',
 })
 export class EtapaMedicaoComponent implements OnChanges {
@@ -38,6 +39,10 @@ export class EtapaMedicaoComponent implements OnChanges {
   // Houve alteração não salva (mostra o aviso para salvar)
   protected readonly alterado = signal(false);
   protected readonly reenviando = signal(false);
+  // "Enviar por e-mail" começa desmarcado: só envia quem marcar
+  protected readonly enviarEmail = signal(false);
+  protected readonly prepostosIds = signal<(string | number)[] | null>(null);
+  protected readonly fontePrepostos = () => this.api.gruposPrepostos(this.detalhe().contrato_id);
 
   /** Sempre que a competência muda (entrada nova), recarrega os campos a partir dela. */
   ngOnChanges(): void {
@@ -156,12 +161,12 @@ export class EtapaMedicaoComponent implements OnChanges {
     const d = this.detalhe();
     const ok = await this.dialogos.confirmar({
       titulo: 'Concluir a medição?',
-      mensagem: 'A medição fica somente leitura, a quantidade medida soma no executado dos itens e a memória de cálculo em PDF é gerada. Em seguida, a memória e o diário de bordo do período são enviados por e-mail à equipe e ao preposto, pedindo a nota fiscal em até 48 horas.',
+      mensagem: 'A medição fica somente leitura, a quantidade medida soma no executado dos itens e a memória de cálculo em PDF é gerada. ' + (this.enviarEmail() ? 'Em seguida, a memória e o diário de bordo do período são enviados por e-mail à equipe e ao preposto, pedindo a nota fiscal em até 48 horas.' : 'Nenhum e-mail será enviado agora (você pode reenviar depois).'),
       rotuloConfirmar: 'Concluir medição',
       segundos: 5,
     });
     if (!ok) return;
-    this.dialogos.executar(this.api.concluirMedicao(d.contrato_id, d.id, d.notas_selecionadas.map((n) => n.id)), 'Gerando a memória de cálculo…').subscribe({
+    this.dialogos.executar(this.api.concluirMedicao(d.contrato_id, d.id, d.notas_selecionadas.map((n) => n.id), this.enviarEmail(), this.prepostosIds() as string[] | null), 'Gerando a memória de cálculo…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível concluir a medição'),
     });

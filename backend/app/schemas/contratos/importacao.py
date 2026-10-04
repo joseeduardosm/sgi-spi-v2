@@ -9,6 +9,8 @@ célula pode estar vazia ou inválida; nesse caso, o problema aparece em `erros`
 
 import uuid
 from datetime import date
+from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -89,6 +91,68 @@ class PreviaImportacao(BaseModel):
     valor_global_estimado: ValorMonetario | None = Field(
         None, description="Contínuos: quantidade mensal × preço × vigência inicial; sob demanda: teto × preço."
     )
+    erros: list[ErroImportacao]
+    avisos: list[str]
+    pode_importar: bool = Field(..., description="Verdadeiro quando não há erros.")
+
+
+# ---------------------------------------------------------------------------------------------
+# Prévia da importação de checklist e de formulário de avaliação
+# ---------------------------------------------------------------------------------------------
+
+class DocumentoPrevia(BaseModel):
+    """Documento lido de uma linha da planilha do checklist."""
+
+    linha: int
+    nome: str
+    observacao: str = ""
+    obrigatorio: bool = True
+    com_validade: bool = False
+
+
+class NotaPrevia(BaseModel):
+    """Nota da escala lida da aba Escala (valor vazio quando a célula está em branco ou inválida)."""
+
+    linha: int
+    valor: Decimal | None = None
+    legenda: str = ""
+
+
+class FaixaPrevia(BaseModel):
+    """Faixa de liberação lida da aba Faixas."""
+
+    linha: int
+    minimo: Decimal | None = None
+    maximo: Decimal | None = Field(None, description="Nulo = sem teto.")
+    percentual: Decimal | None = None
+    notas_zero: int | None = None
+
+
+class ItemFormularioPrevia(BaseModel):
+    """Item de avaliação lido da aba Itens."""
+
+    linha: int
+    nome: str = ""
+    descricao: str = ""
+    peso: Decimal | None = None
+
+
+class GrupoPrevia(BaseModel):
+    """Grupo de itens do formulário, na ordem em que aparece na planilha."""
+
+    nome: str
+    itens: list[ItemFormularioPrevia]
+
+
+class PreviaImportacaoModelo(BaseModel):
+    """Resposta da prévia de checklist ou formulário: o que será criado e o que impede a importação."""
+
+    tipo: Literal["checklist", "formulario"]
+    nome: str = ""
+    documentos: list[DocumentoPrevia] = Field(default_factory=list, description="Só para `checklist`.")
+    escala: list[NotaPrevia] = Field(default_factory=list, description="Só para `formulario`.")
+    faixas: list[FaixaPrevia] = Field(default_factory=list, description="Só para `formulario`.")
+    grupos: list[GrupoPrevia] = Field(default_factory=list, description="Só para `formulario`.")
     erros: list[ErroImportacao]
     avisos: list[str]
     pode_importar: bool = Field(..., description="Verdadeiro quando não há erros.")

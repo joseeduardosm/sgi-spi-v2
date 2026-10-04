@@ -18,7 +18,7 @@ from app.core.criptografia import cifrar_segredo
 from app.models.diretorio_ldap import DiretorioLdap
 from app.models.usuario import OrigemUsuario, Usuario
 from app.schemas.ldap import AlteracaoDiretorio, CriacaoDiretorio
-from app.services import cliente_ldap
+from app.services import cliente_ldap, servico_diretorio
 from app.services.cliente_ldap import IdentidadeLdap, ParametrosDiretorio, ResultadoTesteLdap
 from app.services.servico_auditoria import auditar
 from app.services.servico_usuarios import aplicar_identidade, buscar_por_login
@@ -191,6 +191,8 @@ def aplicar_fotografia(sessao: Session, diretorio: DiretorioLdap, identidades: l
             aplicar_identidade(usuario, identidade)
             usuario.ativo = identidade.ativo
             sessao.flush()
+            if identidade.foto:
+                servico_diretorio.importar_foto_ldap(sessao, usuario, identidade.foto)
             por_login[usuario.login.lower()] = usuario
             criados += 1
         else:
@@ -198,6 +200,8 @@ def aplicar_fotografia(sessao: Session, diretorio: DiretorioLdap, identidades: l
             aplicar_identidade(usuario, identidade)
             if usuario.origem == OrigemUsuario.LDAP and not usuario.superusuario:
                 usuario.ativo = identidade.ativo
+            if identidade.foto:
+                servico_diretorio.importar_foto_ldap(sessao, usuario, identidade.foto)
             atualizados += 1
 
     # Contas exclusivamente LDAP que sumiram do diretório são desativadas

@@ -9,6 +9,7 @@ import { Router } from '@angular/router';
 
 import { AutenticacaoService } from '../../core/autenticacao/autenticacao.service';
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
+import { FotoPerfilComponent } from '../diretorio/foto-perfil.component';
 import { CamposPerfilComponent } from '../usuarios/campos-perfil.component';
 import { criarFormularioPerfil, dadosDoFormularioPerfil, gestorComoOpcao, preencherFormularioPerfil } from '../usuarios/formulario-perfil';
 import { UsuariosApiService } from '../usuarios/usuarios-api.service';
@@ -18,7 +19,7 @@ import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.componen
 /** Atualização e revalidação do próprio perfil institucional. */
 @Component({
   selector: 'app-perfil',
-  imports: [ReactiveFormsModule, CamposPerfilComponent, DatePipe, TrilhaComponent],
+  imports: [ReactiveFormsModule, CamposPerfilComponent, FotoPerfilComponent, DatePipe, TrilhaComponent],
   templateUrl: './perfil.component.html',
 })
 export class PerfilComponent implements OnInit {

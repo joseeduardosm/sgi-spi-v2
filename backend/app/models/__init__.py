@@ -21,6 +21,7 @@ from app.models.contratos import (
     ItemContrato,
     PrepostoEmpresa,
 )
+from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
 from app.models.diretorio_ldap import DiretorioLdap
 from app.models.envio_changelog import EnvioChangelog
 from app.models.melhorias import AnexoSugestao, EventoSugestao, SugestaoMelhoria
@@ -68,7 +69,7 @@ __all__ = [
     "ItemContrato",
     "PrepostoEmpresa",
     "DiretorioLdap",
-    "EnvioChangelog",
+    "EnvioChangelog", "FavoritoDiretorio", "ParabensAniversario",
     "EntregaMensagem",
     "Mensagem",
     "AlteracaoCadastral",

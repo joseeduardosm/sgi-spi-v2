@@ -5,11 +5,14 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
+import { GraficoComponent, SerieGrafico } from '../../../shared/componentes/grafico/grafico.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { PainelContratos } from '../compartilhado/contratos.models';
+
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 /**
  * Painel de contratos: o que eu preciso fazer (pendências), onde está o risco (alertas),
@@ -17,7 +20,7 @@ import { PainelContratos } from '../compartilhado/contratos.models';
  */
 @Component({
   selector: 'app-painel',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, GraficoComponent, ...PIPES_FORMATACAO],
   templateUrl: './painel.component.html',
 })
 export class PainelComponent implements OnInit {
@@ -31,10 +34,13 @@ export class PainelComponent implements OnInit {
   protected empresaId = '';
   protected contratoId = '';
 
-  // Maior valor do gráfico: serve de 100% para a altura das barras
-  protected readonly escala = computed(() => {
+  // Séries do gráfico (em milhares de reais) e rótulos dos meses (AAAA-MM-DD → Jan, Fev…)
+  protected readonly rotulosMeses = computed(() => (this.painel()?.execucao.meses ?? []).map((m) => MESES[Number(m.competencia.slice(5, 7)) - 1]));
+  protected readonly series = computed<SerieGrafico[]>(() => {
     const meses = this.painel()?.execucao.meses ?? [];
-    return Math.max(1, ...meses.flatMap((m) => [Number(m.previsto), Number(m.medido), Number(m.pago)]));
+    const mil = (v: string) => Number(v) / 1000;
+    return [{ nome: 'Previsto', dados: meses.map((m) => mil(m.previsto)), cor: '#c9ced4' }, { nome: 'Medido', dados: meses.map((m) => mil(m.medido)), cor: '#2f5d8a' },
+            { nome: 'Pago', dados: meses.map((m) => mil(m.pago)), cor: '#c82331' }];
   });
   // Quantidade de riscos de gravidade alta (destaque no cartão)
   protected readonly alertasAltos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.filter((r) => r.gravidade === 'alta').length, 0) ?? 0);
@@ -73,11 +79,6 @@ export class PainelComponent implements OnInit {
       next: (p) => this.painel.set(p),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar o painel'),
     });
-  }
-
-  /** Altura da barra do gráfico, em % da escala. */
-  protected altura(valor: string): number {
-    return (Number(valor) / this.escala()) * 100;
   }
 }
 

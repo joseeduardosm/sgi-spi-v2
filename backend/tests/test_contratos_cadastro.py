@@ -287,3 +287,19 @@ def test_valor_unitario_com_4_casas(cliente, admin):
     # A planilha de itens mostra o preço com as casas do valor (R$ 0,075)
     from app.services.contratos.documentos_execucao import moeda_unitaria
     assert moeda_unitaria(Decimal(i["valor_unitario"])) == "R$ 0,075"
+
+
+def test_carteira_meus_contratos_so_da_equipe_vigente(cliente, admin):
+    """`meus=true` lista só os contratos em que o usuário integra a equipe vigente."""
+    from tests.apoio_contratos import restringir_contratos
+    from tests.conftest import cabecalho, criar_usuario
+
+    ana, bia = criar_usuario("ana_meus"), criar_usuario("bia_meus")
+    restringir_contratos(cliente, admin, {ana: "MODIFICACAO", bia: "MODIFICACAO"})
+    c1 = criar_contrato(cliente, admin, equipe={"gestor": ana})
+    c2 = criar_contrato(cliente, admin, equipe={"gestor": bia}, numero="002/2026", empresa_id=c1["empresa"]["id"])
+    h = cabecalho(cliente, "ana_meus")
+    todos = cliente.get("/api/contratos", headers=h).json()
+    assert {i["id"] for i in todos["itens"]} >= {c1["id"], c2["id"]}
+    meus = cliente.get("/api/contratos", params={"meus": "true"}, headers=h).json()
+    assert [i["id"] for i in meus["itens"]] == [c1["id"]] and meus["total"] == 1

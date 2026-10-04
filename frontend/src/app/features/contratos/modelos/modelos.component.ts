@@ -9,12 +9,13 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { DefinicaoFormulario, Modelo } from '../compartilhado/contratos.models';
+import { ImportacaoModeloXlsxComponent } from '../compartilhado/importacao-modelo-xlsx.component';
 import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-formulario.component';
 
 /** Modelos globais (SuperRoot): checklists e formulários clonados nos contratos. */
 @Component({
   selector: 'app-modelos',
-  imports: [FormsModule, DatePipe, CabecalhoModuloComponent, EditorFormularioComponent],
+  imports: [FormsModule, DatePipe, CabecalhoModuloComponent, EditorFormularioComponent, ImportacaoModeloXlsxComponent],
   // Esc fecha a janela do checklist
   host: { '(document:keydown.escape)': 'checklistAberto.set(false)' },
   template: `
@@ -24,7 +25,10 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
         <section class="cartao-dados" [attr.aria-labelledby]="'titulo-modelos-' + tipo.id">
           <header>
             <h2 [id]="'titulo-modelos-' + tipo.id">{{ tipo.rotulo }}</h2>
-            <button type="button" class="acao-primaria acao-pequena" (click)="abrir(tipo.id)">+ Novo</button>
+            <div class="acoes-cartao">
+              <app-importacao-modelo-xlsx [tipo]="tipo.id" [pequeno]="true" (importado)="carregar()" />
+              <button type="button" class="acao-primaria acao-pequena" (click)="abrir(tipo.id)">+ Novo</button>
+            </div>
           </header>
           <div class="corpo">
             @for (m of doTipo(tipo.id); track m.id) {
@@ -56,17 +60,21 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
             <div class="linha-caixas" style="align-self: end"><label><input type="checkbox" name="ativo" [(ngModel)]="ativo" /> Ativo</label></div>
           </div>
           @for (i of itens; track $index) {
-            <div class="grade-formulario" style="grid-template-columns: 2fr 2fr 1fr auto">
+            <div class="grade-formulario" style="grid-template-columns: 2fr 2fr 1fr 1fr auto">
               <div><label [for]="'modelo-doc-' + $index">Documento</label><input [id]="'modelo-doc-' + $index" [name]="'doc' + $index" [(ngModel)]="i.nome" /></div>
               <div><label [for]="'modelo-obs-' + $index">Observação</label><input [id]="'modelo-obs-' + $index" [name]="'obs' + $index" [(ngModel)]="i.observacao" /></div>
               <div><label [for]="'modelo-obr-' + $index">Tipo</label>
                 <select [id]="'modelo-obr-' + $index" [name]="'obr' + $index" [(ngModel)]="i.obrigatorio">
                   <option [ngValue]="true">Obrigatório</option><option [ngValue]="false">Opcional</option>
                 </select></div>
+              <div><label [for]="'modelo-val-' + $index">Validade</label>
+                <select [id]="'modelo-val-' + $index" [name]="'val' + $index" [(ngModel)]="i.com_validade">
+                  <option [ngValue]="false">Sem validade</option><option [ngValue]="true">Com validade</option>
+                </select></div>
               <div style="align-self: center"><button type="button" class="link-arquivo" (click)="itens.splice($index, 1)">remover</button></div>
             </div>
           }
-          <button type="button" class="acao-secundaria acao-pequena" (click)="itens.push({ nome: '', observacao: '', obrigatorio: true })">+ Documento</button>
+          <button type="button" class="acao-secundaria acao-pequena" (click)="itens.push({ nome: '', observacao: '', obrigatorio: true, com_validade: false })">+ Documento</button>
           <footer style="margin-top: 16px">
             <button type="button" class="acao-secundaria" (click)="checklistAberto.set(false)">Cancelar</button>
             <button type="submit" class="acao-primaria" [disabled]="!nome.trim() || !itens.length || itens.some(i => !i.nome.trim())">Salvar modelo</button>
@@ -94,7 +102,7 @@ export class ModelosComponent implements OnInit {
   protected emEdicao: Modelo | null = null;
   protected nome = '';
   protected ativo = true;
-  protected itens: { nome: string; observacao: string; obrigatorio: boolean }[] = [];
+  protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean }[] = [];
 
   /** Carrega todos os modelos (inclusive os inativos) ao abrir a tela. */
   ngOnInit(): void {
@@ -102,7 +110,7 @@ export class ModelosComponent implements OnInit {
   }
 
   /** Busca a lista de modelos na API. */
-  private carregar(): void {
+  protected carregar(): void {
     this.api.modelos(undefined, false).subscribe({ next: (m) => this.modelos.set(m), error: (e) => this.dialogos.mostrarErro(e) });
   }
 
@@ -123,7 +131,7 @@ export class ModelosComponent implements OnInit {
     this.nome = modelo?.nome ?? '';
     this.ativo = modelo?.ativo ?? true;
     if (tipo === 'checklist') {
-      this.itens = (modelo?.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true }));
+      this.itens = (modelo?.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false }));
       this.checklistAberto.set(true);
     } else {
       this.formularioAberto.set(true);
@@ -132,7 +140,7 @@ export class ModelosComponent implements OnInit {
 
   /** Salva o modelo de checklist. */
   protected salvarChecklist(): void {
-    const dados = { tipo: 'checklist', nome: this.nome.trim(), ativo: this.ativo, itens: this.itens.map((i) => ({ nome: i.nome.trim(), observacao: i.observacao.trim(), obrigatorio: i.obrigatorio })) };
+    const dados = { tipo: 'checklist', nome: this.nome.trim(), ativo: this.ativo, itens: this.itens.map((i) => ({ nome: i.nome.trim(), observacao: i.observacao.trim(), obrigatorio: i.obrigatorio, com_validade: i.com_validade })) };
     this.api.salvarModelo(dados, this.emEdicao?.id).subscribe({
       next: () => {
         this.checklistAberto.set(false);

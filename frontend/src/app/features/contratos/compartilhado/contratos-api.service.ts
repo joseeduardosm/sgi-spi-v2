@@ -27,6 +27,7 @@ import {
   PainelVigencias,
   Previsao,
   PreviaImportacao,
+  PreviaImportacaoModelo,
   RascunhoContratoSgi,
   ResumoContrato,
   ResumoEmpresa,
@@ -40,8 +41,9 @@ export class ContratosApiService {
 
   // --- Carteira e contrato ---
   /** Carteira paginada, com busca livre. */
-  listar(busca: string, pagina: number, tamanhoPagina: number): Observable<Pagina<ResumoContrato>> {
-    const params = new HttpParams().set('busca', busca).set('pagina', pagina).set('tamanho_pagina', tamanhoPagina);
+  listar(busca: string, pagina: number, tamanhoPagina: number, meus = false): Observable<Pagina<ResumoContrato>> {
+    let params = new HttpParams().set('busca', busca).set('pagina', pagina).set('tamanho_pagina', tamanhoPagina);
+    if (meus) params = params.set('meus', true);
     return this.http.get<Pagina<ResumoContrato>>(this.base, { params });
   }
 
@@ -265,6 +267,33 @@ export class ContratosApiService {
   /** Baixa a planilha modelo em branco. */
   baixarModeloImportacao() {
     return baixarArquivo(this.http, `${this.base}/importacao-xlsx/modelo`, 'modelo-importacao-contrato.xlsx');
+  }
+
+  // --- Importação de checklist e formulário por XLSX (ACL `importacao-modelos`) ---
+  /** Raiz das rotas: no contrato (versão inativa) ou nos modelos globais (SuperRoot). */
+  private raizImportacaoModelo(tipo: 'checklist' | 'formulario', contratoId?: string): string {
+    return contratoId
+      ? `${this.base}/${contratoId}/${tipo === 'checklist' ? 'checklists' : 'formularios'}/importacao-xlsx`
+      : `${this.base}/modelos/importacao-xlsx/${tipo}`;
+  }
+
+  /** Baixa a planilha modelo em branco do tipo pedido. */
+  baixarModeloImportacaoModelo(tipo: 'checklist' | 'formulario', contratoId?: string) {
+    return baixarArquivo(this.http, `${this.raizImportacaoModelo(tipo, contratoId)}/modelo`, `modelo-importacao-${tipo}.xlsx`);
+  }
+
+  /** Lê e valida a planilha sem gravar nada. */
+  previaImportacaoModelo(tipo: 'checklist' | 'formulario', arquivo: File, contratoId?: string): Observable<PreviaImportacaoModelo> {
+    const dados = new FormData();
+    dados.append('arquivo', arquivo);
+    return this.http.post<PreviaImportacaoModelo>(`${this.raizImportacaoModelo(tipo, contratoId)}/previa`, dados);
+  }
+
+  /** Grava a planilha (a mesma da prévia): versão inativa no contrato ou modelo global. */
+  importarModelo(tipo: 'checklist' | 'formulario', arquivo: File, contratoId?: string): Observable<unknown> {
+    const dados = new FormData();
+    dados.append('arquivo', arquivo);
+    return this.http.post<unknown>(this.raizImportacaoModelo(tipo, contratoId), dados);
   }
 
   // --- Importação do SGI (conta root) ---

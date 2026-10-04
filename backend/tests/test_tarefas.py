@@ -2,6 +2,7 @@
 # Este arquivo serve para testar o Módulo Tarefas: pipeline com validação, permissões, prazo, transferência, linha do tempo, avisos e carga.
 """Módulo Tarefas (`/api/tarefas`)."""
 
+import json
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 
@@ -152,6 +153,28 @@ def test_prazo_transferencia_comentario_e_linha_do_tempo(cliente, equipe):
     # Remoção de item só pelo SuperRoot
     evento = tudo["itens"][0]["id"]
     assert cliente.post(f"{URL}/{n}/eventos/{evento}/remover", json={"motivo": "x"}, headers=h["lia"]).status_code == 403
+
+
+def test_criar_tarefa_com_anexos(cliente, equipe):
+    """Anexos na criação: ficam no evento "Tarefa criada"; arquivo recusado cancela a criação; limite de 5."""
+    ids, h, equipe_id = equipe
+    corpo = json.dumps({"titulo": "Com anexos", "descricao": "d", "prazo": _prazo(10), "equipe_id": equipe_id})
+    arquivos = [("arquivos", ("edital.pdf", BytesIO(b"%PDF-1.4 teste"), "application/pdf")), ("arquivos", ("notas.txt", BytesIO(b"texto"), "text/plain"))]
+    r = cliente.post(f"{URL}/com-anexos", data={"dados": corpo}, files=arquivos, headers=h["ana"])
+    assert r.status_code == 201, r.text
+    n = r.json()["numero"]
+    assert r.json()["anexos"] == 2
+    criada = next(e for e in cliente.get(f"{URL}/{n}/linha-do-tempo", headers=h["ana"]).json()["itens"] if e["tipo"] == "criada")
+    assert sorted(a["nome"] for a in criada["anexos"]) == ["edital.pdf", "notas.txt"]
+    assert cliente.get(f"{URL}/{n}/anexos/{criada['anexos'][0]['id']}", headers=h["ana"]).status_code == 200
+    # Arquivo recusado: nenhuma tarefa nova
+    falso = [("arquivos", ("planilha.xlsx", BytesIO(b"nao e zip"), "application/octet-stream"))]
+    assert cliente.post(f"{URL}/com-anexos", data={"dados": corpo}, files=falso, headers=h["ana"]).status_code == 400
+    # Mais de 5 arquivos e dados inválidos
+    seis = [("arquivos", (f"a{i}.txt", BytesIO(b"x"), "text/plain")) for i in range(6)]
+    assert cliente.post(f"{URL}/com-anexos", data={"dados": corpo}, files=seis, headers=h["ana"]).status_code == 400
+    assert cliente.post(f"{URL}/com-anexos", data={"dados": "{}"}, headers=h["ana"]).status_code == 422
+    assert sum(1 for t in cliente.get(URL, headers=h["ana"]).json()["itens"] if t["titulo"] == "Com anexos") == 1  # só a primeira criação valeu
 
 
 def test_carga_indicadores_e_lembretes(cliente, equipe):

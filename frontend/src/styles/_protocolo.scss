@@ -103,7 +103,7 @@ $anulado: #9aa4af;
   .grafico-meses {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 8px;
+    gap: 0;
     align-items: end;
     height: 220px;
   }
@@ -114,8 +114,23 @@ $anulado: #9aa4af;
     align-items: center;
     height: 100%;
     gap: 2px;
+    /* Divisória vertical entre os meses */
+    border-right: 1px solid #e8ebef;
 
-    .barras { display: flex; flex-direction: column; justify-content: flex-end; flex: 1; width: 100%; max-width: 38px; i { display: block; width: 100%; min-height: 0; border-radius: 3px 3px 0 0; } }
+    &:last-child { border-right: 0; }
+
+    /* A área das barras tem a grade horizontal suave (25%) e a linha de base; as colunas coladas formam as linhas contínuas */
+    .barras {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      flex: 1;
+      width: 100%;
+      background: linear-gradient(to top, #e8ebef 1px, transparent 1px) 0 0 / 100% 25%;
+      border-bottom: 1px solid #b9c2cc;
+      align-items: center;
+      i { display: block; width: 70%; max-width: 38px; min-height: 0; border-radius: 3px 3px 0 0; }
+    }
     .reservado { background: $reservado; }
     .utilizado { background: $utilizado; }
     b { color: #464f5a; font-size: 11.5px; }

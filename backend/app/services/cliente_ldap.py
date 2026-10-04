@@ -35,6 +35,7 @@ ATRIBUTOS_USUARIO = [
     "userPrincipalName",
     "objectGUID",
     "userAccountControl",
+    "thumbnailPhoto",
 ]
 # Filtro LDAP: só contas de pessoas (exclui computadores e grupos) que tenham login
 FILTRO_PESSOAS = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=*))"
@@ -50,6 +51,8 @@ class IdentidadeLdap:
     dn: str
     id_externo: str | None
     ativo: bool = True
+    # thumbnailPhoto do AD (bytes da imagem), lida só na listagem completa
+    foto: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -185,6 +188,14 @@ def _esta_ativa(entrada: dict) -> bool:
         return True
 
 
+def _foto(entrada: dict) -> bytes | None:
+    """Bytes da thumbnailPhoto do AD, ou None se a pessoa não tiver foto."""
+    bruto = entrada.get("raw_attributes", {}).get("thumbnailPhoto")
+    if bruto and isinstance(bruto[0], bytes) and bruto[0]:
+        return bruto[0]
+    return None
+
+
 def _identidade(entrada: dict, login: str) -> IdentidadeLdap:
     """Converte uma entrada do AD em `IdentidadeLdap`."""
     nome, sobrenome = _atributo(entrada, "givenName") or "", _atributo(entrada, "sn") or ""
@@ -195,6 +206,7 @@ def _identidade(entrada: dict, login: str) -> IdentidadeLdap:
         dn=entrada.get("dn", ""),
         id_externo=_guid(entrada),
         ativo=_esta_ativa(entrada),
+        foto=_foto(entrada),
     )
 
 

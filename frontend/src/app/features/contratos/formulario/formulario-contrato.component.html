@@ -115,6 +115,11 @@
             </select>
             <p class="dica-formulario">Deixe automática; force só em casos excepcionais (ex.: contrato suspenso).</p>
           </div>
+          <div class="ocupa-4 liberar-competencias">
+            <label for="liberar-todas"><input id="liberar-todas" type="checkbox" name="liberar_todas_competencias" [(ngModel)]="dados.liberar_todas_competencias" />
+              <span>Liberar todas as competências</span></label>
+            <small>Tira a trava que só libera a medição de uma competência no 1º dia do mês seguinte ao período.</small>
+          </div>
         </div>
       </div>
     </section>
@@ -152,7 +157,7 @@
         <button type="button" class="acao-primaria" [disabled]="itensBloqueados()" (click)="novoItem()"><span>+</span> Adicionar item</button>
       </header>
       @if (itensBloqueados()) {
-        <p class="aviso-bloco" style="margin: 14px 22px">As competências de execução já foram geradas: itens, ordem e vigência só podem ser alterados pelo SuperRoot.</p>
+        <p class="aviso-bloco" style="margin: 14px 22px">As competências de execução já foram geradas: itens, ordem e vigência só podem ser alterados pelo SuperRoot. Para corrigir preço ou quantidades, use a aba "Correções de itens" do contrato (o gestor propõe e outra pessoa confirma).</p>
       }
       <div class="tabela-gestao-envoltorio">
         <table class="tabela-gestao tabela-itens-contrato">

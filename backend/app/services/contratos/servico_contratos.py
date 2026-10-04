@@ -65,7 +65,7 @@ RECURSO = "contratos"
 # Campos do contrato acompanhados pelo histórico "quem alterou, quando, de → para"
 CAMPOS_AUDITADOS = (
     "numero", "empresa_id", "apelido", "objeto", "data_inicio", "data_fim", "vigencia_inicial_meses",
-    "vigencia_maxima_meses", "periodicidade_meses", "mes_reajuste", "sei_gestao_numero", "sei_gestao_link",
+    "vigencia_maxima_meses", "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "sei_gestao_numero", "sei_gestao_link",
     "sei_execucao_numero", "sei_execucao_link", "situacao_forcada",
 )
 # Campos do item que não mudam depois de salvo (mudar exigiria excluir e criar outro item)
@@ -221,8 +221,8 @@ def chave_ordem(contrato: Contrato) -> tuple:
     return (-(contrato.ano or 0), -(contrato.sequencial or 0), contrato.numero.lower())
 
 
-def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pagina: int) -> PaginaContratos:
-    """Carteira paginada, com busca por apelido, objeto, empresa ou número."""
+def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pagina: int, equipe_de_usuario_id: int | None = None) -> PaginaContratos:
+    """Carteira paginada, com busca por apelido, objeto, empresa ou número. Com `equipe_de_usuario_id`, só os contratos em que a pessoa integra a equipe vigente."""
     # O join com a empresa permite buscar pela razão social e pelo nome fantasia
     consulta = select(Contrato).join(EmpresaContratada, EmpresaContratada.id == Contrato.empresa_id)
     termo = (busca or "").strip().lower()
@@ -242,6 +242,14 @@ def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pa
         elif termo.isdigit():
             condicoes.append(Contrato.sequencial == int(termo))
         consulta = consulta.where(or_(*condicoes))
+    if equipe_de_usuario_id is not None:
+        agora = agora_utc()
+        vigente = select(DesignacaoEquipe.contrato_id).where(
+            DesignacaoEquipe.usuario_id == equipe_de_usuario_id,
+            or_(DesignacaoEquipe.valido_de.is_(None), DesignacaoEquipe.valido_de <= agora),
+            or_(DesignacaoEquipe.valido_ate.is_(None), DesignacaoEquipe.valido_ate > agora),
+        )
+        consulta = consulta.where(Contrato.id.in_(vigente))
     # Total antes de paginar; depois, a página pedida, dos contratos mais recentes para os mais antigos
     total = sessao.scalar(select(func.count()).select_from(consulta.subquery())) or 0
     contratos = sessao.scalars(
@@ -338,6 +346,7 @@ def detalhar_contrato(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario)
         vigencia_maxima_meses=contrato.vigencia_maxima_meses,
         periodicidade_meses=contrato.periodicidade_meses,
         mes_reajuste=contrato.mes_reajuste,
+        liberar_todas_competencias=contrato.liberar_todas_competencias,
         sei_gestao_numero=contrato.sei_gestao_numero,
         sei_gestao_link=contrato.sei_gestao_link,
         sei_execucao_numero=contrato.sei_execucao_numero,
@@ -454,7 +463,7 @@ def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, numero: str)
     contrato.sequencial, contrato.ano = partes_numero(numero)
     for campo in (
         "empresa_id", "apelido", "objeto", "data_inicio", "vigencia_inicial_meses", "vigencia_maxima_meses",
-        "periodicidade_meses", "mes_reajuste", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero",
+        "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero",
         "sei_execucao_link", "situacao_forcada",
     ):
         setattr(contrato, campo, getattr(dados, campo))
@@ -616,6 +625,19 @@ def alterar_contrato(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCon
     if mudancas_itens:
         auditar(sessao, autor.login, "contrato.itens.alterar", f"Contrato {contrato.numero}", autor_id=autor.id,
                 alvo_tipo="contrato", alvo_id=contrato.id, dados={"itens": mudancas_itens})
+        if contrato.competencias:
+            # Alteração direta (SuperRoot) com competências geradas: sobe a versão do cadastro, registra o histórico e sincroniza as abertas
+            from app.models.contratos import HistoricoItemContrato
+            from app.services.contratos.servico_competencias import sincronizar_abertas
+
+            contrato.versao_cadastro += 1
+            for descricao, campos in mudancas_itens.get("alterados", {}).items():
+                item = next((i for i in contrato.itens if i.descricao == descricao), None)
+                sessao.add(HistoricoItemContrato(contrato_id=contrato.id, item_id=item.id if item else None, descricao_item=descricao, versao_cadastro=contrato.versao_cadastro,
+                                                 autor_id=autor.id, autor_nome=autor.nome_completo or autor.login, motivo="Alteração direta pelo SuperRoot no cadastro do contrato",
+                                                 campos={c: {"de": str(v["de"]), "para": str(v["para"])} for c, v in campos.items()}))
+            sessao.flush()
+            sincronizar_abertas(contrato)
     sessao.commit()
     return contrato
 

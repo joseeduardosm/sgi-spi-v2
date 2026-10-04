@@ -9,11 +9,12 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { Checklist, Modelo } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { ImportacaoModeloXlsxComponent } from '../compartilhado/importacao-modelo-xlsx.component';
 
 /** Aba "Checklists": versões do checklist de documentos mensais (etapa 5 da execução). */
 @Component({
   selector: 'app-aba-checklists',
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, ImportacaoModeloXlsxComponent],
   templateUrl: './aba-checklists.component.html',
   // Esc fecha a janela de edição
   host: { '(document:keydown.escape)': 'aberto.set(false)' },
@@ -33,10 +34,13 @@ export class AbaChecklistsComponent implements OnInit {
   protected emEdicao: Checklist | null = null;
   protected nome = '';
   // Documentos da versão em edição e os campos da linha "adicionar documento"
-  protected itens: { nome: string; observacao: string; obrigatorio: boolean }[] = [];
+  protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean }[] = [];
   protected novoDocumento = '';
   protected novaObservacao = '';
   protected novoObrigatorio = true;
+  protected novoComValidade = false;
+  // Versões abertas na lista: todas entram recolhidas e só abrem quando a pessoa clica
+  private readonly abertas = signal<Record<string, boolean>>({});
 
   /** Carrega as versões do contrato e os modelos globais de checklist. */
   ngOnInit(): void {
@@ -44,13 +48,32 @@ export class AbaChecklistsComponent implements OnInit {
     this.contratos.modelos('checklist').subscribe({ next: (m) => this.modelos.set(m), error: () => this.modelos.set([]) });
   }
 
+  /** Recarrega as versões (depois de importar uma planilha). */
+  protected recarregar(): void {
+    this.api.checklists(this.contratoId()).subscribe({ next: (c) => this.checklists.set(c), error: (e) => this.dialogos.mostrarErro(e) });
+  }
+
+  /** A versão está aberta? Sem escolha do usuário, só a ativa aparece aberta. */
+  protected aberta(c: Checklist): boolean {
+    return this.abertas()[c.id] ?? false;
+  }
+
+  protected alternar(c: Checklist): void {
+    this.abertas.update((a) => ({ ...a, [c.id]: !this.aberta(c) }));
+  }
+
+  protected expandirTodos(abrir: boolean): void {
+    this.abertas.set(Object.fromEntries(this.checklists().map((c) => [c.id, abrir])));
+  }
+
   /** Abre a janela: vazia (nova versão) ou com a versão escolhida (edição). */
   protected abrir(checklist?: Checklist): void {
     this.emEdicao = checklist ?? null;
     this.nome = checklist?.nome ?? '';
-    this.itens = checklist?.itens.map((i) => ({ nome: i.nome, observacao: i.observacao, obrigatorio: i.obrigatorio })) ?? [];
+    this.itens = checklist?.itens.map((i) => ({ nome: i.nome, observacao: i.observacao, obrigatorio: i.obrigatorio, com_validade: i.com_validade })) ?? [];
     this.novoDocumento = this.novaObservacao = '';
     this.novoObrigatorio = true;
+    this.novoComValidade = false;
     this.aberto.set(true);
   }
 
@@ -59,15 +82,16 @@ export class AbaChecklistsComponent implements OnInit {
     const modelo = this.modelos().find((m) => m.id === id);
     if (!modelo) return;
     this.nome ||= modelo.nome;
-    this.itens = (modelo.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true }));
+    this.itens = (modelo.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false }));
   }
 
   /** Acrescenta o documento digitado à lista (obrigatório por padrão). */
   protected adicionar(): void {
     if (!this.novoDocumento.trim()) return;
-    this.itens = [...this.itens, { nome: this.novoDocumento.trim(), observacao: this.novaObservacao.trim(), obrigatorio: this.novoObrigatorio }];
+    this.itens = [...this.itens, { nome: this.novoDocumento.trim(), observacao: this.novaObservacao.trim(), obrigatorio: this.novoObrigatorio, com_validade: this.novoComValidade }];
     this.novoDocumento = this.novaObservacao = '';
     this.novoObrigatorio = true;
+    this.novoComValidade = false;
   }
 
   /** Sobe (−1) ou desce (+1) um documento, trocando-o de lugar com o vizinho (a ordem vale na competência). */

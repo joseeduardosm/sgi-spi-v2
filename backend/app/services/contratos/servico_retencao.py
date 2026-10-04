@@ -73,6 +73,29 @@ def usuarios_financeiro(sessao: Session) -> list[Usuario]:
     ))
 
 
+def grupos_financeiro(sessao: Session) -> list[dict]:
+    """Usuários ativos com e-mail do Financeiro, agrupados por setor (raiz e subsetores), com o caminho `DOF › Subsetor`."""
+    setores = setores_financeiro(sessao)
+    por_id = {s.id: s for s in setores}
+
+    def caminho(setor: Setor) -> str:
+        partes, atual = [setor.nome], setor
+        while atual.setor_pai_id in por_id:
+            atual = por_id[atual.setor_pai_id]
+            partes.append(atual.nome)
+        return " › ".join(reversed(partes))
+
+    grupos = []
+    for setor in setores:
+        membros = select(MembroSetor.usuario_id).where(MembroSetor.setor_id == setor.id)
+        usuarios = sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True), Usuario.email != "",
+                                                        Usuario.id.in_(membros) | (func.lower(func.trim(Usuario.departamento)) == setor.nome.strip().lower())).order_by(Usuario.nome_completo))
+        lista = [{"id": u.id, "nome": u.nome_completo or u.login, "email": u.email, "cargo": u.cargo or ""} for u in usuarios]
+        if lista:
+            grupos.append({"setor_id": setor.id, "setor": caminho(setor), "usuarios": lista})
+    return sorted(grupos, key=lambda g: g["setor"])
+
+
 def eh_financeiro(sessao: Session, usuario: Usuario) -> bool:
     return any(u.id == usuario.id for u in usuarios_financeiro(sessao))
 

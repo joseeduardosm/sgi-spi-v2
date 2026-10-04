@@ -177,3 +177,4 @@ Procura um login usando **apenas a conta técnica**. Nunca testa a senha da pess
 - Tela: `/admin/ldap` (`DiretoriosLdapComponent`), protegida por `guardaPapel` (`SuperRoot`).
 - Na edição, o formulário envia `senha_bind: null` quando a senha fica vazia.
 - "Testar sem salvar" usa `POST /testar` quando há senha no formulário. Na edição sem senha nova, usa `POST /{id}/testar`.
+- **Foto:** a `thumbnailPhoto` do AD é importada para o cartão de ramais (ver [diretorio.md](diretorio.md)), sem sobrescrever foto enviada pelo próprio usuário.

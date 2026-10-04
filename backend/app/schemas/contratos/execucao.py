@@ -30,6 +30,7 @@ class GravacaoDocumentoChecklist(BaseModel):
     nome: TextoObrigatorio = Field(..., max_length=500)
     observacao: Texto = Field("", max_length=1000)
     obrigatorio: bool = Field(True, description="Obrigatório precisa estar anexado para concluir a etapa do checklist; opcional, não.")
+    com_validade: bool = Field(False, description="Documento com validade: o envio exige a data de validade e, se ainda valer, ele é reaproveitado na competência seguinte.")
 
 
 class GravacaoChecklist(BaseModel):
@@ -45,6 +46,7 @@ class LeituraDocumentoChecklist(BaseModel):
     nome: str
     observacao: str
     obrigatorio: bool
+    com_validade: bool
 
 
 class LeituraChecklist(BaseModel):
@@ -331,6 +333,7 @@ class GravacaoRetencao(BaseModel):
     """Conferência da etapa 4: retenções de cada nota fiscal e a confirmação da discriminação."""
     notas: list[RetencoesDaNota] = Field(..., min_length=1, description="Uma entrada para cada nota fiscal da competência.")
     discriminacao_conferida: bool = Field(..., description="A discriminação dos serviços é compatível com o objeto (obrigatório = true).")
+    enviar_email: bool = Field(False, description="Envia o e-mail desta etapa (equipe, prepostos ou Financeiro). Padrão `false`: só envia quem marcar.")
 
 
 class LeituraRetencao(BaseModel):
@@ -360,6 +363,9 @@ class LeituraDocumentoMensal(BaseModel):
     nome: str
     observacao: str
     obrigatorio: bool
+    com_validade: bool = False
+    validade_ate: date | None = Field(None, description="Até quando o documento vale (só em documento com validade).")
+    reaproveitado_de: date | None = Field(None, description="Mês da competência de onde o arquivo foi reaproveitado automaticamente (dia 1).")
     arquivo: LeituraArquivo | None
 
 
@@ -480,9 +486,33 @@ class GravacaoMedicao(BaseModel):
     notas_empenho_ids: list[uuid.UUID] = Field(..., min_length=1, description="NEs em ordem de consumo.")
 
 
+class PrepostoDoEmail(BaseModel):
+    """Preposto ativo com e-mail, candidato a receber os comunicados da execução."""
+    id: uuid.UUID
+    nome: str
+    email: str
+    cargo: str
+
+
+class UsuarioFinanceiro(BaseModel):
+    id: int
+    nome: str
+    email: str
+    cargo: str
+
+
+class GrupoFinanceiro(BaseModel):
+    """Um setor do Financeiro (raiz ou subsetor) com os usuários ativos que têm e-mail."""
+    setor_id: int
+    setor: str = Field(..., description="Caminho do setor, ex.: `DOF › Contabilidade`.")
+    usuarios: list[UsuarioFinanceiro]
+
+
 class ConclusaoMedicao(BaseModel):
     """Corpo do `POST /medicao/concluir`; a seleção de NEs precisa bater com a salva."""
     notas_empenho_ids: list[uuid.UUID] = Field(..., min_length=1, description="Deve ser igual à seleção salva.")
+    enviar_email: bool = Field(False, description="Envia o e-mail desta etapa (equipe, prepostos ou Financeiro). Padrão `false`: só envia quem marcar.")
+    prepostos_ids: list[uuid.UUID] | None = Field(None, description="Prepostos que recebem o e-mail (só com `enviar_email`). `null` = todos os ativos; lista vazia = nenhum (só a equipe).")
 
 
 class GravacaoAvaliacaoInicial(BaseModel):

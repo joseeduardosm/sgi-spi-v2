@@ -17,13 +17,14 @@ describe('NavegacaoService', () => {
     usuario,
     possuiPapel: (...papeis: Papel[]) => papeis.some((p) => usuario()?.papeis.includes(p) ?? false),
   };
-  const acessoSimulado = { carregado: signal(true), pode: (slug: string) => concedidos().has(slug) };
+  const acessoSimulado = { carregado: signal(true), painelExecutivo: signal(false), pode: (slug: string) => concedidos().has(slug) };
 
   // Lista plana com os rótulos visíveis de todas as seções
   const rotulos = (nav: NavegacaoService) => nav.secoes().flatMap((s) => s.itens.map((i) => i.rotulo));
 
   beforeEach(() => {
     concedidos.set(new Set());
+    acessoSimulado.painelExecutivo.set(false);
     TestBed.configureTestingModule({
       providers: [
         { provide: AutenticacaoService, useValue: autenticacaoSimulada },
@@ -40,6 +41,14 @@ describe('NavegacaoService', () => {
 
     usuario.set({ id: 1, login: 'root', nome_completo: 'Administrador', papeis: ['SuperRoot'], origem: 'local' });
     expect(nav.secoes().map((s) => s.legenda)).toEqual(['Navegação', 'Administração']);
+  });
+
+  it('mostra o Painel Executivo só quando a API libera', () => {
+    const nav = TestBed.inject(NavegacaoService);
+    usuario.set({ id: 2, login: 'fulano', nome_completo: 'Fulano', papeis: [], origem: 'ldap' });
+    expect(rotulos(nav).concat(nav.secoes().flatMap((s) => s.itens.flatMap((i) => (i.filhos ?? []).map((f) => f.rotulo))))).not.toContain('Painel Executivo');
+    acessoSimulado.painelExecutivo.set(true);
+    expect(nav.secoes().flatMap((s) => s.itens.flatMap((i) => (i.filhos ?? []).map((f) => f.rotulo)))).toContain('Painel Executivo');
   });
 
   it('oculta módulos sem acesso efetivo na ACL', () => {

@@ -77,6 +77,7 @@ export const ROTULOS_CAMPO: Record<string, string> = {
   vigencia_maxima_meses: 'Vigência máxima (meses)',
   periodicidade_meses: 'Periodicidade',
   mes_reajuste: 'Mês de reajuste',
+  liberar_todas_competencias: 'Liberar todas as competências',
   sei_gestao_numero: 'SEI - Gestão (número)',
   sei_gestao_link: 'SEI - Gestão (link)',
   sei_execucao_numero: 'SEI - Execução (número)',

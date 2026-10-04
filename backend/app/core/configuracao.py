@@ -58,6 +58,8 @@ class Configuracao(BaseSettings):
     chave_cifra_ldap: SecretStr
     # Intervalo da sincronização automática do diretório ativo. 0 desativa a rotina.
     intervalo_sincronizacao_ldap_minutos: int = Field(15, ge=0, le=1440)
+    # Hora (0 a 23) em que o parabéns automático de aniversário é enviado. -1 desativa a rotina.
+    hora_parabens_aniversario: int = Field(8, ge=-1, le=23)
     # Tempo máximo de espera por uma resposta do servidor LDAP
     tempo_limite_ldap_segundos: int = Field(5, gt=0, le=60)
 

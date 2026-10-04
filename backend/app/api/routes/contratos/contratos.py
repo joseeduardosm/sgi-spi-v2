@@ -50,17 +50,18 @@ PDF = {status.HTTP_200_OK: {"content": {"application/pdf": {}}, "description": "
     response_model=PaginaContratos,
     summary="Carteira de contratos",
     description="Busca por número (`012/2026`), empresa, apelido ou objeto. Mais recentes primeiro. "
-    "Exige ACL `contratos` ≥ LEITURA.",
+    "Com `meus=true`, só os contratos em que o usuário integra a equipe vigente (gestor, fiscais, suplentes…). Exige ACL `contratos` ≥ LEITURA.",
 )
 def listar_contratos(
     busca: str | None = Query(None, max_length=100),
     pagina: int = Query(1, ge=1),
     tamanho_pagina: int = Query(25, ge=1, le=100),
+    meus: bool = Query(False, description="Só os contratos em que o usuário integra a equipe vigente."),
     sessao: Session = Depends(obter_sessao),
-    _: Usuario = Depends(pode_ler),
+    usuario: Usuario = Depends(pode_ler),
 ) -> PaginaContratos:
     """Carteira: lista paginada com busca por número, empresa, apelido ou objeto."""
-    return servico.listar_contratos(sessao, busca, pagina, tamanho_pagina)
+    return servico.listar_contratos(sessao, busca, pagina, tamanho_pagina, usuario.id if meus else None)
 
 
 @roteador.get(

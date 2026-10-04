@@ -19,6 +19,7 @@
   <form class="filtros-gestao" role="search" (ngSubmit)="carregar(1)">
     <input type="search" name="busca" [(ngModel)]="busca" (ngModelChange)="aoDigitar()" aria-label="Buscar contratos"
            placeholder="Buscar por número, empresa, apelido ou objeto" />
+    <label class="opcao-meus"><input type="checkbox" name="meus" [ngModel]="meus()" (ngModelChange)="alternarMeus($event)" /> Meus contratos</label>
     <button type="submit" class="acao-secundaria">Buscar</button>
   </form>
 

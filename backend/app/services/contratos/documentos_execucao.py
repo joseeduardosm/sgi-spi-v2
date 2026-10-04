@@ -318,7 +318,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         documentos.append(("CADIN", "Certidão do CADIN", consulta.certidao_anexo_id, False, resultado))
         if consulta.email_anexo_id:
             documentos.append(("CADIN", "E-mail de notificação da pendência no CADIN", consulta.email_anexo_id, False, resultado[:1]))
-    for documento in competencia.documentos:
+    for documento in sorted(competencia.documentos, key=lambda x: (not x.obrigatorio, x.ordem)):
         if documento.anexo_id:
             tipo = "Obrigatório" if documento.obrigatorio else "Opcional"
             extras = [("Item do checklist", f"{documento.ordem} · {tipo}")] + ([("Observação", documento.observacao)] if documento.observacao else [])
@@ -372,7 +372,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
     )
     resumo.secao("Checklist mensal").tabela(
         ["Nº", "Documento", "Tipo", "Arquivo"],
-        [[str(d.ordem), d.nome, "Obrigatório" if d.obrigatorio else "Opcional", d.arquivo.nome if d.arquivo else "Não anexado"] for d in detalhe.documentos],
+        [[str(n), d.nome, "Obrigatório" if d.obrigatorio else "Opcional", d.arquivo.nome if d.arquivo else "Não anexado"] for n, d in enumerate(detalhe.documentos, start=1)],
         larguras=[0.5, 4, 1.4, 3.6]
     )
     composicao.append([str(total_documentos), "Resumo executivo", "Resumo executivo da competência", f"a partir da {pagina}"])

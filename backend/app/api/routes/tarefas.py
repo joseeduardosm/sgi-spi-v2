@@ -391,6 +391,24 @@ def criar(dados: NovaTarefa, sessao: Session = Depends(obter_sessao), usuario: U
     return _detalhe(sessao, usuario, t)
 
 
+@roteador.post("/com-anexos", response_model=TarefaDetalhe, status_code=status.HTTP_201_CREATED, summary="Criar tarefa com anexos",
+               description="Igual a `POST /api/tarefas`, mas em `multipart/form-data`: `dados` (JSON do corpo de criação, como texto) e até 5 `arquivos` "
+                           "(PDF, Office/LibreOffice, TXT, CSV, PNG, JPG). Os arquivos ficam no evento \"Tarefa criada\" da linha do tempo; arquivo recusado "
+                           "(tipo, tamanho ou vazio) cancela a criação (`400`).", responses={**SEM_PERMISSAO, **INVALIDO})
+async def criar_com_anexos(dados: str = Form(...), arquivos: list[UploadFile] = File(default_factory=list), sessao: Session = Depends(obter_sessao),
+                           usuario: Usuario = Depends(obter_usuario_atual)) -> TarefaDetalhe:
+    try:
+        nova = NovaTarefa.model_validate_json(dados)
+    except ValueError as erro:
+        raise ErroApi(status.HTTP_422_UNPROCESSABLE_CONTENT, "Dados da tarefa inválidos.", "validacao") from erro
+    with _traduzir():
+        t = servico.criar(sessao, usuario, servico.DadosTarefa(
+            titulo=nova.titulo, descricao=nova.descricao, prazo=nova.prazo, prioridade=nova.prioridade, equipe_id=nova.equipe_id,
+            responsavel_id=nova.responsavel_id, participantes_ids=tuple(nova.participantes_ids), marcadores_ids=tuple(nova.marcadores_ids)),
+            [(a.filename or "arquivo", a.file) for a in arquivos if a.filename])
+    return _detalhe(sessao, usuario, t)
+
+
 @roteador.get("/{numero}", response_model=TarefaDetalhe, summary="Detalhe da tarefa",
               description="Com as etapas do pipeline e as ações permitidas ao usuário. Sem permissão: 404.", responses={**NAO_ENCONTRADA})
 def detalhar(numero: int, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> TarefaDetalhe:

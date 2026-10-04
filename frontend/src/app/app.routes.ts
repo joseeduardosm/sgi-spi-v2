@@ -4,7 +4,7 @@
 import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 
-import { guardaAcl, guardaPerfil } from './core/acesso/acesso.guards';
+import { guardaAcl, guardaPainelExecutivo, guardaPerfil } from './core/acesso/acesso.guards';
 import { guardaAutenticacao, guardaContaRoot, guardaPapel, guardaVisitante } from './core/autenticacao/autenticacao.guards';
 import { AutenticacaoService } from './core/autenticacao/autenticacao.service';
 
@@ -127,6 +127,18 @@ export const rotas: Routes = [
         // Módulo Contratações (ETP e TR): cada rota confere o recurso ACL `contratacoes`; o papel em cada documento é conferido pela API
         path: 'contratacoes',
         loadChildren: () => import('./features/contratacoes/contratacoes.routes').then((m) => m.ROTAS_CONTRATACOES),
+      },
+      {
+        // Painel Executivo: slides de contratos, RH e tarefas; a guarda consulta a API (sem regras na ACL, só o SuperRoot)
+        path: 'painel-executivo',
+        canActivate: [guardaPainelExecutivo],
+        title: 'Painel Executivo | SGI SPI',
+        loadComponent: () => import('./features/painel-executivo/pagina-painel-executivo.component').then((m) => m.PaginaPainelExecutivoComponent),
+      },
+      {
+        // Diretório de ramais (cartões de visita): todo usuário autenticado
+        path: 'ramais',
+        loadChildren: () => import('./features/diretorio/diretorio.routes').then((m) => m.ROTAS_DIRETORIO),
       },
       {
         // Módulo Melhorias: todo usuário vê as próprias sugestões; a triagem confere o acesso na API (ACL `melhorias`)

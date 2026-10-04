@@ -45,6 +45,11 @@ import { ANDARES, LADOS, OpcaoDepartamento, SituacaoCampo } from './usuarios.mod
         <ng-container *ngTemplateOutlet="situacaoCampo; context: { $implicit: 'celular' }" />
       </div>
       <div class="ocupa-duas">
+        <label for="perfil-linkedin">LinkedIn <small>(opcional)</small></label>
+        <input id="perfil-linkedin" formControlName="linkedin" inputmode="url" autocomplete="url" placeholder="https://www.linkedin.com/in/seu-nome" />
+        <small class="dica-formulario">Aparece como atalho no seu cartão de Ramais.</small>
+      </div>
+      <div class="ocupa-duas">
         <label for="perfil-departamento">Departamento {{ marca }}</label>
         <select id="perfil-departamento" formControlName="departamento">
           <option value="">Selecione o departamento</option>

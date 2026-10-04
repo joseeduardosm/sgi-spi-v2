@@ -36,6 +36,10 @@
     <p class="aviso-admin" [class.erro]="a.erro" role="status">{{ a.texto }}</p>
   }
 
+  <!-- Foto do cartão de Ramais e opção de ocultar o aniversário (gravadas na hora, fora do formulário abaixo) -->
+  <h3 class="titulo-foto-perfil">Foto e privacidade</h3>
+  <app-foto-perfil />
+
   <form class="formulario-perfil" [formGroup]="formulario" (ngSubmit)="salvar()" novalidate>
     @if (carregando()) {
       <p class="estado-vazio">Carregando…</p>

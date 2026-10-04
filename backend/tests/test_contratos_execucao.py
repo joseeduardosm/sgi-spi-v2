@@ -265,6 +265,16 @@ def test_nota_de_empenho_sem_saldo_nao_serve_para_a_medicao(cliente, admin, equi
     assert r.status_code == 400 and "saldo suficiente" in r.json()["detalhe"]
     futura = cliente.get(_url(contrato, "/competencias/identificador/2026-04"), headers=gestora).json()
     assert futura["situacao"] == "pendente" and not futura["liberada"]
+    # "Liberar todas as competências" tira a trava do fim do período
+    import uuid
+
+    from app.core.banco import FabricaSessao
+    from app.models.contratos import Contrato
+
+    with FabricaSessao() as sessao:
+        sessao.get(Contrato, uuid.UUID(contrato["id"])).liberar_todas_competencias = True
+        sessao.commit()
+    assert cliente.get(_url(contrato, "/competencias/identificador/2026-04"), headers=gestora).json()["liberada"] is True
 
 
 # --- MVP 4: avaliação ---------------------------------------------------------------------------
@@ -384,6 +394,157 @@ def test_checklist_com_documentos_obrigatorios_e_opcionais(cliente, admin, equip
     r = cliente.post(f"{base}/checklist/concluir", headers=gestora)
     assert r.status_code == 200 and r.json()["etapa_atual"] == "consolidado"
     assert cliente.post(f"{base}/consolidado", headers=gestora).status_code == 200
+
+
+def test_formulario_inativo_pode_ser_excluido_e_o_ativo_nao(cliente, admin, equipe):
+    """Versões inativas do formulário e do checklist saem da lista (exclusão lógica); a ativa não pode ser excluída."""
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    v1 = cliente.post(_url(contrato, "/formularios"), json=FORMULARIO, headers=gestora).json()[0]
+    cliente.post(_url(contrato, f"/formularios/{v1['id']}/ativar"), headers=gestora)
+    v2 = next(f for f in cliente.post(_url(contrato, f"/formularios/{v1['id']}/duplicar"), headers=gestora).json() if not f["ativo"])
+    r = cliente.delete(_url(contrato, f"/formularios/{v1['id']}"), headers=gestora)
+    assert r.status_code == 400 and "ativo" in r.json()["detalhe"]
+    r = cliente.delete(_url(contrato, f"/formularios/{v2['id']}"), headers=gestora)
+    assert r.status_code == 200 and [f["id"] for f in r.json()] == [v1["id"]]
+    assert cliente.delete(_url(contrato, f"/formularios/{v2['id']}"), headers=gestora).status_code == 404
+    # A numeração das versões continua crescendo (não reaproveita a excluída)
+    v3 = cliente.post(_url(contrato, f"/formularios/{v1['id']}/duplicar"), headers=gestora).json()[0]
+    assert v3["versao"] == v2["versao"] + 1
+    # Checklist: a mesma regra (inativo sai, ativo não)
+    checklists = cliente.get(_url(contrato, "/checklists"), headers=gestora).json()
+    ativo = next(c for c in checklists if c["ativo"])
+    assert cliente.delete(_url(contrato, f"/checklists/{ativo['id']}"), headers=gestora).status_code == 400
+    novo = next(c for c in cliente.post(_url(contrato, f"/checklists/{ativo['id']}/duplicar"), headers=gestora).json() if not c["ativo"])
+    assert cliente.delete(_url(contrato, f"/checklists/{novo['id']}"), headers=gestora).status_code == 200
+
+
+def test_correcao_de_itens_com_dois_olhos_sincroniza_so_as_competencias_abertas(cliente, admin, equipe):
+    """Gestor propõe, outra pessoa confirma; as abertas seguem o cadastro (preservando o medido) e as ciências são invalidadas."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    item = next(i for i in contrato["itens"] if i["tipo"] == "continuo")
+    assert cliente.get(_url(contrato, "/itens/correcoes"), headers=gestora).json()["pode_propor"] is True
+    assert cliente.get(_url(contrato, "/itens/correcoes"), headers=fiscal).json()["pode_propor"] is False
+
+    # Competência aberta com medição salva e ciências
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
+    assert cliente.put(f"{base}/medicao", json=medicao, headers=gestora).status_code == 200
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
+    antes = cliente.get(base, headers=gestora).json()
+    assert len(antes["ciencias"]) == 2
+    medido = {i["descricao"]: i["quantidade_medida"] for i in antes["itens"]}
+
+    novo_preco = str(Decimal(item["valor_unitario"]) + Decimal("1.0000"))
+    corpo = {"justificativa": "Preço digitado errado no cadastro do contrato.", "itens": [{"id": item["id"], "valor_unitario": novo_preco}]}
+    # Fiscal não propõe; justificativa curta e valor sem mudança são recusados
+    assert cliente.post(_url(contrato, "/itens/correcoes"), json=corpo, headers=fiscal).status_code == 403
+    assert cliente.post(_url(contrato, "/itens/correcoes"), json={**corpo, "justificativa": "curta"}, headers=gestora).status_code == 422
+    assert cliente.post(_url(contrato, "/itens/correcoes"), json={**corpo, "itens": [{"id": item["id"], "valor_unitario": item["valor_unitario"]}]}, headers=gestora).status_code == 400
+    # A prévia não grava nada
+    previa = cliente.post(_url(contrato, "/itens/correcoes/previa"), json=corpo, headers=gestora)
+    assert previa.status_code == 200 and previa.json()["competencias_abertas"] and Decimal(previa.json()["variacao_total"]) > 0
+    assert cliente.get(_url(contrato), headers=gestora).json()["itens"][0]["valor_unitario"] == contrato["itens"][0]["valor_unitario"]
+
+    proposta = cliente.post(_url(contrato, "/itens/correcoes"), json=corpo, headers=gestora)
+    assert proposta.status_code == 201, proposta.text
+    cid = proposta.json()["id"]
+    assert proposta.json()["situacao"] == "pendente" and proposta.json()["pode_decidir"] is False
+    # Dois olhos: o autor não confirma a própria proposta; o fiscal vê que pode decidir
+    assert cliente.post(_url(contrato, f"/itens/correcoes/{cid}/confirmar"), headers=gestora).status_code == 403
+    assert next(c for c in cliente.get(_url(contrato, "/itens/correcoes"), headers=fiscal).json()["itens"] if c["id"] == cid)["pode_decidir"] is True
+    r = cliente.post(_url(contrato, f"/itens/correcoes/{cid}/confirmar"), headers=fiscal)
+    assert r.status_code == 200 and r.json()["situacao"] == "aplicada" and r.json()["decidido_por_nome"]
+    assert cliente.post(_url(contrato, f"/itens/correcoes/{cid}/confirmar"), headers=fiscal).status_code == 409  # já decidida
+
+    # Cadastro mudou; a competência aberta seguiu o cadastro, preservou o medido e perdeu as ciências
+    assert next(i for i in cliente.get(_url(contrato), headers=gestora).json()["itens"] if i["id"] == item["id"])["valor_unitario"] == novo_preco
+    depois = cliente.get(base, headers=gestora).json()
+    linha = next(i for i in depois["itens"] if i["descricao"] == item["descricao"])
+    assert linha["valor_unitario"] == novo_preco and {i["descricao"]: i["quantidade_medida"] for i in depois["itens"]} == medido
+    assert depois["ciencias"] == []
+    historico = cliente.get(_url(contrato, "/itens/historico"), headers=gestora).json()
+    assert historico[0]["campos"]["valor_unitario"]["para"] and historico[0]["versao_cadastro"] == 2
+
+    # Recusar e cancelar
+    outra = cliente.post(_url(contrato, "/itens/correcoes"), json={"justificativa": "Outro ajuste de preço, só para testar a recusa.", "itens": [{"id": item["id"], "valor_unitario": "99.0000"}]}, headers=gestora).json()
+    assert cliente.post(_url(contrato, f"/itens/correcoes/{outra['id']}/recusar"), json={"motivo": "Não procede"}, headers=gestora).status_code == 403
+    r = cliente.post(_url(contrato, f"/itens/correcoes/{outra['id']}/recusar"), json={"motivo": "Não procede"}, headers=fiscal)
+    assert r.status_code == 200 and r.json()["situacao"] == "recusada" and r.json()["motivo_decisao"] == "Não procede"
+    ultima = cliente.post(_url(contrato, "/itens/correcoes"), json={"justificativa": "Mais um ajuste de preço apenas para cancelar.", "itens": [{"id": item["id"], "valor_unitario": "98.0000"}]}, headers=gestora).json()
+    assert cliente.post(_url(contrato, f"/itens/correcoes/{ultima['id']}/cancelar"), headers=fiscal).status_code == 403
+    assert cliente.post(_url(contrato, f"/itens/correcoes/{ultima['id']}/cancelar"), headers=gestora).json()["situacao"] == "cancelada"
+
+
+def test_checklist_lista_obrigatorios_primeiro_e_opcionais_por_ultimo(cliente, admin, equipe):
+    """Mesmo cadastrados fora de ordem, os obrigatórios vêm primeiro (no checklist e na competência); a ordem original vale dentro de cada grupo."""
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    itens = [{"nome": "Opcional 1", "obrigatorio": False}, {"nome": "Obrigatório 1"}, {"nome": "Opcional 2", "obrigatorio": False}, {"nome": "Obrigatório 2"}]
+    checklists = cliente.post(_url(contrato, "/checklists"), json={"nome": "Misto", "itens": itens}, headers=gestora).json()
+    novo = next(c for c in checklists if c["nome"] == "Misto")
+    assert [i["nome"] for i in novo["itens"]] == ["Obrigatório 1", "Obrigatório 2", "Opcional 1", "Opcional 2"]
+    cliente.post(_url(contrato, f"/checklists/{novo['id']}/ativar"), headers=gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    assert [d["nome"] for d in competencia["documentos"]] == ["Obrigatório 1", "Obrigatório 2", "Opcional 1", "Opcional 2"]
+    # Trocar o checklist ativo com as competências já geradas (mesmas posições) não pode violar a unicidade da ordem
+    outro = cliente.post(_url(contrato, "/checklists"), json={"nome": "Outro", "itens": [{"nome": "Obrigatório 1"}, {"nome": "Novo", "obrigatorio": False}]}, headers=gestora).json()
+    outro = next(c for c in outro if c["nome"] == "Outro")
+    r = cliente.post(_url(contrato, f"/checklists/{outro['id']}/ativar"), headers=gestora)
+    assert r.status_code == 200, r.text
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    assert [d["nome"] for d in competencia["documentos"]] == ["Obrigatório 1", "Novo"]
+
+
+def test_documento_com_validade_e_reaproveitado_na_competencia_seguinte(cliente, admin, equipe):
+    """Documento com validade exige a data no envio e, ao concluir o checklist, passa para a competência seguinte se ainda valer no fim do período dela."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    itens = [{"nome": "Certidão A", "com_validade": True}, {"nome": "Certidão B", "com_validade": True}, {"nome": "Folha"}]
+    checklists = cliente.post(_url(contrato, "/checklists"), json={"nome": "Com validade", "itens": itens}, headers=gestora).json()
+    novo = next(c for c in checklists if c["nome"] == "Com validade")
+    assert [i["com_validade"] for i in novo["itens"]] == [True, True, False]
+    assert [i["com_validade"] for i in cliente.post(_url(contrato, f"/checklists/{novo['id']}/duplicar"), headers=gestora).json()[0]["itens"]] == [True, True, False]
+    cliente.post(_url(contrato, f"/checklists/{novo['id']}/ativar"), headers=gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
+    cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
+    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    assert juntar_nf(cliente, base, gestora, "2105.00").status_code == 200
+    assert conferir_retencao(cliente, base, gestora).status_code == 200
+    detalhe = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).json()
+    docs = {d["nome"]: d for d in detalhe["documentos"]}
+    assert docs["Certidão A"]["com_validade"] and not docs["Folha"]["com_validade"]
+
+    # A validade é obrigatória no documento com validade
+    r = cliente.post(f"{base}/checklist/{docs['Certidão A']['id']}", files={"arquivo": ("a.pdf", PDF)}, headers=gestora)
+    assert r.status_code == 400 and "válido" in r.json()["detalhe"]
+    # A fecha o último dia de fevereiro (cobre o período da competência seguinte); B vence um dia antes
+    for nome, validade in (("Certidão A", "2026-02-28"), ("Certidão B", "2026-02-27")):
+        r = cliente.post(f"{base}/checklist/{docs[nome]['id']}", files={"arquivo": ("x.pdf", PDF)}, data={"validade": validade}, headers=gestora)
+        assert r.status_code == 200, r.text
+    detalhe = cliente.post(f"{base}/checklist/{docs['Folha']['id']}", files={"arquivo": ("f.pdf", PDF)}, headers=gestora).json()
+    assert detalhe["etapa_atual"] == "consolidado"  # todos anexados: conclui sozinha
+
+    seguinte = cliente.get(_url(contrato, "/competencias/identificador/2026-02"), headers=gestora).json()
+    por_nome = {d["nome"]: d for d in seguinte["documentos"]}
+    assert por_nome["Certidão A"]["arquivo"] is not None and por_nome["Certidão A"]["validade_ate"] == "2026-02-28" and por_nome["Certidão A"]["reaproveitado_de"] == "2026-01-01"
+    assert por_nome["Certidão B"]["arquivo"] is None and por_nome["Folha"]["arquivo"] is None
+    assert seguinte["etapa_atual"] != "consolidado"  # reaproveitar não conclui o checklist da seguinte
+    # A terceira competência não herda o documento da primeira (só a imediatamente seguinte recebe)
+    assert next(d for d in cliente.get(_url(contrato, "/competencias/identificador/2026-03"), headers=gestora).json()["documentos"] if d["nome"] == "Certidão A")["arquivo"] is None
 
 
 def test_avaliacao_toda_na_maxima_dispensa_o_gestor(cliente, admin, equipe):

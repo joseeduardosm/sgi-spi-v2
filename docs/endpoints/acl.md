@@ -18,6 +18,7 @@ Define quem acessa cada módulo do portal. A política e o cálculo do nível ef
 - **Recursos iniciais** (criados pela migração): `usuarios`, `setores`, `contratos` e `relatorios`.
 - **Recursos criados fechados** (só a conta administrativa principal tem CONTROLE_TOTAL; o SuperRoot libera os demais):
   - `importacao-contratos`: botão "Importar XLSX" (migração `d4f7b2c9e1a3`);
+  - `importacao-modelos`: botão "Importar XLSX" de checklists e formulários de avaliação (migração `e5a8c3d7f2b1`; ver [contratos-importacao-modelos-xlsx.md](contratos-importacao-modelos-xlsx.md));
   - `mensageria-setores`: envio de mensagens para setores inteiros, que exige CONTROLE_TOTAL (migração `0c11fdac4f46`; ver [mensagens.md](mensagens.md)).
 
 ---

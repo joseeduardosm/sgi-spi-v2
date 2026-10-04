@@ -51,6 +51,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 | `vigencia_maxima_meses` | integer | sim | ≥ vigência inicial |
 | `periodicidade_meses` | integer | sim | 1, 2, 3, 6 ou 12 |
 | `mes_reajuste` | integer | sim | 1 a 12 |
+| `liberar_todas_competencias` | boolean | não (padrão `false`) | Quando `true`, a medição de uma competência pode ser feita antes do fim do período (sem a trava do 1º dia do mês seguinte); aparece também no detalhe do contrato e no histórico de alterações. Migração `2183de7ec74a` |
 | `sei_gestao_numero`, `sei_execucao_numero` | string | sim | Até 100 |
 | `sei_gestao_link`, `sei_execucao_link` | string | sim | `http(s)://…`, até 1000 |
 | `situacao_forcada` | string \| null | não | `ativo`, `a_vencer`, `encerrado`, `suspenso` |
@@ -79,7 +80,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 
 ## `GET /api/contratos`
 
-`PaginaContratos`, com os mais recentes primeiro. Parâmetros: `busca` (número `012/2026`, empresa, apelido ou objeto), `pagina` e `tamanho_pagina` (padrão 25, máximo 100).
+`PaginaContratos`, com os mais recentes primeiro. Parâmetros: `busca` (número `012/2026`, empresa, apelido ou objeto), `pagina` e `tamanho_pagina` (padrão 25, máximo 100) e `meus=true` (só os contratos em que o usuário integra a equipe vigente; a tela lembra a escolha da caixa "Meus contratos").
 
 ## `GET /api/contratos/proximo-numero?ano=2026`
 

@@ -9,6 +9,7 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { DetalheCompetencia, NotaFiscal, Tributo } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
 const TRIBUTOS: { chave: Tributo; rotulo: string }[] = [
@@ -30,10 +31,12 @@ interface NotaEmConferencia {
 /** Etapa 4: o Financeiro (ou a equipe) confere a NF lida do XML e confirma as retenções. */
 @Component({
   selector: 'app-etapa-retencao',
-  imports: [FormsModule, DatePipe, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-retencao.component.html',
 })
 export class EtapaRetencaoComponent implements OnChanges {
+  // "Enviar por e-mail" começa desmarcado: só envia quem marcar
+  protected readonly enviarEmail = signal(false);
   readonly detalhe = input.required<DetalheCompetencia>();
   readonly editavel = input(false);
   readonly atualizado = output<DetalheCompetencia>();
@@ -90,7 +93,7 @@ export class EtapaRetencaoComponent implements OnChanges {
     const ok = await this.dialogos.confirmar({
       titulo: 'Salvar a retenção de tributos?',
       mensagem: (alertas ? `Há ${alertas} conferência(s) com alerta — confira antes de salvar. ` : '') +
-        'O PDF da conferência é gerado com o seu nome, a data e a hora; a etapa do CADIN é liberada e a equipe recebe um e-mail.',
+        'O PDF da conferência é gerado com o seu nome, a data e a hora; a etapa do CADIN é liberada' + (this.enviarEmail() ? ' e a equipe recebe um e-mail.' : '. Nenhum e-mail será enviado agora.'),
       rotuloConfirmar: 'Salvar retenção',
     });
     if (!ok) return;
@@ -99,6 +102,7 @@ export class EtapaRetencaoComponent implements OnChanges {
     const corpo = {
       notas: this.notas.map((n) => ({ nota_id: n.nota.id, ...valores(n) })),
       discriminacao_conferida: this.discriminacaoConferida,
+      enviar_email: this.enviarEmail(),
     };
     this.dialogos.executar(this.api.salvarRetencao(d.contrato_id, d.id, corpo), 'Salvando a retenção e gerando o PDF…').subscribe({
       next: (novo) => this.atualizado.emit(novo),

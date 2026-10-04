@@ -4,16 +4,19 @@
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { AcessoService } from '../../../core/acesso/acesso.service';
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { NoticiasApiService } from '../noticias-api.service';
 import { Portal } from '../noticias.models';
+import { PainelExecutivoComponent } from '../../painel-executivo/painel-executivo.component';
+import { AniversariantesComponent } from '../../diretorio/aniversariantes.component';
 import { CartaoNoticiaComponent } from './cartao-noticia.component';
 import { SliderNoticiasComponent } from './slider-noticias.component';
 
 /** Página inicial (pública). Tudo o que aparece aqui é configurado em Notícias › Configurar portal. */
 @Component({
   selector: 'app-portal',
-  imports: [RouterLink, SliderNoticiasComponent, CartaoNoticiaComponent],
+  imports: [RouterLink, SliderNoticiasComponent, CartaoNoticiaComponent, AniversariantesComponent, PainelExecutivoComponent],
   template: `
     @if (acesso() === 'negado') {
       <div class="alert alert-warning" role="status">Você não possui acesso ao módulo solicitado. Solicite a revisão da ACL a um administrador do sistema.</div>
@@ -26,6 +29,8 @@ import { SliderNoticiasComponent } from './slider-noticias.component';
           @if (p.configuracao.subtitulo) { <small>{{ p.configuracao.subtitulo }}</small> }
         </div>
       </div>
+      @if (permissoes.painelExecutivo()) { <app-painel-executivo [compacto]="true" /> }
+      @if (autenticacao.usuario()) { <app-aniversariantes /> }
       <div class="grade-portal" [class.sem-atalhos]="!p.atalhos.length">
         <div class="coluna-noticias">
           @if (p.slides.length) {
@@ -68,6 +73,7 @@ export class PortalComponent implements OnInit {
   /** Preenchido pelo guardaAcl ao negar acesso a um módulo (?acesso=negado). */
   readonly acesso = input<string>();
   protected readonly autenticacao = inject(AutenticacaoService);
+  protected readonly permissoes = inject(AcessoService);
   private readonly api = inject(NoticiasApiService);
   protected readonly portal = signal<Portal | null>(null);
   protected readonly erro = signal(false);

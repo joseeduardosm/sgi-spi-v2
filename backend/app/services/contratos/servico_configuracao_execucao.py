@@ -12,7 +12,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.core.banco import agora_utc
 from app.models.contratos import (
@@ -57,7 +57,7 @@ def leitura_checklist(checklist: Checklist) -> LeituraChecklist:
     """Converte o checklist do banco para o formato da API."""
     return LeituraChecklist(
         id=checklist.id, versao=checklist.versao, nome=checklist.nome, ativo=checklist.ativo,
-        itens=[LeituraDocumentoChecklist(id=i.id, ordem=i.ordem, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio) for i in checklist.itens],
+        itens=[LeituraDocumentoChecklist(id=i.id, ordem=i.ordem, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade) for i in sorted(checklist.itens, key=_ordem_checklist)],
         criado_por_nome=checklist.criado_por_nome, criado_em=checklist.criado_em, ativado_em=checklist.ativado_em,
     )
 
@@ -100,7 +100,7 @@ def criar_checklist(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoChec
         contrato_id=contrato.id, versao=_proxima_versao(sessao, Checklist, contrato.id), nome=dados.nome,
         criado_por_id=autor.id, criado_por_nome=_nome(autor),
     )
-    checklist.itens = [ItemChecklist(ordem=n, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio) for n, i in enumerate(dados.itens, start=1)]
+    checklist.itens = [ItemChecklist(ordem=n, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade) for n, i in enumerate(dados.itens, start=1)]
     sessao.add(checklist)
     auditar(sessao, autor.login, "contrato.checklist.criar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": checklist.versao, "nome": dados.nome, "itens": len(dados.itens)})
@@ -118,7 +118,7 @@ def alterar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uui
     # Limpa os documentos antigos (flush grava a remoção) antes de inserir a nova lista
     checklist.itens.clear()
     sessao.flush()
-    checklist.itens.extend(ItemChecklist(ordem=n, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio) for n, i in enumerate(dados.itens, start=1))
+    checklist.itens.extend(ItemChecklist(ordem=n, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade) for n, i in enumerate(dados.itens, start=1))
     auditar(sessao, autor.login, "contrato.checklist.alterar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": checklist.versao, "nome": dados.nome})
     sessao.commit()
@@ -127,7 +127,7 @@ def alterar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uui
 def duplicar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid.UUID, autor: Usuario) -> None:
     """Cria uma nova versão com o mesmo conteúdo da versão de origem."""
     origem = _obter_checklist(sessao, contrato_id, checklist_id)
-    dados = GravacaoChecklist(nome=origem.nome, itens=[{"nome": i.nome, "observacao": i.observacao, "obrigatorio": i.obrigatorio} for i in origem.itens])
+    dados = GravacaoChecklist(nome=origem.nome, itens=[{"nome": i.nome, "observacao": i.observacao, "obrigatorio": i.obrigatorio, "com_validade": i.com_validade} for i in origem.itens])
     criar_checklist(sessao, contrato_id, dados, autor)
 
 
@@ -149,17 +149,57 @@ def copiar_checklist(competencia: Competencia, checklist: Checklist) -> None:
     # Documentos já anexados na competência, indexados pelo nome (sem diferenciar maiúsculas/espaços)
     anexados = {d.nome.strip().lower(): d for d in competencia.documentos if d.anexo_id}
     competencia.documentos.clear()
+    # Grava a remoção antes de inserir a nova lista: o banco não aceita duas linhas com a mesma `ordem` na competência
+    sessao = object_session(competencia)
+    if sessao is not None:
+        sessao.flush()
     # Recria a lista a partir do checklist, reaproveitando o anexo de um documento com o mesmo nome
-    for item in checklist.itens:
+    for item in sorted(checklist.itens, key=_ordem_checklist):
         anterior = anexados.get(item.nome.strip().lower())
         competencia.documentos.append(
             DocumentoMensal(
                 checklist_id=checklist.id, ordem=item.ordem, nome=item.nome, observacao=item.observacao, obrigatorio=item.obrigatorio,
+                com_validade=item.com_validade,
+                validade_ate=anterior.validade_ate if anterior and item.com_validade else None,
+                reaproveitado_de=anterior.reaproveitado_de if anterior and item.com_validade else None,
                 anexo_id=anterior.anexo_id if anterior else None,
                 enviado_em=anterior.enviado_em if anterior else None,
                 enviado_por_id=anterior.enviado_por_id if anterior else None,
             )
         )
+
+
+def _ordem_checklist(item) -> tuple[bool, int]:
+    """Obrigatórios primeiro e opcionais por último; dentro de cada grupo vale a ordem cadastrada."""
+    return (not item.obrigatorio, item.ordem)
+
+
+def _nome_chave(nome: str) -> str:
+    return " ".join(nome.lower().split())
+
+
+def reaproveitar_validos(contrato: Contrato, competencia: Competencia) -> list[str]:
+    """Documentos com validade ainda válidos da competência `competencia` passam para a competência regular seguinte.
+
+    A seguinte é a de menor início depois do fim desta, ainda sem checklist concluído. Só entra o documento com validade dela
+    **sem anexo** cujo par (mesmo nome) está anexado com `validade_ate` igual ou depois do último dia do período da seguinte. Não conclui
+    a etapa: a pessoa ainda confere e conclui (e isso estende a cadeia). Devolve os nomes reaproveitados.
+    """
+    seguintes = sorted((c for c in contrato.competencias if c.tipo == "regular" and c.periodo_inicio > competencia.periodo_fim
+                        and c.checklist_concluido_em is None and c.etapa_atual != "concluida"), key=lambda c: c.periodo_inicio)
+    if competencia.tipo != "regular" or not seguintes:
+        return []
+    proxima = seguintes[0]
+    origem = {_nome_chave(d.nome): d for d in competencia.documentos if d.com_validade and d.anexo_id and d.validade_ate}
+    reaproveitados = []
+    for doc in proxima.documentos:
+        par = origem.get(_nome_chave(doc.nome))
+        if doc.com_validade and doc.anexo_id is None and par is not None and par.validade_ate >= proxima.periodo_fim:
+            doc.anexo_id, doc.enviado_em, doc.enviado_por_id = par.anexo_id, par.enviado_em, par.enviado_por_id
+            doc.validade_ate = par.validade_ate
+            doc.reaproveitado_de = par.reaproveitado_de or competencia.competencia
+            reaproveitados.append(doc.nome)
+    return reaproveitados
 
 
 def ativar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid.UUID, autor: Usuario) -> int:
@@ -213,7 +253,8 @@ def leitura_formulario(formulario: FormularioAvaliacao) -> LeituraFormulario:
 def _formularios(sessao: Session, contrato_id: uuid.UUID) -> list[FormularioAvaliacao]:
     """Versões do formulário do contrato, da mais nova para a mais antiga."""
     return list(
-        sessao.scalars(select(FormularioAvaliacao).where(FormularioAvaliacao.contrato_id == contrato_id).order_by(FormularioAvaliacao.versao.desc()))
+        sessao.scalars(select(FormularioAvaliacao).where(FormularioAvaliacao.contrato_id == contrato_id, FormularioAvaliacao.excluido_em.is_(None))
+                       .order_by(FormularioAvaliacao.versao.desc()))
     )
 
 
@@ -226,7 +267,7 @@ def listar_formularios(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraF
 def _obter_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: uuid.UUID) -> FormularioAvaliacao:
     """Formulário pelo id, desde que seja do contrato."""
     formulario = sessao.get(FormularioAvaliacao, formulario_id)
-    if formulario is None or formulario.contrato_id != contrato_id:
+    if formulario is None or formulario.contrato_id != contrato_id or formulario.excluido_em is not None:
         raise RegistroNaoEncontrado("Formulário")
     return formulario
 
@@ -262,6 +303,19 @@ def duplicar_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: 
     """Cria uma nova versão com a mesma definição da versão de origem."""
     origem = _obter_formulario(sessao, contrato_id, formulario_id)
     criar_formulario(sessao, contrato_id, GravacaoFormulario(nome=origem.nome, definicao=origem.definicao), autor)
+
+
+def excluir_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: uuid.UUID, autor: Usuario) -> None:
+    """Exclusão lógica de uma versão inativa (ela some da lista; as avaliações que a usaram guardam a própria cópia)."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    formulario = _obter_formulario(sessao, contrato_id, formulario_id)
+    if formulario.ativo:
+        raise ErroRegraContrato("Um formulário ativo não pode ser excluído.")
+    formulario.excluido_em = agora_utc()
+    auditar(sessao, autor.login, "contrato.formulario.excluir", f"Contrato {contrato.numero}", autor_id=autor.id,
+            alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": formulario.versao, "nome": formulario.nome})
+    sessao.commit()
 
 
 def ativar_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: uuid.UUID, autor: Usuario) -> int:

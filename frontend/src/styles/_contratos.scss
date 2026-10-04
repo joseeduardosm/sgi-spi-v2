@@ -299,6 +299,16 @@ a.acao-primaria {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 
   .ocupa-2 { grid-column: span 2; }
+  .liberar-competencias {
+    padding: 12px 16px;
+    border: 1px solid #e8eaec;
+    border-radius: 9px;
+    background: #fcfcfc;
+
+    label { display: flex; align-items: center; gap: 10px; margin: 0 0 2px; font-size: 13px; font-weight: 700; cursor: pointer; }
+    input[type='checkbox'] { flex: none; width: 18px; height: 18px; margin: 0; padding: 0; accent-color: #af3741; }
+    small { display: block; padding-left: 28px; color: #6a7786; font-size: 12px; }
+  }
   .ocupa-3 { grid-column: span 3; }
   .ocupa-4 { grid-column: 1 / -1; }
 }
@@ -657,9 +667,13 @@ a.acao-primaria {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   align-items: end;
-  gap: 8px;
+  gap: 0;
   height: 180px;
-  padding: 8px 4px 0;
+  padding: 8px 0 0;
+  /* Eixos: linha de base e eixo vertical; grade horizontal suave a cada 25% da altura */
+  border-bottom: 1px solid #b9c2cc;
+  border-left: 1px solid #b9c2cc;
+  background: linear-gradient(to top, #e8ebef 1px, transparent 1px) 0 0 / 100% 25%;
 
   .coluna {
     display: flex;
@@ -667,6 +681,11 @@ a.acao-primaria {
     justify-content: center;
     gap: 2px;
     height: 100%;
+    padding: 0 6px;
+    /* Divisória vertical entre os meses */
+    border-right: 1px solid #e8ebef;
+
+    &:last-child { border-right: 0; }
   }
 
   .barra {
@@ -691,8 +710,8 @@ a.acao-primaria {
 .eixo-meses {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  gap: 8px;
-  padding: 6px 4px 0;
+  gap: 0;
+  padding: 6px 0 0 1px;
   color: #8e99a6;
   font-size: 10px;
   text-align: center;
@@ -1536,7 +1555,7 @@ a.acao-primaria {
 /* Janela do checklist: faixa "adicionar documento" e lista */
 .adicionar-documento {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) auto auto;
+  grid-template-columns: minmax(220px, 2fr) minmax(220px, 2fr) auto auto auto;
   gap: 0 12px;
   align-items: end;
   margin-top: 14px;
@@ -1545,17 +1564,33 @@ a.acao-primaria {
   border-radius: 8px;
   background: #fbfbfc;
 
-  label {
+  label,
+  .rotulo-campo {
     display: block;
     margin: 0 0 7px;
     color: #464f5a;
     font-size: 12px;
     font-weight: 700;
+    white-space: nowrap;
   }
 
   input {
     width: 100%;
     height: 42px;
+    margin-bottom: 16px;
+    padding: 0 12px;
+    border: 1px solid #e2e5e8;
+    border-radius: 7px;
+    outline: 0;
+    color: #3d454e;
+    background: #fcfcfc;
+    font-size: 13px;
+
+    &::placeholder { color: #9aa4af; }
+    &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; }
+  }
+
+  .seletor-segmentado {
     margin-bottom: 16px;
   }
 
@@ -1570,8 +1605,49 @@ a.acao-primaria {
   overflow-y: auto;
 }
 
+/* Janela do checklist: ocupa 80% da tela (largura e altura) e a lista usa o espaço que sobra */
+.modal-portal.modal-largo.modal-checklist {
+  display: flex;
+  flex-direction: column;
+  width: 80vw;
+  max-width: none;
+  height: 80vh;
+  max-height: 80vh;
+  overflow: hidden;
+
+  /* O formulário ocupa o que sobra da janela; só a lista de documentos rola e o rodapé fica sempre à vista */
+  > form {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .lista-documentos-checklist {
+    flex: 1;
+    min-height: 160px;
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  .grade-formulario,
+  .secao-formulario,
+  .adicionar-documento,
+  .dica-formulario,
+  > form > footer {
+    flex: none;
+  }
+}
+
 .modal-portal footer .resumo-checklist {
   margin: 0 auto 0 0;
+}
+
+@media (max-width: 1100px) {
+  .adicionar-documento {
+    grid-template-columns: 1fr 1fr;
+    gap: 0 12px;
+  }
 }
 
 @media (max-width: 767px) {
@@ -1695,7 +1771,8 @@ $prazo-normal: #2b4468;
     position: relative;
     height: 14px;
     border-radius: 7px;
-    background: #eceef1;
+    /* Marcas discretas a cada 25% do prazo total */
+    background: linear-gradient(90deg, #d3d9df 1px, transparent 1px) 0 0 / 25% 100%, #eceef1;
     overflow: hidden;
   }
 
@@ -1781,3 +1858,37 @@ $prazo-normal: #2b4468;
     }
   }
 }
+
+/* Documento com validade (checklist): data da etapa de execução */
+.campo-validade { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; color: #464f5a; font-size: 12px; font-weight: 700; input { height: 34px; padding: 0 10px; border: 1px solid #e2e5e8; border-radius: 7px; background: #fcfcfc; font-size: 13px; font-weight: 400; } }
+
+/* Cartões dobráveis (versões de checklist e de formulário de avaliação) */
+.barra-dobrar { display: flex; justify-content: flex-end; gap: 14px; margin: 0 0 8px; }
+.cartao-dobravel {
+  .cabecalho-dobravel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+
+    small { margin-right: auto; color: #6a7786; }
+    .seta { display: inline-block; width: 14px; color: #8c97a4; transition: transform 0.15s; &.aberta { transform: rotate(90deg); } }
+    &:focus-visible { outline: 2px solid #bc3843; outline-offset: 3px; border-radius: 6px; }
+  }
+
+  .detalhe-formulario { margin: 10px 0 6px; font-size: 12px; color: #3d454e; }
+  .bloco-formulario { margin: 0 0 10px; ul { margin: 4px 0 0; padding-left: 20px; } }
+}
+
+/* Campo numérico na tabela de correção de itens */
+.campo-correcao { width: 130px; height: 36px; padding: 0 10px; border: 1px solid #e2e5e8; border-radius: 7px; background: #fcfcfc; font-size: 13px; text-align: right; &:disabled { background: #f1f2f4; } &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; outline: 0; } }
+
+/* Carteira: caixa "Meus contratos" ao lado da busca */
+.filtros-gestao .opcao-meus { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: #464f5a; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; input { width: 16px; height: 16px; margin: 0; accent-color: #af3741; } }

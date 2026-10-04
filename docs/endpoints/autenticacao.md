@@ -114,6 +114,7 @@ Perfil institucional do usuário autenticado.
 | `email` | string | E-mail institucional |
 | `ramal` | string | Ramal |
 | `celular` | string | Celular |
+| `linkedin` | string | Link do perfil no LinkedIn (opcional, até 200). Domínio diferente de `linkedin.com` → `422`. **Vale na hora**: não passa pela validação da CGP |
 | `cargo` | string | Cargo |
 | `departamento` | string | Departamento |
 | `andar` | string | Andar: `Subsolo` ou `1` a `13` (lista fixa na tela) |

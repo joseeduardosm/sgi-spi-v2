@@ -41,9 +41,9 @@ def emails_da_equipe(sessao: Session, contrato: Contrato) -> list[str]:
     return _unicos(u.email for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(ids))) if u.email)
 
 
-def emails_dos_prepostos(contrato: Contrato) -> list[str]:
-    """E-mails dos prepostos ativos da empresa contratada."""
-    return _unicos(p.email for p in contrato.empresa.prepostos if p.ativo and p.email)
+def emails_dos_prepostos(contrato: Contrato, prepostos_ids: list[uuid.UUID] | None = None) -> list[str]:
+    """E-mails dos prepostos ativos da empresa contratada. Com `prepostos_ids`, só os escolhidos (lista vazia = nenhum; `None` = todos)."""
+    return _unicos(p.email for p in contrato.empresa.prepostos if p.ativo and p.email and (prepostos_ids is None or p.id in prepostos_ids))
 
 
 def destinatarios(sessao: Session, contrato: Contrato) -> list[str]:
@@ -132,8 +132,11 @@ def mensagem_nf(contrato: Contrato, competencia: Competencia) -> tuple[str, str,
     return assunto, texto, html
 
 
-def notificar_nf(competencia_id: uuid.UUID) -> None:
-    """E-mail da NF juntada: Para = Financeiro, Cc = equipe (segundo plano, sessão própria)."""
+def notificar_nf(competencia_id: uuid.UUID, financeiro_ids: list[int] | None = None) -> None:
+    """E-mail da NF juntada: Para = Financeiro, Cc = equipe (segundo plano, sessão própria).
+
+    Com `financeiro_ids`, só os usuários escolhidos do Financeiro recebem (lista vazia = ninguém do Financeiro; `None` = todos).
+    """
     from app.services.contratos.servico_retencao import usuarios_financeiro
 
     with FabricaSessao() as sessao:
@@ -142,7 +145,7 @@ def notificar_nf(competencia_id: uuid.UUID) -> None:
             return
         contrato = obter_contrato(sessao, competencia.contrato_id)
         competencia = next(c for c in contrato.competencias if c.id == competencia_id)
-        financeiro = _unicos(u.email for u in usuarios_financeiro(sessao) if u.email)
+        financeiro = _unicos(u.email for u in usuarios_financeiro(sessao) if u.email and (financeiro_ids is None or u.id in financeiro_ids))
         assunto, texto, html = mensagem_nf(contrato, competencia)
         if not financeiro:
             para, resultado = emails_da_equipe(sessao, contrato), ResultadoSmtp(
@@ -310,7 +313,7 @@ def anexos_ocorrencia(ocorrencia: OcorrenciaDiario) -> list[AnexoEmail]:
         return []
 
 
-def notificar_ocorrencia(ocorrencia_id: uuid.UUID) -> None:
+def notificar_ocorrencia(ocorrencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID] | None = None) -> None:
     """Envia o e-mail da ocorrência e grava o resultado (roda em segundo plano, com sessão própria)."""
     with FabricaSessao() as sessao:
         ocorrencia = sessao.get(OcorrenciaDiario, ocorrencia_id)
@@ -323,7 +326,8 @@ def notificar_ocorrencia(ocorrencia_id: uuid.UUID) -> None:
             aviso = "Os anexos não foram incluídos neste e-mail (tamanho acima do limite); estão disponíveis no SGI SPI."
             texto += "\n\n" + aviso
             html = html.replace("</body>", f"<p>{aviso}</p></body>") if "</body>" in html else html + f"<p>{aviso}</p>"
-        para, resultado = _enviar(sessao, contrato, assunto, texto, html, anexos or None)
+        destino = _unicos([*emails_da_equipe(sessao, contrato), *emails_dos_prepostos(contrato, prepostos_ids)])
+        para, resultado = _enviar(sessao, contrato, assunto, texto, html, anexos or None, para=destino)
         ocorrencia.email_enviado_em = agora_utc()
         ocorrencia.email_ok = resultado.sucesso
         ocorrencia.email_destinatarios = para
@@ -408,7 +412,7 @@ def exigir_reenvio_ocorrencia(sessao: Session, contrato_id: uuid.UUID, ocorrenci
     servico_diario.obter_ocorrencia(contrato, ocorrencia_id)
 
 
-def notificar_medicao(competencia_id: uuid.UUID) -> None:
+def notificar_medicao(competencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID] | None = None) -> None:
     """Envia o e-mail da medição concluída e grava o resultado (segundo plano, sessão própria)."""
     with FabricaSessao() as sessao:
         competencia = sessao.get(Competencia, competencia_id)
@@ -423,7 +427,8 @@ def notificar_medicao(competencia_id: uuid.UUID) -> None:
         except OSError as erro:
             para, resultado = [], ResultadoSmtp(False, 0, f"Não foi possível ler a memória de cálculo: {erro}")
         else:
-            para, resultado = _enviar(sessao, contrato, assunto, texto, html, anexos)
+            destino = _unicos([*emails_da_equipe(sessao, contrato), *emails_dos_prepostos(contrato, prepostos_ids)])
+            para, resultado = _enviar(sessao, contrato, assunto, texto, html, anexos, para=destino)
         competencia.email_medicao_enviado_em = agora
         competencia.email_medicao_ok = resultado.sucesso
         competencia.email_medicao_destinatarios = para
@@ -471,7 +476,7 @@ def mensagem_avaliacao(contrato: Contrato, competencia: Competencia) -> tuple[st
     return assunto, texto, html
 
 
-def notificar_avaliacao(competencia_id: uuid.UUID) -> None:
+def notificar_avaliacao(competencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID] | None = None) -> None:
     """Envia o relatório de avaliação aos prepostos (cópia para a equipe) e grava o resultado (segundo plano)."""
     with FabricaSessao() as sessao:
         competencia = sessao.get(Competencia, competencia_id)
@@ -481,14 +486,14 @@ def notificar_avaliacao(competencia_id: uuid.UUID) -> None:
         competencia = next(c for c in contrato.competencias if c.id == competencia_id)
         avaliacao = competencia.avaliacao
         assunto, texto, html = mensagem_avaliacao(contrato, competencia)
-        prepostos = emails_dos_prepostos(contrato)
+        prepostos = emails_dos_prepostos(contrato, prepostos_ids)
         try:
             pdf = servico_anexos.caminho(avaliacao.pdf_gerado_anexo).read_bytes()
         except OSError as erro:
             para, resultado = [], ResultadoSmtp(False, 0, f"Não foi possível ler o PDF da avaliação: {erro}")
         else:
             if not prepostos:
-                para, resultado = [], ResultadoSmtp(False, 0, "Nenhum preposto ativo com e-mail: cadastre o e-mail do preposto na empresa.")
+                para, resultado = [], ResultadoSmtp(False, 0, "Nenhum preposto escolhido (ou ativo com e-mail): cadastre o e-mail do preposto na empresa e selecione quem deve receber.")
             else:
                 nome = f"avaliacao_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf"
                 para, resultado = _enviar(sessao, contrato, assunto, texto, html, [AnexoEmail(nome, pdf)], para=prepostos,

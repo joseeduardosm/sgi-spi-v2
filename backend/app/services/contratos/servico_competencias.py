@@ -16,7 +16,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import BinaryIO
 
@@ -72,7 +72,7 @@ from app.schemas.contratos.execucao import (
 from app.services import servico_anexos
 from app.services.contratos import avisos, calculos, documentos_execucao, leitor_nota_xml, servico_diario, servico_retencao, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
-from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist, formulario_ativo
+from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist, formulario_ativo, reaproveitar_validos, _ordem_checklist
 from app.services.contratos.servico_contratos import (
     designacoes_vigentes,
     exigir_edicao,
@@ -272,7 +272,7 @@ def situacao_competencia(competencia: Competencia) -> str:
     """Situação exibida na lista: concluída, pendente (período não acabou), em andamento ou disponível."""
     if competencia.etapa_atual == "concluida":
         return "concluida"
-    if hoje() <= competencia.periodo_fim:
+    if not _liberada(competencia):
         return "pendente"
     if competencia.medicao_iniciada_em is not None or competencia.etapa_atual != "medicao":
         return "em_andamento"
@@ -321,9 +321,14 @@ def _exigir_etapa(competencia: Competencia, etapa: str, descricao: str) -> None:
         raise ErroRegraContrato(f"{descricao} {situacao} nesta competência (etapa atual: {competencia.etapa_atual}).")
 
 
+def _liberada(competencia: Competencia) -> bool:
+    """A medição só é liberada depois do fim do período, exceto nos contratos com "Liberar todas as competências"."""
+    return competencia.contrato.liberar_todas_competencias or hoje() > competencia.periodo_fim
+
+
 def _exigir_liberada(competencia: Competencia) -> None:
-    """Só libera a medição depois do fim do período (não se mede um mês que ainda não acabou)."""
-    if hoje() <= competencia.periodo_fim:
+    """Só libera a medição depois do fim do período (não se mede um mês que ainda não acabou), salvo "Liberar todas as competências"."""
+    if not _liberada(competencia):
         raise ErroRegraContrato(f"A medição será liberada após o encerramento do período ({competencia.periodo_fim:%d/%m/%Y}).")
 
 
@@ -371,11 +376,14 @@ def requisitos(contrato: Contrato) -> Requisitos:
     return Requisitos(prontos=not pendencias, pendencias=pendencias)
 
 
-def itens_previstos(contrato: Contrato, periodo: calculos.PeriodoExecucao) -> list[ItemMedicao]:
-    """Fotografia dos itens na competência: preço vigente e quantidade prevista (pró-rata por item)."""
+def itens_previstos(contrato: Contrato, periodo: calculos.PeriodoExecucao, itens_do_contrato=None) -> list[ItemMedicao]:
+    """Fotografia dos itens na competência: preço vigente e quantidade prevista (pró-rata por item).
+
+    `itens_do_contrato` permite calcular com itens alternativos (a prévia de uma correção usa cópias com os valores propostos, sem tocar no cadastro).
+    """
     apontados = apontamentos_da_vigencia(contrato, periodo.sequencia_vigencia)
     itens = []
-    for item in contrato.itens:
+    for item in (contrato.itens if itens_do_contrato is None else itens_do_contrato):
         preco = valores.preco_em(contrato, item, periodo.competencia)
         # Contínuo: soma mês a mês, pois quantidade e pró-rata podem variar dentro do período
         if item.tipo == "continuo":
@@ -399,6 +407,78 @@ def itens_previstos(contrato: Contrato, periodo: calculos.PeriodoExecucao) -> li
     return itens
 
 
+def competencias_abertas(contrato: Contrato) -> list[Competencia]:
+    """Competências regulares ainda sem medição concluída: seguem o cadastro dos itens (as concluídas são histórico congelado)."""
+    return [c for c in contrato.competencias if c.tipo == "regular" and c.medicao_concluida_em is None]
+
+
+def _periodos_por_inicio(contrato: Contrato) -> dict:
+    return {p.inicio: p for p in calculos.periodos_de_execucao(vigencias(contrato), contrato.periodicidade_meses)}
+
+
+def sincronizar_competencia(contrato: Contrato, competencia: Competencia, periodos: dict | None = None, itens_do_contrato=None, aplicar: bool = True) -> dict | None:
+    """Alinha as linhas de item de uma competência aberta ao cadastro, preservando a `quantidade_medida`.
+
+    Atualiza preço, quantidade prevista, fator, ordem e descrição; cria a linha de item novo; remove a de item que saiu do contrato (se nada foi
+    medido nele). Competência fora do calendário atual (migrada do SGI) não é tocada (`None`). Com `aplicar=False` só calcula (prévia).
+    Devolve `{"alteradas": [...], "incluidas": [...], "removidas": [...], "valor_antes", "valor_depois"}`.
+    """
+    periodos = periodos if periodos is not None else _periodos_por_inicio(contrato)
+    periodo = periodos.get(competencia.periodo_inicio)
+    if periodo is None:
+        return None
+    atuais = {i.item_id: i for i in competencia.itens if i.item_id is not None}
+    novos = {i.item_id: i for i in itens_previstos(contrato, periodo, itens_do_contrato)}
+    resultado: dict = {"alteradas": [], "incluidas": [], "removidas": [], "valor_antes": ZERO, "valor_depois": ZERO}
+    for linha in competencia.itens:
+        resultado["valor_antes"] += linha.valor_unitario * linha.quantidade_prevista
+    for item_id, novo in novos.items():
+        linha = atuais.get(item_id)
+        resultado["valor_depois"] += novo.valor_unitario * novo.quantidade_prevista
+        if linha is None:
+            resultado["incluidas"].append(novo.descricao)
+            if aplicar:
+                competencia.itens.append(novo)
+            continue
+        mudou = (linha.valor_unitario, linha.quantidade_prevista, linha.fator_meses) != (novo.valor_unitario, novo.quantidade_prevista, novo.fator_meses)
+        if mudou:
+            resultado["alteradas"].append(linha.descricao)
+        if aplicar:
+            linha.ordem, linha.descricao, linha.tipo, linha.calcula_pro_rata = novo.ordem, novo.descricao, novo.tipo, novo.calcula_pro_rata
+            linha.valor_unitario, linha.fator_meses, linha.quantidade_prevista = novo.valor_unitario, novo.fator_meses, novo.quantidade_prevista
+    for item_id, linha in atuais.items():
+        if item_id not in novos and linha.quantidade_medida == 0:
+            resultado["removidas"].append(linha.descricao)
+            if aplicar:
+                competencia.itens.remove(linha)
+    # O que foi medido nunca sai: linha de item removido com quantidade medida fica (a correção impede essa remoção antes)
+    if aplicar:
+        competencia.versao_cadastro_sincronizada = contrato.versao_cadastro
+        if (resultado["alteradas"] or resultado["incluidas"] or resultado["removidas"]) and competencia.ciencias:
+            competencia.ciencias.clear()  # as ciências atestavam os valores anteriores
+            resultado["ciencias_invalidadas"] = True
+    return resultado
+
+
+def sincronizar_abertas(contrato: Contrato) -> list[tuple[Competencia, dict]]:
+    """Sincroniza todas as competências abertas do contrato; devolve só as que mudaram."""
+    periodos = _periodos_por_inicio(contrato)
+    mudadas = []
+    for competencia in competencias_abertas(contrato):
+        r = sincronizar_competencia(contrato, competencia, periodos)
+        if r and (r["alteradas"] or r["incluidas"] or r["removidas"]):
+            mudadas.append((competencia, r))
+    return mudadas
+
+
+def sincronizar_se_defasada(contrato: Contrato, competencia: Competencia) -> bool:
+    """Rede de segurança: antes de escrever numa competência aberta, alinha-a ao cadastro se a versão ficou para trás. Devolve se algum valor mudou."""
+    if competencia.tipo == "regular" and competencia.medicao_concluida_em is None and competencia.versao_cadastro_sincronizada != contrato.versao_cadastro:
+        r = sincronizar_competencia(contrato, competencia)
+        return bool(r and (r["alteradas"] or r["incluidas"] or r["removidas"]))
+    return False
+
+
 def gerar_competencias(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> int:
     """Cria as competências que faltam (idempotente). Depois disso, itens e ordem ficam bloqueados."""
     contrato = obter_contrato(sessao, contrato_id)
@@ -418,7 +498,7 @@ def gerar_competencias(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) 
         # Cada competência nova recebe a fotografia dos itens, a cópia do checklist e, se houver, do formulário
         competencia = Competencia(
             competencia=periodo.competencia, periodo_inicio=periodo.inicio, periodo_fim=periodo.fim,
-            sequencia_vigencia=periodo.sequencia_vigencia, etapa_atual="medicao",
+            sequencia_vigencia=periodo.sequencia_vigencia, etapa_atual="medicao", versao_cadastro_sincronizada=contrato.versao_cadastro,
         )
         competencia.itens = itens_previstos(contrato, periodo)
         copiar_checklist(competencia, checklist)
@@ -538,7 +618,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         contrato_id=contrato.id, contrato_numero=contrato.numero, etapas=etapas_da_competencia(competencia),
         pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=integra_equipe(contrato, usuario),
         pode_gerar_consolidado_novamente=pode_gerar_consolidado_novamente(contrato, usuario) and pode_editar(sessao, contrato, usuario),
-        liberada=hoje() > competencia.periodo_fim,
+        liberada=_liberada(competencia),
         itens=[
             LeituraItemMedicao(
                 id=i.id, ordem=i.ordem, descricao=i.descricao, tipo=i.tipo, calcula_pro_rata=i.calcula_pro_rata,
@@ -596,8 +676,9 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
             for c in competencia.consultas_cadin
         ],
         documentos=[
-            LeituraDocumentoMensal(id=d.id, ordem=d.ordem, nome=d.nome, observacao=d.observacao, obrigatorio=d.obrigatorio, arquivo=_arquivo(anexos.get(d.anexo_id)))
-            for d in competencia.documentos
+            LeituraDocumentoMensal(id=d.id, ordem=d.ordem, nome=d.nome, observacao=d.observacao, obrigatorio=d.obrigatorio, com_validade=d.com_validade,
+                                   validade_ate=d.validade_ate, reaproveitado_de=d.reaproveitado_de, arquivo=_arquivo(anexos.get(d.anexo_id)))
+            for d in sorted(competencia.documentos, key=_ordem_checklist)
         ],
         consolidado=_arquivo(competencia.consolidado_anexo),
         ordem_bancaria=_arquivo(competencia.ob_anexo),
@@ -712,6 +793,7 @@ def salvar_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    sincronizar_se_defasada(contrato, competencia)
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
     # A medição precisa trazer todos os itens da competência, nem mais nem menos
@@ -753,6 +835,9 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, competencia_id: u
     """Etapa 1: registra a ciência do usuário logado na medição salva."""
     contrato = obter_contrato(sessao, contrato_id)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    if sincronizar_se_defasada(contrato, competencia):
+        sessao.commit()
+        raise ErroRegraContrato("Os itens do contrato foram atualizados por uma correção de cadastro. Recarregue a página e confira os valores antes de dar ciência.")
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
     if competencia.medicao_iniciada_em is None:
@@ -787,6 +872,7 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    sincronizar_se_defasada(contrato, competencia)
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
     # Regras para concluir: ciências mínimas, mesma seleção de NEs salva, saldo e limite dos itens sob demanda
@@ -1328,8 +1414,16 @@ def registrar_cadin(
 # Etapa 5 — checklist mensal
 # ---------------------------------------------------------------------------------------------
 
-def enviar_documento_mensal(sessao: Session, contrato_id, competencia_id, documento_id: uuid.UUID, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
-    """Etapa 5: anexa o PDF de um documento do checklist mensal."""
+def _estender_validos(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
+    """Com o checklist concluído, os documentos com validade ainda válidos passam para a competência seguinte."""
+    reaproveitados = reaproveitar_validos(contrato, competencia)
+    if reaproveitados:
+        _auditar(sessao, autor, "contrato.execucao.checklist.reaproveitar", contrato, competencia, documentos=reaproveitados)
+
+
+def enviar_documento_mensal(sessao: Session, contrato_id, competencia_id, documento_id: uuid.UUID, arquivo: BinaryIO, nome: str, autor: Usuario,
+                            validade_ate: date | None = None) -> None:
+    """Etapa 5: anexa o PDF de um documento do checklist mensal (documento com validade exige a data de validade)."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
@@ -1337,12 +1431,17 @@ def enviar_documento_mensal(sessao: Session, contrato_id, competencia_id, docume
     documento = next((d for d in competencia.documentos if d.id == documento_id), None)
     if documento is None:
         raise RegistroNaoEncontrado("Documento do checklist")
+    if documento.com_validade and validade_ate is None:
+        raise ErroRegraContrato("Informe até quando o documento é válido.")
     documento.anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-execucao-checklist", autor.id, contrato_id=contrato.id)
     documento.enviado_em, documento.enviado_por_id = agora_utc(), autor.id
+    # Um envio novo substitui o arquivo (inclusive um reaproveitado) e a validade
+    documento.validade_ate, documento.reaproveitado_de = (validade_ate if documento.com_validade else None), None
     sessao.flush()
     # Com todos os documentos anexados (obrigatórios e opcionais), a etapa conclui sozinha
     if all(d.anexo_id for d in competencia.documentos):
         concluir_etapa_paralela(competencia, "checklist")
+        _estender_validos(sessao, contrato, competencia, autor)
     _auditar(sessao, autor, "contrato.execucao.checklist.enviar", contrato, competencia, documento=documento.nome)
     sessao.commit()
 
@@ -1357,6 +1456,7 @@ def concluir_checklist(sessao: Session, contrato_id, competencia_id, autor: Usua
     if faltando:
         raise ErroRegraContrato("Anexe os documentos obrigatórios: " + "; ".join(faltando) + ".")
     concluir_etapa_paralela(competencia, "checklist")
+    _estender_validos(sessao, contrato, competencia, autor)
     _auditar(sessao, autor, "contrato.execucao.checklist.concluir", contrato, competencia,
              opcionais_sem_anexo=[d.nome for d in competencia.documentos if not d.anexo_id])
     sessao.commit()

@@ -144,6 +144,20 @@ def test_nf_envia_email_ao_financeiro_com_copia_para_a_equipe(cliente, cenario):
     assert cliente.get(base, headers=gestora).json()["email_nf"]["ok"] is True
 
 
+def test_escolha_dos_usuarios_do_financeiro_que_recebem_o_aviso_da_nf(cliente, cenario):
+    """O seletor agrupa o Financeiro por setor; `financeiro_ids` limita o Para do e-mail (a equipe segue em cópia)."""
+    contrato, base, gestora = cenario
+    grupos = cliente.get(_url(contrato, "/financeiro"), headers=gestora).json()
+    usuarios = [u for g in grupos for u in g["usuarios"]]
+    assert {u["email"] for u in usuarios} == {"fin1@sp.gov.br", "fin2@sp.gov.br"} and all(g["setor"] for g in grupos)
+    escolhido = next(u for u in usuarios if u["email"] == "fin2@sp.gov.br")
+    SmtpSimulado.enviadas.clear()
+    r = juntar_nf(cliente, base, gestora, "2105.00", "123", financeiro_ids=[escolhido["id"]])
+    assert r.status_code == 200, r.text
+    mensagem, _, _, _ = SmtpSimulado.enviadas[0]
+    assert mensagem["To"] == "fin2@sp.gov.br" and mensagem["Cc"] == "gestora@sp.gov.br, fiscal@sp.gov.br"
+
+
 def test_mesma_nota_nao_entra_em_duas_competencias(cliente, cenario):
     contrato, base, gestora = cenario
     assert juntar_nf(cliente, base, gestora, "2105.00", "123").status_code == 200

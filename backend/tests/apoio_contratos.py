@@ -122,7 +122,7 @@ def xml_nfe(valor: str, numero: str = "1", cnpj_emitente: str = CNPJ_CONTRATADA,
 
 
 def juntar_nf(cliente, base: str, h: dict, valor: str, numero: str = "1", adicional: tuple[str, str] | None = None,
-              recebida_em: str = "2026-02-05", prazo: str = "30", extras: tuple[tuple[str, str], ...] = (), **xml_extras):
+              recebida_em: str = "2026-02-05", prazo: str = "30", extras: tuple[tuple[str, str], ...] = (), email: bool = True, financeiro_ids: list[int] | None = None, **xml_extras):
     """Etapa 3: envia PDF + XML da nota e, se houver, de outras notas (`adicional=(valor, numero)` e `extras=[(valor, numero), …]`)."""
     notas = [(valor, numero, xml_extras)] + ([(*adicional, {})] if adicional else []) + [(v, n, {}) for v, n in extras]
     arquivos = []
@@ -131,17 +131,19 @@ def juntar_nf(cliente, base: str, h: dict, valor: str, numero: str = "1", adicio
         arquivos.append(("arquivos", (f"{nome}.pdf", PDF, "application/pdf")))
         arquivos.append(("xmls", (f"{nome}.xml", xml_nfe(v, n, **extra), "application/xml")))
     corpo = json.dumps([{"arquivo": i, "xml": i} for i in range(len(notas))])
-    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo, "notas": corpo}
+    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo, "notas": corpo, "enviar_email": "true" if email else "false"}
+    if financeiro_ids is not None:
+        dados["financeiro_ids"] = ",".join(str(i) for i in financeiro_ids)
     return cliente.post(f"{base}/nota-fiscal", data=dados, files=arquivos, headers=h)
 
 
 def conferir_retencao(cliente, base: str, h: dict, principal: dict | None = None, adicional: dict | None = None, discriminacao: bool = True,
-                      outras: tuple[dict, ...] = ()):
+                      outras: tuple[dict, ...] = (), email: bool = True):
     """Etapa 4: salva a retenção de tributos (principal, adicional e `outras` notas, na ordem); devolve a resposta.
 
     Uma nota para a qual não se informou retenção (ex.: `adicional=None` com duas notas) fica de fora da gravação.
     """
     notas = cliente.get(base, headers=h).json()["notas_fiscais"]
     informadas = [principal or {}, adicional, *outras]
-    corpo = {"notas": [{"nota_id": n["id"], **r} for n, r in zip(notas, informadas) if r is not None], "discriminacao_conferida": discriminacao}
+    corpo = {"notas": [{"nota_id": n["id"], **r} for n, r in zip(notas, informadas) if r is not None], "discriminacao_conferida": discriminacao, "enviar_email": email}
     return cliente.put(f"{base}/retencao", json=corpo, headers=h)

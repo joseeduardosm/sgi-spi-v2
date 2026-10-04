@@ -42,6 +42,17 @@ export class TarefasApiService {
     return this.http.post<TarefaDetalhe>(this.base, dados);
   }
 
+  /** Cria a tarefa já com anexos (até 5), em `multipart`: os arquivos ficam no evento "Tarefa criada". */
+  criarComAnexos(dados: {
+    titulo: string; descricao: string; prazo: string; prioridade: PrioridadeTarefa; equipe_id: string | null;
+    responsavel_id: number | null; participantes_ids: number[]; marcadores_ids: string[];
+  }, arquivos: File[]): Observable<TarefaDetalhe> {
+    const corpo = new FormData();
+    corpo.append('dados', JSON.stringify(dados));
+    for (const a of arquivos) corpo.append('arquivos', a);
+    return this.http.post<TarefaDetalhe>(`${this.base}/com-anexos`, corpo);
+  }
+
   editar(numero: number, dados: { titulo: string; descricao: string; prioridade: PrioridadeTarefa; participantes_ids: number[]; marcadores_ids: string[]; versao: number }) {
     return this.http.put<TarefaDetalhe>(`${this.base}/${numero}`, dados);
   }

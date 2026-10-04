@@ -183,6 +183,7 @@ export interface DetalheContrato extends ResumoContrato {
   vigencia_maxima_meses: number;
   periodicidade_meses: number;
   mes_reajuste: number;
+  liberar_todas_competencias: boolean;
   sei_gestao_numero: string;
   sei_gestao_link: string;
   sei_execucao_numero: string;
@@ -234,6 +235,7 @@ export interface GravacaoContrato {
   vigencia_maxima_meses: number;
   periodicidade_meses: number;
   mes_reajuste: number;
+  liberar_todas_competencias: boolean;
   sei_gestao_numero: string;
   sei_gestao_link: string;
   sei_execucao_numero: string;
@@ -365,6 +367,8 @@ export interface DocumentoChecklist {
   observacao: string;
   /** Obrigatório precisa estar anexado para concluir a etapa; opcional, não. */
   obrigatorio: boolean;
+  /** Documento com validade: o envio pede a data e, se ainda valer, ele é reaproveitado na competência seguinte. */
+  com_validade: boolean;
 }
 
 /** Versão do checklist do contrato. */
@@ -432,7 +436,7 @@ export interface Modelo {
   id: string;
   tipo: 'checklist' | 'formulario';
   nome: string;
-  conteudo: { itens?: { nome: string; observacao: string; obrigatorio?: boolean }[] } & Partial<DefinicaoFormulario>;
+  conteudo: { itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean }[] } & Partial<DefinicaoFormulario>;
   ativo: boolean;
   atualizado_em: string;
 }
@@ -626,6 +630,11 @@ export interface DocumentoMensal {
   nome: string;
   observacao: string;
   obrigatorio: boolean;
+  com_validade: boolean;
+  /** Até quando o documento vale (YYYY-MM-DD). */
+  validade_ate: string | null;
+  /** Mês (YYYY-MM-DD, dia 1) da competência de onde o arquivo foi reaproveitado automaticamente. */
+  reaproveitado_de: string | null;
   arquivo: Arquivo | null;
 }
 
@@ -1022,6 +1031,10 @@ export interface GravacaoOcorrencia {
   glosas: { item_id: string; quantidade: string }[];
   impacta_avaliacao: boolean;
   itens_avaliacao: string[];
+  /** Envia o registro por e-mail à equipe e aos prepostos (padrão: não envia). */
+  enviar_email?: boolean;
+  /** Prepostos que recebem (nulo = todos os ativos; vazio = só a equipe). */
+  prepostos_ids?: string[] | null;
 }
 
 // --- Importação por XLSX ----------------------------------------------------------------------
@@ -1071,6 +1084,91 @@ export interface PreviaImportacao {
   preposto: { existente: boolean; cpf: string; nome: string; email: string; telefone: string } | null;
   itens: ItemPreviaImportacao[];
   valor_global_estimado: Decimal | null;
+  erros: ErroImportacao[];
+  avisos: string[];
+  pode_importar: boolean;
+}
+
+// --- Correção de itens (depois de geradas as competências) ------------------------------------
+
+export interface MudancaItemCorrecao {
+  item_id: string;
+  descricao: string;
+  campos: Record<string, { de: string; para: string }>;
+}
+
+export interface PreviaCompetenciaCorrecao {
+  competencia: string;
+  identificador: string;
+  itens_alterados: string[];
+  itens_incluidos: string[];
+  itens_removidos: string[];
+  valor_antes: string;
+  valor_depois: string;
+  variacao: string;
+  medicao_iniciada: boolean;
+  ciencias_invalidadas: boolean;
+}
+
+export interface PreviaCorrecao {
+  competencias_abertas: PreviaCompetenciaCorrecao[];
+  variacao_total: string;
+  congeladas: number;
+  fora_do_calendario: number;
+  avisos: string[];
+}
+
+export interface CorrecaoItens {
+  id: string;
+  autor_id: number | null;
+  autor_nome: string;
+  justificativa: string;
+  mudancas: MudancaItemCorrecao[];
+  previa: PreviaCorrecao;
+  situacao: 'pendente' | 'aplicada' | 'recusada' | 'cancelada';
+  decidido_por_nome: string;
+  decidido_em: string | null;
+  motivo_decisao: string;
+  criado_em: string;
+  pode_decidir: boolean;
+  pode_cancelar: boolean;
+}
+
+export interface ListaCorrecoes {
+  pode_propor: boolean;
+  itens: CorrecaoItens[];
+}
+
+export interface HistoricoItemContrato {
+  id: string;
+  item_id: string | null;
+  descricao_item: string;
+  versao_cadastro: number;
+  autor_nome: string;
+  motivo: string;
+  campos: Record<string, { de: string; para: string }>;
+  criado_em: string;
+}
+
+// --- Importação de checklist e formulário por XLSX ---------------------------------------------
+
+/** Documento lido de uma linha da planilha do checklist. */
+export interface DocumentoPreviaImportacao {
+  linha: number;
+  nome: string;
+  observacao: string;
+  obrigatorio: boolean;
+  com_validade: boolean;
+}
+
+/** Prévia da importação de checklist ou formulário (nada foi gravado). */
+export interface PreviaImportacaoModelo {
+  tipo: 'checklist' | 'formulario';
+  nome: string;
+  documentos: DocumentoPreviaImportacao[];
+  escala: { linha: number; valor: string | null; legenda: string }[];
+  faixas: { linha: number; minimo: string | null; maximo: string | null; percentual: string | null; notas_zero: number | null }[];
+  grupos: { nome: string; itens: { linha: number; nome: string; descricao: string; peso: string | null }[] }[];
   erros: ErroImportacao[];
   avisos: string[];
   pode_importar: boolean;

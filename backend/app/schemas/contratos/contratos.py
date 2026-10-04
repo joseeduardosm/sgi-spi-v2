@@ -98,6 +98,7 @@ class GravacaoContrato(BaseModel):
     vigencia_maxima_meses: int = Field(..., ge=1, le=600, description="≥ vigência inicial.")
     periodicidade_meses: Literal[1, 2, 3, 6, 12] = Field(..., description="1 mensal, 2 bimestral, 3 trimestral, 6 semestral, 12 anual.")
     mes_reajuste: int = Field(..., ge=1, le=12)
+    liberar_todas_competencias: bool = Field(False, description="Tira a trava que só libera a medição de uma competência depois do fim do período.")
     sei_gestao_numero: TextoObrigatorio = Field(..., max_length=100)
     sei_gestao_link: Link = Field(..., max_length=1000)
     sei_execucao_numero: TextoObrigatorio = Field(..., max_length=100)
@@ -200,6 +201,7 @@ class DetalheContrato(ResumoContrato):
     vigencia_maxima_meses: int
     periodicidade_meses: int
     mes_reajuste: int
+    liberar_todas_competencias: bool
     sei_gestao_numero: str
     sei_gestao_link: str
     sei_execucao_numero: str

@@ -45,8 +45,8 @@ def listar_diario(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao
     description=(
         "`multipart/form-data`: `dados` (JSON de `GravacaoOcorrencia`: data não futura, relato, glosas e, se a ocorrência impactar a "
         "avaliação da qualidade, os itens do formulário ativo) e até 5 `arquivos` (PDF, Office/LibreOffice, TXT, CSV, PNG ou JPG, "
-        "conferidos pelo conteúdo). As glosas valem na competência cujo período contém a data. Em segundo plano, envia o registro por "
-        "e-mail à equipe vigente e aos prepostos ativos, com os anexos (respostas vão para a equipe)."
+        "conferidos pelo conteúdo). As glosas valem na competência cujo período contém a data. Só com `enviar_email = true` (em `dados`; padrão "
+        "`false`) envia, em segundo plano, o registro por e-mail à equipe vigente e aos prepostos ativos, com os anexos (respostas vão para a equipe)."
     ),
     responses={**NAO_ENCONTRADO, **ESCRITA},
 )
@@ -62,7 +62,8 @@ async def registrar_ocorrencia(contrato_id: uuid.UUID, tarefas: BackgroundTasks,
     conteudos = [(a.filename or "arquivo", await a.read()) for a in arquivos if a.filename]
     with traduzir_erros(sessao):
         ocorrencia = servico_diario.registrar(sessao, contrato_id, gravacao, autor, conteudos)
-        tarefas.add_task(servico_notificacoes.notificar_ocorrencia, ocorrencia.id)
+        if gravacao.enviar_email:
+            tarefas.add_task(servico_notificacoes.notificar_ocorrencia, ocorrencia.id, gravacao.prepostos_ids)
         return servico_diario.leitura(obter_contrato(sessao, contrato_id), ocorrencia)
 
 

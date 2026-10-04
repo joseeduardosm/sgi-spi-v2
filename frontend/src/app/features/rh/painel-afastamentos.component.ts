@@ -5,6 +5,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
+import { GraficoComponent, SerieGrafico } from '../../shared/componentes/grafico/grafico.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CabecalhoRhComponent } from './cabecalho-rh.component';
 import { LancamentoAfastamentoComponent } from './lancamento-afastamento.component';
@@ -29,7 +30,7 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-painel-afastamentos',
-  imports: [FormsModule, DatePipe, CabecalhoRhComponent, LancamentoAfastamentoComponent],
+  imports: [FormsModule, DatePipe, GraficoComponent, CabecalhoRhComponent, LancamentoAfastamentoComponent],
   templateUrl: './painel-afastamentos.component.html',
   // Esc fecha o detalhe do período e a janela de recusa
   host: { '(document:keydown.escape)': 'detalhe.set(null); recusando.set(null)' },
@@ -44,6 +45,20 @@ export class PainelAfastamentosComponent implements OnInit {
   protected readonly meses = MESES;
   protected filtros: FiltrosPainel = { visao: 'mensal', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, pessoa_id: null, setor_id: null, tipo: '' };
   protected readonly painel = signal<PainelAfastamentos | null>(null);
+  // Gráfico anual: pessoas distintas afastadas em cada mês (férias × licença-prêmio), a partir dos períodos que o painel já devolve
+  protected readonly serieAnual = computed<SerieGrafico[]>(() => {
+    const p = this.painel();
+    if (!p || p.visao !== 'anual') return [];
+    const ano = Number(p.inicio.slice(0, 4));
+    const contar = (tipo: string) => MESES.map((_, i) => {
+      // Datas ISO montadas à mão (toISOString converteria para UTC e poderia mudar o dia)
+      const mm = String(i + 1).padStart(2, '0');
+      const ini = `${ano}-${mm}-01`;
+      const fim = `${ano}-${mm}-${String(new Date(ano, i + 1, 0).getDate()).padStart(2, '0')}`;
+      return new Set(p.periodos.filter((a) => a.tipo === tipo && a.inicio <= fim && a.fim >= ini).map((a) => a.usuario_id)).size;
+    });
+    return [{ nome: 'Férias', dados: contar('ferias'), cor: '#2f9e6b' }, { nome: 'Licença-prêmio', dados: contar('licenca_premio'), cor: '#2f5d8a' }];
+  });
   protected readonly aprovacoes = signal<Afastamento[]>([]);
   protected readonly hoje = new Date().toISOString().slice(0, 10);
   protected readonly anos = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i);
@@ -55,7 +70,7 @@ export class PainelAfastamentosComponent implements OnInit {
     const inicio = dia(p.inicio);
     const total = dia(p.fim) + DIA_MS - inicio;
     if (p.visao === 'anual') {
-      return MESES.map((rotulo, m) => ({ rotulo, posicao: ((Date.UTC(this.filtros.ano, m, 1) - inicio) / total) * 100, fimDeSemana: false, feriado: null as string | null }));
+      return MESES.map((rotulo, m) => ({ rotulo, posicao: ((Date.UTC(this.filtros.ano, m, 1) - inicio) / total) * 100, fimDeSemana: false, feriado: null as string | null, marca: true, mes: true }));
     }
     // Feriados e pontos facultativos da janela (marcados como os fins de semana, com a descrição no título)
     const feriados = new Map(p.feriados.map((f) => [f.data, f]));
@@ -63,8 +78,21 @@ export class PainelAfastamentosComponent implements OnInit {
     return Array.from({ length: dias }, (_, i) => {
       const d = new Date(inicio + i * DIA_MS);
       const feriado = feriados.get(d.toISOString().slice(0, 10));
-      return { rotulo: String(d.getUTCDate()), posicao: (i / dias) * 100, fimDeSemana: d.getUTCDay() === 0 || d.getUTCDay() === 6, feriado: feriado?.descricao ?? null };
+      // Linha forte na segunda-feira (início da semana) e no dia 1; as demais ficam só na grade suave do trilho
+      return { rotulo: String(d.getUTCDate()), posicao: (i / dias) * 100, fimDeSemana: d.getUTCDay() === 0 || d.getUTCDay() === 6, feriado: feriado?.descricao ?? null,
+        marca: d.getUTCDay() === 1 || d.getUTCDate() === 1, mes: d.getUTCDate() === 1 };
     });
+  });
+
+  /** Posição (%) de hoje na janela do gráfico; nulo se hoje está fora dela. */
+  protected readonly hojePosicao = computed(() => {
+    const p = this.painel();
+    if (!p) return null;
+    const inicio = dia(p.inicio);
+    const total = dia(p.fim) + DIA_MS - inicio;
+    const agora = new Date();
+    const hoje = Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    return hoje >= inicio && hoje < inicio + total ? ((hoje - inicio) / total) * 100 : null;
   });
 
   ngOnInit(): void {

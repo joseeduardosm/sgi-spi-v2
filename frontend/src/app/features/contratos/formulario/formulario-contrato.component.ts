@@ -91,6 +91,7 @@ export class FormularioContratoComponent implements OnInit {
     vigencia_maxima_meses: 60,
     periodicidade_meses: 1,
     mes_reajuste: new Date().getMonth() + 1,
+    liberar_todas_competencias: false,
     sei_gestao_numero: '',
     sei_gestao_link: '',
     sei_execucao_numero: '',
@@ -144,7 +145,7 @@ export class FormularioContratoComponent implements OnInit {
     this.dados = {
       numero: c.numero, empresa_id: c.empresa.id, apelido: c.apelido, objeto: c.objeto, data_inicio: c.data_inicio,
       vigencia_inicial_meses: c.vigencia_inicial_meses, vigencia_maxima_meses: c.vigencia_maxima_meses,
-      periodicidade_meses: c.periodicidade_meses, mes_reajuste: c.mes_reajuste, sei_gestao_numero: c.sei_gestao_numero,
+      periodicidade_meses: c.periodicidade_meses, mes_reajuste: c.mes_reajuste, liberar_todas_competencias: c.liberar_todas_competencias, sei_gestao_numero: c.sei_gestao_numero,
       sei_gestao_link: c.sei_gestao_link, sei_execucao_numero: c.sei_execucao_numero, sei_execucao_link: c.sei_execucao_link,
       situacao_forcada: c.situacao_forcada,
     };
@@ -169,7 +170,7 @@ export class FormularioContratoComponent implements OnInit {
     this.dados = {
       numero: r.numero, empresa_id: r.empresa.id ?? '', apelido: r.apelido, objeto: r.objeto, data_inicio: r.data_inicio,
       vigencia_inicial_meses: r.vigencia_inicial_meses, vigencia_maxima_meses: r.vigencia_maxima_meses, periodicidade_meses: r.periodicidade_meses,
-      mes_reajuste: r.mes_reajuste, sei_gestao_numero: r.sei_gestao_numero, sei_gestao_link: r.sei_gestao_link,
+      mes_reajuste: r.mes_reajuste, liberar_todas_competencias: false, sei_gestao_numero: r.sei_gestao_numero, sei_gestao_link: r.sei_gestao_link,
       sei_execucao_numero: r.sei_execucao_numero, sei_execucao_link: r.sei_execucao_link, situacao_forcada: null,
     };
     for (const membro of r.equipe) {
@@ -371,6 +372,7 @@ export class FormularioContratoComponent implements OnInit {
       vigencia_maxima_meses: Number(this.dados.vigencia_maxima_meses),
       periodicidade_meses: Number(this.dados.periodicidade_meses),
       mes_reajuste: Number(this.dados.mes_reajuste),
+      liberar_todas_competencias: !!this.dados.liberar_todas_competencias,
       situacao_forcada: this.dados.situacao_forcada || null,
       // Equipe: o id da pessoa escolhida em cada papel (ou null)
       equipe: Object.fromEntries(PAPEIS.map((p) => [p.papel, this.equipe[p.papel]()[0]?.id ?? null])),

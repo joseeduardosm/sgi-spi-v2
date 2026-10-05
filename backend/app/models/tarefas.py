@@ -25,7 +25,7 @@ STATUS_TAREFA = ("a_fazer", "em_andamento", "em_validacao", "concluida")
 PRIORIDADES_TAREFA = ("baixa", "normal", "alta", "critica")
 TIPOS_EVENTO_TAREFA = (
     "criada", "editada", "status", "entregue", "validada", "devolvida", "reaberta", "prazo", "transferida",
-    "comentario", "participantes", "marcadores", "checklist", "removido",
+    "comentario", "participantes", "marcadores", "checklist", "removido", "escalonada",
 )
 
 

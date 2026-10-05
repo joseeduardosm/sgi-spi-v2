@@ -44,6 +44,10 @@ PESOS = {"baixa": 1, "normal": 3, "alta": 5, "critica": 8}
 OPERACIONAIS = ("a_fazer", "em_andamento")
 MAXIMO_ANEXOS = 5
 DIAS_VALIDACAO_PARADA = 2
+# Escalonamento por atraso: a tarefa operacional atrasada há 1+ dia avisa a liderança da equipe; há 3+ dias, também a liderança da equipe acima
+# (tarefa pessoal escala só ao criador). Cada nível avisa uma vez por prazo: prazo novo reinicia o escalonamento.
+DIAS_ESCALONAR_LIDERANCA = 1
+DIAS_ESCALONAR_ACIMA = 3
 
 
 class ErroTarefa(Exception):
@@ -192,6 +196,13 @@ def _avisar(sessao: Session, ids: set[int], assunto: str, corpo: str, tarefa: Ta
     servico_mensagens.notificar(
         sessao, list(ids), assunto, corpo, chave=chave, categoria=categoria, prioridade=prioridade, link=_link(tarefa),
         email=True, autor=autor, abrir_em_janela=janela,
+    )
+
+
+def _avisar_e_devolver(sessao: Session, ids: set[int], assunto: str, corpo: str, tarefa: Tarefa, chave: str):
+    """Como `_avisar`, mas devolve a mensagem criada (ou None se ninguém precisou receber)."""
+    return servico_mensagens.notificar(
+        sessao, list(ids), assunto, corpo, chave=chave, categoria="prazo", prioridade="alta", link=_link(tarefa), email=True,
     )
 
 
@@ -651,10 +662,38 @@ def carga_das_pessoas(sessao: Session, ids: set[int], agora: datetime) -> dict[i
 # Lembretes diários (timer das 07:00)
 # ---------------------------------------------------------------------------------------------
 
+def _escalonar(sessao: Session, tarefa: Tarefa, dias_atraso: int, prazo: date) -> int:
+    """Avisa a liderança de uma tarefa atrasada (nível 1) e a da equipe acima (nível 2), uma vez por nível e prazo. Devolve quantos avisos novos.
+
+    Registra o aviso na linha do tempo da tarefa (evento `escalonada`) só quando alguém realmente recebeu.
+    """
+    # `lideranca()` soma a equipe e todas as acima: nível 1 = só a liderança direta; nível 2 = quem está acima dela
+    acima = lideranca(sessao, sessao.get(EquipeTarefas, tarefa.equipe.equipe_pai_id)) if tarefa.equipe and tarefa.equipe.equipe_pai_id else set()
+    direta = (lideranca(sessao, tarefa.equipe) - acima) if tarefa.equipe else ({tarefa.criado_por_id} - {None})
+    niveis = []
+    if dias_atraso >= DIAS_ESCALONAR_LIDERANCA:
+        niveis.append((1, direta))
+    if dias_atraso >= DIAS_ESCALONAR_ACIMA:
+        niveis.append((2, acima - direta))
+    novos = 0
+    for nivel, ids in niveis:
+        if not ids:
+            continue
+        aviso = _avisar_e_devolver(sessao, ids, f"Tarefa atrasada há {dias_atraso} dia(s): {_rotulo(tarefa)}",
+                                   f"A tarefa {_rotulo(tarefa)} (prazo {_data_hora(tarefa.prazo)}) está atrasada há {dias_atraso} dia(s) e foi escalonada para você"
+                                   f"{' como liderança da equipe acima' if nivel == 2 else ''}. Cobre o andamento ou renegocie o prazo.",
+                                   tarefa, f"tarefa-escalonada:{tarefa.id}:{nivel}:{prazo}")
+        if aviso is not None:
+            _evento(sessao, tarefa, "escalonada", None, f"Escalonada (nível {nivel}): atrasada há {dias_atraso} dia(s)",
+                    nivel=nivel, dias_atraso=dias_atraso, avisados=len(aviso.entregas))
+            novos += 1
+    return novos
+
+
 def lembrar(sessao: Session, dia: date) -> dict[str, int]:
     """Vence amanhã e atrasadas → envolvidos; validação parada há 2+ dias → liderança (janela que não bloqueia)."""
     agora = agora_utc()
-    contagem = {"vencem_amanha": 0, "atrasadas": 0, "validacao_parada": 0}
+    contagem = {"vencem_amanha": 0, "atrasadas": 0, "validacao_parada": 0, "escalonadas": 0}
     for tarefa in sessao.scalars(select(Tarefa).where(Tarefa.status.in_(OPERACIONAIS))):
         prazo = _comparavel(tarefa.prazo).astimezone(__import__("zoneinfo").ZoneInfo("America/Sao_Paulo")).date()
         if prazo == dia + timedelta(days=1):
@@ -666,6 +705,7 @@ def lembrar(sessao: Session, dia: date) -> dict[str, int]:
                     f"A tarefa {_rotulo(tarefa)} passou do prazo ({_data_hora(tarefa.prazo)}). Atualize o andamento ou peça nova data.",
                     tarefa, f"tarefa-prazo-aviso:{tarefa.id}:atrasada:{dia}", categoria="prazo", prioridade="alta")
             contagem["atrasadas"] += 1
+            contagem["escalonadas"] += _escalonar(sessao, tarefa, (dia - prazo).days, prazo)
     limite = agora - timedelta(days=DIAS_VALIDACAO_PARADA)
     for tarefa in sessao.scalars(select(Tarefa).where(Tarefa.status == "em_validacao", Tarefa.entregue_em <= limite)):
         lideres = lideranca(sessao, tarefa.equipe) if tarefa.equipe else ({tarefa.criado_por_id} - {None})

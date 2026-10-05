@@ -60,6 +60,10 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 | Concluída pela liderança | envolvidos e liderança | `tarefa-concluida:{id}:{versao}` |
 | Comentário | envolvidos e criador (menos o autor) | `tarefa-comentario:{evento}` |
 | Vence amanhã / atrasada (timer das 07:00) | envolvidos | `tarefa-prazo-aviso:{id}:…` |
+| **Escalonamento por atraso** nível 1 (atrasada há 1+ dia) | liderança direta da equipe (dono e líderes dela); tarefa pessoal: o criador | `tarefa-escalonada:{id}:1:{prazo}` |
+| **Escalonamento por atraso** nível 2 (atrasada há 3+ dias) | liderança da(s) equipe(s) acima (tarefa de equipe com equipe pai) | `tarefa-escalonada:{id}:2:{prazo}` |
+
+**Escalonamento por atraso.** No mesmo timer das 07:00, a tarefa operacional (a fazer ou em andamento) atrasada avisa a liderança, em dois níveis: há **1+ dia**, a liderança direta da equipe (tarefa pessoal: o criador); há **3+ dias**, também quem lidera as equipes acima. Cada nível avisa **uma vez por prazo**: um prazo novo reinicia o escalonamento, e concluir a tarefa encerra os avisos. Cada aviso novo entra na linha do tempo como evento `escalonada` ("Escalonada (nível N): atrasada há X dia(s)"), só quando alguém realmente recebeu. Constantes: `DIAS_ESCALONAR_LIDERANCA = 1` e `DIAS_ESCALONAR_ACIMA = 3` em `servico_tarefas.py`. Migração `f3b7d1e9a5c4` (aceita o tipo `escalonada`). Sem endpoint novo.
 | Validação parada há 2+ dias (timer) | liderança, **em janela modal que não bloqueia** | `tarefa-validacao-parada:{id}:{versao}` |
 
 ## Endpoints

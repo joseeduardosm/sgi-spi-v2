@@ -3,6 +3,7 @@
 """Módulo Tarefas (`/api/tarefas`)."""
 
 import json
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 
@@ -318,3 +319,53 @@ def test_tarefa_concluida_nao_altera_prazo_e_a_mensagem_explica(cliente, equipe)
     # Depois de reaberta, o prazo volta a poder mudar
     assert _mover(cliente, h["lia"], n, "reabrir", "Faltou um item").status_code == 200
     assert cliente.post(f"{URL}/{n}/prazo", json={"prazo": _prazo(20), "justificativa": "Mais tempo"}, headers=h["ana"]).status_code == 200
+
+
+def _atrasar(numero: int, dias: int) -> None:
+    """Põe o prazo da tarefa `dias` dias no passado (direto no banco; a API não aceita prazo vencido)."""
+    with FabricaSessao() as s:
+        tarefa = s.scalar(select(servico_tarefas.Tarefa).where(servico_tarefas.Tarefa.numero == numero))
+        tarefa.prazo = datetime.now(timezone.utc) - timedelta(days=dias, hours=1)
+        s.commit()
+
+
+def _rodar_lembretes() -> dict[str, int]:
+    with FabricaSessao() as s:
+        return servico_tarefas.lembrar(s, date.today())
+
+
+def test_escalonamento_por_atraso_avisa_a_lideranca_e_depois_a_equipe_acima(cliente, admin, equipe):
+    ids, h, equipe_id = equipe
+    chefe = criar_usuario("chefe", nome_completo="Chefe Geral", email="chefe@sp.gov.br")
+    h["chefe"] = cabecalho(cliente, "chefe")
+    # Equipe "Diretoria" (chefe a lidera) acima de "Contratos"; Contratos passa a ser filha dela
+    pai = cliente.post(f"{URL}/equipes", json={"nome": "Diretoria", "lideres_ids": [chefe], "membros_ids": []}, headers=admin).json()["id"]
+    with FabricaSessao() as s:
+        s.get(servico_tarefas.EquipeTarefas, uuid.UUID(equipe_id)).equipe_pai_id = uuid.UUID(pai)
+        s.commit()
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    # Atrasada há 1 dia (2 no pior caso da diferença de fuso): só o nível 1 (liderança da equipe)
+    _atrasar(t["numero"], 1)
+    assert _rodar_lembretes()["escalonadas"] == 1
+    assert {d for d, _ in _avisos(f"tarefa-escalonada:{t['id']}:1:")} == {ids["lia"]}
+    assert _avisos(f"tarefa-escalonada:{t['id']}:2:") == []
+    # Rodar de novo no mesmo dia não repete
+    assert _rodar_lembretes()["escalonadas"] == 0
+    # Atrasada há 3+ dias: o nível 2 avisa quem lidera a equipe acima (e só ele)
+    _atrasar(t["numero"], 5)
+    assert _rodar_lembretes()["escalonadas"] == 2  # o prazo mudou: nível 1 reinicia e o nível 2 entra
+    nivel2 = {d for d, _ in _avisos(f"tarefa-escalonada:{t['id']}:2:")}
+    assert chefe in nivel2 and ids["lia"] not in nivel2
+    # Cada aviso novo entra na linha do tempo da tarefa
+    eventos = [e for e in cliente.get(f"{URL}/{t['numero']}/linha-do-tempo", headers=h["lia"]).json()["itens"] if e["tipo"] == "escalonada"]
+    assert len(eventos) == 3 and any("nível 2" in e["titulo"] for e in eventos)
+
+
+def test_escalonamento_de_tarefa_pessoal_vai_ao_criador_e_ignora_o_que_nao_esta_atrasado(cliente, equipe):
+    ids, h, _ = equipe
+    pessoal = cliente.post(URL, json={"titulo": "Minha tarefa", "descricao": "x", "prazo": _prazo(10)}, headers=h["ana"]).json()
+    no_prazo = cliente.post(URL, json={"titulo": "No prazo", "descricao": "x", "prazo": _prazo(10)}, headers=h["ana"]).json()
+    _atrasar(pessoal["numero"], 1)
+    assert _rodar_lembretes()["escalonadas"] == 1
+    assert {d for d, _ in _avisos(f"tarefa-escalonada:{pessoal['id']}:1:")} == {ids["ana"]}
+    assert _avisos(f"tarefa-escalonada:{no_prazo['id']}:") == []

@@ -32,6 +32,8 @@ const FILTROS = [
 
 /** Traço SVG (24x24) do ícone de cada tipo de evento; a cor vem do CSS por `data-tipo`. */
 const ICONES: Record<string, string> = {
+  // Escalonamento por atraso: aviso à liderança (triângulo de alerta)
+  escalonada: 'M12 3 2 20h20L12 3Zm0 6v5m0 3h.01',
   criada: 'M12 5v14M5 12h14',
   editada: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
   status: 'M5 12h14M13 6l6 6-6 6',

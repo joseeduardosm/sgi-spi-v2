@@ -133,7 +133,7 @@ Excluir um contrato apaga todos os avisos dele (`mensagens.contrato_id` com `ON 
 - **Medição atrasada:** competência regular com período encerrado há mais de 30 dias e medição não concluída.
   - Pendência à equipe, com e-mail. Chave `atraso:{competencia}`, encerrada ao concluir a medição.
 - **Ciência pendente:** mensagens de prioridade alta ou crítica sem ciência no 3º dia recebem um e-mail "Lembrete: …".
-- **Resumo diário:** um e-mail por usuário com as mensagens pendentes (até 20), uma vez por dia. O envio fica registrado na auditoria (`mensagem.resumo_diario`).
+- **Sem resumo diário:** o e-mail diário "N mensagem(ns) aguardando sua ciência" foi retirado (05/10/2026); as pendências continuam na caixa de mensagens e nos lembretes de ciência pendente.
 
 ## Consumo no Angular
 

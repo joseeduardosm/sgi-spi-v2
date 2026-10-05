@@ -32,6 +32,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 - **Recentes do menu lateral:** a lista era do navegador (duas pessoas no mesmo computador viam as telas uma da outra) e crescia até 8. Agora é **por usuário**, guarda **só as últimas 5 telas** e some da tela ao sair ou trocar de usuário; os favoritos também ficam por usuário no navegador. As chaves antigas são apagadas.
 
 ### Removido
+- **E-mail resumo diário de mensagens pendentes** ("SGI SPI: N mensagem(ns) aguardando sua ciência"): o job das 07:00 deixa de enviá-lo. As pendências seguem na caixa de mensagens e nos lembretes de ciência pendente.
 - **Cartão "Helpdesk"** da página inicial do portal (o chamado agora se abre pelo item "Abrir Chamado" da barra lateral).
 
 ## 2026-10-04

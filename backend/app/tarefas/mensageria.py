@@ -10,8 +10,7 @@ Uso (pelos timers do systemd, ou à mão para testar):
   automáticos marcados para e-mail (ex.: designação na equipe,
   vencimento), entregues nos últimos 2 dias e ainda não enviados. As mensagens avulsas saem na hora.
 - **lembretes:** gera na caixa (e por e-mail) os avisos de vencimento do contrato (90, 60 e 30 dias),
-  de competência com medição atrasada e o lembrete de ciência pendente; por fim, manda o resumo diário
-  das pendências a cada usuário. No Módulo RH, marca como gozados os afastamentos aprovados que terminaram
+  de competência com medição atrasada e o lembrete de ciência pendente. No Módulo RH, marca como gozados os afastamentos aprovados que terminaram
   e lembra o aprovador de pedidos parados há 3 dias. Tudo idempotente: rodar de novo no mesmo dia não repete avisos.
 """
 
@@ -134,26 +133,6 @@ def _lembrar_ciencias(sessao: Session, dia: date) -> int:
     return enviados
 
 
-def _resumos_diarios(sessao: Session, dia: date) -> int:
-    """Um e-mail por usuário com as pendências da caixa (uma vez por dia, registrado na auditoria)."""
-    ja_enviados = set(sessao.scalars(
-        select(RegistroAuditoria.alvo).where(RegistroAuditoria.acao == "mensagem.resumo_diario", RegistroAuditoria.detalhes == dia.isoformat())
-    ))
-    enviados = 0
-    for usuario in sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True))):
-        if usuario.login in ja_enviados:
-            continue
-        pendentes = servico_mensagens.listar(sessao, usuario, "pendentes", "", 1, 20)[0]
-        if not pendentes:
-            continue
-        linhas = [f"• {e.assunto_copia} ({e.mensagem.autor_nome}, {e.entregue_em:%d/%m/%Y})" for e in pendentes]
-        if _email(sessao, usuario, f"SGI SPI: {len(pendentes)} mensagem(ns) aguardando sua ciência",
-                  ["Você tem mensagens pendentes na caixa de mensagens do portal:", "\n".join(linhas)], "/mensagens"):
-            auditar(sessao, "sistema", "mensagem.resumo_diario", usuario.login, dia.isoformat())
-            enviados += 1
-    return enviados
-
-
 def gerar_lembretes(sessao: Session, dia: date | None = None) -> dict[str, int]:
     """Lembretes do dia. `dia` padrão: hoje em São Paulo."""
     from app.services.contratos.servico_contratos import hoje
@@ -188,7 +167,6 @@ def gerar_lembretes(sessao: Session, dia: date | None = None) -> dict[str, int]:
 
     resultado["contratacoes"] = conferencia.lembrar_revisoes_paradas(sessao, dia)
     resultado["emails_rh"] = enviar_emails_pendentes(sessao)
-    resultado["resumos_diarios"] = _resumos_diarios(sessao, dia)
     sessao.commit()
     return resultado
 

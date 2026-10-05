@@ -201,13 +201,14 @@ def test_lembretes_vencimento_atraso_fila_e_resumo(cliente, admin, pessoas, monk
         primeiro = mensageria.gerar_lembretes(sessao, dia)
         segundo = mensageria.gerar_lembretes(sessao, dia)
     assert primeiro["vencimentos"] == 1 and segundo["vencimentos"] == 0
-    assert primeiro["resumos_diarios"] == 1 and segundo["resumos_diarios"] == 0
+    assert "resumos_diarios" not in primeiro
     caixa = cliente.get(URL, headers=h["ana"]).json()
     vencimento = next(i for i in caixa["itens"] if i["categoria"] == "prazo")
     assert vencimento["assunto"] == f"Contrato {contrato['numero']} vence em 41 dia(s) (31/12/2026)"
     assuntos = [m["Subject"] for m, _, _, _ in SmtpSimulado.enviadas]
     assert any("Você foi cadastrado como Gestor" in a for a in assuntos)
-    assert any(a.startswith("SGI SPI: ") and "aguardando sua ciência" in a for a in assuntos)
+    # O resumo diário de "mensagens aguardando sua ciência" foi retirado: nenhum e-mail com esse assunto
+    assert not any("aguardando sua ciência" in a for a in assuntos)
     # Marco seguinte (30 dias) gera um novo aviso
     with FabricaSessao() as sessao:
         assert mensageria.gerar_lembretes(sessao, date(2026, 12, 2))["vencimentos"] == 1

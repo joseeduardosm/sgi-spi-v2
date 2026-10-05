@@ -6,6 +6,33 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-05
+
+### Adicionado
+- **Abrir Chamado pelo SGI (integração com o GLPI).** Novo item **Abrir Chamado** na barra lateral, para todos os usuários, abre um modal com **Assunto** e **Descrição do problema**; nome, setor, superior imediato, e-mail, telefone, celular (se preenchido) e andar - lado vêm do cadastro, e o chamado termina com "Aberto pelo SGI". O chamado é criado no GLPI pela API REST, em nome do usuário (sem categoria: a TI classifica), com limite de 5 por hora por usuário.
+  - Endpoints novos: `GET /api/chamados/solicitante`, `POST /api/chamados`, `GET /api/chamados`, `GET`/`PUT /api/integracao-glpi` e `POST /api/integracao-glpi/testar` (docs em `docs/endpoints/chamados.md`). Tela **Administração › Integração GLPI** (URL, tokens cifrados, liga/desliga, testar conexão). Migração `d1f4b8a2e6c9` (tabelas `integracao_glpi` e `chamados_glpi` e recurso de ACL `abrir-chamado`, sem regras = aberto a todos). Dependência nova: `httpx`.
+  - **No GLPI** (alterações feitas por SSH): API ligada, cliente de API "SGI SPI" liberado só para o IP do servidor do SGI e conta de serviço `sgi.integracao`; como desfazer está em `docs/endpoints/chamados.md`. Integração **ativa** e testada contra o GLPI real (conexão, busca de usuário e um chamado de teste, apagado em seguida).
+  - **Igual ao formulário "Informática" (id 3) do GLPI:** título `Informática | assunto`, conteúdo `1) Assunto … 2) Descrição de Problema … 3) Local do Problema …` (mais os dados do solicitante e "Aberto pelo SGI"), **Local do problema obrigatório** (lista das localizações do GLPI, sugerida pelo andar e lado do cadastro), requerente = o usuário, **grupo SUPORTE atribuído** (o chamado nasce "Em atendimento (atribuído)"), SLAs de atendimento e solução, incidente, sem categoria. Grupo, SLAs, modelo e prefixo ficam configuráveis na tela Integração GLPI. Endpoint novo `GET /api/chamados/locais`; `POST /api/chamados` agora exige `local_id`. Migração `e2a6c4d8b0f3`. No GLPI foi criado o perfil **SGI INTEGRAÇÃO** (cópia do TECNOLOGIA + leitura de Localizações) para a conta de serviço.
+  - **Anexos:** o modal aceita até 5 arquivos (imagem colada com Ctrl+V ou escolhida, PDF, .docx, .xlsx, CSV; 5 MB cada), enviados ao chamado na criação (`POST /api/chamados` agora é `multipart/form-data`). Testado no GLPI real (chamado e documento de teste apagados).
+  - **Dados temporários:** enquanto a CGP não valida o cadastro, o chamado leva os dados que o usuário informou (marcados "temporário"); o primeiro cadastro já abre chamado completo. Removida do modal a frase sobre "Aberto pelo SGI" (a assinatura continua no texto do chamado).
+- **Navegação inspirada no GLPI (fase 1):** **busca global** no topo (Ctrl+K ou `/`) em contratos, contratações, tarefas, pessoas, setores e telas do menu, respeitando o ACL; **favoritos** do menu salvos na conta e **recentes** no navegador; **anterior/próximo** no detalhe do contrato (‹ 3 de 34 ›) respeitando a busca, o filtro e a ordenação da carteira.
+  - O breadcrumb (trilha) passa a existir também em Mensagens e Assinatura de e-mail, e a tela de Ramais aceita `?q=` (a busca global leva direto à pessoa).
+  - Endpoints novos: `GET /api/busca`, `GET`/`PUT /api/favoritos` e `GET /api/contratos/{id}/vizinhos` (docs em `docs/endpoints/navegacao.md`). Migração `c9e3a7f1b5d8` (tabela `usuarios_favoritos`).
+
+- **Reaproveitamento de documentos do checklist entre contratos da mesma empresa** ("documento da empresa"). O item do checklist ganha a opção **Documento da empresa** (com validade), nas abas Checklists, nos modelos globais e na importação XLSX (coluna **Vale para outros contratos**). Na etapa do checklist, o documento sem anexo mostra "Disponível do contrato X (competência mm/aaaa) · válido até …" quando outro contrato da mesma empresa tem o de **mesmo nome**, também marcado, anexado e com validade até o fim do período; **nada é copiado sozinho**: **Usar este documento** ou **Trazer os documentos válidos de outros contratos**. O reaproveitado mostra "Reaproveitado do contrato X (competência mm/aaaa) · válido até …" (só na tela; o consolidado não mostra).
+  - Endpoints novos: `POST /api/contratos/{id}/competencias/{id}/checklist/{documento_id}/reaproveitar` e `POST …/checklist/reaproveitar-todos`; campos novos `vale_outros_contratos`, `reaproveitado_contrato` e `sugestao_outro_contrato` (ver `docs/endpoints/contratos-execucao.md`). Migração `b8d2f6a4c1e7`.
+- **Links clicáveis em todo o portal:** endereços `http://` e `https://` digitados em campos de texto livre (observação do checklist, descrição e comentários de tarefas, mensagens, sugestões de melhoria, justificativas, diário de bordo, recados do mural, comentários das contratações etc.) viram links que abrem em outra aba (pipe `linkificar`, com o texto escapado). Só frontend.
+
+### Alterado
+- **Carteira de contratos (`/contratos`):** todas as colunas (número, empresa/objeto, datas, situação, base mensal e valor global) passam a ser **ordenáveis** (clicar no título ordena; clicar de novo inverte) e o **apelido** abaixo do número aparece em **caixa alta**. O número do contrato também é um link (Ctrl+clique ou botão do meio abre em nova aba) e o menu de ações ganhou "Abrir em nova aba". `GET /api/contratos` ganha os parâmetros `ordenar_por` e `direcao` (docs em `contratos-cadastro.md`); sem migração.
+- **Consolidado:** documento opcional do checklist que não foi anexado deixa de aparecer como "Não anexado" no resumo executivo; só é citado quando anexado (já não tinha página nem índice).
+
+### Corrigido
+- **Recentes do menu lateral:** a lista era do navegador (duas pessoas no mesmo computador viam as telas uma da outra) e crescia até 8. Agora é **por usuário**, guarda **só as últimas 5 telas** e some da tela ao sair ou trocar de usuário; os favoritos também ficam por usuário no navegador. As chaves antigas são apagadas.
+
+### Removido
+- **Cartão "Helpdesk"** da página inicial do portal (o chamado agora se abre pelo item "Abrir Chamado" da barra lateral).
+
 ## 2026-10-04
 
 ### Adicionado
@@ -15,8 +42,21 @@ Informe também migrações do banco e endpoints novos ou alterados.
   - O modelo da planilha é gerado pela API, com exemplo preenchido. As regras são as do cadastro manual (escala crescente, pesos de cada grupo somando 100).
   - Migração `e5a8c3d7f2b1`: recurso de ACL `importacao-modelos`, que nasce fechado (só a conta administrativa); o SuperRoot libera os demais.
 
+- **Tema escuro opcional.** No menu do usuário (canto superior direito) há o seletor **Tema: Claro / Escuro / Auto** (Auto segue o tema do sistema operacional; é o padrão).
+  - A escolha vale na hora e fica gravada no navegador (`localStorage`, `sgi-spi.tema`, aplicada antes do Angular carregar, sem piscar, inclusive na tela de login) **e na conta**, para acompanhar o usuário em outros aparelhos; depois do login, o tema da conta prevalece.
+  - Endpoint novo `PUT /api/autenticacao/tema` e campo `tema` em `UsuarioSessao` (documentação em `docs/endpoints/autenticacao.md`). Migração `f6b9d4e8a3c2` (coluna `usuarios.tema`, padrão `auto`).
+  - As cores neutras fixas dos estilos passaram a variáveis `--cor-<hex>` (definidas em `frontend/src/styles/_tema.scss`); no tema claro as cores são exatamente as de antes. Impressão e PDF saem sempre no tema claro. Gráficos e telas com cores fixas em código TypeScript podem precisar de ajuste fino no tema escuro.
+
 ### Alterado
-- **Ramais:** a página usa toda a largura da janela (antes limitada a 1280 px), com mais colunas em telas largas (cartões a partir de 270 px) e 60 contatos por página (antes 24).
+- **Documento consolidado da execução:** o **índice passa a ser a primeira página**, e o título e as páginas de cada documento são **hiperlinks** que levam direto ao documento dentro do PDF (nos enviados, à contracapa). Os documentos também aparecem nos marcadores do leitor de PDF. A numeração "Página X de N" e a composição do resumo contam o índice. Ver `docs/endpoints/contratos-execucao.md`. Não há endpoint nem migração novos.
+
+- **Ramais:** a página usa toda a largura da janela (antes limitada a 1280 px), com mais colunas em telas largas (cartões a partir de 270 px) e 60 contatos por página (antes 24). O limite de 1840 px do layout com barra lateral também deixa de valer nessa página.
+
+### Corrigido
+- **Departamento validado agora faz o usuário virar membro do setor.** Antes, o Departamento do perfil era só texto e a ACL (que consulta a participação no setor) não enxergava o vínculo: quem estava na "Subsecretaria de Gestão Corporativa" no perfil, mas fora de `membros_setor`, ficava sem os acessos liberados ao setor (caso do jesmartins na importação de XLSX).
+  - Quando o Departamento passa a valer (validação da CGP, recusa com correção, alteração direta de CGP/SuperRoot ou edição pelo administrador), o usuário entra no setor de mesmo nome e sai do setor do Departamento anterior; participações em outros setores não são tocadas. Ver `docs/endpoints/setores.md`.
+  - Renomear um setor atualiza o Departamento dos usuários que apontavam para o nome antigo.
+  - Migração `a7c1e5b9d3f4`: inclui como membros os usuários que já tinham um Departamento válido e nenhum vínculo.
 
 ## 2026-10-02
 

@@ -53,7 +53,7 @@ export class ExecucaoApiService {
   }
 
   /** Cria (sem checklistId) ou edita (com checklistId) uma versão do checklist. */
-  salvarChecklist(id: string, dados: { nome: string; itens: { nome: string; observacao: string; obrigatorio: boolean }[] }, checklistId?: string): Observable<Checklist[]> {
+  salvarChecklist(id: string, dados: { nome: string; itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade?: boolean; vale_outros_contratos?: boolean }[] }, checklistId?: string): Observable<Checklist[]> {
     return checklistId
       ? this.http.put<Checklist[]>(this.url(id, `/checklists/${checklistId}`), dados)
       : this.http.post<Checklist[]>(this.url(id, '/checklists'), dados);
@@ -226,6 +226,16 @@ export class ExecucaoApiService {
   /** Conclui a etapa do checklist com os documentos obrigatórios anexados (opcionais podem faltar). */
   concluirChecklist(id: string, c: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/checklist/concluir'), {});
+  }
+
+  /** Etapa 5: traz o documento igual, ainda válido, de outro contrato da mesma empresa (`origem_id` da sugestão). */
+  reaproveitarDocumento(id: string, c: string, documentoId: string, origemId: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/checklist/${documentoId}/reaproveitar`), { origem_id: origemId });
+  }
+
+  /** Etapa 5: traz de uma vez todos os documentos válidos de outros contratos da mesma empresa. */
+  reaproveitarTodos(id: string, c: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/checklist/reaproveitar-todos'), {});
   }
 
   /** Etapa 5: anexa um documento do checklist mensal. */

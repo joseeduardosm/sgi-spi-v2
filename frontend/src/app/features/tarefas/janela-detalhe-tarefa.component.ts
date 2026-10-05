@@ -18,6 +18,7 @@ import {
   AcaoPipeline, AnexoEvento, duracao, EventoTarefa, Marcador, Pessoa, prazoRelativo, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS,
   situacaoPrazo, StatusTarefa, TarefaDetalhe, tamanhoLegivel,
 } from './tarefas.models';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 /** Filtros da linha do tempo (chips). */
 const FILTROS = [
@@ -62,7 +63,7 @@ interface CamposEdicao { titulo: string; descricao: string; prioridade: Priorida
  */
 @Component({
   selector: 'app-janela-detalhe-tarefa',
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
+  imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
   templateUrl: './janela-detalhe-tarefa.component.html',
   // Esc fecha a janela, a menos que uma janela interna (prazo, motivo, remoção) esteja aberta: ela fecha primeiro
   host: { '(document:keydown.escape)': 'aoEsc()', '(window:focus)': 'recarregarAoVoltar()' },

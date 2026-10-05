@@ -59,17 +59,17 @@ export interface GrupoDestinatarios {
   styles: `
     :host { display: inline-block; vertical-align: top; }
     .opcao-email-bloco { margin: 0 12px 6px 0; }
-    .opcao-email { display: inline-flex; align-items: center; gap: 8px; color: #464f5a; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .opcao-email { display: inline-flex; align-items: center; gap: 8px; color: var(--cor-464f5a); font-size: 13px; font-weight: 600; cursor: pointer; }
     input[type='checkbox'] { width: 16px; height: 16px; margin: 0; accent-color: #af3741; }
-    small { display: block; color: #6a7786; font-size: 11.5px; font-weight: 400; }
-    .seletor-destinatarios { min-width: 340px; max-width: 520px; max-height: 260px; margin-top: 8px; padding: 10px 12px; overflow: auto; border: 1px solid #e2e5e8; border-radius: 8px; background: #fbfbfc; }
-    .cabecalho-seletor { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid #eceef0; font-size: 12.5px; }
+    small { display: block; color: var(--cor-6a7786); font-size: 11.5px; font-weight: 400; }
+    .seletor-destinatarios { min-width: 340px; max-width: 520px; max-height: 260px; margin-top: 8px; padding: 10px 12px; overflow: auto; border: 1px solid var(--cor-e2e5e8); border-radius: 8px; background: var(--cor-fbfbfc); }
+    .cabecalho-seletor { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--cor-eceef0); font-size: 12.5px; }
     .cabecalho-seletor label, .titulo-grupo, .destinatario { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .grupo-destinatarios { margin-top: 8px; }
-    .titulo-grupo { color: #361a1c; font-size: 12px; font-weight: 700; }
+    .titulo-grupo { color: var(--cor-361a1c); font-size: 12px; font-weight: 700; }
     .destinatario { padding: 3px 0 3px 24px; font-size: 12.5px; }
     .destinatario small { display: inline; }
-    .dica-formulario { margin: 8px 0 0; color: #6a7786; font-size: 12px; }
+    .dica-formulario { margin: 8px 0 0; color: var(--cor-6a7786); font-size: 12px; }
   `,
 })
 export class OpcaoEmailComponent {

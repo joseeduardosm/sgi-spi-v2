@@ -21,6 +21,7 @@ import {
 } from './contratacoes.models';
 import { EditorRicoComponent } from './editor-rico.component';
 import { HtmlConfiavelPipe } from './html-confiavel.pipe';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 type Janela = null | 'edicao' | 'revisoes' | 'historico' | 'lote' | 'compartilhar' | 'contrato' | 'conferencia' | 'dados' | 'tabela';
 
@@ -44,7 +45,7 @@ interface Edicao {
 /** Tela do documento. Todas as ações chamam a API, que devolve o documento inteiro atualizado. */
 @Component({
   selector: 'app-documento-contratacao',
-  imports: [FormsModule, DatePipe, RouterLink, TrilhaComponent, EditorRicoComponent, HtmlConfiavelPipe, SeletorUsuariosComponent],
+  imports: [LinkificarPipe, FormsModule, DatePipe, RouterLink, TrilhaComponent, EditorRicoComponent, HtmlConfiavelPipe, SeletorUsuariosComponent],
   template: `
     @if (doc(); as d) {
       <div class="cabecalho-pagina">
@@ -173,7 +174,7 @@ interface Edicao {
                 <p><b>{{ r.autor_nome }}</b> · {{ r.criada_em | date: 'dd/MM/yyyy HH:mm' }}
                   @if (r.aplicada_em) { <span class="selo-ok">Aplicada por {{ r.aplicada_por_nome }}</span> }
                   @if (r.resolvida_em) { <span class="selo-ok">Resolvida por {{ r.resolvida_por_nome }}</span> }</p>
-                <p>{{ r.comentario }}</p>
+                <p [innerHTML]="r.comentario | linkificar"></p>
                 @if (r.conteudo_proposto_html || r.conteudo_proposto) {
                   <div class="proposta"><small>Proposta de texto:</small><div [innerHTML]="(r.conteudo_proposto_html || r.conteudo_proposto) | htmlConfiavel"></div></div>
                 }

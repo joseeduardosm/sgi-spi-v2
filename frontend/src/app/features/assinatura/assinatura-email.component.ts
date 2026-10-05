@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para a tela de geração da assinatura de e-mail: formulário, prévia ao vivo, download e cópia.
 
+import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -23,9 +24,10 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  */
 @Component({
   selector: 'app-assinatura-email',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, TrilhaComponent],
   template: `
     <section class="painel-gestao assinatura-email">
+      <app-trilha [itens]="[{ rotulo: 'Assinatura de e-mail', rota: '/assinatura-email' }]" />
       <div class="barra-ferramentas">
         <div>
           <h2>Assinatura de e-mail</h2>

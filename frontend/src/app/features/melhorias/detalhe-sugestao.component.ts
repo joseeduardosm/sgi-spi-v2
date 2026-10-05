@@ -13,13 +13,14 @@ import { Equipe, PessoaCarga } from '../tarefas/tarefas.models';
 import { CabecalhoMelhoriasComponent } from './cabecalho-melhorias.component';
 import { MelhoriasApiService } from './melhorias-api.service';
 import { ConversaoTarefa, PrintSugestao, ROTULOS_MODULO, ROTULOS_SITUACAO, SituacaoSugestao, SugestaoTriagem, Tratamento } from './melhorias.models';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
 
 /** Cada sugestão tem a própria tela (`/melhorias/triagem/12`), a mesma dos links de avisos; só quem faz a triagem acessa (a API confere). */
 @Component({
   selector: 'app-detalhe-sugestao',
-  imports: [FormsModule, DatePipe, RouterLink, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
+  imports: [LinkificarPipe, FormsModule, DatePipe, RouterLink, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
   template: `
     <app-cabecalho-melhorias [titulo]="'Sugestão #' + numero" descricao="Analise, responda ao autor e, se fizer sentido, transforme em tarefa." />
     <p><a class="link-arquivo" routerLink="/melhorias/triagem">‹ Voltar à triagem</a></p>
@@ -34,7 +35,7 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
         <div><dt>Autor</dt><dd>{{ s.autor_nome }} — &#64;{{ s.autor_login }}</dd></div>
         <div><dt>Enviada em</dt><dd>{{ s.criado_em | date: 'dd/MM/yyyy HH:mm' }}</dd></div>
         <div class="inteira"><dt>Tela</dt><dd><code>{{ s.tela || '—' }}</code></dd></div>
-        <div class="inteira"><dt>Sugestão</dt><dd class="texto-sugestao">{{ s.texto }}</dd></div>
+        <div class="inteira"><dt>Sugestão</dt><dd class="texto-sugestao" [innerHTML]="s.texto | linkificar"></dd></div>
       </dl>
       @if (s.prints.length) {
         <div class="prints-sugestao grandes">
@@ -102,7 +103,7 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
         <p class="secao-formulario">Histórico</p>
         <ul class="historico-sugestao">
           @for (e of s.eventos; track $index) {
-            <li><span>{{ e.descricao }}</span><small>{{ e.autor_nome }} · {{ e.criado_em | date: 'dd/MM/yyyy HH:mm' }}</small></li>
+            <li><span [innerHTML]="e.descricao | linkificar"></span><small>{{ e.autor_nome }} · {{ e.criado_em | date: 'dd/MM/yyyy HH:mm' }}</small></li>
           }
         </ul>
       }

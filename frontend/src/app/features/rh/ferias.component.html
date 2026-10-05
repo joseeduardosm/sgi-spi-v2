@@ -93,7 +93,7 @@
                 @if (a.aguarda_ciencia) { <small>Aguardando o ciente e de acordo do superior imediato</small> }
                 @else if (a.status === 'pendente' && a.ciencia_por_nome) { <small>Ciente: {{ a.ciencia_por_nome }}; aguardando aprovação</small> }</td>
               <td>@if (a.decidido_por_nome) { {{ a.decidido_por_nome }} em {{ a.decidido_em | date: 'dd/MM/yyyy' }} }
-                @if (a.justificativa) { <small class="texto-erro">{{ a.justificativa }}</small> }</td>
+                @if (a.justificativa) { <small class="texto-erro" [innerHTML]="a.justificativa | linkificar"></small> }</td>
               <td class="acoes-linha">
                 @if (a.pode_alterar) {
                   <button type="button" class="link-arquivo" (click)="iniciarAlteracao(a)">Alterar</button>

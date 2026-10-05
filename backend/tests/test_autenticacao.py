@@ -140,6 +140,7 @@ CAMINHOS_CONTRATOS = {
     "/api/contratos/{contrato_id}",
     "/api/contratos/{contrato_id}/itens/pdf",
     "/api/contratos/{contrato_id}/historico",
+    "/api/contratos/{contrato_id}/vizinhos",
     "/api/contratos/{contrato_id}/documentos",
     "/api/contratos/{contrato_id}/documentos/{codigo}",
     "/api/contratos/{contrato_id}/documentos/{codigo}/arquivo",
@@ -173,6 +174,8 @@ CAMINHOS_CONTRATOS = {
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/nota-fiscal",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/cadin",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/checklist/concluir",
+    "/api/contratos/{contrato_id}/competencias/{competencia_id}/checklist/reaproveitar-todos",
+    "/api/contratos/{contrato_id}/competencias/{competencia_id}/checklist/{documento_id}/reaproveitar",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/checklist/{documento_id}",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/consolidado",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/ordem-bancaria",
@@ -236,6 +239,14 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/autenticacao/login",
         "/api/autenticacao/sessao",
         "/api/autenticacao/perfil",
+        "/api/autenticacao/tema",
+        "/api/busca",
+        "/api/chamados",
+        "/api/chamados/solicitante",
+        "/api/chamados/locais",
+        "/api/integracao-glpi",
+        "/api/integracao-glpi/testar",
+        "/api/favoritos",
         "/api/autenticacao/perfil/opcoes-gestor",
         "/api/autenticacao/perfil/opcoes-departamento",
         "/api/usuarios",
@@ -491,3 +502,13 @@ def test_token_expirado_nao_e_renovado(cliente, admin):
     uid = cliente.get("/api/autenticacao/sessao", headers=admin).json()["id"]
     r = _sessao(cliente, _token(cliente, uid, restam_minutos=-1))
     assert r.status_code == 401 and "x-token-renovado" not in r.headers
+
+
+def test_tema_da_interface_e_salvo_no_perfil(cliente, admin):
+    """O tema escolhido é gravado na conta e volta na sessão; valor desconhecido é recusado."""
+    assert cliente.get("/api/autenticacao/sessao", headers=admin).json()["tema"] == "auto"
+    r = cliente.put("/api/autenticacao/tema", json={"tema": "escuro"}, headers=admin)
+    assert r.status_code == 200 and r.json()["tema"] == "escuro"
+    assert cliente.get("/api/autenticacao/sessao", headers=admin).json()["tema"] == "escuro"
+    assert cliente.put("/api/autenticacao/tema", json={"tema": "roxo"}, headers=admin).status_code == 422
+    assert cliente.put("/api/autenticacao/tema", json={"tema": "claro"}).status_code == 401

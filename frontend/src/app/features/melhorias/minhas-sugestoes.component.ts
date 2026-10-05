@@ -10,10 +10,11 @@ import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CabecalhoMelhoriasComponent } from './cabecalho-melhorias.component';
 import { MelhoriasApiService } from './melhorias-api.service';
 import { PrintSugestao, ROTULOS_MODULO, ROTULOS_SITUACAO, SugestaoAutor } from './melhorias.models';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 @Component({
   selector: 'app-minhas-sugestoes',
-  imports: [DatePipe, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
+  imports: [LinkificarPipe, DatePipe, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
   template: `
     <app-cabecalho-melhorias titulo="Minhas sugestões"
       descricao="Sugestões que você enviou pelo botão &quot;Sugerir melhoria&quot;, com a situação e a resposta da equipe." />
@@ -26,7 +27,7 @@ import { PrintSugestao, ROTULOS_MODULO, ROTULOS_SITUACAO, SugestaoAutor } from '
             <span class="modulo-sugestao">{{ modulos[s.modulo] ?? s.modulo }}</span>
             <time [attr.datetime]="s.criado_em">{{ s.criado_em | date: 'dd/MM/yyyy HH:mm' }}</time>
           </header>
-          <p class="texto-sugestao">{{ s.texto }}</p>
+          <p class="texto-sugestao" [innerHTML]="s.texto | linkificar"></p>
           @if (s.prints.length) {
             <div class="prints-sugestao">
               @for (p of s.prints; track p.id) {

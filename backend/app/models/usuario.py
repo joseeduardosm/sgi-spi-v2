@@ -55,6 +55,8 @@ class Usuario(Base):
     email: Mapped[str] = mapped_column(String(254), default="")
     ramal: Mapped[str] = mapped_column(String(20), default="")
     celular: Mapped[str] = mapped_column(String(30), default="")
+    # Tema da interface escolhido pelo usuário: claro, escuro ou auto (segue o sistema). Não passa pela validação da CGP
+    tema: Mapped[str] = mapped_column(String(10), default="auto", server_default="auto")
     # Link do perfil no LinkedIn (opcional; sempre https://…linkedin.com/…). Não passa pela validação da CGP
     linkedin: Mapped[str] = mapped_column(String(200), default="", server_default="")
     cargo: Mapped[str] = mapped_column(String(150), default="")

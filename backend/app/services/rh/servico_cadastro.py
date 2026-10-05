@@ -141,6 +141,15 @@ def _registrar(sessao: Session, usuario: Usuario, campo: str, novo, autor: Usuar
     return alteracao
 
 
+def _aplicar_campo(sessao: Session, usuario: Usuario, campo: str, valor) -> None:
+    """Grava o valor em vigor do campo; o Departamento também ajusta a participação nos setores (ACL)."""
+    if campo == "departamento":
+        from app.services import servico_setores
+
+        servico_setores.sincronizar_departamento(sessao, usuario.id, usuario.departamento, valor)
+    setattr(usuario, campo, valor)
+
+
 def revisar_perfil(sessao: Session, usuario: Usuario, dados: DadosPerfil) -> Usuario:
     """Confirmação mensal do próprio perfil.
 
@@ -170,7 +179,7 @@ def revisar_perfil(sessao: Session, usuario: Usuario, dados: DadosPerfil) -> Usu
             continue
         novas.append(_registrar(sessao, usuario, campo, novo, usuario, "validada" if direto else "pendente"))
         if direto:
-            setattr(usuario, campo, novo)
+            _aplicar_campo(sessao, usuario, campo, novo)
     # LinkedIn é divulgação voluntária do próprio usuário: vale na hora, sem validação da CGP
     usuario.linkedin = dados.linkedin
     usuario.perfil_revisado_em = agora_utc()
@@ -273,7 +282,7 @@ def _aplicar_validacao(sessao: Session, alteracao_id: uuid.UUID, autor: Usuario)
     valor = de_texto(alteracao.campo, alteracao.valor_proposto)
     if alteracao.campo == "gestor_id":
         validar_superior(sessao, usuario.id, valor, False)
-    setattr(usuario, alteracao.campo, valor)
+    _aplicar_campo(sessao, usuario, alteracao.campo, valor)
     alteracao.status, alteracao.analisada_por_id, alteracao.analisada_por_nome, alteracao.analisada_em = "validada", autor.id, _nome(autor), agora_utc()
     auditar(sessao, autor.login, "rh.cadastro.validar", usuario.login, autor_id=autor.id, alvo_tipo="usuario", alvo_id=str(usuario.id),
             dados={"campo": alteracao.campo, "valor": alteracao.valor_proposto})
@@ -303,7 +312,7 @@ def recusar(sessao: Session, alteracao_id: uuid.UUID, justificativa: str, valor_
     alteracao = _alteracao_pendente(sessao, alteracao_id)
     usuario = sessao.get(Usuario, alteracao.usuario_id)
     valor, texto = _validar_correcao(sessao, usuario, alteracao.campo, valor_corrigido)
-    setattr(usuario, alteracao.campo, valor)
+    _aplicar_campo(sessao, usuario, alteracao.campo, valor)
     alteracao.status, alteracao.justificativa, alteracao.valor_corrigido = "recusada", justificativa.strip(), texto
     alteracao.analisada_por_id, alteracao.analisada_por_nome, alteracao.analisada_em = autor.id, _nome(autor), agora_utc()
     rotulo = ROTULOS[alteracao.campo]

@@ -7,6 +7,8 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/ro
 import { filter } from 'rxjs';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
+import { ChamadoService } from '../../../core/chamados/chamado.service';
+import { AtalhosService } from '../../../core/navegacao/atalhos.service';
 import { ItemNavegacao } from '../../../core/navegacao/navegacao.model';
 import { NavegacaoService } from '../../../core/navegacao/navegacao.service';
 import { IconeComponent } from '../../componentes/icone/icone.component';
@@ -33,6 +35,8 @@ export class BarraLateralComponent {
   protected readonly layout = inject(LayoutService);
   protected readonly navegacao = inject(NavegacaoService);
   protected readonly autenticacao = inject(AutenticacaoService);
+  protected readonly atalhos = inject(AtalhosService);
+  private readonly chamado = inject(ChamadoService);
   private readonly roteador = inject(Router);
 
   /** URL atual, atualizada a cada navegação (faz o destaque dos itens do submenu reagir). */
@@ -52,6 +56,18 @@ export class BarraLateralComponent {
         this.urlAtual.set(this.roteador.url);
         this.abrirGruposAtivos();
       });
+  }
+
+  /** Parâmetros de query de uma rota guardada (`/ramais?q=Maria` → `{ q: 'Maria' }`), para o link do menu. */
+  protected parametros(rota: string): Record<string, string> {
+    const consulta = rota.split('?')[1];
+    return consulta ? Object.fromEntries(new URLSearchParams(consulta)) : {};
+  }
+
+  /** Executa o item de ação (hoje só "Abrir Chamado"); fecha a gaveta no celular. */
+  protected executarAcao(item: ItemNavegacao): void {
+    if (item.acao === 'abrir-chamado') this.chamado.abrirModal();
+    this.layout.menuCelularAberto.set(false);
   }
 
   /** Indica se o grupo (submenu) está aberto. */

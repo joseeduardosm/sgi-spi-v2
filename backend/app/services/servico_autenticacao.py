@@ -92,4 +92,5 @@ def para_usuario_sessao(usuario: Usuario) -> UsuarioSessao:
         campos_pendentes=servico_perfil.campos_pendentes(usuario),
         revisao_obrigatoria=servico_perfil.revisao_vencida(usuario),
         conta_root=servico_perfil.dispensado(usuario),
+        tema=usuario.tema if usuario.tema in ("claro", "escuro") else "auto",
     )

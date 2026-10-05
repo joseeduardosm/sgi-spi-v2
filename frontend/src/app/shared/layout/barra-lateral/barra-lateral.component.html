@@ -13,6 +13,29 @@
   </div>
 
   <nav class="barra-lateral-navegacao">
+    <!-- Favoritos (na conta) e recentes (neste navegador): só com a barra aberta -->
+    @if (layout.barraExpandida()) {
+      @if (atalhos.favoritos().length) {
+        <p class="nav-legenda">Favoritos</p>
+        <div class="nav-atalhos">
+          @for (f of atalhos.favoritos(); track f.rota) {
+            <span class="nav-atalho">
+              <a [routerLink]="f.rota.split('?')[0]" [queryParams]="parametros(f.rota)" [title]="f.rotulo">★ {{ f.rotulo }}</a>
+              <button type="button" class="nav-atalho-remover" [attr.aria-label]="'Remover ' + f.rotulo + ' dos favoritos'" (click)="atalhos.alternar(f.rota, f.rotulo)">×</button>
+            </span>
+          }
+        </div>
+      }
+      @if (atalhos.recentes().length) {
+        <p class="nav-legenda nav-legenda-secundaria">Recentes</p>
+        <div class="nav-atalhos">
+          @for (r of atalhos.recentes(); track r.rota) {
+            <span class="nav-atalho"><a [routerLink]="r.rota.split('?')[0]" [queryParams]="parametros(r.rota)" [title]="r.rotulo">{{ r.rotulo }}</a></span>
+          }
+        </div>
+      }
+    }
+
     @for (secao of navegacao.secoes(); track secao.legenda) {
       <p class="nav-legenda" [class.nav-legenda-secundaria]="!$first">{{ secao.legenda }}</p>
 
@@ -39,6 +62,11 @@
               }
             </div>
           }
+        } @else if (item.acao) {
+          <!-- Item de ação (ex.: Abrir Chamado): abre um modal em vez de uma tela -->
+          <button class="nav-item" type="button" [title]="item.rotulo" (click)="executarAcao(item)">
+            <app-icone [nome]="item.icone ?? 'arquivo'" /><span>{{ item.rotulo }}</span>
+          </button>
         } @else if (item.rota) {
           <a class="nav-item" [routerLink]="item.rota" routerLinkActive="ativo" ariaCurrentWhenActive="page"
              [routerLinkActiveOptions]="{ exact: !!item.exata }" [title]="item.rotulo">

@@ -83,6 +83,8 @@ class ItemChecklist(Base):
     obrigatorio: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     # Documento com validade (certidões, apólices…): informa-se até quando vale e, se ainda valer, vira o documento da competência seguinte
     com_validade: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Documento da empresa (ex.: certidão): se já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo
+    vale_outros_contratos: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     checklist: Mapped[Checklist] = relationship(back_populates="itens")
 
@@ -397,6 +399,10 @@ class DocumentoMensal(Base):
     com_validade: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     validade_ate: Mapped[date | None] = mapped_column(Date)
     reaproveitado_de: Mapped[date | None] = mapped_column(Date)
+    # Copiado do item do checklist (documento da empresa). `reaproveitado_contrato`: número do contrato de onde o arquivo veio,
+    # quando foi reaproveitado de outro contrato da mesma empresa (só para a tela; o consolidado não mostra)
+    vale_outros_contratos: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    reaproveitado_contrato: Mapped[str | None] = mapped_column(String(60))
     # PDF anexado pelo usuário (vazio enquanto não enviado)
     anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

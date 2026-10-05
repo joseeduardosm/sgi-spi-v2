@@ -31,7 +31,19 @@ import {
   RascunhoContratoSgi,
   ResumoContrato,
   ResumoEmpresa,
+  VizinhosContrato,
 } from './contratos.models';
+
+/** Estado da lista da carteira guardado ao abrir um contrato, para o anterior/próximo respeitá-lo. */
+export interface ContextoCarteira {
+  busca: string;
+  meus: boolean;
+  ordenarPor: string;
+  direcao: 'asc' | 'desc';
+}
+
+/** Chave do `sessionStorage` com o contexto da carteira. */
+export const CHAVE_CONTEXTO_CARTEIRA = 'sgi-spi.carteira-contexto';
 
 /** Contratos, empresas, orçamento, painel, relatórios e modelos (docs/endpoints/contratos-*.md). */
 @Injectable({ providedIn: 'root' })
@@ -41,10 +53,19 @@ export class ContratosApiService {
 
   // --- Carteira e contrato ---
   /** Carteira paginada, com busca livre. */
-  listar(busca: string, pagina: number, tamanhoPagina: number, meus = false): Observable<Pagina<ResumoContrato>> {
+  listar(busca: string, pagina: number, tamanhoPagina: number, meus = false, ordenarPor = 'numero', direcao: 'asc' | 'desc' = 'desc'): Observable<Pagina<ResumoContrato>> {
     let params = new HttpParams().set('busca', busca).set('pagina', pagina).set('tamanho_pagina', tamanhoPagina);
     if (meus) params = params.set('meus', true);
+    // Ordem padrão da API (número, mais recentes primeiro): só envia quando o usuário escolheu outra
+    if (ordenarPor !== 'numero' || direcao !== 'desc') params = params.set('ordenar_por', ordenarPor).set('direcao', direcao);
     return this.http.get<Pagina<ResumoContrato>>(this.base, { params });
+  }
+
+  /** Contrato anterior e próximo na lista que a pessoa estava vendo (mesma busca, filtro e ordenação da carteira). */
+  vizinhos(id: string, contexto: ContextoCarteira): Observable<VizinhosContrato> {
+    let params = new HttpParams().set('busca', contexto.busca).set('ordenar_por', contexto.ordenarPor).set('direcao', contexto.direcao);
+    if (contexto.meus) params = params.set('meus', true);
+    return this.http.get<VizinhosContrato>(`${this.base}/${id}/vizinhos`, { params });
   }
 
   /** Detalhe completo do contrato. */

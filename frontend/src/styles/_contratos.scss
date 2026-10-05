@@ -35,10 +35,10 @@ a.acao-primaria {
 .acao-perigo {
   height: 39px;
   padding: 0 16px;
-  border: 1px solid #f0c9cd;
+  border: 1px solid var(--cor-f0c9cd);
   border-radius: 8px;
   color: #b3262f;
-  background: #fff;
+  background: var(--cor-ffffff);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -62,9 +62,9 @@ a.acao-primaria {
 /* Cartão de dados (detalhe, telas de processo) */
 .cartao-dados {
   margin-bottom: 18px;
-  border: 1px solid #e8eaec;
+  border: 1px solid var(--cor-e8eaec);
   border-radius: 12px;
-  background: #fff;
+  background: var(--cor-ffffff);
   box-shadow: 0 4px 16px #401e2008;
 
   > header {
@@ -74,7 +74,7 @@ a.acao-primaria {
     justify-content: space-between;
     gap: 10px;
     padding: 16px 22px;
-    border-bottom: 1px solid #ecedef;
+    border-bottom: 1px solid var(--cor-ecedef);
 
     h2,
     h3 {
@@ -126,7 +126,7 @@ a.acao-primaria {
 
   dd {
     margin: 0;
-    color: #32383f;
+    color: var(--cor-32383f);
     font-size: 13px;
     overflow-wrap: anywhere;
   }
@@ -146,9 +146,9 @@ a.acao-primaria {
 
 .indicador {
   padding: 14px 16px;
-  border: 1px solid #e8eaec;
+  border: 1px solid var(--cor-e8eaec);
   border-radius: 10px;
-  background: #fff;
+  background: var(--cor-ffffff);
 
   span {
     display: block;
@@ -184,25 +184,25 @@ a.acao-primaria {
   &.a_vencer,
   &.em_andamento,
   &.amarelo {
-    color: #9a6400;
-    background: #fff4dc;
+    color: var(--cor-9a6400);
+    background: var(--cor-fff4dc);
   }
 
   &.encerrado,
   &.pendente {
     color: #7e8995;
-    background: #eef0f2;
+    background: var(--cor-eef0f2);
   }
 
   &.suspenso,
   &.vermelho {
-    color: #a63942;
+    color: var(--cor-a63942);
     background: var(--spi-vermelho-suave);
   }
 
   &.disponivel {
-    color: #3b5b8a;
-    background: #e9f0fb;
+    color: var(--cor-3b5b8a);
+    background: var(--cor-e9f0fb);
   }
 }
 
@@ -227,10 +227,10 @@ a.acao-primaria {
   }
 
   tfoot td {
-    border-top: 2px solid #e3e6e9;
-    color: #32383f;
+    border-top: 2px solid var(--cor-e3e6e9);
+    color: var(--cor-32383f);
     font-weight: 700;
-    background: #fbfbfc;
+    background: var(--cor-fbfbfc);
   }
 
   input.campo-tabela,
@@ -239,9 +239,9 @@ a.acao-primaria {
     min-width: 72px;
     height: 32px;
     padding: 0 8px;
-    border: 1px solid #e2e5e8;
+    border: 1px solid var(--cor-e2e5e8);
     border-radius: 6px;
-    background: #fff;
+    background: var(--cor-ffffff);
     font-size: 12px;
     text-align: right;
 
@@ -253,7 +253,7 @@ a.acao-primaria {
 
     &.invalido {
       border-color: #d9534f;
-      background: #fff6f6;
+      background: var(--cor-fff6f6);
     }
   }
 
@@ -261,12 +261,12 @@ a.acao-primaria {
     cursor: pointer;
 
     &:hover td {
-      background: #fcf7f7;
+      background: var(--cor-fcf7f7);
     }
   }
 
   tr.linha-erro td {
-    background: #fff6f6;
+    background: var(--cor-fff6f6);
   }
 }
 
@@ -276,11 +276,11 @@ a.acao-primaria {
   min-height: 90px;
   margin-bottom: 16px;
   padding: 10px 12px;
-  border: 1px solid #e2e5e8;
+  border: 1px solid var(--cor-e2e5e8);
   border-radius: 7px;
   outline: 0;
-  color: #3d454e;
-  background: #fcfcfc;
+  color: var(--cor-3d454e);
+  background: var(--cor-fcfcfc);
   font-size: 13px;
   resize: vertical;
 
@@ -301,13 +301,13 @@ a.acao-primaria {
   .ocupa-2 { grid-column: span 2; }
   .liberar-competencias {
     padding: 12px 16px;
-    border: 1px solid #e8eaec;
+    border: 1px solid var(--cor-e8eaec);
     border-radius: 9px;
-    background: #fcfcfc;
+    background: var(--cor-fcfcfc);
 
     label { display: flex; align-items: center; gap: 10px; margin: 0 0 2px; font-size: 13px; font-weight: 700; cursor: pointer; }
     input[type='checkbox'] { flex: none; width: 18px; height: 18px; margin: 0; padding: 0; accent-color: #af3741; }
-    small { display: block; padding-left: 28px; color: #6a7786; font-size: 12px; }
+    small { display: block; padding-left: 28px; color: var(--cor-6a7786); font-size: 12px; }
   }
   .ocupa-3 { grid-column: span 3; }
   .ocupa-4 { grid-column: 1 / -1; }
@@ -326,8 +326,8 @@ a.acao-primaria {
     margin-left: 6px;
     padding: 1px 7px;
     border-radius: 10px;
-    background: #eff0f2;
-    color: #7c8998;
+    background: var(--cor-eff0f2);
+    color: var(--cor-7c8998);
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
@@ -335,8 +335,8 @@ a.acao-primaria {
 
   input {
     border-style: dashed;
-    background: #f6f7f8;
-    color: #361a1c;
+    background: var(--cor-f6f7f8);
+    color: var(--cor-361a1c);
     font-weight: 700;
     cursor: default;
   }
@@ -366,7 +366,7 @@ a.acao-primaria {
     position: relative;
     height: 6px;
     border-radius: 3px;
-    background: #eceef1;
+    background: var(--cor-eceef1);
   }
 
   .decorrido {
@@ -381,7 +381,7 @@ a.acao-primaria {
     top: 1px;
     width: 1px;
     height: 4px;
-    background: #cfd4da;
+    background: var(--cor-cfd4da);
   }
 
   .marco {
@@ -395,7 +395,7 @@ a.acao-primaria {
       width: 12px;
       height: 12px;
       margin: 0 auto;
-      border: 2px solid #fff;
+      border: 2px solid var(--cor-ffffff);
       border-radius: 50%;
       background: #8e99a6;
       box-shadow: 0 0 0 1px #cfd4da;
@@ -407,7 +407,7 @@ a.acao-primaria {
       width: max-content;
       max-width: 140px;
       transform: translateX(-50%);
-      color: #5a6673;
+      color: var(--cor-5a6673);
       font-size: 10px;
       line-height: 1.25;
       white-space: normal;
@@ -448,10 +448,10 @@ a.acao-primaria {
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border: 1px solid #e2e4e7;
+    border: 1px solid var(--cor-e2e4e7);
     border-radius: 20px;
-    color: #6a7786;
-    background: #fff;
+    color: var(--cor-6a7786);
+    background: var(--cor-ffffff);
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
@@ -503,8 +503,8 @@ a.acao-primaria {
     justify-content: space-between;
     gap: 8px;
     padding: 8px 0;
-    border-bottom: 1px solid #f0f1f3;
-    color: #3d454e;
+    border-bottom: 1px solid var(--cor-f0f1f3);
+    color: var(--cor-3d454e);
     font-size: 12px;
 
     small {
@@ -517,14 +517,14 @@ a.acao-primaria {
   display: inline-block;
   padding: 4px 10px;
   border-radius: 12px;
-  color: #9a6400;
-  background: #fff4dc;
+  color: var(--cor-9a6400);
+  background: var(--cor-fff4dc);
   font-size: 11px;
   font-weight: 700;
 
   &.completo {
-    color: #218365;
-    background: #e9f7f2;
+    color: var(--cor-218365);
+    background: var(--cor-e9f7f2);
   }
 }
 
@@ -559,7 +559,7 @@ a.acao-primaria {
   height: 8px;
   margin: 8px 0 4px;
   border-radius: 4px;
-  background: #eceef1;
+  background: var(--cor-eceef1);
   overflow: hidden;
 
   span {
@@ -584,19 +584,19 @@ a.acao-primaria {
   border-left: 3px solid #e0a526;
   border-radius: 6px;
   color: #6b4b00;
-  background: #fff8e6;
+  background: var(--cor-fff8e6);
   font-size: 12px;
 
   &.informativo {
     border-left-color: #3b5b8a;
     color: #2b4468;
-    background: #eef3fb;
+    background: var(--cor-eef3fb);
   }
 
   &.erro {
     border-left-color: var(--spi-vermelho);
     color: #7a2129;
-    background: #fcf0f1;
+    background: var(--cor-fcf0f1);
   }
 
   ul {
@@ -633,9 +633,9 @@ a.acao-primaria {
     max-height: 260px;
     overflow-y: auto;
     padding: 10px 12px;
-    border: 1px solid #e2e5e8;
+    border: 1px solid var(--cor-e2e5e8);
     border-radius: 8px;
-    background: #fff;
+    background: var(--cor-ffffff);
     box-shadow: 0 12px 30px #18222d22;
     text-transform: none;
     letter-spacing: normal;
@@ -644,8 +644,8 @@ a.acao-primaria {
     p {
       margin: 0 0 8px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #f0f1f3;
-      color: #3d454e;
+      border-bottom: 1px solid var(--cor-f0f1f3);
+      color: var(--cor-3d454e);
       font-size: 12px;
 
       &:last-child {
@@ -671,9 +671,9 @@ a.acao-primaria {
   height: 180px;
   padding: 8px 0 0;
   /* Eixos: linha de base e eixo vertical; grade horizontal suave a cada 25% da altura */
-  border-bottom: 1px solid #b9c2cc;
-  border-left: 1px solid #b9c2cc;
-  background: linear-gradient(to top, #e8ebef 1px, transparent 1px) 0 0 / 100% 25%;
+  border-bottom: 1px solid var(--cor-b9c2cc);
+  border-left: 1px solid var(--cor-b9c2cc);
+  background: linear-gradient(to top, var(--cor-e8ebef) 1px, transparent 1px) 0 0 / 100% 25%;
 
   .coluna {
     display: flex;
@@ -683,7 +683,7 @@ a.acao-primaria {
     height: 100%;
     padding: 0 6px;
     /* Divisória vertical entre os meses */
-    border-right: 1px solid #e8ebef;
+    border-right: 1px solid var(--cor-e8ebef);
 
     &:last-child { border-right: 0; }
   }
@@ -694,7 +694,7 @@ a.acao-primaria {
     border-radius: 3px 3px 0 0;
 
     &.previsto {
-      background: #cfd6de;
+      background: var(--cor-cfd6de);
     }
 
     &.medido {
@@ -721,7 +721,7 @@ a.acao-primaria {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  color: #5a6673;
+  color: var(--cor-5a6673);
   font-size: 11px;
 
   i {
@@ -733,7 +733,7 @@ a.acao-primaria {
     vertical-align: -1px;
 
     &.previsto {
-      background: #cfd6de;
+      background: var(--cor-cfd6de);
     }
 
     &.medido {
@@ -774,9 +774,9 @@ a.acao-primaria {
   right: 0;
   min-width: 150px;
   padding: 6px;
-  border: 1px solid #e2e5e8;
+  border: 1px solid var(--cor-e2e5e8);
   border-radius: 8px;
-  background: #fff;
+  background: var(--cor-ffffff);
   box-shadow: 0 12px 30px #18222d22;
 
   button {
@@ -784,7 +784,7 @@ a.acao-primaria {
     width: 100%;
     padding: 7px 10px !important;
     border-radius: 5px;
-    color: #32383f !important;
+    color: var(--cor-32383f) !important;
     background: transparent !important;
     text-align: left;
 
@@ -807,11 +807,11 @@ a.acao-primaria {
 /* Tabela de itens do formulário do contrato: códigos agrupados numa coluna */
 .tabela-itens-contrato td small {
   display: block;
-  color: #6a7786;
+  color: var(--cor-6a7786);
 }
 
 .tabela-itens-contrato .codigos-item small {
-  color: #6a7786;
+  color: var(--cor-6a7786);
   white-space: nowrap;
 }
 
@@ -826,7 +826,7 @@ a.acao-primaria {
 
   summary {
     cursor: pointer;
-    color: #5a6673;
+    color: var(--cor-5a6673);
     font-weight: 700;
   }
 }
@@ -844,7 +844,7 @@ a.acao-primaria {
     display: flex;
     justify-content: space-between;
     padding: 6px 0;
-    border-bottom: 1px solid #f0f1f3;
+    border-bottom: 1px solid var(--cor-f0f1f3);
   }
 }
 
@@ -906,11 +906,11 @@ a.acao-primaria {
   select {
     height: 38px;
     padding: 0 12px;
-    border: 1px solid #e2e5e8;
+    border: 1px solid var(--cor-e2e5e8);
     border-radius: 7px;
     outline: 0;
-    color: #3d454e;
-    background: #fcfcfc;
+    color: var(--cor-3d454e);
+    background: var(--cor-fcfcfc);
     font-size: 13px;
 
     &:focus {
@@ -939,10 +939,10 @@ a.acao-primaria {
 
   button {
     padding: 6px 11px;
-    border: 1px solid #e2e5e8;
+    border: 1px solid var(--cor-e2e5e8);
     border-radius: 999px;
-    color: #4a5561;
-    background: #fff;
+    color: var(--cor-4a5561);
+    background: var(--cor-ffffff);
     font-size: 12px;
     cursor: pointer;
 
@@ -974,11 +974,11 @@ a.acao-primaria {
   flex-direction: column;
   gap: 6px;
   padding: 14px 16px;
-  border: 1px solid #e8eaec;
+  border: 1px solid var(--cor-e8eaec);
   border-left: 4px solid #e0a526;
   border-radius: 10px;
-  color: #32383f;
-  background: #fff;
+  color: var(--cor-32383f);
+  background: var(--cor-ffffff);
   box-shadow: 0 4px 16px #401e2008;
   text-decoration: none;
   transition: box-shadow 0.15s, transform 0.15s;
@@ -1003,7 +1003,7 @@ a.acao-primaria {
   }
 
   small {
-    color: #6a7786;
+    color: var(--cor-6a7786);
     font-size: 12px;
   }
 
@@ -1028,7 +1028,7 @@ a.acao-primaria {
   padding: 2px 8px;
   border-radius: 999px;
   color: #6b4b00;
-  background: #fff8e6;
+  background: var(--cor-fff8e6);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -1036,7 +1036,7 @@ a.acao-primaria {
 
   .alta & {
     color: #7a2129;
-    background: #fcf0f1;
+    background: var(--cor-fcf0f1);
   }
 }
 
@@ -1049,7 +1049,7 @@ a.acao-primaria {
     align-items: baseline;
     gap: 4px 10px;
     margin-bottom: 10px;
-    color: #32383f;
+    color: var(--cor-32383f);
     text-decoration: none;
 
     .marcador {
@@ -1095,22 +1095,22 @@ a.acao-primaria {
   max-height: max(360px, calc(100vh - 420px));
   overflow-y: auto;
   padding: 14px 18px;
-  background: #f7f8fa;
+  background: var(--cor-f7f8fa);
 }
 
 .balao-diario {
   align-self: flex-start;
   max-width: min(980px, 82%);
   padding: 9px 13px;
-  border: 1px solid #e3e6e9;
+  border: 1px solid var(--cor-e3e6e9);
   border-radius: 4px 14px 14px 14px;
-  background: #fff;
+  background: var(--cor-ffffff);
   box-shadow: 0 2px 8px #401e2008;
 
   &.minha {
     align-self: flex-end;
     border-radius: 14px 4px 14px 14px;
-    background: #fdf5f5;
+    background: var(--cor-fdf5f5);
   }
 
   &.com-glosa {
@@ -1130,7 +1130,7 @@ a.acao-primaria {
     font-size: 12px;
 
     .papel {
-      color: #6a7786;
+      color: var(--cor-6a7786);
     }
 
     time {
@@ -1144,8 +1144,8 @@ a.acao-primaria {
   .selo-diario {
     padding: 1px 8px;
     border-radius: 10px;
-    background: #eff1f4;
-    color: #4d5966;
+    background: var(--cor-eff1f4);
+    color: var(--cor-4d5966);
     font-size: 11px;
     font-weight: 600;
   }
@@ -1175,9 +1175,9 @@ a.acao-primaria {
 
     .chip-glosa {
       padding: 2px 9px;
-      border: 1px solid #f1c9cd;
+      border: 1px solid var(--cor-f1c9cd);
       border-radius: 10px;
-      background: #fcf0f1;
+      background: var(--cor-fcf0f1);
     }
   }
 
@@ -1188,8 +1188,8 @@ a.acao-primaria {
     }
 
     .chip-glosa {
-      border-color: #f0d9b0;
-      background: #fdf6e9;
+      border-color: var(--cor-f0d9b0);
+      background: var(--cor-fdf6e9);
     }
   }
 
@@ -1213,7 +1213,7 @@ a.acao-primaria {
 
 .diario-formulario {
   padding: 18px 22px;
-  border-top: 1px solid #ecedef;
+  border-top: 1px solid var(--cor-ecedef);
 
   .linha-glosa {
     display: grid;
@@ -1238,7 +1238,7 @@ a.acao-primaria {
 
     legend {
       margin-bottom: 4px;
-      color: #4d5966;
+      color: var(--cor-4d5966);
       font-size: 12px;
       font-weight: 700;
     }
@@ -1265,9 +1265,9 @@ a.acao-primaria {
       gap: 6px;
       align-items: center;
       padding: 3px 10px;
-      border: 1px solid #e3e6e9;
+      border: 1px solid var(--cor-e3e6e9);
       border-radius: 12px;
-      background: #f7f8fa;
+      background: var(--cor-f7f8fa);
       font-size: 12px;
     }
   }
@@ -1293,7 +1293,7 @@ a.acao-primaria {
   legend {
     width: 100%;
     margin-bottom: 8px;
-    color: #32383f;
+    color: var(--cor-32383f);
     font-size: 12px;
     font-weight: 700;
   }
@@ -1325,16 +1325,16 @@ a.acao-primaria {
 
 .campo-tabela.invalido {
   border-color: var(--spi-vermelho) !important;
-  background: #fcf0f1;
+  background: var(--cor-fcf0f1);
 }
 
 /* Etapa 4 — retenção de tributos: nota renderizada a partir do XML */
 .nota-xml {
   margin-bottom: 22px;
   padding: 16px 18px;
-  border: 1px solid #e3e6e9;
+  border: 1px solid var(--cor-e3e6e9);
   border-radius: 10px;
-  background: #fff;
+  background: var(--cor-ffffff);
 
   > header {
     display: flex;
@@ -1375,7 +1375,7 @@ a.acao-primaria {
       gap: 2px;
       padding: 10px 12px;
       border-radius: 8px;
-      background: #f7f8fa;
+      background: var(--cor-f7f8fa);
       font-size: 12px;
     }
 
@@ -1427,9 +1427,9 @@ a.acao-primaria {
     flex-wrap: wrap;
     gap: 4px 10px;
     padding: 6px 10px;
-    border-left: 3px solid #cfd4da;
+    border-left: 3px solid var(--cor-cfd4da);
     border-radius: 4px;
-    background: #f7f8fa;
+    background: var(--cor-f7f8fa);
 
     & + li {
       margin-top: 4px;
@@ -1445,7 +1445,7 @@ a.acao-primaria {
 
     &.alerta {
       border-left-color: #e0a526;
-      background: #fff8e6;
+      background: var(--cor-fff8e6);
 
       b {
         color: #8a5a00;
@@ -1453,7 +1453,7 @@ a.acao-primaria {
     }
 
     span {
-      color: #5a6673;
+      color: var(--cor-5a6673);
     }
   }
 }
@@ -1502,7 +1502,7 @@ a.acao-primaria {
 .rotulo-campo {
   display: block;
   margin: 0 0 7px;
-  color: #464f5a;
+  color: var(--cor-464f5a);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1511,7 +1511,7 @@ a.acao-primaria {
 .seletor-segmentado {
   display: inline-flex;
   margin-bottom: 16px;
-  border: 1px solid #e2e5e8;
+  border: 1px solid var(--cor-e2e5e8);
   border-radius: 7px;
   overflow: hidden;
 
@@ -1520,13 +1520,13 @@ a.acao-primaria {
     height: 42px;
     padding: 0 18px;
     border: 0;
-    background: #fff;
-    color: #4d5966;
+    background: var(--cor-ffffff);
+    color: var(--cor-4d5966);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
 
-    & + button { border-left: 1px solid #e2e5e8; }
+    & + button { border-left: 1px solid var(--cor-e2e5e8); }
 
     &.ativo {
       background: var(--spi-vermelho);
@@ -1560,15 +1560,15 @@ a.acao-primaria {
   align-items: end;
   margin-top: 14px;
   padding: 14px 14px 0;
-  border: 1px dashed #e2e5e8;
+  border: 1px dashed var(--cor-e2e5e8);
   border-radius: 8px;
-  background: #fbfbfc;
+  background: var(--cor-fbfbfc);
 
   label,
   .rotulo-campo {
     display: block;
     margin: 0 0 7px;
-    color: #464f5a;
+    color: var(--cor-464f5a);
     font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
@@ -1579,11 +1579,11 @@ a.acao-primaria {
     height: 42px;
     margin-bottom: 16px;
     padding: 0 12px;
-    border: 1px solid #e2e5e8;
+    border: 1px solid var(--cor-e2e5e8);
     border-radius: 7px;
     outline: 0;
-    color: #3d454e;
-    background: #fcfcfc;
+    color: var(--cor-3d454e);
+    background: var(--cor-fcfcfc);
     font-size: 13px;
 
     &::placeholder { color: #9aa4af; }
@@ -1671,9 +1671,9 @@ a.acao-primaria {
   gap: 8px 16px;
   margin: 0 0 14px;
   padding: 12px 14px;
-  border: 1px solid #e2e5e8;
+  border: 1px solid var(--cor-e2e5e8);
   border-radius: 8px;
-  background: #f8f9fa;
+  background: var(--cor-f8f9fa);
   font-size: 13px;
 
   dt {
@@ -1712,7 +1712,7 @@ a.acao-primaria {
 }
 
 .tabela-gestao td.variacao-positiva {
-  color: #218365;
+  color: var(--cor-218365);
 }
 
 .tabela-gestao td.variacao-negativa,
@@ -1747,7 +1747,7 @@ $prazo-normal: #2b4468;
   padding: 12px 22px;
   border-top: 1px solid var(--spi-borda);
 
-  &:hover { background: #fafbfc; }
+  &:hover { background: var(--cor-fafbfc); }
 
   .identificacao-prazo {
     display: flex;
@@ -1772,7 +1772,7 @@ $prazo-normal: #2b4468;
     height: 14px;
     border-radius: 7px;
     /* Marcas discretas a cada 25% do prazo total */
-    background: linear-gradient(90deg, #d3d9df 1px, transparent 1px) 0 0 / 25% 100%, #eceef1;
+    background: linear-gradient(90deg, var(--cor-d3d9df) 1px, transparent 1px) 0 0 / 25% 100%, var(--cor-eceef1);
     overflow: hidden;
   }
 
@@ -1781,10 +1781,10 @@ $prazo-normal: #2b4468;
     position: absolute;
     top: 0;
     bottom: 0;
-    border-right: 2px solid #fff;
-    background: #e3e6ea;
+    border-right: 2px solid var(--cor-ffffff);
+    background: var(--cor-e3e6ea);
 
-    &.prorrogacao { background: #d6dbe1; }
+    &.prorrogacao { background: var(--cor-d6dbe1); }
   }
 
   .decorrido-prazo {
@@ -1860,7 +1860,7 @@ $prazo-normal: #2b4468;
 }
 
 /* Documento com validade (checklist): data da etapa de execução */
-.campo-validade { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; color: #464f5a; font-size: 12px; font-weight: 700; input { height: 34px; padding: 0 10px; border: 1px solid #e2e5e8; border-radius: 7px; background: #fcfcfc; font-size: 13px; font-weight: 400; } }
+.campo-validade { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; color: var(--cor-464f5a); font-size: 12px; font-weight: 700; input { height: 34px; padding: 0 10px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px; background: var(--cor-fcfcfc); font-size: 13px; font-weight: 400; } }
 
 /* Cartões dobráveis (versões de checklist e de formulário de avaliação) */
 .barra-dobrar { display: flex; justify-content: flex-end; gap: 14px; margin: 0 0 8px; }
@@ -1878,17 +1878,46 @@ $prazo-normal: #2b4468;
     text-align: left;
     cursor: pointer;
 
-    small { margin-right: auto; color: #6a7786; }
+    small { margin-right: auto; color: var(--cor-6a7786); }
     .seta { display: inline-block; width: 14px; color: #8c97a4; transition: transform 0.15s; &.aberta { transform: rotate(90deg); } }
     &:focus-visible { outline: 2px solid #bc3843; outline-offset: 3px; border-radius: 6px; }
   }
 
-  .detalhe-formulario { margin: 10px 0 6px; font-size: 12px; color: #3d454e; }
+  .detalhe-formulario { margin: 10px 0 6px; font-size: 12px; color: var(--cor-3d454e); }
   .bloco-formulario { margin: 0 0 10px; ul { margin: 4px 0 0; padding-left: 20px; } }
 }
 
 /* Campo numérico na tabela de correção de itens */
-.campo-correcao { width: 130px; height: 36px; padding: 0 10px; border: 1px solid #e2e5e8; border-radius: 7px; background: #fcfcfc; font-size: 13px; text-align: right; &:disabled { background: #f1f2f4; } &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; outline: 0; } }
+.campo-correcao { width: 130px; height: 36px; padding: 0 10px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px; background: var(--cor-fcfcfc); font-size: 13px; text-align: right; &:disabled { background: var(--cor-f1f2f4); } &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; outline: 0; } }
 
 /* Carteira: caixa "Meus contratos" ao lado da busca */
-.filtros-gestao .opcao-meus { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: #464f5a; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; input { width: 16px; height: 16px; margin: 0; accent-color: #af3741; } }
+.filtros-gestao .opcao-meus { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: var(--cor-464f5a); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; input { width: 16px; height: 16px; margin: 0; accent-color: #af3741; } }
+
+// Opção "Documento da empresa" (checklist) e sugestão de documento de outro contrato (etapa do checklist)
+.opcao-empresa { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: var(--spi-apagado); cursor: pointer; input { margin: 0; } }
+.sugestao-outro-contrato {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 6px; padding: 8px 10px;
+  border: 1px dashed var(--spi-borda-campo); border-radius: 8px; background: var(--cor-eaf1fb);
+}
+.reaproveitado-contrato { display: block; color: var(--spi-link); }
+
+// Número do contrato na carteira: link de verdade (Ctrl+clique, botão do meio e "abrir em nova aba" funcionam)
+.link-contrato { color: inherit; text-decoration: none; &:hover strong { text-decoration: underline; } }
+
+// Linha inteira como link: o link do número é esticado sobre a linha (::after), então clique com a roda, Ctrl+clique e o botão direito
+// ("Abrir link em nova guia") funcionam em qualquer ponto dela. A célula das ações fica por cima, para o menu ⋮ continuar clicável.
+tr.linha-link {
+  position: relative;
+  .link-contrato::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+  .celula-acoes { position: relative; z-index: 2; }
+}
+
+// Títulos ordenáveis das tabelas: botão sem aparência de botão, com a seta do sentido da ordenação
+.ordenar-coluna {
+  display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: inherit;
+  font: inherit; font-weight: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; white-space: nowrap;
+  span { font-size: 9px; opacity: 0.45; }
+  &.ativa span { opacity: 1; color: var(--spi-vermelho); }
+  &:hover span { opacity: 1; }
+}
+th.num .ordenar-coluna { justify-content: flex-end; width: 100%; }

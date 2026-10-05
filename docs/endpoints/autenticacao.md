@@ -48,6 +48,7 @@ Valida login e senha e emite um token JWT de acesso. Com um diretório LDAP ativ
 | `campos_pendentes` | string[] | Campos obrigatórios não preenchidos (ex.: `["ramal", "andar"]`) |
 | `revisao_obrigatoria` | boolean | Perfil ainda não confirmado no mês civil atual (ou nunca confirmado) |
 | `conta_root` | boolean | Conta administrativa principal (login `LOGIN_ADMIN`): dispensada da confirmação do perfil e única com acesso à Mensageria |
+| `tema` | string | Tema da interface escolhido pelo usuário: `claro`, `escuro` ou `auto` (segue o sistema operacional; padrão) |
 
 ```json
 {
@@ -98,6 +99,17 @@ Retorna o `UsuarioSessao` do dono do token, com a situação do perfil recalcula
 - **Autorização:** Bearer.
 - **Resposta `200`:** `UsuarioSessao`, ver acima.
 - **Erros:** `401` (`nao_autenticado`), com `detalhe` `Não autenticado.`, `Token inválido.`, `Sessão expirada.` ou `Usuário inválido ou inativo.`
+
+---
+
+## `PUT /api/autenticacao/tema`
+
+Grava o tema da interface do próprio usuário, para que a escolha o acompanhe em qualquer navegador ou aparelho. O Angular também guarda a escolha no `localStorage` (chave `sgi-spi.tema`), para aplicá-la antes do login e sem piscar; depois do login, o valor da conta prevalece.
+
+- **Autorização:** Bearer. Funciona mesmo com o perfil pendente; não passa pela validação da CGP.
+- **Corpo:** `{"tema": "claro" | "escuro" | "auto"}`.
+- **Resposta `200`:** `UsuarioSessao` atualizado (campo `tema`).
+- **Erros:** `401` (`nao_autenticado`); `422` (`validacao`) para valor fora das três opções.
 
 ---
 

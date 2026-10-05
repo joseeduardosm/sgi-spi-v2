@@ -23,7 +23,7 @@
         <tbody>
           @for (i of g.itens; track i.id) {
             <tr>
-              <td><strong>{{ i.nome }}</strong>@if (i.descricao) { <small>{{ i.descricao }}</small> }
+              <td><strong>{{ i.nome }}</strong>@if (i.descricao) { <small [innerHTML]="i.descricao | linkificar"></small> }
                 @for (o of ocorrenciasPorItem()[i.id] ?? []; track o.id) {
                   <small class="ocorrencia-item" [title]="'Registrada por ' + o.registrada_por_nome">Diário {{ o.data_ocorrencia | dataBr }}: {{ o.descricao }}</small>
                 }
@@ -62,7 +62,7 @@
             @for (i of g.itens; track i.id) {
               <tr>
                 <td><strong>{{ i.nome }}</strong>@if (ocorrenciasPorItem()[i.id]?.length) { <small class="ocorrencia-item">{{ ocorrenciasPorItem()[i.id].length }} ocorrência(s) no diário</small> }</td>
-                <td>{{ iniciais[i.id].nota || '—' }}@if (iniciais[i.id].justificativa) { <small>{{ iniciais[i.id].justificativa }}</small> }</td>
+                <td>{{ iniciais[i.id].nota || '—' }}@if (iniciais[i.id].justificativa) { <small [innerHTML]="iniciais[i.id].justificativa | linkificar"></small> }</td>
                 <td style="width: 150px">
                   <select class="campo-tabela" [attr.aria-label]="'Nota do gestor de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="gestor[i.id].nota">
                     @for (n of a.definicao.escala; track $index) { <option [value]="'' + +n.valor">{{ n.valor }} · {{ n.legenda }}</option> }

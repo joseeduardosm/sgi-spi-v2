@@ -22,6 +22,8 @@ from app.models.contratos import (
     PrepostoEmpresa,
 )
 from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
+from app.models.favorito_menu import FavoritoMenu
+from app.models.integracao_glpi import ChamadoGlpi, IntegracaoGlpi
 from app.models.diretorio_ldap import DiretorioLdap
 from app.models.envio_changelog import EnvioChangelog
 from app.models.melhorias import AnexoSugestao, EventoSugestao, SugestaoMelhoria
@@ -69,7 +71,8 @@ __all__ = [
     "ItemContrato",
     "PrepostoEmpresa",
     "DiretorioLdap",
-    "EnvioChangelog", "FavoritoDiretorio", "ParabensAniversario",
+    "EnvioChangelog", "FavoritoDiretorio",
+    "FavoritoMenu", "ChamadoGlpi", "IntegracaoGlpi", "ParabensAniversario",
     "EntregaMensagem",
     "Mensagem",
     "AlteracaoCadastral",

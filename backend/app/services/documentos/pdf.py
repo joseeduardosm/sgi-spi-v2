@@ -8,7 +8,9 @@ Todo documento gerado pelo sistema sai em **A4 paisagem**.
 
 Para os documentos consolidados há também:
 - `contracapa()`: página que antecede cada documento enviado, dizendo que documento é aquele;
-- `montar_consolidado()`: junta as partes e numera todas as páginas em sequência ("Página X de N").
+- `indice_consolidado()`: página(s) de índice, com a posição de cada título para virar hiperlink;
+- `montar_consolidado()`: junta as partes, numera todas as páginas em sequência ("Página X de N") e cria
+  os hiperlinks do índice e os marcadores (painel de navegação do leitor de PDF).
 """
 
 from collections.abc import Iterable, Sequence
@@ -20,6 +22,7 @@ from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 
 from pypdf import PdfReader, PdfWriter, Transformation
+from pypdf.annotations import Link
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
@@ -235,6 +238,72 @@ def contracapa(sobretitulo: str, titulo: str, pares: Sequence[tuple[str, str]], 
     return documento.gerar()
 
 
+@dataclass
+class EntradaIndice:
+    """Uma linha do índice do consolidado: o documento e as páginas (já contando o deslocamento do índice)."""
+
+    numero: str
+    etapa: str
+    titulo: str
+    pagina_inicial: int
+    pagina_final: int
+
+
+@dataclass
+class AlvoLink:
+    """Área clicável de uma página do consolidado que leva a outra página (números 1-based)."""
+
+    pagina_origem: int
+    retangulo: tuple[float, float, float, float]
+    pagina_destino: int
+
+
+ESTILO_LINK_INDICE = ParagraphStyle("link_indice", parent=ESTILO_PEQUENO, fontSize=9, leading=12, textColor=colors.HexColor("#1a56a0"))
+
+
+class _CelulaLink(Paragraph):
+    """Parágrafo que anota, ao ser desenhado, onde ficou na página (para o hiperlink do índice)."""
+
+    def __init__(self, conteudo: str, destino: int, alvos: list[AlvoLink]) -> None:
+        super().__init__(conteudo, ESTILO_LINK_INDICE)
+        self._destino, self._alvos = destino, alvos
+
+    def draw(self) -> None:
+        super().draw()
+        x, y = self.canv.absolutePosition(0, 0)
+        self._alvos.append(AlvoLink(self.canv.getPageNumber(), (x, y, x + self.width, y + self.height), self._destino))
+
+
+def indice_consolidado(titulo: str, contexto: str, entradas: Sequence[EntradaIndice], autor: str = "") -> tuple[bytes, list[AlvoLink]]:
+    """Índice do consolidado (primeira página): um documento por linha, com o título e as páginas clicáveis.
+
+    Devolve o PDF do índice e as áreas clicáveis (páginas do próprio índice → página do documento).
+    Os números de página das `entradas` já devem considerar as páginas do índice.
+    """
+    alvos: list[AlvoLink] = []
+    documento = DocumentoPdf(titulo, contexto, autor=autor)
+    documento.paragrafo("Clique no título de um documento para ir direto a ele neste arquivo.")
+    cabecalho = [texto(c, ESTILO_ROTULO) for c in ("Nº", "Etapa", "Documento", "Páginas")]
+    linhas = [cabecalho]
+    for e in entradas:
+        paginas = f"{e.pagina_inicial}" if e.pagina_final <= e.pagina_inicial else f"{e.pagina_inicial} a {e.pagina_final}"
+        linhas.append([
+            texto(e.numero), texto(e.etapa),
+            _CelulaLink(f"<u>{escape(e.titulo)}</u>", e.pagina_inicial, alvos),
+            _CelulaLink(f"<u>{escape(paginas)}</u>", e.pagina_inicial, alvos),
+        ])
+    util = documento._largura_util()
+    proporcoes = [0.5, 2, 6, 1.5]
+    tabela = Table(linhas, colWidths=[util * p / sum(proporcoes) for p in proporcoes], repeatRows=1)
+    tabela.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), VERMELHO_SUAVE), ("LINEBELOW", (0, 0), (-1, 0), 0.8, VERMELHO),
+        ("LINEBELOW", (0, 1), (-1, -1), 0.3, BORDA), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    documento.bloco(Spacer(1, 3 * mm), tabela)
+    return documento.gerar(), alvos
+
+
 # Numeração do consolidado: área do "Página N" que a moldura desenha nos documentos do sistema
 # (canto inferior direito, linha de base a 9 mm). Nas partes geradas pelo sistema ela é coberta e
 # reescrita; nas enviadas, o número entra num selo pequeno no canto, sem mexer no layout do arquivo.
@@ -265,11 +334,15 @@ def _selo_pagina(largura: float, altura: float, texto_pagina: str, gerado: bool)
     return PdfReader(BytesIO(saida.getvalue()))
 
 
-def montar_consolidado(partes: Iterable[tuple[bytes | Path, bool]]) -> bytes:
+def montar_consolidado(
+    partes: Iterable[tuple[bytes | Path, bool]], links: Sequence[AlvoLink] = (), marcadores: Sequence[tuple[str, int]] = ()
+) -> bytes:
     """Junta as partes, na ordem, e numera todas as páginas em sequência ("Página X de N").
 
     Cada parte é (conteúdo, gerado_pelo_sistema). O conteúdo dos documentos enviados não é
     alterado: só recebem o selo com o número da página, na orientação em que foram enviados.
+    `links` são as áreas clicáveis do índice (páginas 1-based do arquivo final) e `marcadores`, pares
+    (título, página 1-based) do painel de navegação do leitor de PDF.
     """
     escritor = PdfWriter()
     origem: list[bool] = []
@@ -279,6 +352,16 @@ def montar_consolidado(partes: Iterable[tuple[bytes | Path, bool]]) -> bytes:
             escritor.add_page(pagina)
             origem.append(gerado)
     total = len(escritor.pages)
+    # Hiperlinks do índice e marcadores; as páginas de destino são identificadas pelo índice (0-based)
+    for alvo in links:
+        if 1 <= alvo.pagina_destino <= total:
+            escritor.add_annotation(
+                page_number=alvo.pagina_origem - 1,
+                annotation=Link(rect=alvo.retangulo, target_page_index=alvo.pagina_destino - 1, border=[0, 0, 0]),
+            )
+    for titulo_marcador, numero_pagina in marcadores:
+        if 1 <= numero_pagina <= total:
+            escritor.add_outline_item(titulo_marcador, numero_pagina - 1)
     for numero, (pagina, gerado) in enumerate(zip(escritor.pages, origem, strict=True), start=1):
         # Páginas giradas (/Rotate) têm a rotação aplicada ao conteúdo, para o selo cair no canto certo
         if pagina.rotation:

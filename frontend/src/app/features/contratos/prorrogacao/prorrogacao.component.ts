@@ -16,6 +16,7 @@ import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.comp
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { CamposParecer, DetalheContrato, ProcessoProrrogacao, RegraSobDemanda } from '../compartilhado/contratos.models';
 import { paraDecimalApi, paraDecimalTela, ROTULOS_PAPEL } from '../compartilhado/rotulos';
+import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
 // Campos do parecer, na ordem de exibição
 const CAMPOS: { campo: keyof CamposParecer; rotulo: string }[] = [
@@ -30,7 +31,7 @@ const CAMPOS: { campo: keyof CamposParecer; rotulo: string }[] = [
 /** Tela 4: prorrogação com prazo, itens sob demanda, parecer opcional, ciências opcionais e termo aditivo. */
 @Component({
   selector: 'app-prorrogacao',
-  imports: [FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './prorrogacao.component.html',
 })
 export class ProrrogacaoComponent implements OnInit {

@@ -173,7 +173,7 @@
       <dt>Situação</dt><dd><span [class]="'selo-afastamento ' + a.status">{{ status[a.status] }}</span></dd>
       @if (a.decidido_por_nome) { <dt>Decisão</dt><dd>{{ a.decidido_por_nome }} em {{ a.decidido_em | date: 'dd/MM/yyyy HH:mm' }}</dd> }
       @if (a.ciencia_por_nome) { <dt>Ciente e de acordo</dt><dd>{{ a.ciencia_por_nome }} em {{ a.ciencia_em | date: 'dd/MM/yyyy HH:mm' }}</dd> }
-      @if (a.justificativa) { <dt>Justificativa</dt><dd>{{ a.justificativa }}</dd> }
+      @if (a.justificativa) { <dt>Justificativa</dt><dd [innerHTML]="a.justificativa | linkificar"></dd> }
     </dl>
     @if (a.status === 'pendente' && a.aguarda_ciencia) {
       <p class="dica-formulario" style="margin: 0 25px 12px">Etapa 1: aguardando o ciente e de acordo do superior imediato. Depois disso o pedido segue para aprovação.</p>

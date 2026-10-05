@@ -31,6 +31,7 @@ class GravacaoDocumentoChecklist(BaseModel):
     observacao: Texto = Field("", max_length=1000)
     obrigatorio: bool = Field(True, description="Obrigatório precisa estar anexado para concluir a etapa do checklist; opcional, não.")
     com_validade: bool = Field(False, description="Documento com validade: o envio exige a data de validade e, se ainda valer, ele é reaproveitado na competência seguinte.")
+    vale_outros_contratos: bool = Field(False, description="Documento da empresa: se já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo (exige `com_validade`).")
 
 
 class GravacaoChecklist(BaseModel):
@@ -47,6 +48,7 @@ class LeituraDocumentoChecklist(BaseModel):
     observacao: str
     obrigatorio: bool
     com_validade: bool
+    vale_outros_contratos: bool = False
 
 
 class LeituraChecklist(BaseModel):
@@ -356,6 +358,20 @@ class LeituraConsultaCadin(BaseModel):
     criado_em: datetime
 
 
+class SugestaoOutroContrato(BaseModel):
+    """Documento ainda válido de outro contrato da mesma empresa que pode ser reaproveitado na competência."""
+    origem_id: uuid.UUID = Field(..., description="Id do documento de origem (enviar em `reaproveitar`).")
+    contrato_numero: str
+    competencia: date = Field(..., description="Mês da competência de origem (dia 1).")
+    validade_ate: date
+    arquivo_nome: str
+
+
+class ReaproveitamentoDocumento(BaseModel):
+    """Corpo de `POST …/checklist/{documento_id}/reaproveitar`."""
+    origem_id: uuid.UUID = Field(..., description="`sugestao_outro_contrato.origem_id` do documento.")
+
+
 class LeituraDocumentoMensal(BaseModel):
     """Documento do checklist na competência, com o PDF anexado (se houver)."""
     id: uuid.UUID
@@ -365,7 +381,11 @@ class LeituraDocumentoMensal(BaseModel):
     obrigatorio: bool
     com_validade: bool = False
     validade_ate: date | None = Field(None, description="Até quando o documento vale (só em documento com validade).")
-    reaproveitado_de: date | None = Field(None, description="Mês da competência de onde o arquivo foi reaproveitado automaticamente (dia 1).")
+    reaproveitado_de: date | None = Field(None, description="Mês da competência de onde o arquivo foi reaproveitado (dia 1).")
+    vale_outros_contratos: bool = Field(False, description="Documento da empresa: pode ser reaproveitado de outro contrato da mesma empresa.")
+    reaproveitado_contrato: str | None = Field(None, description="Número do contrato de onde o arquivo foi reaproveitado, quando veio de outro contrato.")
+    sugestao_outro_contrato: "SugestaoOutroContrato | None" = Field(
+        None, description="Documento igual, ainda válido, já juntado em outro contrato da mesma empresa (só na etapa do checklist, sem anexo).")
     arquivo: LeituraArquivo | None
 
 

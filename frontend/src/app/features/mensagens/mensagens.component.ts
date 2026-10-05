@@ -13,6 +13,7 @@ import {
   Destinatarios, EntregaDetalhe, EntregaResumo, EnviadaDetalhe, EnviadaResumo, EnvioMensagem, Pagina,
   ROTULOS_CATEGORIA, ROTULOS_ESTADO, ROTULOS_PRIORIDADE,
 } from '../../core/mensagens/mensagens.models';
+import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 import { PaginacaoComponent } from '../../shared/componentes/paginacao/paginacao.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 
@@ -35,7 +36,7 @@ function envioVazio(): EnvioMensagem {
  */
 @Component({
   selector: 'app-mensagens',
-  imports: [FormsModule, DatePipe, PaginacaoComponent],
+  imports: [FormsModule, DatePipe, PaginacaoComponent, TrilhaComponent],
   templateUrl: './mensagens.component.html',
   host: { '(document:keydown.escape)': 'fecharJanelas()' },
 })

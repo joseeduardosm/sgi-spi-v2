@@ -7,6 +7,7 @@ import { Router } from '@angular/router';
 import { CaixaMensagensService } from '../../core/mensagens/caixa-mensagens.service';
 import { MensagensApiService } from '../../core/mensagens/mensagens-api.service';
 import { ROTULOS_CATEGORIA } from '../../core/mensagens/mensagens.models';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 /**
  * Janela de aviso (não bloqueia nada): ao aparecer, a mensagem conta como lida; "Ciente" registra a
@@ -14,6 +15,7 @@ import { ROTULOS_CATEGORIA } from '../../core/mensagens/mensagens.models';
  */
 @Component({
   selector: 'app-janela-mensagem',
+  imports: [LinkificarPipe],
   host: { '(document:keydown.escape)': 'fechar()' },
   template: `
     @if (caixa.janela(); as m) {
@@ -24,7 +26,7 @@ import { ROTULOS_CATEGORIA } from '../../core/mensagens/mensagens.models';
             <h2 id="titulo-janela-mensagem">{{ m.assunto }}</h2></div>
           <button type="button" aria-label="Fechar" (click)="fechar()">×</button>
         </header>
-        <div class="corpo-janela-mensagem">{{ m.corpo }}</div>
+        <div class="corpo-janela-mensagem" [innerHTML]="m.corpo | linkificar"></div>
         <footer>
           @if (m.link) { <button type="button" class="acao-secundaria" [disabled]="ocupado()" (click)="abrirLink(m.link)">Abrir</button> }
           <button type="button" class="acao-primaria" [disabled]="ocupado()" (click)="ciente(m.id)">Ciente</button>

@@ -3,6 +3,16 @@
 
   <div class="barra-fixa">
     <a class="acao-secundaria" routerLink="/contratos">← Contratos</a>
+    @if (vizinhos(); as v) {
+      <!-- Anterior/próximo na lista da carteira (mesma busca e ordenação) -->
+      <nav class="vizinhos-contrato" aria-label="Navegar entre os contratos da lista">
+        @if (v.anterior_id) { <a [routerLink]="['/contratos', v.anterior_id]" [queryParams]="{ aba: aba() }" title="Contrato anterior" aria-label="Contrato anterior">‹</a> }
+        @else { <span class="desativado" aria-hidden="true"><button type="button" tabindex="-1">‹</button></span> }
+        <span>{{ v.posicao }} de {{ v.total }}</span>
+        @if (v.proximo_id) { <a [routerLink]="['/contratos', v.proximo_id]" [queryParams]="{ aba: aba() }" title="Próximo contrato" aria-label="Próximo contrato">›</a> }
+        @else { <span class="desativado" aria-hidden="true"><button type="button" tabindex="-1">›</button></span> }
+      </nav>
+    }
     @if (c.permissoes.pode_editar) {
       <a class="acao-primaria" [routerLink]="['/contratos', c.id, 'editar']">Editar</a>
     }

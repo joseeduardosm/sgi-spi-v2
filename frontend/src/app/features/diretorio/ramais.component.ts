@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para exibir o diretório de ramais em cartões de visita, com busca, filtros, favoritos, lista compacta e impressão.
 
+import { ActivatedRoute } from '@angular/router';
 import { Component, ElementRef, HostListener, inject, OnInit, signal, viewChild } from '@angular/core';
 
 import { PaginacaoComponent } from '../../shared/componentes/paginacao/paginacao.component';
@@ -101,6 +102,7 @@ const CHAVE_MODO = 'diretorio.modo';
 })
 export class RamaisComponent implements OnInit {
   private readonly api = inject(DiretorioApiService);
+  private readonly rota = inject(ActivatedRoute);
   private readonly dialogos = inject(DialogosService);
   private readonly campoBusca = viewChild<ElementRef<HTMLInputElement>>('busca');
   protected readonly tamanho = TAMANHO_PAGINA;
@@ -119,6 +121,9 @@ export class RamaisComponent implements OnInit {
   private temporizador: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
+    // Vindo da busca global (`/ramais?q=Maria`): já abre filtrado pelo nome
+    const q = this.rota.snapshot.queryParamMap.get('q');
+    if (q) this.filtros.update((f) => ({ ...f, q }));
     this.api.filtros().subscribe({ next: (o) => this.opcoes.set(o), error: () => undefined });
     this.carregar();
   }

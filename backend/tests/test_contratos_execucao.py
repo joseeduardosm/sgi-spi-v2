@@ -215,12 +215,16 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     paginas = PdfReader(BytesIO(consolidado.content)).pages
     textos = [" ".join(pg.extract_text().split()) for pg in paginas]
     assert all(f"Página {i} de {len(paginas)}" in texto for i, texto in enumerate(textos, start=1))
-    assert "Memória de cálculo" in textos[0] and "Resumo executivo" in textos[-1]
+    # O índice é a primeira página, com um documento por linha, e a memória de cálculo vem logo depois dele
+    assert "Índice do documento consolidado" in textos[0] and "Memória de cálculo" in textos[0]
+    assert "Memória de cálculo" in textos[1] and "Resumo executivo" in textos[-1]
+    ligacoes = [a.get_object() for a in paginas[0].get("/Annots", [])]
+    assert len(ligacoes) >= 2 * 7 and all(a["/Subtype"] == "/Link" for a in ligacoes)
     # Contracapas ("Documento 2 de 8 · Nota fiscal"): a retenção é gerada pelo sistema e não tem contracapa
     etapas = [m.group(1) for texto in textos if (m := re.search(r"Documento \d+ de \d+ · (Nota fiscal|CADIN|Checklist)", texto))]
     assert etapas[0] == "Nota fiscal" and etapas.index("CADIN") < etapas.index("Checklist")
     # A contracapa diz quando e por quem o arquivo foi enviado
-    assert re.search(r"Enviado em \d{2}/\d{2}/\d{4} \d{2}:\d{2} por \S+", textos[1])
+    assert re.search(r"Enviado em \d{2}/\d{2}/\d{4} \d{2}:\d{2} por \S+", textos[2])
     # Documentos gerados pelo sistema em paisagem
     assert float(paginas[0].mediabox.width) > float(paginas[0].mediabox.height)
     # Gerar novamente: só o gestor do contrato ou o SuperRoot
@@ -393,7 +397,12 @@ def test_checklist_com_documentos_obrigatorios_e_opcionais(cliente, admin, equip
     assert detalhe["etapa_atual"] == "checklist"
     r = cliente.post(f"{base}/checklist/concluir", headers=gestora)
     assert r.status_code == 200 and r.json()["etapa_atual"] == "consolidado"
-    assert cliente.post(f"{base}/consolidado", headers=gestora).status_code == 200
+    consolidado = cliente.post(f"{base}/consolidado", headers=gestora)
+    assert consolidado.status_code == 200
+    # Opcional sem anexo não é citado no consolidado (nem no índice, nem como "Não anexado" no resumo); o anexado é
+    pdf = cliente.get(f"{base}/arquivos/{consolidado.json()['consolidado']['anexo_id']}", headers=gestora).content
+    texto = " ".join(p.extract_text() for p in PdfReader(BytesIO(pdf)).pages)
+    assert "Folha de pagamento" in texto and "Relatório fotográfico" not in texto and "Não anexado" not in texto
 
 
 def test_formulario_inativo_pode_ser_excluido_e_o_ativo_nao(cliente, admin, equipe):

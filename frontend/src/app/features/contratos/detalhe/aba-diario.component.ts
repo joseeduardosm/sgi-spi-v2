@@ -12,6 +12,7 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { AnexoOcorrencia, DiarioContrato, OcorrenciaDiario } from '../compartilhado/contratos.models';
 import { paraDecimalApi, ROTULOS_PAPEL } from '../compartilhado/rotulos';
+import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
 /** Máximo de arquivos por ocorrência (mesmo limite da API). */
 const MAXIMO_ANEXOS = 5;
@@ -24,7 +25,7 @@ interface LinhaGlosa {
 /** Aba "Diário de bordo": a equipe relata ocorrências; cada uma é enviada por e-mail à equipe e ao preposto. */
 @Component({
   selector: 'app-aba-diario',
-  imports: [FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [LinkificarPipe, FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-diario">
       <header>
@@ -46,7 +47,7 @@ interface LinhaGlosa {
               @if (o.competencia_rotulo) { <span class="selo-diario">Competência {{ o.competencia_rotulo }}</span> }
               <time [attr.datetime]="o.criado_em" title="Registrado em">{{ o.criado_em | date: 'dd/MM/yyyy HH:mm' }}</time>
             </header>
-            <p class="texto">{{ o.descricao }}</p>
+            <p class="texto" [innerHTML]="o.descricao | linkificar"></p>
             @if (o.possui_glosa) {
               <!-- Glosas como chips: item e quantidade, sem ocupar um bloco inteiro -->
               <div class="glosas-balao">

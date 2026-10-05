@@ -1,17 +1,18 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para controlar a tela de detalhe do contrato e a troca entre as suas abas.
 
-import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 
+import { AtalhosService } from '../../../core/navegacao/atalhos.service';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { hojeIso } from '../../../shared/utilitarios/formatadores';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
-import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { AlteracaoCampo, DetalheContrato, Prorrogacao } from '../compartilhado/contratos.models';
+import { CHAVE_CONTEXTO_CARTEIRA, ContextoCarteira, ContratosApiService } from '../compartilhado/contratos-api.service';
+import { AlteracaoCampo, DetalheContrato, Prorrogacao, VizinhosContrato } from '../compartilhado/contratos.models';
 import { HistoricoCampoComponent } from '../compartilhado/historico-campo.component';
 import { LinhaDoTempoComponent } from '../compartilhado/linha-do-tempo.component';
 import { MESES, PAPEIS, PERIODICIDADES, ROTULOS_CAMPO, ROTULOS_SITUACAO, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
@@ -37,7 +38,7 @@ type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'docume
   ],
   templateUrl: './detalhe-contrato.component.html',
 })
-export class DetalheContratoComponent implements OnInit {
+export class DetalheContratoComponent {
   // Id do contrato, vindo da URL (/contratos/:id) graças ao withComponentInputBinding
   readonly id = input.required<string>();
 
@@ -46,6 +47,7 @@ export class DetalheContratoComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   private readonly rota = inject(ActivatedRoute);
   private readonly roteador = inject(Router);
+  private readonly atalhos = inject(AtalhosService);
   private readonly autenticacao = inject(AutenticacaoService);
   /** Usuário logado (no diário, os próprios registros ficam à direita). */
   protected readonly usuarioId = computed(() => this.autenticacao.usuario()?.id ?? null);
@@ -94,11 +96,34 @@ export class DetalheContratoComponent implements OnInit {
     return c ? { base: c.base_mensal, global: c.valor_global } : null;
   });
 
-  /** Abre a aba indicada na URL (?aba=...) e carrega os dados. */
-  ngOnInit(): void {
+  /** Anterior e próximo contrato na lista que a pessoa estava vendo (carteira); nulo quando abriu o contrato por outro caminho. */
+  protected readonly vizinhos = signal<VizinhosContrato | null>(null);
+
+  constructor() {
+    // Abre a aba indicada na URL (?aba=...) uma vez
     const aba = this.rota.snapshot.queryParamMap.get('aba') as Aba | null;
     if (aba && this.abas.some((a) => a.id === aba)) this.aba.set(aba);
-    this.carregar();
+    // A cada contrato (inclusive ao navegar ‹ › para outro, pois o Angular reaproveita este componente), recarrega os dados e os vizinhos
+    effect(() => {
+      this.id();
+      untracked(() => {
+        this.contrato.set(null);
+        this.vizinhos.set(null);
+        this.carregar();
+        this.carregarVizinhos();
+      });
+    });
+  }
+
+  /** Pede ao servidor o anterior/próximo na mesma lista da carteira (busca, "Meus contratos" e ordenação guardadas ao abrir). */
+  private carregarVizinhos(): void {
+    let contexto: ContextoCarteira = { busca: '', meus: false, ordenarPor: 'numero', direcao: 'desc' };
+    try {
+      contexto = { ...contexto, ...JSON.parse(sessionStorage.getItem(CHAVE_CONTEXTO_CARTEIRA) ?? '{}') };
+    } catch {
+      // sem contexto guardado: vale a ordem padrão da carteira
+    }
+    this.api.vizinhos(this.id(), contexto).subscribe({ next: (v) => this.vizinhos.set(v.posicao ? v : null), error: () => this.vizinhos.set(null) });
   }
 
   /** Carrega contrato, histórico e prorrogações em paralelo (`forkJoin` espera as três respostas). */
@@ -110,6 +135,8 @@ export class DetalheContratoComponent implements OnInit {
     }).subscribe({
       next: ({ contrato, historico, prorrogacoes }) => {
         this.contrato.set(contrato);
+        // O nome da tela nos recentes e favoritos passa a ser o número do contrato
+        this.atalhos.rotularAtual(`Contrato ${contrato.numero}`);
         this.historico.set(historico);
         this.prorrogacoes.set(prorrogacoes);
       },

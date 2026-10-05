@@ -175,6 +175,14 @@ class ResumoContrato(BaseModel):
     valor_global: ValorMonetario = Field(..., description="Valor da vigência atual (ou o valor reajustado).")
 
 
+class VizinhosContrato(BaseModel):
+    """Contrato anterior e próximo na lista que o usuário estava vendo (para os botões ‹ › do detalhe)."""
+    anterior_id: uuid.UUID | None = None
+    proximo_id: uuid.UUID | None = None
+    posicao: int | None = Field(None, description="Posição do contrato na lista (1 = primeiro); nulo se ele não está na lista.")
+    total: int = Field(0, description="Total de contratos da lista.")
+
+
 class PaginaContratos(BaseModel):
     """Uma página da carteira de contratos."""
     itens: list[ResumoContrato]

@@ -67,7 +67,7 @@
     <p class="secao-formulario" style="margin-top: 0">Notas de Empenho (ordem de consumo)</p>
     @if (editavel()) {
       <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
-        <select class="campo-tabela" style="height: 36px; max-width: 360px; padding: 0 8px; border: 1px solid #e2e5e8; border-radius: 7px" aria-label="Nota de Empenho" [(ngModel)]="notaParaAdicionar">
+        <select class="campo-tabela" style="height: 36px; max-width: 360px; padding: 0 8px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px" aria-label="Nota de Empenho" [(ngModel)]="notaParaAdicionar">
           <option value="">Selecione uma NE com saldo</option>
           @for (n of disponiveis(); track n.id) { <option [value]="n.id">NE {{ n.numero }} — saldo livre {{ n.saldo_livre | moeda }}</option> }
         </select>

@@ -15,6 +15,7 @@ import { UsuariosApiService } from '../usuarios/usuarios-api.service';
 import { CabecalhoRhComponent } from './cabecalho-rh.component';
 import { RhApiService } from './rh-api.service';
 import { AlteracaoCadastral, CadastroRh, UsuarioPendente } from './rh.models';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 /**
  * Validações de cadastro (só CGP): usuários com alterações pendentes; para cada um, atual × proposto com
@@ -22,7 +23,7 @@ import { AlteracaoCadastral, CadastroRh, UsuarioPendente } from './rh.models';
  */
 @Component({
   selector: 'app-validacoes',
-  imports: [FormsModule, DatePipe, CabecalhoRhComponent, SeletorUsuariosComponent, DadosFuncionaisComponent, ImportacaoFuncionaisComponent],
+  imports: [LinkificarPipe, FormsModule, DatePipe, CabecalhoRhComponent, SeletorUsuariosComponent, DadosFuncionaisComponent, ImportacaoFuncionaisComponent],
   templateUrl: './validacoes.component.html',
 })
 export class ValidacoesComponent implements OnInit {

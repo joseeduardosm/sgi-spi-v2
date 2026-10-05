@@ -4,7 +4,7 @@
 
 Planilhas (o modelo é gerado aqui mesmo, com exemplo e instruções):
 - **Checklist** (aba "Checklist"): nome na célula ao lado de "Nome do checklist" e, abaixo, a tabela
-  `Documento | Observação | Obrigatório | Com validade` (Sim/Não).
+  `Documento | Observação | Obrigatório | Com validade | Vale para outros contratos` (Sim/Não).
 - **Formulário** (abas "Formulário", "Escala", "Faixas" e "Itens"): nome ao lado de "Nome do
   formulário"; escala `Nota | Legenda`; faixas `Mínimo | Máximo | Percentual liberado | Notas zero`;
   itens `Grupo | Item | Descrição | Peso`. Grupo em branco repete o de cima.
@@ -56,6 +56,7 @@ COLUNAS_DOCUMENTOS = {
     "observacao": ("observacao", "Observação"),
     "obrigatorio": ("obrigatorio", "Obrigatório"),
     "com validade": ("com_validade", "Com validade"),
+    "vale para outros contratos": ("vale_outros_contratos", "Vale para outros contratos"),
 }
 COLUNAS_ESCALA = {"nota": ("valor", "Nota"), "legenda": ("legenda", "Legenda")}
 COLUNAS_FAIXAS = {
@@ -71,7 +72,7 @@ COLUNAS_ITENS = {
     "peso": ("peso", "Peso"),
 }
 # Colunas que podem faltar ou ficar em branco
-OPCIONAIS = {"observacao", "obrigatorio", "com_validade", "maximo", "notas_zero", "descricao"}
+OPCIONAIS = {"observacao", "obrigatorio", "com_validade", "vale_outros_contratos", "maximo", "notas_zero", "descricao"}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -250,7 +251,7 @@ def ler_checklist(conteudo: bytes) -> Leitura:
         return leitura
     leitura.nome = _nome(folha, "nome do checklist", leitura)
     rotulos = {c: r for c, r in COLUNAS_DOCUMENTOS.values()}
-    conversores = {"obrigatorio": lambda v: _sim_nao(v, True), "com_validade": lambda v: _sim_nao(v, False)}
+    conversores = {"obrigatorio": lambda v: _sim_nao(v, True), "com_validade": lambda v: _sim_nao(v, False), "vale_outros_contratos": lambda v: _sim_nao(v, False)}
     linhas = {}
     for n, valores in _tabela(folha, COLUNAS_DOCUMENTOS, "Checklist", leitura):
         documento = _converter(leitura, n, valores, rotulos, conversores)
@@ -348,7 +349,8 @@ def previa(tipo: str, conteudo: bytes) -> PreviaImportacaoModelo:
         tipo=tipo,
         nome=leitura.nome,
         documentos=[DocumentoPrevia(linha=d["linha"], nome=d.get("nome", ""), observacao=d.get("observacao", ""),
-                                    obrigatorio=d.get("obrigatorio", True), com_validade=d.get("com_validade", False))
+                                    obrigatorio=d.get("obrigatorio", True), com_validade=d.get("com_validade", False),
+                                    vale_outros_contratos=d.get("vale_outros_contratos", False))
                     for d in leitura.documentos],
         escala=[NotaPrevia(linha=e["linha"], valor=e.get("valor"), legenda=e.get("legenda", "")) for e in leitura.escala],
         faixas=[FaixaPrevia(linha=f["linha"], minimo=f.get("minimo"), maximo=f.get("maximo"), percentual=f.get("percentual"),
@@ -425,12 +427,12 @@ def gerar_modelo_checklist() -> bytes:
     livro = Workbook()
     folha = livro.active
     folha.title = "Checklist"
-    _instrucoes(folha, ["Modelo de importação de checklist", "Preencha o nome e os documentos mensais, na ordem. Obrigatório e Com validade: Sim ou Não (em branco: Sim e Não)."])
+    _instrucoes(folha, ["Modelo de importação de checklist", "Preencha o nome e os documentos mensais, na ordem. Obrigatório, Com validade e Vale para outros contratos: Sim ou Não (em branco: Sim, Não e Não). Vale para outros contratos (só com validade) marca o documento da empresa, reaproveitável entre contratos da mesma empresa."])
     folha["A4"], folha["B4"] = "Nome do checklist", "Checklist mensal padrão"
-    _titulos(folha, 6, ["Documento", "Observação", "Obrigatório", "Com validade"])
-    exemplos = [("Certidão negativa de débitos", "Federal, estadual e municipal", "Sim", "Sim"),
-                ("Comprovante de pagamento de encargos", "", "Sim", "Não"),
-                ("Relatório fotográfico", "Quando houver", "Não", "Não")]
+    _titulos(folha, 6, ["Documento", "Observação", "Obrigatório", "Com validade", "Vale para outros contratos"])
+    exemplos = [("Certidão negativa de débitos", "Federal, estadual e municipal", "Sim", "Sim", "Sim"),
+                ("Comprovante de pagamento de encargos", "", "Sim", "Não", "Não"),
+                ("Relatório fotográfico", "Quando houver", "Não", "Não", "Não")]
     for n, linha in enumerate(exemplos, start=7):
         for coluna, valor in enumerate(linha, start=1):
             folha.cell(n, coluna, valor)

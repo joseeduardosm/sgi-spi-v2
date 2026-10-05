@@ -81,6 +81,8 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 ## `GET /api/contratos`
 
 `PaginaContratos`, com os mais recentes primeiro. Parâmetros: `busca` (número `012/2026`, empresa, apelido ou objeto), `pagina` e `tamanho_pagina` (padrão 25, máximo 100) e `meus=true` (só os contratos em que o usuário integra a equipe vigente; a tela lembra a escolha da caixa "Meus contratos").
+- **Anterior/próximo:** `GET /api/contratos/{contrato_id}/vizinhos` com os mesmos `busca`, `meus`, `ordenar_por` e `direcao` da carteira devolve `{anterior_id, proximo_id, posicao, total}` (`VizinhosContrato`), para os botões ‹ › do detalhe. Fora da lista, `posicao` vem nula. ACL `contratos` ≥ LEITURA.
+- **Ordenação:** `ordenar_por` (`numero` — padrão —, `empresa`, `data_inicio`, `data_fim`, `situacao`, `base_mensal` ou `valor_global`) e `direcao` (`desc` — padrão — ou `asc`); valor fora da lista → `422`. A ordem padrão (`numero` decrescente: ano e sequencial, do mais recente ao mais antigo) é feita no banco. Qualquer outra carrega os contratos da busca, ordena pelos valores já calculados (a situação, pelo rótulo: ativo, a vencer, encerrado, suspenso; a empresa, sem diferenciar maiúsculas) e só então pagina; os empates seguem a ordem padrão. Na tela, os títulos das colunas da carteira são botões (clicar ordena; clicar de novo inverte) e o apelido aparece em **caixa alta** abaixo do número.
 
 ## `GET /api/contratos/proximo-numero?ano=2026`
 

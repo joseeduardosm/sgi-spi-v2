@@ -10,11 +10,12 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { Checklist, Modelo } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { ImportacaoModeloXlsxComponent } from '../compartilhado/importacao-modelo-xlsx.component';
+import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
 /** Aba "Checklists": versões do checklist de documentos mensais (etapa 5 da execução). */
 @Component({
   selector: 'app-aba-checklists',
-  imports: [FormsModule, DatePipe, ImportacaoModeloXlsxComponent],
+  imports: [LinkificarPipe, FormsModule, DatePipe, ImportacaoModeloXlsxComponent],
   templateUrl: './aba-checklists.component.html',
   // Esc fecha a janela de edição
   host: { '(document:keydown.escape)': 'aberto.set(false)' },
@@ -34,11 +35,12 @@ export class AbaChecklistsComponent implements OnInit {
   protected emEdicao: Checklist | null = null;
   protected nome = '';
   // Documentos da versão em edição e os campos da linha "adicionar documento"
-  protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean }[] = [];
+  protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean; vale_outros_contratos: boolean }[] = [];
   protected novoDocumento = '';
   protected novaObservacao = '';
   protected novoObrigatorio = true;
   protected novoComValidade = false;
+  protected novoValeOutros = false;
   // Versões abertas na lista: todas entram recolhidas e só abrem quando a pessoa clica
   private readonly abertas = signal<Record<string, boolean>>({});
 
@@ -70,10 +72,11 @@ export class AbaChecklistsComponent implements OnInit {
   protected abrir(checklist?: Checklist): void {
     this.emEdicao = checklist ?? null;
     this.nome = checklist?.nome ?? '';
-    this.itens = checklist?.itens.map((i) => ({ nome: i.nome, observacao: i.observacao, obrigatorio: i.obrigatorio, com_validade: i.com_validade })) ?? [];
+    this.itens = checklist?.itens.map((i) => ({ nome: i.nome, observacao: i.observacao, obrigatorio: i.obrigatorio, com_validade: i.com_validade, vale_outros_contratos: i.vale_outros_contratos ?? false })) ?? [];
     this.novoDocumento = this.novaObservacao = '';
     this.novoObrigatorio = true;
     this.novoComValidade = false;
+    this.novoValeOutros = false;
     this.aberto.set(true);
   }
 
@@ -82,16 +85,17 @@ export class AbaChecklistsComponent implements OnInit {
     const modelo = this.modelos().find((m) => m.id === id);
     if (!modelo) return;
     this.nome ||= modelo.nome;
-    this.itens = (modelo.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false }));
+    this.itens = (modelo.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false, vale_outros_contratos: i.vale_outros_contratos ?? false }));
   }
 
   /** Acrescenta o documento digitado à lista (obrigatório por padrão). */
   protected adicionar(): void {
     if (!this.novoDocumento.trim()) return;
-    this.itens = [...this.itens, { nome: this.novoDocumento.trim(), observacao: this.novaObservacao.trim(), obrigatorio: this.novoObrigatorio, com_validade: this.novoComValidade }];
+    this.itens = [...this.itens, { nome: this.novoDocumento.trim(), observacao: this.novaObservacao.trim(), obrigatorio: this.novoObrigatorio, com_validade: this.novoComValidade, vale_outros_contratos: this.novoComValidade && this.novoValeOutros }];
     this.novoDocumento = this.novaObservacao = '';
     this.novoObrigatorio = true;
     this.novoComValidade = false;
+    this.novoValeOutros = false;
   }
 
   /** Sobe (−1) ou desce (+1) um documento, trocando-o de lugar com o vizinho (a ordem vale na competência). */

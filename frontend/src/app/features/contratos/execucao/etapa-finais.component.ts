@@ -11,11 +11,12 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { DetalheCompetencia, DocumentoMensal, Etapa } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
+import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
 /** Etapas 5 (checklist mensal), 6 (documento consolidado) e 7 (Ordem Bancária). */
 @Component({
   selector: 'app-etapa-finais',
-  imports: [DatePipe, FormsModule, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [LinkificarPipe, DatePipe, FormsModule, EnvioPdfComponent, ...PIPES_FORMATACAO],
   template: `
     @let d = detalhe();
     @switch (etapa()) {
@@ -24,6 +25,9 @@ import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
           <header>
             <div><h2 id="titulo-checklist-mensal">6. Documentos mensais do checklist</h2>
               <small>Os obrigatórios precisam ser anexados; os opcionais podem ficar sem anexo. Com todos anexados, a etapa conclui sozinha.</small></div>
+            @if (editavel() && sugestoes(d) > 0) {
+              <button type="button" class="acao-secundaria" (click)="trazerTodos()">Trazer os documentos válidos de outros contratos ({{ sugestoes(d) }})</button>
+            }
             @if (editavel()) {
               <button type="button" class="acao-primaria" [disabled]="obrigatoriosPendentes(d) > 0" (click)="concluirChecklist()"
                       [title]="obrigatoriosPendentes(d) ? 'Anexe os documentos obrigatórios' : ''">Concluir checklist</button>
@@ -36,7 +40,7 @@ import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
                 @for (doc of d.documentos; track doc.id) {
                   <tr>
                     <td>{{ $index + 1 }}</td>
-                    <td><strong>{{ doc.nome }}</strong>@if (doc.observacao) { <small>{{ doc.observacao }}</small> }</td>
+                    <td><strong>{{ doc.nome }}</strong>@if (doc.observacao) { <small [innerHTML]="doc.observacao | linkificar"></small> }</td>
                     <td>{{ doc.obrigatorio ? 'Obrigatório' : 'Opcional' }}@if (doc.com_validade) { <small>Com validade</small> }</td>
                     <td><span class="selo-situacao" [class.pendente]="!doc.arquivo" [class.vermelho]="!doc.arquivo && doc.obrigatorio">{{ doc.arquivo ? 'Anexado' : doc.obrigatorio ? 'Pendente' : 'Não anexado' }}</span></td>
                     <td>
@@ -46,7 +50,15 @@ import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
                           Válido até {{ doc.validade_ate | dataBr }}@if (vencimento(doc.validade_ate) === 'perto') { (vence em até 30 dias) }@if (vencimento(doc.validade_ate) === 'vencido') { (vencido) }
                         </small>
                       }
-                      @if (doc.reaproveitado_de) { <small style="color: #2f6f9f">Reaproveitado da competência de {{ doc.reaproveitado_de | date: 'MM/yyyy' }}: confira e conclua</small> }
+                      @if (doc.reaproveitado_contrato) {
+                        <small class="reaproveitado-contrato">Reaproveitado do contrato {{ doc.reaproveitado_contrato }} (competência {{ doc.reaproveitado_de | date: 'MM/yyyy' }})@if (doc.validade_ate) { · válido até {{ doc.validade_ate | dataBr }} }: confira e conclua</small>
+                      } @else if (doc.reaproveitado_de) { <small style="color: #2f6f9f">Reaproveitado da competência de {{ doc.reaproveitado_de | date: 'MM/yyyy' }}: confira e conclua</small> }
+                      @if (editavel() && doc.sugestao_outro_contrato; as s) {
+                        <div class="sugestao-outro-contrato">
+                          <small>Disponível do contrato {{ s.contrato_numero }} (competência {{ s.competencia | date: 'MM/yyyy' }}) · válido até {{ s.validade_ate | dataBr }}</small>
+                          <button type="button" class="acao-secundaria acao-pequena" (click)="usarDeOutroContrato(doc, s.origem_id)">Usar este documento</button>
+                        </div>
+                      }
                       @if (editavel() && doc.com_validade) {
                         <label class="campo-validade">Válido até *
                           <input type="date" [name]="'validade-' + doc.id" [ngModel]="validades[doc.id] ?? doc.validade_ate ?? ''" (ngModelChange)="validades[doc.id] = $event" /></label>
@@ -138,6 +150,35 @@ export class EtapaFinaisComponent {
     this.dialogos.executar(this.api.documentoMensal(d.contrato_id, d.id, documento.id, arquivo, documento.com_validade ? validade : undefined), 'Enviando o documento…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível anexar o documento'),
+    });
+  }
+
+  /** Quantos documentos têm um igual, ainda válido, em outro contrato da mesma empresa. */
+  protected sugestoes(d: DetalheCompetencia): number {
+    return d.documentos.filter((doc) => !doc.arquivo && doc.sugestao_outro_contrato).length;
+  }
+
+  /** Traz o documento de outro contrato da mesma empresa (confirmação do usuário: nada é copiado sozinho). */
+  protected usarDeOutroContrato(documento: DocumentoMensal, origemId: string): void {
+    const d = this.detalhe();
+    this.api.reaproveitarDocumento(d.contrato_id, d.id, documento.id, origemId).subscribe({
+      next: (novo) => this.atualizado.emit(novo),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível trazer o documento'),
+    });
+  }
+
+  /** Traz de uma vez todos os documentos válidos de outros contratos da mesma empresa. */
+  protected async trazerTodos(): Promise<void> {
+    const d = this.detalhe();
+    const ok = await this.dialogos.confirmar({
+      titulo: 'Trazer os documentos de outros contratos?',
+      mensagem: `${this.sugestoes(d)} documento(s) ainda válido(s) de outros contratos da empresa serão copiados para esta competência. Confira antes de concluir.`,
+      rotuloConfirmar: 'Trazer documentos',
+    });
+    if (!ok) return;
+    this.api.reaproveitarTodos(d.contrato_id, d.id).subscribe({
+      next: (novo) => this.atualizado.emit(novo),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível trazer os documentos'),
     });
   }
 

@@ -17,7 +17,21 @@
           <p>Secretaria de Parcerias em Investimentos</p>
           <strong>{{ tituloPagina() }}</strong>
         </div>
+        @if (autenticacao.usuario(); as u) {
+          @if (!u.perfil_restrito) {
+            <!-- Estrela: fixa esta tela nos favoritos do menu lateral -->
+            <button type="button" class="estrela-pagina" [class.ativa]="favorita()" [attr.aria-pressed]="favorita()"
+                    [attr.aria-label]="favorita() ? 'Remover dos favoritos' : 'Adicionar aos favoritos'"
+                    [title]="favorita() ? 'Remover dos favoritos' : 'Adicionar aos favoritos'" (click)="alternarFavorita()">{{ favorita() ? '★' : '☆' }}</button>
+          }
+        }
       </div>
+
+      @if (autenticacao.usuario(); as u) {
+        @if (!u.perfil_restrito) {
+          <div class="busca-topo"><app-busca-global #busca /></div>
+        }
+      }
 
       @if (autenticacao.usuario(); as usuario) {
         <div class="barra-topo-acoes">
@@ -47,6 +61,14 @@
               @if (!usuario.perfil_restrito) {
                 <button type="button" role="menuitem" (click)="abrirAssinatura()"><app-icone nome="envelope" /> Assinatura de e-mail</button>
               }
+              <!-- Tema da interface: fica salvo no navegador e na conta -->
+              <div class="seletor-tema" role="group" aria-label="Tema da interface">
+                <span>Tema</span>
+                @for (opcao of opcoesTema; track opcao.valor) {
+                  <button type="button" [class.ativo]="tema.preferencia() === opcao.valor" [attr.aria-pressed]="tema.preferencia() === opcao.valor"
+                          (click)="tema.escolher(opcao.valor)">{{ opcao.rotulo }}</button>
+                }
+              </div>
               <button class="acao-sair" type="button" role="menuitem" (click)="sair()"><app-icone nome="sair" /> Sair</button>
             </div>
           }
@@ -67,6 +89,7 @@
 <app-dialogos />
 <!-- Avisos da mensageria que abrem em janela (não bloqueiam a navegação) -->
 <app-janela-mensagem />
+<app-abrir-chamado />
 <!-- Folha de ponto (menu do usuário): escolha da competência e download do PDF -->
 @if (folhaPontoAberta()) { <app-folha-ponto-dialogo [(aberta)]="folhaPontoAberta" /> }
 <!-- Botão flutuante "Sugerir melhoria" (arrastável; fechado vale só nesta aba). Com o perfil pendente, não aparece -->

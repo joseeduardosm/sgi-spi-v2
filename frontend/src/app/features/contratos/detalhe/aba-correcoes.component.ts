@@ -8,6 +8,7 @@ import { FormsModule } from '@angular/forms';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { CorrecaoItens, HistoricoItemContrato, ItemContrato, PreviaCorrecao } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
 const ROTULOS_CAMPO: Record<string, string> = {
   valor_unitario: 'Valor unitário', quantidade_mensal: 'Quantidade mensal', quantidade_total: 'Quantidade total (teto)', unidade_fornecimento: 'Unidade',
@@ -28,7 +29,7 @@ interface LinhaEdicao {
  */
 @Component({
   selector: 'app-aba-correcoes',
-  imports: [FormsModule, DatePipe],
+  imports: [LinkificarPipe, FormsModule, DatePipe],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-correcoes">
       <header>
@@ -47,7 +48,7 @@ interface LinhaEdicao {
               <span class="selo-situacao" [class.inativo]="c.situacao !== 'pendente' && c.situacao !== 'aplicada'">{{ situacoes[c.situacao] }}</span>
             </button>
             @if (aberta(c)) {
-              <p style="margin: 8px 0 4px; font-size: 13px"><b>Justificativa:</b> {{ c.justificativa }}</p>
+              <p style="margin: 8px 0 4px; font-size: 13px"><b>Justificativa:</b> <span [innerHTML]="c.justificativa | linkificar"></span></p>
               @for (m of c.mudancas; track m.item_id) {
                 <div style="font-size: 12.5px; margin: 6px 0"><b>{{ m.descricao }}</b>
                   <ul style="margin: 2px 0 0; padding-left: 20px">
@@ -79,7 +80,7 @@ interface LinhaEdicao {
             <tbody>@for (h of historico(); track h.id) {
               <tr><td>{{ h.criado_em | date: 'dd/MM/yyyy HH:mm' }}</td><td>{{ h.descricao_item }}</td>
                 <td>@for (campo of chaves(h.campos); track campo) { <div>{{ rotulos[campo] ?? campo }}: <s>{{ h.campos[campo].de }}</s> → <b>{{ h.campos[campo].para }}</b></div> }</td>
-                <td>{{ h.autor_nome }}<small style="display:block">{{ h.motivo }}</small></td><td>{{ h.versao_cadastro }}</td></tr> }</tbody></table></div>
+                <td>{{ h.autor_nome }}<small style="display:block" [innerHTML]="h.motivo | linkificar"></small></td><td>{{ h.versao_cadastro }}</td></tr> }</tbody></table></div>
         }
       </div>
     </section>

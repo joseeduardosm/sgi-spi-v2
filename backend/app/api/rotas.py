@@ -8,7 +8,7 @@ caminhos podem coincidir (ver comentário abaixo).
 
 from fastapi import APIRouter
 
-from app.api.routes import acl, assinatura_email, autenticacao, contratacoes, diretorio, ldap, melhorias, painel_executivo, mensageria, mensagens, noticias, protocolo, rh, tarefas, saude, setores, smtp, usuarios
+from app.api.routes import acl, assinatura_email, autenticacao, busca, chamados, contratacoes, diretorio, favoritos, integracao_glpi, ldap, melhorias, painel_executivo, mensageria, mensagens, noticias, protocolo, rh, tarefas, saude, setores, smtp, usuarios
 from app.api.routes.contratos import alteracoes, contratos, correcoes, diario, empresas, execucao, importacao, importacao_modelos, migracao, modelos, orcamento, relatorios
 
 roteador_api = APIRouter()
@@ -38,6 +38,10 @@ roteador_api.include_router(modelos.roteador)
 roteador_api.include_router(migracao.roteador)
 roteador_api.include_router(importacao.roteador)
 roteador_api.include_router(importacao_modelos.roteador)
+roteador_api.include_router(busca.roteador)
+roteador_api.include_router(favoritos.roteador)
+roteador_api.include_router(chamados.roteador)
+roteador_api.include_router(integracao_glpi.roteador)
 roteador_api.include_router(relatorios.roteador)
 roteador_api.include_router(relatorios.roteador_painel)
 roteador_api.include_router(contratos.roteador)

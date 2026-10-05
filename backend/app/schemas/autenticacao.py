@@ -3,6 +3,7 @@
 """Formatos de entrada e saída do login e da sessão."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +32,7 @@ class UsuarioSessao(BaseModel):
     campos_pendentes: list[str] = Field(default_factory=list, description="Campos obrigatórios do perfil não preenchidos.")
     revisao_obrigatoria: bool = Field(False, description="Revalidação do perfil vencida (mais de 30 dias) ou nunca feita.")
     conta_root: bool = Field(False, description="Conta administrativa principal (login `LOGIN_ADMIN`): libera a tela Mensageria.")
+    tema: Literal["claro", "escuro", "auto"] = Field("auto", description="Tema da interface escolhido pelo usuário (`auto` segue o sistema operacional).")
 
 
 class RespostaToken(BaseModel):
@@ -40,3 +42,9 @@ class RespostaToken(BaseModel):
     expira_em_segundos: int = Field(..., description="Validade do token em segundos a partir da emissão.")
     expira_em: datetime = Field(..., description="Instante de expiração do token (UTC, ISO 8601).")
     usuario: UsuarioSessao
+
+
+class PreferenciaTema(BaseModel):
+    """Corpo do `PUT /api/autenticacao/tema`."""
+
+    tema: Literal["claro", "escuro", "auto"] = Field(..., description="`claro`, `escuro` ou `auto` (segue o tema do sistema operacional).")

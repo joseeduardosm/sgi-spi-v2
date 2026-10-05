@@ -11,6 +11,7 @@ import { AcessoService } from '../../core/acesso/acesso.service';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { ContratosApiService } from '../contratos/compartilhado/contratos-api.service';
 import { ResumoContrato } from '../contratos/compartilhado/contratos.models';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 import { CabecalhoProtocoloComponent } from './cabecalho-protocolo.component';
 import { ProtocoloApiService } from './protocolo-api.service';
 import { ListaNumeros, NumeroProtocolo, ROTULOS_ESTADO, ROTULOS_EVENTO, SequenciaProtocolo, TipoProtocolo } from './protocolo.models';
@@ -25,7 +26,7 @@ type AcaoMotivo = 'liberar' | 'anular';
  */
 @Component({
   selector: 'app-numeracao',
-  imports: [FormsModule, DatePipe, CabecalhoProtocoloComponent],
+  imports: [LinkificarPipe, FormsModule, DatePipe, CabecalhoProtocoloComponent],
   template: `
     <app-cabecalho-protocolo titulo="Protocolo" descricao="Reserve o próximo número de ofícios, portarias e resoluções e anexe o documento." />
     <section class="painel-gestao protocolo">
@@ -147,7 +148,7 @@ type AcaoMotivo = 'liberar' | 'anular';
           <h3 class="subtitulo-numero">Linha do tempo</h3>
           <ol class="linha-do-tempo-protocolo">
             @for (e of n.eventos; track $index) {
-              <li><b>{{ eventos[e.tipo] }}</b>@if (e.texto) { <span> · {{ e.texto }}</span> }
+              <li><b>{{ eventos[e.tipo] }}</b>@if (e.texto) { <span> · <span [innerHTML]="e.texto | linkificar"></span></span> }
                 <small>{{ e.autor_nome }} · {{ e.ocorrido_em | date: 'dd/MM/yyyy HH:mm' }}</small></li>
             } @empty { <li>Sem movimentação.</li> }
           </ol>

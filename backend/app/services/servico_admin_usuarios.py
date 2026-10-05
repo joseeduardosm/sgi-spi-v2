@@ -179,6 +179,10 @@ def _aplicar_perfil(sessao: Session, usuario: Usuario, perfil: DadosPerfil) -> N
             validar_superior(sessao, usuario.id, perfil.gestor_id, False)
         except ErroCadastro as erro:
             raise ErroRegraUsuario(str(erro)) from erro
+    # O Departamento define o setor do usuário (participação usada pela ACL); o import é local por causa do ciclo entre os módulos
+    from app.services import servico_setores
+
+    servico_setores.sincronizar_departamento(sessao, usuario.id, usuario.departamento, perfil.departamento)
     for campo in CAMPOS_PERFIL:
         setattr(usuario, campo, getattr(perfil, campo))
 

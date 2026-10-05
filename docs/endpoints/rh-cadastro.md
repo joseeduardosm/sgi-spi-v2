@@ -25,6 +25,7 @@ Tag no OpenAPI: **Módulo RH**. Implementação:
    - Todos da CGP recebem na caixa de mensagens, com e-mail: "[Nome] alterou seu cadastro e aguarda validação da CGP".
 3. **Análise da CGP:**
    - **validar:** o valor proposto passa a valer, e o campo exibe "Validado por [nome] em [data]";
+     - quando o campo é o **Departamento**, o usuário também vira membro do setor de mesmo nome (e sai do anterior); ver [setores.md](setores.md#departamento-do-perfil--participação-no-setor);
    - **recusar:** a CGP informa a **justificativa** e a **correção**. A correção passa a valer, e o usuário recebe um e-mail com a justificativa e a correção.
 4. **Histórico:** todas as alterações ficam em `rh_alteracoes_cadastrais`, com quem alterou, o quê, quando, e quem validou ou corrigiu.
 

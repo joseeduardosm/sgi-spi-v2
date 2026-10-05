@@ -9,6 +9,7 @@ Permissões em duas camadas:
 """
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -32,6 +33,7 @@ from app.schemas.contratos.contratos import (
     GravacaoContrato,
     LeituraDocumento,
     PaginaContratos,
+    VizinhosContrato,
     ProximoNumero,
 )
 from app.schemas.usuarios import OpcaoUsuario
@@ -49,7 +51,7 @@ PDF = {status.HTTP_200_OK: {"content": {"application/pdf": {}}, "description": "
     "",
     response_model=PaginaContratos,
     summary="Carteira de contratos",
-    description="Busca por número (`012/2026`), empresa, apelido ou objeto. Mais recentes primeiro. "
+    description="Busca por número (`012/2026`), empresa, apelido ou objeto. Mais recentes primeiro, ou a coluna escolhida em `ordenar_por` e `direcao`. "
     "Com `meus=true`, só os contratos em que o usuário integra a equipe vigente (gestor, fiscais, suplentes…). Exige ACL `contratos` ≥ LEITURA.",
 )
 def listar_contratos(
@@ -57,11 +59,14 @@ def listar_contratos(
     pagina: int = Query(1, ge=1),
     tamanho_pagina: int = Query(25, ge=1, le=100),
     meus: bool = Query(False, description="Só os contratos em que o usuário integra a equipe vigente."),
+    ordenar_por: Literal["numero", "empresa", "data_inicio", "data_fim", "situacao", "base_mensal", "valor_global"] = Query(
+        "numero", description="Coluna da ordenação. Empates seguem a ordem padrão (mais recentes primeiro)."),
+    direcao: Literal["asc", "desc"] = Query("desc", description="`desc` (padrão: número do mais recente ao mais antigo) ou `asc`."),
     sessao: Session = Depends(obter_sessao),
     usuario: Usuario = Depends(pode_ler),
 ) -> PaginaContratos:
-    """Carteira: lista paginada com busca por número, empresa, apelido ou objeto."""
-    return servico.listar_contratos(sessao, busca, pagina, tamanho_pagina, usuario.id if meus else None)
+    """Carteira: lista paginada com busca por número, empresa, apelido ou objeto e ordenação por coluna."""
+    return servico.listar_contratos(sessao, busca, pagina, tamanho_pagina, usuario.id if meus else None, ordenar_por, direcao)
 
 
 @roteador.get(
@@ -159,6 +164,26 @@ def historico(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _
     """Histórico campo a campo, lido da auditoria estruturada."""
     with traduzir_erros():
         return servico.historico(sessao, contrato_id)
+
+
+@roteador.get(
+    "/{contrato_id}/vizinhos",
+    response_model=VizinhosContrato,
+    summary="Contrato anterior e próximo da lista",
+    description="Com os mesmos `busca`, `meus`, `ordenar_por` e `direcao` da carteira, devolve o contrato anterior e o próximo, a posição e o total, "
+    "para navegar entre contratos sem voltar à lista. Fora da lista, `posicao` vem nula. Exige ACL `contratos` ≥ LEITURA.",
+)
+def vizinhos(
+    contrato_id: uuid.UUID,
+    busca: str | None = Query(None, max_length=100),
+    meus: bool = Query(False, description="Só os contratos em que o usuário integra a equipe vigente."),
+    ordenar_por: Literal["numero", "empresa", "data_inicio", "data_fim", "situacao", "base_mensal", "valor_global"] = Query("numero"),
+    direcao: Literal["asc", "desc"] = Query("desc"),
+    sessao: Session = Depends(obter_sessao),
+    usuario: Usuario = Depends(pode_ler),
+) -> VizinhosContrato:
+    """Anterior e próximo na ordem da carteira."""
+    return servico.vizinhos_na_carteira(sessao, contrato_id, busca, usuario.id if meus else None, ordenar_por, direcao)
 
 
 @roteador.get(

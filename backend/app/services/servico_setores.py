@@ -95,6 +95,30 @@ def opcoes_departamento(sessao: Session) -> list[OpcaoDepartamento]:
     return opcoes
 
 
+def _setor_do_departamento(sessao: Session, departamento: str | None) -> Setor | None:
+    """Setor institucional ativo cujo nome é o Departamento informado (sem diferenciar maiúsculas)."""
+    nome = (departamento or "").strip().lower()
+    if not nome:
+        return None
+    return sessao.scalar(select(Setor).where(func.lower(func.trim(Setor.nome)) == nome, Setor.ativo.is_(True), Setor.sistemico.is_(False)))
+
+
+def sincronizar_departamento(sessao: Session, usuario_id: int, anterior: str | None, atual: str | None) -> None:
+    """Mantém a participação nos setores coerente com o Departamento do perfil (sem commit).
+
+    O Departamento é o setor em que o usuário atua: quando ele passa a valer (validação da CGP, alteração
+    direta de CGP/SuperRoot, correção na recusa ou edição pelo administrador), o usuário vira membro do setor
+    de mesmo nome e deixa de ser membro do setor do Departamento anterior. É a participação que a ACL
+    consulta; participações em outros setores (sistêmicos ou incluídas à mão) não são tocadas.
+    """
+    antigo, novo = _setor_do_departamento(sessao, anterior), _setor_do_departamento(sessao, atual)
+    if antigo is not None and (novo is None or antigo.id != novo.id):
+        sessao.execute(delete(MembroSetor).where(MembroSetor.setor_id == antigo.id, MembroSetor.usuario_id == usuario_id))
+    if novo is not None and sessao.get(MembroSetor, (novo.id, usuario_id)) is None:
+        sessao.add(MembroSetor(setor_id=novo.id, usuario_id=usuario_id))
+        sessao.flush()
+
+
 def detalhar_setor(sessao: Session, setor_id: int) -> DetalheSetor:
     """Detalhe do setor: a linha da listagem mais a lista de membros."""
     obter_setor(sessao, setor_id)
@@ -156,8 +180,13 @@ def alterar_setor(sessao: Session, setor_id: int, dados: GravacaoSetor, autor: s
     """Altera os dados do setor e substitui os membros."""
     setor = obter_setor(sessao, setor_id)
     _validar(sessao, dados, setor_id)
+    nome_anterior = setor.nome
     for campo in ("nome", "setor_pai_id", "lider_id", "sistemico", "ativo"):
         setattr(setor, campo, getattr(dados, campo))
+    # O Departamento dos usuários guarda o nome do setor: renomear o setor acompanha o perfil deles
+    if nome_anterior.strip().lower() != dados.nome.strip().lower() and not setor.sistemico:
+        for usuario in sessao.scalars(select(Usuario).where(func.lower(func.trim(Usuario.departamento)) == nome_anterior.strip().lower())):
+            usuario.departamento = setor.nome
     _definir_membros(sessao, setor.id, dados.membros_ids)
     auditar(sessao, autor, "setor.alterar", setor.nome, f"id={setor.id} membros={len(set(dados.membros_ids))}")
     sessao.commit()

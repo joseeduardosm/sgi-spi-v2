@@ -6,6 +6,22 @@ Tag no OpenAPI: **Setores**. Implementação: `backend/app/api/routes/setores.py
 
 Os setores representam a estrutura institucional (hierarquia com setor pai e líder) e os grupos sistêmicos. Eles funcionam como **grupos de acesso** na ACL: uma regra concedida a um setor vale para todos os seus membros.
 
+## Departamento do perfil × participação no setor
+
+O **Departamento** do perfil guarda o nome de um setor institucional ativo. Quando ele passa a **valer**, o usuário vira **membro** desse setor (é a participação que a ACL consulta) e deixa de ser membro do setor do Departamento anterior:
+- validação da CGP (`POST /api/rh/cadastro/alteracoes/{id}/validar` e `/validar-lote`);
+- recusa com correção (`/recusar`), quando o valor corrigido é um Departamento;
+- alteração direta de CGP/SuperRoot no próprio perfil (`PUT /api/autenticacao/perfil`);
+- edição do perfil pelo administrador (`PUT /api/usuarios/{id}`; na criação, `POST /api/usuarios`, vale a mesma regra).
+
+Detalhes:
+- A comparação é pelo nome do setor, sem diferenciar maiúsculas. Departamento que não corresponde a um setor institucional ativo não cria nem remove vínculos.
+- Participações em outros setores (grupos sistêmicos ou incluídas à mão em `membros_ids`) não são tocadas.
+- Alteração **pendente** de validação não muda a participação; só a validação.
+- Renomear o setor (`PUT /api/setores/{id}` com `nome` novo) atualiza o Departamento dos usuários que apontavam para o nome antigo.
+- A migração `a7c1e5b9d3f4` aplicou a regra aos usuários que já tinham o Departamento válido, mas nenhum vínculo.
+- Como o vínculo é automático, excluir um setor exige antes mudar o Departamento (ou a participação) dos membros.
+
 ## Regras gerais
 
 - **Autorização:**

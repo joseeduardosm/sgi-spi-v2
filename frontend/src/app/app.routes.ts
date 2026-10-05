@@ -182,6 +182,14 @@ export const rotas: Routes = [
           import('./features/administracao/smtp/servidores-smtp.component').then((m) => m.ServidoresSmtpComponent),
       },
       {
+        path: 'admin/glpi',
+        title: 'Integração GLPI | SGI SPI',
+        canActivate: [guardaPapel],
+        data: { papeis: ['SuperRoot'] },
+        loadComponent: () =>
+          import('./features/administracao/glpi/integracao-glpi.component').then((m) => m.IntegracaoGlpiComponent),
+      },
+      {
         // Mensageria (e-mail de changelog): exclusiva da conta root
         path: 'admin/mensageria',
         title: 'Mensageria | SGI SPI',

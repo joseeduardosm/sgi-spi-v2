@@ -23,6 +23,8 @@ export interface ItemNavegacao {
   exata?: boolean;
   href?: string;
   novaAba?: boolean;
+  /** Item de ação: em vez de abrir uma tela, executa algo (ex.: `abrir-chamado` abre o modal de chamado). */
+  acao?: 'abrir-chamado';
   papeis?: Papel[];
   /** Só a conta root (login `LOGIN_ADMIN`) vê o item. */
   somenteRoot?: boolean;

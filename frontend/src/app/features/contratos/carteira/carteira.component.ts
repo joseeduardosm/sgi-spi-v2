@@ -3,6 +3,7 @@
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { UpperCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { debounceTime, Subject } from 'rxjs';
@@ -11,7 +12,7 @@ import { PaginacaoComponent } from '../../../shared/componentes/paginacao/pagina
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
-import { ContratosApiService } from '../compartilhado/contratos-api.service';
+import { CHAVE_CONTEXTO_CARTEIRA, ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ResumoContrato } from '../compartilhado/contratos.models';
 import { ROTULOS_SITUACAO } from '../compartilhado/rotulos';
 import { AcessoService } from '../../../core/acesso/acesso.service';
@@ -26,9 +27,12 @@ function lerMeus(): boolean {
   try { return localStorage.getItem(CHAVE_MEUS) === '1'; } catch { return false; }
 }
 
+/** Colunas da carteira que a API sabe ordenar. */
+export type ColunaCarteira = 'numero' | 'empresa' | 'data_inicio' | 'data_fim' | 'situacao' | 'base_mensal' | 'valor_global';
+
 @Component({
   selector: 'app-carteira',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent, ImportacaoSgiComponent, ImportacaoXlsxComponent, ...PIPES_FORMATACAO],
+  imports: [UpperCasePipe, FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent, ImportacaoSgiComponent, ImportacaoXlsxComponent, ...PIPES_FORMATACAO],
   templateUrl: './carteira.component.html',
   // Qualquer clique fora fecha o menu de ações aberto
   host: { '(document:click)': 'menuAberto.set(null)' },
@@ -52,6 +56,9 @@ export class CarteiraComponent implements OnInit {
   protected readonly total = signal(0);
   protected readonly carregando = signal(true);
   protected readonly menuAberto = signal<string | null>(null);
+  // Ordenação por coluna (feita na API, antes de paginar); padrão: número, mais recentes primeiro
+  protected readonly ordenarPor = signal<ColunaCarteira>('numero');
+  protected readonly direcao = signal<'asc' | 'desc'>('desc');
   private readonly pesquisa$ = new Subject<void>();
 
   constructor() {
@@ -80,9 +87,10 @@ export class CarteiraComponent implements OnInit {
   /** Busca uma página da carteira na API. */
   protected carregar(pagina: number): void {
     this.carregando.set(true);
-    this.api.listar(this.busca.trim(), pagina, this.tamanhoPagina, this.meus()).subscribe({
+    this.api.listar(this.busca.trim(), pagina, this.tamanhoPagina, this.meus(), this.ordenarPor(), this.direcao()).subscribe({
       next: (resposta) => {
         this.itens.set(resposta.itens);
+        this.guardarContexto();
         this.total.set(resposta.total);
         this.pagina.set(pagina);
         this.carregando.set(false);
@@ -94,9 +102,48 @@ export class CarteiraComponent implements OnInit {
     });
   }
 
+  /** Guarda a busca, o filtro "Meus contratos" e a ordenação desta lista: o detalhe do contrato usa para navegar ‹ › entre os contratos dela. */
+  private guardarContexto(): void {
+    try {
+      sessionStorage.setItem(CHAVE_CONTEXTO_CARTEIRA, JSON.stringify({ busca: this.busca.trim(), meus: this.meus(), ordenarPor: this.ordenarPor(), direcao: this.direcao() }));
+    } catch {
+      // sem armazenamento: o anterior/próximo usa a ordem padrão
+    }
+  }
+
+  /** Clique no título da coluna: ordena por ela (crescente); clicar de novo inverte o sentido. Volta à página 1. */
+  protected ordenar(coluna: ColunaCarteira): void {
+    if (this.ordenarPor() === coluna) {
+      this.direcao.update((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      this.ordenarPor.set(coluna);
+      // Textos e datas começam crescentes; valores em dinheiro, do maior para o menor
+      this.direcao.set(coluna === 'base_mensal' || coluna === 'valor_global' ? 'desc' : 'asc');
+    }
+    this.carregar(1);
+  }
+
+  /** Valor de `aria-sort` do título da coluna. */
+  protected sentido(coluna: ColunaCarteira): 'ascending' | 'descending' | 'none' {
+    if (this.ordenarPor() !== coluna) return 'none';
+    return this.direcao() === 'asc' ? 'ascending' : 'descending';
+  }
+
   /** Abre o detalhe do contrato ao clicar na linha. */
   protected abrir(contrato: ResumoContrato): void {
     void this.roteador.navigate(['/contratos', contrato.id]);
+  }
+
+  /** Clique na linha: abre o contrato, exceto quando o clique foi no link do número (o navegador cuida: Ctrl+clique, botão do meio, "abrir em nova aba") ou com tecla modificadora. */
+  protected abrirLinha(evento: MouseEvent, contrato: ResumoContrato): void {
+    if (evento.ctrlKey || evento.metaKey || evento.shiftKey || (evento.target as HTMLElement).closest('a')) return;
+    this.abrir(contrato);
+  }
+
+  /** Abre o contrato em uma nova aba do navegador (item do menu de ações). */
+  protected abrirEmNovaAba(contrato: ResumoContrato): void {
+    window.open(this.roteador.serializeUrl(this.roteador.createUrlTree(['/contratos', contrato.id])), '_blank', 'noopener');
+    this.menuAberto.set(null);
   }
 
   /** Abre ou fecha o menu de ações da linha; `stopPropagation` evita que o clique abra o contrato. */

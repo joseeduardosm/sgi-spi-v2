@@ -24,7 +24,7 @@
     gap: 6px;
     min-width: 0;
 
-    label { color: #464f5a; font-size: 12px; font-weight: 700; }
+    label { color: var(--cor-464f5a); font-size: 12px; font-weight: 700; }
 
     input[type='text'],
     input[type='email'],
@@ -32,11 +32,11 @@
       width: 100%;
       height: 40px;
       padding: 0 12px;
-      border: 1px solid #e2e5e8;
+      border: 1px solid var(--cor-e2e5e8);
       border-radius: 7px;
       outline: 0;
-      color: #3d454e;
-      background: #fcfcfc;
+      color: var(--cor-3d454e);
+      background: var(--cor-fcfcfc);
       font-size: 13px;
 
       &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; }
@@ -46,11 +46,11 @@
       width: 100%;
       height: 40px;
       padding: 0 12px;
-      border: 1px solid #e2e5e8;
+      border: 1px solid var(--cor-e2e5e8);
       border-radius: 7px;
       outline: 0;
-      color: #3d454e;
-      background: #fcfcfc;
+      color: var(--cor-3d454e);
+      background: var(--cor-fcfcfc);
       font-size: 13px;
 
       &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; }
@@ -71,16 +71,16 @@
       gap: 12px;
       margin: 0;
       padding: 11px 14px;
-      border: 1px solid #e8eaec;
+      border: 1px solid var(--cor-e8eaec);
       border-radius: 9px;
-      background: #fcfcfc;
+      background: var(--cor-fcfcfc);
       cursor: pointer;
 
       input[type='checkbox'] { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: #af3741; }
       span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-      strong { color: #32383f; font-size: 13px; font-weight: 600; }
-      small { color: #7c8998; font-size: 12px; }
-      &:has(input:checked) { border-color: #e3b9bd; background: #fcf0f1; }
+      strong { color: var(--cor-32383f); font-size: 13px; font-weight: 600; }
+      small { color: var(--cor-7c8998); font-size: 12px; }
+      &:has(input:checked) { border-color: var(--cor-e3b9bd); background: var(--cor-fcf0f1); }
     }
   }
 
@@ -91,12 +91,12 @@
     min-height: 200px;
     padding: 16px;
     overflow-x: auto;
-    border: 1px solid #e3e5e8;
+    border: 1px solid var(--cor-e3e5e8);
     border-radius: 8px;
-    background: #f5f7fb;
+    background: var(--cor-f5f7fb);
 
-    img { max-width: none; height: auto; background: #fff; box-shadow: 0 8px 24px #0f172a1f; }
-    &.vazia { color: #667085; text-align: center; border-style: dashed; }
+    img { max-width: none; height: auto; background: var(--cor-ffffff); box-shadow: 0 8px 24px #0f172a1f; }
+    &.vazia { color: var(--cor-667085); text-align: center; border-style: dashed; }
   }
 
   .acoes-assinatura { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 4px; }
@@ -104,18 +104,18 @@
   .versao-html {
     margin-top: 14px;
 
-    summary { color: #5a6673; font-size: 12.5px; cursor: pointer; }
-    iframe { width: 100%; height: 220px; margin-top: 10px; border: 1px solid #e3e5e8; border-radius: 8px; background: #fff; }
+    summary { color: var(--cor-5a6673); font-size: 12.5px; cursor: pointer; }
+    iframe { width: 100%; height: 220px; margin-top: 10px; border: 1px solid var(--cor-e3e5e8); border-radius: 8px; background: var(--cor-ffffff); }
   }
 
   .instalar-assinatura {
     display: grid;
     gap: 10px;
 
-    details { padding: 10px 14px; border: 1px solid #e8eaec; border-radius: 9px; background: #fcfcfc; }
-    summary { color: #361a1c; font-size: 13px; font-weight: 600; cursor: pointer; }
-    ol { margin: 10px 0 2px; padding-left: 20px; color: #4b5663; font-size: 13px; line-height: 1.6; }
-    kbd { padding: 1px 6px; border: 1px solid #d8dce0; border-radius: 4px; background: #fff; font-size: 11.5px; }
+    details { padding: 10px 14px; border: 1px solid var(--cor-e8eaec); border-radius: 9px; background: var(--cor-fcfcfc); }
+    summary { color: var(--cor-361a1c); font-size: 13px; font-weight: 600; cursor: pointer; }
+    ol { margin: 10px 0 2px; padding-left: 20px; color: var(--cor-4b5663); font-size: 13px; line-height: 1.6; }
+    kbd { padding: 1px 6px; border: 1px solid var(--cor-d8dce0); border-radius: 4px; background: var(--cor-ffffff); font-size: 11.5px; }
   }
 }
 

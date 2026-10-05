@@ -1,6 +1,6 @@
 .barra-topo {
-  background: #fff;
-  border-bottom: 1px solid #e2e6ea;
+  background: var(--cor-ffffff);
+  border-bottom: 1px solid var(--cor-e2e6ea);
 }
 
 .marca {
@@ -26,7 +26,7 @@
 }
 
 .marca-nome {
-  color: #171c23;
+  color: var(--cor-171c23);
   line-height: 1.15;
   letter-spacing: 0.015em;
 

@@ -27,32 +27,33 @@
     <table class="tabela-gestao">
       <thead>
         <tr>
-          <th>Número</th>
-          <th>Empresa / objeto</th>
-          <th>Data início</th>
-          <th>Data fim</th>
-          <th>Situação</th>
-          <th class="num">Base mensal</th>
-          <th class="num">Valor global</th>
+          <th [attr.aria-sort]="sentido('numero')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'numero'" (click)="ordenar('numero')" title="Ordenar por número">Número<span aria-hidden="true">{{ ordenarPor() === 'numero' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('empresa')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'empresa'" (click)="ordenar('empresa')" title="Ordenar por empresa / objeto">Empresa / objeto<span aria-hidden="true">{{ ordenarPor() === 'empresa' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('data_inicio')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'data_inicio'" (click)="ordenar('data_inicio')" title="Ordenar por data início">Data início<span aria-hidden="true">{{ ordenarPor() === 'data_inicio' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('data_fim')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'data_fim'" (click)="ordenar('data_fim')" title="Ordenar por data fim">Data fim<span aria-hidden="true">{{ ordenarPor() === 'data_fim' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('situacao')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'situacao'" (click)="ordenar('situacao')" title="Ordenar por situação">Situação<span aria-hidden="true">{{ ordenarPor() === 'situacao' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th class="num" [attr.aria-sort]="sentido('base_mensal')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'base_mensal'" (click)="ordenar('base_mensal')" title="Ordenar por base mensal">Base mensal<span aria-hidden="true">{{ ordenarPor() === 'base_mensal' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th class="num" [attr.aria-sort]="sentido('valor_global')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'valor_global'" (click)="ordenar('valor_global')" title="Ordenar por valor global">Valor global<span aria-hidden="true">{{ ordenarPor() === 'valor_global' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
           <th class="coluna-acoes">Ações</th>
         </tr>
       </thead>
       <tbody>
         @for (c of itens(); track c.id) {
-          <tr class="linha-clicavel" (click)="abrir(c)">
-            <td><strong>{{ c.numero }}</strong>@if (c.apelido) { <small>{{ c.apelido }}</small> }</td>
+          <tr class="linha-clicavel linha-link" (click)="abrirLinha($event, c)" (auxclick)="$event.stopPropagation()">
+            <td><a class="link-contrato" [routerLink]="['/contratos', c.id]" [title]="'Abrir o contrato ' + c.numero + ' (Ctrl+clique ou botão do meio abre em nova aba)'"><strong>{{ c.numero }}</strong></a>@if (c.apelido) { <small class="apelido-contrato">{{ c.apelido | uppercase }}</small> }</td>
             <td><strong>{{ c.empresa_razao_social }}</strong><small>{{ c.objeto.length > 110 ? c.objeto.slice(0, 110) + '…' : c.objeto }}</small></td>
             <td>{{ c.data_inicio | dataBr }}</td>
             <td>{{ c.data_fim | dataBr }}</td>
             <td><span class="selo-situacao" [class]="'selo-situacao ' + c.situacao">{{ rotulos[c.situacao] }}</span></td>
             <td class="num">{{ c.base_mensal | moeda }}</td>
             <td class="num">{{ c.valor_global | moeda }}</td>
-            <td>
+            <td class="celula-acoes">
               <div class="acoes-linha" style="position: relative">
                 <button type="button" aria-label="Ações" [attr.aria-expanded]="menuAberto() === c.id" (click)="alternarMenu($event, c.id)">⋮</button>
                 @if (menuAberto() === c.id) {
                   <div class="menu-flutuante" role="menu">
                     <button type="button" role="menuitem" (click)="abrir(c)">Visualizar</button>
+                    <button type="button" role="menuitem" (click)="abrirEmNovaAba(c)">Abrir em nova aba</button>
                     @if (acesso.pode('contratos', 'CONTROLE_TOTAL')) {
                       <button type="button" role="menuitem" (click)="excluir($event, c)">Excluir</button>
                     }

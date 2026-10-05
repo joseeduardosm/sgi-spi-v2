@@ -45,7 +45,7 @@
               </div>
             } @else {
               <div class="descricao-tarefa" [class.vazia]="!t.descricao" (dblclick)="pode('editar') && editarDescricao()">
-                @if (t.descricao) { {{ t.descricao }} } @else { Sem descrição.@if (pode('editar')) { Clique em Editar para detalhar o que precisa ser feito. } }
+                @if (t.descricao) { <span [innerHTML]="t.descricao | linkificar"></span> } @else { Sem descrição.@if (pode('editar')) { Clique em Editar para detalhar o que precisa ser feito. } }
               </div>
             }
           </section>
@@ -149,7 +149,7 @@
                             }
                           }
                         }
-                        @if (e.texto) { <p class="texto-evento" [class.justificativa]="e.tipo !== 'comentario'">{{ e.texto }}</p> }
+                        @if (e.texto) { <p class="texto-evento" [class.justificativa]="e.tipo !== 'comentario'" [innerHTML]="e.texto | linkificar"></p> }
                         @if (e.anexos.length) {
                           <ul class="anexos-evento">
                             @for (a of e.anexos; track a.id) {

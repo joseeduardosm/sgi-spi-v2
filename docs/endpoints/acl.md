@@ -16,6 +16,7 @@ Define quem acessa cada módulo do portal. A política e o cálculo do nível ef
   - recursos: `acl.recurso.criar`, `acl.recurso.alterar` e `acl.recurso.excluir`;
   - regras: `acl.regra.criar`, `acl.regra.alterar` e `acl.regra.excluir`.
 - **Recursos iniciais** (criados pela migração): `usuarios`, `setores`, `contratos` e `relatorios`.
+- **Recursos criados abertos a todos** (sem regras): `abrir-chamado`, item "Abrir Chamado" da barra lateral (migração `d1f4b8a2e6c9`; ver [chamados.md](chamados.md)). O SuperRoot pode restringir criando regras.
 - **Recursos criados fechados** (só a conta administrativa principal tem CONTROLE_TOTAL; o SuperRoot libera os demais):
   - `importacao-contratos`: botão "Importar XLSX" (migração `d4f7b2c9e1a3`);
   - `importacao-modelos`: botão "Importar XLSX" de checklists e formulários de avaliação (migração `e5a8c3d7f2b1`; ver [contratos-importacao-modelos-xlsx.md](contratos-importacao-modelos-xlsx.md));

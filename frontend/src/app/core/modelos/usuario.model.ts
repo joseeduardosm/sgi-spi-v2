@@ -20,6 +20,8 @@ export interface Usuario {
   revisao_obrigatoria?: boolean;
   /** Conta administrativa principal (login root): única com acesso à Mensageria. */
   conta_root?: boolean;
+  /** Tema da interface escolhido pelo usuário (`auto` segue o sistema operacional). */
+  tema?: 'claro' | 'escuro' | 'auto';
 }
 
 /** Forma reduzida usada em seletores (`OpcaoUsuario` da API). */

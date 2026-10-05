@@ -44,6 +44,7 @@ from app.schemas.contratos.execucao import (
     LeituraFormulario,
     PainelExecucao,
     Reabertura,
+    ReaproveitamentoDocumento,
 )
 from app.services.contratos.servico_contratos import obter_contrato
 from app.services.contratos import servico_competencias as competencias
@@ -512,6 +513,32 @@ def concluir_checklist(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao
     # Esta rota precisa vir antes de `/checklist/{documento_id}`, senão "concluir" seria lido como id
     with traduzir_erros(sessao):
         competencias.concluir_checklist(sessao, contrato_id, competencia_id, autor)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/checklist/reaproveitar-todos", response_model=DetalheCompetencia,
+               summary="Trazer os documentos válidos de outros contratos da empresa",
+               description="Traz de uma vez todos os documentos da empresa (item marcado com `vale_outros_contratos`) ainda sem anexo que têm um igual (mesmo nome), "
+               "com validade até o último dia do período, em outro contrato da mesma empresa. Com todos anexados, a etapa conclui sozinha. "
+               "`400` quando não há nenhum para trazer.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def reaproveitar_todos(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 5: reaproveita, com confirmação do usuário, todos os documentos válidos de outros contratos da empresa."""
+    # Esta rota precisa vir antes de `/checklist/{documento_id}`, senão "reaproveitar-todos" seria lido como id
+    with traduzir_erros(sessao):
+        competencias.reaproveitar_todos_de_outros_contratos(sessao, contrato_id, competencia_id, autor)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/checklist/{documento_id}/reaproveitar", response_model=DetalheCompetencia,
+               summary="Trazer o documento válido de outro contrato da empresa",
+               description="Corpo `{\"origem_id\": uuid}` (a `sugestao_outro_contrato.origem_id` do documento). Copia o arquivo e a validade do mesmo documento da "
+               "empresa, ainda válido, de outro contrato da mesma empresa. `400` quando o documento não é da empresa, já tem anexo ou a origem não vale mais.",
+               responses={**resposta_nao_encontrado("Competência ou documento"), **ESCRITA})
+def reaproveitar_documento(contrato_id: uuid.UUID, competencia_id: uuid.UUID, documento_id: uuid.UUID, dados: ReaproveitamentoDocumento,
+                           sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 5: reaproveita um documento de outro contrato da mesma empresa."""
+    with traduzir_erros(sessao):
+        competencias.reaproveitar_de_outro_contrato(sessao, contrato_id, competencia_id, documento_id, dados.origem_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 

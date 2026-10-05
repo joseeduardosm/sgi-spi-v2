@@ -47,6 +47,7 @@ from app.schemas.contratos.contratos import (
     MarcoLinhaTempo,
     MembroEquipe,
     PaginaContratos,
+    VizinhosContrato,
     PermissoesContrato,
     ProximoNumero,
     ResumoContrato,
@@ -221,8 +222,20 @@ def chave_ordem(contrato: Contrato) -> tuple:
     return (-(contrato.ano or 0), -(contrato.sequencial or 0), contrato.numero.lower())
 
 
-def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pagina: int, equipe_de_usuario_id: int | None = None) -> PaginaContratos:
-    """Carteira paginada, com busca por apelido, objeto, empresa ou número. Com `equipe_de_usuario_id`, só os contratos em que a pessoa integra a equipe vigente."""
+# Colunas ordenáveis da carteira → chave de ordenação sobre a linha já calculada (`ResumoContrato`). A situação ordena pelo rótulo exibido.
+ROTULO_SITUACAO = {"ativo": "ativo", "a_vencer": "a vencer", "encerrado": "encerrado", "suspenso": "suspenso"}
+ORDENACOES_CARTEIRA = {
+    "empresa": lambda r: r.empresa_razao_social.lower(),
+    "data_inicio": lambda r: r.data_inicio,
+    "data_fim": lambda r: r.data_fim,
+    "situacao": lambda r: ROTULO_SITUACAO.get(r.situacao, r.situacao),
+    "base_mensal": lambda r: r.base_mensal,
+    "valor_global": lambda r: r.valor_global,
+}
+
+
+def _consulta_carteira(busca: str | None, equipe_de_usuario_id: int | None):
+    """Consulta da carteira com a busca (apelido, objeto, empresa ou número) e, se pedido, só os contratos da equipe vigente do usuário."""
     # O join com a empresa permite buscar pela razão social e pelo nome fantasia
     consulta = select(Contrato).join(EmpresaContratada, EmpresaContratada.id == Contrato.empresa_id)
     termo = (busca or "").strip().lower()
@@ -250,8 +263,30 @@ def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pa
             or_(DesignacaoEquipe.valido_ate.is_(None), DesignacaoEquipe.valido_ate > agora),
         )
         consulta = consulta.where(Contrato.id.in_(vigente))
+    return consulta
+
+
+def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pagina: int, equipe_de_usuario_id: int | None = None,
+                     ordenar_por: str = "numero", direcao: str = "desc") -> PaginaContratos:
+    """Carteira paginada, com busca por apelido, objeto, empresa ou número. Com `equipe_de_usuario_id`, só os contratos em que a pessoa integra a equipe vigente.
+
+    Ordem padrão (`numero` decrescente): ano e sequencial do mais recente ao mais antigo, direto no banco. Qualquer outra ordem carrega os
+    contratos da busca, ordena pelos valores já calculados (situação, vigência, valores) e só então pagina; empates seguem a ordem padrão.
+    """
+    consulta = _consulta_carteira(busca, equipe_de_usuario_id)
     # Total antes de paginar; depois, a página pedida, dos contratos mais recentes para os mais antigos
     total = sessao.scalar(select(func.count()).select_from(consulta.subquery())) or 0
+    if (ordenar_por, direcao) != ("numero", "desc"):
+        todos = list(sessao.scalars(consulta.options(*opcoes_carga_resumo()).order_by(*ordem_contratos())).unique())
+        if ordenar_por == "numero":
+            # `chave_ordem` já é a ordem decrescente (mais recente primeiro): "asc" a inverte
+            todos.sort(key=chave_ordem, reverse=direcao == "asc")
+            linhas = [resumo(c) for c in todos]
+        else:
+            # Ordenação estável sobre a ordem padrão: os empates continuam do mais recente para o mais antigo
+            linhas = sorted((resumo(c) for c in todos), key=ORDENACOES_CARTEIRA[ordenar_por], reverse=direcao == "desc")
+        inicio = (pagina - 1) * tamanho_pagina
+        return PaginaContratos(itens=linhas[inicio:inicio + tamanho_pagina], total=total, pagina=pagina, tamanho_pagina=tamanho_pagina)
     contratos = sessao.scalars(
         consulta.options(*opcoes_carga_resumo())
         .order_by(*ordem_contratos())
@@ -259,6 +294,33 @@ def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pa
         .limit(tamanho_pagina)
     )
     return PaginaContratos(itens=[resumo(c) for c in contratos], total=total, pagina=pagina, tamanho_pagina=tamanho_pagina)
+
+
+def vizinhos_na_carteira(sessao: Session, contrato_id: uuid.UUID, busca: str | None, equipe_de_usuario_id: int | None = None,
+                         ordenar_por: str = "numero", direcao: str = "desc") -> VizinhosContrato:
+    """Contrato anterior e próximo na mesma lista que o usuário estava vendo (mesma busca, filtro "meus" e ordenação).
+
+    Se o contrato não está nessa lista (ex.: a busca mudou), `posicao` e os vizinhos vêm vazios.
+    """
+    consulta = _consulta_carteira(busca, equipe_de_usuario_id)
+    if (ordenar_por, direcao) == ("numero", "desc"):
+        ids = list(sessao.scalars(consulta.with_only_columns(Contrato.id).order_by(*ordem_contratos())))
+    else:
+        todos = list(sessao.scalars(consulta.options(*opcoes_carga_resumo()).order_by(*ordem_contratos())).unique())
+        if ordenar_por == "numero":
+            todos.sort(key=chave_ordem, reverse=direcao == "asc")
+            ids = [c.id for c in todos]
+        else:
+            ids = [r.id for r in sorted((resumo(c) for c in todos), key=ORDENACOES_CARTEIRA[ordenar_por], reverse=direcao == "desc")]
+    if contrato_id not in ids:
+        return VizinhosContrato(total=len(ids))
+    posicao = ids.index(contrato_id)
+    return VizinhosContrato(
+        anterior_id=ids[posicao - 1] if posicao > 0 else None,
+        proximo_id=ids[posicao + 1] if posicao < len(ids) - 1 else None,
+        posicao=posicao + 1,
+        total=len(ids),
+    )
 
 
 def opcoes_carga_resumo() -> list:

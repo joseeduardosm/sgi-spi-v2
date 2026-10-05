@@ -9,6 +9,7 @@ import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CabecalhoRhComponent } from './cabecalho-rh.component';
 import { RhApiService } from './rh-api.service';
 import { Afastamento, DIAS_SEMANA, Feriado, MeusAfastamentos, ROTULOS_STATUS, ROTULOS_TIPO, SIGLAS_TIPO, TipoAfastamento } from './rh.models';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 /** Um dia do calendário (null = casa vazia antes do dia 1º). */
 interface Dia {
@@ -32,7 +33,7 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-ferias',
-  imports: [FormsModule, DatePipe, CabecalhoRhComponent],
+  imports: [LinkificarPipe, FormsModule, DatePipe, CabecalhoRhComponent],
   templateUrl: './ferias.component.html',
   host: { '(document:keydown.escape)': 'limparSelecao()' },
 })

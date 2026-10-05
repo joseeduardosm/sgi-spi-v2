@@ -70,11 +70,12 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
               <div><label [for]="'modelo-val-' + $index">Validade</label>
                 <select [id]="'modelo-val-' + $index" [name]="'val' + $index" [(ngModel)]="i.com_validade">
                   <option [ngValue]="false">Sem validade</option><option [ngValue]="true">Com validade</option>
-                </select></div>
+                </select>
+                @if (i.com_validade) { <label class="opcao-empresa"><input type="checkbox" [name]="'emp' + $index" [(ngModel)]="i.vale_outros_contratos" /> Documento da empresa</label> }</div>
               <div style="align-self: center"><button type="button" class="link-arquivo" (click)="itens.splice($index, 1)">remover</button></div>
             </div>
           }
-          <button type="button" class="acao-secundaria acao-pequena" (click)="itens.push({ nome: '', observacao: '', obrigatorio: true, com_validade: false })">+ Documento</button>
+          <button type="button" class="acao-secundaria acao-pequena" (click)="itens.push({ nome: '', observacao: '', obrigatorio: true, com_validade: false, vale_outros_contratos: false })">+ Documento</button>
           <footer style="margin-top: 16px">
             <button type="button" class="acao-secundaria" (click)="checklistAberto.set(false)">Cancelar</button>
             <button type="submit" class="acao-primaria" [disabled]="!nome.trim() || !itens.length || itens.some(i => !i.nome.trim())">Salvar modelo</button>
@@ -102,7 +103,7 @@ export class ModelosComponent implements OnInit {
   protected emEdicao: Modelo | null = null;
   protected nome = '';
   protected ativo = true;
-  protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean }[] = [];
+  protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean; vale_outros_contratos: boolean }[] = [];
 
   /** Carrega todos os modelos (inclusive os inativos) ao abrir a tela. */
   ngOnInit(): void {
@@ -131,7 +132,7 @@ export class ModelosComponent implements OnInit {
     this.nome = modelo?.nome ?? '';
     this.ativo = modelo?.ativo ?? true;
     if (tipo === 'checklist') {
-      this.itens = (modelo?.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false }));
+      this.itens = (modelo?.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false, vale_outros_contratos: i.vale_outros_contratos ?? false }));
       this.checklistAberto.set(true);
     } else {
       this.formularioAberto.set(true);
@@ -140,7 +141,7 @@ export class ModelosComponent implements OnInit {
 
   /** Salva o modelo de checklist. */
   protected salvarChecklist(): void {
-    const dados = { tipo: 'checklist', nome: this.nome.trim(), ativo: this.ativo, itens: this.itens.map((i) => ({ nome: i.nome.trim(), observacao: i.observacao.trim(), obrigatorio: i.obrigatorio, com_validade: i.com_validade })) };
+    const dados = { tipo: 'checklist', nome: this.nome.trim(), ativo: this.ativo, itens: this.itens.map((i) => ({ nome: i.nome.trim(), observacao: i.observacao.trim(), obrigatorio: i.obrigatorio, com_validade: i.com_validade, vale_outros_contratos: i.com_validade && i.vale_outros_contratos })) };
     this.api.salvarModelo(dados, this.emEdicao?.id).subscribe({
       next: () => {
         this.checklistAberto.set(false);

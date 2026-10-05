@@ -25,14 +25,14 @@
   input[type='search'] { flex: 2 1 260px; }
   select { flex: 1 1 160px; }
   .ficha {
-    height: 38px; padding: 0 14px; border: 1px solid var(--spi-borda-campo); border-radius: 999px; background: #fff; font-size: 12px; font-weight: 700; cursor: pointer;
+    height: 38px; padding: 0 14px; border: 1px solid var(--spi-borda-campo); border-radius: 999px; background: var(--cor-ffffff); font-size: 12px; font-weight: 700; cursor: pointer;
     &.ativa { background: var(--spi-vermelho); border-color: var(--spi-vermelho); color: #fff; }
   }
 }
 
 .modos-diretorio {
   display: inline-flex; border: 1px solid var(--spi-borda-campo); border-radius: 8px; overflow: hidden;
-  button { border: 0; background: #fff; padding: 0 14px; height: 38px; font-size: 12px; font-weight: 700; cursor: pointer; &.ativo { background: var(--spi-titulo); color: #fff; } }
+  button { border: 0; background: var(--cor-ffffff); padding: 0 14px; height: 38px; font-size: 12px; font-weight: 700; cursor: pointer; &.ativo { background: var(--spi-titulo); color: #fff; } }
 }
 
 // ---- Cartões de visita (proporção 85 x 55 mm) ----
@@ -42,10 +42,12 @@
 // Nas páginas do diretório o contêiner do portal (1280 px) não limita a largura: cabeçalho e conteúdo
 // acompanham a janela, com uma folga lateral que cresce só até um teto para telas ultralargas.
 body:has(app-ramais) .largura-portal-noticias { width: min(100% - 16px, 3200px); }
+// Layout autenticado (barra lateral): o conteúdo passa do teto de 1840 px; a classe repetida vence o estilo encapsulado do layout
+body:has(app-ramais) .portal-conteudo.portal-conteudo { width: min(100%, 3200px); }
 
 .cartao-visita {
   // Textos longos (setor, cargo) são cortados com reticências; o texto completo aparece ao abrir o cartão
-  position: relative; display: flex; flex-direction: column; min-height: 230px; background: #fff; overflow: hidden;
+  position: relative; display: flex; flex-direction: column; min-height: 230px; background: var(--cor-ffffff); overflow: hidden;
   border: 1px solid var(--spi-borda); border-left: 6px solid var(--spi-vermelho); border-radius: 10px; box-shadow: 0 14px 30px #18222d14;
   transition: transform 0.15s, box-shadow 0.15s;
   &:hover, &:focus-within { transform: translateY(-3px); box-shadow: 0 20px 38px #18222d24; }
@@ -53,7 +55,7 @@ body:has(app-ramais) .largura-portal-noticias { width: min(100% - 16px, 3200px);
 
   .corpo-cartao {
     flex: 1; display: flex; gap: 14px; align-items: flex-start; padding: 16px 38px 8px 14px; border: 0; background: none; text-align: left; cursor: pointer; min-height: 0;
-    .avatar-diretorio { width: 68px; height: 68px; font-size: 1.35rem; border: 3px solid #fff; box-shadow: 0 0 0 1px var(--spi-borda); }
+    .avatar-diretorio { width: 68px; height: 68px; font-size: 1.35rem; border: 3px solid var(--cor-ffffff); box-shadow: 0 0 0 1px var(--spi-borda); }
   }
   .dados-cartao { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
   .nome-cartao { font-size: 1rem; color: var(--spi-titulo); line-height: 1.2; @include limitar(2); }
@@ -66,14 +68,14 @@ body:has(app-ramais) .largura-portal-noticias { width: min(100% - 16px, 3200px);
   .selo-ferias { position: absolute; right: 10px; bottom: 50px; max-width: calc(100% - 20px); }
 
   .acoes-cartao-visita {
-    display: flex; border-top: 1px solid var(--spi-borda); background: #fafbfb;
+    display: flex; border-top: 1px solid var(--spi-borda); background: var(--cor-fafbfb);
     a, button { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 2px; border: 0; background: none; color: var(--spi-apagado); font-size: 1rem; text-decoration: none; cursor: pointer;
       span { font-size: 0.58rem; font-weight: 700; } &:hover { background: var(--spi-vermelho-suave); color: var(--spi-vermelho-escuro); } }
   }
 }
 
 .selo-ferias {
-  display: inline-block; padding: 3px 9px; border-radius: 999px; background: #e3f6ec; color: #17734a; font-size: 0.7rem; font-weight: 800;
+  display: inline-block; padding: 3px 9px; border-radius: 999px; background: var(--cor-e3f6ec); color: #17734a; font-size: 0.7rem; font-weight: 800;
 }
 
 .lista-ramais { tr[tabindex] { cursor: pointer; } td:first-child { width: 56px; } }
@@ -87,7 +89,7 @@ body:has(app-ramais) .largura-portal-noticias { width: min(100% - 16px, 3200px);
     dt { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--spi-apagado); } dd { margin: 2px 0 0; overflow-wrap: anywhere; &.destaque { font-size: 1.6rem; font-weight: 800; } } }
   h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--spi-vermelho-destaque); margin: 14px 0 6px; }
   .pessoas-detalhe { display: flex; flex-wrap: wrap; gap: 8px;
-    button { display: flex; gap: 8px; align-items: center; padding: 6px 12px 6px 6px; border: 1px solid var(--spi-borda); border-radius: 999px; background: #fff; cursor: pointer; text-align: left;
+    button { display: flex; gap: 8px; align-items: center; padding: 6px 12px 6px 6px; border: 1px solid var(--spi-borda); border-radius: 999px; background: var(--cor-ffffff); cursor: pointer; text-align: left;
       .avatar-diretorio { width: 34px; height: 34px; font-size: 0.7rem; } span { display: flex; flex-direction: column; font-size: 0.8rem; font-weight: 700; } small { font-weight: 400; color: var(--spi-apagado); } } }
   .qr-detalhe { display: flex; align-items: center; gap: 14px; margin-top: 16px; p { color: var(--spi-apagado); font-size: 0.8rem; margin: 0; } }
 }
@@ -99,8 +101,8 @@ body:has(app-ramais) .largura-portal-noticias { width: min(100% - 16px, 3200px);
 .aniversariantes {
   padding: 16px 18px; margin-bottom: 22px;
   header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; h2 { margin: 0; font-size: 1.1rem; font-weight: 800; } }
-  .abas-periodo { display: inline-flex; background: #eef0f2; border-radius: 8px; padding: 3px;
-    button { border: 0; background: none; padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; &.ativa { background: #fff; color: var(--spi-vermelho-escuro); box-shadow: 0 1px 3px #0002; } } }
+  .abas-periodo { display: inline-flex; background: var(--cor-eef0f2); border-radius: 8px; padding: 3px;
+    button { border: 0; background: none; padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; &.ativa { background: var(--cor-ffffff); color: var(--spi-vermelho-escuro); box-shadow: 0 1px 3px #0002; } } }
   ul { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; }
   li { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--spi-borda); &:last-child { border-bottom: 0; } &.hoje { background: var(--spi-vermelho-suave); border-radius: 8px; padding-inline: 10px; } }
   .quem { flex: 1; min-width: 0; display: flex; flex-direction: column; strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } small { color: var(--spi-apagado); } }
@@ -111,7 +113,7 @@ body:has(app-ramais) .largura-portal-noticias { width: min(100% - 16px, 3200px);
 .corpo-mural { padding: 8px 24px 20px;
   .homenageado { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; small { display: block; color: var(--spi-apagado); } }
   .recados { list-style: none; padding: 0; margin: 0 0 12px; max-height: 280px; overflow-y: auto;
-    li { padding: 10px 12px; margin-bottom: 8px; background: #fff8e6; border-radius: 10px; p { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; } small { color: var(--spi-apagado); } }
+    li { padding: 10px 12px; margin-bottom: 8px; background: var(--cor-fff8e6); border-radius: 10px; p { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; } small { color: var(--spi-apagado); } }
     .link-apagar { border: 0; background: none; color: var(--spi-vermelho); cursor: pointer; padding: 0; text-decoration: underline; } }
   .rodape-recado { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
 }

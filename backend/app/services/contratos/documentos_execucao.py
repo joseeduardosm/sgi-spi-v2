@@ -15,7 +15,15 @@ from app.models.anexo import Anexo
 from app.models.contratos import Competencia, Contrato, NotaEmpenho
 from app.services import servico_anexos
 from app.services.contratos.calculos import arredondar
-from app.services.documentos.pdf import FUSO_SAO_PAULO, DocumentoPdf, contar_paginas, contracapa, montar_consolidado
+from app.services.documentos.pdf import (
+    FUSO_SAO_PAULO,
+    DocumentoPdf,
+    EntradaIndice,
+    contar_paginas,
+    contracapa,
+    indice_consolidado,
+    montar_consolidado,
+)
 
 # Nomes dos papéis da equipe como aparecem nos documentos
 PAPEIS = {
@@ -277,6 +285,10 @@ def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Deci
 def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: dict, autor: str, enviados_por: dict | None = None) -> bytes:
     """Documento consolidado da competência, na ordem de execução, com páginas numeradas em sequência.
 
+    A **primeira página é o índice**: cada documento aparece com o título e as páginas clicáveis (hiperlink
+    que leva direto ao documento dentro do PDF; os documentos enviados são alcançados pela contracapa).
+    Os mesmos documentos entram nos marcadores do leitor de PDF.
+
     Ordem: 1 medição (memória de cálculo) → 2 avaliação (quando houver) → 3 nota(s) fiscal(is) →
     4 retenção de tributos → 5 CADIN → 6 checklist → 7 resumo executivo (por último).
     Cada documento enviado pela equipe é precedido de uma contracapa na identidade do sistema; os
@@ -324,9 +336,10 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             extras = [("Item do checklist", f"{documento.ordem} · {tipo}")] + ([("Observação", documento.observacao)] if documento.observacao else [])
             documentos.append(("Checklist", documento.nome, documento.anexo_id, False, extras))
 
-    # 2) Monta as partes: contracapa (para os enviados) + o arquivo; anota as páginas de cada um
+    # 2) Monta as partes: contracapa (para os enviados) + o arquivo; anota as páginas de cada um,
+    #    contadas a partir de 1 (o índice, que vem antes, desloca tudo depois)
     partes: list[tuple[bytes | object, bool]] = []
-    composicao: list[list[str]] = []
+    relativas: list[tuple[str, str, str, int, int]] = []  # (nº, etapa, título, 1ª página, última página)
     pagina = 1
     total_documentos = len(documentos) + 1  # + o resumo executivo, ao final
     for posicao, (etapa, titulo, anexo_id, gerado, extras) in enumerate(documentos, start=1):
@@ -345,7 +358,22 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         if legivel:
             partes.append((caminho, gerado))
             pagina += contar_paginas(caminho)
-        composicao.append([str(posicao), etapa, titulo, f"{inicio}" if pagina - 1 == inicio else f"{inicio} a {pagina - 1}"])
+        relativas.append((str(posicao), etapa, titulo, inicio, pagina - 1))
+    relativas.append((str(total_documentos), "Resumo executivo", "Resumo executivo da competência", pagina, pagina))
+
+    # 2b) Índice (primeira página): cada documento com o hiperlink para a sua página. O índice ocupa `k`
+    #     páginas e desloca as demais; se a quantidade mudar ao refazê-lo com o deslocamento, repete.
+    deslocamento = 1
+    while True:
+        entradas = [EntradaIndice(n, et, ti, ini + deslocamento, fim + deslocamento) for n, et, ti, ini, fim in relativas]
+        indice, links = indice_consolidado("Índice do documento consolidado", contexto, entradas, autor)
+        paginas_indice = contar_paginas(indice)
+        if paginas_indice == deslocamento:
+            break
+        deslocamento = paginas_indice
+    composicao = [[e.numero, e.etapa, e.titulo, f"{e.pagina_inicial}" if e.pagina_final <= e.pagina_inicial else f"{e.pagina_inicial} a {e.pagina_final}"]
+                  for e in entradas[:-1]]
+    pagina_resumo = entradas[-1].pagina_inicial
 
     # 3) Resumo executivo, por último: dados da competência e a composição do documento
     resumo = DocumentoPdf("Resumo executivo da competência", contexto, autor=autor)
@@ -372,13 +400,16 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
     )
     resumo.secao("Checklist mensal").tabela(
         ["Nº", "Documento", "Tipo", "Arquivo"],
-        [[str(n), d.nome, "Obrigatório" if d.obrigatorio else "Opcional", d.arquivo.nome if d.arquivo else "Não anexado"] for n, d in enumerate(detalhe.documentos, start=1)],
+        # Documento opcional só é citado quando foi anexado; sem anexo, não aparece nem como "Não anexado"
+        [[str(n), d.nome, "Obrigatório" if d.obrigatorio else "Opcional", d.arquivo.nome if d.arquivo else "Não anexado"]
+         for n, d in enumerate((d for d in detalhe.documentos if d.obrigatorio or d.arquivo), start=1)],
         larguras=[0.5, 4, 1.4, 3.6]
     )
-    composicao.append([str(total_documentos), "Resumo executivo", "Resumo executivo da competência", f"a partir da {pagina}"])
+    composicao.append([str(total_documentos), "Resumo executivo", "Resumo executivo da competência", f"a partir da {pagina_resumo}"])
     resumo.secao("Composição deste documento").tabela(["Nº", "Etapa", "Documento", "Páginas"], composicao, larguras=[0.5, 2, 5, 1.5])
     partes.append((resumo.gerar(), True))
-    return montar_consolidado(partes)
+    marcadores = [("Índice", 1)] + [(f"{e.numero}. {e.titulo}", e.pagina_inicial) for e in entradas]
+    return montar_consolidado([(indice, True), *partes], links=links, marcadores=marcadores)
 
 
 def _pdf_legivel(conteudo: bytes) -> bool:

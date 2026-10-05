@@ -58,11 +58,11 @@ import { PreviaImportacaoModelo } from './contratos.models';
             @if (p.tipo === 'checklist') {
               <div class="tabela-gestao-envoltorio">
                 <table class="tabela-gestao">
-                  <thead><tr><th>Linha</th><th>Documento</th><th>Observação</th><th>Obrigatório</th><th>Com validade</th></tr></thead>
+                  <thead><tr><th>Linha</th><th>Documento</th><th>Observação</th><th>Obrigatório</th><th>Com validade</th><th>Da empresa</th></tr></thead>
                   <tbody>
                     @for (d of p.documentos; track d.linha) {
-                      <tr><td>{{ d.linha }}</td><td>{{ d.nome }}</td><td>{{ d.observacao || '—' }}</td><td>{{ d.obrigatorio ? 'Sim' : 'Não' }}</td><td>{{ d.com_validade ? 'Sim' : 'Não' }}</td></tr>
-                    } @empty { <tr><td class="estado-vazio" colspan="5">Nenhum documento na planilha.</td></tr> }
+                      <tr><td>{{ d.linha }}</td><td>{{ d.nome }}</td><td>{{ d.observacao || '—' }}</td><td>{{ d.obrigatorio ? 'Sim' : 'Não' }}</td><td>{{ d.com_validade ? 'Sim' : 'Não' }}</td><td>{{ d.vale_outros_contratos ? 'Sim' : 'Não' }}</td></tr>
+                    } @empty { <tr><td class="estado-vazio" colspan="6">Nenhum documento na planilha.</td></tr> }
                   </tbody>
                 </table>
               </div>

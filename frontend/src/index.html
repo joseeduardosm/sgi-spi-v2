@@ -8,6 +8,17 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/imagens/icone-192.png">
   <link rel="apple-touch-icon" href="assets/imagens/icone-apple-180.png">
+  <script>
+    // Aplica o tema salvo antes do Angular carregar, para a página não piscar no tema errado (ver core/tema/tema.service.ts)
+    (function () {
+      try {
+        var t = localStorage.getItem('sgi-spi.tema');
+        var escuro = t === 'escuro' || (t !== 'claro' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-tema', escuro ? 'escuro' : 'claro');
+        document.documentElement.setAttribute('data-bs-theme', escuro ? 'dark' : 'light');
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <app-root></app-root>

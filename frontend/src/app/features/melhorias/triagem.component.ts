@@ -16,12 +16,13 @@ import { MelhoriasApiService } from './melhorias-api.service';
 import {
   ConversaoTarefa, FiltrosTriagem, PaginaTriagem, PrintSugestao, ROTULOS_MODULO, ROTULOS_SITUACAO, SituacaoSugestao, SugestaoTriagem, Tratamento,
 } from './melhorias.models';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
 
 @Component({
   selector: 'app-triagem-melhorias',
-  imports: [FormsModule, DatePipe, CabecalhoMelhoriasComponent],
+  imports: [LinkificarPipe, FormsModule, DatePipe, CabecalhoMelhoriasComponent],
   template: `
     <app-cabecalho-melhorias titulo="Triagem de melhorias" descricao="Sugestões enviadas pelos usuários: analise, responda ao autor e transforme em tarefa." />
     @if (semAcesso()) {
@@ -57,7 +58,7 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
               @for (s of pagina()?.itens ?? []; track s.id) {
                 <tr (click)="abrir(s)" (keydown.enter)="abrir(s)" tabindex="0" class="linha-clicavel">
                   <td><strong>#{{ s.numero }}</strong></td>
-                  <td><span class="resumo-sugestao">{{ s.texto }}</span>
+                  <td><span class="resumo-sugestao" [innerHTML]="s.texto | linkificar"></span>
                     <small>@if (s.prints.length) { {{ s.prints.length }} print(s) · } @if (s.tarefa_numero) { tarefa #{{ s.tarefa_numero }} · } {{ s.tela }}</small></td>
                   <td>{{ s.autor_nome }}<small>&#64;{{ s.autor_login }}</small></td>
                   <td>{{ modulos[s.modulo] ?? s.modulo }}</td>

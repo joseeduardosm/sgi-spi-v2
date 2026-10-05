@@ -21,7 +21,7 @@
         <div><dt>Contrato</dt><dd>{{ c.numero }}</dd></div>
         <div><dt>Contratada</dt><dd>{{ c.empresa.razao_social }}</dd></div>
         <div><dt>Período de avaliação (vigência atual)</dt><dd>{{ p.vigencia_atual_inicio | dataBr }} a {{ p.vigencia_atual_fim | dataBr }}</dd></div>
-        <div class="ocupa-linha"><dt>Objeto</dt><dd>{{ c.objeto }}</dd></div>
+        <div class="ocupa-linha"><dt>Objeto</dt><dd [innerHTML]="c.objeto | linkificar"></dd></div>
       </dl>
     </section>
 
@@ -39,7 +39,7 @@
       <section class="cartao-dados" aria-labelledby="titulo-sob-demanda">
         <header>
           <div><h2 id="titulo-sob-demanda">2. Itens sob demanda (opcional)</h2><small>Nenhum limite pode passar da quantidade original. Para ampliar o objeto, registre aditamento.</small></div>
-          <select aria-label="Regra para itens sob demanda" class="campo-tabela" style="width: auto; height: 36px; padding: 0 10px; border: 1px solid #e2e5e8; border-radius: 7px"
+          <select aria-label="Regra para itens sob demanda" class="campo-tabela" style="width: auto; height: 36px; padding: 0 10px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px"
                   [disabled]="!p.pode_editar" [(ngModel)]="regra" (ngModelChange)="aoMudarRegra()">
             <option value="saldo_remanescente">Prorrogar com o saldo remanescente</option>
             <option value="repetir_inicial">Repetir o saldo inicial</option>

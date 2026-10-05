@@ -18,7 +18,7 @@ from app.api.respostas import INVALIDO, VALIDACAO, erro_regra
 from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
 from app.models.usuario import Usuario
-from app.schemas.autenticacao import RequisicaoLogin, RespostaToken, UsuarioSessao
+from app.schemas.autenticacao import PreferenciaTema, RequisicaoLogin, RespostaToken, UsuarioSessao
 from app.schemas.comum import RespostaErro
 from app.schemas.usuarios import OpcaoUsuario, PerfilLeitura, RevisaoPerfil
 from app.schemas.setores import OpcaoDepartamento
@@ -63,6 +63,25 @@ def entrar(dados: RequisicaoLogin, sessao: Session = Depends(obter_sessao)) -> R
 )
 def obter_sessao_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) -> UsuarioSessao:
     """Dados do usuário logado; o frontend chama ao abrir para confirmar que o token ainda vale."""
+    return para_usuario_sessao(usuario)
+
+
+@roteador.put(
+    "/tema",
+    response_model=UsuarioSessao,
+    summary="Salvar meu tema da interface",
+    description=(
+        "Grava a escolha de tema do próprio usuário (`claro`, `escuro` ou `auto`) para que ela o acompanhe em qualquer "
+        "navegador ou aparelho. Funciona mesmo com o perfil pendente e não passa pela validação da CGP. Retorna a sessão atualizada."
+    ),
+    responses={**NAO_AUTENTICADO, **VALIDACAO},
+)
+def salvar_meu_tema(
+    dados: PreferenciaTema, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado)
+) -> UsuarioSessao:
+    """Atualiza só a coluna `tema` do usuário logado."""
+    usuario.tema = dados.tema
+    sessao.commit()
     return para_usuario_sessao(usuario)
 
 

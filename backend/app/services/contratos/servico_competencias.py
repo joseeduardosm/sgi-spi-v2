@@ -40,7 +40,7 @@ from app.models.contratos import (
     NotaEmpenho,
     SelecaoNotaEmpenho,
 )
-from app.models.contratos.execucao import ETAPAS_PARALELAS
+from app.models.contratos.execucao import ETAPAS_PARALELAS, DocumentoMensal
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
     ConferenciaNota,
@@ -58,6 +58,7 @@ from app.schemas.contratos.execucao import (
     OcorrenciaAvaliacao,
     LeituraConsultaCadin,
     LeituraDocumentoMensal,
+    SugestaoOutroContrato,
     LeituraItemMedicao,
     LeituraMemoria,
     LeituraNotaFiscal,
@@ -72,7 +73,14 @@ from app.schemas.contratos.execucao import (
 from app.services import servico_anexos
 from app.services.contratos import avisos, calculos, documentos_execucao, leitor_nota_xml, servico_diario, servico_retencao, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
-from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist, formulario_ativo, reaproveitar_validos, _ordem_checklist
+from app.services.contratos.servico_configuracao_execucao import (
+    _nome_chave,
+    _ordem_checklist,
+    checklist_ativo,
+    copiar_checklist,
+    formulario_ativo,
+    reaproveitar_validos,
+)
 from app.services.contratos.servico_contratos import (
     designacoes_vigentes,
     exigir_edicao,
@@ -590,6 +598,8 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
     notas = {n.id: n for n in contrato.notas_empenho}
     # Saldo reservado por OUTRAS competências (esta fica de fora, pois é a que está sendo editada)
     reservado = compromissos(contrato, exceto=competencia.id)
+    # Documentos iguais, ainda válidos, de outros contratos da mesma empresa (só com o checklist aberto)
+    sugestoes = _candidatos_outros_contratos(sessao, contrato, competencia) if "checklist" in etapas_abertas(competencia) else {}
 
     def opcao_nota(nota: NotaEmpenho) -> NotaSelecionada:
         """NE no formato da tela, com o saldo livre já descontado do reservado."""
@@ -677,7 +687,9 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         ],
         documentos=[
             LeituraDocumentoMensal(id=d.id, ordem=d.ordem, nome=d.nome, observacao=d.observacao, obrigatorio=d.obrigatorio, com_validade=d.com_validade,
-                                   validade_ate=d.validade_ate, reaproveitado_de=d.reaproveitado_de, arquivo=_arquivo(anexos.get(d.anexo_id)))
+                                   validade_ate=d.validade_ate, reaproveitado_de=d.reaproveitado_de, vale_outros_contratos=d.vale_outros_contratos,
+                                   reaproveitado_contrato=d.reaproveitado_contrato, sugestao_outro_contrato=_sugestao(d, sugestoes),
+                                   arquivo=_arquivo(anexos.get(d.anexo_id)))
             for d in sorted(competencia.documentos, key=_ordem_checklist)
         ],
         consolidado=_arquivo(competencia.consolidado_anexo),
@@ -1414,6 +1426,108 @@ def registrar_cadin(
 # Etapa 5 — checklist mensal
 # ---------------------------------------------------------------------------------------------
 
+def _candidatos_outros_contratos(sessao: Session, contrato: Contrato, competencia: Competencia) -> dict[str, tuple[DocumentoMensal, Competencia, Contrato]]:
+    """Documentos da empresa ainda válidos, já juntados em OUTROS contratos da mesma empresa, por nome (sem diferenciar maiúsculas/espaços).
+
+    Só entram os marcados como "documento da empresa" e com validade que cubra o último dia do período desta competência (mesmo critério do
+    reaproveitamento entre competências). Havendo mais de um com o mesmo nome, vale o de maior validade. Só procura se esta competência tem
+    algum documento da empresa ainda sem anexo.
+    """
+    if not any(d.vale_outros_contratos and d.com_validade and d.anexo_id is None for d in competencia.documentos):
+        return {}
+    consulta = (
+        select(DocumentoMensal, Competencia, Contrato)
+        .join(Competencia, DocumentoMensal.competencia_id == Competencia.id)
+        .join(Contrato, Competencia.contrato_id == Contrato.id)
+        .where(
+            Contrato.empresa_id == contrato.empresa_id, Contrato.id != contrato.id,
+            DocumentoMensal.vale_outros_contratos.is_(True), DocumentoMensal.com_validade.is_(True),
+            DocumentoMensal.anexo_id.is_not(None), DocumentoMensal.validade_ate >= competencia.periodo_fim,
+        )
+    )
+    melhores: dict[str, tuple[DocumentoMensal, Competencia, Contrato]] = {}
+    for documento, origem_competencia, origem_contrato in sessao.execute(consulta):
+        chave = _nome_chave(documento.nome)
+        atual = melhores.get(chave)
+        if atual is None or documento.validade_ate > atual[0].validade_ate:
+            melhores[chave] = (documento, origem_competencia, origem_contrato)
+    return melhores
+
+
+def _sugestao(documento: DocumentoMensal, sugestoes: dict) -> SugestaoOutroContrato | None:
+    """Sugestão de reaproveitamento para um documento da empresa ainda sem anexo."""
+    par = sugestoes.get(_nome_chave(documento.nome)) if documento.vale_outros_contratos and documento.com_validade and documento.anexo_id is None else None
+    if par is None:
+        return None
+    origem, origem_competencia, origem_contrato = par
+    return SugestaoOutroContrato(
+        origem_id=origem.id, contrato_numero=origem_contrato.numero, competencia=origem.reaproveitado_de or origem_competencia.competencia,
+        validade_ate=origem.validade_ate, arquivo_nome=origem.anexo.nome_original if origem.anexo else "",
+    )
+
+
+def _copiar_de_outro_contrato(documento: DocumentoMensal, par: tuple[DocumentoMensal, Competencia, Contrato]) -> None:
+    """Copia o arquivo e a validade; a origem fica guardada para a tela (em cadeia, mantém a origem original)."""
+    origem, origem_competencia, origem_contrato = par
+    documento.anexo_id, documento.enviado_em, documento.enviado_por_id = origem.anexo_id, origem.enviado_em, origem.enviado_por_id
+    documento.validade_ate = origem.validade_ate
+    documento.reaproveitado_de = origem.reaproveitado_de or origem_competencia.competencia
+    documento.reaproveitado_contrato = origem.reaproveitado_contrato or origem_contrato.numero
+
+
+def _concluir_se_completo(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
+    """Com todos os documentos anexados (obrigatórios e opcionais), a etapa do checklist conclui sozinha."""
+    if all(d.anexo_id for d in competencia.documentos):
+        concluir_etapa_paralela(competencia, "checklist")
+        _estender_validos(sessao, contrato, competencia, autor)
+
+
+def reaproveitar_de_outro_contrato(sessao: Session, contrato_id, competencia_id, documento_id: uuid.UUID, origem_id: uuid.UUID, autor: Usuario) -> None:
+    """Etapa 5: traz para o documento o arquivo do mesmo documento da empresa, ainda válido, de outro contrato da mesma empresa."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    _exigir_etapa(competencia, "checklist", "O checklist")
+    documento = next((d for d in competencia.documentos if d.id == documento_id), None)
+    if documento is None:
+        raise RegistroNaoEncontrado("Documento do checklist")
+    if not (documento.vale_outros_contratos and documento.com_validade) or documento.anexo_id is not None:
+        raise ErroRegraContrato("Este documento não aceita reaproveitamento de outro contrato (precisa ser documento da empresa, com validade e sem anexo).")
+    par = _candidatos_outros_contratos(sessao, contrato, competencia).get(_nome_chave(documento.nome))
+    if par is None or par[0].id != origem_id:
+        raise ErroRegraContrato("O documento de origem não está mais disponível ou não cobre o período desta competência.")
+    _copiar_de_outro_contrato(documento, par)
+    sessao.flush()
+    _concluir_se_completo(sessao, contrato, competencia, autor)
+    _auditar(sessao, autor, "contrato.execucao.checklist.reaproveitar_contrato", contrato, competencia,
+             documentos=[documento.nome], contrato_origem=par[2].numero)
+    sessao.commit()
+
+
+def reaproveitar_todos_de_outros_contratos(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> list[str]:
+    """Etapa 5: traz de uma vez todos os documentos da empresa que têm um igual, ainda válido, em outro contrato. Devolve os nomes."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    _exigir_etapa(competencia, "checklist", "O checklist")
+    candidatos = _candidatos_outros_contratos(sessao, contrato, competencia)
+    trazidos, origens = [], set()
+    for documento in competencia.documentos:
+        par = candidatos.get(_nome_chave(documento.nome))
+        if par is not None and documento.vale_outros_contratos and documento.com_validade and documento.anexo_id is None:
+            _copiar_de_outro_contrato(documento, par)
+            trazidos.append(documento.nome)
+            origens.add(par[2].numero)
+    if not trazidos:
+        raise ErroRegraContrato("Não há documentos válidos de outros contratos da empresa para trazer.")
+    sessao.flush()
+    _concluir_se_completo(sessao, contrato, competencia, autor)
+    _auditar(sessao, autor, "contrato.execucao.checklist.reaproveitar_contrato", contrato, competencia,
+             documentos=trazidos, contratos_origem=sorted(origens))
+    sessao.commit()
+    return trazidos
+
+
 def _estender_validos(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
     """Com o checklist concluído, os documentos com validade ainda válidos passam para a competência seguinte."""
     reaproveitados = reaproveitar_validos(contrato, competencia)
@@ -1436,7 +1550,7 @@ def enviar_documento_mensal(sessao: Session, contrato_id, competencia_id, docume
     documento.anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-execucao-checklist", autor.id, contrato_id=contrato.id)
     documento.enviado_em, documento.enviado_por_id = agora_utc(), autor.id
     # Um envio novo substitui o arquivo (inclusive um reaproveitado) e a validade
-    documento.validade_ate, documento.reaproveitado_de = (validade_ate if documento.com_validade else None), None
+    documento.validade_ate, documento.reaproveitado_de, documento.reaproveitado_contrato = (validade_ate if documento.com_validade else None), None, None
     sessao.flush()
     # Com todos os documentos anexados (obrigatórios e opcionais), a etapa conclui sozinha
     if all(d.anexo_id for d in competencia.documentos):

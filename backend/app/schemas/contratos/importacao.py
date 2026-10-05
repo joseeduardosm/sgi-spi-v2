@@ -108,6 +108,7 @@ class DocumentoPrevia(BaseModel):
     observacao: str = ""
     obrigatorio: bool = True
     com_validade: bool = False
+    vale_outros_contratos: bool = False
 
 
 class NotaPrevia(BaseModel):

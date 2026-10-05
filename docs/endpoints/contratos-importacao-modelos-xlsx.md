@@ -38,6 +38,7 @@ O modelo é gerado pela API, com um exemplo preenchido. Abas e colunas são acha
 | Observação | Opcional, até 1000 caracteres |
 | Obrigatório | `Sim` ou `Não`; em branco = Sim |
 | Com validade | `Sim` ou `Não`; em branco = Não |
+| Vale para outros contratos | Opcional (coluna pode faltar). `Sim` ou `Não`; em branco = Não. Marca o **documento da empresa**, reaproveitável entre contratos da mesma empresa (ver [contratos-execucao.md](contratos-execucao.md)); só vale com validade |
 
 Pelo menos um documento. A ordem das linhas é a ordem do checklist.
 
@@ -78,7 +79,7 @@ Erros comuns: `400 invalido` para arquivo vazio, acima de 5 MB ou que não é `.
 | Campo | Descrição |
 |---|---|
 | `tipo`, `nome` | Tipo e nome lidos |
-| `documentos[]` | Checklist: `linha`, `nome`, `observacao`, `obrigatorio`, `com_validade` |
+| `documentos[]` | Checklist: `linha`, `nome`, `observacao`, `obrigatorio`, `com_validade`, `vale_outros_contratos` |
 | `escala[]`, `faixas[]`, `grupos[]` | Formulário: o que foi lido, com a `linha` de cada nota, faixa e item |
 | `erros[]` | `linha` (nulo para erro do arquivo), `campo` e `mensagem`; impedem a importação |
 | `avisos[]` | Só informam |

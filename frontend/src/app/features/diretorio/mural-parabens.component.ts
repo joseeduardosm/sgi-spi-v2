@@ -9,10 +9,11 @@ import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { Aniversariante, diaMes, MAXIMO_RECADO, Parabens } from './diretorio.models';
 import { DiretorioApiService } from './diretorio-api.service';
 import { AvatarComponent } from './avatar.component';
+import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 @Component({
   selector: 'app-mural-parabens',
-  imports: [FormsModule, DatePipe, AvatarComponent],
+  imports: [LinkificarPipe, FormsModule, DatePipe, AvatarComponent],
   template: `
     <div class="fundo-modal" (click)="fechar.emit()"></div>
     <section class="modal-portal" role="dialog" aria-modal="true" aria-label="Mural de parabéns">
@@ -24,7 +25,7 @@ import { AvatarComponent } from './avatar.component';
         </div>
         <ul class="recados">
           @for (r of recados(); track r.id) {
-            <li><p>{{ r.texto }}</p>
+            <li><p [innerHTML]="r.texto | linkificar"></p>
               <small>{{ r.autor_nome }} · {{ r.criado_em | date: 'dd/MM HH:mm' }}
                 @if (r.meu) { · <button type="button" class="link-apagar" (click)="apagar()">apagar</button> }</small></li>
           } @empty { <li class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Ainda não há recados. Seja o primeiro!' }}</li> }

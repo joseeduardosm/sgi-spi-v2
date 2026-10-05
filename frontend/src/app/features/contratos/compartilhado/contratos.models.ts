@@ -369,6 +369,8 @@ export interface DocumentoChecklist {
   obrigatorio: boolean;
   /** Documento com validade: o envio pede a data e, se ainda valer, ele é reaproveitado na competência seguinte. */
   com_validade: boolean;
+  /** Documento da empresa: a execução oferece reaproveitar o igual, ainda válido, de outro contrato da mesma empresa. */
+  vale_outros_contratos?: boolean;
 }
 
 /** Versão do checklist do contrato. */
@@ -436,7 +438,7 @@ export interface Modelo {
   id: string;
   tipo: 'checklist' | 'formulario';
   nome: string;
-  conteudo: { itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean }[] } & Partial<DefinicaoFormulario>;
+  conteudo: { itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean }[] } & Partial<DefinicaoFormulario>;
   ativo: boolean;
   atualizado_em: string;
 }
@@ -635,7 +637,23 @@ export interface DocumentoMensal {
   validade_ate: string | null;
   /** Mês (YYYY-MM-DD, dia 1) da competência de onde o arquivo foi reaproveitado automaticamente. */
   reaproveitado_de: string | null;
+  /** Documento da empresa: pode ser reaproveitado de outro contrato da mesma empresa. */
+  vale_outros_contratos?: boolean;
+  /** Número do contrato de onde o arquivo foi reaproveitado (só para a tela; o consolidado não mostra). */
+  reaproveitado_contrato?: string | null;
+  /** Documento igual, ainda válido, de outro contrato da mesma empresa (só com o checklist aberto e o documento sem anexo). */
+  sugestao_outro_contrato?: SugestaoOutroContrato | null;
   arquivo: Arquivo | null;
+}
+
+/** Documento ainda válido de outro contrato da mesma empresa que pode ser trazido para a competência. */
+export interface SugestaoOutroContrato {
+  origem_id: string;
+  contrato_numero: string;
+  /** Mês (YYYY-MM-DD, dia 1) da competência de origem. */
+  competencia: string;
+  validade_ate: string;
+  arquivo_nome: string;
 }
 
 /** Competência completa: tudo o que a tela de execução mostra em todas as etapas. */
@@ -1159,6 +1177,7 @@ export interface DocumentoPreviaImportacao {
   observacao: string;
   obrigatorio: boolean;
   com_validade: boolean;
+  vale_outros_contratos?: boolean;
 }
 
 /** Prévia da importação de checklist ou formulário (nada foi gravado). */
@@ -1172,4 +1191,12 @@ export interface PreviaImportacaoModelo {
   erros: ErroImportacao[];
   avisos: string[];
   pode_importar: boolean;
+}
+
+/** Contrato anterior e próximo na lista da carteira (`VizinhosContrato` da API). */
+export interface VizinhosContrato {
+  anterior_id: string | null;
+  proximo_id: string | null;
+  posicao: number | null;
+  total: number;
 }

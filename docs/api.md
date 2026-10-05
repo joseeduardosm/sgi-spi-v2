@@ -120,6 +120,12 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/saude` | Pública | Verifica se a API está no ar | [sistema.md](endpoints/sistema.md) |
 | `POST` | `/api/autenticacao/login` | Pública | Autentica e emite o JWT | [autenticacao.md](endpoints/autenticacao.md#post-apiautenticacaologin) |
 | `GET` | `/api/autenticacao/sessao` | Bearer (1) | Usuário autenticado | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaosessao) |
+| `GET` `POST` | `/api/chamados[/solicitante]` | ACL `abrir-chamado` (aberta a todos) | Dados do cadastro que vão no chamado; abre o chamado no GLPI; meus chamados | [chamados.md](endpoints/chamados.md) |
+| `GET` `PUT` `POST` | `/api/integracao-glpi[/testar]` | SuperRoot | Configuração da integração com o GLPI (tokens cifrados) e teste de conexão | [chamados.md](endpoints/chamados.md#getput-apiintegracao-glpi-e-post-apiintegracao-glpitestar-superroot) |
+| `GET` | `/api/busca` | Bearer (1), com ACL por módulo | Busca global em contratos, contratações, tarefas, pessoas e setores | [navegacao.md](endpoints/navegacao.md#get-apibusca) |
+| `GET` `PUT` | `/api/favoritos` | Bearer (1) | Favoritos do menu (telas fixadas pelo usuário) | [navegacao.md](endpoints/navegacao.md#get-apifavoritos) |
+| `GET` | `/api/contratos/{contrato_id}/vizinhos` | LEITURA | Contrato anterior e próximo na lista (carteira) | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
+| `PUT` | `/api/autenticacao/tema` | Bearer (1) | Salva meu tema da interface (claro, escuro ou automático) | [autenticacao.md](endpoints/autenticacao.md#put-apiautenticacaotema) |
 | `GET` | `/api/autenticacao/perfil` | Bearer (1) | Meu perfil institucional | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaoperfil) |
 | `PUT` | `/api/autenticacao/perfil` | Bearer (1) | Atualiza e revalida meu perfil | [autenticacao.md](endpoints/autenticacao.md#put-apiautenticacaoperfil) |
 | `GET` | `/api/autenticacao/perfil/opcoes-departamento` | Bearer (1) | Setores para o combobox Departamento | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaoperfilopcoes-departamento) |
@@ -225,6 +231,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/contratos/{contrato_id}/previsao/{sequencia_vigencia}/xlsx` | ACL `contratos` ≥ LEITURA | Exporta a previsão | [contratos-orcamento.md](endpoints/contratos-orcamento.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/contratos/{contrato_id}/notas-empenho[/{nota_id}]` | LEITURA / pode editar (2) | Notas de Empenho | [contratos-orcamento.md](endpoints/contratos-orcamento.md) |
 | vários | `/api/contratos/{contrato_id}/checklists/*`, `/formularios/*` | LEITURA / pode editar (2) | Versões de checklist e de formulário | [contratos-execucao.md](endpoints/contratos-execucao.md) |
+| `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/checklist/{documento_id}/reaproveitar` e `…/checklist/reaproveitar-todos` | pode editar (2) | Traz o documento da empresa, ainda válido, de outro contrato da mesma empresa (com confirmação) | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | vários | `/api/contratos/{contrato_id}/execucao*`, `/competencias/*` | LEITURA / pode editar (2) / SuperRoot (reabrir) | Competências e etapas 1 a 7 | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | vários | `/api/contratos/{contrato_id}/prorrogacao*`, `/prorrogacoes/*` | LEITURA / pode editar (2) | Prorrogação | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#prorrogação) |
 | vários | `/api/contratos/{contrato_id}/reajustes/*` | LEITURA / pode editar (2) | Reajuste | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#reajuste) |

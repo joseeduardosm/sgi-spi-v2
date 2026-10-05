@@ -22,8 +22,8 @@
         </button>
         @if (aberta(c)) {
         <div [id]="'checklist-' + c.id">
-        <ol style="margin: 10px 0; padding-left: 20px; font-size: 12px; color: #3d454e">
-          @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.com_validade) { <span class="etiqueta">Com validade</span> }@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — {{ i.observacao }}</small> }</li> }
+        <ol style="margin: 10px 0; padding-left: 20px; font-size: 12px; color: var(--cor-3d454e)">
+          @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.com_validade) { <span class="etiqueta">Com validade</span> }@if (i.vale_outros_contratos) { <span class="etiqueta">Documento da empresa</span> }@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — <span [innerHTML]="i.observacao | linkificar"></span></small> }</li> }
         </ol>
         <small>Criado por {{ c.criado_por_nome }} em {{ c.criado_em | date: 'dd/MM/yyyy HH:mm' }}{{ c.ativado_em ? ' · ativado em ' + (c.ativado_em | date: 'dd/MM/yyyy HH:mm') : '' }}</small>
         @if (podeEditar()) {
@@ -79,7 +79,7 @@
             @for (i of itens; track $index) {
               <tr>
                 <td>{{ $index + 1 }}</td>
-                <td><strong>{{ i.nome }}</strong>@if (i.observacao) { <small>{{ i.observacao }}</small> }</td>
+                <td><strong>{{ i.nome }}</strong>@if (i.observacao) { <small [innerHTML]="i.observacao | linkificar"></small> }</td>
                 <td>
                   <div class="seletor-segmentado pequeno" role="radiogroup" [attr.aria-label]="'Tipo do documento ' + i.nome">
                     <button type="button" role="radio" [attr.aria-checked]="i.obrigatorio" [class.ativo]="i.obrigatorio" (click)="i.obrigatorio = true">Obrigatório</button>
@@ -91,6 +91,10 @@
                     <button type="button" role="radio" [attr.aria-checked]="!i.com_validade" [class.ativo]="!i.com_validade" (click)="i.com_validade = false">Sem validade</button>
                     <button type="button" role="radio" [attr.aria-checked]="i.com_validade" [class.ativo]="i.com_validade" (click)="i.com_validade = true">Com validade</button>
                   </div>
+                  @if (i.com_validade) {
+                    <label class="opcao-empresa" title="Se este documento já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo.">
+                      <input type="checkbox" [name]="'empresa-' + $index" [(ngModel)]="i.vale_outros_contratos" /> Documento da empresa</label>
+                  }
                 </td>
                 <td>
                   <div class="acoes-linha">
@@ -130,6 +134,10 @@
             <button type="button" role="radio" [attr.aria-checked]="!novoComValidade" [class.ativo]="!novoComValidade" (click)="novoComValidade = false">Sem validade</button>
             <button type="button" role="radio" [attr.aria-checked]="novoComValidade" [class.ativo]="novoComValidade" (click)="novoComValidade = true">Com validade</button>
           </div>
+          @if (novoComValidade) {
+            <label class="opcao-empresa" title="Se este documento já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo.">
+              <input type="checkbox" name="novo-vale-outros" [(ngModel)]="novoValeOutros" /> Documento da empresa</label>
+          }
         </div>
         <button type="button" class="acao-secundaria" [disabled]="!novoDocumento.trim()" (click)="adicionar()"><span>+</span> Adicionar</button>
       </div>

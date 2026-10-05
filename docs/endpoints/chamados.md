@@ -13,7 +13,7 @@ O chamado do SGI reproduz o que o formulário `https://chamados.spi.sp.gov.br/fr
 | Item | No formulário do GLPI | No chamado aberto pelo SGI |
 |---|---|---|
 | Título | `Informática \| <assunto>` | `<prefixo> \| <assunto>` (prefixo configurável, padrão "Informática") |
-| Perguntas | Assunto, Descrição de Problema e **Local do Problema** (lista de localizações), todas obrigatórias | Assunto, Descrição e **Local do problema** (lista do GLPI, obrigatória; sugerido pelo andar e lado do cadastro) |
+| Perguntas | Assunto, Descrição de Problema e **Local do Problema** (lista de localizações), todas obrigatórias | Assunto e Descrição; o **Local do Problema não é preenchido**: é sempre o **andar e lado do cadastro** do usuário (ex.: `5º andar - B` → localização `05º Andar > Lado B` do GLPI). Sem localização equivalente no GLPI, o chamado abre sem localização e o texto do cadastro vai no conteúdo |
 | Conteúdo | `1) Assunto … 2) Descrição de Problema … 3) Local do Problema …` | o mesmo formato, seguido da tabela "Dados do solicitante" e de "Aberto pelo SGI" |
 | Requerente | quem preenche | o próprio usuário (achado pelo login, depois pelo e-mail), com aviso por e-mail ligado; sem cadastro no GLPI: e-mail alternativo |
 | Atribuído a | grupo SUPORTE (id 4) | grupo configurável (padrão 4); o chamado nasce **"Em atendimento (atribuído)"** |
@@ -22,10 +22,10 @@ O chamado do SGI reproduz o que o formulário `https://chamados.spi.sp.gov.br/fr
 | Tipo / urgência / impacto / origem | incidente / 3 / 3 / Helpdesk | iguais |
 | Categoria | nenhuma (a TI classifica) | nenhuma |
 | SLA | atendimento (id 2) e solução (id 1) | configuráveis (padrão 2 e 1); o GLPI calcula os prazos (+15 min e +4 h) |
-| Localização | a do "Local do Problema" | a escolhida no modal |
+| Localização | a do "Local do Problema" | a do cadastro do usuário (andar - lado) |
 | Entidade | a do usuário (raiz) | raiz |
 
-Chamadas à API REST: `initSession` (user_token + App-Token) → `GET /search/Location` (lista de locais) → `GET /search/User` (login, depois e-mail) → `POST /Ticket` (multipart com `_filename` quando há anexos) → `killSession`. O chamado fica registrado em `chamados_glpi` e auditado (`chamado.abrir`).
+Chamadas à API REST: `initSession` (user_token + App-Token) → `GET /search/Location` (para achar a localização do andar e lado do usuário) → `GET /search/User` (login, depois e-mail) → `POST /Ticket` (multipart com `_filename` quando há anexos) → `killSession`. O chamado fica registrado em `chamados_glpi` e auditado (`chamado.abrir`).
 
 ## Quem pode o quê
 - **Abrir chamado:** ACL `abrir-chamado` ≥ LEITURA. O recurso foi criado **sem regras**, e na ACL recurso sem regras fica aberto a **todo usuário autenticado**. O SuperRoot pode restringir depois em Controle de acesso.
@@ -37,7 +37,7 @@ Dados do cadastro que vão no chamado: `nome`, `setor`, `superior_imediato`, `em
 - O bloqueio do perfil (preencher no primeiro acesso e a cada 30 dias) continua valendo para o resto do sistema; as ACLs de setor só passam a valer quando a CGP/administrador **valida** o Departamento (ver [setores.md](setores.md)).
 
 ## `POST /api/chamados`
-`multipart/form-data`: `dados` (JSON `{"assunto", "descricao", "local_id"}`; assunto de 3 a 200 caracteres, descrição de 10 a 5000 e o local obrigatório) e até **5 `arquivos`** (imagens coladas com Ctrl+V ou escolhidas, PDF, Word `.docx`, Excel `.xlsx` ou CSV; **5 MB** cada; extensão e **assinatura do conteúdo** conferidas). Resposta `201`: `{"glpi_id", "assunto", "url", "aberto_em", "anexos_enviados", "anexos_com_falha"}`.
+`multipart/form-data`: `dados` (JSON `{"assunto", "descricao"}`; assunto de 3 a 200 caracteres e descrição de 10 a 5000; o local vem do cadastro) e até **5 `arquivos`** (imagens coladas com Ctrl+V ou escolhidas, PDF, Word `.docx`, Excel `.xlsx` ou CSV; **5 MB** cada; extensão e **assinatura do conteúdo** conferidas). Resposta `201`: `{"glpi_id", "assunto", "url", "aberto_em", "anexos_enviados", "anexos_com_falha"}`.
 - **Anexos no GLPI:** o chamado é criado já com os arquivos (envio multipart com `_filename`, como a tela do GLPI faz), porque o perfil da conta de serviço não tem direito de ligar documentos depois. Se o GLPI recusar os anexos, o chamado é aberto **sem eles** e os nomes vêm em `anexos_com_falha` (a tela avisa).
 
 | Erro | Código | Quando |
@@ -47,9 +47,6 @@ Dados do cadastro que vão no chamado: `nome`, `setor`, `superior_imediato`, `em
 | `429` | `limite_excedido` | mais de **5 chamados por hora** do mesmo usuário |
 | `502` | `glpi_indisponivel` | GLPI fora do ar ou recusou o pedido (a tela mantém o texto digitado) |
 | `503` | `integracao_desativada` | integração desligada ou sem credenciais |
-
-## `GET /api/chamados/locais`
-Localizações do GLPI para a lista obrigatória "Local do problema": `{"itens": [{"id", "nome"}]}`, nome completo em ordem alfabética (ex.: `05º Andar > Lado B`). Mesmos erros do `POST` (`502`, `503`).
 
 ## `GET /api/chamados`
 Últimos 20 chamados que o usuário abriu pelo SGI (`glpi_id`, `assunto`, `url`, `aberto_em`).

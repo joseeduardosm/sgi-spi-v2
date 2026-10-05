@@ -7,6 +7,7 @@ celular se houver, andar e lado). O chamado é criado no GLPI pela API REST, com
 (achado pelo login, depois pelo e-mail), e termina com a assinatura "Aberto pelo SGI".
 """
 
+import re
 from datetime import timedelta
 from html import escape
 from pathlib import Path
@@ -121,22 +122,27 @@ def _exigir_limite(sessao: Session, usuario: Usuario) -> None:
         raise ErroApi(429, f"Você já abriu {LIMITE_POR_HORA} chamados na última hora. Aguarde um pouco ou acompanhe os que já abriu.", "limite_excedido")
 
 
-def listar_locais(sessao: Session) -> list[tuple[int, str]]:
-    """Localizações do GLPI para a pergunta "Local do Problema" (sessão rápida na API; erro do GLPI vira 502)."""
-    config = integracao.obter(sessao)
-    if not config.ativo or not (config.url_base and config.user_token_cifrado):
-        raise ErroApi(503, "A abertura de chamados pelo SGI não está disponível no momento. Abra o chamado direto no GLPI.", "integracao_desativada")
-    try:
-        app_token, user_token = integracao.tokens(config)
-        with ClienteGlpi(config.url_base, app_token, user_token) as glpi:
-            return glpi.listar_localizacoes()
-    except ErroGlpi as erro:
-        raise ErroApi(502, f"Não foi possível carregar os locais agora: {erro.mensagem}", "glpi_indisponivel") from erro
+def local_do_usuario(locais: list[tuple[int, str]], andar_lado: str) -> tuple[int | None, str]:
+    """"Local do Problema" = o andar e lado do cadastro do usuário (ex.: `5º andar - B` → localização `05º Andar > Lado B` do GLPI).
+
+    Devolve (id da localização no GLPI ou None, texto do local). Sem a localização exata, tenta o andar; sem nenhuma, o chamado abre sem
+    localização e o texto do cadastro vai no conteúdo.
+    """
+    m = re.match(r"^(\d+)º andar(?: - (\w+))?$", (andar_lado or "").strip(), re.IGNORECASE)
+    if not m:
+        return None, (andar_lado or "").strip() or "Não informado"
+    andar = f"{int(m.group(1)):02d}º Andar"
+    por_nome = {nome: id_ for id_, nome in locais}
+    candidatos = ([f"{andar} > Lado {m.group(2).upper()}"] if m.group(2) else []) + [andar]
+    for nome in candidatos:
+        if nome in por_nome:
+            return por_nome[nome], nome
+    return None, andar_lado.strip()
 
 
-def abrir(sessao: Session, usuario: Usuario, assunto: str, descricao: str, local_id: int, arquivos: list[tuple[str, bytes]] | None = None) -> ChamadoAberto:
+def abrir(sessao: Session, usuario: Usuario, assunto: str, descricao: str, arquivos: list[tuple[str, bytes]] | None = None) -> ChamadoAberto:
     """Cria o chamado no GLPI como o formulário "Informática" faz: título `<prefixo> | <assunto>`, usuário como requerente, grupo atribuído,
-    SLAs, localização e conteúdo `1) Assunto … 2) Descrição … 3) Local`. Falha do GLPI vira 502 (o texto não se perde: a tela continua aberta)."""
+    SLAs, localização (a do cadastro do usuário) e conteúdo `1) Assunto … 2) Descrição … 3) Local`. Falha do GLPI vira 502 (o texto não se perde: a tela continua aberta)."""
     config = integracao.obter(sessao)
     if not config.ativo or not (config.url_base and config.user_token_cifrado):
         raise ErroApi(503, "A abertura de chamados pelo SGI não está disponível no momento. Abra o chamado direto no GLPI.", "integracao_desativada")
@@ -147,16 +153,17 @@ def abrir(sessao: Session, usuario: Usuario, assunto: str, descricao: str, local
     try:
         app_token, user_token = integracao.tokens(config)
         with ClienteGlpi(config.url_base, app_token, user_token) as glpi:
-            local = dict(glpi.listar_localizacoes()).get(local_id)
-            if local is None:
-                raise ErroApi(422, "Escolha um local válido.", "validacao")
+            # O local do problema é sempre o do cadastro do usuário (não é preenchido no modal)
+            local_id, local = local_do_usuario(glpi.listar_localizacoes(), dados.andar_lado)
             glpi_usuario = glpi.buscar_usuario(usuario.login) or glpi.buscar_usuario(dados.email, por_email=True)
             titulo = f"{config.prefixo_titulo} | {assunto}" if config.prefixo_titulo else assunto
             entrada: dict = {
                 "name": titulo, "content": montar_conteudo(assunto, descricao, local, dados, sem_cadastro=glpi_usuario is None),
                 "type": config.tipo_padrao, "urgency": config.urgencia_padrao, "impact": 3, "requesttypes_id": config.origem_id,
-                "locations_id": local_id, "entities_id": 0,
+                "entities_id": 0,
             }
+            if local_id:
+                entrada["locations_id"] = local_id
             # Como o formulário: grupo atribuído (o chamado já nasce "Em atendimento (atribuído)"), SLAs e modelo de chamado
             if config.grupo_atribuido_id:
                 entrada["_groups_id_assign"] = config.grupo_atribuido_id

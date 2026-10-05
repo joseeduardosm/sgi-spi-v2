@@ -20,12 +20,6 @@ export interface DadosSolicitante {
   aguardando_validacao: string[];
 }
 
-/** Uma localização do GLPI (pergunta "Local do Problema"). */
-export interface LocalChamado {
-  id: number;
-  nome: string;
-}
-
 /** Chamado criado no GLPI (`ChamadoAberto` da API). */
 export interface ChamadoAberto {
   glpi_id: number;
@@ -58,15 +52,10 @@ export class ChamadoService {
     return this.http.get<DadosSolicitante>(`${this.base}/solicitante`);
   }
 
-  /** Locais do GLPI para a lista "Local do problema" (obrigatória, como no formulário do GLPI). */
-  locais(): Observable<{ itens: LocalChamado[] }> {
-    return this.http.get<{ itens: LocalChamado[] }>(`${this.base}/locais`);
-  }
-
-  /** Cria o chamado no GLPI (multipart: `dados` com assunto, descrição e local, e os anexos em `arquivos`). */
-  abrir(assunto: string, descricao: string, localId: number, anexos: File[] = []): Observable<ChamadoAberto> {
+  /** Cria o chamado no GLPI (multipart: `dados` com assunto e descrição (o local vem do cadastro), e os anexos em `arquivos`). */
+  abrir(assunto: string, descricao: string, anexos: File[] = []): Observable<ChamadoAberto> {
     const corpo = new FormData();
-    corpo.append('dados', JSON.stringify({ assunto, descricao, local_id: localId }));
+    corpo.append('dados', JSON.stringify({ assunto, descricao }));
     for (const a of anexos) corpo.append('arquivos', a, a.name);
     return this.http.post<ChamadoAberto>(this.base, corpo);
   }

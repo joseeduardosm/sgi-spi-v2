@@ -19,7 +19,6 @@ describe('AbrirChamadoComponent', () => {
     TestBed.inject(ChamadoService).abrirModal();
     fixture.detectChanges();
     http.expectOne('/api/chamados/solicitante').flush(DADOS);
-    http.expectOne('/api/chamados/locais').flush({ itens: [{ id: 1, nome: '00 - Térreo' }, { id: 38, nome: '05º Andar > Lado A' }] });
     fixture.detectChanges();
     // O ngModel inicializa o campo em um microtask: espera antes de digitar (como faz uma pessoa)
     await fixture.whenStable();
@@ -47,7 +46,9 @@ describe('AbrirChamadoComponent', () => {
     expect(texto).not.toContain('Aberto pelo SGI');
     // Campo de anexos presente
     expect(texto).toContain('Anexar arquivo');
-    expect(texto).toContain('Local do problema');
+    expect(texto).not.toContain('Local do problema');
+    expect(texto).toContain('Seus dados');
+    expect(texto).not.toContain('(do cadastro)');
   });
 
   it('mostra todos os dados mesmo se a API não mandar `aguardando_validacao` (versão anterior)', async () => {
@@ -57,7 +58,6 @@ describe('AbrirChamadoComponent', () => {
     fixture.detectChanges();
     const { aguardando_validacao: _, ...semCampo } = DADOS;
     http.expectOne('/api/chamados/solicitante').flush(semCampo);
-    http.expectOne('/api/chamados/locais').flush({ itens: [] });
     fixture.detectChanges();
     const texto = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(texto).toContain('Chefe Silva');
@@ -79,8 +79,8 @@ describe('AbrirChamadoComponent', () => {
     (elemento.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
     const req = http.expectOne('/api/chamados');
     const corpo = req.request.body as FormData;
-    // O local é sugerido pelo andar e lado do cadastro (5º andar - A → 05º Andar > Lado A)
-    expect(JSON.parse(corpo.get('dados') as string)).toEqual({ assunto: 'Sem rede', descricao: 'Meu computador está sem rede.', local_id: 38 });
+    // Sem campo de local: o servidor usa o andar e lado do cadastro
+    expect(JSON.parse(corpo.get('dados') as string)).toEqual({ assunto: 'Sem rede', descricao: 'Meu computador está sem rede.' });
     expect(corpo.getAll('arquivos')).toHaveLength(1);
     req.flush({ glpi_id: 1501, assunto: 'Sem rede', url: 'https://glpi/ticket?id=1501', aberto_em: '2026-10-05T10:00:00Z', anexos_enviados: 1, anexos_com_falha: [] });
     fixture.detectChanges();

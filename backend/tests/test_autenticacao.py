@@ -243,7 +243,6 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/busca",
         "/api/chamados",
         "/api/chamados/solicitante",
-        "/api/chamados/locais",
         "/api/integracao-glpi",
         "/api/integracao-glpi/testar",
         "/api/favoritos",

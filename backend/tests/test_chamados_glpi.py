@@ -15,9 +15,9 @@ CONFIG = "/api/integracao-glpi"
 CHAMADOS = "/api/chamados"
 
 
-def abrir_chamado(cliente, h, assunto, descricao, arquivos=(), local_id=38):
+def abrir_chamado(cliente, h, assunto, descricao, arquivos=()):
     """POST multipart: `dados` (JSON) e os `arquivos` [(nome, conteúdo, tipo)]."""
-    return cliente.post(CHAMADOS, data={"dados": json.dumps({"assunto": assunto, "descricao": descricao, "local_id": local_id})},
+    return cliente.post(CHAMADOS, data={"dados": json.dumps({"assunto": assunto, "descricao": descricao})},
                         files=[("arquivos", a) for a in arquivos] or None, headers=h)
 
 
@@ -43,7 +43,7 @@ class GlpiSimulado:
         if caminho.endswith("/killSession"):
             return httpx.Response(200)
         if caminho.endswith("/search/Location"):
-            return httpx.Response(200, json={"totalcount": 2, "data": [{"1": "05º Andar > Lado B", "2": 38}, {"1": "00 - Térreo", "2": 1}]})
+            return httpx.Response(200, json={"totalcount": 3, "data": [{"1": "05º Andar > Lado B", "2": 38}, {"1": "05º Andar > Lado A", "2": 37}, {"1": "00 - Térreo", "2": 1}]})
         if caminho.endswith("/search/User"):
             parametros = dict(requisicao.url.params)
             valor, campo = parametros["criteria[0][value]"], parametros["criteria[0][field]"]
@@ -146,10 +146,10 @@ def test_todo_usuario_abre_chamado_com_os_dados_do_cadastro(cliente, admin, glpi
     assert ticket["_users_id_requester_notif"] == {"use_notification": [1], "alternative_email": [""]}
     assert ticket["type"] == 1 and ticket["urgency"] == 3 and ticket["impact"] == 3 and ticket["requesttypes_id"] == 1 and "itilcategories_id" not in ticket
     assert ticket["_groups_id_assign"] == 4 and ticket["slas_id_tto"] == 2 and ticket["slas_id_ttr"] == 1 and ticket["tickettemplates_id"] == 1
-    assert ticket["locations_id"] == 38 and ticket["entities_id"] == 0
+    assert ticket["locations_id"] == 37 and ticket["entities_id"] == 0  # perfil de teste: 5º andar - A
     html = ticket["content"]
     assert html.startswith("<p><b>1) Assunto</b>: Sem rede<br><b>2) Descrição de Problema</b>: <p>Meu computador &lt;b&gt;não&lt;/b&gt; conecta.</p>\n<p>Já reiniciei.</p>")
-    assert "<b>3) Local do Problema</b>: 05º Andar &gt; Lado B<br></p>" in html
+    assert "<b>3) Local do Problema</b>: 05º Andar &gt; Lado A<br></p>" in html
     # Descrição escapada, dados do cadastro, celular (preenchido) e a assinatura no fim
     assert "&lt;b&gt;não&lt;/b&gt;" in html and "<b>não</b>" not in html
     for esperado in ("Fulano de Tal", "Setor X", "Chefe Silva", "fulano@sp.gov.br", "8123", "(11) 99999-0000", "5º andar - A"):
@@ -190,7 +190,7 @@ def test_limite_por_hora_e_falha_do_glpi(cliente, admin, glpi, configurada):
     assert r.status_code == 429 and r.json()["codigo"] == "limite_excedido"
     # Validação do corpo
     assert abrir_chamado(cliente, h, "ab", "curta").status_code == 422
-    assert cliente.post(CHAMADOS, data={"dados": json.dumps({"assunto": "Ok ok", "descricao": "Descrição ok ok", "local_id": 38})}).status_code == 401
+    assert cliente.post(CHAMADOS, data={"dados": json.dumps({"assunto": "Ok ok", "descricao": "Descrição ok ok"})}).status_code == 401
 
 
 def test_anexos_vao_para_o_chamado_no_glpi(cliente, admin, glpi, configurada):
@@ -250,16 +250,19 @@ def test_dados_temporarios_do_cadastro_valem_no_chamado_ate_a_cgp_validar(client
     assert "Setor Novo" in html and "7º andar - B" in html and "aguardam validação da CGP" in html
 
 
-def test_local_do_problema_e_obrigatorio_e_vem_do_glpi(cliente, admin, glpi, configurada):
-    _perfil()
-    h = cabecalho(cliente, "fulano")
-    locais = cliente.get(f"{CHAMADOS}/locais", headers=h).json()["itens"]
-    assert [l["nome"] for l in locais] == ["00 - Térreo", "05º Andar > Lado B"] and locais[0]["id"] == 1
-    # Sem local, ou com um local que não existe no GLPI: recusado, sem criar chamado
-    r = cliente.post(CHAMADOS, data={"dados": json.dumps({"assunto": "Sem local", "descricao": "Descrição do problema."})}, headers=h)
-    assert r.status_code == 422
-    assert abrir_chamado(cliente, h, "Local ruim", "Descrição do problema.", local_id=9999).status_code == 422
-    assert not any(c.url.path.endswith("/Ticket") for c in glpi.chamadas)
+def test_local_do_problema_e_sempre_o_do_cadastro(cliente, admin, glpi, configurada):
+    """Sem campo no modal: o local é o andar e lado do cadastro, achado entre as localizações do GLPI."""
+    _perfil("lado", andar="5", predio="B")           # 5º andar - B → "05º Andar > Lado B" (id 38 no GLPI simulado)
+    assert abrir_chamado(cliente, cabecalho(cliente, "lado"), "Local certo", "Descrição do problema.").status_code == 201
+    ticket = glpi.ticket()
+    assert ticket["locations_id"] == 38 and "<b>3) Local do Problema</b>: 05º Andar &gt; Lado B<br></p>" in ticket["content"]
+    # Andar sem a localização no GLPI: abre sem localização e o texto do cadastro vai no conteúdo
+    _perfil("sem_local", andar="9", predio="Z")
+    assert abrir_chamado(cliente, cabecalho(cliente, "sem_local"), "Sem local", "Descrição do problema.").status_code == 201
+    ticket = glpi.ticket()
+    assert "locations_id" not in ticket and "<b>3) Local do Problema</b>: 9º andar - Z<br></p>" in ticket["content"]
+    # Mesmo que alguém envie `local_id`, ele é ignorado
+    assert cliente.get(f"{CHAMADOS}/locais", headers=cabecalho(cliente, "lado")).status_code == 404
 
 
 def test_configuracao_do_formulario_e_editavel_e_desligavel(cliente, admin, glpi, configurada):

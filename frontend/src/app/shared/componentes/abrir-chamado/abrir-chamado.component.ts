@@ -4,7 +4,7 @@
 import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { ChamadoAberto, ChamadoService, DadosSolicitante, LocalChamado } from '../../../core/chamados/chamado.service';
+import { ChamadoAberto, ChamadoService, DadosSolicitante } from '../../../core/chamados/chamado.service';
 import { erroExibivel } from '../../utilitarios/erros-api';
 
 /** Anexo escolhido ou colado; imagens ganham miniatura. */
@@ -59,14 +59,6 @@ const EXTENSOES = ['.png', '.jpg', '.jpeg', '.pdf', '.docx', '.xlsx', '.csv'];
                 <small class="dica-formulario">{{ descricao.length }} / 5000</small>
               </div>
 
-              <div class="campo-formulario">
-                <label for="chamado-local">Local do problema *</label>
-                <select id="chamado-local" name="local" class="form-control" required [(ngModel)]="localId" [disabled]="enviando()">
-                  <option [ngValue]="null" disabled>{{ locais().length ? 'Selecione o local…' : 'Carregando os locais…' }}</option>
-                  @for (l of locais(); track l.id) { <option [ngValue]="l.id">{{ l.nome }}</option> }
-                </select>
-              </div>
-
               <p class="secao-formulario">Anexos (opcional)</p>
               <div class="anexos-chamado">
                 @for (a of anexos(); track a.arquivo) {
@@ -83,7 +75,7 @@ const EXTENSOES = ['.png', '.jpg', '.jpeg', '.pdf', '.docx', '.xlsx', '.csv'];
               </div>
               <small class="dica-formulario">Até {{ maximoAnexos }} arquivos de 5 MB: PNG, JPG, PDF, Word (.docx), Excel (.xlsx) ou CSV.</small>
 
-              <p class="secao-formulario">Seus dados (do cadastro)</p>
+              <p class="secao-formulario">Seus dados</p>
               @if (dados(); as d) {
                 <dl class="dados-chamado">
                   <div><dt>Nome</dt><dd>{{ d.nome }}</dd></div>
@@ -105,7 +97,7 @@ const EXTENSOES = ['.png', '.jpg', '.jpeg', '.pdf', '.docx', '.xlsx', '.csv'];
             </div>
             <footer>
               <button type="button" class="acao-secundaria" [disabled]="enviando()" (click)="fechar()">Cancelar</button>
-              <button type="submit" class="acao-primaria" [disabled]="enviando() || formulario.invalid || !assunto.trim() || !descricao.trim() || localId === null">
+              <button type="submit" class="acao-primaria" [disabled]="enviando() || formulario.invalid || !assunto.trim() || !descricao.trim()">
                 {{ enviando() ? 'Enviando…' : 'Abrir chamado' }}
               </button>
             </footer>
@@ -120,8 +112,6 @@ export class AbrirChamadoComponent {
 
   protected assunto = '';
   protected descricao = '';
-  protected localId: number | null = null;
-  protected readonly locais = signal<LocalChamado[]>([]);
   protected readonly dados = signal<DadosSolicitante | null>(null);
   protected readonly enviando = signal(false);
   protected readonly erro = signal<string | null>(null);
@@ -135,15 +125,12 @@ export class AbrirChamadoComponent {
     effect(() => {
       if (!this.servico.modalAberto()) return;
       this.assunto = this.descricao = '';
-      this.localId = null;
       // `untracked`: limpar os anexos lê e escreve o sinal deles, e isso não pode reabrir o formulário a cada anexo novo
       untracked(() => this.limparAnexos());
       this.erro.set(null);
       this.aberto.set(null);
       this.dados.set(null);
-      this.locais.set([]);
-      this.servico.solicitante().subscribe({ next: (d) => { this.dados.set(d); this.sugerirLocal(); }, error: (e) => this.erro.set(this.textoErro(e)) });
-      this.servico.locais().subscribe({ next: (r) => { this.locais.set(r.itens); this.sugerirLocal(); }, error: (e) => this.erro.set(this.textoErro(e)) });
+      this.servico.solicitante().subscribe({ next: (d) => this.dados.set(d), error: (e) => this.erro.set(this.textoErro(e)) });
     });
   }
 
@@ -151,7 +138,7 @@ export class AbrirChamadoComponent {
     if (this.enviando()) return;
     this.enviando.set(true);
     this.erro.set(null);
-    this.servico.abrir(this.assunto.trim(), this.descricao.trim(), this.localId!, this.anexos().map((a) => a.arquivo)).subscribe({
+    this.servico.abrir(this.assunto.trim(), this.descricao.trim(), this.anexos().map((a) => a.arquivo)).subscribe({
       next: (chamado) => {
         this.enviando.set(false);
         this.aberto.set(chamado);
@@ -162,16 +149,6 @@ export class AbrirChamadoComponent {
         this.erro.set(this.textoErro(e));
       },
     });
-  }
-
-  /** Sugere o local pelo andar e lado do cadastro (ex.: "5º andar - B" → "05º Andar > Lado B"), sem sobrescrever uma escolha já feita. */
-  private sugerirLocal(): void {
-    const d = this.dados();
-    if (this.localId !== null || !d || !this.locais().length) return;
-    const m = /^(\d+)º andar(?: - (\w+))?$/i.exec(d.andar_lado.trim());
-    if (!m) return;
-    const alvo = `${m[1].padStart(2, '0')}º Andar${m[2] ? ' > Lado ' + m[2].toUpperCase() : ''}`;
-    this.localId = this.locais().find((l) => l.nome === alvo)?.id ?? null;
   }
 
   /** O campo do cadastro está aguardando validação (valor temporário)? */

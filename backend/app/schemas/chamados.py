@@ -25,7 +25,6 @@ class AberturaChamado(BaseModel):
 
     assunto: str = Field(..., min_length=3, max_length=200, description="Título do chamado.")
     descricao: str = Field(..., min_length=10, max_length=5000, description="Descrição do problema.")
-    local_id: int = Field(..., ge=1, description="Local do problema: id de uma localização do GLPI (`GET /api/chamados/locais`). Obrigatório, como no formulário do GLPI.")
 
     @field_validator("assunto", "descricao")
     @classmethod
@@ -35,19 +34,6 @@ class AberturaChamado(BaseModel):
         if not valor:
             raise ValueError("informe o texto")
         return valor
-
-
-class LocalChamado(BaseModel):
-    """Uma localização do GLPI para a pergunta "Local do Problema"."""
-
-    id: int
-    nome: str = Field(..., description="Nome completo, ex.: `05º Andar > Lado B`.")
-
-
-class ListaLocais(BaseModel):
-    """Localizações do GLPI, em ordem alfabética."""
-
-    itens: list[LocalChamado]
 
 
 class ChamadoAberto(BaseModel):

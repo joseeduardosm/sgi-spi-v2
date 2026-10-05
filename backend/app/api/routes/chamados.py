@@ -12,7 +12,7 @@ from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
 from app.models.acl import NivelAcl
 from app.models.usuario import Usuario
-from app.schemas.chamados import AberturaChamado, ChamadoAberto, DadosSolicitante, ListaChamados, ListaLocais, LocalChamado
+from app.schemas.chamados import AberturaChamado, ChamadoAberto, DadosSolicitante, ListaChamados
 from app.schemas.comum import RespostaErro
 from app.services import servico_chamados
 
@@ -35,16 +35,8 @@ def solicitante(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depe
     return servico_chamados.dados_do_solicitante(sessao, usuario)
 
 
-@roteador.get("/locais", response_model=ListaLocais, summary="Locais do problema (localizações do GLPI)", responses=ERROS_ABERTURA,
-              description="Localizações do GLPI para a pergunta obrigatória \"Local do Problema\" (como no formulário do GLPI), em ordem alfabética: `{id, nome}` com o nome "
-              "completo (ex.: `05º Andar > Lado B`). Exige ACL `abrir-chamado` ≥ LEITURA.")
-def locais(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_abrir)) -> ListaLocais:
-    """Locais para a tela montar a lista."""
-    return ListaLocais(itens=[LocalChamado(id=i, nome=n) for i, n in servico_chamados.listar_locais(sessao)])
-
-
 @roteador.post("", response_model=ChamadoAberto, status_code=status.HTTP_201_CREATED, summary="Abrir chamado no GLPI", responses=ERROS_ABERTURA,
-               description="`multipart/form-data`: `dados` (JSON `{\"assunto\", \"descricao\", \"local_id\"}`, assunto de 3 a 200 caracteres, descrição de 10 a 5000 e o local obrigatório) e até 5 `arquivos` "
+               description="`multipart/form-data`: `dados` (JSON `{\"assunto\", \"descricao\"}`, assunto de 3 a 200 caracteres e descrição de 10 a 5000; o local do problema vem do cadastro do usuário) e até 5 `arquivos` "
                "(imagens coladas ou escolhidas, PDF, Word .docx, Excel .xlsx ou CSV; até 5 MB cada, conferidos pelo conteúdo), anexados ao chamado. "
                "Cria o chamado no GLPI em nome do usuário (solicitante achado pelo login, depois pelo e-mail); os demais dados vêm do cadastro e o texto termina com "
                "\"Aberto pelo SGI\". Sem categoria: a TI classifica. Anexo que o GLPI recuse não desfaz a abertura: vem em `anexos_com_falha`. "
@@ -58,7 +50,7 @@ async def abrir(dados: str = Form(..., description="JSON de `AberturaChamado`.")
         mensagem = erro.errors()[0].get("msg", "Dados inválidos.").removeprefix("Value error, ")
         raise ErroApi(status.HTTP_422_UNPROCESSABLE_CONTENT, mensagem, "validacao") from erro
     conteudos = [(a.filename or "anexo", await a.read(servico_chamados.TAMANHO_MAXIMO_ANEXO + 1)) for a in arquivos if a.filename]
-    return servico_chamados.abrir(sessao, usuario, corpo.assunto, corpo.descricao, corpo.local_id, conteudos)
+    return servico_chamados.abrir(sessao, usuario, corpo.assunto, corpo.descricao, conteudos)
 
 
 @roteador.get("", response_model=ListaChamados, summary="Meus chamados abertos pelo SGI",

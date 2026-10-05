@@ -45,11 +45,31 @@ def _inline(texto: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escape(texto))
 
 
+def _tabela_html(linhas: list[str]) -> str:
+    """Linhas `| a | b |` consecutivas → tabela HTML (a primeira é o cabeçalho; linhas só de `---` são ignoradas)."""
+    corpo = []
+    for n, linha in enumerate(linhas):
+        celulas = [c.strip() for c in linha.strip().strip("|").split("|")]
+        if all(re.fullmatch(r":?-{2,}:?", c) for c in celulas):
+            continue
+        tag = "th" if n == 0 else "td"
+        estilo = "padding:6px 8px;border:1px solid #e2e5e8;text-align:left;font-size:13px" + (";background:#fcecee" if tag == "th" else "")
+        corpo.append("<tr>" + "".join(f'<{tag} style="{estilo}">{_inline(c)}</{tag}>' for c in celulas) + "</tr>")
+    return '<table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:8px 0 14px;width:100%">' + "".join(corpo) + "</table>"
+
+
 def corpo_html(corpo: str) -> str:
-    """Texto editado → HTML do e-mail: `## ` vira subtítulo, `- ` vira lista (2 espaços por nível), o resto parágrafo."""
+    """Texto editado → HTML do e-mail: `## ` vira subtítulo, `- ` vira lista (2 espaços por nível), `| a | b |` vira tabela, o resto parágrafo."""
     partes: list[str] = []
     nivel = 0  # listas abertas
-    for linha in corpo.splitlines():
+    tabela: list[str] = []  # linhas da tabela em montagem
+    for linha in corpo.splitlines() + [""]:
+        if linha.lstrip().startswith("|"):
+            tabela.append(linha)
+            continue
+        if tabela:
+            partes.append(_tabela_html(tabela))
+            tabela = []
         item = re.match(r"^(\s*)[-*]\s+(.*)$", linha)
         if item:
             alvo = len(item.group(1).replace("\t", "  ")) // 2 + 1

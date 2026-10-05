@@ -334,31 +334,40 @@ def _rodar_lembretes() -> dict[str, int]:
         return servico_tarefas.lembrar(s, date.today())
 
 
-def test_escalonamento_por_atraso_avisa_a_lideranca_e_depois_a_equipe_acima(cliente, admin, equipe):
+def test_escalonamento_gera_um_memorial_por_lider_por_dia(cliente, admin, equipe):
     ids, h, equipe_id = equipe
     chefe = criar_usuario("chefe", nome_completo="Chefe Geral", email="chefe@sp.gov.br")
-    h["chefe"] = cabecalho(cliente, "chefe")
-    # Equipe "Diretoria" (chefe a lidera) acima de "Contratos"; Contratos passa a ser filha dela
     pai = cliente.post(f"{URL}/equipes", json={"nome": "Diretoria", "lideres_ids": [chefe], "membros_ids": []}, headers=admin).json()["id"]
     with FabricaSessao() as s:
         s.get(servico_tarefas.EquipeTarefas, uuid.UUID(equipe_id)).equipe_pai_id = uuid.UUID(pai)
         s.commit()
-    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
-    # Atrasada há 1 dia (2 no pior caso da diferença de fuso): só o nível 1 (liderança da equipe)
-    _atrasar(t["numero"], 1)
-    assert _rodar_lembretes()["escalonadas"] == 1
-    assert {d for d, _ in _avisos(f"tarefa-escalonada:{t['id']}:1:")} == {ids["lia"]}
-    assert _avisos(f"tarefa-escalonada:{t['id']}:2:") == []
-    # Rodar de novo no mesmo dia não repete
-    assert _rodar_lembretes()["escalonadas"] == 0
-    # Atrasada há 3+ dias: o nível 2 avisa quem lidera a equipe acima (e só ele)
-    _atrasar(t["numero"], 5)
-    assert _rodar_lembretes()["escalonadas"] == 2  # o prazo mudou: nível 1 reinicia e o nível 2 entra
-    nivel2 = {d for d, _ in _avisos(f"tarefa-escalonada:{t['id']}:2:")}
-    assert chefe in nivel2 and ids["lia"] not in nivel2
-    # Cada aviso novo entra na linha do tempo da tarefa
-    eventos = [e for e in cliente.get(f"{URL}/{t['numero']}/linha-do-tempo", headers=h["lia"]).json()["itens"] if e["tipo"] == "escalonada"]
-    assert len(eventos) == 3 and any("nível 2" in e["titulo"] for e in eventos)
+    a = _nova(cliente, h["lia"], equipe_id, titulo="Revisar edital", responsavel_id=ids["ana"])
+    b = _nova(cliente, h["lia"], equipe_id, titulo="Enviar | relatório", responsavel_id=ids["beto"])
+    # Atrasadas há 1 dia (2 no pior caso do fuso): só o nível 1 (Lia); UM aviso com as duas tarefas, não um por tarefa
+    _atrasar(a["numero"], 1)
+    _atrasar(b["numero"], 1)
+    contagem = _rodar_lembretes()
+    assert contagem["tarefas_escalonadas"] == 2 and contagem["escalonadas"] >= 1
+    with FabricaSessao() as s:
+        memorial = s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{ids['lia']}:%"))).all()
+        assert len(memorial) == 1 and memorial[0].enviar_email and memorial[0].assunto == "Tarefas atrasadas das suas equipes: 2"
+        corpo = memorial[0].corpo
+    # Tabela: número, título (sem quebrar a tabela), responsável, atraso e link
+    assert "| Nº | Título | Responsável | Atraso | Link |" in corpo and "Enviar / relatório" in corpo
+    assert f"| #{a['numero']} | Revisar edital | Ana Executora |" in corpo and f"/tarefas/{b['numero']} |" in corpo
+    # Rodar de novo no mesmo dia não repete o aviso
+    _rodar_lembretes()
+    with FabricaSessao() as s:
+        assert len(s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{ids['lia']}:%"))).all()) == 1
+    # Atrasada há 3+ dias: o chefe (equipe acima) também recebe o seu memorial; Lia continua recebendo o dela
+    _atrasar(a["numero"], 5)
+    _rodar_lembretes()
+    with FabricaSessao() as s:
+        do_chefe = s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{chefe}:%"))).all()
+        assert len(do_chefe) == 1 and "Revisar edital" in do_chefe[0].corpo and "Enviar" not in do_chefe[0].corpo
+    # Linha do tempo: um evento por nível e prazo, sem repetir a cada dia
+    eventos = [e for e in cliente.get(f"{URL}/{a['numero']}/linha-do-tempo", headers=h["lia"]).json()["itens"] if e["tipo"] == "escalonada"]
+    assert len(eventos) == 3 and any("nível 2" in e["titulo"] for e in eventos)  # nível 1 (prazo antigo), nível 1 e 2 (prazo novo)
 
 
 def test_escalonamento_de_tarefa_pessoal_vai_ao_criador_e_ignora_o_que_nao_esta_atrasado(cliente, equipe):
@@ -366,6 +375,7 @@ def test_escalonamento_de_tarefa_pessoal_vai_ao_criador_e_ignora_o_que_nao_esta_
     pessoal = cliente.post(URL, json={"titulo": "Minha tarefa", "descricao": "x", "prazo": _prazo(10)}, headers=h["ana"]).json()
     no_prazo = cliente.post(URL, json={"titulo": "No prazo", "descricao": "x", "prazo": _prazo(10)}, headers=h["ana"]).json()
     _atrasar(pessoal["numero"], 1)
-    assert _rodar_lembretes()["escalonadas"] == 1
-    assert {d for d, _ in _avisos(f"tarefa-escalonada:{pessoal['id']}:1:")} == {ids["ana"]}
-    assert _avisos(f"tarefa-escalonada:{no_prazo['id']}:") == []
+    assert _rodar_lembretes()["tarefas_escalonadas"] == 1
+    with FabricaSessao() as s:
+        do_criador = s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{ids['ana']}:%"))).all()
+        assert len(do_criador) == 1 and "Minha tarefa" in do_criador[0].corpo and "No prazo" not in do_criador[0].corpo

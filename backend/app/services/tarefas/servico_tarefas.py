@@ -30,6 +30,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.banco import agora_utc
+from app.core.configuracao import obter_configuracao
 from app.models.tarefas import (
     AnexoEventoTarefa, EquipeTarefas, EventoTarefa, ItemChecklistTarefa, LiderEquipeTarefas, MarcadorTarefa,
     MembroEquipeTarefas, ParticipanteTarefa, Tarefa,
@@ -196,13 +197,6 @@ def _avisar(sessao: Session, ids: set[int], assunto: str, corpo: str, tarefa: Ta
     servico_mensagens.notificar(
         sessao, list(ids), assunto, corpo, chave=chave, categoria=categoria, prioridade=prioridade, link=_link(tarefa),
         email=True, autor=autor, abrir_em_janela=janela,
-    )
-
-
-def _avisar_e_devolver(sessao: Session, ids: set[int], assunto: str, corpo: str, tarefa: Tarefa, chave: str):
-    """Como `_avisar`, mas devolve a mensagem criada (ou None se ninguém precisou receber)."""
-    return servico_mensagens.notificar(
-        sessao, list(ids), assunto, corpo, chave=chave, categoria="prazo", prioridade="alta", link=_link(tarefa), email=True,
     )
 
 
@@ -662,10 +656,10 @@ def carga_das_pessoas(sessao: Session, ids: set[int], agora: datetime) -> dict[i
 # Lembretes diários (timer das 07:00)
 # ---------------------------------------------------------------------------------------------
 
-def _escalonar(sessao: Session, tarefa: Tarefa, dias_atraso: int, prazo: date) -> int:
-    """Avisa a liderança de uma tarefa atrasada (nível 1) e a da equipe acima (nível 2), uma vez por nível e prazo. Devolve quantos avisos novos.
+def _registrar_escalonamento(sessao: Session, tarefa: Tarefa, dias_atraso: int, prazo: date, memorial: dict[int, list[tuple[Tarefa, int]]]) -> bool:
+    """Põe a tarefa atrasada no memorial de cada líder (nível 1: liderança direta; nível 2, a partir de 3 dias: as equipes acima).
 
-    Registra o aviso na linha do tempo da tarefa (evento `escalonada`) só quando alguém realmente recebeu.
+    Devolve se a tarefa foi escalonada. Cada nível entra na linha do tempo da tarefa (evento `escalonada`) uma vez por prazo.
     """
     # `lideranca()` soma a equipe e todas as acima: nível 1 = só a liderança direta; nível 2 = quem está acima dela
     acima = lideranca(sessao, sessao.get(EquipeTarefas, tarefa.equipe.equipe_pai_id)) if tarefa.equipe and tarefa.equipe.equipe_pai_id else set()
@@ -675,25 +669,46 @@ def _escalonar(sessao: Session, tarefa: Tarefa, dias_atraso: int, prazo: date) -
         niveis.append((1, direta))
     if dias_atraso >= DIAS_ESCALONAR_ACIMA:
         niveis.append((2, acima - direta))
-    novos = 0
+    ja_registrados = {(e.dados.get("nivel"), e.dados.get("prazo")) for e in sessao.scalars(
+        select(EventoTarefa).where(EventoTarefa.tarefa_id == tarefa.id, EventoTarefa.tipo == "escalonada"))}
+    escalonada = False
     for nivel, ids in niveis:
         if not ids:
             continue
-        aviso = _avisar_e_devolver(sessao, ids, f"Tarefa atrasada há {dias_atraso} dia(s): {_rotulo(tarefa)}",
-                                   f"A tarefa {_rotulo(tarefa)} (prazo {_data_hora(tarefa.prazo)}) está atrasada há {dias_atraso} dia(s) e foi escalonada para você"
-                                   f"{' como liderança da equipe acima' if nivel == 2 else ''}. Cobre o andamento ou renegocie o prazo.",
-                                   tarefa, f"tarefa-escalonada:{tarefa.id}:{nivel}:{prazo}")
-        if aviso is not None:
+        escalonada = True
+        for uid in ids:
+            memorial.setdefault(uid, []).append((tarefa, dias_atraso))
+        if (nivel, prazo.isoformat()) not in ja_registrados:
             _evento(sessao, tarefa, "escalonada", None, f"Escalonada (nível {nivel}): atrasada há {dias_atraso} dia(s)",
-                    nivel=nivel, dias_atraso=dias_atraso, avisados=len(aviso.entregas))
-            novos += 1
-    return novos
+                    nivel=nivel, prazo=prazo.isoformat(), dias_atraso=dias_atraso, avisados=len(ids))
+    return escalonada
+
+
+def _enviar_memoriais(sessao: Session, memorial: dict[int, list[tuple[Tarefa, int]]], dia: date) -> int:
+    """Um aviso (caixa + e-mail) por líder e por dia, com a tabela das tarefas atrasadas escalonadas para ele. Devolve quantos líderes receberam."""
+    base = obter_configuracao().url_publica.rstrip("/")
+    nomes = {u.id: (u.nome_completo or u.login) for u in sessao.scalars(
+        select(Usuario).where(Usuario.id.in_({t.responsavel_id for lista in memorial.values() for t, _ in lista if t.responsavel_id}))
+    )}
+    enviados = 0
+    for uid, lista in memorial.items():
+        unicas = sorted({t.id: (t, d) for t, d in lista}.values(), key=lambda x: (-x[1], x[0].numero))
+        linhas = ["| Nº | Título | Responsável | Atraso | Link |", "| --- | --- | --- | --- | --- |"]
+        linhas += [f"| #{t.numero} | {t.titulo.replace('|', '/')} | {nomes.get(t.responsavel_id, 'sem responsável')} | {d} dia(s) | {base}/tarefas/{t.numero} |" for t, d in unicas]
+        corpo = (f"Você tem **{len(unicas)} tarefa(s) atrasada(s)** nas equipes que lidera. Cobre o andamento ou renegocie os prazos.\n\n" + "\n".join(linhas))
+        aviso = servico_mensagens.notificar(
+            sessao, [uid], f"Tarefas atrasadas das suas equipes: {len(unicas)}", corpo, chave=f"tarefa-escalonada:{uid}:{dia}",
+            categoria="prazo", prioridade="alta", link="/tarefas", email=True,
+        )
+        enviados += 1 if aviso is not None else 0
+    return enviados
 
 
 def lembrar(sessao: Session, dia: date) -> dict[str, int]:
     """Vence amanhã e atrasadas → envolvidos; validação parada há 2+ dias → liderança (janela que não bloqueia)."""
     agora = agora_utc()
-    contagem = {"vencem_amanha": 0, "atrasadas": 0, "validacao_parada": 0, "escalonadas": 0}
+    memorial: dict[int, list[tuple[Tarefa, int]]] = {}  # líder → tarefas atrasadas escalonadas para ele (um aviso por dia)
+    contagem = {"vencem_amanha": 0, "atrasadas": 0, "validacao_parada": 0, "escalonadas": 0, "tarefas_escalonadas": 0}
     for tarefa in sessao.scalars(select(Tarefa).where(Tarefa.status.in_(OPERACIONAIS))):
         prazo = _comparavel(tarefa.prazo).astimezone(__import__("zoneinfo").ZoneInfo("America/Sao_Paulo")).date()
         if prazo == dia + timedelta(days=1):
@@ -705,7 +720,8 @@ def lembrar(sessao: Session, dia: date) -> dict[str, int]:
                     f"A tarefa {_rotulo(tarefa)} passou do prazo ({_data_hora(tarefa.prazo)}). Atualize o andamento ou peça nova data.",
                     tarefa, f"tarefa-prazo-aviso:{tarefa.id}:atrasada:{dia}", categoria="prazo", prioridade="alta")
             contagem["atrasadas"] += 1
-            contagem["escalonadas"] += _escalonar(sessao, tarefa, (dia - prazo).days, prazo)
+            contagem["tarefas_escalonadas"] += _registrar_escalonamento(sessao, tarefa, (dia - prazo).days, prazo, memorial)
+    contagem["escalonadas"] = _enviar_memoriais(sessao, memorial, dia)
     limite = agora - timedelta(days=DIAS_VALIDACAO_PARADA)
     for tarefa in sessao.scalars(select(Tarefa).where(Tarefa.status == "em_validacao", Tarefa.entregue_em <= limite)):
         lideres = lideranca(sessao, tarefa.equipe) if tarefa.equipe else ({tarefa.criado_por_id} - {None})

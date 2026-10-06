@@ -9,6 +9,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 ## 2026-10-06
 
 ### Corrigido
+- **Campos de formulário fora do padrão** (ex.: o seletor de Prioridade na janela da tarefa aparecia no visual nativo do navegador). Causa: o estilo dos campos só existia por contexto (`.grade-formulario select` etc.). Agora há um **estilo base global** para `select`, `textarea` e `input` de texto/número/data em `styles.scss`, com especificidade baixa (os estilos de contexto e a classe `.form-control` continuam mandando), de modo que todo campo novo já nasce no padrão; regra registrada no `CLAUDE.md`.
 - **Busca global:** passa a pesquisar também as **empresas contratadas** (razão social, nome fantasia, CNPJ, endereço e nome dos prepostos), com o mesmo acesso dos contratos; o resultado abre a ficha da empresa.
 
 ### Adicionado

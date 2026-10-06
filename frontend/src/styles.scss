@@ -141,6 +141,48 @@ body {
   font-size: 0.82rem;
 }
 
+/*
+ * Estilo BASE dos campos de formulário (select, textarea e inputs de texto, número, data etc.).
+ * O estilo dos campos do sistema era definido só por contexto (".grade-formulario select", ".filtros input"...), e todo campo criado fora
+ * desses contextos aparecia com o visual nativo do navegador. Estas regras valem para QUALQUER campo, em qualquer tela, e têm especificidade
+ * baixa de propósito: as regras de contexto, a classe `.form-control` do Bootstrap e os estilos dos componentes continuam mandando.
+ * Campo novo não precisa de classe nem de CSS próprio para ficar no padrão.
+ */
+select,
+textarea,
+input:where(:not([type='checkbox'], [type='radio'], [type='file'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='image'])) {
+  max-width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--cor-e2e5e8);
+  border-radius: 7px;
+  outline: 0;
+  color: var(--cor-3d454e);
+  background-color: var(--cor-fcfcfc);
+  font-size: 13px;
+
+  &:focus {
+    border-color: #bc3843;
+    box-shadow: 0 0 0 3px #af374112;
+  }
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+}
+
+select,
+input:where(:not([type='checkbox'], [type='radio'], [type='file'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='image'])) {
+  height: 38px;
+}
+
+textarea {
+  min-height: 72px;
+  padding: 9px 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 /* Botão principal das páginas públicas (vermelho institucional) */
 .botao-acao {
   background: var(--spi-vermelho);

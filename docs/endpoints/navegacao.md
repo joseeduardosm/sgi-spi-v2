@@ -17,7 +17,7 @@ Procura em vários módulos ao mesmo tempo.
 
 | Campo | Descrição |
 |---|---|
-| `tipo` | `contrato`, `contratacao`, `tarefa`, `pessoa` ou `setor` |
+| `tipo` | `contrato`, `empresa`, `contratacao`, `tarefa`, `pessoa` ou `setor` |
 | `id` | Identificador do registro (texto) |
 | `titulo`, `subtitulo` | Texto da linha (ex.: "Contrato 012/2026 · LIMPEZA SEDE" e a razão social) |
 | `rota` | Rota do Angular que abre o registro (pessoas: `/ramais?q=<nome>`) |
@@ -25,6 +25,7 @@ Procura em vários módulos ao mesmo tempo.
 | Tipo | Onde procura | Quem vê |
 |---|---|---|
 | `contrato` | número, apelido, empresa e objeto (mesma busca da carteira) | ACL `contratos` ≥ LEITURA |
+| `empresa` | razão social, nome fantasia, CNPJ, endereço e nome dos prepostos | ACL `contratos` ≥ LEITURA |
 | `contratacao` | nome e processo | ACL `contratacoes` ≥ LEITURA, e só os documentos que a pessoa enxerga (criador, membro ou administração) |
 | `tarefa` | título e número | só as tarefas em que o usuário é criador, responsável ou participante |
 | `pessoa` | diretório de ramais (nome, cargo, setor, ramal, e-mail…) | todo usuário logado |

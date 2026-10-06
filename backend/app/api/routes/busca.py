@@ -19,7 +19,7 @@ roteador = APIRouter(prefix="/busca", tags=["Busca global"], responses=RESPOSTAS
     "",
     response_model=RespostaBusca,
     summary="Busca global",
-    description="Procura `q` (mínimo 2 caracteres) em contratos (número, apelido, empresa, objeto), contratações (nome, processo), tarefas do próprio usuário "
+    description="Procura `q` (mínimo 2 caracteres) em contratos (número, apelido, empresa, objeto), empresas contratadas (razão social, nome fantasia, CNPJ, preposto), contratações (nome, processo), tarefas do próprio usuário "
     "(título ou número), pessoas (diretório de ramais) e setores, com até 5 resultados por módulo. Cada módulo só aparece se o usuário tem "
     "pelo menos LEITURA no recurso de ACL dele (`contratos`, `contratacoes`, `setores`); pessoas valem para todo usuário logado. "
     "Sem `q` ou com menos de 2 caracteres, devolve lista vazia.",

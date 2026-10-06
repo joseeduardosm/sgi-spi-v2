@@ -8,6 +8,9 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-10-06
 
+### Corrigido
+- **Busca global:** passa a pesquisar também as **empresas contratadas** (razão social, nome fantasia, CNPJ, endereço e nome dos prepostos), com o mesmo acesso dos contratos; o resultado abre a ficha da empresa.
+
 ### Adicionado
 - **Recusa da nota fiscal pelo Financeiro (DOF) na retenção de tributos.** O Financeiro pode **recusar a nota com justificativa** (mínimo de 10 caracteres): a etapa da **nota fiscal volta a ficar aberta**, com novo campo para subir a nota (PDF; **XML opcional**), e o ciclo **se repete sem limite** até o Financeiro conferir a retenção. **CADIN e checklist já feitos são mantidos.**
   - A recusa gera um **PDF** (baixável na etapa, para juntar a um processo) e um **e-mail obrigatório à equipe do contrato e a todos os prepostos da empresa**, com a justificativa e o PDF anexado (reenvio disponível). A equipe recebe também uma pendência na caixa de mensagens.

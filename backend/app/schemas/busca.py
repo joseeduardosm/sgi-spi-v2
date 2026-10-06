@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 class ResultadoBusca(BaseModel):
     """Um resultado da busca global, pronto para a tela montar o link."""
 
-    tipo: Literal["contrato", "setor", "pessoa", "tarefa", "contratacao"] = Field(..., description="Tipo do resultado (agrupa a lista na tela).")
+    tipo: Literal["contrato", "empresa", "setor", "pessoa", "tarefa", "contratacao"] = Field(..., description="Tipo do resultado (agrupa a lista na tela).")
     id: str = Field(..., description="Identificador do registro (texto).")
     titulo: str
     subtitulo: str = ""

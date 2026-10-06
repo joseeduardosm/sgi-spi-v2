@@ -18,7 +18,9 @@ def test_busca_global_agrupa_modulos_e_respeita_o_acl(cliente, admin):
     # Muito curto: sem resultados
     assert cliente.get("/api/busca", params={"q": "l"}, headers=admin).json()["itens"] == []
     r = cliente.get("/api/busca", params={"q": "limpa"}, headers=admin)
-    assert _tipos(r) >= {"contrato", "pessoa"}
+    assert _tipos(r) >= {"contrato", "empresa", "pessoa"}
+    empresa_achada = next(i for i in r.json()["itens"] if i["tipo"] == "empresa")
+    assert empresa_achada["titulo"] == "Limpatudo Serviços" and empresa_achada["rota"] == f"/contratos/empresas/{empresa}" and "1 contrato(s)" in empresa_achada["subtitulo"]
     contrato = next(i for i in r.json()["itens"] if i["tipo"] == "contrato")
     assert contrato["titulo"].startswith("Contrato 012/2026") and contrato["rota"].startswith("/contratos/")
     pessoa = next(i for i in r.json()["itens"] if i["tipo"] == "pessoa")
@@ -26,7 +28,8 @@ def test_busca_global_agrupa_modulos_e_respeita_o_acl(cliente, admin):
     # Sem ACL de contratos, o bloco de contratos some (pessoas continuam para todo usuário logado)
     restringir_contratos(cliente, admin, {criar_usuario("sem_acesso"): "LEITURA"})
     sem = cabecalho(cliente, "fulano")
-    assert "contrato" not in _tipos(cliente.get("/api/busca", params={"q": "limpa"}, headers=sem))
+    sem_acesso = _tipos(cliente.get("/api/busca", params={"q": "limpa"}, headers=sem))
+    assert "contrato" not in sem_acesso and "empresa" not in sem_acesso
     assert "pessoa" in _tipos(cliente.get("/api/busca", params={"q": "limpa"}, headers=sem))
     assert cliente.get("/api/busca", params={"q": "limpa"}).status_code == 401
 

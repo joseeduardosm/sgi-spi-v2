@@ -19,7 +19,7 @@ from app.models.usuario import Usuario
 from app.schemas.busca import ResultadoBusca
 from app.services import servico_acl, servico_setores
 from app.services.contratacoes import acesso as acesso_contratacoes
-from app.services.contratos import servico_contratos
+from app.services.contratos import servico_contratos, servico_empresas
 from app.services.servico_diretorio import FiltrosRamais, listar_ramais
 
 registro = logging.getLogger("sgi_spi.busca")
@@ -39,6 +39,16 @@ def _contratos(sessao: Session, usuario: Usuario, termo: str) -> list[ResultadoB
     pagina = servico_contratos.listar_contratos(sessao, termo, 1, POR_MODULO)
     return [ResultadoBusca(tipo="contrato", id=str(c.id), titulo=f"Contrato {c.numero}" + (f" · {c.apelido.upper()}" if c.apelido else ""),
                            subtitulo=c.empresa_razao_social, rota=f"/contratos/{c.id}") for c in pagina.itens]
+
+
+def _empresas(sessao: Session, usuario: Usuario, termo: str) -> list[ResultadoBusca]:
+    """Empresas contratadas (razão social, nome fantasia, CNPJ, endereço e nome dos prepostos), com o mesmo acesso dos contratos."""
+    if not _pode(sessao, usuario, "contratos"):
+        return []
+    pagina = servico_empresas.listar_empresas(sessao, termo, "razao_social", "asc", 1, POR_MODULO)
+    return [ResultadoBusca(tipo="empresa", id=str(e.id), titulo=e.razao_social,
+                           subtitulo=" · ".join(x for x in (f"CNPJ {e.cnpj}", f"{len(e.contratos)} contrato(s)" if e.contratos else "", "" if e.ativa else "inativa") if x),
+                           rota=f"/contratos/empresas/{e.id}") for e in pagina.itens]
 
 
 def _setores(sessao: Session, usuario: Usuario, termo: str) -> list[ResultadoBusca]:
@@ -91,7 +101,7 @@ def buscar(sessao: Session, usuario: Usuario, termo: str) -> list[ResultadoBusca
     if len(termo) < MINIMO_CARACTERES:
         return []
     resultados: list[ResultadoBusca] = []
-    for bloco in (_contratos, _contratacoes, _tarefas, _pessoas, _setores):
+    for bloco in (_contratos, _empresas, _contratacoes, _tarefas, _pessoas, _setores):
         try:
             resultados.extend(bloco(sessao, usuario, termo))
         except Exception:  # noqa: BLE001 — um módulo com problema não pode derrubar a busca inteira

@@ -13,7 +13,7 @@ import { NavegacaoService } from '../../../core/navegacao/navegacao.service';
 
 /** Resultado da busca (`ResultadoBusca` da API; as telas do menu usam o tipo `tela`). */
 export interface ResultadoBusca {
-  tipo: 'tela' | 'contrato' | 'contratacao' | 'tarefa' | 'pessoa' | 'setor';
+  tipo: 'tela' | 'contrato' | 'empresa' | 'contratacao' | 'tarefa' | 'pessoa' | 'setor';
   id: string;
   titulo: string;
   subtitulo: string;
@@ -24,6 +24,7 @@ export interface ResultadoBusca {
 export const GRUPOS_BUSCA: { tipo: ResultadoBusca['tipo']; titulo: string }[] = [
   { tipo: 'tela', titulo: 'Telas' },
   { tipo: 'contrato', titulo: 'Contratos' },
+  { tipo: 'empresa', titulo: 'Empresas' },
   { tipo: 'contratacao', titulo: 'Contratações' },
   { tipo: 'tarefa', titulo: 'Tarefas' },
   { tipo: 'pessoa', titulo: 'Pessoas' },

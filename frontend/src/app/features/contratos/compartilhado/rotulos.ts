@@ -24,7 +24,11 @@ export const PAPEIS: { papel: Papel; rotulo: string }[] = [
 ];
 
 /** Papel → texto (montado a partir da lista acima). */
-export const ROTULOS_PAPEL: Record<Papel, string> = Object.fromEntries(PAPEIS.map((p) => [p.papel, p.rotulo])) as Record<Papel, string>;
+export const ROTULOS_PAPEL: Record<string, string> = {
+  ...(Object.fromEntries(PAPEIS.map((p) => [p.papel, p.rotulo])) as Record<Papel, string>),
+  // SuperRoot que registra ciência sem integrar a equipe (efeito de teste)
+  administrador: 'Administrador (teste)',
+};
 
 /** Tipo de item → texto. */
 export const ROTULOS_TIPO_ITEM: Record<TipoItem, string> = { continuo: 'Contínuo', sob_demanda: 'Sob demanda' };

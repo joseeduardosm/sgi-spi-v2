@@ -657,9 +657,34 @@ export interface SugestaoOutroContrato {
 }
 
 /** Competência completa: tudo o que a tela de execução mostra em todas as etapas. */
+/** Nota fiscal recusada (retrato guardado na recusa; os PDFs continuam disponíveis). */
+export interface NotaRecusada {
+  rotulo: string;
+  numero: string | null;
+  valor_bruto: string | null;
+  chave: string | null;
+  arquivo: Arquivo | null;
+  xml: Arquivo | null;
+}
+
+/** Recusa da nota fiscal pelo Financeiro: trilha nota → recusa → nova nota → … → aprovação. */
+export interface RecusaNota {
+  id: string;
+  ordem: number;
+  justificativa: string;
+  recusada_por_nome: string;
+  recusada_em: string;
+  notas: NotaRecusada[];
+  /** PDF da recusa, para juntar a um processo. */
+  pdf: Arquivo | null;
+  email: EnvioEmail;
+}
+
 export interface DetalheCompetencia extends ResumoCompetencia {
   contrato_id: string;
   contrato_numero: string;
+  /** CNPJ da contratada, só dígitos. */
+  empresa_cnpj: string;
   etapas: Etapa[];
   pode_editar: boolean;
   integra_equipe: boolean;
@@ -690,6 +715,10 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   email_retencao: EnvioEmail;
   retencao: { concluida_em: string | null; por_nome: string; discriminacao_conferida: boolean; pdf: Arquivo | null } | null;
   pode_conferir_retencao: boolean;
+  /** Recusas da nota fiscal, da primeira para a última. */
+  recusas: RecusaNota[];
+  /** O usuário pode recusar a nota agora (retenção aberta e permissão de conferir). */
+  pode_recusar: boolean;
   /** Etapas que aceitam gravação agora (depois da NF: retenção, CADIN e checklist em paralelo). */
   etapas_abertas: Etapa[];
   etapas_concluidas: Etapa[];

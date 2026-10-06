@@ -328,7 +328,10 @@ class ItemNotaFiscal(BaseModel):
     """Uma nota fiscal na gravação da etapa 3 (a lista inteira, na ordem final)."""
     id: uuid.UUID | None = Field(None, description="Nota já registrada, que mantém os arquivos que não forem trocados; vazio para uma nota nova.")
     arquivo: int | None = Field(None, ge=0, description="Posição, na lista `arquivos`, do PDF desta nota.")
-    xml: int | None = Field(None, ge=0, description="Posição, na lista `xmls`, do XML desta nota.")
+    xml: int | None = Field(None, ge=0, description="Posição, na lista `xmls`, do XML desta nota. Opcional: sem XML, informe `valor_bruto`.")
+    valor_bruto: Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=2)] | None = Field(
+        None, description="Valor bruto da nota. Obrigatório quando a nota não tem XML; com XML, vale o valor lido dele.")
+    numero: str | None = Field(None, max_length=100, description="Número da nota, para a nota sem XML (opcional).")
 
 
 class GravacaoRetencao(BaseModel):
@@ -344,6 +347,33 @@ class LeituraRetencao(BaseModel):
     por_nome: str
     discriminacao_conferida: bool
     pdf: LeituraArquivo | None
+
+
+class NotaRecusada(BaseModel):
+    """Retrato de uma nota fiscal recusada (os PDFs ficam disponíveis para baixar)."""
+    rotulo: str
+    numero: str | None = None
+    valor_bruto: ValorMonetario | None = None
+    chave: str | None = None
+    arquivo: LeituraArquivo | None = Field(None, description="PDF da nota recusada.")
+    xml: LeituraArquivo | None = None
+
+
+class LeituraRecusa(BaseModel):
+    """Recusa da nota fiscal pelo Financeiro (ciclo nota → recusa → nova nota → … → aprovação)."""
+    id: uuid.UUID
+    ordem: int
+    justificativa: str
+    recusada_por_nome: str
+    recusada_em: datetime
+    notas: list[NotaRecusada]
+    pdf: LeituraArquivo | None = Field(None, description="PDF da recusa, para juntar a um processo.")
+    email: "EmailMedicao" = Field(description="E-mail à equipe e a todos os prepostos, com o PDF anexado.")
+
+
+class GravacaoRecusa(BaseModel):
+    """Corpo do `POST …/retencao/recusar`."""
+    justificativa: str = Field(..., min_length=10, max_length=4000, description="Motivo da recusa (obrigatório, mínimo de 10 caracteres).")
 
 
 class LeituraConsultaCadin(BaseModel):
@@ -443,6 +473,7 @@ class DetalheCompetencia(ResumoCompetencia):
     """Detalhe completo da competência: tudo o que a tela de execução precisa em uma resposta."""
     contrato_id: uuid.UUID
     contrato_numero: str
+    empresa_cnpj: str = Field(..., description="CNPJ da empresa contratada, só dígitos (para copiar na consulta ao CADIN).")
     etapas: list[Etapa] = Field(..., description="Etapas desta competência, em ordem (sem `avaliacao` se não houver formulário).")
     pode_editar: bool
     integra_equipe: bool = Field(..., description="O usuário pode registrar ciência.")
@@ -478,6 +509,8 @@ class DetalheCompetencia(ResumoCompetencia):
     email_retencao: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail à equipe com as retenções conferidas.")
     retencao: LeituraRetencao | None = Field(None, description="Conferência da retenção de tributos, se feita.")
     pode_conferir_retencao: bool = Field(False, description="O usuário pode fazer a etapa de retenção (Financeiro, equipe ou SuperRoot).")
+    recusas: list[LeituraRecusa] = Field(default_factory=list, description="Recusas da nota fiscal, da primeira para a última (trilha do ciclo).")
+    pode_recusar: bool = Field(False, description="O usuário pode recusar a nota agora (mesma permissão da retenção, com a retenção aberta).")
     etapas_abertas: list[Etapa] = Field(default_factory=list, description="Etapas que aceitam gravação agora (retenção, CADIN e checklist em paralelo).")
     etapas_concluidas: list[Etapa] = Field(default_factory=list, description="Etapas já concluídas.")
     reaberturas_permitidas: bool = Field(False, description="O usuário pode reabrir etapas (SuperRoot ou gestor vigente do contrato).")

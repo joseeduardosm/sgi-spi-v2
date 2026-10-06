@@ -132,11 +132,16 @@ export class AbaChecklistsComponent implements OnInit {
   protected async ativar(checklist: Checklist): Promise<void> {
     const ok = await this.dialogos.confirmar({
       titulo: `Ativar a versão v${checklist.versao}?`,
-      mensagem: 'A nova versão passa a valer para as competências geradas daqui em diante e para as que ainda não passaram do checklist. Documentos já anexados com o mesmo nome são mantidos.',
+      mensagem: 'A nova versão passa a valer para as competências que ainda não iniciaram o checklist (cada uma copia o checklist ativo ao concluir a nota fiscal). Checklists já copiados não mudam; para refazer um, reabra a nota fiscal da competência.',
       rotuloConfirmar: 'Ativar',
       segundos: 3,
     });
     if (ok) this.api.acaoChecklist(this.contratoId(), checklist.id, 'ativar').subscribe({ next: (c) => this.checklists.set(c), error: (e) => this.dialogos.mostrarErro(e) });
+  }
+
+  /** Baixa a versão como planilha XLSX já preenchida. */
+  protected baixarXlsx(checklist: Checklist): void {
+    this.api.baixarModeloXlsx(this.contratoId(), 'checklists', checklist.id).subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível baixar a planilha') });
   }
 
   /** Cria uma cópia inativa da versão. */

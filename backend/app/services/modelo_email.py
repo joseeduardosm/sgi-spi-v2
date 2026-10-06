@@ -114,16 +114,24 @@ def paragrafos(textos: list[str]) -> str:
     )
 
 
+def botao(url: str, rotulo: str) -> str:
+    """Botão vermelho que não quebra nos clientes de e-mail (Outlook inclusive).
+
+    A cor, o recuo e o canto arredondado ficam na célula da tabela (o Outlook ignora padding e fundo em `<a>` inline-block);
+    o link só carrega o texto, sem quebra de linha.
+    """
+    return (
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 4px;border-collapse:separate"><tr>'
+        f'<td align="center" bgcolor="{VERMELHO}" style="background:{VERMELHO};border-radius:4px;padding:12px 24px;mso-padding-alt:12px 24px">'
+        f'<a href="{escape(url)}" target="_blank" style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;'
+        f'font-weight:bold;color:#ffffff;text-decoration:none;white-space:nowrap">{escape(rotulo)}</a></td></tr></table>'
+    )
+
+
 def pagina(titulo: str, conteudo_html: str, *, link_url: str | None = None, rotulo_link: str = "Acessar o SGI SPI",
            sobretitulo: str = "", nota_rodape: str = NOTA_PADRAO) -> str:
     """E-mail completo no padrão oficial. `conteudo_html` já vem montado (use `paragrafos` para texto)."""
-    botao = (
-        f'<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 4px"><tr>'
-        f'<td style="background:{VERMELHO};border-radius:4px">'
-        f'<a href="{escape(link_url)}" style="display:inline-block;padding:11px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;'
-        f'font-weight:bold;color:#ffffff;text-decoration:none">{escape(rotulo_link)}</a></td></tr></table>'
-        if link_url else ""
-    )
+    botao_html = botao(link_url, rotulo_link) if link_url else ""
     sobre = (f'<p style="margin:0 0 6px;font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:{VERMELHO}">'
              f"{escape(sobretitulo)}</p>") if sobretitulo else ""
     return f"""<!DOCTYPE html>
@@ -144,7 +152,7 @@ def pagina(titulo: str, conteudo_html: str, *, link_url: str | None = None, rotu
     <tr><td style="padding:26px 28px 20px">
       {sobre}<h1 style="margin:0 0 16px;font-size:19px;line-height:1.35;color:#1f262d">{escape(titulo)}</h1>
       {conteudo_html}
-      {botao}
+      {botao_html}
     </td></tr>
     <tr><td style="padding:16px 28px 20px;background:#f7f8f9;border-top:1px solid #e6e8eb">
       <div style="font-size:12px;font-weight:bold;color:#3a424a">SGI SPI – Sistema de Gestão Integrada</div>

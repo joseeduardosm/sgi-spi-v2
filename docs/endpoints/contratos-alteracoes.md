@@ -8,7 +8,7 @@ Implementação:
 
 ## Regras gerais
 
-- **Autorização:** leitura com ACL `contratos` ≥ `LEITURA`; gravação exige poder editar o contrato; ciências só de integrantes vigentes da equipe.
+- **Autorização:** leitura com ACL `contratos` ≥ `LEITURA`; gravação exige poder editar o contrato; ciências de integrantes vigentes da equipe e, para efeito de teste, do SuperRoot (papel `administrador`).
 - Cada processo é um **rascunho** até a conclusão. Só a conclusão altera o contrato.
 - **Auditoria:** `contrato.prorrogacao.*`, `contrato.reajuste.*`, `contrato.aditamento.*` e `contrato.supressao.*`.
 

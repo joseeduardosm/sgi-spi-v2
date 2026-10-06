@@ -17,9 +17,9 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
       <header class="topo-portal">
         <div class="largura-portal-noticias topo-portal-interno">
           <a class="marca-portal" routerLink="/" aria-label="Início do portal">
-            <span class="brasao-portal" aria-hidden="true"></span>
+            <img class="logo-portal" src="assets/imagens/4-vertical-slogan.png" alt="Governo do Estado de São Paulo" />
             <span class="filete-portal" aria-hidden="true"></span>
-            <span class="nome-portal"><strong>GOVERNO DO ESTADO<br />DE SÃO PAULO</strong><small>SECRETARIA DE PARCERIAS<br />EM INVESTIMENTOS</small></span>
+            <span class="nome-portal"><strong>SECRETARIA DE PARCERIAS<br />EM INVESTIMENTOS</strong></span>
           </a>
           <nav class="nav-portal" aria-label="Portal">
             <a routerLink="/" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">Início</a>

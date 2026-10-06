@@ -53,6 +53,28 @@ a.acao-primaria {
   }
 }
 
+/* Perigo invertido: fundo vermelho e letras brancas (ações sem volta, como "Zerar competência") */
+.acao-perigo-cheio {
+  height: 39px;
+  padding: 0 16px;
+  border: 1px solid #b3262f;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #b3262f;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #8f1d25;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
 .acao-pequena {
   height: 30px !important;
   padding: 0 11px !important;
@@ -1921,3 +1943,12 @@ tr.linha-link {
   &:hover span { opacity: 1; }
 }
 th.num .ordenar-coluna { justify-content: flex-end; width: 100%; }
+
+// Recusas da nota fiscal (histórico nas etapas da nota fiscal e da retenção)
+.historico-recusas { margin-bottom: 14px; }
+.recusa-nf {
+  margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--spi-borda); border-left: 4px solid var(--spi-vermelho); border-radius: 8px; background: var(--cor-fcfcfc);
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 4px; small { color: var(--spi-apagado); } }
+  .justificativa-recusa { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .notas-recusadas { margin: 4px 0 8px; padding-left: 18px; font-size: 12px; }
+}

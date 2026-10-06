@@ -23,11 +23,15 @@ Autenticação: `Authorization: Bearer <token>` (perfil em dia; ver [autenticaca
 
 **`DadosAssinatura`** (corpo dos três `POST`): `nome_completo` (até 220), `cargo` (180), `departamento` (180), `email` (formato válido), `ramal` (só dígitos e hífen, até 20), `celular` (dígitos, espaço, parênteses, `+` e hífen), `andar` (`Subsolo` ou `1` a `13`), `lado` (`A` ou `B`), `incluir_celular` e `incluir_andar_lado` (padrão `false`).
 
-**Imagem:** PNG de **1692×471** (3× o tamanho de e-mail de 564×157; use-o a 564 px de largura). Esquerda: brasão e "GOVERNO DO ESTADO DE SÃO PAULO"; direita: nome, cargo, secretaria, departamento, e-mail, telefone (`prefixo + ramal`) e endereço, com os dois filetes inferiores do modelo da SPI. Celular e "5º andar · Lado B" saem alinhados ao telefone, só quando marcados e presentes.
+**Modelo:** a imagem é desenhada a partir de um PowerPoint, `backend/app/recursos/assinatura/modelo-assinatura.pptx` (o `GOV_ASSINATURA-DE-EMAIL_2023.pptx`, padrão do Governo de SP). **Para mudar o visual, troque esse arquivo** (mesmo nome, 1º slide); a próxima assinatura gerada já sai nova, sem reiniciar nem alterar código.
 
-**Texto longo:** nome e e-mail diminuem a fonte até o mínimo e depois são abreviados com "…"; cargo e departamento quebram em até duas linhas antes de abreviar. Cada abreviação gera um aviso (ex.: "Cargo muito longo: abreviado na imagem."). Campo marcado e ausente (celular, andar/lado) ou sem ramal também gera aviso.
+**Imagem:** PNG no **pixel original do fundo do modelo** (hoje **1765×492**, sem reamostrar: é a nitidez do arquivo do Governo; um PPTX com fundo de maior resolução gera uma imagem maior). Use-a a **564 px** de largura nos clientes de e-mail. O fundo traz a marca "SÃO PAULO – Governo do Estado", o divisor, as redes sociais e os filetes; o texto vem por cima, em cinco campos do modelo, reconhecidos pelo texto de exemplo (`Nome Sobrenome`, `Cargo`, `Órgão ou Secretaria`, `email@sp.gov.br | 11 0000-0000` e `Av. Morumbi, 4.500 - São Paulo - SP`) ou por fichas `{{nome}}`, `{{cargo}}`, `{{departamento}}`, `{{secretaria}}`, `{{email}}`, `{{telefone}}`, `{{celular}}`, `{{endereco}}`, `{{cidade}}` e `{{andar_lado}}`. Fonte: a do modelo (Verdana) se houver `Verdana.ttf` e `Verdana-Bold.ttf` em `recursos/assinatura/fontes/`; senão, a Bitstream Vera, de proporções parecidas.
 
-**HTML:** tabela com estilos inline (Outlook e webmails), texto selecionável, `mailto:` e `tel:` clicáveis, brasão pequeno embutido (`data:`). Todo texto digitado é escapado.
+**Conteúdo:** nome; cargo (negrito); departamento e Secretaria (configuração); e-mail e telefone (`prefixo + ramal`); endereço e cidade (configuração). Celular e "5º andar · Lado B", quando marcados e presentes, saem numa linha a mais.
+
+**Espaço e texto longo:** o texto não pode passar de 75% da altura do modelo (embaixo ficam as redes sociais). Se não couber, o sistema aproxima as linhas e, em seguida, junta o endereço e a cidade numa linha e, por fim, tira as linhas opcionais (com aviso). Texto de uma linha que não cabe na largura encolhe até 80% do tamanho do modelo e depois é abreviado com "…". Cada abreviação gera um aviso (ex.: "Cargo muito longo: abreviado na imagem."). Campo marcado e ausente (celular, andar/lado) ou sem ramal também gera aviso.
+
+**HTML:** a mesma imagem (embutida como `data:`, exibida a 564 px) em uma tabela, com o texto alternativo completo (nome, cargo, órgão, e-mail, telefone, endereço e extras); como o fundo do Governo é uma figura única, o texto não é selecionável nem tem `mailto:`/`tel:`. Todo texto digitado é escapado.
 
 ### Erros
 

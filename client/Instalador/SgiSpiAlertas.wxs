@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SGI SPI · Alertas: definição do instalador (formato WiX 3, compilado com `wixl`; veja ../construir.sh).
+     Instala por máquina em Arquivos de Programas e inicia com o Windows de todo usuário.
+     Não leva appsettings.json: os padrões estão no programa; a TI cria esse arquivo ao lado do .exe só para trocar servidor/IP/intervalos. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="SGI SPI Alertas" Language="1046" Version="1.0.0"
+           Manufacturer="Secretaria de Parcerias em Investimentos" UpgradeCode="6F1C2B7E-4A39-4D58-9E0B-5B8D1A7C3F21">
+
+    <Package Description="Alertas das mensagens do SGI SPI no canto da tela" Comments="Mostra as mensagens do SGI SPI como alertas perto do relógio do Windows."
+             InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+
+    <MajorUpgrade DowngradeErrorMessage="Já existe uma versão mais nova do SGI SPI Alertas instalada." />
+    <Media Id="1" Cabinet="sgi.cab" EmbedCab="yes" />
+    <Icon Id="IconeSgi.ico" SourceFile="../SgiAlertas/icone.ico" />
+    <Property Id="ARPPRODUCTICON" Value="IconeSgi.ico" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="SGI SPI Alertas">
+
+          <!-- Programa: atalho no menu Iniciar e execução automática no logon de qualquer usuário (cada sessão abre o login) -->
+          <Component Id="Programa" Guid="3C9D7A10-8E54-4B6F-A2D1-77C5E0F4B9A3" Win64="yes">
+            <File Id="ExeAlertas" Name="SgiAlertas.exe" Source="../publicar/SgiAlertas.exe" KeyPath="yes">
+              <Shortcut Id="AtalhoMenu" Directory="ProgramMenuFolder" Name="SGI SPI Alertas" Description="Alertas das mensagens do SGI SPI"
+                        WorkingDirectory="INSTALLFOLDER" Icon="IconeSgi.ico" Advertise="yes" />
+            </File>
+            <RegistryValue Id="ExecucaoAutomatica" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Run" Name="SgiSpiAlertas"
+                           Type="string" Value="&quot;[INSTALLFOLDER]SgiAlertas.exe&quot;" />
+          </Component>
+
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+    </Directory>
+
+    <Feature Id="Principal" Title="SGI SPI Alertas" Level="1">
+      <ComponentRef Id="Programa" />
+    </Feature>
+  </Product>
+</Wix>

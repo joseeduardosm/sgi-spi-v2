@@ -13,12 +13,12 @@ Configurar a execução (checklist de documentos mensais e formulário de avalia
 - **Autorização:**
   - **Leitura:** ACL `contratos` ≥ `LEITURA`.
   - **Gravação:** poder editar o contrato. Os seis papéis da equipe têm os mesmos poderes.
-  - **Ciências:** só integrantes **vigentes** da equipe (o SuperRoot fora da equipe não registra ciência).
+  - **Ciências:** integrantes **vigentes** da equipe e, **para efeito de teste**, o SuperRoot em qualquer contrato (a ciência dele fica com o papel `administrador`, exibido como "Administrador (teste)"). Vale para a medição, o ateste da avaliação, as alterações de quantitativos e a prorrogação. O SuperRoot também lança a avaliação inicial e a do gestor. O campo `integra_equipe` da resposta indica se o usuário pode registrar ciência e avaliar.
   - **Retenção de tributos:** além de quem edita o contrato e do SuperRoot, o **Financeiro**: usuários do setor configurado em `SETOR_FINANCEIRO` (padrão "Diretoria de Orçamento e Finanças") e dos setores filhos — por serem **membros** do setor (em Setores) **ou** por terem um deles como **Departamento** no perfil. Precisam de ACL `contratos` ≥ `LEITURA`.
   - **Reabrir etapa (e estornar pagamento):** o SuperRoot ou o **gestor vigente** do contrato (papel `gestor`, com ACL ≥ MODIFICACAO).
 - **Versões de checklist e de formulário:** nascem inativas. Uma versão ativa não é editada nem excluída; para mudar, duplica-se.
   - Ativar o **checklist** aplica a nova versão às competências que ainda não passaram do checklist (documentos já anexados com o mesmo nome são mantidos).
-  - Ativar o **formulário** aplica a nova versão às competências ainda na medição.
+  - Ativar uma versão (checklist ou formulário) **só troca a versão ativa** e não toca em nenhuma competência: veja "Itens, formulário e checklist: copiados ao iniciar a etapa" abaixo. (Texto anterior, obsoleto: se já havia notas lançadas (inclusive a avaliação do gestor e as ciências), elas são descartadas, porque pertencem aos itens da versão antiga; a auditoria registra `avaliacoes_reiniciadas`.
 - **Formulário:**
   - escala de notas em ordem crescente e sem repetição;
   - faixas de liberação (mínimo ≤ máximo; máximo nulo = sem teto; % do pagamento; `notas_zero` opcional, ver Avaliação);
@@ -74,7 +74,7 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
   - **e-mail à contratada** (em segundo plano, ao gerar o PDF, pelo [servidor SMTP](smtp.md) ativo): para os **prepostos ativos** da contratada, com **cópia para a equipe** vigente e "Responder para" a equipe; assunto `Contrato NNN/AAAA — avaliação dos serviços MM/AAAA: assinar e devolver`; corpo com nota final e % liberado, pedindo a devolução do relatório **assinado pelo preposto** respondendo ao e-mail; o PDF vai anexo. O resultado fica em `avaliacao.email` (`enviado_em`, `ok`, `destinatarios[]`, `erro`; `enviado_em` nulo enquanto o envio não terminou). Sem preposto com e-mail, a falha fica registrada. `POST /competencias/{id}/reenviar-email-avaliacao` reenvia (exige o PDF gerado; senão `400`);
   - reconsideração: uma vez, antes da nota fiscal, reabre a avaliação.
 - **Nota fiscal** (equipe): só os arquivos e as datas.
-  - **Uma ou mais notas fiscais** por medição (até 20), cada uma com **PDF e XML obrigatórios** (tabela `contratos_competencias_notas_fiscais`, migração `b8e41f6a2c93`: a NF principal virou a nota 1 e a adicional a nota 2). O XML é lido automaticamente (NF-e modelo 55, NFS-e Padrão Nacional ou NFS-e da Prefeitura de São Paulo; ver [Leitura do XML](#leitura-do-xml)): **número, chave e valor bruto vêm do XML**, e as retenções informadas nele ficam como sugestão para a etapa seguinte;
+  - **Uma ou mais notas fiscais** por medição (até 20), cada uma com **PDF obrigatório e XML opcional** (tabela `contratos_competencias_notas_fiscais`, migração `b8e41f6a2c93`: a NF principal virou a nota 1 e a adicional a nota 2). O XML é lido automaticamente (NF-e modelo 55, NFS-e Padrão Nacional ou NFS-e da Prefeitura de São Paulo; ver [Leitura do XML](#leitura-do-xml)): **número, chave e valor bruto vêm do XML**, e as retenções informadas nele ficam como sugestão para a etapa seguinte;
   - data de recebimento e prazo de pagamento: vencimento = recebimento + prazo (dias corridos);
   - a mesma nota (chave) não pode ser juntada em outra competência (`400`); a mesma nota não entra duas vezes na medição;
   - todas as notas são pagas pelas **mesmas NEs** apontadas na medição: o saldo livre delas precisa cobrir a soma dos valores brutos, senão `400`;
@@ -84,6 +84,11 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
   - retenções IR, INSS, ISS, PIS, COFINS e **CSLL**, já preenchidas com os valores do XML: não negativas e com soma ≤ bruto; **líquido = bruto − retenções**;
   - é obrigatório confirmar que a **discriminação dos serviços é compatível** com o objeto;
   - ao salvar: gera o **PDF da retenção** (nota do XML + conferências + retenções + líquido + "conferido por … em …"), conclui a etapa e envia **e-mail à equipe** (assunto `Contrato NNN/AAAA - MM/AAAA - Retenções tributárias conferidas`, com o link da próxima etapa). Resultado em `email_retencao`; `POST …/reenviar-email-retencao` reenvia;
+  - **Recusa da nota fiscal** (`POST /competencias/{id}/retencao/recusar`, corpo `{"justificativa"}`, mínimo de 10 caracteres): o Financeiro (ou a equipe e o SuperRoot, com a mesma permissão da retenção) pode **recusar a nota** enquanto a retenção estiver aberta.
+    - Guarda a **trilha** (`recusas[]` no detalhe: ordem, justificativa, quem, quando, as notas recusadas com o PDF de cada uma e o **PDF da recusa**, para juntar a um processo) e **reabre a etapa da nota fiscal** (`etapa_atual = nota_fiscal`), onde se junta outra nota (PDF obrigatório, XML opcional). O ciclo **repete sem limite** até o Financeiro conferir a retenção.
+    - **CADIN e checklist já feitos são mantidos**: só a retenção é refeita. Ao juntar a nova nota, `etapa_atual` volta para a retenção (ou para a etapa paralela que ainda falte).
+    - **E-mail obrigatório** à **equipe do contrato e a todos os prepostos ativos da empresa** (quem recusou em cópia), com a justificativa no corpo e o **PDF da recusa anexado**; resultado em `recusas[].email`. `POST /competencias/{id}/recusas/{recusa_id}/reenviar-email` reenvia. Pendência na caixa da equipe até a nova nota ser juntada.
+    - Erros: `400` com a retenção fechada (nota ainda não juntada ou já conferida) ou justificativa curta/ausente (`422` pelo schema); `403` sem permissão. Auditoria `contrato.execucao.retencao.recusar`. `pode_recusar` no detalhe diz se o usuário vê o botão.
   - reabrir a nota fiscal (ou a retenção) desfaz a conferência; uma NF nova exige nova conferência.
   - o **Financeiro** vê as retenções a conferir em "Minhas pendências" do painel.
 - **CADIN:** com pendência, exige descrição e e-mail de comunicação, e a etapa continua aberta; sem pendência, conclui.
@@ -101,14 +106,36 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
 - **Consolidado:** um PDF só.
   - **Quem gera:** a primeira geração é de quem pode editar o contrato. **Gerar novamente** (substituir o consolidado existente) é só do **gestor do contrato** (titular vigente) ou do **SuperRoot**, inclusive depois da OB, para refazer consolidados antigos. Os demais recebem `403`. `pode_gerar_consolidado_novamente` diz se o usuário vê o botão.
   - **Índice na primeira página:** o consolidado abre com o índice ("Índice do documento consolidado"), com um documento por linha (nº, etapa, título e páginas). O **título e as páginas de cada documento são hiperlinks**: um clique leva direto à página dele no PDF (nos documentos enviados, à contracapa que o antecede). Os mesmos documentos entram nos **marcadores** do leitor de PDF. Se houver muitos documentos, o índice ocupa mais de uma página, e toda a numeração ("Página X de N") e a tabela "Composição deste documento" já contam as páginas do índice. Vale também para consolidados gerados novamente.
+  - **Trilha da nota fiscal:** com recusas, as notas aparecem na ordem do ciclo: nota recusada → **recusa nº N** (PDF) → … → nota aprovada → retenção (aprovação), e o resumo executivo traz a tabela "Trilha da nota fiscal" (etapa, detalhe, data e autor).
   - **Ordem de execução:** 1 medição (última memória de cálculo) → 2 avaliação (via assinada; sem ela, o relatório gerado), quando houver → 3 notas fiscais → 4 retenção de tributos (PDF gerado) → 5 CADIN (certidão e, se houver, e-mail de notificação, por consulta) → 6 documentos do checklist → 7 **resumo executivo, por último**, com a tabela "Composição deste documento" (nº, etapa, documento e páginas).
-  - **Documentos opcionais não anexados** não aparecem em lugar nenhum do consolidado (nem no índice, nem como "Não anexado" no resumo executivo): o opcional só é citado quando foi anexado.
+  - **Resumo executivo** é a última página do consolidado e traz só os dados da competência e o histórico do CADIN: as tabelas "Checklist mensal" e "Composição deste documento" foram retiradas, porque o índice da primeira página já lista tudo.
+  - **Documentos opcionais não anexados** não aparecem em lugar nenhum do consolidado: o opcional só é citado quando foi anexado.
   - **Contracapa:** cada documento **enviado** (avaliação assinada, NFs, CADIN e checklist) vem precedido de uma página na identidade visual do sistema: "Documento N de M · etapa", nome do documento, arquivo, data de envio com o nome completo de quem enviou e dados da etapa. Um arquivo ausente ou ilegível fica só com a contracapa, que avisa que ele não foi incluído.
   - **Paginação sequencial:** todas as páginas levam "Página X de N". Nas páginas geradas pelo sistema, o número substitui o do rodapé original. Nos documentos enviados, entra num selo pequeno no canto inferior direito, e **o layout e a orientação do arquivo enviado são preservados**.
 - **PDFs gerados pelo sistema:** todos em **A4 paisagem** (memórias, avaliação, retenção, parecer de prorrogação, relatórios, contracapas e resumo).
 - **Ordem Bancária:** debita nas NEs apontadas, na ordem escolhida, o **valor a pagar** = soma das notas fiscais (valores brutos), e conclui a competência. O lançamento (`pagamento`) registra o autor.
-- **Reabrir (SuperRoot ou gestor):** volta para uma etapa anterior com justificativa e desfaz as conclusões posteriores. Se a competência estava paga, cada débito ganha um lançamento de **`estorno`** (valor negativo, com autor e justificativa) no extrato da NE; o pagamento original **permanece** no extrato. Anexos e histórico ficam guardados.
-- **Auditoria:** `contrato.checklist.*`, `contrato.formulario.*`, `contrato.execucao.gerar`, `contrato.execucao.medicao.*`, `contrato.execucao.avaliacao.*`, `contrato.execucao.nota_fiscal.concluir`, `contrato.execucao.cadin`, `contrato.execucao.checklist.enviar`, `contrato.execucao.checklist.reaproveitar`, `contrato.execucao.consolidado`, `contrato.execucao.ordem_bancaria` e `contrato.execucao.reabrir`.
+- **Itens, formulário e checklist: copiados ao iniciar a etapa.** Gerar competências cria só o período; cada competência copia (e depois mantém congelado) o que estiver vigente quando a etapa começa:
+
+  | Etapa | Quando copia | De onde |
+  |---|---|---|
+  | Medição | primeiro acesso (`GET` do detalhe, salvar, ciência ou concluir) com o período encerrado (ou "liberar todas") | itens do contrato, com preço e previsão do período |
+  | Avaliação | ao concluir a medição | formulário ativo naquele momento (sem formulário ativo, a etapa não existe) |
+  | Checklist | ao concluir a nota fiscal | checklist ativo naquele momento; documentos ainda válidos da competência anterior são reaproveitados |
+
+  Antes disso a competência não guarda itens (o previsto, p. ex. no alerta de empenho do painel, é calculado na hora). Para pegar uma versão nova numa competência já copiada, reabra uma etapa anterior (ou zere): o que veio depois é descartado e copiado de novo. Competências geradas antes dessa mudança já têm as cópias e seguem como estavam.
+- **Reabrir (SuperRoot ou gestor):** volta para uma etapa anterior com justificativa. A etapa escolhida **mantém o preenchimento**; as **posteriores são descartadas** e começam vazias:
+
+  | Etapa posterior | O que é descartado |
+  |---|---|
+  | Avaliação | apagada (notas, ciências, PDFs, e-mail); copiada de novo do formulário ativo ao concluir a medição |
+  | Nota fiscal | notas fiscais juntadas, recebimento, prazo, origem do valor e e-mail |
+  | Retenção | conferência, PDF e e-mail |
+  | CADIN | consultas |
+  | Checklist | cópia apagada (com os anexos); copiada de novo ao concluir a nota fiscal |
+  | Consolidado / OB | documento consolidado, OB e conclusão |
+
+  Retenção, CADIN e checklist são paralelos: reabrir um deles não descarta os outros dois. A **recusa da nota** (acima) é outro caminho: reabre só a nota fiscal e mantém o CADIN e o checklist. Reabrir a nota fiscal ou a medição descarta o histórico de recusas. Reabrir a medição também apaga as ciências. Se a competência estava paga, cada débito ganha um lançamento de **`estorno`** (valor negativo, com autor e justificativa) no extrato da NE; o pagamento original **permanece** no extrato. Anexos e histórico ficam guardados.
+- **Auditoria:** `contrato.checklist.*`, `contrato.formulario.*`, `contrato.execucao.gerar`, `contrato.execucao.medicao.*`, `contrato.execucao.avaliacao.*`, `contrato.execucao.nota_fiscal.concluir`, `contrato.execucao.cadin`, `contrato.execucao.checklist.enviar`, `contrato.execucao.checklist.reaproveitar`, `contrato.execucao.consolidado`, `contrato.execucao.ordem_bancaria`, `contrato.execucao.reabrir` (registra as etapas descartadas) e `contrato.execucao.zerar`.
 
 ---
 
@@ -158,15 +185,18 @@ A API gera `id` para grupos e itens. As respostas da avaliação referenciam o `
 | `POST /competencias/{id}/reenviar-email-avaliacao` | Reenvia o relatório de avaliação à contratada (quem pode editar o contrato; exige o PDF gerado) |
 | `POST /competencias/{id}/avaliacao/assinada` | `multipart` `arquivo`: via assinada pela contratada; conclui a etapa |
 | `POST /competencias/{id}/avaliacao/reconsideracao` | `multipart` `arquivo`: justificativa da contratada; reabre a avaliação (uma vez) |
-| `POST /competencias/{id}/nota-fiscal` | `multipart`: `recebida_em`, `prazo_pagamento_dias`, `notas` (JSON com a lista final, na ordem: `[{"id": uuid\|null, "arquivo": posição\|null, "xml": posição\|null}]`) e as listas de arquivos `arquivos` (PDFs) e `xmls`, referenciados por posição. PDF e XML são obrigatórios em cada nota; `id` mantém uma nota já registrada e seus arquivos (correção depois de reabrir); notas fora da lista são removidas; `422` se `notas` não for uma lista JSON válida |
+| `POST /competencias/{id}/nota-fiscal` | `multipart`: `recebida_em`, `prazo_pagamento_dias`, `notas` (JSON com a lista final, na ordem: `[{"id": uuid\|null, "arquivo": posição\|null, "xml": posição\|null, "valor_bruto": decimal\|null, "numero": texto\|null}]`) e as listas de arquivos `arquivos` (PDFs) e `xmls`, referenciados por posição. O PDF é obrigatório em cada nota; o **XML é opcional**: sem ele, cada item de `notas` traz `valor_bruto` (obrigatório) e `numero` (opcional), e a nota fica sem chave, sem dados do XML e sem retenções sugeridas (o Financeiro digita as retenções na etapa seguinte); `id` mantém uma nota já registrada e seus arquivos (correção depois de reabrir); notas fora da lista são removidas; `422` se `notas` não for uma lista JSON válida |
 | `POST /competencias/{id}/reenviar-email-nf` | Reenvia o e-mail da NF ao Financeiro (quem edita o contrato) |
 | `PUT /competencias/{id}/retencao` | `{ "notas": [{"nota_id", "ir","inss","iss","pis","cofins","csll"}, …], "discriminacao_conferida": true }` (uma entrada para cada nota; falta de alguma → `400`) (Financeiro, equipe ou SuperRoot). Outro usuário → `403` |
 | `POST /competencias/{id}/reenviar-email-retencao` | Reenvia o e-mail da retenção à equipe |
+| `POST /competencias/{id}/retencao/recusar` | Recusa a nota fiscal (justificativa obrigatória; e-mail à equipe e a todos os prepostos com o PDF) e reabre a etapa da nota fiscal |
+| `POST /competencias/{id}/recusas/{recusa_id}/reenviar-email` | Reenvia o e-mail de uma recusa |
 | `POST /competencias/{id}/cadin` | `multipart`: `possui_pendencia`, `certidao`; com pendência: `pendencia`, `texto_notificacao` e `email` |
 | `POST /competencias/{id}/checklist/{documento_id}` | `multipart` `arquivo` |
 | `POST /competencias/{id}/checklist/concluir` | Conclui a etapa com os obrigatórios anexados. Falta de obrigatório → `400` com os nomes |
 | `POST /competencias/{id}/consolidado` | Gera o documento consolidado. Gerar novamente: só gestor do contrato ou SuperRoot (`403`), também após a OB |
 | `POST /competencias/{id}/ordem-bancaria` | `multipart` `arquivo`: debita as NEs e conclui |
+| `POST /competencias/{id}/zerar` | Sem corpo. Zera a competência inteira (medição: itens copiados, quantidades medidas, ciências, memórias, NEs escolhidas e e-mail; e todas as etapas seguintes, como na reabertura; estorna a OB se estava paga). SuperRoot ou gestor vigente; demais → `403`. Na tela, botão vermelho "Zerar competência" ao lado de "Reabrir etapa", com alerta e contagem de 5 s |
 | `POST /competencias/{id}/reabrir` | `{ "etapa": "…", "justificativa": "…" }` (SuperRoot ou gestor vigente; demais → `403`) |
 
 O `DetalheCompetencia` traz o `ResumoCompetencia` e mais:
@@ -182,9 +212,10 @@ O `DetalheCompetencia` traz o `ResumoCompetencia` e mais:
 - **Avaliação e pagamento:**
   - `avaliacao`: definição, respostas, `nota_final`, `percentual_liberado`, `precisa_avaliacao_gestor`, `ciencias` (mesmo formato das ciências da medição: `usuario_id`, `nome`, `papel`, `registrada_em`), PDFs e reconsideração;
   - `percentual_autorizado`, `valor_autorizado` (medido × % − desconto de reajuste, nunca negativo; sugestão do valor da NF), `desconto_reajuste` (crédito de um reajuste com desconto retroativo abatido nesta competência; `0.00` quando não há) e `descontos_reajuste[]` (`reajuste_id`, `mes_referencia`, `valor`: a origem de cada desconto) e `valor_a_pagar` (o que a OB debita: a soma das NFs; antes da NF, o valor autorizado);
-  - `reaberturas_permitidas` (o usuário pode reabrir etapas).
+  - `reaberturas_permitidas` (o usuário pode reabrir etapas);
+  - `empresa_cnpj` (CNPJ da contratada, só dígitos): a etapa do CADIN mostra o campo com botão **Copiar** e o link para a consulta pública do CADIN estadual (`https://www.fazenda.sp.gov.br/cadin_estadual/pages/publ/cadin.aspx`).
 - **Notas fiscais:** `notas_fiscais[]`, em ordem (`id`, `ordem`, número, `arquivo`, `xml`, `dados_xml`, `conferencias[]` com `descricao`/`situacao`/`detalhe`, bruto, retenções — `retencao_ir`, `_inss`, `_iss`, `_pis`, `_cofins`, `_csll` —, líquido), `nf_recebida_em`, `prazo_pagamento_dias`, `vencimento_pagamento`, `nf_concluida_em`, `email_nf`.
-- **Retenção:** `retencao` (`concluida_em`, `por_nome`, `discriminacao_conferida`, `pdf`) ou `null`, `pode_conferir_retencao`, `email_retencao`.
+- **Retenção:** `retencao` (`concluida_em`, `por_nome`, `discriminacao_conferida`, `pdf`) ou `null`, `pode_conferir_retencao`, `email_retencao`, **`recusas[]`** e `pode_recusar`.
 - **Etapas:** `etapas_abertas` (aceitam gravação agora; depois da NF, até três ao mesmo tempo) e `etapas_concluidas`.
 - **Demais etapas:** `consultas_cadin[]`, `documentos[]` (checklist mensal, com `obrigatorio`), `consolidado`, `ordem_bancaria`, `concluida_em`.
 

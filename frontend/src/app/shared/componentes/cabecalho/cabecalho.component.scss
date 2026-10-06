@@ -7,16 +7,12 @@
   min-height: 70px;
 }
 
-/* Recorte do brasão a partir da imagem institucional */
-.brasao {
-  width: 57px;
-  height: 63px;
-  display: inline-block;
+/* Logo institucional do Governo (4-vertical-slogan.png) */
+.logo-sp {
+  height: 56px;
+  width: auto;
+  display: block;
   flex: none;
-  background-image: url('/assets/imagens/brasao.png');
-  background-repeat: no-repeat;
-  background-size: 360px auto;
-  background-position: center -37px;
 }
 
 .marca-filete {

@@ -53,9 +53,9 @@ def test_previa_devolve_png_em_alta_resolucao_html_e_nao_grava_no_perfil(cliente
     assert r.status_code == 200, r.text
     corpo = r.json()
     imagem = Image.open(io.BytesIO(base64.b64decode(corpo["png_base64"])))
-    assert imagem.size == (1692, 471) and imagem.format == "PNG"
+    assert imagem.size == (1765, 492) and imagem.format == "PNG"
     assert "(11) 3702-8178" in corpo["html"] and "Cel. (11) 99999-8888" in corpo["html"] and "5º andar · Lado B" in corpo["html"]
-    assert 'href="mailto:ebothmann@sp.gov.br"' in corpo["html"] and 'href="tel:+5511370 28178"'.replace(" ", "") in corpo["html"]
+    assert 'alt="' in corpo["html"] and "data:image/png;base64," in corpo["html"] and 'width="564"' in corpo["html"]
     assert corpo["avisos"] == []
     # Nada foi gravado no perfil nem na fila de validação da CGP
     with FabricaSessao() as sessao:
@@ -86,8 +86,8 @@ def test_texto_longo_e_abreviado_com_aviso_e_a_imagem_mantem_o_tamanho(cliente):
     r = cliente.post(f"{URL}/previa", json=longo, headers=h)
     assert r.status_code == 200
     avisos = " ".join(r.json()["avisos"])
-    assert "E-mail muito longo" in avisos and "Cargo muito longo" in avisos and "Departamento muito longo" in avisos
-    assert Image.open(io.BytesIO(base64.b64decode(r.json()["png_base64"]))).size == (1692, 471)
+    assert "E-mail e telefone muito longo" in avisos and "Cargo muito longo" in avisos and "Órgão muito longo" in avisos
+    assert Image.open(io.BytesIO(base64.b64decode(r.json()["png_base64"]))).size == (1765, 492)
 
 
 def test_html_escapa_o_que_o_usuario_digita(cliente):
@@ -110,7 +110,7 @@ def test_baixar_png_e_html_com_auditoria(cliente):
     h = cabecalho_de_teste(cliente)
     r = cliente.post(f"{URL}/png", json=DADOS, headers=h)
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
-    assert 'filename="assinatura-email.png"' in r.headers["content-disposition"] and _png(r).size == (1692, 471)
+    assert 'filename="assinatura-email.png"' in r.headers["content-disposition"] and _png(r).size == (1765, 492)
     r = cliente.post(f"{URL}/html", json=DADOS, headers=h)
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     assert "<!DOCTYPE html>" in r.text and "ebothmann@sp.gov.br" in r.text

@@ -2,6 +2,7 @@
 # Este arquivo serve para testar previsão, Notas de Empenho, checklists e as etapas da execução.
 """MVPs 2 a 4: previsão, Notas de Empenho, checklists, competências (etapas 1 a 7), avaliação e reabertura."""
 
+import json
 import re
 from datetime import date
 from decimal import Decimal
@@ -28,8 +29,8 @@ def _hoje(monkeypatch):
 @pytest.fixture
 def equipe(cliente, admin):
     """Contrato com gestora e fiscal (ACL MODIFICACAO) e os cabeçalhos de cada um."""
-    gestora, fiscal = criar_usuario("gestora"), criar_usuario("fiscal")
-    restringir_contratos(cliente, admin, {gestora: "MODIFICACAO", fiscal: "MODIFICACAO"})
+    gestora, fiscal, externo = criar_usuario("gestora"), criar_usuario("fiscal"), criar_usuario("externo")
+    restringir_contratos(cliente, admin, {gestora: "MODIFICACAO", fiscal: "MODIFICACAO", externo: "MODIFICACAO"})
     contrato = criar_contrato(cliente, admin, equipe={"gestor": gestora, "fiscal_tecnico": fiscal})
     return contrato, cabecalho(cliente, "gestora"), cabecalho(cliente, "fiscal")
 
@@ -162,7 +163,7 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     # Sem nenhuma ciência, a conclusão é recusada; uma ciência já basta para avançar
     r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": ordem_notas}, headers=gestora)
     assert r.status_code == 400 and "uma ciência" in r.json()["detalhe"]
-    assert cliente.post(f"{base}/medicao/ciencia", headers=admin).status_code == 400  # SuperRoot fora da equipe
+    assert cliente.post(f"{base}/medicao/ciencia", headers=cabecalho(cliente, "externo")).status_code == 400  # usuário fora da equipe
     assert len(cliente.post(f"{base}/medicao/ciencia", headers=gestora).json()["ciencias"]) == 1
     r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": ordem_notas}, headers=fiscal)
     assert r.status_code == 200, r.text
@@ -315,7 +316,7 @@ def test_avaliacao_libera_pagamento_pela_faixa(cliente, admin, equipe):
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
     assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).json()["etapa_atual"] == "avaliacao"
 
-    itens = [i["id"] for g in competencia["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
+    itens = [i["id"] for g in cliente.get(base, headers=gestora).json()["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
     sem_justificativa = {"respostas": [{"item_id": itens[0], "nota": "5"}, {"item_id": itens[1], "nota": "10"}]}
     assert cliente.put(f"{base}/avaliacao/inicial", json=sem_justificativa, headers=fiscal).status_code == 400
     inicial = {"respostas": [{"item_id": itens[0], "nota": "5", "justificativa": "Atrasos"}, {"item_id": itens[1], "nota": "10"}]}
@@ -329,7 +330,7 @@ def test_avaliacao_libera_pagamento_pela_faixa(cliente, admin, equipe):
 
     # Ateste: ciências da equipe, como na medição (sem indicar assinantes); uma já libera o PDF
     assert cliente.post(f"{base}/avaliacao/pdf", headers=gestora).status_code == 400
-    assert cliente.post(f"{base}/avaliacao/ciencia", headers=admin).status_code == 400  # SuperRoot fora da equipe
+    assert cliente.post(f"{base}/avaliacao/ciencia", headers=cabecalho(cliente, "externo")).status_code == 400  # usuário fora da equipe
     ciencias = cliente.post(f"{base}/avaliacao/ciencia", headers=gestora).json()["avaliacao"]["ciencias"]
     assert [(c["nome"], c["papel"]) for c in ciencias] == [(ciencias[0]["nome"], "gestor")]
     # Repetir a ciência não duplica
@@ -500,15 +501,16 @@ def test_checklist_lista_obrigatorios_primeiro_e_opcionais_por_ultimo(cliente, a
     assert [i["nome"] for i in novo["itens"]] == ["Obrigatório 1", "Obrigatório 2", "Opcional 1", "Opcional 2"]
     cliente.post(_url(contrato, f"/checklists/{novo['id']}/ativar"), headers=gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    # A competência só copia o checklist ao iniciar a etapa (ao concluir a nota fiscal): ao gerar, nada é copiado
     competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
-    assert [d["nome"] for d in competencia["documentos"]] == ["Obrigatório 1", "Obrigatório 2", "Opcional 1", "Opcional 2"]
-    # Trocar o checklist ativo com as competências já geradas (mesmas posições) não pode violar a unicidade da ordem
+    assert competencia["documentos"] == []
     outro = cliente.post(_url(contrato, "/checklists"), json={"nome": "Outro", "itens": [{"nome": "Obrigatório 1"}, {"nome": "Novo", "obrigatorio": False}]}, headers=gestora).json()
     outro = next(c for c in outro if c["nome"] == "Outro")
     r = cliente.post(_url(contrato, f"/checklists/{outro['id']}/ativar"), headers=gestora)
     assert r.status_code == 200, r.text
+    # Trocar o checklist ativo não toca nas competências que ainda não iniciaram a etapa
     competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
-    assert [d["nome"] for d in competencia["documentos"]] == ["Obrigatório 1", "Novo"]
+    assert competencia["documentos"] == []
 
 
 def test_documento_com_validade_e_reaproveitado_na_competencia_seguinte(cliente, admin, equipe):
@@ -547,13 +549,24 @@ def test_documento_com_validade_e_reaproveitado_na_competencia_seguinte(cliente,
     detalhe = cliente.post(f"{base}/checklist/{docs['Folha']['id']}", files={"arquivo": ("f.pdf", PDF)}, headers=gestora).json()
     assert detalhe["etapa_atual"] == "consolidado"  # todos anexados: conclui sozinha
 
+    # A seguinte ainda não copiou o checklist (a etapa dela não começou): nada a reaproveitar até lá
     seguinte = cliente.get(_url(contrato, "/competencias/identificador/2026-02"), headers=gestora).json()
+    assert seguinte["documentos"] == []
+    # Ao concluir a nota fiscal da seguinte, ela copia o checklist ativo e traz os documentos ainda válidos da anterior
+    base2 = _url(contrato, f"/competencias/{seguinte['id']}")
+    medicao2 = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in seguinte["itens"]], "notas_empenho_ids": notas}
+    cliente.put(f"{base2}/medicao", json=medicao2, headers=gestora)
+    cliente.post(f"{base2}/medicao/ciencia", headers=gestora)
+    cliente.post(f"{base2}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    r = juntar_nf(cliente, base2, gestora, "2105.00", numero="2")
+    assert r.status_code == 200, r.text
+    seguinte = cliente.get(base2, headers=gestora).json()
     por_nome = {d["nome"]: d for d in seguinte["documentos"]}
     assert por_nome["Certidão A"]["arquivo"] is not None and por_nome["Certidão A"]["validade_ate"] == "2026-02-28" and por_nome["Certidão A"]["reaproveitado_de"] == "2026-01-01"
     assert por_nome["Certidão B"]["arquivo"] is None and por_nome["Folha"]["arquivo"] is None
     assert seguinte["etapa_atual"] != "consolidado"  # reaproveitar não conclui o checklist da seguinte
-    # A terceira competência não herda o documento da primeira (só a imediatamente seguinte recebe)
-    assert next(d for d in cliente.get(_url(contrato, "/competencias/identificador/2026-03"), headers=gestora).json()["documentos"] if d["nome"] == "Certidão A")["arquivo"] is None
+    # A terceira competência ainda não começou a etapa: sem documentos
+    assert cliente.get(_url(contrato, "/competencias/identificador/2026-03"), headers=gestora).json()["documentos"] == []
 
 
 def test_avaliacao_toda_na_maxima_dispensa_o_gestor(cliente, admin, equipe):
@@ -571,7 +584,7 @@ def test_avaliacao_toda_na_maxima_dispensa_o_gestor(cliente, admin, equipe):
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).json()["etapa_atual"] == "avaliacao"
 
-    itens = [i["id"] for g in competencia["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
+    itens = [i["id"] for g in cliente.get(base, headers=gestora).json()["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
     maxima = {"respostas": [{"item_id": i, "nota": "10"} for i in itens]}
     r = cliente.put(f"{base}/avaliacao/inicial", json=maxima, headers=fiscal).json()
     assert r["avaliacao"]["precisa_avaliacao_gestor"] is False and r["avaliacao"]["nota_final"] == "10.00"
@@ -586,3 +599,147 @@ def test_avaliacao_toda_na_maxima_dispensa_o_gestor(cliente, admin, equipe):
     r = cliente.put(f"{base}/avaliacao/inicial", json=inicial, headers=fiscal).json()
     assert r["avaliacao"]["precisa_avaliacao_gestor"] is True and r["avaliacao"]["ciencias"] == []
     assert cliente.post(f"{base}/avaliacao/ciencia", headers=fiscal).status_code == 400
+
+
+def _medir_ate_concluir(cliente, contrato, gestora, fiscal, concluir=True):
+    """Mede e (se pedido) conclui a medição de 2026-01; devolve (url base, notas de empenho)."""
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
+    cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    if concluir:
+        assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
+    return base, notas
+
+
+def _formulario_com_faixa(percentual: str) -> dict:
+    return {**FORMULARIO, "definicao": {**FORMULARIO["definicao"], "faixas": [{"minimo": "0", "percentual": percentual}]}}
+
+
+def test_avaliacao_copia_o_formulario_ativo_ao_concluir_a_medicao(cliente, admin, equipe):
+    """Gerar não copia o formulário: a avaliação nasce ao concluir a medição, com a versão ativa naquele momento, e fica congelada."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    v1 = cliente.post(_url(contrato, "/formularios"), json=FORMULARIO, headers=gestora).json()[0]
+    cliente.post(_url(contrato, f"/formularios/{v1['id']}/ativar"), headers=gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    base, notas = _medir_ate_concluir(cliente, contrato, gestora, fiscal, concluir=False)
+    antes = cliente.get(base, headers=gestora).json()
+    assert antes["avaliacao"] is None and "avaliacao" in antes["etapas"]
+
+    # Versão nova ativada antes de concluir a medição: é ela que a avaliação copia
+    v2 = cliente.post(_url(contrato, "/formularios"), json=_formulario_com_faixa("50"), headers=gestora).json()[0]
+    assert cliente.post(_url(contrato, f"/formularios/{v2['id']}/ativar"), headers=gestora).status_code == 200
+    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
+    depois = cliente.get(base, headers=gestora).json()
+    assert depois["etapa_atual"] == "avaliacao" and depois["avaliacao"]["definicao"]["faixas"] == v2["definicao"]["faixas"]
+
+    # Ativar outra versão depois não altera a avaliação já copiada
+    cliente.post(_url(contrato, f"/formularios/{v1['id']}/ativar"), headers=gestora)
+    assert cliente.get(base, headers=gestora).json()["avaliacao"]["definicao"]["faixas"] == v2["definicao"]["faixas"]
+
+
+def test_reabrir_medicao_descarta_a_avaliacao_e_copia_o_ativo_ao_concluir_de_novo(cliente, admin, equipe):
+    """Reabrir a medição mantém a medição e apaga a avaliação; ao concluir de novo, ela copia o formulário ativo da hora."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    v1 = cliente.post(_url(contrato, "/formularios"), json=FORMULARIO, headers=gestora).json()[0]
+    cliente.post(_url(contrato, f"/formularios/{v1['id']}/ativar"), headers=gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    base, notas = _medir_ate_concluir(cliente, contrato, gestora, fiscal)
+    itens = [i["id"] for g in cliente.get(base, headers=gestora).json()["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
+    inicial = {"respostas": [{"item_id": itens[0], "nota": "5", "justificativa": "Atrasos"}, {"item_id": itens[1], "nota": "10"}]}
+    assert cliente.put(f"{base}/avaliacao/inicial", json=inicial, headers=fiscal).status_code == 200
+
+    v2 = cliente.post(_url(contrato, "/formularios"), json=_formulario_com_faixa("50"), headers=gestora).json()[0]
+    cliente.post(_url(contrato, f"/formularios/{v2['id']}/ativar"), headers=gestora)
+    r = cliente.post(f"{base}/reabrir", json={"etapa": "medicao", "justificativa": "Teste"}, headers=gestora)
+    assert r.status_code == 200, r.text
+    reaberta = cliente.get(base, headers=gestora).json()
+    assert reaberta["etapa_atual"] == "medicao" and reaberta["itens"] and reaberta["avaliacao"] is None
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
+    nova = cliente.get(base, headers=gestora).json()["avaliacao"]
+    assert nova["respostas_iniciais"] == [] and nova["definicao"]["faixas"] == v2["definicao"]["faixas"]
+
+
+def test_superroot_registra_ciencia_sem_integrar_a_equipe(cliente, admin, equipe):
+    """Para efeito de teste, o SuperRoot dá ciência na medição mesmo fora da equipe, com o papel "administrador"."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    v1 = cliente.post(_url(contrato, "/formularios"), json=FORMULARIO, headers=gestora).json()[0]
+    cliente.post(_url(contrato, f"/formularios/{v1['id']}/ativar"), headers=gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
+    cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
+    assert cliente.get(base, headers=admin).json()["integra_equipe"] is True
+    assert cliente.post(f"{base}/medicao/ciencia", headers=admin).status_code == 200
+    assert [c["papel"] for c in cliente.get(base, headers=admin).json()["ciencias"]] == ["administrador"]
+    # Também avalia os serviços (inicial e do gestor), o que um usuário comum fora da equipe não faz
+    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=admin)
+    competencia = cliente.get(base, headers=admin).json()
+    itens = [i["id"] for g in cliente.get(base, headers=gestora).json()["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
+    inicial = {"respostas": [{"item_id": itens[0], "nota": "5", "justificativa": "Atrasos"}, {"item_id": itens[1], "nota": "10"}]}
+    assert cliente.put(f"{base}/avaliacao/inicial", json=inicial, headers=cabecalho(cliente, "externo")).status_code == 403
+    assert cliente.put(f"{base}/avaliacao/inicial", json=inicial, headers=admin).status_code == 200
+    gestor = {"respostas": inicial["respostas"], "complemento": "Ok"}
+    assert cliente.put(f"{base}/avaliacao/gestor", json=gestor, headers=admin).status_code == 200
+
+
+def test_zerar_competencia_apaga_a_medicao_e_as_etapas(cliente, admin, equipe):
+    """Zerar volta tudo ao início (quantidades medidas, ciências, NEs); só SuperRoot ou gestor."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
+    cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    assert cliente.post(f"{base}/zerar", headers=fiscal).status_code == 403
+    r = cliente.post(f"{base}/zerar", headers=gestora)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["etapa_atual"] == "medicao" and d["ciencias"] == [] and d["notas_selecionadas"] == []
+    assert all(i["quantidade_medida"] in ("0", "0.0000") or float(i["quantidade_medida"]) == 0 for i in d["itens"])
+
+
+def test_itens_so_sao_copiados_no_primeiro_acesso_da_medicao(cliente, admin, equipe):
+    """Gerar não copia os itens; o primeiro acesso à competência liberada copia uma vez, e depois ficam congelados."""
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    assert len(competencia["itens"]) == len(contrato["itens"])
+    # Acessos repetidos não duplicam
+    assert len(cliente.get(base, headers=gestora).json()["itens"]) == len(contrato["itens"])
+    # Zerar descarta os itens; o próximo acesso copia de novo
+    assert cliente.post(f"{base}/zerar", headers=gestora).status_code == 200
+    assert len(cliente.get(base, headers=gestora).json()["itens"]) == len(contrato["itens"])
+
+
+def test_nota_fiscal_sem_xml_com_valor_informado(cliente, admin, equipe):
+    """O XML é opcional: sem ele a nota exige o valor bruto, não guarda dados do XML e a etapa avança."""
+    contrato, gestora, fiscal = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    base, notas = _medir_ate_concluir(cliente, contrato, gestora, fiscal)
+    dados = {"recebida_em": "2026-02-05", "prazo_pagamento_dias": "30", "notas": json.dumps([{"arquivo": 0}])}
+    arquivos = [("arquivos", ("nf.pdf", PDF, "application/pdf"))]
+    # Sem XML e sem valor: recusa
+    r = cliente.post(f"{base}/nota-fiscal", data=dados, files=arquivos, headers=gestora)
+    assert r.status_code == 400 and "valor bruto" in r.json()["detalhe"]
+    dados["notas"] = json.dumps([{"arquivo": 0, "valor_bruto": "2105.00", "numero": "99"}])
+    r = cliente.post(f"{base}/nota-fiscal", data=dados, files=arquivos, headers=gestora)
+    assert r.status_code == 200, r.text
+    nota = r.json()["notas_fiscais"][0]
+    assert r.json()["etapa_atual"] == "retencao" and nota["valor_bruto"] == "2105.00" and nota["numero"] == "99"
+    assert nota["dados_xml"] is None and nota["xml"] is None

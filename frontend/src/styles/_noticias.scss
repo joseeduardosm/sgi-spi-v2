@@ -10,10 +10,8 @@
 .topo-portal-interno { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; padding-bottom: 12px; }
 
 .marca-portal { display: flex; align-items: center; gap: 12px; color: var(--cor-171c23); text-decoration: none; }
-.brasao-portal {
-  width: 57px; height: 63px; flex: none;
-  background: url('/assets/imagens/brasao.png') no-repeat center -37px / 360px auto;
-}
+/* Logo institucional do Governo (4-vertical-slogan.png) */
+.logo-portal { height: 56px; width: auto; display: block; flex: none; }
 .filete-portal { width: 2px; height: 52px; background: var(--spi-vermelho-filete, #c82331); }
 .nome-portal { line-height: 1.15; strong { display: block; font-size: 12px; } small { display: block; font-size: 10px; color: var(--cor-5a6673); } }
 

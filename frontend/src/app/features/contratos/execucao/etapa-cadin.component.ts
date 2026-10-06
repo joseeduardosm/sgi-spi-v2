@@ -2,7 +2,7 @@
 // Este arquivo serve para controlar a etapa 4 (consulta ao CADIN), com o histórico de consultas.
 
 import { DatePipe } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { Component, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
@@ -25,6 +25,21 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
             <label><input type="radio" name="pendencia" [value]="false" [(ngModel)]="possuiPendencia" /> Não</label>
             <label><input type="radio" name="pendencia" [value]="true" [(ngModel)]="possuiPendencia" /> Sim</label>
           </fieldset>
+          <div class="grade-formulario" style="margin: 0 0 10px">
+            @if (d.empresa_cnpj) {
+            <div>
+              <label for="cadin-cnpj">CNPJ da contratada (só números)</label>
+              <div class="acoes-cartao esquerda" style="margin: 0">
+                <input id="cadin-cnpj" readonly [value]="d.empresa_cnpj" (focus)="$any($event.target).select()" />
+                <button type="button" class="acao-secundaria acao-pequena" (click)="copiarCnpj()">{{ cnpjCopiado() ? 'Copiado' : 'Copiar' }}</button>
+              </div>
+            </div>
+            }
+            <div>
+              <label>Consulta pública</label>
+              <a class="link-arquivo" [href]="urlCadin" target="_blank" rel="noopener noreferrer">Abrir o CADIN estadual (Fazenda-SP)</a>
+            </div>
+          </div>
           <div class="acoes-cartao esquerda" style="margin: 0 0 14px"><app-envio-pdf rotulo="Selecionar certidão do CADIN" (selecionado)="certidao = $event" /></div>
           @if (possuiPendencia) {
             <div class="grade-formulario">
@@ -76,8 +91,18 @@ export class EtapaCadinComponent {
   protected possuiPendencia = false;
   protected pendencia = '';
   protected textoNotificacao = '';
+  protected readonly urlCadin = 'https://www.fazenda.sp.gov.br/cadin_estadual/pages/publ/cadin.aspx';
+  protected readonly cnpjCopiado = signal(false);
   protected certidao: File | null = null;
   protected email: File | null = null;
+
+  /** Copia o CNPJ da contratada (só dígitos) para colar na consulta do CADIN. */
+  protected copiarCnpj(): void {
+    void navigator.clipboard?.writeText(this.detalhe().empresa_cnpj).then(() => {
+      this.cnpjCopiado.set(true);
+      setTimeout(() => this.cnpjCopiado.set(false), 2000);
+    });
+  }
 
   /** Envia a consulta; em seguida, limpa o formulário para uma nova consulta. */
   protected registrar(): void {

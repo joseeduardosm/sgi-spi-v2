@@ -37,7 +37,7 @@ def dados(usuario: Usuario = Depends(obter_usuario_atual)) -> LeituraDadosAssina
 
 
 @roteador.post("/previa", response_model=PreviaAssinatura, summary="Prévia da assinatura",
-               description="Gera a imagem (PNG 1692×471 em base64), o HTML e os avisos (texto abreviado, campo ausente). "
+               description="Gera a imagem (PNG do modelo PPTX, hoje 1765×492, em base64), o HTML e os avisos (texto abreviado, campo ausente). "
                "Nome, cargo e e-mail são obrigatórios (`400`). **Não grava nada no perfil.**", responses=INVALIDO)
 def previa(dados: DadosAssinatura, _: Usuario = Depends(obter_usuario_atual)) -> PreviaAssinatura:
     resultado = _gerar(dados)
@@ -45,7 +45,7 @@ def previa(dados: DadosAssinatura, _: Usuario = Depends(obter_usuario_atual)) ->
 
 
 @roteador.post("/png", response_class=Response, summary="Baixar a assinatura em PNG",
-               description="`image/png` de 1692×471 (use a 564 px de largura nos clientes de e-mail). Auditado como `assinatura.gerar`.",
+               description="`image/png` no pixel original do modelo PPTX (hoje 1765×492; use a 564 px de largura nos clientes de e-mail). Auditado como `assinatura.gerar`.",
                responses={200: {"content": {"image/png": {}}}, **INVALIDO})
 def baixar_png(dados: DadosAssinatura, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> Response:
     resultado = _gerar(dados)
@@ -55,7 +55,7 @@ def baixar_png(dados: DadosAssinatura, sessao: Session = Depends(obter_sessao), 
 
 
 @roteador.post("/html", response_class=Response, summary="Baixar a assinatura em HTML",
-               description="Arquivo `.html` com a assinatura (tabela com estilos inline) para importar no Outlook ou no webmail. Auditado como `assinatura.gerar`.",
+               description="Arquivo `.html` com a assinatura (a imagem do modelo em uma tabela, com texto alternativo) para importar no Outlook ou no webmail. Auditado como `assinatura.gerar`.",
                responses={200: {"content": {"text/html": {}}}, **INVALIDO})
 def baixar_html(dados: DadosAssinatura, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> Response:
     resultado = _gerar(dados)

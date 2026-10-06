@@ -19,6 +19,9 @@ import { EtapaNotaFiscalComponent } from './etapa-nota-fiscal.component';
 import { EtapaRetencaoComponent } from './etapa-retencao.component';
 
 /** Tela 5: execução de uma competência (etapas 1 a 7). */
+/** Quantas vezes (a cada 2,5 s) a tela consulta o resultado do e-mail antes de parar. */
+const LIMITE_CONSULTAS_EMAIL = 8;
+
 @Component({
   selector: 'app-competencia',
   imports: [
@@ -59,6 +62,9 @@ export class CompetenciaComponent implements OnInit {
     });
   }
 
+  /** Consultas seguidas feitas à espera do resultado do e-mail em segundo plano. */
+  private consultasEmail = 0;
+
   /** Recebe a competência atualizada (de qualquer etapa) e decide qual etapa exibir. */
   protected aplicar(detalhe: DetalheCompetencia, reposicionar = false): void {
     const anterior = this.detalhe()?.etapa_atual;
@@ -68,7 +74,9 @@ export class CompetenciaComponent implements OnInit {
     // E-mail em segundo plano (medição concluída ou PDF da avaliação gerado) ainda sem resultado: consulta de novo em instantes
     const enviando = (!!detalhe.medicao_concluida_em && detalhe.email_medicao.enviado_em === null)
       || (!!detalhe.avaliacao?.pdf_gerado && detalhe.avaliacao.email.enviado_em === null);
-    if (enviando) setTimeout(() => this.api.porIdentificador(this.id(), this.competencia()).subscribe({ next: (d) => this.detalhe() && this.aplicar(d) }), 2500);
+    // Reinicia a contagem quando a pessoa age; sem resultado de e-mail (ex.: e-mail não pedido) a consulta para após algumas tentativas
+    if (reposicionar) this.consultasEmail = 0;
+    if (enviando && this.consultasEmail++ < LIMITE_CONSULTAS_EMAIL) setTimeout(() => this.api.porIdentificador(this.id(), this.competencia()).subscribe({ next: (d) => this.detalhe() && this.aplicar(d) }), 2500);
     // Ao avançar de etapa, a tela acompanha a próxima etapa aberta
     if (reposicionar || anterior !== detalhe.etapa_atual || concluiuAEmTela) {
       const proxima = detalhe.etapas_abertas.find((e) => e !== 'retencao' || detalhe.pode_conferir_retencao) ?? detalhe.etapas_abertas[0];
@@ -112,6 +120,24 @@ export class CompetenciaComponent implements OnInit {
   protected etapasAnteriores(): Etapa[] {
     const d = this.detalhe();
     return d ? d.etapas.filter((e) => this.indice(e) < this.indice(d.etapa_atual)) : [];
+  }
+
+  /** Zera a competência (todas as etapas, inclusive a medição), depois de um alerta com contagem de 5 segundos. */
+  protected async zerar(): Promise<void> {
+    const d = this.detalhe();
+    if (!d) return;
+    const ok = await this.dialogos.confirmar({
+      titulo: `Zerar a competência ${d.rotulo}?`,
+      mensagem: 'ATENÇÃO: todas as etapas desta competência serão zeradas: a medição (quantidades medidas, ciências e Notas de Empenho escolhidas), a avaliação, a nota fiscal, a retenção, o CADIN, o checklist e o consolidado. Se a competência já foi paga, a ordem bancária será estornada no extrato das Notas de Empenho. Os arquivos ficam guardados no histórico, mas deixam de valer. Esta ação não pode ser desfeita.',
+      rotuloConfirmar: 'Zerar competência',
+      segundos: 5,
+      perigo: true,
+    });
+    if (!ok) return;
+    this.api.zerar(d.contrato_id, d.id).subscribe({
+      next: (novo) => this.aplicar(novo, true),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível zerar a competência'),
+    });
   }
 
   /** Reabre a competência na etapa escolhida, com a justificativa. */

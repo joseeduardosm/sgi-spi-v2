@@ -13,6 +13,8 @@ export interface OpcoesConfirmacao {
   rotuloConfirmar?: string;
   /** Segundos até liberar o botão Confirmar. Use em ações sem volta. 0 = liberado. */
   segundos?: number;
+  /** Botão Confirmar em vermelho com letras brancas (ações destrutivas). */
+  perigo?: boolean;
 }
 
 /** Confirmação em exibição, com a função que entrega a resposta a quem pediu. */
@@ -49,6 +51,7 @@ export class DialogosService {
       const segundos = Math.max(0, opcoes.segundos ?? 0);
       this.confirmacao.set({
         rotuloConfirmar: 'Confirmar',
+        perigo: false,
         ...opcoes,
         segundos,
         responder: resolver,

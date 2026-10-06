@@ -68,8 +68,11 @@ def medicao_concluida(sessao: Session, contrato: Contrato, competencia: Competen
 
 
 def nota_fiscal_juntada(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
-    """Pendência do Financeiro: conferir a retenção de tributos (encerrada em `retencao_conferida`)."""
+    """Pendência do Financeiro: conferir a retenção de tributos (encerrada em `retencao_conferida`); encerra a pendência da recusa, se houver."""
     from app.services.contratos.servico_retencao import usuarios_financeiro
+
+    for recusa in competencia.recusas:
+        servico_mensagens.encerrar(sessao, chave=f"recusa-nf:{competencia.id}:{recusa.ordem}")
 
     servico_mensagens.notificar(
         sessao, [u.id for u in usuarios_financeiro(sessao)],
@@ -78,6 +81,18 @@ def nota_fiscal_juntada(sessao: Session, contrato: Contrato, competencia: Compet
         "Confira a tributação e as retenções na etapa \"Retenção de tributos\".",
         chave=f"retencao:{competencia.id}", categoria="pendencia", prioridade="alta",
         link=_rota_competencia(contrato, competencia, "retencao"), contrato_id=contrato.id, autor=autor,
+    )
+
+
+def nota_recusada(sessao: Session, contrato: Contrato, competencia: Competencia, recusa, autor: Usuario) -> None:
+    """Encerra a pendência do Financeiro e avisa a equipe (pendência) de que a nota foi recusada e outra deve ser juntada."""
+    servico_mensagens.encerrar(sessao, chave=f"retencao:{competencia.id}")
+    avisar_equipe(
+        sessao, contrato, f"{_identificacao(contrato)}: nota fiscal recusada ({competencia.numero_competencia})",
+        f"{recusa.recusada_por_nome} recusou a nota fiscal da competência {competencia.numero_competencia} (recusa nº {recusa.ordem}). "
+        f"Justificativa: {recusa.justificativa}\n\nJunte outra nota fiscal na etapa \"Nota fiscal\".",
+        chave=f"recusa-nf:{competencia.id}:{recusa.ordem}", link=_rota_competencia(contrato, competencia, "nota_fiscal"), categoria="pendencia",
+        prioridade="alta", autor=autor,
     )
 
 

@@ -48,15 +48,15 @@
   flex: none;
 }
 
-// Recorte do brasão em escala reduzida
+// Símbolo "SP" recortado do logo institucional (4-vertical-slogan.png, 1233×619): o recorte de 568×270 px fica em 34 px de largura
 .brasao {
-  width: 32px;
+  width: 36px;
   height: 36px;
   display: inline-block;
-  background-image: url('/assets/imagens/brasao.png');
+  background-image: url('/assets/imagens/4-vertical-slogan.png');
   background-repeat: no-repeat;
-  background-size: 206px auto;
-  background-position: center -21px;
+  background-size: 73.8px auto;
+  background-position: -2px 6.2px;
 }
 
 .barra-lateral-marca-texto {

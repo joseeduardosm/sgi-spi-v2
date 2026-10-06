@@ -46,6 +46,17 @@ export class ExecucaoApiService {
     return dados;
   }
 
+  // --- Download em XLSX (planilha preenchida, no formato da importação) ---
+  /** Baixa o contrato em planilha. */
+  baixarContratoXlsx(id: string) {
+    return baixarArquivo(this.http, this.url(id, '/exportacao-xlsx'), 'contrato.xlsx');
+  }
+
+  /** Baixa uma versão do checklist ou do formulário de avaliação em planilha. */
+  baixarModeloXlsx(id: string, tipo: 'checklists' | 'formularios', versaoId: string) {
+    return baixarArquivo(this.http, this.url(id, `/${tipo}/${versaoId}/xlsx`), `${tipo}.xlsx`);
+  }
+
   // --- Checklists ---
   /** Versões do checklist do contrato. */
   checklists(id: string): Observable<Checklist[]> {
@@ -195,7 +206,7 @@ export class ExecucaoApiService {
    * registrada, e `arquivo`/`xml` são posições nas listas `arquivos` e `xmls` (os PDFs e XMLs novos).
    */
   notaFiscal(id: string, c: string, dados: {
-    recebida_em: string; prazo_pagamento_dias: number; notas: { id: string | null; arquivo: number | null; xml: number | null }[];
+    recebida_em: string; prazo_pagamento_dias: number; notas: { id: string | null; arquivo: number | null; xml: number | null; valor_bruto?: string | null; numero?: string | null }[];
     arquivos: File[]; xmls: File[]; enviar_email?: boolean; financeiro_ids?: (string | number)[] | null;
   }): Observable<DetalheCompetencia> {
     const corpo = this.formulario({ recebida_em: dados.recebida_em, prazo_pagamento_dias: dados.prazo_pagamento_dias, notas: JSON.stringify(dados.notas), enviar_email: !!dados.enviar_email });
@@ -211,6 +222,16 @@ export class ExecucaoApiService {
     notas: ({ nota_id: string } & Record<string, string>)[]; discriminacao_conferida: boolean; enviar_email?: boolean;
   }): Observable<DetalheCompetencia> {
     return this.http.put<DetalheCompetencia>(this.competencia(id, c, '/retencao'), dados);
+  }
+
+  /** Etapa 4: recusa a nota fiscal com justificativa (reabre a etapa da nota; e-mail obrigatório à equipe e aos prepostos). */
+  recusarNota(id: string, c: string, justificativa: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/retencao/recusar'), { justificativa });
+  }
+
+  /** Reenvia o e-mail de uma recusa (com o PDF anexado). */
+  reenviarEmailRecusa(id: string, c: string, recusaId: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/recusas/${recusaId}/reenviar-email`), null);
   }
 
   /** Reenvia o e-mail da NF (ao Financeiro) ou da retenção (à equipe). */
@@ -254,6 +275,11 @@ export class ExecucaoApiService {
   }
 
   /** Reabre a competência em uma etapa anterior (SuperRoot ou gestor). */
+  zerar(id: string, c: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/zerar'), {});
+  }
+
+  /** Reabre a competência numa etapa anterior; as posteriores são descartadas. */
   reabrir(id: string, c: string, etapa: Etapa, justificativa: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/reabrir'), { etapa, justificativa });
   }

@@ -8,6 +8,7 @@
     @if (d.retencao) { <span class="selo-situacao">Conferida</span> }
   </header>
   <div class="corpo">
+    <app-historico-recusas [detalhe]="d" (atualizado)="atualizado.emit($event)" />
     @for (n of notas; track n.titulo) {
       @let x = n.nota.dados_xml;
       <article class="nota-xml">
@@ -79,6 +80,7 @@
         Conferi que a <b>discriminação dos serviços</b> é compatível com o que foi contratado e medido no processo.
       </label>
       <div class="acoes-cartao"><app-opcao-email [(marcado)]="enviarEmail" descricao="PDF da conferência à equipe" />
+        @if (d.pode_recusar) { <button type="button" class="acao-perigo" (click)="recusando.set(true)">Recusar nota</button> }
         <button type="button" class="acao-primaria" [disabled]="!valido()" (click)="salvar()">Salvar retenção</button></div>
     }
 
@@ -100,3 +102,26 @@
     }
   </div>
 </section>
+
+@if (recusando()) {
+  <div class="fundo-modal" role="presentation" (click)="recusando.set(false)"></div>
+  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa">
+    <header><div><span class="modal-sobretitulo">Retenção de tributos</span><h2 id="titulo-recusa">Recusar a nota fiscal</h2></div>
+      <button type="button" aria-label="Fechar" (click)="recusando.set(false)">×</button></header>
+    <form (submit)="$event.preventDefault(); recusar()">
+      <div class="corpo-chamado">
+        <p class="dica-formulario" style="margin-top: 0">A etapa da nota fiscal volta a ficar aberta para a equipe juntar outra nota. A <b>equipe do contrato e todos os prepostos da empresa</b>
+          recebem um e-mail com a justificativa e o PDF da recusa, que também fica disponível aqui para baixar.</p>
+        <div class="campo-formulario">
+          <label for="justificativa-recusa">Justificativa da recusa *</label>
+          <textarea id="justificativa-recusa" name="justificativa" class="form-control" rows="6" maxlength="4000" required minlength="10"
+                    placeholder="Explique o que está errado na nota (mínimo de 10 caracteres)." [(ngModel)]="justificativaRecusa"></textarea>
+        </div>
+      </div>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="recusando.set(false)">Cancelar</button>
+        <button type="submit" class="acao-perigo" [disabled]="justificativaRecusa.trim().length < 10">Recusar nota</button>
+      </footer>
+    </form>
+  </section>
+}

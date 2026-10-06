@@ -26,16 +26,17 @@
           @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.com_validade) { <span class="etiqueta">Com validade</span> }@if (i.vale_outros_contratos) { <span class="etiqueta">Documento da empresa</span> }@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — <span [innerHTML]="i.observacao | linkificar"></span></small> }</li> }
         </ol>
         <small>Criado por {{ c.criado_por_nome }} em {{ c.criado_em | date: 'dd/MM/yyyy HH:mm' }}{{ c.ativado_em ? ' · ativado em ' + (c.ativado_em | date: 'dd/MM/yyyy HH:mm') : '' }}</small>
-        @if (podeEditar()) {
-          <div class="acoes-cartao esquerda">
+        <div class="acoes-cartao esquerda">
+          @if (podeEditar()) {
             @if (!c.ativo) {
               <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(c)">Editar</button>
               <button type="button" class="acao-primaria acao-pequena" (click)="ativar(c)">Ativar</button>
               <button type="button" class="acao-perigo acao-pequena" (click)="excluir(c)">Excluir</button>
             }
             <button type="button" class="acao-secundaria acao-pequena" (click)="duplicar(c)">Duplicar</button>
-          </div>
-        }
+          }
+          <button type="button" class="acao-secundaria acao-pequena" (click)="baixarXlsx(c)">Baixar XLSX</button>
+        </div>
         </div>
         }
       </article>

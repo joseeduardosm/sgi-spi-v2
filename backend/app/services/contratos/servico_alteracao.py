@@ -33,7 +33,7 @@ from app.services.contratos import calculos, valores
 from app.services.contratos.documentos_execucao import PAPEIS, data_hora, moeda, moeda_unitaria, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_competencias import CIENCIAS_MINIMAS
-from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, integra_equipe, obter_contrato, pode_editar, vigencias
+from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, papel_para_ciencia, pode_dar_ciencia, obter_contrato, pode_editar, vigencias
 from app.services.contratos.servico_orcamento import obter_ou_criar_previsao
 from app.services.documentos.pdf import DocumentoPdf, mesclar_pdfs
 from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_MOEDA_UNITARIA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
@@ -138,7 +138,7 @@ def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelA
         em_andamento=leitura(sessao, contrato, andamento, alteracoes) if andamento else None,
         vigencias=[VigenciaDisponivel(sequencia=v.sequencia, inicio=v.inicio, fim=v.fim) for v in vigencias(contrato)],
         historico=[leitura(sessao, contrato, a, alteracoes) for a in alteracoes if a is not andamento],
-        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=integra_equipe(contrato, usuario),
+        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(contrato, usuario),
     )
 
 
@@ -269,12 +269,12 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uui
     alteracao, _ = _em_andamento(sessao, contrato, alteracao_id)
     if alteracao.situacao != "aguardando_ciencias":
         raise ErroRegraContrato("Salve os quantitativos antes de registrar ciência.")
-    designacao = next((d for d in designacoes_vigentes(contrato) if d.usuario_id == autor.id), None)
-    if designacao is None:
+    papel = papel_para_ciencia(contrato, autor)
+    if papel is None:
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
     if not any(c.usuario_id == autor.id for c in alteracao.ciencias):
         # Uma nova ciência invalida a memória gerada antes (ela lista as ciências)
-        alteracao.ciencias.append(CienciaAlteracao(usuario_id=autor.id, nome=autor.nome_completo or autor.login, papel=designacao.papel, registrada_em=agora_utc()))
+        alteracao.ciencias.append(CienciaAlteracao(usuario_id=autor.id, nome=autor.nome_completo or autor.login, papel=papel, registrada_em=agora_utc()))
         alteracao.memoria_pdf_anexo_id = alteracao.memoria_xlsx_anexo_id = None
         auditar(sessao, autor.login, f"contrato.{alteracao.tipo}.ciencia", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id)
     sessao.commit()

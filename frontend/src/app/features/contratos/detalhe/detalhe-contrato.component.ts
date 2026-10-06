@@ -12,6 +12,7 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { CHAVE_CONTEXTO_CARTEIRA, ContextoCarteira, ContratosApiService } from '../compartilhado/contratos-api.service';
+import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { AlteracaoCampo, DetalheContrato, Prorrogacao, VizinhosContrato } from '../compartilhado/contratos.models';
 import { HistoricoCampoComponent } from '../compartilhado/historico-campo.component';
 import { LinhaDoTempoComponent } from '../compartilhado/linha-do-tempo.component';
@@ -44,6 +45,7 @@ export class DetalheContratoComponent {
 
   private readonly api = inject(ContratosApiService);
   private readonly alteracoes = inject(AlteracoesApiService);
+  private readonly execucao = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly rota = inject(ActivatedRoute);
   private readonly roteador = inject(Router);
@@ -127,6 +129,11 @@ export class DetalheContratoComponent {
   }
 
   /** Carrega contrato, histórico e prorrogações em paralelo (`forkJoin` espera as três respostas). */
+  /** Baixa o contrato como planilha XLSX já preenchida. */
+  protected baixarXlsx(): void {
+    this.execucao.baixarContratoXlsx(this.id()).subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível baixar a planilha') });
+  }
+
   protected carregar(): void {
     forkJoin({
       contrato: this.api.consultar(this.id()),

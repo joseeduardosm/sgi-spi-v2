@@ -1,10 +1,14 @@
 @let d = detalhe();
 <section class="cartao-dados" aria-labelledby="titulo-nf">
   <header>
-    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Junte o PDF e o XML de cada nota (pode haver mais de uma por medição). Os valores são lidos dos XMLs; as retenções são conferidas pelo Financeiro na etapa seguinte. Valor autorizado pela medição: {{ d.valor_autorizado | moeda }}@if (+d.desconto_reajuste > 0) { (já descontado o crédito de reajuste de {{ d.desconto_reajuste | moeda }}) }.</small></div>
+    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Junte o PDF de cada nota (pode haver mais de uma por medição). O XML é opcional: com ele, os valores são lidos dele; sem ele, informe o valor bruto; as retenções são conferidas pelo Financeiro na etapa seguinte. Valor autorizado pela medição: {{ d.valor_autorizado | moeda }}@if (+d.desconto_reajuste > 0) { (já descontado o crédito de reajuste de {{ d.desconto_reajuste | moeda }}) }.</small></div>
     @if (d.nf_concluida_em) { <span class="selo-situacao">Concluída</span> }
   </header>
   <div class="corpo">
+    @if (d.recusas.length && !d.nf_concluida_em) {
+      <p class="aviso-bloco erro" role="status">A nota anterior foi <b>recusada</b> pelo Financeiro. Junte outra nota fiscal (PDF obrigatório; XML opcional); este ciclo se repete até o Financeiro aprovar.</p>
+    }
+    <app-historico-recusas [detalhe]="d" (atualizado)="atualizado.emit($event)" />
     <div class="grade-formulario tres-colunas">
       <div><label for="nf-recebida">Recebida pela Administração em *</label><input id="nf-recebida" type="date" [disabled]="!editavel()" [(ngModel)]="recebidaEm" /></div>
       <div><label for="nf-prazo">Prazo para pagamento (dias corridos) *</label><input id="nf-prazo" type="number" min="1" max="3650" [disabled]="!editavel()" [(ngModel)]="prazo" /></div>
@@ -25,11 +29,17 @@
         @if (editavel()) {
           <app-envio-pdf [rotulo]="l.existente?.arquivo ? 'Substituir PDF da nota' : 'Selecionar PDF da nota'" (selecionado)="l.arquivo = $event" />
           <label class="acao-secundaria acao-pequena seletor-xml">
-            {{ l.xml ? 'XML: ' + l.xml.name : (l.existente?.xml ? 'Substituir XML da nota' : 'Selecionar XML da nota') }}
+            {{ l.xml ? 'XML: ' + l.xml.name : (l.existente?.dados_xml ? 'Substituir XML da nota' : 'Selecionar XML da nota (opcional)') }}
             <input type="file" accept=".xml,application/xml,text/xml" (change)="escolherXml($event, l)" />
           </label>
         }
       </div>
+      @if (!temXml(l)) {
+        <div class="grade-formulario tres-colunas" style="margin-top: 8px">
+          <div><label [for]="'nf-valor-' + i">Valor bruto da nota (R$) *</label><input [id]="'nf-valor-' + i" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="l.valor" /></div>
+          <div><label [for]="'nf-numero-' + i">Número da nota</label><input [id]="'nf-numero-' + i" maxlength="100" [disabled]="!editavel()" [(ngModel)]="l.numero" /></div>
+        </div>
+      }
     }
     @if (editavel()) {
       <div class="acoes-cartao esquerda" style="margin-top: 12px">

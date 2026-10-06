@@ -130,9 +130,26 @@ def _utc(valor: datetime) -> datetime:
     return valor if valor.tzinfo else valor.replace(tzinfo=ZoneInfo("UTC"))
 
 
+# Papel gravado na ciência do SuperRoot que não integra a equipe do contrato
+PAPEL_ADMINISTRADOR = "administrador"
+
+
 def integra_equipe(contrato: Contrato, usuario: Usuario) -> bool:
     """Indica se o usuário está na equipe vigente do contrato (em qualquer um dos seis papéis)."""
     return any(d.usuario_id == usuario.id for d in designacoes_vigentes(contrato))
+
+
+def papel_para_ciencia(contrato: Contrato, usuario: Usuario) -> str | None:
+    """Papel com que o usuário registra ciência: o da equipe vigente ou, para o SuperRoot (testes), "administrador"."""
+    designacao = next((d for d in designacoes_vigentes(contrato) if d.usuario_id == usuario.id), None)
+    if designacao:
+        return designacao.papel
+    return PAPEL_ADMINISTRADOR if usuario.superusuario else None
+
+
+def pode_dar_ciencia(contrato: Contrato, usuario: Usuario) -> bool:
+    """Integrante vigente da equipe ou SuperRoot (que registra ciência em qualquer contrato, para efeito de teste)."""
+    return papel_para_ciencia(contrato, usuario) is not None
 
 
 def pode_editar(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:

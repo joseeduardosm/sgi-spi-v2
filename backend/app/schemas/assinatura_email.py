@@ -58,6 +58,6 @@ class LeituraDadosAssinatura(DadosAssinatura):
 
 
 class PreviaAssinatura(BaseModel):
-    png_base64: str = Field(..., description="PNG de 1692×471 (exibir a 564 px de largura) em base64.")
-    html: str = Field(..., description="Assinatura em HTML (tabela com estilos inline), para colar no Outlook ou no webmail.")
+    png_base64: str = Field(..., description="PNG do modelo PPTX (hoje 1765×492; exibir a 564 px de largura) em base64.")
+    html: str = Field(..., description="Assinatura em HTML (a imagem do modelo em uma tabela), para colar no Outlook ou no webmail.")
     avisos: list[str] = Field(default_factory=list, description="Texto abreviado ou campo ausente na imagem.")

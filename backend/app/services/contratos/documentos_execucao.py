@@ -6,6 +6,7 @@ Também reúne formatadores usados em outros PDFs do módulo (moeda, quantidade,
 dos papéis da equipe).
 """
 
+import uuid
 from decimal import Decimal
 from io import BytesIO
 
@@ -33,6 +34,8 @@ PAPEIS = {
     "fiscal_administrativo_suplente": "Suplente administrativo",
     "fiscal_tecnico": "Fiscal técnico",
     "fiscal_tecnico_suplente": "Suplente técnico",
+    # SuperRoot que registra ciência sem integrar a equipe (efeito de teste)
+    "administrador": "Administrador (teste)",
 }
 
 
@@ -227,6 +230,26 @@ def relatorio_retencao(contrato: Contrato, competencia: Competencia, conferencia
     return documento.gerar()
 
 
+def relatorio_recusa(contrato: Contrato, competencia: Competencia, recusa, autor: str) -> bytes:
+    """PDF da recusa da nota fiscal pelo Financeiro: quem recusou, quando, a justificativa e as notas recusadas (para juntar a um processo)."""
+    documento = DocumentoPdf(
+        f"Recusa nº {recusa.ordem} da nota fiscal", f"Contrato {contrato.numero} · Competência {competencia.numero_competencia}", autor=autor,
+    )
+    _cabecalho_contrato(documento, contrato, competencia)
+    documento.secao("Recusa").campos([
+        ("Recusa nº", str(recusa.ordem)), ("Recusada por", recusa.recusada_por_nome or "—"),
+        ("Em", data_hora(recusa.recusada_em)), ("Etapa", "Retenção de tributos (Financeiro)"),
+    ])
+    documento.secao("Justificativa").paragrafo(recusa.justificativa)
+    documento.secao("Nota(s) fiscal(is) recusada(s)").tabela(
+        ["Nota", "Valor bruto", "Chave de acesso"],
+        [[n.get("rotulo") or n.get("numero") or "—", moeda(Decimal(n["valor_bruto"])) if n.get("valor_bruto") else "—", n.get("chave") or "—"] for n in recusa.notas],
+        larguras=[1.6, 1.6, 6],
+    )
+    documento.paragrafo("A competência voltou para a etapa da nota fiscal: a equipe do contrato deve juntar outra nota, que será conferida novamente pelo Financeiro.")
+    return documento.gerar()
+
+
 def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Decimal | None, percentual: Decimal, autor: str) -> bytes:
     """PDF do relatório de avaliação: notas por grupo, resultado, ateste e linhas de assinatura."""
     avaliacao = competencia.avaliacao
@@ -319,11 +342,21 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             documentos.append(("Avaliação dos serviços", "Relatório de avaliação assinado pela contratada", avaliacao.pdf_assinado_anexo_id, False, []))
         elif avaliacao.pdf_gerado_anexo_id:
             documentos.append(("Avaliação dos serviços", "Relatório de avaliação dos serviços", avaliacao.pdf_gerado_anexo_id, True, []))
+    # Trilha da nota fiscal: cada nota recusada seguida do PDF da recusa, depois a nota aprovada e a retenção (aprovação)
+    for recusa in competencia.recusas:
+        for retrato in recusa.notas:
+            if retrato.get("anexo_id"):
+                documentos.append(("Nota fiscal", f"Nota fiscal {retrato.get('numero') or retrato.get('rotulo') or ''} (recusada)".replace("  ", " ").strip(),
+                                   uuid.UUID(retrato["anexo_id"]), False, [("Situação", f"Recusada na recusa nº {recusa.ordem}")]))
+        if recusa.pdf_anexo_id:
+            documentos.append(("Recusa da nota fiscal", f"Recusa nº {recusa.ordem} da nota fiscal", recusa.pdf_anexo_id, True, []))
     for nota in competencia.notas_fiscais:
         if nota.anexo_id:
-            documentos.append(("Nota fiscal", f"Nota fiscal {nota.numero or nota.ordem}".strip(), nota.anexo_id, False, []))
+            sufixo = " (aprovada)" if competencia.recusas else ""
+            documentos.append(("Nota fiscal", f"Nota fiscal {nota.numero or nota.ordem}{sufixo}".strip(), nota.anexo_id, False, []))
     if competencia.retencao_pdf_anexo_id:
-        documentos.append(("Avaliação de retenção", "Retenção de tributos", competencia.retencao_pdf_anexo_id, True, []))
+        titulo = "Retenção de tributos (aprovação da nota fiscal)" if competencia.recusas else "Retenção de tributos"
+        documentos.append(("Avaliação de retenção", titulo, competencia.retencao_pdf_anexo_id, True, []))
     for consulta in competencia.consultas_cadin:
         resultado = [("Resultado", "Pendência encontrada" if consulta.possui_pendencia else "Sem pendência"),
                      ("Consulta registrada em", data_hora(consulta.criado_em)), ("Registrada por", consulta.criado_por_nome)]
@@ -371,11 +404,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         if paginas_indice == deslocamento:
             break
         deslocamento = paginas_indice
-    composicao = [[e.numero, e.etapa, e.titulo, f"{e.pagina_inicial}" if e.pagina_final <= e.pagina_inicial else f"{e.pagina_inicial} a {e.pagina_final}"]
-                  for e in entradas[:-1]]
-    pagina_resumo = entradas[-1].pagina_inicial
-
-    # 3) Resumo executivo, por último: dados da competência e a composição do documento
+    # 3) Resumo executivo, por último: só os dados da competência (a composição já está no índice da primeira página)
     resumo = DocumentoPdf("Resumo executivo da competência", contexto, autor=autor)
     _cabecalho_contrato(resumo, contrato, competencia)
     resumo.secao("Resumo executivo").campos(
@@ -392,21 +421,21 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             ("Avaliação (nota final)", f"{detalhe.avaliacao.nota_final}" if detalhe.avaliacao and detalhe.avaliacao.nota_final is not None else "Sem avaliação"),
         ]
     )
+    if competencia.recusas:
+        # Trilha: nota → recusa → outra nota → recusa → … → aprovação
+        trilha = []
+        for recusa in competencia.recusas:
+            trilha.append(["Nota fiscal recusada", ", ".join(str(n.get("numero") or n.get("rotulo") or "—") for n in recusa.notas), "—", "—"])
+            trilha.append([f"Recusa nº {recusa.ordem}", recusa.justificativa, data_hora(recusa.recusada_em), recusa.recusada_por_nome or "—"])
+        trilha.append(["Nota fiscal aprovada", ", ".join(str(n.numero or n.rotulo) for n in competencia.notas_fiscais) or "—",
+                       data_hora(competencia.retencao_concluida_em) if competencia.retencao_concluida_em else "—", competencia.retencao_por_nome or "—"])
+        resumo.secao("Trilha da nota fiscal").tabela(["Etapa", "Detalhe", "Em", "Por"], trilha, larguras=[2, 5, 1.8, 2.2])
     resumo.secao("Histórico do CADIN").tabela(
         ["Data", "Resultado", "Pendência", "Registrado por"],
         [[data_hora(c.criado_em), "Pendência encontrada" if c.possui_pendencia else "Sem pendência", c.pendencia or "—", c.criado_por_nome]
          for c in detalhe.consultas_cadin],
         larguras=[1.6, 2, 4, 2.4],
     )
-    resumo.secao("Checklist mensal").tabela(
-        ["Nº", "Documento", "Tipo", "Arquivo"],
-        # Documento opcional só é citado quando foi anexado; sem anexo, não aparece nem como "Não anexado"
-        [[str(n), d.nome, "Obrigatório" if d.obrigatorio else "Opcional", d.arquivo.nome if d.arquivo else "Não anexado"]
-         for n, d in enumerate((d for d in detalhe.documentos if d.obrigatorio or d.arquivo), start=1)],
-        larguras=[0.5, 4, 1.4, 3.6]
-    )
-    composicao.append([str(total_documentos), "Resumo executivo", "Resumo executivo da competência", f"a partir da {pagina_resumo}"])
-    resumo.secao("Composição deste documento").tabela(["Nº", "Etapa", "Documento", "Páginas"], composicao, larguras=[0.5, 2, 5, 1.5])
     partes.append((resumo.gerar(), True))
     marcadores = [("Índice", 1)] + [(f"{e.numero}. {e.titulo}", e.pagina_inicial) for e in entradas]
     return montar_consolidado([(indice, True), *partes], links=links, marcadores=marcadores)

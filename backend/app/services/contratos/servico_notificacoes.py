@@ -13,6 +13,7 @@ Os envios rodam em segundo plano (depois da resposta da API), com sessão própr
 
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 from html import escape
 
 from sqlalchemy import select
@@ -120,8 +121,8 @@ def mensagem_nf(contrato: Contrato, competencia: Competencia) -> tuple[str, str,
     ])
     html = _html(assunto, [
         "<p>Foi juntada a nota fiscal para conferência de tributação pelo setor competente:</p>",
-        f"<p><a href=\"{escape(link)}\" style=\"display:inline-block;padding:10px 16px;background:#b0222e;color:#fff;border-radius:6px;"
-        f"text-decoration:none;font-weight:bold\">Abrir a retenção de tributos</a><br><small>{escape(link)}</small></p>",
+        modelo_email.botao(link, "Abrir a retenção de tributos"),
+        f"<p style=\"margin:6px 0 12px;font-size:11px;color:#7b8490;word-break:break-all\">{escape(link)}</p>",
         _tabela_html(["Campo", "Valor"], [
             ["Contrato", contrato.numero + (f" — {contrato.apelido}" if contrato.apelido else "")],
             ["Contratada", contrato.empresa.razao_social],
@@ -182,8 +183,8 @@ def mensagem_retencao(contrato: Contrato, competencia: Competencia) -> tuple[str
         f"<p>As retenções tributárias já foram conferidas e salvas no sistema por <b>{escape(competencia.retencao_por_nome)}</b> em "
         f"{escape(data_hora(competencia.retencao_concluida_em))}.</p>",
         _tabela_html(["Nota", "Bruto", "Retenções", "Líquido a pagar"], linhas),
-        f"<p><a href=\"{escape(link)}\" style=\"display:inline-block;padding:10px 16px;background:#b0222e;color:#fff;border-radius:6px;"
-        f"text-decoration:none;font-weight:bold\">Ir para a próxima etapa</a><br><small>{escape(link)}</small></p>",
+        modelo_email.botao(link, "Ir para a próxima etapa"),
+        f"<p style=\"margin:6px 0 12px;font-size:11px;color:#7b8490;word-break:break-all\">{escape(link)}</p>",
     ])
     return assunto, texto, html
 
@@ -199,6 +200,56 @@ def notificar_retencao(competencia_id: uuid.UUID) -> None:
         assunto, texto, html = mensagem_retencao(contrato, competencia)
         para, resultado = _enviar(sessao, contrato, assunto, texto, html, para=emails_da_equipe(sessao, contrato))
         _gravar_email(competencia, "email_retencao", para, resultado)
+        sessao.commit()
+
+
+def mensagem_recusa(contrato: Contrato, competencia: Competencia, recusa) -> tuple[str, str, str]:
+    """E-mail da recusa da nota fiscal (equipe e todos os prepostos): justificativa, notas recusadas e link para juntar outra nota."""
+    link = _link(contrato, competencia, "nota_fiscal")
+    assunto = _assunto_competencia(contrato, competencia, f"Nota fiscal recusada (recusa nº {recusa.ordem})")
+    linhas = [[n.get("rotulo") or n.get("numero") or "—", moeda(Decimal(n["valor_bruto"])) if n.get("valor_bruto") else "—", n.get("chave") or "—"] for n in recusa.notas]
+    texto = "\n".join([
+        f"A nota fiscal da competência {competencia.numero_competencia} do contrato {contrato.numero} foi recusada por {recusa.recusada_por_nome} "
+        f"em {data_hora(recusa.recusada_em)} (recusa nº {recusa.ordem}).",
+        "", f"Justificativa: {recusa.justificativa}", "",
+        *[f"{n}: bruto {b} · chave {c}" for n, b, c in linhas], "",
+        "O PDF da recusa segue em anexo. A equipe do contrato deve juntar outra nota fiscal no sistema.", f"Juntar nova nota: {link}",
+    ])
+    html = _html(assunto, [
+        f"<p>A nota fiscal foi <b>recusada</b> por <b>{escape(recusa.recusada_por_nome)}</b> em {escape(data_hora(recusa.recusada_em))} "
+        f"(recusa nº {recusa.ordem}).</p>",
+        f"<p><b>Justificativa:</b><br>{escape(recusa.justificativa).replace(chr(10), '<br>')}</p>",
+        _tabela_html(["Nota", "Valor bruto", "Chave de acesso"], linhas),
+        "<p>O PDF da recusa segue em anexo, para juntar ao processo. A equipe do contrato deve juntar outra nota fiscal no sistema.</p>",
+        modelo_email.botao(link, "Juntar nova nota fiscal"),
+        f"<p style=\"margin:6px 0 12px;font-size:11px;color:#7b8490;word-break:break-all\">{escape(link)}</p>",
+    ])
+    return assunto, texto, html
+
+
+def notificar_recusa(recusa_id: uuid.UUID) -> None:
+    """E-mail da recusa (segundo plano, sessão própria). Para = equipe do contrato + TODOS os prepostos da empresa (obrigatório), Cc = quem recusou.
+    Leva o PDF da recusa anexado."""
+    from app.models.contratos.execucao import RecusaNota
+
+    with FabricaSessao() as sessao:
+        recusa = sessao.get(RecusaNota, recusa_id)
+        if recusa is None:
+            return
+        competencia = recusa.competencia
+        contrato = obter_contrato(sessao, competencia.contrato_id)
+        competencia = next(c for c in contrato.competencias if c.id == competencia.id)
+        recusa = next(r for r in competencia.recusas if r.id == recusa_id)
+        assunto, texto, html = mensagem_recusa(contrato, competencia, recusa)
+        anexos = []
+        if recusa.pdf_anexo is not None:
+            arquivo = servico_anexos.caminho(recusa.pdf_anexo)
+            if arquivo.is_file():
+                anexos.append(AnexoEmail(nome=recusa.pdf_anexo.nome_original, conteudo=arquivo.read_bytes(), tipo="application/pdf"))
+        quem = sessao.get(Usuario, recusa.recusada_por_id) if recusa.recusada_por_id else None
+        todos, resultado = _enviar(sessao, contrato, assunto, texto, html, anexos=anexos, cc=[quem.email] if quem and quem.email else [])
+        recusa.email_enviado_em, recusa.email_ok, recusa.email_destinatarios = agora_utc(), resultado.sucesso, todos
+        recusa.email_erro = None if resultado.sucesso else resultado.mensagem
         sessao.commit()
 
 
@@ -219,6 +270,18 @@ def exigir_reenvio(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
             raise SemPermissaoContrato("Somente o Financeiro, a equipe do contrato ou o SuperRoot reenviam este e-mail.")
         if competencia.retencao_concluida_em is None:
             raise ErroRegraContrato("O e-mail da retenção só é enviado depois de conferidas as retenções.")
+
+
+def exigir_reenvio_recusa(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, recusa_id: uuid.UUID, autor: Usuario) -> None:
+    """Reenvio do e-mail de uma recusa: quem pode conferir a retenção (Financeiro, equipe ou SuperRoot)."""
+    from app.services.contratos.servico_retencao import pode_conferir
+
+    contrato = obter_contrato(sessao, contrato_id)
+    competencia = next((c for c in contrato.competencias if c.id == competencia_id), None)
+    if competencia is None or not any(r.id == recusa_id for r in competencia.recusas):
+        raise RegistroNaoEncontrado("Recusa")
+    if not pode_conferir(sessao, contrato, autor):
+        raise SemPermissaoContrato("Somente o Financeiro, a equipe do contrato ou o SuperRoot reenviam este e-mail.")
 
 
 def _html(titulo: str, blocos: list[str]) -> str:

@@ -44,7 +44,7 @@ from app.services.contratos import calculos, valores
 from app.services.contratos.documentos_execucao import PAPEIS, data_hora, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo
-from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, integra_equipe, obter_contrato, pode_editar, vigencias
+from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, papel_para_ciencia, pode_dar_ciencia, obter_contrato, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.servico_auditoria import auditar
 
@@ -141,7 +141,7 @@ def consultar(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> Leit
         ciencias=[LeituraCiencia(usuario_id=c.usuario_id, nome=c.nome, papel=c.papel, registrada_em=c.registrada_em) for c in (processo.ciencias if processo else [])],
         relatorio=_arquivo(processo.relatorio_anexo) if processo else None,
         exige_checklist_ativo=bool(contrato.competencias) and checklist_ativo(contrato) is None,
-        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=integra_equipe(contrato, usuario),
+        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(contrato, usuario),
     )
 
 
@@ -207,15 +207,15 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -
     processo = _rascunho(sessao, contrato)
     if processo is None or not _possui_parecer(processo):
         raise ErroRegraContrato("Preencha e salve o parecer antes de registrar ciência.")
-    designacao = next((d for d in designacoes_vigentes(contrato) if d.usuario_id == autor.id), None)
-    if designacao is None:
+    papel = papel_para_ciencia(contrato, autor)
+    if papel is None:
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
     # Uma ciência por pessoa; a nova ciência invalida o PDF do parecer gerado antes
     if not any(c.usuario_id == autor.id for c in processo.ciencias):
-        processo.ciencias.append(CienciaProrrogacao(usuario_id=autor.id, nome=autor.nome_completo or autor.login, papel=designacao.papel, registrada_em=agora_utc()))
+        processo.ciencias.append(CienciaProrrogacao(usuario_id=autor.id, nome=autor.nome_completo or autor.login, papel=papel, registrada_em=agora_utc()))
         processo.relatorio_anexo_id = None
         auditar(sessao, autor.login, "contrato.prorrogacao.ciencia", f"Contrato {contrato.numero}", autor_id=autor.id,
-                alvo_tipo="contrato", alvo_id=contrato.id, dados={"papel": designacao.papel})
+                alvo_tipo="contrato", alvo_id=contrato.id, dados={"papel": papel})
     sessao.commit()
 
 

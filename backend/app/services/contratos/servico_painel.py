@@ -42,6 +42,7 @@ from app.services.contratos.servico_competencias import (
     avaliacao_pronta_para_ciencia,
     ciencias_ateste,
     compromissos,
+    total_previsto_na_hora,
     etapas_abertas,
     requisitos,
     total_medido,
@@ -222,7 +223,7 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
         a_medir = sorted((c for c in contrato.competencias if c.medicao_concluida_em is None and c.tipo == "regular"), key=lambda c: c.periodo_inicio)
         if a_medir:
             proxima = a_medir[0]
-            necessario = calculos.arredondar(sum((i.quantidade_prevista * i.valor_unitario for i in proxima.itens), ZERO))
+            necessario = total_previsto_na_hora(contrato, proxima)
             if livre < necessario:
                 risco("empenho_insuficiente", "alta",
                       f"Saldo livre das NEs ({_moeda(livre)}) não cobre a competência {proxima.numero_competencia} ({_moeda(necessario)})",

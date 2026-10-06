@@ -216,3 +216,52 @@ def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uui
     )
     sessao.commit()
     return competencia
+
+
+def recusar_nota(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, justificativa: str, autor: Usuario):
+    """O Financeiro recusa a(s) nota(s) fiscal(is) na etapa de retenção, com justificativa.
+
+    Guarda o retrato das notas e o PDF da recusa; a competência volta para a etapa da nota fiscal (que fica aberta para juntar outra nota,
+    sem limite de ciclos). O CADIN e o checklist já feitos são mantidos: só a retenção precisa ser refeita. Devolve a `RecusaNota`.
+    """
+    from app.models.contratos.execucao import RecusaNota
+    from app.services.contratos import avisos
+    from app.services.contratos.servico_competencias import _carregar_competencia, etapas_abertas
+
+    contrato = obter_contrato(sessao, contrato_id)
+    if not pode_conferir(sessao, contrato, autor):
+        raise SemPermissaoContrato("A nota fiscal é recusada pelo Financeiro, pela equipe do contrato ou pelo SuperRoot.")
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    if "retencao" not in etapas_abertas(competencia):
+        raise ErroRegraContrato("A nota só pode ser recusada com a retenção de tributos aberta (nota juntada e ainda não conferida).")
+    justificativa = (justificativa or "").strip()
+    if len(justificativa) < 10:
+        raise ErroRegraContrato("Informe a justificativa da recusa (pelo menos 10 caracteres).")
+    nome = autor.nome_completo or autor.login
+    recusa = RecusaNota(
+        competencia_id=competencia.id, ordem=len(competencia.recusas) + 1, justificativa=justificativa, recusada_por_id=autor.id,
+        recusada_por_nome=nome, recusada_em=agora_utc(),
+        notas=[{"rotulo": n.rotulo, "numero": n.numero, "valor_bruto": str(n.valor_bruto) if n.valor_bruto is not None else None, "chave": n.chave,
+                "anexo_id": str(n.anexo_id) if n.anexo_id else None, "xml_anexo_id": str(n.xml_anexo_id) if n.xml_anexo_id else None}
+               for n in competencia.notas_fiscais],
+    )
+    competencia.recusas.append(recusa)
+    sessao.flush()
+    pdf = documentos_execucao.relatorio_recusa(contrato, competencia, recusa, nome)
+    recusa.pdf_anexo = servico_anexos.guardar_pdf_gerado(
+        sessao, pdf, f"recusa{recusa.ordem}_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf", "contrato-execucao-recusa", autor.id,
+        contrato_id=contrato.id,
+    )
+    # A nota recusada sai da competência; a etapa da nota fiscal reabre. CADIN, checklist e seus anexos ficam como estavam.
+    competencia.notas_fiscais.clear()
+    competencia.nf_concluida_em = competencia.origem_valor_nf = None
+    competencia.retencao_concluida_em, competencia.retencao_pdf_anexo_id = None, None
+    competencia.retencao_por_id, competencia.retencao_por_nome, competencia.retencao_discriminacao_conferida = None, "", False
+    competencia.etapa_atual = "nota_fiscal"
+    avisos.nota_recusada(sessao, contrato, competencia, recusa, autor)
+    auditar(
+        sessao, autor.login, "contrato.execucao.retencao.recusar", f"Contrato {contrato.numero} · {competencia.numero_competencia}", autor_id=autor.id,
+        alvo_tipo="contrato", alvo_id=contrato.id, dados={"competencia": competencia.competencia, "recusa": recusa.ordem, "justificativa": justificativa},
+    )
+    sessao.commit()
+    return recusa

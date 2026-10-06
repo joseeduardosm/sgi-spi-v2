@@ -12,7 +12,7 @@
       <p id="texto-confirmacao">{{ confirmacao.mensagem }}</p>
       <footer>
         <button type="button" class="acao-secundaria" (click)="dialogos.responderConfirmacao(false)">Cancelar</button>
-        <button type="button" class="acao-primaria" [disabled]="dialogos.segundosRestantes() > 0" (click)="dialogos.responderConfirmacao(true)">
+        <button type="button" [class]="confirmacao.perigo ? 'acao-perigo-cheio' : 'acao-primaria'" [disabled]="dialogos.segundosRestantes() > 0" (click)="dialogos.responderConfirmacao(true)">
           {{ confirmacao.rotuloConfirmar }}
           @if (dialogos.segundosRestantes() > 0) { <span class="contador">({{ dialogos.segundosRestantes() }})</span> }
         </button>

@@ -58,6 +58,8 @@ from app.schemas.contratos.execucao import (
     OcorrenciaAvaliacao,
     LeituraConsultaCadin,
     LeituraDocumentoMensal,
+    LeituraRecusa,
+    NotaRecusada,
     SugestaoOutroContrato,
     LeituraItemMedicao,
     LeituraMemoria,
@@ -77,15 +79,16 @@ from app.services.contratos.servico_configuracao_execucao import (
     _nome_chave,
     _ordem_checklist,
     checklist_ativo,
-    copiar_checklist,
     formulario_ativo,
+    puxar_checklist,
     reaproveitar_validos,
 )
 from app.services.contratos.servico_contratos import (
     designacoes_vigentes,
     exigir_edicao,
     hoje,
-    integra_equipe,
+    pode_dar_ciencia,
+    papel_para_ciencia,
     obter_contrato,
     pode_editar,
     vigencias,
@@ -114,6 +117,7 @@ def _carregar_competencia(sessao: Session, contrato: Contrato, competencia_id: u
         .options(
             selectinload(Competencia.itens),
             selectinload(Competencia.notas),
+            selectinload(Competencia.recusas),
             selectinload(Competencia.ciencias),
             selectinload(Competencia.memorias).selectinload(MemoriaMedicao.anexo),
             selectinload(Competencia.consultas_cadin),
@@ -127,9 +131,31 @@ def _carregar_competencia(sessao: Session, contrato: Contrato, competencia_id: u
     return competencia
 
 
+def tem_avaliacao(competencia: Competencia) -> bool:
+    """A competência tem (ou terá) a etapa de avaliação.
+
+    A avaliação é copiada do formulário ativo ao concluir a medição (`puxar_avaliacao`). Até lá, a etapa existe se a competência
+    regular ainda está na medição e há formulário ativo; depois, se a avaliação foi criada.
+    """
+    if competencia.avaliacao is not None:
+        return True
+    return competencia.tipo == "regular" and competencia.etapa_atual == "medicao" and formulario_ativo(competencia.contrato) is not None
+
+
+def puxar_avaliacao(sessao: Session, contrato: Contrato, competencia: Competencia) -> None:
+    """Início da avaliação: a competência copia o formulário ATIVO agora (sem formulário ativo, uma cópia antiga é mantida)."""
+    formulario = formulario_ativo(contrato)
+    if formulario is None:
+        return
+    competencia.avaliacao = None
+    # A exclusão precisa ir ao banco antes da nova linha (há uma avaliação por competência)
+    sessao.flush()
+    competencia.avaliacao = AvaliacaoCompetencia(formulario_id=formulario.id, definicao=formulario.definicao)
+
+
 def etapas_da_competencia(competencia: Competencia) -> list[str]:
     """Etapas desta competência em ordem (sem "avaliacao" quando não há formulário)."""
-    return [e for e in ETAPAS if e != "avaliacao" or competencia.avaliacao is not None]
+    return [e for e in ETAPAS if e != "avaliacao" or tem_avaliacao(competencia)]
 
 
 def proxima_etapa(competencia: Competencia, etapa: str) -> str:
@@ -358,6 +384,20 @@ def _arquivo(anexo: Anexo | None) -> LeituraArquivo | None:
     return LeituraArquivo(anexo_id=anexo.id, nome=anexo.nome_original, tamanho=anexo.tamanho, enviado_em=anexo.criado_em)
 
 
+def _recusa(recusa, anexos: dict) -> LeituraRecusa:
+    """Recusa no formato da API, com os arquivos das notas recusadas e o PDF da recusa."""
+    def arq(valor):
+        return _arquivo(anexos.get(uuid.UUID(valor))) if valor else None
+
+    return LeituraRecusa(
+        id=recusa.id, ordem=recusa.ordem, justificativa=recusa.justificativa, recusada_por_nome=recusa.recusada_por_nome, recusada_em=recusa.recusada_em,
+        notas=[NotaRecusada(rotulo=n.get("rotulo") or n.get("numero") or "Nota fiscal", numero=n.get("numero"), valor_bruto=n.get("valor_bruto"),
+                            chave=n.get("chave"), arquivo=arq(n.get("anexo_id")), xml=arq(n.get("xml_anexo_id"))) for n in recusa.notas],
+        pdf=_arquivo(anexos.get(recusa.pdf_anexo_id)),
+        email=EmailMedicao(enviado_em=recusa.email_enviado_em, ok=recusa.email_ok, destinatarios=recusa.email_destinatarios or [], erro=recusa.email_erro),
+    )
+
+
 def _auditar(sessao: Session, autor: Usuario, acao: str, contrato: Contrato, competencia: Competencia, **dados) -> None:
     """Registra a operação na auditoria, identificando contrato e competência."""
     auditar(sessao, autor.login, acao, f"Contrato {contrato.numero} · {competencia.numero_competencia}", autor_id=autor.id,
@@ -416,8 +456,11 @@ def itens_previstos(contrato: Contrato, periodo: calculos.PeriodoExecucao, itens
 
 
 def competencias_abertas(contrato: Contrato) -> list[Competencia]:
-    """Competências regulares ainda sem medição concluída: seguem o cadastro dos itens (as concluídas são histórico congelado)."""
-    return [c for c in contrato.competencias if c.tipo == "regular" and c.medicao_concluida_em is None]
+    """Competências regulares com itens copiados e sem medição concluída: seguem o cadastro dos itens (as concluídas são histórico congelado).
+
+    Competência que ainda não iniciou a medição não tem itens: ela os copia do cadastro quando a medição começa (`garantir_itens`).
+    """
+    return [c for c in contrato.competencias if c.tipo == "regular" and c.medicao_concluida_em is None and c.itens]
 
 
 def _periodos_por_inicio(contrato: Contrato) -> dict:
@@ -479,9 +522,35 @@ def sincronizar_abertas(contrato: Contrato) -> list[tuple[Competencia, dict]]:
     return mudadas
 
 
+def garantir_itens(contrato: Contrato, competencia: Competencia) -> bool:
+    """Início da medição: a competência liberada copia os itens do cadastro agora (uma única vez; depois ficam congelados).
+
+    Antes disso (período em andamento) ela não guarda itens. Competências complementares e migradas do SGI já nascem completas
+    ou fora do calendário e não são tocadas. Devolve se copiou.
+    """
+    if competencia.tipo != "regular" or competencia.itens or competencia.medicao_concluida_em is not None or not _liberada(competencia):
+        return False
+    periodo = _periodos_por_inicio(contrato).get(competencia.periodo_inicio)
+    if periodo is None:
+        return False
+    competencia.itens = itens_previstos(contrato, periodo)
+    competencia.versao_cadastro_sincronizada = contrato.versao_cadastro
+    return True
+
+
+def total_previsto_na_hora(contrato: Contrato, competencia: Competencia) -> Decimal:
+    """Total previsto da competência: o das linhas copiadas ou, se ainda não começou a medição, o calculado agora pelo cadastro."""
+    if competencia.itens:
+        linhas = competencia.itens
+    else:
+        periodo = _periodos_por_inicio(contrato).get(competencia.periodo_inicio)
+        linhas = itens_previstos(contrato, periodo) if periodo else []
+    return calculos.arredondar(sum((i.quantidade_prevista * i.valor_unitario for i in linhas), ZERO))
+
+
 def sincronizar_se_defasada(contrato: Contrato, competencia: Competencia) -> bool:
     """Rede de segurança: antes de escrever numa competência aberta, alinha-a ao cadastro se a versão ficou para trás. Devolve se algum valor mudou."""
-    if competencia.tipo == "regular" and competencia.medicao_concluida_em is None and competencia.versao_cadastro_sincronizada != contrato.versao_cadastro:
+    if competencia.itens and competencia.tipo == "regular" and competencia.medicao_concluida_em is None and competencia.versao_cadastro_sincronizada != contrato.versao_cadastro:
         r = sincronizar_competencia(contrato, competencia)
         return bool(r and (r["alteradas"] or r["incluidas"] or r["removidas"]))
     return False
@@ -494,8 +563,6 @@ def gerar_competencias(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) 
     situacao = requisitos(contrato)
     if not situacao.prontos:
         raise ErroRegraContrato("Complete a base do contrato: " + " ".join(situacao.pendencias))
-    checklist = checklist_ativo(contrato)
-    formulario = formulario_ativo(contrato)
     # Períodos já cobertos. Competências migradas do SGI seguem o aniversário do contrato (ex.: 15/01 a
     # 14/02): um período civil que se sobrepõe a qualquer uma delas não é gerado de novo.
     existentes = [(c.periodo_inicio, c.periodo_fim) for c in contrato.competencias if c.tipo == "regular"]
@@ -503,15 +570,11 @@ def gerar_competencias(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) 
     for periodo in calculos.periodos_de_execucao(vigencias(contrato), contrato.periodicidade_meses):
         if any(inicio <= periodo.fim and periodo.inicio <= fim for inicio, fim in existentes):
             continue
-        # Cada competência nova recebe a fotografia dos itens, a cópia do checklist e, se houver, do formulário
+        # A competência nasce vazia: itens, formulário e checklist são copiados quando a etapa correspondente começa
         competencia = Competencia(
             competencia=periodo.competencia, periodo_inicio=periodo.inicio, periodo_fim=periodo.fim,
             sequencia_vigencia=periodo.sequencia_vigencia, etapa_atual="medicao", versao_cadastro_sincronizada=contrato.versao_cadastro,
         )
-        competencia.itens = itens_previstos(contrato, periodo)
-        copiar_checklist(competencia, checklist)
-        if formulario:
-            competencia.avaliacao = AvaliacaoCompetencia(formulario_id=formulario.id, definicao=formulario.definicao)
         contrato.competencias.append(competencia)
         geradas += 1
     # Crédito de desconto de reajuste sem competência a medir: vai para a primeira nova
@@ -545,7 +608,7 @@ def resumo(competencia: Competencia) -> ResumoCompetencia:
         periodo_inicio=competencia.periodo_inicio, periodo_fim=competencia.periodo_fim, situacao=situacao_competencia(competencia),
         etapa_atual=competencia.etapa_atual,
         valor_medicao=total_medido(competencia) if competencia.medicao_iniciada_em else None,
-        possui_avaliacao=competencia.avaliacao is not None,
+        possui_avaliacao=tem_avaliacao(competencia),
     )
 
 
@@ -592,6 +655,9 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
     """Detalhe completo da competência (resposta de quase todas as rotas da execução)."""
     contrato = obter_contrato(sessao, contrato_id)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    # Primeiro acesso com o período encerrado: a medição começa e os itens são copiados (uma vez só)
+    if garantir_itens(contrato, competencia):
+        sessao.commit()
     # Todos os anexos da competência em uma consulta: {id: anexo}
     anexos = {a.id: a for a in sessao.scalars(select(Anexo).where(Anexo.id.in_(_ids_anexos(competencia))))}
     selecionadas = [n.nota_id for n in competencia.notas]
@@ -625,8 +691,9 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
     )
     return DetalheCompetencia(
         **resumo(competencia).model_dump(),
-        contrato_id=contrato.id, contrato_numero=contrato.numero, etapas=etapas_da_competencia(competencia),
-        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=integra_equipe(contrato, usuario),
+        contrato_id=contrato.id, contrato_numero=contrato.numero, empresa_cnpj="".join(c for c in contrato.empresa.cnpj if c.isdigit()),
+        etapas=etapas_da_competencia(competencia),
+        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(contrato, usuario),
         pode_gerar_consolidado_novamente=pode_gerar_consolidado_novamente(contrato, usuario) and pode_editar(sessao, contrato, usuario),
         liberada=_liberada(competencia),
         itens=[
@@ -668,6 +735,8 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
             discriminacao_conferida=competencia.retencao_discriminacao_conferida, pdf=_arquivo(competencia.retencao_pdf_anexo),
         ) if competencia.retencao_concluida_em else None,
         pode_conferir_retencao=servico_retencao.pode_conferir(sessao, contrato, usuario),
+        recusas=[_recusa(r, anexos) for r in competencia.recusas],
+        pode_recusar="retencao" in etapas_abertas(competencia) and servico_retencao.pode_conferir(sessao, contrato, usuario),
         etapas_abertas=etapas_abertas(competencia),
         etapas_concluidas=etapas_concluidas(competencia),
         email_medicao=EmailMedicao(
@@ -702,6 +771,11 @@ def _ids_anexos(competencia: Competencia) -> set[uuid.UUID]:
     """Todos os anexos da competência (usados no detalhe e para autorizar downloads)."""
     ids = {competencia.consolidado_anexo_id, competencia.ob_anexo_id, competencia.retencao_pdf_anexo_id}
     ids |= {n.anexo_id for n in competencia.notas_fiscais} | {n.xml_anexo_id for n in competencia.notas_fiscais}
+    # Recusas da nota fiscal: o PDF da recusa e os arquivos das notas recusadas
+    for recusa in competencia.recusas:
+        ids.add(recusa.pdf_anexo_id)
+        for nota in recusa.notas:
+            ids |= {uuid.UUID(nota[k]) for k in ("anexo_id", "xml_anexo_id") if nota.get(k)}
     ids |= {m.anexo_id for m in competencia.memorias}
     ids |= {c.certidao_anexo_id for c in competencia.consultas_cadin} | {c.email_anexo_id for c in competencia.consultas_cadin}
     ids |= {d.anexo_id for d in competencia.documentos}
@@ -805,6 +879,7 @@ def salvar_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    garantir_itens(contrato, competencia)
     sincronizar_se_defasada(contrato, competencia)
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
@@ -847,6 +922,7 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, competencia_id: u
     """Etapa 1: registra a ciência do usuário logado na medição salva."""
     contrato = obter_contrato(sessao, contrato_id)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    garantir_itens(contrato, competencia)
     if sincronizar_se_defasada(contrato, competencia):
         sessao.commit()
         raise ErroRegraContrato("Os itens do contrato foram atualizados por uma correção de cadastro. Recarregue a página e confira os valores antes de dar ciência.")
@@ -854,7 +930,7 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, competencia_id: u
     _exigir_etapa(competencia, "medicao", "A medição")
     if competencia.medicao_iniciada_em is None:
         raise ErroRegraContrato("Salve a medição antes de registrar a ciência.")
-    papel = _papel_do_usuario(contrato, autor)
+    papel = papel_para_ciencia(contrato, autor)
     if papel is None:
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
     # Ciência repetida da mesma pessoa é ignorada (não gera erro)
@@ -884,6 +960,7 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    garantir_itens(contrato, competencia)
     sincronizar_se_defasada(contrato, competencia)
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
@@ -903,6 +980,8 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     # Gera o PDF, marca a conclusão, avança a etapa e atualiza o executado dos itens do contrato
     gerar_memoria(sessao, contrato, competencia, autor)
     competencia.medicao_concluida_em = agora_utc()
+    # A avaliação começa agora: copia o formulário ativo neste momento
+    puxar_avaliacao(sessao, contrato, competencia)
     competencia.etapa_atual = proxima_etapa(competencia, "medicao")
     atualizar_executado(contrato)
     _auditar(sessao, autor, "contrato.execucao.medicao.concluir", contrato, competencia, total=total_medido(competencia))
@@ -1111,7 +1190,7 @@ def _avaliacao_aberta(sessao: Session, contrato_id: uuid.UUID, competencia_id: u
     if competencia.avaliacao is None:
         raise ErroRegraContrato("Esta competência não tem formulário de avaliação.")
     _exigir_etapa(competencia, "avaliacao", "A avaliação")
-    if exigir_equipe and _papel_do_usuario(contrato, autor) is None:
+    if exigir_equipe and not pode_dar_ciencia(contrato, autor):
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização avaliam os serviços.")
     return contrato, competencia, competencia.avaliacao
 
@@ -1193,7 +1272,7 @@ def registrar_ciencia_ateste(sessao: Session, contrato_id, competencia_id, autor
     _exigir_etapa(competencia, "avaliacao", "A avaliação")
     if not avaliacao_pronta_para_ciencia(avaliacao):
         raise ErroRegraContrato("Conclua as notas da avaliação antes de registrar a ciência no ateste.")
-    papel = _papel_do_usuario(contrato, autor)
+    papel = papel_para_ciencia(contrato, autor)
     if papel is None:
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
     # Ciência repetida da mesma pessoa é ignorada (não gera erro)
@@ -1292,7 +1371,7 @@ def registrar_nota_fiscal(
     sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: dict, notas: list[dict], arquivos: list[tuple],
     xmls: list[tuple], autor: Usuario,
 ) -> None:
-    """Etapa 3: junta uma ou mais notas fiscais (PDF + XML obrigatórios em cada); os valores vêm dos XMLs.
+    """Etapa 3: junta uma ou mais notas fiscais (PDF obrigatório; XML opcional); os valores vêm dos XMLs ou, sem XML, são informados.
 
     `dados`: recebida_em e prazo_pagamento_dias. `notas`: a lista final, na ordem desejada; cada item traz `id` (nota já
     registrada, que mantém os arquivos que não forem trocados) e/ou `arquivo` e `xml` (posições nas listas `arquivos` e `xmls`).
@@ -1318,12 +1397,19 @@ def registrar_nota_fiscal(
         for indice, lista, qual in ((ipdf, arquivos, "PDF"), (ixml, xmls, "XML")):
             if indice is not None and not 0 <= indice < len(lista):
                 raise ErroRegraContrato(f"Arquivo {qual} da nota fiscal {posicao} não foi enviado.")
-        # PDF e XML são obrigatórios em cada nota (na correção depois de reabrir, os arquivos anteriores podem ser mantidos)
+        # O PDF é obrigatório em cada nota (na correção depois de reabrir, o arquivo anterior pode ser mantido)
         if ipdf is None and (existente is None or existente.anexo_id is None):
             raise ErroRegraContrato(f"Selecione a nota fiscal {posicao} em PDF.")
-        if ixml is None and (existente is None or existente.xml_anexo_id is None):
-            raise ErroRegraContrato(f"Selecione o XML da nota fiscal {posicao}.")
-        lido = _ler_xml(xmls[ixml]) if ixml is not None else (None, existente.dados_xml)
+        if ixml is not None:
+            lido = _ler_xml(xmls[ixml])
+        elif existente is not None and existente.dados_xml:
+            lido = (None, existente.dados_xml)
+        else:
+            # Sem XML: o valor bruto (e, se quiser, o número) é informado; não há chave nem retenções sugeridas
+            valor = item.get("valor_bruto") or (existente.valor_bruto if existente is not None else None)
+            if not valor:
+                raise ErroRegraContrato(f"Informe o valor bruto da nota fiscal {posicao} (ou selecione o XML).")
+            lido = (None, {"valor_bruto": str(valor), "numero": item.get("numero") or (existente.numero if existente is not None else ""), "manual": True})
         chave = lido[1].get("chave")
         if chave:
             if chave in chaves:
@@ -1364,6 +1450,8 @@ def registrar_nota_fiscal(
     # Uma NF nova (ou corrigida) exige nova conferência de tributos
     competencia.retencao_concluida_em, competencia.retencao_pdf_anexo_id = None, None
     competencia.retencao_por_id, competencia.retencao_por_nome, competencia.retencao_discriminacao_conferida = None, "", False
+    # As etapas paralelas começam agora: o checklist ativo é copiado neste momento
+    puxar_checklist(contrato, competencia)
     competencia.etapa_atual = proxima_etapa(competencia, "nota_fiscal")
     sessao.flush()
     _auditar(sessao, autor, "contrato.execucao.nota_fiscal.concluir", contrato, competencia,
@@ -1373,11 +1461,14 @@ def registrar_nota_fiscal(
 
 
 def _aplicar_nota(nota: NotaFiscalCompetencia, dados: dict) -> None:
-    """Grava número, chave, bruto e dados do XML; as retenções do XML ficam como sugestão para a conferência."""
+    """Grava número, chave, bruto e dados do XML; as retenções do XML ficam como sugestão para a conferência.
+
+    Nota sem XML (`dados["manual"]`): só número e valor bruto; sem dados do XML, chave nem retenções sugeridas.
+    """
     nota.numero = (dados.get("numero") or "")[:100]
     nota.chave = dados.get("chave")
     nota.valor_bruto = Decimal(dados["valor_bruto"])
-    nota.dados_xml = dados
+    nota.dados_xml = None if dados.get("manual") else dados
     for tributo in ("ir", "inss", "iss", "pis", "cofins", "csll"):
         setattr(nota, f"retencao_{tributo}", Decimal((dados.get("retencoes") or {}).get(tributo) or "0"))
 
@@ -1653,6 +1744,27 @@ def registrar_ordem_bancaria(sessao: Session, contrato_id, competencia_id, arqui
 # Reabertura (SuperRoot ou gestor do contrato)
 # ---------------------------------------------------------------------------------------------
 
+def _descartar_checklist(sessao: Session, competencia: Competencia) -> None:
+    """Descarta a cópia do checklist (e os anexos dela); ela é copiada de novo do checklist ativo quando a etapa recomeçar."""
+    competencia.documentos.clear()
+    sessao.flush()
+
+
+def _descartar_nota_fiscal(competencia: Competencia) -> None:
+    """Remove as notas fiscais juntadas, o histórico de recusas e os dados de recebimento e de e-mail da etapa."""
+    competencia.notas_fiscais.clear()
+    competencia.recusas.clear()
+    competencia.nf_recebida_em = competencia.prazo_pagamento_dias = competencia.origem_valor_nf = None
+    competencia.email_nf_enviado_em = competencia.email_nf_ok = competencia.email_nf_erro = None
+    competencia.email_nf_destinatarios = []
+
+
+def _descartar_avaliacao(sessao: Session, competencia: Competencia) -> None:
+    """Apaga a avaliação (notas, ciências, PDFs); ela é copiada de novo do formulário ativo quando a etapa recomeçar."""
+    competencia.avaliacao = None
+    sessao.flush()
+
+
 def pode_reabrir(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
     """SuperRoot, ou o gestor vigente do contrato (papel `gestor`) com permissão de edição."""
     if usuario.superusuario:
@@ -1663,8 +1775,9 @@ def pode_reabrir(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
 def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, autor: Usuario) -> None:
     """Volta a competência para uma etapa anterior, desfazendo as conclusões posteriores.
 
-    Anexos e histórico são mantidos (auditoria). Se a competência já estava paga, cada débito da OB
-    ganha um lançamento de **estorno** no extrato da NE (o pagamento original permanece registrado).
+    Reabrir a etapa X mantém X preenchida e DESCARTA as posteriores (começam vazias; a avaliação é refeita com o
+    formulário ativo). Anexos e histórico são mantidos (auditoria). Se a competência já estava paga, cada débito
+    da OB ganha um lançamento de **estorno** no extrato da NE (o pagamento original permanece registrado).
     """
     contrato = obter_contrato(sessao, contrato_id)
     if not pode_reabrir(sessao, contrato, autor):
@@ -1674,11 +1787,44 @@ def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, aut
     etapas = etapas_da_competencia(competencia)
     if dados.etapa not in etapas or etapas.index(dados.etapa) >= etapas.index(competencia.etapa_atual):
         raise ErroRegraContrato("Escolha uma etapa anterior à etapa atual desta competência.")
+    _reabrir_etapa(sessao, contrato, competencia, dados, autor)
+    sessao.commit()
+
+
+def zerar(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
+    """Zera a competência: todas as etapas voltam ao início, inclusive a medição (SuperRoot ou gestor).
+
+    Estorna a OB se já paga, descarta avaliação, nota fiscal, retenção, CADIN, checklist e consolidado e apaga a medição
+    (itens copiados, quantidades medidas, ciências, memórias, NEs escolhidas e e-mail). Anexos e
+    histórico continuam guardados.
+    """
+    contrato = obter_contrato(sessao, contrato_id)
+    if not pode_reabrir(sessao, contrato, autor):
+        raise SemPermissaoContrato("Somente o SuperRoot ou o gestor do contrato podem zerar a competência.")
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    _reabrir_etapa(sessao, contrato, competencia, Reabertura(etapa="medicao", justificativa="Competência zerada"), autor)
+    # Os itens saem junto: a medição recomeça e copia o cadastro de novo no próximo acesso
+    competencia.itens.clear()
+    competencia.notas.clear()
+    competencia.memorias.clear()
+    competencia.medicao_iniciada_em = None
+    competencia.email_medicao_enviado_em = competencia.email_medicao_ok = competencia.email_medicao_erro = None
+    competencia.email_medicao_destinatarios = []
+    atualizar_executado(contrato)
+    _auditar(sessao, autor, "contrato.execucao.zerar", contrato, competencia)
+    sessao.commit()
+
+
+def _reabrir_etapa(sessao: Session, contrato: Contrato, competencia: Competencia, dados: Reabertura, autor: Usuario) -> None:
+    """Corpo da reabertura (sem validar a etapa nem gravar): usado por `reabrir` e `zerar`."""
+    etapas = etapas_da_competencia(competencia)
     alvo = etapas.index(dados.etapa)
 
-    def reaberta(etapa: str) -> bool:
-        """Indica se a etapa volta a ficar aberta (é a etapa escolhida ou uma posterior a ela)."""
-        return etapa in etapas and etapas.index(etapa) >= alvo
+    def posterior(etapa: str) -> bool:
+        """Etapa depois da escolhida. Retenção, CADIN e checklist são paralelos: reabrir um não descarta os outros."""
+        if etapa not in etapas or etapas.index(etapa) <= alvo:
+            return False
+        return not (etapa in ETAPAS_PARALELAS and dados.etapa in ETAPAS_PARALELAS)
 
     # Competência paga: estorna no extrato de cada NE o valor líquido que ela debitou
     estornos = {}
@@ -1696,22 +1842,35 @@ def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, aut
                 estornos[nota.numero] = liquido
         competencia.concluida_em = competencia.ob_enviada_em = None
         competencia.ob_anexo_id = None
-    # Desfaz as conclusões das etapas reabertas (anexos continuam guardados)
-    if reaberta("consolidado"):
+    # A etapa escolhida volta a ficar aberta mantendo o que foi preenchido; as POSTERIORES são descartadas e
+    # começam vazias quando a competência chegar a elas (anexos antigos continuam guardados, sem vínculo)
+    descartadas = [e for e in etapas if posterior(e)]
+    if "consolidado" in descartadas or dados.etapa == "consolidado":
         competencia.consolidado_anexo_id, competencia.consolidado_em = None, None
-    if reaberta("cadin"):
+    if "cadin" in descartadas:
+        competencia.consultas_cadin.clear()
+    if "cadin" in descartadas or dados.etapa == "cadin":
         competencia.cadin_concluido_em = None
-    if reaberta("checklist"):
+    if "checklist" in descartadas:
+        _descartar_checklist(sessao, competencia)
+    if "checklist" in descartadas or dados.etapa == "checklist":
         competencia.checklist_concluido_em = None
-    if reaberta("retencao"):
+    if "retencao" in descartadas or dados.etapa == "retencao":
         competencia.retencao_concluida_em, competencia.retencao_pdf_anexo_id = None, None
         competencia.retencao_por_id, competencia.retencao_por_nome, competencia.retencao_discriminacao_conferida = None, "", False
-    if reaberta("nota_fiscal"):
+    if "retencao" in descartadas:
+        competencia.email_retencao_enviado_em = competencia.email_retencao_ok = competencia.email_retencao_erro = None
+        competencia.email_retencao_destinatarios = []
+    if "nota_fiscal" in descartadas:
+        _descartar_nota_fiscal(competencia)
+    if "nota_fiscal" in descartadas or dados.etapa == "nota_fiscal":
         competencia.nf_concluida_em = None
-    if reaberta("avaliacao") and competencia.avaliacao:
+    if "avaliacao" in descartadas:
+        _descartar_avaliacao(sessao, competencia)
+    elif dados.etapa == "avaliacao" and competencia.avaliacao:
         competencia.avaliacao.concluida_em, competencia.avaliacao.pdf_assinado_anexo_id = None, None
     # Reabrir a medição apaga as ciências e recalcula o executado dos itens
-    if reaberta("medicao"):
+    if dados.etapa == "medicao":
         competencia.medicao_concluida_em = None
         competencia.ciencias.clear()
         # Sobras de desconto de reajuste ainda não usadas voltam para esta competência
@@ -1720,5 +1879,4 @@ def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, aut
     etapa_anterior = competencia.etapa_atual
     competencia.etapa_atual = dados.etapa
     _auditar(sessao, autor, "contrato.execucao.reabrir", contrato, competencia, de=etapa_anterior, para=dados.etapa,
-             justificativa=dados.justificativa, estornos=estornos)
-    sessao.commit()
+             justificativa=dados.justificativa, estornos=estornos, descartadas=descartadas)

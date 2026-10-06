@@ -10,6 +10,7 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { DetalheCompetencia, NotaFiscal, Tributo } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
+import { HistoricoRecusasComponent } from './historico-recusas.component';
 import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
 const TRIBUTOS: { chave: Tributo; rotulo: string }[] = [
@@ -31,7 +32,7 @@ interface NotaEmConferencia {
 /** Etapa 4: o Financeiro (ou a equipe) confere a NF lida do XML e confirma as retenções. */
 @Component({
   selector: 'app-etapa-retencao',
-  imports: [FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, OpcaoEmailComponent, HistoricoRecusasComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-retencao.component.html',
 })
 export class EtapaRetencaoComponent implements OnChanges {
@@ -48,6 +49,9 @@ export class EtapaRetencaoComponent implements OnChanges {
   protected notas: NotaEmConferencia[] = [];
   protected discriminacaoConferida = false;
   protected readonly reenviando = signal(false);
+  // Janela de recusa da nota (justificativa obrigatória)
+  protected readonly recusando = signal(false);
+  protected justificativaRecusa = '';
 
   /** Preenche as retenções com o que está gravado (na primeira vez, os valores lidos do XML). */
   ngOnChanges(): void {
@@ -107,6 +111,20 @@ export class EtapaRetencaoComponent implements OnChanges {
     this.dialogos.executar(this.api.salvarRetencao(d.contrato_id, d.id, corpo), 'Salvando a retenção e gerando o PDF…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível salvar a retenção'),
+    });
+  }
+
+  /** Recusa a nota: a etapa da nota fiscal reabre e a equipe e todos os prepostos recebem o e-mail com o PDF da recusa. */
+  protected recusar(): void {
+    const d = this.detalhe();
+    if (this.justificativaRecusa.trim().length < 10) return;
+    this.dialogos.executar(this.api.recusarNota(d.contrato_id, d.id, this.justificativaRecusa.trim()), 'Registrando a recusa e gerando o PDF…').subscribe({
+      next: (novo) => {
+        this.recusando.set(false);
+        this.justificativaRecusa = '';
+        this.atualizado.emit(novo);
+      },
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível recusar a nota'),
     });
   }
 

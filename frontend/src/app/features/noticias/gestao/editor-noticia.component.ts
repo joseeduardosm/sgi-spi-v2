@@ -162,8 +162,18 @@ export class EditorNoticiaComponent implements OnInit {
 
   private validar(): boolean {
     if (!this.titulo.trim()) { this.dialogos.avisar('Falta o título', 'Informe o título da notícia.'); return false; }
-    if (this.publicacao === 'agendada' && !this.publicarEm) { this.dialogos.avisar('Falta a data', 'Informe quando a notícia deve ser publicada.'); return false; }
+    if (this.publicacao === 'agendada' && !this.publicarEm) {
+      if (this.campoIncompleto('nt-publicar')) { this.dialogos.avisar('Falta o horário', 'Preencha também o horário em "Publicar em" (hora e minuto).'); return false; }
+      this.dialogos.avisar('Falta a data', 'Informe quando a notícia deve ser publicada.'); return false;
+    }
+    if (!this.destaqueAte && this.campoIncompleto('nt-destaque')) { this.dialogos.avisar('Falta o horário', 'Preencha também o horário em "Tirar do slider em" (hora e minuto) ou limpe o campo.'); return false; }
     return true;
+  }
+
+  /** Campo datetime-local com data mas sem hora (ou o inverso): o navegador entrega valor vazio ao formulário. */
+  private campoIncompleto(id: string): boolean {
+    const campo = document.getElementById(id) as HTMLInputElement | null;
+    return !!campo && campo.validity.badInput;
   }
 
   protected salvar(): void {

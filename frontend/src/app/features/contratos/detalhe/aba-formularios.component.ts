@@ -52,16 +52,17 @@ import { EditorFormularioComponent, definicaoVazia } from './editor-formulario.c
             </div>
             }
             <small>Criado por {{ f.criado_por_nome }} em {{ f.criado_em | date: 'dd/MM/yyyy HH:mm' }}</small>
-            @if (podeEditar()) {
-              <div class="acoes-cartao esquerda">
+            <div class="acoes-cartao esquerda">
+              @if (podeEditar()) {
                 @if (!f.ativo) {
                   <button type="button" class="acao-primaria acao-pequena" (click)="ativar(f)">Ativar</button>
                   <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(f)">Editar</button>
                   <button type="button" class="acao-perigo acao-pequena" (click)="excluir(f)">Excluir</button>
                 }
                 <button type="button" class="acao-secundaria acao-pequena" (click)="duplicar(f)">Duplicar</button>
-              </div>
-            }
+              }
+              <button type="button" class="acao-secundaria acao-pequena" (click)="baixarXlsx(f)">Baixar XLSX</button>
+            </div>
           </article>
         } @empty {
           <p class="estado-vazio">Nenhum formulário cadastrado.</p>
@@ -146,7 +147,7 @@ export class AbaFormulariosComponent implements OnInit {
   protected async ativar(formulario: Formulario): Promise<void> {
     const ok = await this.dialogos.confirmar({
       titulo: `Ativar o formulário v${formulario.versao}?`,
-      mensagem: 'Ele passa a valer para as competências geradas daqui em diante e para as que ainda estão na medição.',
+      mensagem: 'Ele passa a valer para as competências que ainda não iniciaram a avaliação (cada uma copia o formulário ativo ao concluir a medição). Avaliações já criadas não mudam; para refazer uma, reabra a medição da competência.',
       rotuloConfirmar: 'Ativar',
       segundos: 3,
     });
@@ -154,6 +155,11 @@ export class AbaFormulariosComponent implements OnInit {
   }
 
   /** Cria uma cópia inativa da versão. */
+  /** Baixa a versão como planilha XLSX já preenchida. */
+  protected baixarXlsx(formulario: Formulario): void {
+    this.api.baixarModeloXlsx(this.contratoId(), 'formularios', formulario.id).subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível baixar a planilha') });
+  }
+
   protected duplicar(formulario: Formulario): void {
     this.api.acaoFormulario(this.contratoId(), formulario.id, 'duplicar').subscribe({ next: (f) => this.formularios.set(f), error: (e) => this.dialogos.mostrarErro(e) });
   }

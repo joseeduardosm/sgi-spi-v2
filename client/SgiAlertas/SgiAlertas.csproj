@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- SGI SPI · Alertas: aplicativo de bandeja do Windows que mostra as mensagens do SGI como alertas no canto da tela. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SgiAlertas</AssemblyName>
+    <RootNamespace>SgiSpi.Alertas</RootNamespace>
+    <ApplicationIcon>icone.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Company>Secretaria de Parcerias em Investimentos</Company>
+    <Product>SGI SPI Alertas</Product>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>pt-BR</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- Publicação: um único .exe que já leva o .NET (o PC não precisa ter nada instalado) -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="icone.ico" />
+  </ItemGroup>
+
+</Project>

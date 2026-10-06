@@ -10,6 +10,9 @@
       @if (d.reaberturas_permitidas && etapasAnteriores().length) {
         <button type="button" class="acao-perigo acao-pequena" (click)="reabrindo.set(true)">Reabrir etapa</button>
       }
+      @if (d.reaberturas_permitidas) {
+        <button type="button" class="acao-perigo-cheio acao-pequena" (click)="zerar()">Zerar competência</button>
+      }
     </div>
   </div>
 
@@ -52,7 +55,7 @@
       <button type="button" aria-label="Fechar" (click)="reabrindo.set(false)">×</button>
     </header>
     <form (ngSubmit)="reabrir()">
-      <p class="dica-formulario" style="margin: 0 0 14px">As conclusões das etapas seguintes são desfeitas. Se a competência já foi paga, cada débito da OB ganha um lançamento de estorno no extrato da NE (o pagamento original continua registrado). Anexos e histórico ficam guardados.</p>
+      <p class="dica-formulario" style="margin: 0 0 14px">A etapa escolhida continua preenchida, mas tudo o que foi feito nas etapas seguintes é descartado (a avaliação volta em branco, com o formulário ativo). Se a competência já foi paga, cada débito da OB ganha um lançamento de estorno no extrato da NE (o pagamento original continua registrado). Anexos e histórico ficam guardados.</p>
       <div class="grade-formulario">
         <div class="ocupa-duas">
           <label for="reabrir-etapa">Etapa a reabrir *</label>

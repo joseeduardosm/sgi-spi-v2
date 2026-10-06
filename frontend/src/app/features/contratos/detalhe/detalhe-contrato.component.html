@@ -13,6 +13,7 @@
         @else { <span class="desativado" aria-hidden="true"><button type="button" tabindex="-1">›</button></span> }
       </nav>
     }
+    <button type="button" class="acao-secundaria" (click)="baixarXlsx()">Baixar XLSX</button>
     @if (c.permissoes.pode_editar) {
       <a class="acao-primaria" [routerLink]="['/contratos', c.id, 'editar']">Editar</a>
     }

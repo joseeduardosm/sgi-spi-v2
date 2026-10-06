@@ -238,6 +238,10 @@ class Competencia(Base):
     notas_fiscais: Mapped[list["NotaFiscalCompetencia"]] = relationship(
         back_populates="competencia", cascade="all, delete-orphan", order_by="NotaFiscalCompetencia.ordem"
     )
+    # Recusas da nota fiscal pelo Financeiro (histórico do ciclo nota → recusa → nova nota → … → aprovação)
+    recusas: Mapped[list["RecusaNota"]] = relationship(
+        back_populates="competencia", cascade="all, delete-orphan", order_by="RecusaNota.ordem"
+    )
     documentos: Mapped[list["DocumentoMensal"]] = relationship(
         back_populates="competencia", cascade="all, delete-orphan", order_by="[DocumentoMensal.obrigatorio.desc(), DocumentoMensal.ordem]"
     )
@@ -491,3 +495,34 @@ class NotaFiscalCompetencia(Base):
     def rotulo(self) -> str:
         """"NF 123" (ou "NF 2" pela ordem, se o XML não trouxe número)."""
         return f"NF {self.numero}" if self.numero else f"NF {self.ordem}"
+
+
+class RecusaNota(Base):
+    """Recusa da(s) nota(s) fiscal(is) pelo Financeiro na retenção de tributos (etapa 4).
+
+    A competência volta para a etapa da nota fiscal, onde se junta outra nota; o ciclo pode se repetir sem limite até a retenção ser
+    conferida. `notas` guarda o retrato das notas recusadas ([{numero, valor_bruto, chave, anexo_id, xml_anexo_id}]): os PDFs
+    ficam preservados mesmo depois de as notas ativas serem substituídas, para a trilha do consolidado.
+    """
+
+    __tablename__ = "contratos_competencias_recusas"
+    __table_args__ = (UniqueConstraint("competencia_id", "ordem", name="uq_contratos_recusas_competencia_ordem"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer)
+    justificativa: Mapped[str] = mapped_column(Text)
+    recusada_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    recusada_por_nome: Mapped[str] = mapped_column(String(250), default="")
+    recusada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    notas: Mapped[list[dict[str, Any]]] = mapped_column(TipoJson, default=list)
+    # PDF da recusa, gerado pelo sistema (para juntar a um processo)
+    pdf_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    # E-mail à equipe e a todos os prepostos (obrigatório), com o PDF anexado
+    email_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_ok: Mapped[bool | None] = mapped_column(Boolean)
+    email_destinatarios: Mapped[list[str]] = mapped_column(TipoJson, default=list)
+    email_erro: Mapped[str | None] = mapped_column(Text)
+
+    competencia: Mapped[Competencia] = relationship(back_populates="recusas")
+    pdf_anexo: Mapped[Anexo | None] = relationship()

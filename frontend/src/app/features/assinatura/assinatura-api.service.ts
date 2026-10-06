@@ -48,7 +48,7 @@ export class AssinaturaApiService {
     return this.http.post<PreviaAssinatura>(`${this.base}/previa`, dados);
   }
 
-  /** Baixa a assinatura em PNG (1692×471, usar a 564 px de largura). */
+  /** Baixa a assinatura em PNG (no pixel original do modelo PPTX, hoje 1765×492; usar a 564 px de largura). */
   baixarPng(dados: DadosAssinatura): Observable<unknown> {
     return this.baixar('png', dados, 'assinatura-email.png');
   }

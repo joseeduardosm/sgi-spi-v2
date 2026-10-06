@@ -33,6 +33,7 @@ from app.schemas.contratos.execucao import (
     PrepostoDoEmail,
     ItemNotaFiscal,
     ConclusaoMedicao,
+    GravacaoRecusa,
     GravacaoRetencao,
     DetalheCompetencia,
     GravacaoAvaliacaoGestor,
@@ -169,10 +170,10 @@ def excluir_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, sessao:
 
 
 @roteador.post("/formularios/{formulario_id}/ativar", response_model=list[LeituraFormulario], summary="Ativar formulário",
-               description="Desativa as demais versões e aplica esta às competências ainda na medição (sem avaliação iniciada).",
+               description="Desativa as demais versões e aplica esta às competências na medição ou na avaliação, desde que a avaliação não esteja concluída nem tenha PDF gerado. Notas já lançadas nessas avaliações são descartadas (pertencem à versão antiga).",
                responses={**NAO_ENCONTRADO, **ESCRITA})
 def ativar_formulario(contrato_id: uuid.UUID, formulario_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
-    """Ativa o formulário e o aplica às competências cuja avaliação ainda não começou."""
+    """Ativa o formulário e o aplica às competências que ainda não concluíram a avaliação."""
     with traduzir_erros(sessao):
         configuracao.ativar_formulario(sessao, contrato_id, formulario_id, autor)
         return configuracao.listar_formularios(sessao, contrato_id)
@@ -396,7 +397,7 @@ def reconsideracao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: U
 @roteador.post("/competencias/{competencia_id}/nota-fiscal", response_model=DetalheCompetencia, summary="Juntar nota fiscal (PDF + XML)",
                description="`multipart/form-data`: uma ou mais notas (até 20). `notas` é um JSON com a lista final, na ordem desejada: "
                "cada item traz `id` (nota já registrada, que mantém os arquivos não trocados), `arquivo` e `xml` (posições nas listas de "
-               "arquivos `arquivos` e `xmls`). PDF e XML (NF-e ou NFS-e) são obrigatórios em cada nota; notas fora da lista são removidas. "
+               "arquivos `arquivos` e `xmls`). O PDF é obrigatório em cada nota; o XML (NF-e ou NFS-e) é opcional: sem ele, informe `valor_bruto` (e, se quiser, `numero`) no item da nota; notas fora da lista são removidas. "
                "Data de recebimento e prazo de pagamento (1 a 3650 dias). Número, chave, valor e as retenções sugeridas vêm dos XMLs; "
                "o saldo livre das NEs precisa cobrir a soma. Conclui a etapa (próxima: retenção de tributos) e, **só com `enviar_email = true`** (padrão `false`), envia em segundo plano "
                "o e-mail ao Financeiro com cópia à equipe.", responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
@@ -406,7 +407,7 @@ def nota_fiscal(
     tarefas: BackgroundTasks,
     recebida_em: Annotated[date, Form(description="Data em que a Administração recebeu a NF.")],
     prazo_pagamento_dias: Annotated[int, Form(ge=1, le=3650)],
-    notas: Annotated[str, Form(description='JSON: lista de {"id": uuid|null, "arquivo": posição|null, "xml": posição|null}.')],
+    notas: Annotated[str, Form(description='JSON: lista de {"id": uuid|null, "arquivo": posição|null, "xml": posição|null, "valor_bruto": decimal|null, "numero": texto|null}.')],
     enviar_email: Annotated[bool, Form(description="Envia o e-mail ao Financeiro (cópia à equipe). Padrão `false`.")] = False,
     financeiro_ids: Annotated[str | None, Form(description="Ids dos usuários do Financeiro que recebem, separados por vírgula. Ausente = todos; vazio = ninguém do Financeiro. Só vale com `enviar_email`.")] = None,
     arquivos: Annotated[list[UploadFile], File(description="PDFs das notas (referenciados por posição em `notas`).")] = [],
@@ -414,12 +415,12 @@ def nota_fiscal(
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ):
-    """Etapa 3: junta uma ou mais notas fiscais; os valores são lidos dos XMLs."""
+    """Etapa 3: junta uma ou mais notas fiscais; os valores vêm dos XMLs ou, sem XML, do valor informado."""
     dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo_pagamento_dias}
     try:
         itens = [i.model_dump() for i in TypeAdapter(list[ItemNotaFiscal]).validate_json(notas)]
     except ValidationError as erro:
-        raise ErroApi(422, "O campo `notas` precisa ser uma lista JSON de {id, arquivo, xml}.", "validacao") from erro
+        raise ErroApi(422, "O campo `notas` precisa ser uma lista JSON de {id, arquivo, xml, valor_bruto, numero}.", "validacao") from erro
 
     with traduzir_erros(sessao):
         # Os arquivos são opcionais por nota: ao corrigir depois de reabrir, os anteriores podem ser mantidos
@@ -461,6 +462,34 @@ def salvar_retencao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Gr
         )
         if dados.enviar_email:
             tarefas.add_task(servico_notificacoes.notificar_retencao, competencia_id)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/retencao/recusar", response_model=DetalheCompetencia, summary="Recusar a nota fiscal",
+               description="O Financeiro (ou a equipe e o SuperRoot, com a mesma permissão da retenção) recusa a(s) nota(s) com **justificativa obrigatória** "
+               "(mínimo de 10 caracteres). Gera o PDF da recusa (para juntar a um processo), guarda a trilha, **envia obrigatoriamente o e-mail à equipe do "
+               "contrato e a todos os prepostos da empresa** (com o PDF anexado e a justificativa) e **reabre a etapa da nota fiscal**, onde se junta outra nota "
+               "(XML opcional). O ciclo pode se repetir sem limite até o Financeiro conferir a retenção. CADIN e checklist já feitos são mantidos. "
+               "`400` fora da etapa de retenção ou sem justificativa; `403` sem permissão.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def recusar_nota(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoRecusa, tarefas: BackgroundTasks,
+                 sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):
+    """Etapa 4: recusa da nota fiscal pelo Financeiro."""
+    with traduzir_erros(sessao):
+        recusa = servico_retencao.recusar_nota(sessao, contrato_id, competencia_id, dados.justificativa, autor)
+        tarefas.add_task(servico_notificacoes.notificar_recusa, recusa.id)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/recusas/{recusa_id}/reenviar-email", response_model=DetalheCompetencia,
+               summary="Reenviar o e-mail de uma recusa", description="Envia de novo à equipe e a todos os prepostos o e-mail da recusa, com o PDF anexado.",
+               responses={**resposta_nao_encontrado("Competência ou recusa"), **ESCRITA})
+def reenviar_email_recusa(contrato_id: uuid.UUID, competencia_id: uuid.UUID, recusa_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                          autor: Usuario = Depends(pode_ler)):
+    """Reenvio síncrono (a tela mostra o resultado na hora)."""
+    with traduzir_erros(sessao):
+        servico_notificacoes.exigir_reenvio_recusa(sessao, contrato_id, competencia_id, recusa_id, autor)
+        servico_notificacoes.notificar_recusa(recusa_id)
+        sessao.expire_all()
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
@@ -577,8 +606,20 @@ def ordem_bancaria(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: U
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
+@roteador.post("/competencias/{competencia_id}/zerar", response_model=DetalheCompetencia, summary="Zerar competência (SuperRoot ou gestor)",
+               description="Volta a competência ao início: apaga a medição (quantidades medidas, ciências, memórias, NEs escolhidas) e descarta todas as "
+               "etapas seguintes. Se estava paga, lança estorno dos débitos da OB. Anexos e histórico ficam guardados. Permitido ao SuperRoot e ao "
+               "gestor vigente do contrato.", responses={**NAO_ENCONTRADA, **INVALIDO})
+def zerar(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Zera todas as etapas da competência."""
+    with traduzir_erros(sessao):
+        competencias.zerar(sessao, contrato_id, competencia_id, autor)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
 @roteador.post("/competencias/{competencia_id}/reabrir", response_model=DetalheCompetencia, summary="Reabrir etapa (SuperRoot ou gestor)",
-               description="Volta para uma etapa anterior com justificativa e desfaz as conclusões posteriores. Se a competência "
+               description="Volta para uma etapa anterior com justificativa. A etapa escolhida mantém o preenchimento; as **posteriores são descartadas** "
+               "(avaliação refeita em branco com o formulário ativo, nota fiscal, retenção, CADIN, checklist e consolidado começam vazios). Se a competência "
                "estava paga, lança **estorno** dos débitos da OB no extrato das NEs (o pagamento original permanece). Anexos e "
                "histórico ficam guardados. Permitido ao SuperRoot e ao gestor vigente do contrato.", responses={**NAO_ENCONTRADA, **INVALIDO})
 def reabrir(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Reabertura, sessao: Session = Depends(obter_sessao),

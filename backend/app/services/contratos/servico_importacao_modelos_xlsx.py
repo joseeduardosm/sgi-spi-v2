@@ -422,49 +422,94 @@ def _salvar(livro: Workbook) -> bytes:
     return saida.getvalue()
 
 
-def gerar_modelo_checklist() -> bytes:
-    """Planilha em branco do checklist, com um exemplo preenchido."""
+def _numero(valor: Any) -> float | int | None:
+    """Número para a célula (a definição do formulário guarda decimais como texto ou número)."""
+    if valor is None or valor == "":
+        return None
+    numero = Decimal(str(valor))
+    return int(numero) if numero == numero.to_integral_value() else float(numero)
+
+
+def _montar_checklist(nome: str, documentos: list[tuple], instrucoes: list[str]) -> bytes:
+    """Planilha do checklist: `documentos` = (documento, observação, obrigatório, com validade, vale para outros), Sim/Não em texto."""
     livro = Workbook()
     folha = livro.active
     folha.title = "Checklist"
-    _instrucoes(folha, ["Modelo de importação de checklist", "Preencha o nome e os documentos mensais, na ordem. Obrigatório, Com validade e Vale para outros contratos: Sim ou Não (em branco: Sim, Não e Não). Vale para outros contratos (só com validade) marca o documento da empresa, reaproveitável entre contratos da mesma empresa."])
-    folha["A4"], folha["B4"] = "Nome do checklist", "Checklist mensal padrão"
+    _instrucoes(folha, instrucoes)
+    folha["A4"], folha["B4"] = "Nome do checklist", nome
     _titulos(folha, 6, ["Documento", "Observação", "Obrigatório", "Com validade", "Vale para outros contratos"])
-    exemplos = [("Certidão negativa de débitos", "Federal, estadual e municipal", "Sim", "Sim", "Sim"),
-                ("Comprovante de pagamento de encargos", "", "Sim", "Não", "Não"),
-                ("Relatório fotográfico", "Quando houver", "Não", "Não", "Não")]
-    for n, linha in enumerate(exemplos, start=7):
+    for n, linha in enumerate(documentos, start=7):
         for coluna, valor in enumerate(linha, start=1):
             folha.cell(n, coluna, valor)
     return _salvar(livro)
 
 
-def gerar_modelo_formulario() -> bytes:
-    """Planilha em branco do formulário de avaliação, com um exemplo preenchido."""
+def _montar_formulario(nome: str, escala: list[tuple], faixas: list[tuple], itens: list[tuple], instrucoes: list[str]) -> bytes:
+    """Planilha do formulário: `escala` = (nota, legenda); `faixas` = (mínimo, máximo, percentual, notas zero); `itens` = (grupo, item, descrição, peso)."""
     livro = Workbook()
     folha = livro.active
     folha.title = "Formulário"
-    _instrucoes(folha, ["Modelo de importação de formulário de avaliação da qualidade",
-                        "Preencha o nome aqui e as abas Escala, Faixas e Itens. Os pesos de cada grupo devem somar 100."])
-    folha["A4"], folha["B4"] = "Nome do formulário", "Avaliação mensal da qualidade"
+    _instrucoes(folha, instrucoes)
+    folha["A4"], folha["B4"] = "Nome do formulário", nome
     folha.column_dimensions["A"].width, folha.column_dimensions["B"].width = 26, 40
-    escala = livro.create_sheet("Escala")
-    _instrucoes(escala, ["Escala de notas (ordem crescente, sem repetir)"])
-    _titulos(escala, 3, ["Nota", "Legenda"])
-    for n, linha in enumerate([(0, "Insatisfatório"), (5, "Regular"), (10, "Ótimo")], start=4):
-        escala.cell(n, 1, linha[0]), escala.cell(n, 2, linha[1])
-    faixas = livro.create_sheet("Faixas")
-    _instrucoes(faixas, ["Faixas da nota final e % do pagamento liberado (Máximo em branco = sem teto; Notas zero é opcional)"])
-    _titulos(faixas, 3, ["Mínimo", "Máximo", "Percentual liberado", "Notas zero"])
-    for n, linha in enumerate([(0, 4.99, 70, None), (5, 7.99, 90, None), (8, None, 100, None)], start=4):
-        for coluna, valor in enumerate(linha, start=1):
-            faixas.cell(n, coluna, valor)
-    itens = livro.create_sheet("Itens")
-    _instrucoes(itens, ["Itens avaliados por grupo (grupo em branco repete o de cima; pesos do grupo somam 100)"])
-    _titulos(itens, 3, ["Grupo", "Item", "Descrição", "Peso"])
-    exemplos = [("Pessoal", "Pontualidade", "Cumprimento dos horários", 50), (None, "Uniforme", "Uso de uniforme e crachá", 50),
-                ("Materiais", "Qualidade", "Materiais conforme especificação", 100)]
-    for n, linha in enumerate(exemplos, start=4):
-        for coluna, valor in enumerate(linha, start=1):
-            itens.cell(n, coluna, valor)
+    abas = (("Escala", ["Escala de notas (ordem crescente, sem repetir)"], ["Nota", "Legenda"], escala),
+            ("Faixas", ["Faixas da nota final e % do pagamento liberado (Máximo em branco = sem teto; Notas zero é opcional)"],
+             ["Mínimo", "Máximo", "Percentual liberado", "Notas zero"], faixas),
+            ("Itens", ["Itens avaliados por grupo (grupo em branco repete o de cima; pesos do grupo somam 100)"],
+             ["Grupo", "Item", "Descrição", "Peso"], itens))
+    for titulo, instrucao, colunas, linhas in abas:
+        aba = livro.create_sheet(titulo)
+        _instrucoes(aba, instrucao)
+        _titulos(aba, 3, colunas)
+        for n, linha in enumerate(linhas, start=4):
+            for coluna, valor in enumerate(linha, start=1):
+                aba.cell(n, coluna, valor)
     return _salvar(livro)
+
+
+def gerar_modelo_checklist() -> bytes:
+    """Planilha em branco do checklist, com um exemplo preenchido."""
+    exemplos = [("Certidão negativa de débitos", "Federal, estadual e municipal", "Sim", "Sim", "Sim"),
+                ("Comprovante de pagamento de encargos", "", "Sim", "Não", "Não"),
+                ("Relatório fotográfico", "Quando houver", "Não", "Não", "Não")]
+    return _montar_checklist("Checklist mensal padrão", exemplos, [
+        "Modelo de importação de checklist",
+        "Preencha o nome e os documentos mensais, na ordem. Obrigatório, Com validade e Vale para outros contratos: Sim ou Não (em branco: Sim, Não e Não). Vale para outros contratos (só com validade) marca o documento da empresa, reaproveitável entre contratos da mesma empresa."])
+
+
+def gerar_modelo_formulario() -> bytes:
+    """Planilha em branco do formulário de avaliação, com um exemplo preenchido."""
+    return _montar_formulario(
+        "Avaliação mensal da qualidade",
+        [(0, "Insatisfatório"), (5, "Regular"), (10, "Ótimo")],
+        [(0, 4.99, 70, None), (5, 7.99, 90, None), (8, None, 100, None)],
+        [("Pessoal", "Pontualidade", "Cumprimento dos horários", 50), (None, "Uniforme", "Uso de uniforme e crachá", 50),
+         ("Materiais", "Qualidade", "Materiais conforme especificação", 100)],
+        ["Modelo de importação de formulário de avaliação da qualidade", "Preencha o nome aqui e as abas Escala, Faixas e Itens. Os pesos de cada grupo devem somar 100."])
+
+
+# ---------------------------------------------------------------------------------------------
+# Exportação (planilha já preenchida, no mesmo formato da importação)
+# ---------------------------------------------------------------------------------------------
+
+def _sim_nao_texto(valor: bool) -> str:
+    return "Sim" if valor else "Não"
+
+
+def exportar_checklist(checklist) -> bytes:
+    """Planilha de uma versão do checklist, preenchida; pode ser reimportada em outro contrato."""
+    documentos = [(i.nome, i.observacao, _sim_nao_texto(i.obrigatorio), _sim_nao_texto(i.com_validade), _sim_nao_texto(i.vale_outros_contratos))
+                  for i in sorted(checklist.itens, key=lambda i: i.ordem)]
+    return _montar_checklist(checklist.nome, documentos, [f"Checklist · versão {checklist.versao}", "Obrigatório, Com validade e Vale para outros contratos: Sim ou Não."])
+
+
+def exportar_formulario(formulario) -> bytes:
+    """Planilha de uma versão do formulário de avaliação, preenchida; pode ser reimportada em outro contrato."""
+    definicao = formulario.definicao or {}
+    escala = [(_numero(n.get("valor")), n.get("legenda", "")) for n in definicao.get("escala", [])]
+    faixas = [(_numero(f.get("minimo")), _numero(f.get("maximo")), _numero(f.get("percentual")), f.get("notas_zero")) for f in definicao.get("faixas", [])]
+    itens = []
+    for grupo in definicao.get("grupos", []):
+        for posicao, item in enumerate(grupo.get("itens", [])):
+            itens.append((grupo["nome"] if posicao == 0 else None, item.get("nome", ""), item.get("descricao", ""), _numero(item.get("peso"))))
+    return _montar_formulario(formulario.nome, escala, faixas, itens, [f"Formulário de avaliação · versão {formulario.versao}", "Os pesos de cada grupo somam 100."])

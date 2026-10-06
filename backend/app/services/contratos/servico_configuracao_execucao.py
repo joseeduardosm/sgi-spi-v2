@@ -40,9 +40,6 @@ from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrad
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato
 from app.services.servico_auditoria import auditar, valor_json
 
-# Etapas em que a competência ainda recebe a nova versão do checklist
-ETAPAS_ANTES_DO_CHECKLIST = ("medicao", "avaliacao", "nota_fiscal", "retencao", "cadin", "checklist")
-
 
 def _nome(usuario: Usuario) -> str:
     """Nome de exibição do usuário (nome completo ou, na falta, o login)."""
@@ -179,33 +176,54 @@ def _nome_chave(nome: str) -> str:
     return " ".join(nome.lower().split())
 
 
+def _passar_validos(origem: Competencia, destino: Competencia) -> list[str]:
+    """Documentos com validade anexados em `origem` e ainda válidos no período de `destino` passam para o par (mesmo nome) sem anexo."""
+    fontes = {_nome_chave(d.nome): d for d in origem.documentos if d.com_validade and d.anexo_id and d.validade_ate}
+    reaproveitados = []
+    for doc in destino.documentos:
+        par = fontes.get(_nome_chave(doc.nome))
+        if doc.com_validade and doc.anexo_id is None and par is not None and par.validade_ate >= destino.periodo_fim:
+            doc.anexo_id, doc.enviado_em, doc.enviado_por_id = par.anexo_id, par.enviado_em, par.enviado_por_id
+            doc.validade_ate = par.validade_ate
+            doc.reaproveitado_de = par.reaproveitado_de or origem.competencia
+            doc.reaproveitado_contrato = par.reaproveitado_contrato
+            reaproveitados.append(doc.nome)
+    return reaproveitados
+
+
+def puxar_checklist(contrato: Contrato, competencia: Competencia) -> None:
+    """Início da etapa do checklist: a competência copia o checklist ATIVO agora (sem checklist ativo, nada muda).
+
+    Documentos válidos da competência regular anterior (a mais recente com checklist) são reaproveitados, como já acontecia
+    no sentido inverso quando a anterior concluía o checklist.
+    """
+    checklist = checklist_ativo(contrato)
+    if checklist is None:
+        return
+    copiar_checklist(competencia, checklist)
+    anteriores = sorted((c for c in contrato.competencias if c.tipo == "regular" and c.periodo_fim < competencia.periodo_inicio and c.documentos),
+                        key=lambda c: c.periodo_fim)
+    if competencia.tipo == "regular" and anteriores:
+        _passar_validos(anteriores[-1], competencia)
+
+
 def reaproveitar_validos(contrato: Contrato, competencia: Competencia) -> list[str]:
     """Documentos com validade ainda válidos da competência `competencia` passam para a competência regular seguinte.
 
-    A seguinte é a de menor início depois do fim desta, ainda sem checklist concluído. Só entra o documento com validade dela
-    **sem anexo** cujo par (mesmo nome) está anexado com `validade_ate` igual ou depois do último dia do período da seguinte. Não conclui
+    A seguinte é a de menor início depois do fim desta, ainda sem checklist concluído e **que já copiou o checklist**
+    (sem documentos, ela reaproveita sozinha ao iniciar a etapa). Só entra o documento com validade dela **sem anexo**
+    cujo par (mesmo nome) está anexado com `validade_ate` igual ou depois do último dia do período da seguinte. Não conclui
     a etapa: a pessoa ainda confere e conclui (e isso estende a cadeia). Devolve os nomes reaproveitados.
     """
     seguintes = sorted((c for c in contrato.competencias if c.tipo == "regular" and c.periodo_inicio > competencia.periodo_fim
                         and c.checklist_concluido_em is None and c.etapa_atual != "concluida"), key=lambda c: c.periodo_inicio)
     if competencia.tipo != "regular" or not seguintes:
         return []
-    proxima = seguintes[0]
-    origem = {_nome_chave(d.nome): d for d in competencia.documentos if d.com_validade and d.anexo_id and d.validade_ate}
-    reaproveitados = []
-    for doc in proxima.documentos:
-        par = origem.get(_nome_chave(doc.nome))
-        if doc.com_validade and doc.anexo_id is None and par is not None and par.validade_ate >= proxima.periodo_fim:
-            doc.anexo_id, doc.enviado_em, doc.enviado_por_id = par.anexo_id, par.enviado_em, par.enviado_por_id
-            doc.validade_ate = par.validade_ate
-            doc.reaproveitado_de = par.reaproveitado_de or competencia.competencia
-            doc.reaproveitado_contrato = par.reaproveitado_contrato
-            reaproveitados.append(doc.nome)
-    return reaproveitados
+    return _passar_validos(competencia, seguintes[0])
 
 
-def ativar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid.UUID, autor: Usuario) -> int:
-    """Ativa a versão e a aplica às competências que ainda não passaram do checklist. Devolve quantas."""
+def ativar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid.UUID, autor: Usuario) -> None:
+    """Ativa a versão. As competências não são tocadas: cada uma copia o checklist ativo ao iniciar a etapa (`puxar_checklist`)."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     checklist = _obter_checklist(sessao, contrato_id, checklist_id)
@@ -213,15 +231,9 @@ def ativar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid
     for outro in _checklists(sessao, contrato_id):
         outro.ativo = False
     checklist.ativo, checklist.ativado_em = True, agora_utc()
-    # Competências que ainda não passaram da etapa do checklist recebem a nova versão
-    abertas = [c for c in contrato.competencias if c.etapa_atual in ETAPAS_ANTES_DO_CHECKLIST and c.checklist_concluido_em is None]
-    for competencia in abertas:
-        copiar_checklist(competencia, checklist)
-        sessao.flush()
     auditar(sessao, autor.login, "contrato.checklist.ativar", f"Contrato {contrato.numero}", autor_id=autor.id,
-            alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": checklist.versao, "competencias_atualizadas": len(abertas)})
+            alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": checklist.versao})
     sessao.commit()
-    return len(abertas)
 
 
 def checklist_ativo(contrato: Contrato) -> Checklist | None:
@@ -264,6 +276,16 @@ def listar_formularios(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraF
     """Versões do formulário para a aba Formulários."""
     obter_contrato(sessao, contrato_id)
     return [leitura_formulario(f) for f in _formularios(sessao, contrato_id)]
+
+
+def obter_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid.UUID) -> Checklist:
+    """Versão do checklist do contrato (para a exportação em XLSX); inexistente ou excluída vira 404."""
+    return _obter_checklist(sessao, contrato_id, checklist_id)
+
+
+def obter_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: uuid.UUID) -> FormularioAvaliacao:
+    """Versão do formulário do contrato (para a exportação em XLSX); inexistente ou excluída vira 404."""
+    return _obter_formulario(sessao, contrato_id, formulario_id)
 
 
 def _obter_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: uuid.UUID) -> FormularioAvaliacao:
@@ -320,33 +342,17 @@ def excluir_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: u
     sessao.commit()
 
 
-def ativar_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: uuid.UUID, autor: Usuario) -> int:
-    """Ativa a versão e a aplica às competências ainda na medição (avaliação não iniciada)."""
+def ativar_formulario(sessao: Session, contrato_id: uuid.UUID, formulario_id: uuid.UUID, autor: Usuario) -> None:
+    """Ativa a versão. As competências não são tocadas: cada uma copia o formulário ativo ao iniciar a avaliação (`servico_competencias.puxar_avaliacao`)."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     formulario = _obter_formulario(sessao, contrato_id, formulario_id)
     for outro in _formularios(sessao, contrato_id):
         outro.ativo = False
     formulario.ativo, formulario.ativado_em = True, agora_utc()
-    # Aplica a nova versão só às competências ainda na medição
-    aplicadas = 0
-    for competencia in contrato.competencias:
-        if competencia.etapa_atual != "medicao":
-            continue
-        # Sem avaliação: cria com a nova definição; com avaliação ainda sem respostas: troca a definição;
-        # com respostas: mantém a versão antiga (a avaliação já começou)
-        avaliacao = sessao.scalar(select(AvaliacaoCompetencia).where(AvaliacaoCompetencia.competencia_id == competencia.id))
-        if avaliacao is None:
-            sessao.add(AvaliacaoCompetencia(competencia_id=competencia.id, formulario_id=formulario.id, definicao=formulario.definicao))
-        elif not avaliacao.respostas_iniciais:
-            avaliacao.formulario_id, avaliacao.definicao = formulario.id, formulario.definicao
-        else:
-            continue
-        aplicadas += 1
     auditar(sessao, autor.login, "contrato.formulario.ativar", f"Contrato {contrato.numero}", autor_id=autor.id,
-            alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": formulario.versao, "competencias_atualizadas": aplicadas})
+            alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": formulario.versao})
     sessao.commit()
-    return aplicadas
 
 
 def formulario_ativo(contrato: Contrato) -> FormularioAvaliacao | None:

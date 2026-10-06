@@ -10,6 +10,7 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { DetalheCompetencia, NotaFiscal } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { HistoricoRecusasComponent } from './historico-recusas.component';
 import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 
 /** Linha do formulário: uma nota fiscal (registrada e/ou com arquivos novos escolhidos). */
@@ -17,12 +18,15 @@ interface LinhaNota {
   existente: NotaFiscal | null;
   arquivo: File | null;
   xml: File | null;
+  /** Valor bruto e número, digitados quando a nota não tem XML. */
+  valor: string;
+  numero: string;
 }
 
 /** Etapa 3: a equipe junta uma ou mais NFs (PDF + XML de cada). Os valores vêm dos XMLs; as retenções são conferidas na etapa 4. */
 @Component({
   selector: 'app-etapa-nota-fiscal',
-  imports: [FormsModule, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, HistoricoRecusasComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-nota-fiscal.component.html',
 })
 export class EtapaNotaFiscalComponent implements OnChanges {
@@ -43,16 +47,23 @@ export class EtapaNotaFiscalComponent implements OnChanges {
   protected linhas: LinhaNota[] = [];
   protected readonly reenviando = signal(false);
 
-  /** Sempre que a competência muda, preenche o formulário com o que já foi registrado. */
+  /** Resumo do que já foi registrado: o formulário só é refeito quando isso muda (e não a cada atualização da tela). */
+  private registrado = '';
+
+  /** Quando o registro da nota fiscal muda, preenche o formulário com o que já foi registrado. */
   ngOnChanges(): void {
     const d = this.detalhe();
+    const registrado = JSON.stringify([d.id, d.nf_recebida_em, d.prazo_pagamento_dias, d.notas_fiscais.map((n) => n.id)]);
+    // Atualizações sem mudança na nota (ex.: consulta do e-mail) não podem apagar os arquivos já escolhidos
+    if (registrado === this.registrado) return;
+    this.registrado = registrado;
     this.recebidaEm = d.nf_recebida_em ?? '';
     this.prazo = d.prazo_pagamento_dias ?? 30;
-    this.linhas = d.notas_fiscais.length ? d.notas_fiscais.map((n) => ({ existente: n, arquivo: null, xml: null })) : [{ existente: null, arquivo: null, xml: null }];
+    this.linhas = d.notas_fiscais.length ? d.notas_fiscais.map((n) => ({ existente: n, arquivo: null, xml: null, valor: n.dados_xml ? '' : String(n.valor_bruto ?? ''), numero: n.dados_xml ? '' : n.numero })) : [{ existente: null, arquivo: null, xml: null, valor: d.valor_autorizado ? String(d.valor_autorizado) : '', numero: '' }];
   }
 
   protected adicionarNota(): void {
-    this.linhas = [...this.linhas, { existente: null, arquivo: null, xml: null }];
+    this.linhas = [...this.linhas, { existente: null, arquivo: null, xml: null, valor: '', numero: '' }];
   }
 
   protected removerNota(linha: LinhaNota): void {
@@ -85,15 +96,27 @@ export class EtapaNotaFiscalComponent implements OnChanges {
 
   /** Cada nota com PDF e XML (novos ou já enviados), recebimento e prazo válidos. */
   protected valido(): boolean {
-    const completas = this.linhas.length > 0 && this.linhas.every((l) => (!!l.arquivo || !!l.existente?.arquivo) && (!!l.xml || !!l.existente?.xml));
+    // O PDF é obrigatório; o XML é opcional (sem ele, informe o valor bruto da nota)
+    const completas = this.linhas.length > 0 && this.linhas.every((l) => (!!l.arquivo || !!l.existente?.arquivo) && (this.temXml(l) || this.valorDigitado(l) > 0));
     return completas && !!this.recebidaEm && this.prazo >= 1 && this.prazo <= 3650;
+  }
+
+  /** A nota tem XML (novo ou já enviado). */
+  protected temXml(linha: LinhaNota): boolean {
+    return !!linha.xml || !!linha.existente?.dados_xml;
+  }
+
+  /** Valor bruto digitado (aceita vírgula decimal); 0 se vazio ou inválido. */
+  protected valorDigitado(linha: LinhaNota): number {
+    const numero = Number(String(linha.valor ?? '').replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(numero) ? numero : 0;
   }
 
   /** Envia (multipart) os arquivos e as datas; a etapa conclui e o Financeiro é avisado por e-mail. */
   protected async concluir(): Promise<void> {
     const ok = await this.dialogos.confirmar({
       titulo: 'Juntar a nota fiscal?',
-      mensagem: 'O XML é lido para preencher número, valor e retenções. A retenção de tributos (Financeiro, que recebe um e-mail com cópia para a equipe), o CADIN e o checklist ficam liberados ao mesmo tempo; o documento consolidado só é gerado com os três concluídos.',
+      mensagem: 'Com XML, ele é lido para preencher número, valor e retenções; sem XML, vale o valor bruto informado. A retenção de tributos (Financeiro, que recebe um e-mail com cópia para a equipe), o CADIN e o checklist ficam liberados ao mesmo tempo; o documento consolidado só é gerado com os três concluídos.',
       rotuloConfirmar: 'Juntar nota fiscal',
     });
     if (!ok) return;
@@ -105,6 +128,9 @@ export class EtapaNotaFiscalComponent implements OnChanges {
       id: l.existente?.id ?? null,
       arquivo: l.arquivo ? arquivos.push(l.arquivo) - 1 : null,
       xml: l.xml ? xmls.push(l.xml) - 1 : null,
+      // Sem XML, o valor bruto e o número vão digitados
+      valor_bruto: this.temXml(l) ? null : this.valorDigitado(l).toFixed(2),
+      numero: this.temXml(l) ? null : l.numero.trim() || null,
     }));
     const dados = { recebida_em: this.recebidaEm, prazo_pagamento_dias: this.prazo, notas, arquivos, xmls, enviar_email: this.enviarEmail(), financeiro_ids: this.financeiroIds() };
     this.dialogos.executar(this.api.notaFiscal(d.contrato_id, d.id, dados), 'Lendo os XMLs e enviando as notas fiscais…').subscribe({

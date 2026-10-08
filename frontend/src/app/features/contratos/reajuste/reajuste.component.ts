@@ -35,8 +35,8 @@ export class ReajusteComponent implements OnInit {
   // Contrato e painel carregados
   protected readonly contrato = signal<DetalheContrato | null>(null);
   protected readonly painel = signal<PainelReajuste | null>(null);
-  // Campos da abertura (mês de referência AAAA-MM e vigência) e da memória (índice e teto por item)
-  protected mesReferencia = '';
+  // Campos da abertura (data a partir da qual os novos valores valem, AAAA-MM-DD, e vigência) e da memória (índice e teto por item)
+  protected dataEfeito = '';
   protected vigencia: number | null = null;
   protected indices: Record<string, string> = {};
   protected referenciais: Record<string, string> = {};
@@ -80,8 +80,8 @@ export class ReajusteComponent implements OnInit {
 
   /** Abre o reajuste para a vigência e o mês escolhidos (enviado como dia 1). */
   protected abrir(): void {
-    if (!this.vigencia || !this.mesReferencia) return;
-    this.tratar(this.api.abrirReajuste(this.id(), this.vigencia, `${this.mesReferencia}-01`), 'Não foi possível abrir o reajuste');
+    if (!this.vigencia || !this.dataEfeito) return;
+    this.tratar(this.api.abrirReajuste(this.id(), this.vigencia, this.dataEfeito), 'Não foi possível abrir o reajuste');
   }
 
   /** Anexa a evidência do índice. */
@@ -163,7 +163,7 @@ export class ReajusteComponent implements OnInit {
     if (!this.apostilamento) return;
     const ok = await this.dialogos.confirmar({
       titulo: 'Concluir e aplicar o reajuste?',
-      mensagem: `Os novos preços passam a valer a partir de ${r.mes_referencia.slice(5, 7)}/${r.mes_referencia.slice(0, 4)}, em ${r.competencias_recalculadas} competência(s) ainda não medida(s)${this.textoRetroativo(r)}, e o valor global passa a ${reais(r.valor_global_reajustado)}.`,
+      mensagem: `Os novos preços passam a valer a partir de ${r.data_efeito.slice(8, 10)}/${r.data_efeito.slice(5, 7)}/${r.data_efeito.slice(0, 4)} (o mês dessa data é pago proporcionalmente aos dias de cada preço), em ${r.competencias_recalculadas} competência(s) ainda não medida(s)${this.textoRetroativo(r)}, e o valor global passa a ${reais(r.valor_global_reajustado)}.`,
       rotuloConfirmar: 'Concluir e aplicar',
       segundos: 5,
     });

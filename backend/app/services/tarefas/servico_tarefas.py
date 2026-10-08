@@ -3,7 +3,7 @@
 """Regras do Módulo Tarefas (tudo conferido no servidor).
 
 **Papéis numa tarefa**
-- *envolvidos*: responsável e participantes (executam; a carga conta para cada um);
+- *envolvidos*: os responsáveis (um ou mais, com os mesmos poderes; executam e a carga conta para cada um);
 - *liderança*: dono e líderes da equipe da tarefa **e das equipes acima dela** (equipe pai), além do SuperRoot;
 - *criador*: quem cadastrou.
 
@@ -21,10 +21,14 @@ Prazo só muda por `alterar_prazo`, com justificativa. Transferência: para memb
 a qualquer usuário ativo). Carga = peso da prioridade × urgência do prazo, só para a_fazer e em_andamento.
 """
 
+import random
+import re
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import BinaryIO
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -33,17 +37,21 @@ from app.core.banco import agora_utc
 from app.core.configuracao import obter_configuracao
 from app.models.tarefas import (
     AnexoEventoTarefa, EquipeTarefas, EventoTarefa, ItemChecklistTarefa, LiderEquipeTarefas, MarcadorTarefa,
-    MembroEquipeTarefas, ParticipanteTarefa, Tarefa,
+    DependenciaTarefa, EstagioTarefa, MarcoTarefa, MembroEquipeTarefas, ResponsavelTarefa, SeguidorTarefa, Tarefa, VinculoMarcadorTarefa,
 )
 from app.models.usuario import Usuario
 from app.services import servico_anexos, servico_mensagens
+from app.services.tarefas import paleta
 from app.services.servico_auditoria import auditar
 
 ROTULOS_STATUS = {"a_fazer": "A fazer", "em_andamento": "Em andamento", "em_validacao": "Em validação", "concluida": "Concluída"}
 ROTULOS_PRIORIDADE = {"baixa": "Baixa", "normal": "Normal", "alta": "Alta", "critica": "Crítica"}
 PESOS = {"baixa": 1, "normal": 3, "alta": 5, "critica": 8}
+FUSO_LOCAL = ZoneInfo("America/Sao_Paulo")
 OPERACIONAIS = ("a_fazer", "em_andamento")
 MAXIMO_ANEXOS = 5
+# Quantas tarefas recentes da equipe entram na conta dos marcadores "mais usados"
+MARCADORES_JANELA_USO = 1000
 DIAS_VALIDACAO_PARADA = 2
 # Escalonamento por atraso: a tarefa operacional atrasada há 1+ dia avisa a liderança da equipe; há 3+ dias, também a liderança da equipe acima
 # (tarefa pessoal escala só ao criador). Cada nível avisa uma vez por prazo: prazo novo reinicia o escalonamento.
@@ -107,7 +115,7 @@ def membros(equipe: EquipeTarefas | None) -> set[int]:
 
 
 def envolvidos(tarefa: Tarefa) -> set[int]:
-    ids = {p.usuario_id for p in tarefa.participantes}
+    ids = {p.usuario_id for p in tarefa.responsaveis}
     if tarefa.responsavel_id:
         ids.add(tarefa.responsavel_id)
     return ids
@@ -155,6 +163,10 @@ def acoes(sessao: Session, usuario: Usuario, tarefa: Tarefa) -> list[str]:
         lista.append("reabrir")
     if lider or usuario.id == tarefa.criado_por_id:
         lista.append("excluir")
+    if tarefa.controlada_externamente:
+        # Quem move e conclui é o módulo de origem (ex.: Contratos): fica só comentar, e a liderança ajusta responsáveis, prazo e transferência
+        permitidas = {"comentar"} | ({"editar", "prazo", "transferir"} if lider and s != "concluida" else set())
+        lista = [a for a in lista if a in permitidas]
     return lista
 
 
@@ -162,6 +174,12 @@ def _exigir_nao_concluida(tarefa: Tarefa, acao: str) -> None:
     """Tarefa concluída não aceita mudança de prazo, edição ou transferência: é preciso reabri-la (mensagem clara para telas desatualizadas)."""
     if tarefa.status == "concluida":
         raise ErroTarefa(f"A tarefa #{tarefa.numero} já foi concluída: não é possível {acao}. Peça a quem lidera a equipe para reabri-la.", 403, "tarefa_concluida")
+
+
+def exigir_nao_controlada(tarefa: Tarefa, acao: str) -> None:
+    """Tarefa controlada por outro módulo não aceita esta ação: o andamento dela é feito lá."""
+    if tarefa.controlada_externamente:
+        raise ErroTarefa(f"A tarefa #{tarefa.numero} é controlada pelo módulo Contratos: não é possível {acao}. Trate a etapa no módulo Contratos.", 403, "controlada_externamente")
 
 
 def _exigir(condicao: bool, detalhe: str) -> None:
@@ -192,8 +210,16 @@ def _link(tarefa: Tarefa) -> str:
     return f"/tarefas/{tarefa.numero}"
 
 
+def seguidores(sessao: Session, tarefa: Tarefa) -> set[int]:
+    return set(sessao.scalars(select(SeguidorTarefa.usuario_id).where(SeguidorTarefa.tarefa_id == tarefa.id)))
+
+
 def _avisar(sessao: Session, ids: set[int], assunto: str, corpo: str, tarefa: Tarefa, chave: str, autor: Usuario | None = None,
-            prioridade: str = "normal", categoria: str = "atribuicao", janela: bool = False) -> None:
+            prioridade: str = "normal", categoria: str = "atribuicao", janela: bool = False, exceto: set[int] | None = None) -> None:
+    # Quem segue a tarefa (sem ser responsável) recebe os avisos informativos (comunicados e prazos), não as pendências nem as atribuições
+    if categoria in ("comunicado", "prazo") and tarefa.id is not None:
+        ids = set(ids) | seguidores(sessao, tarefa)
+    ids = set(ids) - (exceto or set())
     servico_mensagens.notificar(
         sessao, list(ids), assunto, corpo, chave=chave, categoria=categoria, prioridade=prioridade, link=_link(tarefa),
         email=True, autor=autor, abrir_em_janela=janela,
@@ -215,9 +241,16 @@ class DadosTarefa:
     prazo: datetime
     prioridade: str = "normal"
     equipe_id: uuid.UUID | None = None
-    responsavel_id: int | None = None
-    participantes_ids: tuple[int, ...] = ()
+    # Responsáveis: o primeiro é o principal; vazio = quem cadastra
+    responsaveis_ids: tuple[int, ...] = ()
     marcadores_ids: tuple[uuid.UUID, ...] = ()
+    # Gerada por uma série recorrente (o sistema avisa todos os responsáveis, inclusive quem criou a série)
+    recorrencia_id: uuid.UUID | None = None
+    ocorrencia_em: date | None = None
+    automatica: bool = False
+    checklist: tuple[str, ...] = ()
+    # Subtarefa: número da tarefa mãe já resolvida em id
+    tarefa_pai_id: uuid.UUID | None = None
 
 
 def _usuario_ativo(sessao: Session, usuario_id: int) -> Usuario:
@@ -228,7 +261,7 @@ def _usuario_ativo(sessao: Session, usuario_id: int) -> Usuario:
 
 
 def _conferir_pessoas(sessao: Session, autor: Usuario, equipe: EquipeTarefas | None, ids: set[int]) -> None:
-    """Numa equipe, responsável e participantes são da equipe (a liderança pode incluir qualquer usuário ativo)."""
+    """Numa equipe, os responsáveis são da equipe (a liderança pode incluir qualquer usuário ativo)."""
     for i in ids:
         _usuario_ativo(sessao, i)
     if equipe is not None and not autor.superusuario and autor.id not in lideranca(sessao, equipe):
@@ -255,21 +288,23 @@ def criar(sessao: Session, autor: Usuario, dados: DadosTarefa, arquivos: list[tu
         raise ErroTarefa("Equipe inexistente ou inativa.")
     if equipe is not None and not autor.superusuario:
         _exigir(autor.id in membros(equipe) or autor.id in lideranca(sessao, equipe), "Só membros e liderança da equipe cadastram tarefas nela.")
-    responsavel = dados.responsavel_id or autor.id
-    pessoas = {responsavel, *dados.participantes_ids}
+    responsavel = dados.responsaveis_ids[0] if dados.responsaveis_ids else autor.id
+    pessoas = {responsavel, *dados.responsaveis_ids}
     _conferir_pessoas(sessao, autor, equipe, pessoas)
     numero = (sessao.scalar(select(func.max(Tarefa.numero))) or 0) + 1
     tarefa = Tarefa(
         numero=numero, titulo=dados.titulo, descricao=dados.descricao, equipe_id=equipe.id if equipe else None, criado_por_id=autor.id,
         responsavel_id=responsavel, prazo=dados.prazo, prazo_original=dados.prazo, prioridade=dados.prioridade,
-        ordem=-numero, criado_em=agora_utc(),
+        ordem=-numero, criado_em=agora_utc(), recorrencia_id=dados.recorrencia_id, ocorrencia_em=dados.ocorrencia_em, tarefa_pai_id=dados.tarefa_pai_id,
     )
     tarefa.equipe = equipe
-    tarefa.participantes = [ParticipanteTarefa(usuario_id=i) for i in sorted(pessoas)]
+    tarefa.estagio_id = estagio_da_categoria(sessao, tarefa.equipe_id, "a_fazer")
+    tarefa.checklist = [ItemChecklistTarefa(texto=t, posicao=i) for i, t in enumerate(dados.checklist)]
+    tarefa.responsaveis = [ResponsavelTarefa(usuario_id=i) for i in sorted(pessoas)]
     tarefa.marcadores = _marcadores(sessao, equipe, dados.marcadores_ids)
     sessao.add(tarefa)
     sessao.flush()
-    evento = _evento(sessao, tarefa, "criada", autor, "Tarefa criada", prazo=dados.prazo.isoformat(), responsavel=_nome(sessao.get(Usuario, responsavel)))
+    evento = _evento(sessao, tarefa, "criada", autor, "Tarefa criada pela recorrência" if dados.automatica else "Tarefa criada", prazo=dados.prazo.isoformat(), responsavel=_nome(sessao.get(Usuario, responsavel)))
     if arquivos:
         sessao.flush()
         try:
@@ -280,9 +315,11 @@ def criar(sessao: Session, autor: Usuario, dados: DadosTarefa, arquivos: list[tu
             sessao.rollback()
             raise ErroTarefa(str(erro)) from erro
     anexos_txt = f" Ela já tem {len(arquivos)} arquivo(s) anexado(s)." if arquivos else ""
+    quem = "A recorrência criada por " + _nome(autor) + " gerou para você" if dados.automatica else f"{_nome(autor)} atribuiu a você"
     _avisar(sessao, pessoas, f"Nova tarefa: {_rotulo(tarefa)}",
-            f"{_nome(autor)} atribuiu a você a tarefa {_rotulo(tarefa)}, com prazo em {_data_hora(dados.prazo)} "
-            f"(prioridade {ROTULOS_PRIORIDADE[dados.prioridade].lower()}).{anexos_txt}", tarefa, f"tarefa-criada:{tarefa.id}", autor=autor)
+            f"{quem} a tarefa {_rotulo(tarefa)}, com prazo em {_data_hora(dados.prazo)} "
+            f"(prioridade {ROTULOS_PRIORIDADE[dados.prioridade].lower()}).{anexos_txt}", tarefa, f"tarefa-criada:{tarefa.id}",
+            autor=None if dados.automatica else autor)
     auditar(sessao, autor.login, "tarefas.criar", _rotulo(tarefa), autor_id=autor.id, alvo_tipo="tarefa", alvo_id=tarefa.id)
     sessao.commit()
     return tarefa
@@ -294,11 +331,15 @@ def _versao(tarefa: Tarefa, versao: int | None) -> None:
 
 
 def editar(sessao: Session, autor: Usuario, tarefa: Tarefa, titulo: str, descricao: str, prioridade: str,
-           participantes_ids: tuple[int, ...], marcadores_ids: tuple[uuid.UUID, ...], versao: int | None) -> Tarefa:
+           responsaveis_ids: tuple[int, ...], marcadores_ids: tuple[uuid.UUID, ...], versao: int | None) -> Tarefa:
     _exigir_nao_concluida(tarefa, "editá-la")
     _exigir(pode_editar(sessao, autor, tarefa), "Você não pode editar esta tarefa.")
     _versao(tarefa, versao)
-    novos = {tarefa.responsavel_id, *participantes_ids} - {None}
+    if tarefa.controlada_externamente and (titulo != tarefa.titulo or descricao != tarefa.descricao):
+        exigir_nao_controlada(tarefa, "alterar o título ou a descrição")
+    if not responsaveis_ids:
+        raise ErroTarefa("A tarefa precisa de ao menos um responsável.")
+    novos = set(responsaveis_ids)
     _conferir_pessoas(sessao, autor, tarefa.equipe, novos - envolvidos(tarefa))
     mudancas = {}
     for campo, valor in (("titulo", titulo), ("descricao", descricao), ("prioridade", prioridade)):
@@ -307,14 +348,17 @@ def editar(sessao: Session, autor: Usuario, tarefa: Tarefa, titulo: str, descric
             setattr(tarefa, campo, valor)
     antes = envolvidos(tarefa)
     if novos != antes:
-        tarefa.participantes = [p for p in tarefa.participantes if p.usuario_id in novos] + [
-            ParticipanteTarefa(usuario_id=i) for i in sorted(novos - antes)]
+        tarefa.responsaveis = [p for p in tarefa.responsaveis if p.usuario_id in novos] + [
+            ResponsavelTarefa(usuario_id=i) for i in sorted(novos - antes)]
         entrou = novos - antes
-        mudancas["participantes"] = {"entraram": sorted(_nome(sessao.get(Usuario, i)) for i in entrou),
+        # O responsável principal é o primeiro da lista; se ele saiu, passa para o primeiro que ficou
+        if tarefa.responsavel_id not in novos:
+            tarefa.responsavel_id = next(i for i in responsaveis_ids if i in novos)
+        mudancas["responsaveis"] = {"entraram": sorted(_nome(sessao.get(Usuario, i)) for i in entrou),
                                      "sairam": sorted(_nome(sessao.get(Usuario, i)) for i in antes - novos)}
         if entrou:
-            _avisar(sessao, entrou, f"Você entrou na tarefa {_rotulo(tarefa)}", f"{_nome(autor)} incluiu você como participante da tarefa {_rotulo(tarefa)}.",
-                    tarefa, f"tarefa-participante:{tarefa.id}:{tarefa.versao}", autor=autor)
+            _avisar(sessao, entrou, f"Você entrou na tarefa {_rotulo(tarefa)}", f"{_nome(autor)} incluiu você como responsável pela tarefa {_rotulo(tarefa)}.",
+                    tarefa, f"tarefa-responsavel:{tarefa.id}:{tarefa.versao}", autor=autor)
     marcadores = _marcadores(sessao, tarefa.equipe, marcadores_ids)
     if {m.id for m in marcadores} != {m.id for m in tarefa.marcadores}:
         mudancas["marcadores"] = {"de": sorted(m.nome for m in tarefa.marcadores), "para": sorted(m.nome for m in marcadores)}
@@ -360,7 +404,63 @@ ACOES_PIPELINE = {
 EXIGEM_MOTIVO = ("devolver", "reabrir")
 
 
-def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str = "", versao: int | None = None) -> Tarefa:
+def estagio_da_categoria(sessao: Session, equipe_id: uuid.UUID | None, categoria: str, desejado: uuid.UUID | None = None) -> uuid.UUID | None:
+    """Estágio (coluna) que a tarefa ocupa ao entrar na categoria: o pedido (se for da equipe e da categoria) ou o primeiro da categoria.
+
+    Equipe sem estágios cadastrados (ou tarefa pessoal) devolve None: a tarefa fica só pela situação.
+    """
+    if equipe_id is None:
+        return None
+    if desejado is not None:
+        escolhido = sessao.get(EstagioTarefa, desejado)
+        if escolhido is None or escolhido.equipe_id != equipe_id or escolhido.categoria != categoria:
+            raise ErroTarefa("O estágio escolhido não pertence a esta equipe ou não corresponde à situação de destino.")
+        return escolhido.id
+    return sessao.scalar(select(EstagioTarefa.id).where(EstagioTarefa.equipe_id == equipe_id, EstagioTarefa.categoria == categoria).order_by(EstagioTarefa.posicao).limit(1))
+
+
+def reavaliar_marco(sessao: Session, marco_id: uuid.UUID | None) -> None:
+    """Marco com todas as tarefas concluídas fica atingido (e volta a aberto se entrar tarefa nova ou reabrir), salvo decisão manual da liderança."""
+    marco = sessao.get(MarcoTarefa, marco_id) if marco_id else None
+    if marco is None or marco.atingido_manual:
+        return
+    sessao.flush()
+    estados = list(sessao.scalars(select(Tarefa.status).where(Tarefa.marco_id == marco.id)))
+    if estados and all(e == "concluida" for e in estados) and marco.atingido_em is None:
+        marco.atingido_em = agora_utc()
+        equipe = sessao.get(EquipeTarefas, marco.equipe_id)
+        if equipe is not None:
+            _avisar_equipe_marco(sessao, equipe, marco)
+    elif not all(e == "concluida" for e in estados) and marco.atingido_em is not None:
+        marco.atingido_em = None
+
+
+def _avisar_equipe_marco(sessao: Session, equipe: EquipeTarefas, marco: MarcoTarefa) -> None:
+    ids = lideranca(sessao, equipe) | membros(equipe)
+    servico_mensagens.notificar(
+        sessao, list(ids), f"Marco atingido: {marco.nome}", f"Todas as tarefas do marco \"{marco.nome}\" da equipe {equipe.nome} foram concluídas.",
+        chave=f"tarefa-marco:{marco.id}:{agora_utc():%Y%m%d%H%M%S}", categoria="comunicado", link=f"/tarefas/equipes/{equipe.id}",
+    )
+
+
+def subtarefas_abertas(sessao: Session, tarefa: Tarefa) -> list[Tarefa]:
+    """Subtarefas ainda não concluídas (a tarefa mãe só entra em validação ou conclui sem nenhuma)."""
+    return list(sessao.scalars(select(Tarefa).where(Tarefa.tarefa_pai_id == tarefa.id, Tarefa.status != "concluida").order_by(Tarefa.numero)))
+
+
+def bloqueadoras_abertas(sessao: Session, tarefa: Tarefa) -> list[Tarefa]:
+    """Tarefas que bloqueiam esta e ainda não foram concluídas."""
+    return list(sessao.scalars(
+        select(Tarefa).join(DependenciaTarefa, DependenciaTarefa.bloqueada_por_id == Tarefa.id)
+        .where(DependenciaTarefa.tarefa_id == tarefa.id, Tarefa.status != "concluida").order_by(Tarefa.numero)
+    ))
+
+
+def _numeros(tarefas: list[Tarefa]) -> str:
+    return ", ".join(f"#{t.numero}" for t in tarefas)
+
+
+def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str = "", versao: int | None = None, estagio_id: uuid.UUID | None = None) -> Tarefa:
     if acao not in ACOES_PIPELINE:
         raise ErroTarefa("Ação desconhecida.")
     _versao(tarefa, versao)
@@ -374,6 +474,11 @@ def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str
     # Tarefa sem equipe não passa por validação: a entrega já conclui
     if acao == "entregar" and tarefa.equipe is None:
         para = "concluida"
+    # Dependências e subtarefas: tarefa bloqueada não inicia; a mãe só entra em validação ou conclui com todas as subtarefas concluídas
+    if acao == "iniciar" and (bloqueio := bloqueadoras_abertas(sessao, tarefa)):
+        raise ErroTarefa(f"Esta tarefa está bloqueada: conclua antes {_numeros(bloqueio)}.")
+    if para in ("em_validacao", "concluida") and (abertas := subtarefas_abertas(sessao, tarefa)):
+        raise ErroTarefa(f"Conclua antes as subtarefas em aberto: {_numeros(abertas)}.")
     agora = agora_utc()
     if tarefa.em_andamento_desde is not None:
         tarefa.segundos_em_andamento += max(0, int((agora - _comparavel(tarefa.em_andamento_desde)).total_seconds()))
@@ -385,6 +490,8 @@ def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str
         tarefa.entregue_em = agora
     tarefa.concluida_em = agora if para == "concluida" else None
     tarefa.status, tarefa.versao = para, tarefa.versao + 1
+    tarefa.estagio_id = estagio_da_categoria(sessao, tarefa.equipe_id, para, estagio_id)
+    reavaliar_marco(sessao, tarefa.marco_id)
     tipo = {"entregar": "entregue", "validar": "validada", "devolver": "devolvida", "reabrir": "reaberta"}.get(acao, "status")
     titulos = {
         "iniciar": "Tarefa iniciada", "pausar": "Tarefa voltou para A fazer", "entregar": "Entregue para validação",
@@ -446,8 +553,8 @@ def transferir(sessao: Session, autor: Usuario, tarefa: Tarefa, para_id: int, ju
     if tarefa.equipe is not None and not lider and destino.id not in membros(tarefa.equipe):
         raise ErroTarefa("Transferência só para membros da equipe. Para outra pessoa, peça à liderança.")
     anterior = sessao.get(Usuario, tarefa.responsavel_id) if tarefa.responsavel_id else None
-    tarefa.participantes = [p for p in tarefa.participantes if p.usuario_id != tarefa.responsavel_id] + (
-        [] if destino.id in envolvidos(tarefa) else [ParticipanteTarefa(usuario_id=destino.id)])
+    tarefa.responsaveis = [p for p in tarefa.responsaveis if p.usuario_id != tarefa.responsavel_id] + (
+        [] if destino.id in envolvidos(tarefa) else [ResponsavelTarefa(usuario_id=destino.id)])
     tarefa.responsavel_id = destino.id
     prazo_anterior = tarefa.prazo
     if novo_prazo is not None and _comparavel(novo_prazo) != _comparavel(tarefa.prazo):
@@ -463,7 +570,19 @@ def transferir(sessao: Session, autor: Usuario, tarefa: Tarefa, para_id: int, ju
     return tarefa
 
 
-def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquivos: list[tuple[str, BinaryIO]]) -> EventoTarefa:
+def _mencionados(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str) -> set[int]:
+    """Pessoas citadas com @login no comentário que podem ver a tarefa (responsáveis, criador, equipe, liderança e seguidores)."""
+    logins = {m.lower() for m in re.findall(r"@([A-Za-z0-9._-]+)", texto or "")}
+    if not logins:
+        return set()
+    visiveis = envolvidos(tarefa) | ({tarefa.criado_por_id} - {None}) | seguidores(sessao, tarefa)
+    if tarefa.equipe is not None:
+        visiveis |= membros(tarefa.equipe) | lideranca(sessao, tarefa.equipe)
+    achados = set(sessao.scalars(select(Usuario.id).where(func.lower(Usuario.login).in_(logins), Usuario.ativo.is_(True))))
+    return (achados & visiveis) - {autor.id}
+
+
+def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquivos: list[tuple[str, BinaryIO]], em_resposta_a: uuid.UUID | None = None) -> EventoTarefa:
     _exigir("comentar" in acoes(sessao, autor, tarefa), "Você não pode comentar nesta tarefa.")
     texto = (texto or "").strip()
     if not texto and not arquivos:
@@ -471,7 +590,15 @@ def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquiv
     if len(arquivos) > MAXIMO_ANEXOS:
         raise ErroTarefa(f"Envie no máximo {MAXIMO_ANEXOS} arquivos por vez.")
     titulo = "Comentário" if texto else ("Anexo" if len(arquivos) == 1 else f"{len(arquivos)} anexos")
-    evento = _evento(sessao, tarefa, "comentario", autor, titulo, texto)
+    # Resposta: guarda quem e o que foi respondido (o trecho fica salvo, para a citação continuar legível se o original for removido depois)
+    citado = None
+    if em_resposta_a is not None:
+        citado = sessao.get(EventoTarefa, em_resposta_a)
+        if citado is None or citado.tarefa_id != tarefa.id or citado.tipo != "comentario" or citado.removido_em is not None:
+            raise ErroTarefa("O comentário a responder não existe nesta tarefa.", 404, "nao_encontrado")
+    evento = _evento(sessao, tarefa, "comentario", autor, titulo, texto,
+                     resposta_a=str(citado.id) if citado else None, resposta_autor=citado.autor_nome if citado else None,
+                     resposta_texto=(citado.texto[:240] + ("…" if len(citado.texto) > 240 else "")) if citado else None)
     sessao.flush()
     try:
         for nome, conteudo in arquivos:
@@ -482,9 +609,14 @@ def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquiv
         raise ErroTarefa(str(erro)) from erro
     tarefa.atualizado_em = agora_utc()
     outros = (envolvidos(tarefa) | ({tarefa.criado_por_id} - {None}))
+    mencionados = _mencionados(sessao, autor, tarefa, texto)
+    outros -= mencionados
+    if mencionados:
+        _avisar(sessao, mencionados, f"{_nome(autor)} mencionou você em {_rotulo(tarefa)}", f"{_nome(autor)} escreveu:\n\n{texto[:300]}",
+                tarefa, f"tarefa-mencao:{evento.id}", autor=autor, categoria="atribuicao", prioridade="alta")
     resumo = texto[:300] + ("…" if len(texto) > 300 else "") if texto else f"{len(arquivos)} arquivo(s) anexado(s)."
     _avisar(sessao, outros, f"Novo comentário em {_rotulo(tarefa)}", f"{_nome(autor)} comentou:\n\n{resumo}",
-            tarefa, f"tarefa-comentario:{evento.id}", autor=autor, categoria="comunicado")
+            tarefa, f"tarefa-comentario:{evento.id}", autor=autor, categoria="comunicado", exceto=mencionados)
     sessao.commit()
     return evento
 
@@ -541,7 +673,8 @@ def excluir(sessao: Session, autor: Usuario, tarefa: Tarefa) -> None:
 
 def carga(tarefa: Tarefa, agora: datetime) -> float:
     """Peso da prioridade × urgência do prazo (só a fazer e em andamento)."""
-    if tarefa.status not in OPERACIONAIS:
+    # Tarefas controladas por outro módulo (medem trabalho de contratos) não pesam na carga da pessoa
+    if tarefa.status not in OPERACIONAIS or tarefa.controlada_externamente:
         return 0.0
     dias = (_comparavel(tarefa.prazo) - agora).total_seconds() / 86400
     urgencia = 4 if dias < 0 else 3 if dias < 3 else 2 if dias <= 7 else 1.5 if dias <= 15 else 1
@@ -584,18 +717,19 @@ def equipes_lideradas(sessao: Session, usuario: Usuario) -> list[EquipeTarefas]:
 
 
 def minhas(sessao: Session, usuario: Usuario) -> list[Tarefa]:
-    """Tarefas em que a pessoa está envolvida ou que criou."""
-    envolvida = select(ParticipanteTarefa.tarefa_id).where(ParticipanteTarefa.usuario_id == usuario.id)
-    return list(sessao.scalars(select(Tarefa).where(or_(Tarefa.id.in_(envolvida), Tarefa.criado_por_id == usuario.id, Tarefa.responsavel_id == usuario.id))))
+    """Tarefas em que a pessoa está envolvida ou que criou. As nascidas de outro módulo (Contratos) ficam só na equipe, fora da fila pessoal."""
+    envolvida = select(ResponsavelTarefa.tarefa_id).where(ResponsavelTarefa.usuario_id == usuario.id)
+    return list(sessao.scalars(select(Tarefa).where(
+        or_(Tarefa.id.in_(envolvida), Tarefa.criado_por_id == usuario.id, Tarefa.responsavel_id == usuario.id), Tarefa.origem_tipo.is_(None))))
 
 
 def agenda(sessao: Session, pessoa: Usuario, de: datetime, ate: datetime) -> list[Tarefa]:
-    """Tarefas em que a pessoa está envolvida (responsável ou participante) para o painel de atribuição.
+    """Tarefas em que a pessoa está envolvida (responsável) para o painel de atribuição.
 
     Entram todas as abertas (a fazer, em andamento e em validação), qualquer que seja o prazo, e as
     concluídas dentro do período. Por decisão do usuário, quem atribui vê o título de todas elas.
     """
-    envolvida = select(ParticipanteTarefa.tarefa_id).where(ParticipanteTarefa.usuario_id == pessoa.id)
+    envolvida = select(ResponsavelTarefa.tarefa_id).where(ResponsavelTarefa.usuario_id == pessoa.id)
     consulta = select(Tarefa).where(
         or_(Tarefa.id.in_(envolvida), Tarefa.responsavel_id == pessoa.id),
         or_(Tarefa.status != "concluida", Tarefa.concluida_em.between(de, ate)),
@@ -639,8 +773,8 @@ def carga_das_pessoas(sessao: Session, ids: set[int], agora: datetime) -> dict[i
     resultado = {i: {"carga": 0.0, "a_fazer": 0, "em_andamento": 0, "atrasadas": 0} for i in ids}
     if not ids:
         return resultado
-    linhas = sessao.execute(select(ParticipanteTarefa.usuario_id, Tarefa).join(Tarefa, Tarefa.id == ParticipanteTarefa.tarefa_id)
-                            .where(ParticipanteTarefa.usuario_id.in_(ids), Tarefa.status.in_(OPERACIONAIS)))
+    linhas = sessao.execute(select(ResponsavelTarefa.usuario_id, Tarefa).join(Tarefa, Tarefa.id == ResponsavelTarefa.tarefa_id)
+                            .where(ResponsavelTarefa.usuario_id.in_(ids), Tarefa.status.in_(OPERACIONAIS)))
     for usuario_id, tarefa in linhas:
         r = resultado[usuario_id]
         r["carga"] += carga(tarefa, agora)
@@ -763,8 +897,12 @@ def salvar_equipe(sessao: Session, autor: Usuario, equipe_id: uuid.UUID | None, 
     equipe.equipe_pai_id = equipe_pai_id
     for i in set(lideres_ids) | set(membros_ids):
         _usuario_ativo(sessao, i)
-    equipe.lideres = [LiderEquipeTarefas(usuario_id=i) for i in sorted(set(lideres_ids))]
-    equipe.membros = [MembroEquipeTarefas(usuario_id=i) for i in sorted(set(membros_ids) - set(lideres_ids))]
+    # Ajusta as listas sem recriar quem continua: trocar tudo reinsere o mesmo par (equipe, usuário) antes de apagar o antigo e viola a unicidade
+    novos_lideres, novos_membros = set(lideres_ids), set(membros_ids) - set(lideres_ids)
+    equipe.lideres = [l for l in equipe.lideres if l.usuario_id in novos_lideres] + [
+        LiderEquipeTarefas(usuario_id=i) for i in sorted(novos_lideres - {l.usuario_id for l in equipe.lideres})]
+    equipe.membros = [m for m in equipe.membros if m.usuario_id in novos_membros] + [
+        MembroEquipeTarefas(usuario_id=i) for i in sorted(novos_membros - {m.usuario_id for m in equipe.membros})]
     sessao.flush()
     auditar(sessao, autor.login, "tarefas.equipe", nome, autor_id=autor.id, alvo_tipo="tarefa-equipe", alvo_id=equipe.id,
             dados={"lideres": sorted(set(lideres_ids)), "membros": sorted(set(membros_ids))})
@@ -785,19 +923,57 @@ def excluir_equipe(sessao: Session, autor: Usuario, equipe_id: uuid.UUID) -> Non
     sessao.commit()
 
 
-def salvar_marcador(sessao: Session, autor: Usuario, equipe_id: uuid.UUID, nome: str, cor: str, marcador_id: uuid.UUID | None = None) -> MarcadorTarefa:
-    """Marcadores são da equipe e criados pela liderança."""
+def _sem_acento(texto: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", texto) if not unicodedata.combining(c)).lower()
+
+
+def listar_marcadores(sessao: Session, equipe_id: uuid.UUID, busca: str = "", limite: int = 100) -> list[tuple[MarcadorTarefa, int]]:
+    """Marcadores da equipe e os globais, com o uso nas últimas 1000 tarefas da equipe: mais usados primeiro, depois por nome.
+
+    `busca` filtra por trecho do nome, sem diferenciar maiúsculas nem acentos (como o campo de etiquetas do Odoo).
+    """
+    recentes = select(Tarefa.id).where(Tarefa.equipe_id == equipe_id).order_by(Tarefa.numero.desc()).limit(MARCADORES_JANELA_USO).subquery()
+    usos = dict(sessao.execute(
+        select(VinculoMarcadorTarefa.marcador_id, func.count()).where(VinculoMarcadorTarefa.tarefa_id.in_(select(recentes.c.id)))
+        .group_by(VinculoMarcadorTarefa.marcador_id)
+    ).all())
+    lista = list(sessao.scalars(select(MarcadorTarefa).where((MarcadorTarefa.equipe_id == equipe_id) | MarcadorTarefa.equipe_id.is_(None))))
+    termo = _sem_acento(busca.strip())
+    if termo:
+        lista = [m for m in lista if termo in _sem_acento(m.nome)]
+    lista.sort(key=lambda m: (-usos.get(m.id, 0), _sem_acento(m.nome)))
+    return [(m, usos.get(m.id, 0)) for m in lista[:limite]]
+
+
+def pode_criar_marcador(sessao: Session, autor: Usuario, equipe: EquipeTarefas) -> bool:
+    """Quem cadastra tarefas na equipe (membros e liderança) cria marcadores na hora, como no Odoo."""
+    return autor.superusuario or autor.id in lideranca(sessao, equipe) or autor.id in membros(equipe)
+
+
+def salvar_marcador(sessao: Session, autor: Usuario, equipe_id: uuid.UUID, nome: str, cor_indice: int | None = None,
+                    marcador_id: uuid.UUID | None = None) -> MarcadorTarefa:
+    """Cria (membros e liderança; nome repetido devolve o existente) ou altera (só a liderança) um marcador da equipe."""
     equipe = sessao.get(EquipeTarefas, equipe_id)
     if equipe is None:
         raise ErroTarefa("Equipe não encontrada.", 404, "nao_encontrado")
-    _exigir(autor.superusuario or autor.id in lideranca(sessao, equipe), "Só a liderança da equipe cria marcadores.")
-    marcador = sessao.get(MarcadorTarefa, marcador_id) if marcador_id else MarcadorTarefa(equipe_id=equipe.id)
-    if marcador is None or marcador.equipe_id != equipe.id:
-        raise ErroTarefa("Marcador não encontrado.", 404, "nao_encontrado")
-    repetido = sessao.scalar(select(MarcadorTarefa).where(MarcadorTarefa.equipe_id == equipe.id, func.lower(MarcadorTarefa.nome) == nome.lower()))
-    if repetido is not None and repetido.id != marcador.id:
-        raise ErroTarefa("Já existe um marcador com esse nome na equipe.", 409, "conflito")
-    marcador.nome, marcador.cor = nome, cor
+    nome = nome.strip()
+    existente = sessao.scalar(select(MarcadorTarefa).where(MarcadorTarefa.equipe_id == equipe.id, func.lower(MarcadorTarefa.nome) == nome.lower()))
+    if marcador_id is None:
+        _exigir(pode_criar_marcador(sessao, autor, equipe), "Só os membros e a liderança da equipe criam marcadores.")
+        if existente is not None:
+            return existente
+        marcador = MarcadorTarefa(equipe_id=equipe.id)
+        cor_indice = random.randint(1, 11) if cor_indice is None else cor_indice
+    else:
+        _exigir(autor.superusuario or autor.id in lideranca(sessao, equipe), "Só a liderança da equipe altera marcadores.")
+        marcador = sessao.get(MarcadorTarefa, marcador_id)
+        if marcador is None or marcador.equipe_id != equipe.id:
+            raise ErroTarefa("Marcador não encontrado.", 404, "nao_encontrado")
+        if existente is not None and existente.id != marcador.id:
+            raise ErroTarefa("Já existe um marcador com esse nome na equipe.", 409, "conflito")
+    marcador.nome = nome
+    if cor_indice is not None:
+        marcador.cor_indice, marcador.cor = cor_indice, paleta.borda(cor_indice)
     sessao.add(marcador)
     sessao.commit()
     return marcador

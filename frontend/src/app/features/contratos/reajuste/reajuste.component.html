@@ -13,7 +13,7 @@
         <div class="corpo">
           <!-- Mês de referência e mês de reajuste sempre no topo -->
           <dl class="resumo-reajuste">
-            <div><dt>Mês de referência</dt><dd>{{ r.mes_referencia | competencia }}</dd></div>
+            <div><dt>Novos valores a partir de</dt><dd>{{ r.data_efeito | dataBr }}</dd></div>
             <div><dt>Mês de reajuste do contrato</dt><dd>{{ meses[c.mes_reajuste - 1] }}</dd></div>
             <div><dt>Vigência</dt><dd>{{ r.sequencia_vigencia }}ª · {{ r.vigencia_inicio | dataBr }} a {{ r.vigencia_fim | dataBr }}</dd></div>
             <div><dt>Competências recalculadas</dt><dd>{{ r.competencias_recalculadas }} ainda não medida(s)</dd></div>
@@ -21,9 +21,9 @@
           @if (r.competencias_com_diferenca) {
             @let dif = +r.diferenca_retroativa;
             @if (dif > 0) {
-              <p class="aviso-bloco informativo">Reajuste retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.mes_referencia | competencia }} mantêm o preço pago. Ao concluir, será gerada uma <strong>competência de diferença de reajuste</strong> de {{ r.diferenca_retroativa | moeda }} (quantidades medidas × (preço novo − preço pago)), paga pelo fluxo normal da execução.</p>
+              <p class="aviso-bloco informativo">Reajuste retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.data_efeito | dataBr }} mantêm o preço pago. Ao concluir, será gerada uma <strong>competência de diferença de reajuste</strong> de {{ r.diferenca_retroativa | moeda }} (quantidades medidas × (preço novo − preço pago)), paga pelo fluxo normal da execução.</p>
             } @else if (dif < 0) {
-              <p class="aviso-bloco informativo">Desconto retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.mes_referencia | competencia }} foram pagas com o preço anterior. Ao concluir, o <strong>crédito de {{ -dif | moeda }}</strong> da SPI será abatido do valor autorizado {{ r.competencia_credito ? 'na medição de ' + r.competencia_credito : 'na próxima competência gerada' }} (e, se não couber, nas seguintes).</p>
+              <p class="aviso-bloco informativo">Desconto retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.data_efeito | dataBr }} foram pagas com o preço anterior. Ao concluir, o <strong>crédito de {{ -dif | moeda }}</strong> da SPI será abatido do valor autorizado {{ r.competencia_credito ? 'na medição de ' + r.competencia_credito : 'na próxima competência gerada' }} (e, se não couber, nas seguintes).</p>
             } @else {
               <p class="dica-formulario">{{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir da referência: com os percentuais salvos, não há diferença a acertar.</p>
             }
@@ -111,12 +111,12 @@
         <div class="corpo">
           @if (p.vigencias_disponiveis.length) {
             <div class="grade-formulario tres-colunas">
-              <div><label for="reajuste-mes">Mês de referência (primeiro mês com os novos valores) *</label><input id="reajuste-mes" type="month" [(ngModel)]="mesReferencia" /></div>
+              <div><label for="reajuste-data">Novos valores valem a partir de *</label><input id="reajuste-data" type="date" [(ngModel)]="dataEfeito" /><small class="dica-formulario">O mês dessa data é pago proporcionalmente aos dias de cada preço.</small></div>
               <div><label for="reajuste-vigencia">Vigência *</label>
                 <select id="reajuste-vigencia" [(ngModel)]="vigencia">
                   @for (v of p.vigencias_disponiveis; track v.sequencia) { <option [ngValue]="v.sequencia">{{ v.sequencia }}ª · {{ v.inicio | dataBr }} a {{ v.fim | dataBr }}</option> }
                 </select></div>
-              <div style="align-self: end; margin-bottom: 16px"><button type="button" class="acao-primaria" [disabled]="!mesReferencia || !vigencia" (click)="abrir()">Abrir reajuste</button></div>
+              <div style="align-self: end; margin-bottom: 16px"><button type="button" class="acao-primaria" [disabled]="!dataEfeito || !vigencia" (click)="abrir()">Abrir reajuste</button></div>
             </div>
           } @else { <p class="estado-vazio">Todas as vigências já foram reajustadas.</p> }
         </div>
@@ -132,7 +132,7 @@
             <tbody>
               @for (r of p.historico; track r.id) {
                 <tr>
-                  <td>{{ r.mes_referencia | competencia }}</td><td>{{ r.sequencia_vigencia }}ª</td>
+                  <td>{{ r.data_efeito | dataBr }}</td><td>{{ r.sequencia_vigencia }}ª</td>
                   <td><span class="selo-situacao" [class.inativo]="r.situacao === 'cancelado'">{{ r.situacao === 'concluido' ? 'Concluído' : 'Cancelado' }}</span></td>
                   <td class="num">{{ r.base_atual | moeda }} → {{ r.base_reajustada | moeda }}</td>
                   <td class="num">{{ r.valor_global_atual | moeda }} → {{ r.valor_global_reajustado | moeda }}</td>

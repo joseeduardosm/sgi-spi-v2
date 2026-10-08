@@ -240,7 +240,7 @@ def salvar_quantitativos(sessao: Session, contrato_id: uuid.UUID, alteracao_id: 
         if linha.tipo == "continuo" and item is not None:
             # Preço de cada mês (reajustes posteriores ao efeito também contam) e fator 30/360 do item
             linha.impacto_valor = calculos.arredondar(sum(
-                (diferenca * valores.preco_em(contrato, item, m.competencia) * (m.fator if item.calcula_pro_rata else Decimal(1))
+                (diferenca * valores.preco_em(contrato, item, m.inicio) * (m.fator if item.calcula_pro_rata else Decimal(1))
                  for m in meses_efeito),
                 ZERO,
             ))
@@ -390,7 +390,12 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UUID, a
 
 
 def _recalcular_previstas(contrato: Contrato, alteracao: AlteracaoQuantidade) -> None:
-    """Competências ainda não medidas a partir do mês de efeito recebem a nova quantidade prevista (contínuos)."""
+    """Competências ainda não medidas a partir do mês de efeito recebem a nova quantidade prevista (contínuos).
+
+    A quantidade vem do mesmo cálculo da geração (`itens_previstos`), então os trechos de um mês com virada também são atualizados.
+    """
+    from app.services.contratos.servico_competencias import itens_previstos
+
     # Períodos de execução indexados pelo início, para recalcular a quantidade prevista
     periodos = {p.inicio: p for p in calculos.periodos_de_execucao(vigencias(contrato), contrato.periodicidade_meses)}
     itens = {i.id: i for i in contrato.itens}
@@ -400,14 +405,13 @@ def _recalcular_previstas(contrato: Contrato, alteracao: AlteracaoQuantidade) ->
         # Só competências ainda não medidas, geradas pelo calendário atual
         if competencia.medicao_concluida_em is not None or competencia.periodo_inicio not in periodos:
             continue
+        novas = {(i.item_id, i.segmento): i for i in itens_previstos(contrato, periodos[competencia.periodo_inicio])}
         for linha in competencia.itens:
             item = itens.get(linha.item_id)
-            if item is None or item.tipo != "continuo":
+            nova = novas.get((linha.item_id, linha.segmento))
+            if item is None or item.tipo != "continuo" or nova is None:
                 continue
-            prevista = ZERO
-            for mes in periodos[competencia.periodo_inicio].meses:
-                prevista += calculos.quantidade_prevista_continua(valores.quantidade_mensal_em(contrato, item, mes.competencia), item.calcula_pro_rata, [mes])[0]
-            linha.quantidade_prevista = prevista
+            linha.quantidade_prevista = nova.quantidade_prevista
 
 
 def cancelar(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UUID, autor: Usuario) -> None:

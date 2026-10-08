@@ -50,22 +50,51 @@
       <p class="dica-formulario">Total das {{ d.notas_fiscais.length }} notas: <b>{{ totalRegistrado() | moeda }}</b>. É esse valor que a Ordem Bancária debita nas NEs.</p>
     }
 
+    @if (d.tem_despesas_variaveis) {
+      <p class="secao-formulario">Despesas variáveis — nota de débito, recibo ou outros *</p>
+      <p class="dica-formulario" style="margin-top: 0">A medição tem itens de despesas variáveis. Junte ao menos um documento; a soma deles precisa ser igual ao Subtotal - Despesas Variáveis ({{ esperadoDespesas() | moeda }}).
+        Estes documentos <b>não vão para a validação do Financeiro</b>: ficam só juntados e seguem para o documento consolidado.</p>
+      @for (x of despesas; track x; let k = $index) {
+        <div class="grade-formulario quatro-colunas" style="margin-top: 8px">
+          <div><label [for]="'dv-tipo-' + k">Tipo *</label>
+            <select [id]="'dv-tipo-' + k" [disabled]="!editavel()" [(ngModel)]="x.tipo">
+              <option value="nota_debito">Nota de débito</option><option value="recibo">Recibo</option><option value="outros">Outros</option>
+            </select></div>
+          <div><label [for]="'dv-numero-' + k">Número</label><input [id]="'dv-numero-' + k" maxlength="100" [disabled]="!editavel()" [(ngModel)]="x.numero" /></div>
+          <div><label [for]="'dv-valor-' + k">Valor (R$) *</label><input [id]="'dv-valor-' + k" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="x.valor" /></div>
+          <div class="acoes-cartao esquerda arquivos-nf" style="align-self: end">
+            @if (x.existente?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">PDF: {{ a.nome }}</button> }
+            @if (editavel()) {
+              <app-envio-pdf [rotulo]="x.existente?.arquivo ? 'Substituir PDF' : 'Selecionar PDF'" (selecionado)="x.arquivo = $event" />
+              @if (despesas.length > 1) { <button type="button" class="acao-secundaria acao-pequena" (click)="removerDespesa(x)">Remover</button> }
+            }
+          </div>
+        </div>
+      }
+      @if (editavel()) {
+        <div class="acoes-cartao esquerda" style="margin-top: 12px">
+          <button type="button" class="acao-secundaria" (click)="adicionarDespesa()">+ Adicionar outro documento de despesa</button>
+        </div>
+        <p class="dica-formulario" [class.texto-erro]="!despesasValidas() && totalDespesas() > 0">Soma dos documentos: <b>{{ totalDespesas() | moeda }}</b> de {{ esperadoDespesas() | moeda }}.</p>
+      }
+    }
+
     @if (editavel()) {
-      <div class="acoes-cartao"><app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="financeiroIds" [fonte]="fonteFinanceiro" rotuloLista="Financeiro" vazio="Nenhum usuário do Financeiro com e-mail." descricao="Aviso ao Financeiro (escolha quem recebe, por subsetor), com cópia à equipe" />
+      <div class="acoes-cartao"><span class="dica-formulario">Ao juntar a nota, todo o DOF recebe o aviso por e-mail, com cópia à equipe.</span>
         <button type="button" class="acao-primaria" [disabled]="!valido()" (click)="concluir()">Juntar nota fiscal</button></div>
     }
 
     @if (d.nf_concluida_em) {
       <p class="secao-formulario">E-mail ao Financeiro</p>
       @if (d.email_nf.enviado_em === null) {
-        <p class="dica-formulario">Enviando o aviso ao Financeiro…</p>
+        <p class="dica-formulario">O aviso ainda não foi enviado ao Financeiro (nota juntada quando o envio era opcional, ou envio em andamento).</p>
       } @else if (d.email_nf.ok) {
         <p class="aviso-bloco informativo">Enviado em {{ d.email_nf.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_nf.destinatarios.join(', ') }}.</p>
       } @else {
         <p class="aviso-bloco erro">O e-mail não foi enviado: {{ d.email_nf.erro }}</p>
       }
-      @if (d.pode_editar && d.email_nf.enviado_em !== null) {
-        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Reenviando…' : 'Reenviar e-mail' }}</button>
+      @if (d.pode_editar) {
+        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Enviando…' : (d.email_nf.enviado_em === null ? 'Enviar e-mail ao Financeiro' : 'Reenviar e-mail') }}</button>
       }
     }
   </div>

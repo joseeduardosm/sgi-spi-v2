@@ -12,6 +12,7 @@ from datetime import date, datetime
 
 from sqlalchemy import text
 
+from app.core.banco import FUSO_SAO_PAULO
 from app.core.banco import FabricaSessao
 from app.core.configuracao import obter_configuracao
 from app.services import servico_diretorio, servico_mensagens
@@ -41,7 +42,7 @@ class AgendadorParabens:
         if self._parar.wait(60):
             return
         while True:
-            agora = datetime.now()
+            agora = datetime.now(FUSO_SAO_PAULO)
             if agora.hour >= obter_configuracao().hora_parabens_aniversario and self._ultimo_envio != agora.date():
                 try:
                     self.executar_uma_vez(agora.date())

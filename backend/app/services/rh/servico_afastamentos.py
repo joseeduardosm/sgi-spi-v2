@@ -585,6 +585,54 @@ def marcar_gozados(sessao: Session, dia: date | None = None) -> int:
     return len(gozados)
 
 
+def _boas_vindas(nome: str, a: Afastamento) -> str:
+    """Texto do e-mail de retorno das férias (parágrafos separados por linha em branco)."""
+    primeiro = (nome or "").split()[0] if (nome or "").strip() else "colega"
+    return (
+        f"Olá, {primeiro}!\n\n"
+        f"Suas férias ({_data(a.inicio)} a {_data(a.fim)}) chegaram ao fim e a equipe da SPI está muito feliz em ter você de volta. "
+        "Esperamos que tenha descansado, recarregado as energias e aproveitado cada momento.\n\n"
+        "Todo retorno é um bom recomeço: com a cabeça leve e novas ideias, você faz muita diferença nos resultados que a Secretaria entrega à sociedade. "
+        "O seu trabalho importa, e é um prazer contar com ele.\n\n"
+        "Para a primeira semana, vá no seu ritmo: comece pelas mensagens e pendências do SGI SPI, priorize o que for mais urgente e conte com seus colegas "
+        "e com a sua chefia para pôr tudo em dia, sem pressa e sem pressão.\n\n"
+        "Boa volta e um ótimo retorno às atividades!\n\n"
+        "Coordenadoria de Gestão de Pessoas"
+    )
+
+
+def dar_boas_vindas(sessao: Session, dia: date | None = None) -> int:
+    """E-mail de boas-vindas no dia seguinte ao fim das férias (tarefa diária).
+
+    Quem termina as férias na sexta, no sábado ou no domingo recebe na segunda-feira; sábados e domingos não enviam.
+    Não envia a quem já tem outras férias aprovadas em andamento (férias fracionadas em sequência). Idempotente pela chave do aviso.
+    """
+    dia = dia or hoje()
+    if dia.weekday() >= 5:
+        return 0
+    primeiro_fim = dia - timedelta(days=3 if dia.weekday() == 0 else 1)
+    enviados = 0
+    for a in sessao.scalars(select(Afastamento).where(
+        Afastamento.tipo == "ferias", Afastamento.status.in_(("aprovado", "gozado")), Afastamento.fim >= primeiro_fim, Afastamento.fim < dia,
+    )):
+        # Férias seguidas (a próxima já começou ou começa hoje): ainda não voltou
+        if sessao.scalar(select(Afastamento.id).where(
+            Afastamento.usuario_id == a.usuario_id, Afastamento.tipo == "ferias", Afastamento.status.in_(("aprovado", "gozado")),
+            Afastamento.id != a.id, Afastamento.inicio <= dia, Afastamento.fim >= dia,
+        )):
+            continue
+        usuario = sessao.get(Usuario, a.usuario_id)
+        if usuario is None or not usuario.ativo:
+            continue
+        if servico_mensagens.notificar(
+            sessao, [usuario.id], "Que bom ter você de volta!", _boas_vindas(_nome(usuario), a),
+            chave=f"afastamento:{a.id}:retorno", categoria="comunicado", prioridade="normal", link="/mensagens", email=True,
+        ):
+            enviados += 1
+    sessao.commit()
+    return enviados
+
+
 def lembrar_pendentes(sessao: Session, dia: date | None = None, dias_espera: int = 3) -> int:
     """Pedidos pendentes há exatamente `dias_espera` dias: novo aviso (com e-mail) a quem pode aprovar."""
     dia = dia or hoje()

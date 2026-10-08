@@ -52,6 +52,8 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 | `periodicidade_meses` | integer | sim | 1, 2, 3, 6 ou 12 |
 | `mes_reajuste` | integer | sim | 1 a 12 |
 | `liberar_todas_competencias` | boolean | não (padrão `false`) | Quando `true`, a medição de uma competência pode ser feita antes do fim do período (sem a trava do 1º dia do mês seguinte); aparece também no detalhe do contrato e no histórico de alterações. Migração `2183de7ec74a` |
+| `permite_medicao_adicional` | boolean | não (padrão `false`) | Quando `true`, qualquer competência do contrato pode receber **medições adicionais** (outra medição e outro pagamento no mesmo mês; ver [contratos-execucao.md](contratos-execucao.md)); aparece também no detalhe do contrato e no histórico de alterações. Migração `d8e2f6b0a4c5` |
+| `alertas_a_partir_de` | date | não | **Desconsiderar alertas a partir de**: competências anteriores a esta data não geram alertas, pendências nem avisos de atraso. Vale a **maior** entre ela e o corte global de 09/2026; nula = só o corte global. Migração `b2e6a0d4f8c1` |
 | `sei_gestao_numero`, `sei_execucao_numero` | string | sim | Até 100 |
 | `sei_gestao_link`, `sei_execucao_link` | string | sim | `http(s)://…`, até 1000 |
 | `situacao_forcada` | string \| null | não | `ativo`, `a_vencer`, `encerrado`, `suspenso` |

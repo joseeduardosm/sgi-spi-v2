@@ -27,6 +27,7 @@ from app.models.contratos import Competencia, Contrato
 from app.models.mensagem import EntregaMensagem, Mensagem
 from app.models.usuario import Usuario
 from app.services import servico_mensagens, servico_smtp
+from app.services.contratos.servico_competencias import anterior_ao_corte
 from app.services.cliente_smtp import Mensagem as EmailSmtp
 from app.services.servico_auditoria import auditar
 from app.services.servico_smtp import SemServidorAtivo
@@ -84,7 +85,7 @@ def _avisar_atrasos(sessao: Session, contratos: list[Contrato], dia: date) -> in
     gerados = 0
     for contrato in contratos:
         for competencia in contrato.competencias:
-            if competencia.tipo != "regular" or competencia.medicao_concluida_em is not None:
+            if competencia.tipo != "regular" or competencia.medicao_concluida_em is not None or anterior_ao_corte(competencia):
                 continue
             if (dia - competencia.periodo_fim).days <= DIAS_ATRASO:
                 continue
@@ -154,14 +155,37 @@ def gerar_lembretes(sessao: Session, dia: date | None = None) -> dict[str, int]:
 
     resultado["rh_periodos"] = servico_periodos.processar(sessao, dia)
     resultado["rh_lembretes"] = servico_afastamentos.lembrar_pendentes(sessao, dia)
+    resultado["rh_boas_vindas"] = servico_afastamentos.dar_boas_vindas(sessao, dia)
+    # Virada das competências dos contratos: cria as tarefas de cada etapa e corrige as que divergem do módulo Contratos
+    from app.services.contratos import servico_tarefas_contratos
+
+    virada = servico_tarefas_contratos.sincronizar_todas(sessao, dia)
+    resultado["contratos_tarefas_criadas"], resultado["contratos_tarefas_atualizadas"] = virada.criadas, virada.atualizadas
+    resultado["contratos_tarefas_erros"] = len(virada.erros)
     # Módulo Tarefas: vence amanhã, atrasadas e validação parada há 2+ dias
     from app.services.tarefas import servico_tarefas
 
     resultado["tarefas"] = servico_tarefas.lembrar(sessao, dia)
+    # Tarefas recorrentes: cria as ocorrências cuja data chegou
+    from app.services.tarefas import servico_recorrencias
+
+    resultado["tarefas_recorrentes"] = servico_recorrencias.gerar_ocorrencias(sessao, dia)
+    # Atividades agendadas das tarefas: as de hoje e as atrasadas
+    from app.services.tarefas import servico_atividades
+
+    resultado["tarefas_atividades"] = servico_atividades.lembrar(sessao, dia)
+    # Status das equipes: lembrete semanal (segunda-feira) à liderança
+    from app.services.tarefas import servico_marcos
+
+    resultado["tarefas_lembrete_status"] = servico_marcos.lembrar(sessao, dia)
     # Protocolo: reservas sem documento há alguns dias
     from app.services import servico_protocolo
 
     resultado["protocolo"] = servico_protocolo.lembrar_reservas(sessao, dia)
+    # Reserva de Espaços: lembrete um dia antes das reservas deferidas
+    from app.services import servico_reserva_espacos
+
+    resultado["reserva_espacos"] = servico_reserva_espacos.lembrar(sessao, dia)
     # Contratações: revisões e propostas sem resposta
     from app.services.contratacoes import conferencia
 

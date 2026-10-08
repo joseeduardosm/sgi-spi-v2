@@ -24,10 +24,32 @@ Resposta `Painel`:
   - `reajuste_pendente`: mês de reajuste passado, com o contrato já com 12 meses, sem reajuste aberto;
   - `empenho_insuficiente`: o **saldo livre** das NEs não cobre a próxima competência;
   - `pagamento_vencido` / `pagamento_vencendo` (até 5 dias): recebimento da NF + prazo;
+  - **Corte de alertas:** o corte global é 09/2026 e o contrato pode empurrá-lo para depois com `alertas_a_partir_de` (vale a maior das duas datas). **Corte em 09/2026:** competências de antes de 09/2026 não entram nos riscos `competencias_atrasadas`, `pagamento_vencido`, `pagamento_vencendo` nem `empenho_insuficiente` (nem em "minhas pendências"). A constante é `PENDENCIAS_A_PARTIR_DE`, em `servico_competencias.py`.
   - `competencias_atrasadas`: **um** risco por contrato somando as competências com período encerrado há mais de 30 dias sem medição concluída (`alta` acima de 60 dias). Na competência de diferença de reajuste, o prazo conta da sua criação (conclusão do reajuste).
 - `execucao`: exercício, 12 `meses` com `previsto`, `medido` e `pago` (débitos das OBs, somados no **mês da competência paga**, e não na data do pagamento: a OB de 08/2026 lançada em setembro entra em agosto; estornos entram como negativos), totais, e `empenhado`, `consumido` e `saldo_empenho`.
 - `numeros`: `contratos_ativos`, `contratos_a_vencer`, `contratos_encerrados`, `valor_global_ativos`, `base_mensal_ativos`.
 - `empresas[]` e `contratos[]`: opções dos filtros (`id`, `rotulo`).
+
+## `GET` e `POST /api/contratos/verificar-documento`
+
+Verificação de autenticidade dos **PDFs autenticados pelo sistema**: o relatório de avaliação, a memória de cálculo da medição e o documento consolidado levam, no fim, uma **Folha de autenticação** com o código de verificação (16 caracteres do SHA-256 do conteúdo, em grupos de 4), o SHA-256 completo, quem gerou e quando, e a lista de quem tinha dado ciência. Cada documento é registrado em `contratos_documentos_autenticados` (migração `c5e8a2b6d9f1`) com o SHA-256 do arquivo completo.
+
+- `GET …?codigo=` (ACL `contratos` ≥ LEITURA): mostra o registro (tipo, contrato, competência, quem gerou, quando, ciências). Aceita o código com ou sem hífens e em qualquer caixa. O código sozinho não prova que o arquivo é o original.
+- `POST …` (`multipart/form-data`, `arquivo` PDF): válido só se o SHA-256 do arquivo for exatamente o de um documento gerado pelo sistema; arquivo alterado devolve `valido=false`.
+- Resposta (`VerificacaoDocumento`): `valido`, `motivo` e `documento` (`tipo`, `contrato_id`, `contrato_numero`, `competencia`, `gerado_por`, `gerado_em`, `codigo`, `sha256`, `ciencias[]`).
+- **Não é assinatura digital.** A via assinada pela contratada continua sendo feita fora (gov.br) e enviada de volta na etapa de avaliação, que agora mostra os passos (baixar, assinar, enviar).
+- No Angular: tela `/contratos/verificar` e o link "Verificar documento" na etapa de avaliação.
+
+## `GET /api/contratos/calendario`
+
+Calendário de vencimentos: os prazos dos contratos numa lista por data.
+
+- **Acesso:** ACL `contratos` ≥ LEITURA (quem lê vê todos os contratos). Contratos encerrados e suspensos ficam de fora.
+- **Parâmetros:** `de` e `ate` (obrigatórios, AAAA-MM-DD, período de até 366 dias, `422` se maior ou invertido); `meus=true` (só contratos em que o usuário é criador ou integrante vigente da equipe); `contrato_id`; `empresa_id`; `tipos` (separados por vírgula; `422` para tipo desconhecido).
+- **Resposta (`Calendario`):** `de`, `ate` e `eventos[]` em ordem de data, hora e gravidade. Cada evento: `data`, `hora` (opcional, horário de São Paulo), `tipo`, `contrato_id`, `contrato_numero`, `contrato_apelido`, `rotulo`, `rota` (tela do Angular), `severidade` (`alta`, `media`, `info`), `competencia_id` e `valor` (opcionais).
+- **Tipos:** `vigencia_fim` (fim da vigência atual; `alta` em até 30 dias, `media` em 31 a 60, `info` depois); `vigencia_maxima` (limite da vigência máxima, quando não há mais meses prorrogáveis); `reajuste` (cada mês de reajuste, a partir do primeiro aniversário, sem reajuste aberto; `media` se já passou); `pagamento_nf` (data da NF + prazo; `alta` se vencido, `media` em até 5 dias); `prazo_nf_48h` (conclusão da medição + 48 h, só até a NF ser juntada; com hora); `validade_documento` (`validade_ate` do documento do checklist, o mais distante de cada nome; `alta` em até 15 dias, `media` em até 30); `medicao_atrasada` (30 dias depois do fim do período sem medição concluída); `empenho_insuficiente` (fim do período da próxima competência a medir, com o valor que falta em `valor`); `tarefa_contrato` (prazo das tarefas abertas geradas pelos contratos, **só para quem pode ver a tarefa**, não pela regra aberta de Contratos).
+- Competências anteriores ao corte de alertas do contrato não geram eventos. Nada é gravado.
+- No Angular: tela `/contratos/calendario` (atalho "Calendário" no cabeçalho do módulo), com filtros "Só meus contratos" e por tipo, visões de mês e semana, e clique abrindo a tela do assunto.
 
 ## `GET /api/contratos/painel/vigencias`
 

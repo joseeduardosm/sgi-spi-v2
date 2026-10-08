@@ -139,6 +139,9 @@ CAMINHOS_CONTRATOS = {
     "/api/contratos/relatorios/previsao-orcamentaria",
     "/api/contratos/painel",
     "/api/contratos/painel/vigencias",
+    "/api/contratos/calendario",
+    "/api/sla/politicas",
+    "/api/contratos/verificar-documento",
     "/api/contratos",
     "/api/contratos/proximo-numero",
     "/api/contratos/opcoes-usuarios",
@@ -158,6 +161,7 @@ CAMINHOS_CONTRATOS = {
     "/api/contratos/{contrato_id}/checklists/{checklist_id}",
     "/api/contratos/{contrato_id}/checklists/{checklist_id}/duplicar",
     "/api/contratos/{contrato_id}/checklists/{checklist_id}/ativar",
+    "/api/contratos/{contrato_id}/checklists/{checklist_id}/itens/{item_id}/pedir-envio",
     "/api/contratos/{contrato_id}/formularios",
     "/api/contratos/{contrato_id}/formularios/{formulario_id}",
     "/api/contratos/{contrato_id}/formularios/{formulario_id}/duplicar",
@@ -167,6 +171,7 @@ CAMINHOS_CONTRATOS = {
     "/api/contratos/{contrato_id}/competencias/identificador/{identificador}",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/arquivos/{anexo_id}",
+    "/api/contratos/{contrato_id}/competencias/{competencia_id}/adicional",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/medicao",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/medicao/ciencia",
     "/api/contratos/{contrato_id}/competencias/{competencia_id}/medicao/concluir",
@@ -220,12 +225,28 @@ CAMINHOS_CONTRATOS = {
 }
 
 
-def test_openapi_documenta_endpoints(cliente):
+def test_openapi_documenta_endpoints(cliente, admin):
     """Falha quando endpoints mudam: atualize docs/ e esta lista na mesma alteração."""
-    # A lista de caminhos precisa bater exatamente com a especificação gerada
-    especificacao = cliente.get("/api/openapi.json").json()
+    # A lista de caminhos precisa bater exatamente com a especificação gerada (a especificação exige login e a ACL `documentacao-api`)
+    especificacao = cliente.get("/api/openapi.json", headers=admin).json()
     assert set(especificacao["paths"]) == {
         "/api/saude",
+        "/api/reserva-espacos/contexto",
+        "/api/reserva-espacos/agenda",
+        "/api/reserva-espacos/disponibilidade",
+        "/api/reserva-espacos/minhas",
+        "/api/reserva-espacos/reservas",
+        "/api/reserva-espacos/exportar",
+        "/api/reserva-espacos/fila",
+        "/api/reserva-espacos/reservas/{reserva_id}",
+        "/api/reserva-espacos/reservas/predefinida",
+        "/api/reserva-espacos/reservas/{reserva_id}/analise",
+        "/api/reserva-espacos/reservas/{reserva_id}/cancelamento",
+        "/api/reserva-espacos/usuarios",
+        "/api/reserva-espacos/espacos",
+        "/api/reserva-espacos/espacos/{espaco_id}",
+        "/api/reserva-espacos/painel",
+        "/api/reserva-espacos/configuracao",
         "/api/painel-executivo/acesso",
         "/api/painel-executivo/contratos",
         "/api/painel-executivo/rh",
@@ -247,6 +268,19 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/autenticacao/perfil",
         "/api/autenticacao/tema",
         "/api/busca",
+        "/api/atalhos",
+        "/api/manuais",
+        "/api/manuais/busca",
+        "/api/manuais/imagem",
+        "/api/manuais/livros/{livro_id}",
+        "/api/manuais/paginas/{pagina_id}",
+        "/api/integracao-bookstack",
+        "/api/integracao-bookstack/testar",
+        "/api/atalhos/gestao",
+        "/api/atalhos/categorias",
+        "/api/atalhos/categorias/{categoria_id}",
+        "/api/atalhos/itens",
+        "/api/atalhos/itens/{atalho_id}",
         "/api/chamados",
         "/api/chamados/solicitante",
         "/api/integracao-glpi",
@@ -294,7 +328,25 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/tarefas",
         "/api/tarefas/equipes",
         "/api/tarefas/equipes/{equipe_id}",
+        "/api/tarefas/atividades",
+        "/api/tarefas/atividades/{atividade_id}",
+        "/api/tarefas/atividades/{atividade_id}/concluir",
+        "/api/tarefas/equipes/{equipe_id}/desempenho",
+        "/api/tarefas/pessoas/{usuario_id}/desempenho",
+        "/api/tarefas/contratos/sincronizar",
+        "/api/tarefas/equipes/{equipe_id}/marcos",
+        "/api/tarefas/equipes/{equipe_id}/status",
+        "/api/tarefas/marcos/{marco_id}",
+        "/api/tarefas/marcos/{marco_id}/atingir",
+        "/api/tarefas/marcos/{marco_id}/reabrir",
+        "/api/tarefas/equipes/{equipe_id}/estagios",
         "/api/tarefas/equipes/{equipe_id}/marcadores",
+        "/api/tarefas/equipes/{equipe_id}/marcadores/{marcador_id}",
+        "/api/tarefas/recorrencias/previa",
+        "/api/tarefas/recorrencias",
+        "/api/tarefas/recorrencias/{recorrencia_id}",
+        "/api/tarefas/recorrencias/{recorrencia_id}/pausar",
+        "/api/tarefas/recorrencias/{recorrencia_id}/retomar",
         "/api/tarefas/marcadores/{marcador_id}",
         "/api/tarefas/ordem",
         "/api/tarefas/pessoas",
@@ -344,6 +396,12 @@ def test_openapi_documenta_endpoints(cliente):
         "/api/tarefas/{numero}/eventos/{evento_id}/remover",
         "/api/tarefas/{numero}/linha-do-tempo",
         "/api/tarefas/{numero}/mover",
+        "/api/tarefas/{numero}/subtarefas",
+        "/api/tarefas/{numero}/dependencias",
+        "/api/tarefas/{numero}/estagio",
+        "/api/tarefas/{numero}/atividades",
+        "/api/tarefas/{numero}/seguir",
+        "/api/tarefas/{numero}/marco",
         "/api/tarefas/{numero}/prazo",
         "/api/tarefas/{numero}/transferir",
         "/api/rh/afastamentos/lancamento",
@@ -517,3 +575,23 @@ def test_tema_da_interface_e_salvo_no_perfil(cliente, admin):
     assert cliente.get("/api/autenticacao/sessao", headers=admin).json()["tema"] == "escuro"
     assert cliente.put("/api/autenticacao/tema", json={"tema": "roxo"}, headers=admin).status_code == 422
     assert cliente.put("/api/autenticacao/tema", json={"tema": "claro"}).status_code == 401
+
+
+def test_documentacao_da_api_exige_login_e_acl(cliente, admin):
+    """O OpenAPI só sai com token e permissão; as páginas Swagger/ReDoc são só a casca HTML (sem dados)."""
+    from tests.conftest import cabecalho, criar_usuario
+
+    assert cliente.get("/api/openapi.json").status_code == 401
+    # As páginas abrem sem token, mas não trazem nenhuma especificação embutida
+    for pagina in ("/api/documentacao", "/api/redoc"):
+        resposta = cliente.get(pagina)
+        assert resposta.status_code == 200 and "text/html" in resposta.headers["content-type"]
+        assert '"paths"' not in resposta.text
+    # Recurso fechado (como na migração): só o usuário com regra enxerga
+    liberado = criar_usuario("doc_liberado")
+    criar_usuario("doc_negado")
+    recurso = cliente.post("/api/acl/recursos", json={"nome": "Documentação da API", "slug": "documentacao-api"}, headers=admin).json()
+    regra = cliente.post("/api/acl/regras", json={"recurso_id": recurso["id"], "nivel": "LEITURA", "usuarios_ids": [liberado], "setores_ids": []}, headers=admin)
+    assert regra.status_code == 201, regra.text
+    assert cliente.get("/api/openapi.json", headers=cabecalho(cliente, "doc_negado")).status_code == 403
+    assert cliente.get("/api/openapi.json", headers=cabecalho(cliente, "doc_liberado")).status_code == 200

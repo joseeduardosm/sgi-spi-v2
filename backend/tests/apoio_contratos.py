@@ -122,7 +122,7 @@ def xml_nfe(valor: str, numero: str = "1", cnpj_emitente: str = CNPJ_CONTRATADA,
 
 
 def juntar_nf(cliente, base: str, h: dict, valor: str, numero: str = "1", adicional: tuple[str, str] | None = None,
-              recebida_em: str = "2026-02-05", prazo: str = "30", extras: tuple[tuple[str, str], ...] = (), email: bool = True, financeiro_ids: list[int] | None = None, **xml_extras):
+              recebida_em: str = "2026-02-05", prazo: str = "30", extras: tuple[tuple[str, str], ...] = (), despesas: tuple[tuple[str, str], ...] = (), **xml_extras):
     """Etapa 3: envia PDF + XML da nota e, se houver, de outras notas (`adicional=(valor, numero)` e `extras=[(valor, numero), …]`)."""
     notas = [(valor, numero, xml_extras)] + ([(*adicional, {})] if adicional else []) + [(v, n, {}) for v, n in extras]
     arquivos = []
@@ -131,9 +131,11 @@ def juntar_nf(cliente, base: str, h: dict, valor: str, numero: str = "1", adicio
         arquivos.append(("arquivos", (f"{nome}.pdf", PDF, "application/pdf")))
         arquivos.append(("xmls", (f"{nome}.xml", xml_nfe(v, n, **extra), "application/xml")))
     corpo = json.dumps([{"arquivo": i, "xml": i} for i in range(len(notas))])
-    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo, "notas": corpo, "enviar_email": "true" if email else "false"}
-    if financeiro_ids is not None:
-        dados["financeiro_ids"] = ",".join(str(i) for i in financeiro_ids)
+    dados = {"recebida_em": recebida_em, "prazo_pagamento_dias": prazo, "notas": corpo}
+    # Documentos de despesas variáveis: (tipo, valor) com um PDF cada
+    if despesas:
+        dados["despesas"] = json.dumps([{"tipo": t, "valor": v, "numero": str(i + 1), "arquivo": i} for i, (t, v) in enumerate(despesas)])
+        arquivos += [("arquivos_despesas", (f"despesa{i + 1}.pdf", PDF, "application/pdf")) for i in range(len(despesas))]
     return cliente.post(f"{base}/nota-fiscal", data=dados, files=arquivos, headers=h)
 
 

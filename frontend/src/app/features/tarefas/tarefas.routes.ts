@@ -24,6 +24,11 @@ export const ROTAS_TAREFAS: Routes = [
         loadComponent: () => import('./nova-tarefa.component').then((m) => m.NovaTarefaComponent),
       },
       {
+        path: 'atividades',
+        title: 'Minhas atividades | SGI SPI',
+        loadComponent: () => import('./atividades.component').then((m) => m.AtividadesComponent),
+      },
+      {
         path: 'equipes',
         title: 'Equipes | SGI SPI',
         loadComponent: () => import('./equipes.component').then((m) => m.EquipesComponent),
@@ -33,6 +38,16 @@ export const ROTAS_TAREFAS: Routes = [
         path: 'equipes/:equipeId/configurar',
         title: 'Configurar equipe | SGI SPI',
         loadComponent: () => import('./configuracao-equipe.component').then((m) => m.ConfiguracaoEquipeComponent),
+      },
+      {
+        path: 'equipes/:equipeId/recorrencias',
+        title: 'Tarefas recorrentes | SGI SPI',
+        loadComponent: () => import('./recorrencias.component').then((m) => m.RecorrenciasComponent),
+      },
+      {
+        path: 'recorrencias',
+        title: 'Tarefas recorrentes | SGI SPI',
+        loadComponent: () => import('./recorrencias.component').then((m) => m.RecorrenciasComponent),
       },
       {
         path: 'equipes/:equipeId',

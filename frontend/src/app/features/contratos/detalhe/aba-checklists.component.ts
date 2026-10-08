@@ -7,7 +7,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { Checklist, Modelo } from '../compartilhado/contratos.models';
+import { Checklist, DocumentoChecklist, Modelo } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { ImportacaoModeloXlsxComponent } from '../compartilhado/importacao-modelo-xlsx.component';
 import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
@@ -35,12 +35,13 @@ export class AbaChecklistsComponent implements OnInit {
   protected emEdicao: Checklist | null = null;
   protected nome = '';
   // Documentos da versão em edição e os campos da linha "adicionar documento"
-  protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean; vale_outros_contratos: boolean }[] = [];
+  protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean; vale_outros_contratos: boolean; pedir_envio: boolean }[] = [];
   protected novoDocumento = '';
   protected novaObservacao = '';
   protected novoObrigatorio = true;
   protected novoComValidade = false;
   protected novoValeOutros = false;
+  protected novoPedirEnvio = false;
   // Versões abertas na lista: todas entram recolhidas e só abrem quando a pessoa clica
   private readonly abertas = signal<Record<string, boolean>>({});
 
@@ -48,6 +49,15 @@ export class AbaChecklistsComponent implements OnInit {
   ngOnInit(): void {
     this.api.checklists(this.contratoId()).subscribe({ next: (c) => this.checklists.set(c), error: (e) => this.dialogos.mostrarErro(e) });
     this.contratos.modelos('checklist').subscribe({ next: (m) => this.modelos.set(m), error: () => this.modelos.set([]) });
+  }
+
+  /** Liga ou desliga "Pedir para enviar" de um documento da lista; vale também com a versão ativa. */
+  protected alternarPedirEnvio(checklist: Checklist, item: DocumentoChecklist, caixa: HTMLInputElement): void {
+    const pedir = caixa.checked;
+    this.api.definirPedirEnvio(this.contratoId(), checklist.id, item.id, pedir).subscribe({
+      next: (c) => this.checklists.set(c),
+      error: (e) => { caixa.checked = !pedir; this.dialogos.mostrarErro(e, 'Não foi possível alterar o documento'); },
+    });
   }
 
   /** Recarrega as versões (depois de importar uma planilha). */
@@ -72,11 +82,12 @@ export class AbaChecklistsComponent implements OnInit {
   protected abrir(checklist?: Checklist): void {
     this.emEdicao = checklist ?? null;
     this.nome = checklist?.nome ?? '';
-    this.itens = checklist?.itens.map((i) => ({ nome: i.nome, observacao: i.observacao, obrigatorio: i.obrigatorio, com_validade: i.com_validade, vale_outros_contratos: i.vale_outros_contratos ?? false })) ?? [];
+    this.itens = checklist?.itens.map((i) => ({ nome: i.nome, observacao: i.observacao, obrigatorio: i.obrigatorio, com_validade: i.com_validade, vale_outros_contratos: i.vale_outros_contratos ?? false, pedir_envio: i.pedir_envio ?? false })) ?? [];
     this.novoDocumento = this.novaObservacao = '';
     this.novoObrigatorio = true;
     this.novoComValidade = false;
     this.novoValeOutros = false;
+    this.novoPedirEnvio = false;
     this.aberto.set(true);
   }
 
@@ -85,17 +96,18 @@ export class AbaChecklistsComponent implements OnInit {
     const modelo = this.modelos().find((m) => m.id === id);
     if (!modelo) return;
     this.nome ||= modelo.nome;
-    this.itens = (modelo.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false, vale_outros_contratos: i.vale_outros_contratos ?? false }));
+    this.itens = (modelo.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false, vale_outros_contratos: i.vale_outros_contratos ?? false, pedir_envio: i.pedir_envio ?? false }));
   }
 
   /** Acrescenta o documento digitado à lista (obrigatório por padrão). */
   protected adicionar(): void {
     if (!this.novoDocumento.trim()) return;
-    this.itens = [...this.itens, { nome: this.novoDocumento.trim(), observacao: this.novaObservacao.trim(), obrigatorio: this.novoObrigatorio, com_validade: this.novoComValidade, vale_outros_contratos: this.novoComValidade && this.novoValeOutros }];
+    this.itens = [...this.itens, { nome: this.novoDocumento.trim(), observacao: this.novaObservacao.trim(), obrigatorio: this.novoObrigatorio, com_validade: this.novoComValidade, vale_outros_contratos: this.novoComValidade && this.novoValeOutros, pedir_envio: this.novoPedirEnvio }];
     this.novoDocumento = this.novaObservacao = '';
     this.novoObrigatorio = true;
     this.novoComValidade = false;
     this.novoValeOutros = false;
+    this.novoPedirEnvio = false;
   }
 
   /** Sobe (−1) ou desce (+1) um documento, trocando-o de lugar com o vizinho (a ordem vale na competência). */

@@ -1,0 +1,58 @@
+/* Módulo Reserva de Espaços: agenda mensal, selos de situação, linha do tempo e painel (identidade do SGI SPI). */
+$deferida: #2e9d5b;
+$aguardando: #f0b429;
+$indeferida: #c82331;
+$cancelada: #9aa4af;
+
+.reservas {
+  .mes-agenda { margin: 0; align-self: center; text-transform: capitalize; font-size: 18px; }
+  .ponto-cor { display: inline-block; width: 10px; height: 10px; margin-right: 7px; border-radius: 50%; }
+  .dica { display: block; margin-top: -10px; margin-bottom: 12px; color: var(--cor-5a6673); font-size: 12px; }
+  textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px; font: inherit; font-size: 13px; background: var(--cor-fcfcfc); resize: vertical; }
+  .par-horas { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .linha-caixa { display: flex; align-items: center; gap: 8px; font-weight: 600; input { width: auto; height: auto; margin: 0; } }
+  .acoes-formulario { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+  .legenda-espacos { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 12px; color: var(--cor-5a6673); font-size: 12px;
+    i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: 3px; vertical-align: -1px;
+      &.pendente { background: repeating-linear-gradient(45deg, #f0b429, #f0b429 3px, #fff 3px, #fff 6px); border: 1px solid #f0b429; } } }
+
+  .grade-agenda { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; margin-bottom: 20px; border: 1px solid var(--cor-e8eaec); background: var(--cor-e8eaec); border-radius: 10px; overflow: hidden;
+    .cab-dia { padding: 8px; color: var(--cor-5a6673); background: var(--cor-f7f8f9); font-size: 12px; text-align: center; }
+    .celula { min-height: 96px; padding: 6px; background: #fff; cursor: pointer; overflow: hidden;
+      &.fora { background: var(--cor-fafbfc); .numero { opacity: 0.45; } }
+      &.hoje .numero { color: #fff; background: var(--spi-vermelho); }
+      &.escolhido { outline: 2px solid var(--spi-vermelho); outline-offset: -2px; }
+      .numero { display: inline-block; min-width: 22px; padding: 1px 5px; border-radius: 11px; font-size: 12px; font-weight: 700; text-align: center; }
+      .mais { display: block; color: var(--cor-5a6673); font-size: 11px; } }
+    .chip { display: block; margin-top: 3px; padding: 2px 6px; border-left: 4px solid var(--cor); border-radius: 4px; color: var(--cor-3d454e); background: color-mix(in srgb, var(--cor) 14%, #fff);
+      font-size: 11px; text-decoration: none; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+      &.pendente { background: repeating-linear-gradient(45deg, #fff8e5, #fff8e5 4px, #fff 4px, #fff 8px); } }
+  }
+
+  .dia-escolhido .linha-reserva { display: grid; grid-template-columns: 6px 110px 1fr auto; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--cor-e8eaec); color: inherit; text-decoration: none;
+    .barra-cor { align-self: stretch; border-radius: 3px; } small { display: block; color: var(--cor-5a6673); } .horas { font-weight: 700; } }
+
+  .selo-reserva { display: inline-block; padding: 4px 9px; border-radius: 12px; color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap;
+    &.DEFERIDA { background: $deferida; } &.AGUARDANDO_APROVACAO { color: #5c4300; background: $aguardando; }
+    &.INDEFERIDA { background: $indeferida; } &.CANCELADA { background: $cancelada; } }
+
+  .item-fila header, .cartao-dados header { gap: 12px; flex-wrap: wrap; }
+  .obs { padding: 8px 12px; border-left: 3px solid var(--cor-e2e5e8); color: var(--cor-3d454e); background: var(--cor-fafbfc); }
+  .recusa { display: grid; gap: 8px; max-width: 560px; margin-top: 14px; padding: 14px; border: 1px solid var(--spi-vermelho-suave); border-radius: 10px; background: #fffafa; label { font-size: 12px; font-weight: 700; } }
+  .dados-reserva { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 20px; margin: 0 0 16px;
+    div { min-width: 0; } .larga { grid-column: 1 / -1; } dt { color: var(--cor-5a6673); font-size: 12px; font-weight: 700; } dd { margin: 2px 0 0; color: var(--cor-3d454e); } }
+  .serie { display: flex; flex-wrap: wrap; gap: 8px; a { padding: 4px 10px; border: 1px solid var(--cor-e2e5e8); border-radius: 8px; color: inherit; text-decoration: none; &.cancelada { opacity: 0.55; text-decoration: line-through; } } }
+  .linha-do-tempo { margin: 0; padding-left: 18px; li { margin-bottom: 12px; small { color: var(--cor-5a6673); } p { margin: 4px 0 0; color: var(--cor-3d454e); } } }
+
+  .lista-busca, .lista-fiscais { margin: 0 0 12px; padding: 0; list-style: none; border: 1px solid var(--cor-e8eaec); border-radius: 8px; li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--cor-e8eaec); &:last-child { border-bottom: 0; } }
+    button:not(.acao-recusar) { width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; } }
+
+  .indicadores { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px;
+    div { padding: 14px; border: 1px solid var(--cor-e8eaec); border-radius: 10px; b { display: block; font-size: 26px; } small { color: var(--cor-5a6673); } &.ok b { color: $deferida; } &.ruim b { color: $indeferida; } } }
+  .grafico-meses { display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px; align-items: end; height: 170px;
+    .coluna-mes { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; font-size: 11px; }
+    .barras { display: flex; align-items: flex-end; width: 70%; flex: 1; i { display: block; width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: $deferida; } } }
+  .grade-painel-reservas { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px; }
+  .linha-ocupacao { display: grid; grid-template-columns: minmax(120px, 1fr) 1fr; gap: 4px 12px; align-items: center; padding: 6px 0;
+    small { grid-column: 1 / -1; color: var(--cor-5a6673); } .trilho { height: 10px; border-radius: 5px; background: var(--cor-e8eaec); overflow: hidden; b { display: block; height: 100%; } } }
+}

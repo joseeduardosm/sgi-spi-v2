@@ -234,15 +234,21 @@ class PeriodoExecucao:
 
 
 def periodos_de_execucao(vigencias: Sequence[Vigencia], periodicidade_meses: int) -> list[PeriodoExecucao]:
-    """Competências por mês civil: a 1ª começa no início da vigência; cada uma agrupa N meses."""
-    # Cada vigência é dividida separadamente, para uma competência nunca atravessar duas vigências
-    periodos = []
+    """Competências por mês civil: a 1ª começa no início do contrato; cada uma agrupa N meses.
+
+    **Uma prorrogação nunca corta a competência**, qualquer que seja a periodicidade: os meses de todas as vigências formam uma
+    sequência só, agrupada de N em N; o mês em que uma vigência começa ou termina no meio fica inteiro na mesma competência,
+    com as partes de cada vigência dentro dela (`meses`), e a competência leva a sequência da vigência mais recente.
+    """
+    por_mes: dict[date, list[PeriodoMensal]] = {}
     for vigencia in vigencias:
-        meses = meses_da_vigencia(vigencia)
-        for indice in range(0, len(meses), periodicidade_meses):
-            # Agrupa os meses de N em N (periodicidade); o último grupo pode ficar menor
-            grupo = tuple(meses[indice : indice + periodicidade_meses])
-            periodos.append(PeriodoExecucao(grupo[0].competencia, grupo[0].inicio, grupo[-1].fim, vigencia.sequencia, grupo))
+        for parte in meses_da_vigencia(vigencia):
+            por_mes.setdefault(parte.competencia, []).append(parte)
+    meses_civis = sorted(por_mes)
+    periodos = []
+    for indice in range(0, len(meses_civis), periodicidade_meses):
+        partes = sorted((p for m in meses_civis[indice : indice + periodicidade_meses] for p in por_mes[m]), key=lambda p: p.inicio)
+        periodos.append(PeriodoExecucao(partes[0].competencia, partes[0].inicio, partes[-1].fim, partes[-1].sequencia_vigencia, tuple(partes)))
     return periodos
 
 

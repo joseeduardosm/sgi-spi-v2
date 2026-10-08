@@ -49,7 +49,7 @@ class EmpresaRascunho(BaseModel):
 
 class PrepostoRascunho(BaseModel):
     """Preposto ativo da empresa no SGI (cadastrado junto com a empresa, se ela for nova)."""
-    cpf: str
+    cpf: str = ""
     nome: str
     telefone: str = ""
     email: str = ""

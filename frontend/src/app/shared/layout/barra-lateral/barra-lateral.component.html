@@ -26,11 +26,45 @@
           }
         </div>
       }
-      @if (atalhos.recentes().length) {
+      <!-- "Recentes" desativado temporariamente: para religar, troque `mostrarRecentes` por `true` em barra-lateral.component.ts -->
+      @if (mostrarRecentes && atalhos.recentes().length) {
         <p class="nav-legenda nav-legenda-secundaria">Recentes</p>
         <div class="nav-atalhos">
           @for (r of atalhos.recentes(); track r.rota) {
             <span class="nav-atalho"><a [routerLink]="r.rota.split('?')[0]" [queryParams]="parametros(r.rota)" [title]="r.rotulo">{{ r.rotulo }}</a></span>
+          }
+        </div>
+      }
+    }
+
+    <!-- Atalhos fixos para todos: grupo dobrável, com categorias também dobráveis -->
+    @if (atalhosFixos.categorias().length) {
+      <button class="nav-item nav-grupo" type="button" (click)="alternarGrupo('atalhos-fixos')"
+              [attr.aria-expanded]="estaAberto('atalhos-fixos')" aria-controls="submenu-atalhos-fixos" title="Atalhos">
+        <app-icone nome="alfinete" /><span>Atalhos</span><b [class.aberto]="estaAberto('atalhos-fixos')">⌄</b>
+      </button>
+      @if (estaAberto('atalhos-fixos') && layout.barraExpandida()) {
+        <div class="nav-submenu" id="submenu-atalhos-fixos">
+          @for (cat of atalhosFixos.categorias(); track cat.id) {
+            <button class="nav-categoria" type="button" (click)="alternarGrupo('atalhos-cat-' + cat.id)"
+                    [attr.aria-expanded]="estaAberto('atalhos-cat-' + cat.id)">
+              <span>{{ cat.nome }}</span><b [class.aberto]="estaAberto('atalhos-cat-' + cat.id)">⌄</b>
+            </button>
+            @if (estaAberto('atalhos-cat-' + cat.id)) {
+              <div class="nav-categoria-itens">
+                @for (a of cat.atalhos; track a.id) {
+                  @if (a.externo) {
+                    <a [href]="a.url" [attr.target]="a.nova_aba ? '_blank' : null" [attr.rel]="a.nova_aba ? 'noopener noreferrer' : null">
+                      {{ a.titulo }} @if (a.nova_aba) { <span aria-label="abre em nova aba">↗</span> }
+                    </a>
+                  } @else if (a.nova_aba) {
+                    <a [href]="a.url" target="_blank" rel="noopener">{{ a.titulo }} <span aria-label="abre em nova aba">↗</span></a>
+                  } @else {
+                    <a [routerLink]="a.url.split('?')[0]" [queryParams]="parametros(a.url)" (click)="layout.menuCelularAberto.set(false)">{{ a.titulo }}</a>
+                  }
+                }
+              </div>
+            }
           }
         </div>
       }

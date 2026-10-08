@@ -36,8 +36,8 @@
 }
 
 // ---- Cartões de visita (proporção 85 x 55 mm) ----
-// A grade ocupa toda a largura disponível: o número de colunas cresce com a tela (cartões de 270 a ~340 px)
-.grade-cartoes-visita { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 16px; }
+// A grade ocupa toda a largura disponível: o número de colunas cresce com a tela, mas com cartões de no mínimo 340 px e respiro entre eles (nada apertado)
+.grade-cartoes-visita { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 22px; }
 
 // Nas páginas do diretório o contêiner do portal (1280 px) não limita a largura: cabeçalho e conteúdo
 // acompanham a janela, com uma folga lateral que cresce só até um teto para telas ultralargas.
@@ -47,35 +47,39 @@ body:has(app-ramais) .portal-conteudo.portal-conteudo { width: min(100%, 3200px)
 
 .cartao-visita {
   // Textos longos (setor, cargo) são cortados com reticências; o texto completo aparece ao abrir o cartão
-  position: relative; display: flex; flex-direction: column; min-height: 230px; background: var(--cor-ffffff); overflow: hidden;
-  border: 1px solid var(--spi-borda); border-left: 6px solid var(--spi-vermelho); border-radius: 10px; box-shadow: 0 14px 30px #18222d14;
+  // Destaque do cartão: verde para quem está no trabalho; vermelho para quem está de férias (o tom suave serve de fundo do avatar e do selo)
+  --destaque: #2f9e6b; --destaque-escuro: #17734a;
+  --destaque-suave: color-mix(in srgb, var(--destaque) 14%, var(--cor-ffffff));
+  position: relative; display: flex; flex-direction: column; min-height: 250px; background: var(--cor-ffffff); overflow: hidden;
+  border: 1px solid var(--spi-borda); border-left: 6px solid var(--destaque); border-radius: 14px; box-shadow: 0 10px 28px #18222d12;
   transition: transform 0.15s, box-shadow 0.15s;
-  &:hover, &:focus-within { transform: translateY(-3px); box-shadow: 0 20px 38px #18222d24; }
-  &.em-ferias { border-left-color: #2f9e6b; }
+  &:hover, &:focus-within { transform: translateY(-3px); box-shadow: 0 18px 38px #18222d22; }
+  &.em-ferias { --destaque: var(--spi-vermelho); --destaque-escuro: var(--spi-vermelho-escuro); }
+  .avatar-diretorio { background: var(--destaque-suave); color: var(--destaque-escuro); }
 
   .corpo-cartao {
-    flex: 1; display: flex; gap: 14px; align-items: flex-start; padding: 16px 38px 8px 14px; border: 0; background: none; text-align: left; cursor: pointer; min-height: 0;
-    .avatar-diretorio { width: 68px; height: 68px; font-size: 1.35rem; border: 3px solid var(--cor-ffffff); box-shadow: 0 0 0 1px var(--spi-borda); }
+    flex: 1; display: flex; gap: 16px; align-items: flex-start; padding: 22px 42px 12px 20px; border: 0; background: none; text-align: left; cursor: pointer; min-height: 0;
+    .avatar-diretorio { width: 72px; height: 72px; font-size: 1.4rem; border: 3px solid var(--cor-ffffff); box-shadow: 0 0 0 2px var(--destaque-suave); }
   }
-  .dados-cartao { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+  .dados-cartao { display: flex; flex-direction: column; min-width: 0; gap: 3px; }
   .nome-cartao { font-size: 1rem; color: var(--spi-titulo); line-height: 1.2; @include limitar(2); }
   .cargo-cartao { font-size: 0.78rem; color: var(--spi-apagado); line-height: 1.25; @include limitar(2); }
-  .setor-cartao { font-size: 0.74rem; font-weight: 700; color: var(--spi-vermelho-destaque); text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.2; @include limitar(2); }
-  .ramal-cartao { margin-top: 6px; font-size: 1.5rem; font-weight: 800; color: var(--spi-titulo); line-height: 1; small { font-size: 0.65rem; color: var(--spi-apagado); font-weight: 700; text-transform: uppercase; margin-right: 4px; } }
+  .setor-cartao { font-size: 0.74rem; font-weight: 700; color: var(--destaque-escuro); text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.25; margin-top: 2px; @include limitar(2); }
+  .ramal-cartao { margin-top: 10px; font-size: 1.5rem; font-weight: 800; color: var(--spi-titulo); line-height: 1; small { font-size: 0.65rem; color: var(--spi-apagado); font-weight: 700; text-transform: uppercase; margin-right: 4px; } }
   .local-cartao { font-size: 0.72rem; color: var(--spi-apagado-2); margin-top: 2px; @include limitar(1); }
 
   .favorito { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 1.35rem; color: #b9c0c8; cursor: pointer; &.ativo { color: #f2a900; } }
-  .selo-ferias { position: absolute; right: 10px; bottom: 50px; max-width: calc(100% - 20px); }
+  .selo-ferias { position: absolute; right: 14px; bottom: 56px; max-width: calc(100% - 28px); }
 
   .acoes-cartao-visita {
     display: flex; border-top: 1px solid var(--spi-borda); background: var(--cor-fafbfb);
     a, button { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 2px; border: 0; background: none; color: var(--spi-apagado); font-size: 1rem; text-decoration: none; cursor: pointer;
-      span { font-size: 0.58rem; font-weight: 700; } &:hover { background: var(--spi-vermelho-suave); color: var(--spi-vermelho-escuro); } }
+      span { font-size: 0.58rem; font-weight: 700; } &:hover { background: var(--destaque-suave); color: var(--destaque-escuro); } }
   }
 }
 
 .selo-ferias {
-  display: inline-block; padding: 3px 9px; border-radius: 999px; background: var(--cor-e3f6ec); color: #17734a; font-size: 0.7rem; font-weight: 800;
+  display: inline-block; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--spi-vermelho) 12%, var(--cor-ffffff)); color: var(--spi-vermelho-escuro); font-size: 0.7rem; font-weight: 800;
 }
 
 .lista-ramais { tr[tabindex] { cursor: pointer; } td:first-child { width: 56px; } }
@@ -110,6 +114,14 @@ body:has(app-ramais) .portal-conteudo.portal-conteudo { width: min(100%, 3200px)
   .acao-secundaria { height: 32px; }
 }
 
+// Mural de parabéns: a janela ocupa 80% da tela na largura e na altura; os recados rolam e o campo de escrita fica sempre visível
+.modal-portal.modal-mural { width: 80vw; height: 80vh; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden;
+  > header { flex: none; }
+  .corpo-mural { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 16px;
+    .homenageado { flex: none; }
+    .recados { flex: 1; min-height: 0; max-height: none; }
+    form, > .dica-formulario { flex: none; } } }
+
 .corpo-mural { padding: 8px 24px 20px;
   .homenageado { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; small { display: block; color: var(--spi-apagado); } }
   .recados { list-style: none; padding: 0; margin: 0 0 12px; max-height: 280px; overflow-y: auto;
@@ -136,3 +148,18 @@ body:has(app-ramais) .portal-conteudo.portal-conteudo { width: min(100%, 3200px)
 .titulo-foto-perfil { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--spi-vermelho-destaque); margin: 14px 0 0; }
 .aniversariantes header { position: relative; }
 .fechar-aniversariantes { border: 0; background: none; font-size: 1.4rem; line-height: 1; color: var(--spi-apagado); cursor: pointer; padding: 0 4px; &:hover { color: var(--spi-vermelho); } }
+
+// ---- Tema escuro: tons mais claros para o texto e o destaque dos cartões (os de cor escura somem no fundo escuro) ----
+:root[data-tema='escuro'] {
+  .cartao-visita {
+    --destaque: #3fbf86; --destaque-escuro: #7ee0b2;
+    --destaque-suave: color-mix(in srgb, var(--destaque) 20%, var(--cor-ffffff));
+    border-color: var(--spi-borda); box-shadow: 0 10px 28px #00000055;
+    &:hover, &:focus-within { box-shadow: 0 18px 38px #00000080; }
+    &.em-ferias { --destaque: #ff6b78; --destaque-escuro: #ff9aa3; }
+    .avatar-diretorio { border-color: var(--cor-ffffff); }
+    .favorito { color: #6b7684; &.ativo { color: #f2b83a; } }
+  }
+  .selo-ferias { background: color-mix(in srgb, #ff6b78 20%, var(--cor-ffffff)); color: #ffb3b9; }
+  .barra-diretorio .ficha.ativa { color: #fff; }
+}

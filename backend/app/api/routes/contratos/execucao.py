@@ -19,7 +19,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
@@ -29,8 +29,10 @@ from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
+    AlteracaoPedirEnvio,
     GrupoFinanceiro,
     PrepostoDoEmail,
+    ItemDespesaVariavel,
     ItemNotaFiscal,
     ConclusaoMedicao,
     GravacaoRecusa,
@@ -87,6 +89,18 @@ def alterar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, dados: Gr
     """Edita uma versão inativa (ativas ficam congeladas para não mudar competências em andamento)."""
     with traduzir_erros(sessao):
         configuracao.alterar_checklist(sessao, contrato_id, checklist_id, dados, autor)
+        return configuracao.listar_checklists(sessao, contrato_id)
+
+
+@roteador.put("/checklists/{checklist_id}/itens/{item_id}/pedir-envio", response_model=list[LeituraChecklist], summary="Pedir para enviar um documento",
+              description="Liga ou desliga \"Pedir para enviar\" de um documento do checklist, **inclusive no checklist ativo** (as demais opções ficam "
+              "congeladas). Documentos marcados são pedidos à empresa, com a observação, no e-mail da medição concluída. Exige poder editar o contrato.",
+              responses={**NAO_ENCONTRADO, **ESCRITA})
+def definir_pedir_envio(contrato_id: uuid.UUID, checklist_id: uuid.UUID, item_id: uuid.UUID, dados: AlteracaoPedirEnvio,
+                        sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Marca ou desmarca o pedido de envio de um documento do checklist."""
+    with traduzir_erros(sessao):
+        configuracao.definir_pedir_envio(sessao, contrato_id, checklist_id, item_id, dados.pedir_envio, autor)
         return configuracao.listar_checklists(sessao, contrato_id)
 
 
@@ -192,8 +206,8 @@ def painel_execucao(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sess
 
 
 @roteador.post("/execucao/gerar", response_model=PainelExecucao, summary="Gerar ou atualizar competências",
-               description="Cria as competências que faltam (mês civil × periodicidade), copiando o checklist ativo e o formulário ativo. "
-               "Depois disso, itens e ordem só mudam pelo SuperRoot. Pré-requisitos não atendidos → 400 com os motivos.",
+               description="Cria as competências que faltam (mês civil × periodicidade), ainda vazias: itens, formulário de avaliação e checklist são copiados "
+               "quando a etapa correspondente começa. Depois disso, itens e ordem só mudam pelo SuperRoot. Pré-requisitos não atendidos → 400 com os motivos.",
                responses={**NAO_ENCONTRADO, **ESCRITA})
 def gerar_competencias(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Gera as competências que faltam (operação idempotente: rodar duas vezes não duplica nada)."""
@@ -203,14 +217,14 @@ def gerar_competencias(contrato_id: uuid.UUID, sessao: Session = Depends(obter_s
 
 
 @roteador.get("/competencias/identificador/{identificador}", response_model=DetalheCompetencia, summary="Competência pelo identificador",
-              description="`identificador` = `AAAA-MM`, `AAAA-MM-1`/`AAAA-MM-2` (mês dividido entre vigências) ou `AAAA-MM-dif` "
-              "(diferença de reajuste). É a chave da tela `/contratos/:id/execucao/:identificador`.", responses=NAO_ENCONTRADA)
+              description="`identificador` = `AAAA-MM`, `AAAA-MM-1`/`AAAA-MM-2` (mês dividido entre vigências), `AAAA-MM-dif` "
+              "(diferença de reajuste) ou `AAAA-MM-adicional-N` (medição adicional). É a chave da tela `/contratos/:id/execucao/:identificador`.", responses=NAO_ENCONTRADA)
 def competencia_por_identificador(
     contrato_id: uuid.UUID, identificador: str, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)
 ):
     """Busca a competência pelo identificador legível usado na URL da tela (ex.: `2026-03`)."""
     # Recusa formatos inválidos logo aqui, como 404, sem consultar o banco
-    if not re.fullmatch(r"\d{4}-\d{2}(-(\d|dif))?", identificador):
+    if not re.fullmatch(r"\d{4}-\d{2}(-(\d|dif|adicional-\d{1,3}))?", identificador):
         raise ErroApi(status.HTTP_404_NOT_FOUND, "Competência não encontrada.", "nao_encontrado")
     with traduzir_erros():
         competencia_id = competencias.localizar_competencia(sessao, contrato_id, identificador)
@@ -238,6 +252,33 @@ def baixar_arquivo(contrato_id: uuid.UUID, competencia_id: uuid.UUID, anexo_id: 
 def _depois(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, usuario: Usuario) -> DetalheCompetencia:
     """Atalho usado pelas rotas de escrita para devolver o detalhe atualizado da competência."""
     return competencias.detalhar(sessao, contrato_id, competencia_id, usuario)
+
+
+@roteador.post("/competencias/{competencia_id}/adicional", response_model=DetalheCompetencia, status_code=status.HTTP_201_CREATED,
+               summary="Incluir nova medição (medição adicional)",
+               description="`multipart/form-data`: `justificativa` (obrigatória) e `arquivo` (PDF opcional). Cria, no período da competência indicada, outra medição "
+               "com os itens zerados, que segue todo o rito (ciências, avaliação, nota fiscal, retenção, CADIN, checklist, consolidado e OB) de forma independente. "
+               "Exige o contrato com \"medição adicional\" permitida (`409` se não) e a justificativa (`400`). Devolve o detalhe da nova medição.",
+               responses={**NAO_ENCONTRADA, **ESCRITA, **ARQUIVO_RECUSADO})
+def incluir_adicional(contrato_id: uuid.UUID, competencia_id: uuid.UUID, justificativa: str = Form(...), arquivo: UploadFile | None = File(None),
+                      sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Cria a medição adicional e abre o detalhe dela."""
+    with traduzir_erros(sessao):
+        conteudo, nome = arquivo_pdf(arquivo) if arquivo is not None and arquivo.filename else (None, "")
+        nova = competencias.incluir_medicao_adicional(sessao, contrato_id, competencia_id, justificativa, conteudo, nome, autor)
+        return _depois(sessao, contrato_id, nova.id, autor)
+
+
+@roteador.delete("/competencias/{competencia_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Excluir medição adicional",
+                 description="Apaga a medição adicional com todo o seu conteúdo (itens, ciências, avaliação, nota fiscal, retenção, CADIN, checklist), para a equipe "
+                 "refazê-la do zero. Permitido a quem edita a execução do contrato (`403` se não). Só vale para medição adicional (`409` nas demais) e não paga "
+                 "(`409`: zere a competência antes, o que estorna a OB). Os arquivos ficam guardados no histórico de anexos. Auditoria: `contrato.execucao.adicional.excluir`.",
+                 responses={**NAO_ENCONTRADA, **ESCRITA})
+def excluir_adicional(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Exclui a medição adicional."""
+    with traduzir_erros(sessao):
+        competencias.excluir_medicao_adicional(sessao, contrato_id, competencia_id, autor)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @roteador.put("/competencias/{competencia_id}/medicao", response_model=DetalheCompetencia, summary="Salvar medição",
@@ -399,8 +440,8 @@ def reconsideracao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: U
                "cada item traz `id` (nota já registrada, que mantém os arquivos não trocados), `arquivo` e `xml` (posições nas listas de "
                "arquivos `arquivos` e `xmls`). O PDF é obrigatório em cada nota; o XML (NF-e ou NFS-e) é opcional: sem ele, informe `valor_bruto` (e, se quiser, `numero`) no item da nota; notas fora da lista são removidas. "
                "Data de recebimento e prazo de pagamento (1 a 3650 dias). Número, chave, valor e as retenções sugeridas vêm dos XMLs; "
-               "o saldo livre das NEs precisa cobrir a soma. Conclui a etapa (próxima: retenção de tributos) e, **só com `enviar_email = true`** (padrão `false`), envia em segundo plano "
-               "o e-mail ao Financeiro com cópia à equipe.", responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
+               "o saldo livre das NEs precisa cobrir a soma. Conclui a etapa (próxima: retenção de tributos) e **sempre** envia em segundo plano "
+               "o e-mail a todo o Financeiro (DOF) com cópia à equipe. **Com item marcado como despesa variável na medição**, é obrigatório juntar ao menos uma nota fiscal e ao menos um documento de despesa em `despesas` (JSON com `tipo` = `nota_debito`, `recibo` ou `outros`, `valor`, `numero` opcional e `arquivo` = posição na lista `arquivos_despesas`), e a soma deles precisa ser igual ao Subtotal - Despesas Variáveis. Só a nota fiscal vai para a validação do Financeiro (retenção); os documentos de despesa ficam juntados e entram no consolidado.", responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def nota_fiscal(
     contrato_id: uuid.UUID,
     competencia_id: uuid.UUID,
@@ -408,10 +449,10 @@ def nota_fiscal(
     recebida_em: Annotated[date, Form(description="Data em que a Administração recebeu a NF.")],
     prazo_pagamento_dias: Annotated[int, Form(ge=1, le=3650)],
     notas: Annotated[str, Form(description='JSON: lista de {"id": uuid|null, "arquivo": posição|null, "xml": posição|null, "valor_bruto": decimal|null, "numero": texto|null}.')],
-    enviar_email: Annotated[bool, Form(description="Envia o e-mail ao Financeiro (cópia à equipe). Padrão `false`.")] = False,
-    financeiro_ids: Annotated[str | None, Form(description="Ids dos usuários do Financeiro que recebem, separados por vírgula. Ausente = todos; vazio = ninguém do Financeiro. Só vale com `enviar_email`.")] = None,
     arquivos: Annotated[list[UploadFile], File(description="PDFs das notas (referenciados por posição em `notas`).")] = [],
     xmls: Annotated[list[UploadFile], File(description="XMLs das notas (referenciados por posição em `notas`).")] = [],
+    despesas: Annotated[str | None, Form(description='JSON: lista final de documentos de despesas variáveis, {"id": uuid|null, "tipo": "nota_debito"|"recibo"|"outros", "numero": texto|null, "valor": decimal, "arquivo": posição|null}. Obrigatória (ao menos um) com item de despesa variável na medição; vazia nas demais.')] = None,
+    arquivos_despesas: Annotated[list[UploadFile], File(description="PDFs dos documentos de despesas variáveis (referenciados por posição em `despesas`).")] = [],
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ):
@@ -421,15 +462,19 @@ def nota_fiscal(
         itens = [i.model_dump() for i in TypeAdapter(list[ItemNotaFiscal]).validate_json(notas)]
     except ValidationError as erro:
         raise ErroApi(422, "O campo `notas` precisa ser uma lista JSON de {id, arquivo, xml, valor_bruto, numero}.", "validacao") from erro
+    try:
+        itens_despesas = [i.model_dump() for i in TypeAdapter(list[ItemDespesaVariavel]).validate_json(despesas or "[]")]
+    except ValidationError as erro:
+        raise ErroApi(422, "O campo `despesas` precisa ser uma lista JSON de {id, tipo, numero, valor, arquivo}.", "validacao") from erro
 
     with traduzir_erros(sessao):
         # Os arquivos são opcionais por nota: ao corrigir depois de reabrir, os anteriores podem ser mantidos
         competencias.registrar_nota_fiscal(
             sessao, contrato_id, competencia_id, dados, itens, [arquivo_pdf(a) for a in arquivos],
             [(x.file, x.filename or "nota_fiscal.xml") for x in xmls], autor,
+            despesas=itens_despesas, arquivos_despesas=[arquivo_pdf(a) for a in arquivos_despesas],
         )
-        if enviar_email:
-            tarefas.add_task(servico_notificacoes.notificar_nf, competencia_id, None if financeiro_ids is None else [int(i) for i in financeiro_ids.split(",") if i.strip().isdigit()])
+        tarefas.add_task(servico_notificacoes.notificar_nf, competencia_id)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
@@ -586,7 +631,7 @@ def documento_mensal(contrato_id: uuid.UUID, competencia_id: uuid.UUID, document
 @roteador.post("/competencias/{competencia_id}/consolidado", response_model=DetalheCompetencia, summary="Gerar documento consolidado",
                description="Um único PDF na ordem de execução (medição, avaliação, NFs, retenção, CADIN, checklist e, por último, o "
                "resumo executivo), com contracapa antes de cada documento enviado e páginas numeradas em sequência. "
-               "Gerar novamente (já existe um consolidado) é só do gestor do contrato ou do SuperRoot, inclusive depois da OB (senão, 403).",
+               "Quem pode editar o contrato também gera novamente (já existe um consolidado), inclusive depois da OB.",
                responses={**NAO_ENCONTRADA, **ESCRITA})
 def consolidado(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Etapa 6: gera o PDF consolidado com todos os documentos da competência."""

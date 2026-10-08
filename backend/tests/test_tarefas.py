@@ -40,6 +40,9 @@ def _prazo(dias: int) -> str:
 
 
 def _nova(cliente, h, equipe_id, **extra):
+    # Atalho dos testes: `responsavel_id` = responsável principal; `outros_ids` = demais responsáveis
+    if "responsavel_id" in extra:
+        extra["responsaveis_ids"] = [extra.pop("responsavel_id"), *extra.pop("outros_ids", [])]
     corpo = {"titulo": "Revisar edital", "descricao": "Conferir cláusulas", "prazo": _prazo(10), "equipe_id": equipe_id, **extra}
     r = cliente.post(URL, json=corpo, headers=h)
     assert r.status_code == 201, r.text
@@ -103,7 +106,7 @@ def test_permissoes_visibilidade_e_atribuicao(cliente, equipe):
     ids, h, equipe_id = equipe
     # Fora da equipe não cadastra nela; membro não atribui a quem é de fora; a liderança pode
     assert cliente.post(URL, json={"titulo": "X", "prazo": _prazo(3), "equipe_id": equipe_id}, headers=h["caio"]).status_code == 403
-    r = cliente.post(URL, json={"titulo": "X", "prazo": _prazo(3), "equipe_id": equipe_id, "responsavel_id": ids["caio"]}, headers=h["ana"])
+    r = cliente.post(URL, json={"titulo": "X", "prazo": _prazo(3), "equipe_id": equipe_id, "responsaveis_ids": [ids["caio"]]}, headers=h["ana"])
     assert r.status_code == 400 and "membros da equipe" in r.json()["detalhe"]
     t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["caio"])
     # Quem não tem relação com a tarefa recebe 404 (não revela que existe)
@@ -130,7 +133,7 @@ def test_prazo_transferencia_comentario_e_linha_do_tempo(cliente, equipe):
     # Quem alterou não recebe o próprio aviso
     assert ids["ana"] not in [d for d, _ in _avisos(f"tarefa-prazo:{t['id']}")]
     # Conflito de versão
-    assert cliente.put(f"{URL}/{n}", json={"titulo": "Novo", "prioridade": "alta", "versao": 1}, headers=h["ana"]).status_code == 409
+    assert cliente.put(f"{URL}/{n}", json={"titulo": "Novo", "prioridade": "alta", "responsaveis_ids": [ids["ana"]], "versao": 1}, headers=h["ana"]).status_code == 409
     # Transferência: membro só para membro; justificativa na linha do tempo
     assert cliente.post(f"{URL}/{n}/transferir", json={"para_id": ids["caio"], "justificativa": "x"}, headers=h["ana"]).status_code == 400
     r = cliente.post(f"{URL}/{n}/transferir", json={"para_id": ids["beto"], "justificativa": "Férias da Ana"}, headers=h["ana"])
@@ -203,10 +206,10 @@ def test_carga_indicadores_e_lembretes(cliente, equipe):
 
 def test_equipes_marcadores_e_ordem(cliente, equipe):
     ids, h, equipe_id = equipe
-    # Só o dono configura; só a liderança cria marcadores
+    # Só o dono configura; membros e liderança criam marcadores na hora (quem é de fora da equipe, não)
     corpo = {"nome": "Contratos", "lideres_ids": [ids["lia"]], "membros_ids": [ids["ana"]]}
     assert cliente.put(f"{URL}/equipes/{equipe_id}", json=corpo, headers=h["ana"]).status_code == 403
-    assert cliente.post(f"{URL}/equipes/{equipe_id}/marcadores", json={"nome": "Urgente"}, headers=h["ana"]).status_code == 403
+    assert cliente.post(f"{URL}/equipes/{equipe_id}/marcadores", json={"nome": "Urgente"}, headers=h["caio"]).status_code == 403
     m = cliente.post(f"{URL}/equipes/{equipe_id}/marcadores", json={"nome": "Urgente", "cor": "#c82331"}, headers=h["lia"]).json()
     t = _nova(cliente, h["lia"], equipe_id, marcadores_ids=[m["id"]])
     filtrada = cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id, "marcador_id": m["id"]}, headers=h["lia"]).json()
@@ -231,7 +234,7 @@ def test_relatorio_xlsx_e_pdf(cliente, equipe):
     from openpyxl import load_workbook
 
     ids, h, equipe_id = equipe
-    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], participantes_ids=[ids["beto"]])
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], outros_ids=[ids["beto"]])
     params = {"escopo": "equipe", "equipe_id": equipe_id}
     r = cliente.get(f"{URL}/relatorio", params={**params, "formato": "xlsx"}, headers=h["lia"])
     assert r.status_code == 200 and "tarefas-" in r.headers["content-disposition"]
@@ -265,13 +268,13 @@ def test_pessoas_da_equipe_com_contagem_na_equipe(cliente, equipe):
 def test_resumo_traz_envolvidos_e_contagens_do_cartao(cliente, equipe):
     """Cartão do quadro: avatares (responsável primeiro), comentários, anexos e datas para o Gantt."""
     ids, h, equipe_id = equipe
-    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["beto"], participantes_ids=[ids["ana"]])
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["beto"], outros_ids=[ids["ana"]])
     n = t["numero"]
     cliente.post(f"{URL}/{n}/comentarios", data={"texto": "Primeiro"}, headers=h["ana"])
     arquivo = ("nota.txt", BytesIO(b"conteudo"), "text/plain")
     cliente.post(f"{URL}/{n}/comentarios", data={"texto": "Com anexo"}, files=[("arquivos", arquivo)], headers=h["beto"])
     item = next(i for i in cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id}, headers=h["lia"]).json()["itens"] if i["numero"] == n)
-    assert [p["nome"] for p in item["envolvidos"]] == ["Beto Membro", "Ana Executora"]
+    assert [p["nome"] for p in item["responsaveis"]] == ["Beto Membro", "Ana Executora"]
     assert (item["comentarios"], item["anexos"]) == (2, 1)
     assert item["criado_em"] and item["iniciada_em"] is None
     _mover(cliente, h["beto"], n, "iniciar")
@@ -294,7 +297,7 @@ def test_agenda_da_pessoa_mostra_todas_as_tarefas_com_titulo(cliente, equipe):
     assert agenda["pessoa"]["nome"] == "Ana Executora" and agenda["pessoa"]["a_fazer"] == 2
     titulos = {i["titulo"]: i for i in agenda["itens"]}
     assert set(titulos) == {"Da equipe", "Pessoal da Ana", "Já feita"}
-    assert titulos["Da equipe"]["papel"] == "responsavel" and titulos["Já feita"]["status"] == "concluida"
+    assert titulos["Já feita"]["status"] == "concluida"
     assert not any(i["abrivel"] for i in agenda["itens"])
     # A Lia (liderança) pode abrir a tarefa da equipe, mas não as pessoais da Ana
     abriveis = {i["titulo"] for i in cliente.get(f"{URL}/pessoas/{ids['ana']}/agenda", headers=h["lia"]).json()["itens"] if i["abrivel"]}
@@ -379,3 +382,90 @@ def test_escalonamento_de_tarefa_pessoal_vai_ao_criador_e_ignora_o_que_nao_esta_
     with FabricaSessao() as s:
         do_criador = s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{ids['ana']}:%"))).all()
         assert len(do_criador) == 1 and "Minha tarefa" in do_criador[0].corpo and "No prazo" not in do_criador[0].corpo
+
+
+def test_varios_responsaveis_na_criacao_e_na_edicao(cliente, equipe):
+    ids, h, equipe_id = equipe
+    t = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"], ids["beto"]])
+    assert t["responsavel"]["id"] == ids["ana"] and [p["id"] for p in t["responsaveis"]] == [ids["ana"], ids["beto"]]
+    # Os dois veem a tarefa e executam (iniciam) com os mesmos poderes
+    for quem in ("ana", "beto"):
+        assert "iniciar" in cliente.get(f"{URL}/{t['numero']}", headers=h[quem]).json()["acoes"]
+    # Edição: sem responsáveis é recusada; trocar a lista mantém o principal se ele ficar
+    corpo = {"titulo": t["titulo"], "prioridade": "normal", "versao": t["versao"]}
+    assert cliente.put(f"{URL}/{t['numero']}", json={**corpo, "responsaveis_ids": []}, headers=h["lia"]).status_code == 422
+    r = cliente.put(f"{URL}/{t['numero']}", json={**corpo, "responsaveis_ids": [ids["beto"], ids["ana"]]}, headers=h["lia"])
+    assert r.status_code == 200 and r.json()["responsavel"]["id"] == ids["ana"]
+    # Se o principal sai, o primeiro da lista assume
+    r = cliente.put(f"{URL}/{t['numero']}", json={**corpo, "responsaveis_ids": [ids["beto"]], "versao": r.json()["versao"]}, headers=h["lia"])
+    assert r.status_code == 200 and r.json()["responsavel"]["id"] == ids["beto"] and len(r.json()["responsaveis"]) == 1
+    # Sem responsáveis informados, fica com quem cadastra
+    sem = _nova(cliente, h["lia"], equipe_id)
+    assert sem["responsavel"]["id"] == ids["lia"]
+
+
+def test_editar_equipe_mantendo_lideres_e_membros_nao_viola_a_unicidade(cliente, equipe):
+    ids, h, equipe_id = equipe
+    corpo = {"nome": "Contratos renomeada", "lideres_ids": [ids["lia"]], "membros_ids": [ids["ana"], ids["beto"]]}
+    r = cliente.put(f"{URL}/equipes/{equipe_id}", json=corpo, headers=h["lia"])
+    assert r.status_code == 200, r.text
+    # Troca parcial: sai o Beto, entra o Caio, a liderança e a Ana continuam
+    corpo["membros_ids"] = [ids["ana"], ids["caio"]]
+    r = cliente.put(f"{URL}/equipes/{equipe_id}", json=corpo, headers=h["lia"])
+    assert r.status_code == 200, r.text
+    assert sorted(m["id"] for m in r.json()["membros"]) == sorted([ids["ana"], ids["caio"]])
+
+
+def test_marcadores_estilo_odoo_uso_busca_criacao_e_cor(cliente, equipe):
+    ids, h, equipe_id = equipe
+    base = f"{URL}/equipes/{equipe_id}/marcadores"
+    # Quem é membro cria na hora; a cor sorteia da paleta (1 a 11); nome repetido (sem diferenciar maiúsculas) devolve o mesmo marcador
+    criado = cliente.post(base, json={"nome": "Licitação"}, headers=h["ana"])
+    assert criado.status_code == 201 and 1 <= criado.json()["cor_indice"] <= 11
+    assert cliente.post(base, json={"nome": "  licitação "}, headers=h["beto"]).json()["id"] == criado.json()["id"]
+    urgente = cliente.post(base, json={"nome": "Urgente", "cor_indice": 1}, headers=h["ana"]).json()
+    assert urgente["cor_indice"] == 1 and urgente["cor"] == "#d76a58"
+    jur = cliente.post(base, json={"nome": "Jurídico", "cor": "#c82331"}, headers=h["lia"]).json()  # hexadecimal legado → cor da paleta
+    assert jur["cor_indice"] == 1
+    # Mais usado primeiro: duas tarefas com "Urgente", uma com "Jurídico"
+    for _ in range(2):
+        _nova(cliente, h["lia"], equipe_id, marcadores_ids=[urgente["id"]])
+    _nova(cliente, h["lia"], equipe_id, marcadores_ids=[jur["id"]])
+    lista = cliente.get(base, headers=h["ana"]).json()
+    assert [m["nome"] for m in lista] == ["Urgente", "Jurídico", "Licitação"] and [m["usos"] for m in lista] == [2, 1, 0]
+    # Busca por trecho, sem maiúsculas nem acentos, e limite
+    assert [m["nome"] for m in cliente.get(base, params={"busca": "JURIDI"}, headers=h["ana"]).json()] == ["Jurídico"]
+    assert [m["nome"] for m in cliente.get(base, params={"busca": "i"}, headers=h["ana"]).json()] == ["Jurídico", "Licitação"]
+    assert len(cliente.get(base, params={"limite": 1}, headers=h["ana"]).json()) == 1
+    # Trocar nome e cor: só a liderança; nome repetido dá 409
+    assert cliente.put(f"{base}/{urgente['id']}", json={"nome": "Urgente!", "cor_indice": 4}, headers=h["ana"]).status_code == 403
+    r = cliente.put(f"{base}/{urgente['id']}", json={"nome": "Urgente!", "cor_indice": 4}, headers=h["lia"])
+    assert r.status_code == 200 and r.json()["nome"] == "Urgente!" and r.json()["cor_indice"] == 4
+    assert cliente.put(f"{base}/{urgente['id']}", json={"nome": "jurídico"}, headers=h["lia"]).status_code == 409
+    assert cliente.put(f"{base}/{urgente['id']}", json={"nome": "X", "cor_indice": 12}, headers=h["lia"]).status_code == 422
+
+
+def test_paleta_acha_a_cor_mais_proxima():
+    from app.services.tarefas import paleta
+
+    assert paleta.indice_mais_proximo("#c82331") == 1 and paleta.indice_mais_proximo("#5364ce") == 8
+    assert paleta.indice_mais_proximo("#8e8e8e") == 0 and len(paleta.PALETA) == 12
+
+
+def test_responder_a_um_comentario_cita_o_original_e_vai_para_o_topo(cliente, equipe):
+    ids, h, equipe_id = equipe
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    n = t["numero"]
+    original = cliente.post(f"{URL}/{n}/comentarios", data={"texto": "Precisamos do parecer jurídico antes de seguir."}, headers=h["ana"]).json()
+    cliente.post(f"{URL}/{n}/comentarios", data={"texto": "Outro assunto"}, headers=h["lia"])
+    r = cliente.post(f"{URL}/{n}/comentarios", data={"texto": "Já pedi ao jurídico.", "em_resposta_a": original["id"]}, headers=h["lia"])
+    assert r.status_code == 201, r.text
+    dados = r.json()["dados"]
+    assert dados["resposta_a"] == original["id"] and dados["resposta_autor"] == original["autor"] and dados["resposta_texto"].startswith("Precisamos do parecer")
+    # A resposta é o item mais novo: vem no topo da linha do tempo
+    topo = cliente.get(f"{URL}/{n}/linha-do-tempo", params={"filtro": "comentarios"}, headers=h["lia"]).json()["itens"][0]
+    assert topo["texto"] == "Já pedi ao jurídico." and topo["dados"]["resposta_a"] == original["id"]
+    # Só se responde a comentário desta tarefa: id inexistente ou de outra tarefa dá 404
+    assert cliente.post(f"{URL}/{n}/comentarios", data={"texto": "x", "em_resposta_a": str(uuid.uuid4())}, headers=h["lia"]).status_code == 404
+    outra = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    assert cliente.post(f"{URL}/{outra['numero']}/comentarios", data={"texto": "x", "em_resposta_a": original["id"]}, headers=h["lia"]).status_code == 404

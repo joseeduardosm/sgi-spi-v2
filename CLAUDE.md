@@ -15,3 +15,4 @@
 - Banco PostgreSQL via SQLAlchemy 2 + Alembic: toda alteração de modelo em `backend/app/models/` exige migração em `backend/alembic/versions/` (autogenerate + revisão manual).
 - Papel administrativo é `SuperRoot` (coluna `superusuario`). Módulos existentes: autenticação (local + LDAP), perfil institucional (revalidação a cada 30 dias), usuários, setores, ACL, diretórios LDAP e servidores SMTP (envio de e-mail).
 - Contrato da API, banco, variáveis de ambiente e código estão em pt-BR (ver `AGENTS.md`). Erros da API: `{"detalhe", "codigo"}`.
+- **Recurso novo da ACL** (módulo, `exigir_acl("slug", …)` ou migração que semeia em `acl_recursos`): inclua a entrada em `backend/app/services/acl_niveis.py` com o que **Leitura, Modificação e Controle total liberam naquele módulo** (rótulo curto + frase), a partir do que as rotas realmente exigem. Não deixe nomes genéricos; `test_acl_niveis.py` falha se faltar.

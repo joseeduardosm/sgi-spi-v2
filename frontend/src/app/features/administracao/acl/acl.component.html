@@ -41,7 +41,8 @@
             @for (regra of regrasVisiveis(); track regra.id) {
               <tr>
                 <td><strong>{{ regra.recurso_nome }}</strong><small><code>{{ regra.recurso_slug }}</code></small></td>
-                <td><span class="selo-nivel" [attr.data-nivel]="regra.nivel">{{ rotulosNivel[regra.nivel] }}</span></td>
+                <td><span class="selo-nivel" [attr.data-nivel]="regra.nivel" [attr.title]="descricaoNivel(regra.niveis, regra.nivel)">{{ rotuloNivel(regra.niveis, regra.nivel) }}</span>
+                  <small class="descricao-nivel">{{ descricaoNivel(regra.niveis, regra.nivel) }}</small></td>
                 <td>
                   @for (u of regra.usuarios; track u.id) { <span class="etiqueta">{{ u.nome_completo }}</span> } @empty { <small>—</small> }
                 </td>
@@ -77,7 +78,7 @@
       <div class="tabela-gestao-envoltorio">
         <table class="tabela-gestao">
           <thead>
-            <tr><th>Recurso</th><th>Slug</th><th>URL base</th><th>Política</th><th>Situação</th><th class="coluna-acoes">Ações</th></tr>
+            <tr><th>Recurso</th><th>Slug</th><th>URL base</th><th>Política</th><th>O que cada nível libera</th><th>Situação</th><th class="coluna-acoes">Ações</th></tr>
           </thead>
           <tbody>
             @for (r of recursos(); track r.id) {
@@ -86,6 +87,9 @@
                 <td><code>{{ r.slug }}</code></td>
                 <td><code>{{ r.url_base || '—' }}</code></td>
                 <td>{{ politica(r) }}</td>
+                <td>
+                  @for (n of niveis; track n) { <small class="descricao-nivel"><b>{{ rotuloNivel(r.niveis, n) }}</b>: {{ descricaoNivel(r.niveis, n) }}</small> }
+                </td>
                 <td><span class="selo-situacao" [class.inativo]="!r.ativo">{{ r.ativo ? 'Ativo' : 'Inativo' }}</span></td>
                 <td>
                   <div class="acoes-linha">
@@ -125,7 +129,8 @@
                   <td><code>{{ a.slug }}</code></td>
                   <td>
                     @if (a.nivel) {
-                      <span class="selo-nivel" [attr.data-nivel]="a.nivel">{{ rotulosNivel[a.nivel] }}</span>
+                      <span class="selo-nivel" [attr.data-nivel]="a.nivel" [attr.title]="descricaoNivel(a.niveis, a.nivel)">{{ rotuloNivel(a.niveis, a.nivel) }}</span>
+                      <small class="descricao-nivel">{{ descricaoNivel(a.niveis, a.nivel) }}</small>
                     } @else {
                       <span class="selo-situacao inativo">Sem acesso</span>
                     }
@@ -162,8 +167,9 @@
         <div>
           <label for="regra-nivel">Nível de acesso</label>
           <select id="regra-nivel" formControlName="nivel">
-            @for (n of niveis; track n) { <option [ngValue]="n">{{ rotulosNivel[n] }}</option> }
+            @for (n of niveis; track n) { <option [ngValue]="n">{{ rotuloNivel(niveisDaRegra(), n) }}</option> }
           </select>
+          @if (descricaoNivel(niveisDaRegra(), formularioRegra.controls.nivel.value); as dica) { <small class="dica-formulario">{{ dica }}</small> }
         </div>
       </div>
       <div class="grade-formulario">

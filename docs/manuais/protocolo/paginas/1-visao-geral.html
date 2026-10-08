@@ -1,0 +1,33 @@
+<p>O <strong>Protocolo</strong> do SGI SPI controla a numeração institucional de documentos como ofícios, portarias e resoluções. Em vez de planilhas e de combinar o número por mensagem, cada pessoa <strong>reserva o próximo número livre</strong>, diz para que serve e, depois, <strong>anexa o documento</strong>. O sistema garante que dois documentos nunca recebam o mesmo número e guarda o histórico de tudo.</p>
+[[r02-grade]]
+<p>O acesso fica na barra lateral, em <strong>Módulos › Protocolo</strong>. No topo de todas as telas estão os atalhos <strong>Numeração</strong>, <strong>Painel</strong> e, para quem administra, <strong>Administração</strong>.</p>
+<p class="callout info">Todos os exemplos deste manual usam <strong>dados fictícios</strong> (pessoas, contrato e documentos inventados) e foram feitos numa cópia do sistema, nunca em produção.</p>
+<h2>Como a numeração funciona</h2>
+<ul>
+<li>Cada <strong>tipo de documento</strong> (Ofício, Portaria, Resolução…) tem uma <strong>sequência por exercício</strong>. A numeração recomeça a cada ano e aparece assim: <strong>005/2026</strong>.</li>
+<li>Reservar o <strong>próximo número</strong> entrega sempre o <strong>menor número livre</strong>, de forma segura: duas pessoas reservando ao mesmo tempo recebem números diferentes.</li>
+<li>O número fica reservado em seu nome até você anexar o documento (ele vira <strong>utilizado</strong>) ou liberar a reserva (ele volta a ficar <strong>livre</strong>).</li>
+<li>O que acontece com cada número fica na <strong>linha do tempo</strong>: quem reservou, anexou, liberou, anulou, marcou sigilo ou vinculou a um contrato.</li>
+</ul>
+<h2>Os estados de um número</h2>
+[[r03-legenda]]
+<table>
+<thead><tr><th>Estado</th><th>O que significa</th></tr></thead>
+<tbody>
+<tr><td><strong>Livre</strong></td><td>Ainda ninguém usou. É o próximo a ser entregue na ordem da sequência.</td></tr>
+<tr><td><strong>Reservado, sem documento</strong> (amarelo)</td><td>Alguém reservou e ainda não anexou o documento. Se passar dos dias de aviso, o sistema lembra a pessoa (veja "Painel, exportação e avisos").</td></tr>
+<tr><td><strong>Utilizado, com documento</strong> (verde)</td><td>O documento foi anexado. Um cadeado 🔒 indica que o documento é <strong>sigiloso</strong>.</td></tr>
+<tr><td><strong>Anulado</strong> (cinza, riscado)</td><td>O número saiu de uso para sempre, com o motivo registrado. Quando há documento anexado, ele continua guardado.</td></tr>
+</tbody>
+</table>
+<h2>Quem pode fazer o quê</h2>
+<p>O acesso é controlado pela permissão <strong>Protocolo</strong> (em Administração › Controle de acesso). Existem três níveis:</p>
+<table>
+<thead><tr><th>Nível</th><th>O que pode</th></tr></thead>
+<tbody>
+<tr><td><strong>Leitura</strong></td><td>Ver os tipos, a grade de números, o painel e a linha do tempo, e exportar o controle.</td></tr>
+<tr><td><strong>Modificação</strong></td><td>Tudo o de leitura, mais: <strong>reservar o próximo número</strong>, anexar o documento do que reservou, liberar a própria reserva, marcar o sigilo e vincular a um contrato.</td></tr>
+<tr><td><strong>Controle total</strong> (e o SuperRoot)</td><td>Tudo o de modificação, mais: cadastrar tipos, criar sequências, ampliar faixas, <strong>lançar um número específico</strong>, anular números e agir sobre a reserva de qualquer pessoa.</td></tr>
+</tbody>
+</table>
+<p class="callout info">Quem não aparece em nenhuma regra da permissão não vê o módulo. Se você precisa de acesso, peça a quem administra o SGI SPI.</p>

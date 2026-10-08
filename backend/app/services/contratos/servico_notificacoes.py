@@ -133,11 +133,8 @@ def mensagem_nf(contrato: Contrato, competencia: Competencia) -> tuple[str, str,
     return assunto, texto, html
 
 
-def notificar_nf(competencia_id: uuid.UUID, financeiro_ids: list[int] | None = None) -> None:
-    """E-mail da NF juntada: Para = Financeiro, Cc = equipe (segundo plano, sessão própria).
-
-    Com `financeiro_ids`, só os usuários escolhidos do Financeiro recebem (lista vazia = ninguém do Financeiro; `None` = todos).
-    """
+def notificar_nf(competencia_id: uuid.UUID) -> None:
+    """E-mail da NF juntada: Para = todo o Financeiro (DOF), Cc = equipe (segundo plano, sessão própria). O envio é obrigatório."""
     from app.services.contratos.servico_retencao import usuarios_financeiro
 
     with FabricaSessao() as sessao:
@@ -146,7 +143,7 @@ def notificar_nf(competencia_id: uuid.UUID, financeiro_ids: list[int] | None = N
             return
         contrato = obter_contrato(sessao, competencia.contrato_id)
         competencia = next(c for c in contrato.competencias if c.id == competencia_id)
-        financeiro = _unicos(u.email for u in usuarios_financeiro(sessao) if u.email and (financeiro_ids is None or u.id in financeiro_ids))
+        financeiro = _unicos(u.email for u in usuarios_financeiro(sessao) if u.email)
         assunto, texto, html = mensagem_nf(contrato, competencia)
         if not financeiro:
             para, resultado = emails_da_equipe(sessao, contrato), ResultadoSmtp(
@@ -402,22 +399,35 @@ def notificar_ocorrencia(ocorrencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID
 
 def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -> tuple[str, str, str]:
     """Assunto, texto e HTML do e-mail da medição concluída (pede a NF em PDF e XML em até 48 h)."""
-    from app.services.contratos.servico_competencias import saldos_da_medicao, total_medido
+    from app.services.contratos.servico_competencias import (
+        saldos_da_medicao, subtotal_despesas_variaveis, subtotal_medicao, tem_despesas_variaveis, total_medido,
+    )
 
     rotulo = competencia.numero_competencia
     limite = enviado_em + PRAZO_NOTA_FISCAL
     total = total_medido(competencia)
     saldos = saldos_da_medicao(contrato, competencia)
     itens = [
-        [i.descricao, quantidade(i.quantidade_medida), quantidade(saldos[i.id].glosas), moeda(i.quantidade_medida * i.valor_unitario)]
+        [i.descricao_completa, quantidade(i.quantidade_medida), quantidade(saldos[i.id].glosas), moeda(i.quantidade_medida * i.valor_unitario)]
         for i in competencia.itens
     ]
     assunto = f"Contrato {contrato.numero} — medição {rotulo} concluída: emitir nota fiscal"
+    # Documentos do checklist ativo marcados "Pedir para enviar": pedidos à empresa no mesmo e-mail, com a observação de cada um
+    from app.services.contratos.servico_configuracao_execucao import _ordem_checklist, checklist_ativo
+
+    checklist = checklist_ativo(contrato)
+    documentos = [[d.nome, d.observacao or "—"] for d in sorted(checklist.itens, key=_ordem_checklist) if d.pedir_envio] if checklist else []
     pedido = (
         f"Solicitamos à {contrato.empresa.razao_social} a emissão da nota fiscal com base nesta medição, "
         f"no valor de {moeda(total)}, em até 48 horas (até {data_hora(limite)}). "
         "Envie a nota fiscal nos dois formatos: o PDF e o arquivo XML."
     )
+    # Itens de despesas variáveis: além da nota fiscal, nota de débito, recibo ou outro documento da despesa
+    variaveis = tem_despesas_variaveis(competencia)
+    pedido_despesas = (
+        f"A medição tem despesas variáveis (subtotal de {moeda(subtotal_despesas_variaveis(competencia))}; subtotal da medição {moeda(subtotal_medicao(competencia))}): "
+        "envie também a nota de débito, o recibo ou outro documento dessas despesas."
+    ) if variaveis else ""
     texto = "\n".join([
         f"Contrato: {contrato.numero}{' — ' + contrato.apelido if contrato.apelido else ''}",
         f"Contratada: {contrato.empresa.razao_social}",
@@ -425,9 +435,11 @@ def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -
         f"Total medido: {moeda(total)}",
         "",
         pedido,
+        *(["", pedido_despesas] if variaveis else []),
         "",
         "Itens medidos (quantidade medida · glosa no período · subtotal):",
         *[f"  - {d}: {m} · glosa {g} · {s}" for d, m, g, s in itens],
+        *(["", "Solicitamos também o envio dos documentos abaixo (documento — observação):", *[f"  - {n} — {o}" for n, o in documentos]] if documentos else []),
         "",
         "Anexos: memória de cálculo da medição e diário de bordo do período (PDF).",
     ])
@@ -439,7 +451,9 @@ def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -
             ["Total medido", moeda(total)],
         ]),
         f"<p style=\"background:#fff8e6;border-left:3px solid #e0a526;padding:10px 12px\"><b>{escape(pedido)}</b></p>",
+        *([f"<p style=\"background:#fff8e6;border-left:3px solid #e0a526;padding:10px 12px\"><b>{escape(pedido_despesas)}</b></p>"] if variaveis else []),
         _tabela_html(["Item", "Medido", "Glosa no período", "Subtotal"], itens),
+        *([f"<p><b>Solicitamos também o envio dos documentos abaixo:</b></p>", _tabela_html(["Documento", "Observação"], documentos)] if documentos else []),
         "<p>Anexos: memória de cálculo da medição e diário de bordo do período (PDF).</p>",
     ])
     return assunto, texto, html
@@ -452,6 +466,9 @@ def anexos_medicao(contrato: Contrato, competencia: Competencia) -> list[AnexoEm
         memoria = competencia.memorias[-1]
         anexos.append(AnexoEmail(f"memoria_medicao_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf",
                                  servico_anexos.caminho(memoria.anexo).read_bytes()))
+        if memoria.anexo_despesas is not None:
+            anexos.append(AnexoEmail(f"medicao_despesas_variaveis_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf",
+                                     servico_anexos.caminho(memoria.anexo_despesas).read_bytes()))
     diario = servico_diario.gerar_pdf(contrato, competencia.periodo_inicio, competencia.periodo_fim)
     anexos.append(AnexoEmail(f"diario_de_bordo_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf", diario))
     return anexos

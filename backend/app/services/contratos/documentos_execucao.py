@@ -14,6 +14,7 @@ from pypdf import PdfReader
 
 from app.models.anexo import Anexo
 from app.models.contratos import Competencia, Contrato, NotaEmpenho
+from app.core.banco import agora_utc
 from app.services import servico_anexos
 from app.services.contratos.calculos import arredondar
 from app.services.documentos.pdf import (
@@ -94,22 +95,13 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
 
     _cabecalho_contrato(documento, contrato, competencia)
     saldos = saldos_da_medicao(contrato, competencia)
-    # Uma linha por item, somando o total medido
-    total = Decimal(0)
-    linhas = []
-    for item in competencia.itens:
-        subtotal = arredondar(item.quantidade_medida * item.valor_unitario)
-        total += subtotal
-        saldo = saldos[item.id]
-        linhas.append(
-            [str(item.ordem), item.descricao, "Contínuo" if item.tipo == "continuo" else "Sob demanda", moeda_unitaria(item.valor_unitario),
-             quantidade(saldo.saldo), quantidade(saldo.glosas), quantidade(saldo.saldo_liquido), quantidade(item.quantidade_medida), moeda(subtotal)]
-        )
-    documento.secao("Medição do serviço").tabela(
-        ["Item", "Descrição", "Tipo", "Valor unitário", "Saldo", "Glosas", "Saldo líquido", "Medição", "Subtotal"], linhas,
-        larguras=[0.5, 4.4, 1.2, 1.4, 1.1, 1.1, 1.2, 1.1, 1.5], alinhar_direita=[3, 4, 5, 6, 7, 8],
-        rodape=["", "Total medido", "", "", "", "", "", "", moeda(total)],
-    )
+    # Com despesas variáveis, esta memória traz só os demais itens; os de despesas variáveis vão em outro PDF (depois da nota fiscal)
+    variaveis = any(i.despesa_variavel for i in competencia.itens)
+    total = _tabela_itens_medicao(documento, competencia, saldos, variavel=False if variaveis else None,
+                                  titulo="Medição do serviço", rotulo_total="Subtotal - Medição" if variaveis else "Total medido")
+    if variaveis:
+        _quadro_subtotais(documento, competencia)
+        total = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), Decimal(0)))
     _secao_desconto_reajuste(documento, competencia, arredondar(total))
     # Glosas do diário de bordo que valem nesta competência (data no período)
     glosas = [
@@ -131,6 +123,52 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
         [[c.nome, PAPEIS.get(c.papel, c.papel), data_hora(c.registrada_em)] for c in competencia.ciencias],
         larguras=[4, 3, 2],
     )
+    return documento.gerar()
+
+
+def _tabela_itens_medicao(documento: DocumentoPdf, competencia: Competencia, saldos: dict, variavel: bool | None, titulo: str, rotulo_total: str) -> Decimal:
+    """Tabela dos itens medidos (`variavel`: só despesas variáveis, só os demais ou todos); devolve o subtotal das linhas."""
+    total = Decimal(0)
+    linhas = []
+    for item in competencia.itens:
+        if variavel is not None and item.despesa_variavel != variavel:
+            continue
+        subtotal = arredondar(item.quantidade_medida * item.valor_unitario)
+        total += subtotal
+        saldo = saldos[item.id]
+        linhas.append(
+            [str(item.ordem), item.descricao_completa, "Contínuo" if item.tipo == "continuo" else "Sob demanda", moeda_unitaria(item.valor_unitario),
+             quantidade(saldo.saldo), quantidade(saldo.glosas), quantidade(saldo.saldo_liquido), quantidade(item.quantidade_medida), moeda(subtotal)]
+        )
+    documento.secao(titulo).tabela(
+        ["Item", "Descrição", "Tipo", "Valor unitário", "Saldo", "Glosas", "Saldo líquido", "Medição", "Subtotal"], linhas,
+        larguras=[0.5, 4.4, 1.2, 1.4, 1.1, 1.1, 1.2, 1.1, 1.5], alinhar_direita=[3, 4, 5, 6, 7, 8],
+        rodape=["", rotulo_total, "", "", "", "", "", "", moeda(arredondar(total))],
+    )
+    return arredondar(total)
+
+
+def _quadro_subtotais(documento: DocumentoPdf, competencia: Competencia) -> None:
+    """Subtotal - Medição, Subtotal - Despesas Variáveis e o Total da medição."""
+    medicao = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if not i.despesa_variavel), Decimal(0)))
+    despesas = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if i.despesa_variavel), Decimal(0)))
+    documento.secao("Total da medição").campos([
+        ("Subtotal - Medição", moeda(medicao)), ("Subtotal - Despesas Variáveis", moeda(despesas)), ("Total", moeda(medicao + despesas)),
+    ])
+
+
+def memoria_despesas_variaveis(contrato: Contrato, competencia: Competencia, versao: int, autor: str) -> bytes:
+    """PDF da medição dos itens de despesas variáveis (no consolidado, vem depois da nota fiscal), com os subtotais e o total."""
+    documento = DocumentoPdf(
+        "Medição das despesas variáveis", f"Contrato {contrato.numero} · Competência {competencia.competencia:%m/%Y} · versão {versao}",
+        paisagem=True, autor=autor,
+    )
+    from app.services.contratos.servico_competencias import saldos_da_medicao
+
+    _cabecalho_contrato(documento, contrato, competencia)
+    _tabela_itens_medicao(documento, competencia, saldos_da_medicao(contrato, competencia), variavel=True,
+                          titulo="Medição dos itens de despesas variáveis", rotulo_total="Subtotal - Despesas Variáveis")
+    _quadro_subtotais(documento, competencia)
     return documento.gerar()
 
 
@@ -190,6 +228,38 @@ def _secao_nota(documento: DocumentoPdf, titulo: str, dados: dict, conferencias:
     )
 
 
+TRIBUTOS_QUADRO = ("ir", "inss", "iss", "pis", "cofins", "csll")
+
+
+def _quadro_total_notas(documento: DocumentoPdf, competencia: Competencia, paginas: dict | None = None) -> None:
+    """Quadro "Total das notas": uma linha por nota (bruto, retenções por tributo e líquido) e a soma. Só com mais de uma nota.
+
+    `paginas` (id da nota → "4 a 5") acrescenta a coluna "Páginas no consolidado", usada no resumo executivo.
+    """
+    notas = list(competencia.notas_fiscais)
+    if len(notas) < 2:
+        return
+    zero = Decimal(0)
+    linhas, somas = [], {t: zero for t in TRIBUTOS_QUADRO}
+    total_bruto = total_retido = zero
+    for nota in notas:
+        valores = {t: getattr(nota, f"retencao_{t}") or zero for t in TRIBUTOS_QUADRO}
+        bruto, retido = nota.valor_bruto or zero, sum(valores.values(), zero)
+        linhas.append([nota.rotulo, moeda(bruto), *[moeda(valores[t]) for t in TRIBUTOS_QUADRO], moeda(retido), moeda(bruto - retido),
+                       *([(paginas or {}).get(nota.id, "—")] if paginas is not None else [])])
+        total_bruto, total_retido = total_bruto + bruto, total_retido + retido
+        for t in TRIBUTOS_QUADRO:
+            somas[t] += valores[t]
+    cabecalho = ["Nota", "Bruto", *[t.upper() for t in TRIBUTOS_QUADRO], "Retenções", "Líquido"] + (["Páginas"] if paginas is not None else [])
+    rodape = ["Total", moeda(total_bruto), *[moeda(somas[t]) for t in TRIBUTOS_QUADRO], moeda(total_retido), moeda(total_bruto - total_retido)] + (
+        [""] if paginas is not None else [])
+    colunas = len(cabecalho)
+    documento.secao("Total das notas").tabela(
+        cabecalho, linhas, larguras=[1.5, 1.6, *[1.2] * 6, 1.6, 1.6, *([1.2] if paginas is not None else [])],
+        alinhar_direita=list(range(1, colunas - (1 if paginas is not None else 0))), rodape=rodape,
+    )
+
+
 def _secao_desconto_reajuste(documento: DocumentoPdf, competencia: Competencia, total: Decimal) -> None:
     """Crédito de desconto de reajuste retroativo abatido nesta competência (se houver)."""
     abatimentos = [a for a in competencia.abatimentos_reajuste if a.valor > 0]
@@ -215,6 +285,7 @@ def relatorio_retencao(contrato: Contrato, competencia: Competencia, conferencia
     for nota, conferencias in zip(competencia.notas_fiscais, conferencias_por_nota):
         _secao_nota(documento, f"Nota fiscal{f' {nota.ordem}' if varias else ''} (dados do XML)", nota.dados_xml or {}, conferencias,
                     {t: getattr(nota, f"retencao_{t}") or Decimal(0) for t in tributos}, nota.valor_bruto or Decimal(0))
+    _quadro_total_notas(documento, competencia)
     documento.secao("Conferência").campos(
         [
             ("Conferido por", competencia.retencao_por_nome or "—"),
@@ -305,7 +376,8 @@ def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Deci
     return documento.gerar()
 
 
-def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: dict, autor: str, enviados_por: dict | None = None) -> bytes:
+def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: dict, autor: str, enviados_por: dict | None = None,
+                ciencias: list[dict] | None = None) -> tuple[bytes, str]:
     """Documento consolidado da competência, na ordem de execução, com páginas numeradas em sequência.
 
     A **primeira página é o índice**: cada documento aparece com o título e as páginas clicáveis (hiperlink
@@ -313,7 +385,9 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
     Os mesmos documentos entram nos marcadores do leitor de PDF.
 
     Ordem: 1 medição (memória de cálculo) → 2 avaliação (quando houver) → 3 nota(s) fiscal(is) →
-    4 retenção de tributos → 5 CADIN → 6 checklist → 7 resumo executivo (por último).
+    [com despesas variáveis: medição dos itens de despesas variáveis → nota(s) de débito/recibo/outros] →
+    4 retenção de tributos → 5 CADIN → 6 checklist → 7 folha de autenticação → 8 resumo executivo (por último).
+    Antes do resumo executivo vem a **Folha de autenticação** (código, SHA-256 da composição e de cada documento incluído, e quem deu ciência). Devolve `(PDF, SHA-256 da composição)`.
     Cada documento enviado pela equipe é precedido de uma contracapa na identidade do sistema; os
     documentos gerados pelo sistema já trazem título próprio. Os arquivos enviados entram como
     foram enviados (orientação e layout preservados), só com o selo do número da página.
@@ -354,6 +428,12 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         if nota.anexo_id:
             sufixo = " (aprovada)" if competencia.recusas else ""
             documentos.append(("Nota fiscal", f"Nota fiscal {nota.numero or nota.ordem}{sufixo}".strip(), nota.anexo_id, False, []))
+    # Despesas variáveis: a medição dos itens delas e, em seguida, os documentos (juntados sem passar pela validação do Financeiro)
+    if competencia.memorias and competencia.memorias[-1].anexo_despesas_id:
+        documentos.append(("Medição das despesas variáveis", "Medição dos itens de despesas variáveis", competencia.memorias[-1].anexo_despesas_id, True, []))
+    for despesa in competencia.despesas_variaveis:
+        if despesa.anexo_id:
+            documentos.append(("Despesas variáveis", despesa.rotulo, despesa.anexo_id, False, [("Valor", moeda(despesa.valor))]))
     if competencia.retencao_pdf_anexo_id:
         titulo = "Retenção de tributos (aprovação da nota fiscal)" if competencia.recusas else "Retenção de tributos"
         documentos.append(("Avaliação de retenção", titulo, competencia.retencao_pdf_anexo_id, True, []))
@@ -374,7 +454,15 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
     partes: list[tuple[bytes | object, bool]] = []
     relativas: list[tuple[str, str, str, int, int]] = []  # (nº, etapa, título, 1ª página, última página)
     pagina = 1
-    total_documentos = len(documentos) + 1  # + o resumo executivo, ao final
+    # Folha de autenticação: o SHA-256 de cada arquivo incluído (os gerados na hora, como o resumo, não têm hash antes de montar)
+    from app.services.contratos import servico_autenticacao
+
+    componentes = [(titulo, anexos[anexo_id].sha256 if anexo_id in anexos else "") for _, titulo, anexo_id, _, _ in documentos]
+    sha_composicao = servico_autenticacao.hash_composicao(componentes)
+    folha = servico_autenticacao.folha_consolidado(
+        contrato, competencia, autor, agora_utc(), sha_composicao, componentes, servico_autenticacao.retrato_ciencias(ciencias or []))
+    paginas_folha = contar_paginas(folha)
+    total_documentos = len(documentos) + 2  # + o resumo executivo e a folha de autenticação, ao final
     for posicao, (etapa, titulo, anexo_id, gerado, extras) in enumerate(documentos, start=1):
         anexo: Anexo | None = anexos.get(anexo_id) if anexo_id else None
         caminho = servico_anexos.caminho(anexo) if anexo else None
@@ -392,7 +480,9 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             partes.append((caminho, gerado))
             pagina += contar_paginas(caminho)
         relativas.append((str(posicao), etapa, titulo, inicio, pagina - 1))
-    relativas.append((str(total_documentos), "Resumo executivo", "Resumo executivo da competência", pagina, pagina))
+    # A Folha de autenticação vem antes do resumo executivo, que continua sendo o último documento
+    relativas.append((str(total_documentos - 1), "Autenticação", "Folha de autenticação", pagina, pagina + paginas_folha - 1))
+    relativas.append((str(total_documentos), "Resumo executivo", "Resumo executivo da competência", pagina + paginas_folha, pagina + paginas_folha))
 
     # 2b) Índice (primeira página): cada documento com o hiperlink para a sua página. O índice ocupa `k`
     #     páginas e desloca as demais; se a quantidade mudar ao refazê-lo com o deslocamento, repete.
@@ -410,6 +500,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
     resumo.secao("Resumo executivo").campos(
         [
             ("Total previsto", moeda(detalhe.total_previsto)),
+            *([("Subtotal - Medição", moeda(detalhe.subtotal_medicao)), ("Subtotal - Despesas Variáveis", moeda(detalhe.subtotal_despesas_variaveis))] if detalhe.tem_despesas_variaveis else []),
             ("Total medido", moeda(detalhe.total_medido)),
             ("% autorizado pela avaliação", f"{detalhe.percentual_autorizado}%"),
             *([("Desconto de reajuste", "-" + moeda(detalhe.desconto_reajuste))] if detalhe.desconto_reajuste > 0 else []),
@@ -430,15 +521,25 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         trilha.append(["Nota fiscal aprovada", ", ".join(str(n.numero or n.rotulo) for n in competencia.notas_fiscais) or "—",
                        data_hora(competencia.retencao_concluida_em) if competencia.retencao_concluida_em else "—", competencia.retencao_por_nome or "—"])
         resumo.secao("Trilha da nota fiscal").tabela(["Etapa", "Detalhe", "Em", "Por"], trilha, larguras=[2, 5, 1.8, 2.2])
+    # Total das notas (com mais de uma): a última coluna diz em que páginas do consolidado está cada nota
+    indice_por_anexo = {d[2]: n for n, d in enumerate(documentos)}
+    paginas_das_notas = {}
+    for nota in competencia.notas_fiscais:
+        posicao_nota = indice_por_anexo.get(nota.anexo_id)
+        if posicao_nota is not None:
+            e = entradas[posicao_nota]
+            paginas_das_notas[nota.id] = f"{e.pagina_inicial}" if e.pagina_final <= e.pagina_inicial else f"{e.pagina_inicial} a {e.pagina_final}"
+    _quadro_total_notas(resumo, competencia, paginas_das_notas)
     resumo.secao("Histórico do CADIN").tabela(
         ["Data", "Resultado", "Pendência", "Registrado por"],
         [[data_hora(c.criado_em), "Pendência encontrada" if c.possui_pendencia else "Sem pendência", c.pendencia or "—", c.criado_por_nome]
          for c in detalhe.consultas_cadin],
         larguras=[1.6, 2, 4, 2.4],
     )
+    partes.append((folha, True))
     partes.append((resumo.gerar(), True))
     marcadores = [("Índice", 1)] + [(f"{e.numero}. {e.titulo}", e.pagina_inicial) for e in entradas]
-    return montar_consolidado([(indice, True), *partes], links=links, marcadores=marcadores)
+    return montar_consolidado([(indice, True), *partes], links=links, marcadores=marcadores), sha_composicao
 
 
 def _pdf_legivel(conteudo: bytes) -> bool:

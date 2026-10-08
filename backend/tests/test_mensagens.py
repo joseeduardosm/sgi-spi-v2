@@ -236,9 +236,9 @@ def test_email_no_layout_oficial_com_brasao(cliente, admin, pessoas):
     _enviar(cliente, h["ana"], usuarios_ids=[ids["bruno"]], enviar_email=True)
     mensagem = SmtpSimulado.enviadas[0][0]
     html = mensagem.get_body(("html",)).get_content()
-    assert "cid:brasao-spi" in html and "GOVERNO DO ESTADO DE SÃO PAULO" in html and "SGI SPI – Sistema de Gestão Integrada" in html
+    assert "cid:logo-sp" in html and "Governo do Estado de São Paulo" in html and 'align="center"' in html and "SGI SPI – Sistema de Gestão Integrada" in html
     imagens = [p for p in mensagem.walk() if p.get_content_type() == "image/png"]
-    assert len(imagens) == 1 and imagens[0]["Content-ID"] == "<brasao-spi>" and imagens[0].get_content()[:4] == b"\x89PNG"
+    assert len(imagens) == 1 and imagens[0]["Content-ID"] == "<logo-sp>" and imagens[0].get_content()[:4] == b"\x89PNG"
 
 
 def test_marcar_varias_como_lidas_nao_lidas_e_cientes(cliente, admin, pessoas):
@@ -268,7 +268,7 @@ def test_mensagem_aparece_formatada_como_o_email_do_changelog(cliente, admin, pe
     assert r.status_code == 200
     html = r.json()["html"]
     assert "<h2" in html and "<strong>ciente</strong>" in html and html.count("<li") == 2
-    assert "&lt;b&gt;item&lt;/b&gt;" in html and "data:image/png;base64," in html and "cid:brasao-spi" not in html
+    assert "&lt;b&gt;item&lt;/b&gt;" in html and "data:image/png;base64," in html and "cid:logo-sp" not in html
     assert "Enviada por Ana da Silva." in html
     # O e-mail enviado carrega o mesmo corpo formatado
     SmtpSimulado.enviadas.clear()

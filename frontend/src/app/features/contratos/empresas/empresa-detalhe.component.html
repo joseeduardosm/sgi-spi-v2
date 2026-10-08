@@ -33,7 +33,7 @@
       @if (acesso.pode('contratos', 'MODIFICACAO')) {
         <form class="corpo" (ngSubmit)="salvarPreposto()" #formPreposto="ngForm">
           <div class="grade-formulario tres-colunas">
-            <div><label for="preposto-cpf">CPF *</label><input id="preposto-cpf" name="cpf" required maxlength="14" placeholder="000.000.000-00" [(ngModel)]="preposto.cpf" /></div>
+            <div><label for="preposto-cpf">CPF (opcional)</label><input id="preposto-cpf" name="cpf" maxlength="14" placeholder="000.000.000-00" [(ngModel)]="preposto.cpf" /></div>
             <div><label for="preposto-nome">Nome completo *</label><input id="preposto-nome" name="nome" required maxlength="200" [(ngModel)]="preposto.nome" /></div>
             <div><label for="preposto-telefone">Telefone</label><input id="preposto-telefone" name="telefone" maxlength="30" [(ngModel)]="preposto.telefone" /></div>
             <div><label for="preposto-email">E-mail</label><input id="preposto-email" name="email" type="email" maxlength="250" [(ngModel)]="preposto.email" /></div>
@@ -52,7 +52,7 @@
           <tbody>
             @for (p of e.prepostos; track p.id) {
               <tr>
-                <td><strong>{{ p.nome }}</strong></td><td>{{ cpf(p.cpf) }}</td>
+                <td><strong>{{ p.nome }}</strong></td><td>{{ cpf(p.cpf) || '—' }}</td>
                 <td>{{ p.email || '—' }}<small>{{ p.telefone }}</small></td><td>{{ p.cargo || '—' }}</td>
                 <td><span class="selo-situacao" [class.inativo]="!p.ativo">{{ p.ativo ? 'Ativo' : 'Inativo' }}</span></td>
                 @if (acesso.pode('contratos', 'MODIFICACAO')) {

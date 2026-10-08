@@ -29,6 +29,18 @@ export const ROTAS_CONTRATOS: Routes = [
     loadComponent: () => import('./painel/vigencias.component').then((m) => m.VigenciasComponent),
   },
   {
+    // Verificação de autenticidade dos PDFs gerados pelo sistema (fica antes de `:id`)
+    path: 'verificar',
+    title: 'Verificar documento | SGI SPI',
+    loadComponent: () => import('./painel/verificar-documento.component').then((m) => m.VerificarDocumentoComponent),
+  },
+  {
+    // Calendário de vencimentos (fica antes de `:id`)
+    path: 'calendario',
+    title: 'Calendário de vencimentos | SGI SPI',
+    loadComponent: () => import('./painel/calendario-vencimentos.component').then((m) => m.CalendarioVencimentosComponent),
+  },
+  {
     path: 'minhas-pendencias',
     title: 'Minhas pendências | SGI SPI',
     loadComponent: () => import('./painel/minhas-pendencias.component').then((m) => m.MinhasPendenciasComponent),

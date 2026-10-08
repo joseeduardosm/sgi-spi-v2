@@ -10,7 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.contratos.empresas import Texto
 from app.schemas.contratos.execucao import LeituraArquivo, LeituraCiencia
@@ -107,9 +107,21 @@ class LeituraProrrogacao(BaseModel):
 # ---------------------------------------------------------------------------------------------
 
 class AberturaReajuste(BaseModel):
-    """Corpo do `POST /reajustes`: qual vigência e a partir de que mês."""
+    """Corpo do `POST /reajustes`: qual vigência e a partir de que data (ou, na forma antiga, de que mês)."""
     sequencia_vigencia: int = Field(..., ge=1)
-    mes_referencia: date = Field(..., description="Primeiro mês com os novos valores (qualquer dia; gravado como dia 1).")
+    data_efeito: date | None = Field(
+        None, description="Data a partir da qual os novos valores valem (qualquer dia da vigência). O mês dessa data é pago proporcionalmente "
+        "aos dias de cada preço. Em contratos de periodicidade diferente de mensal, vale o 1º dia do mês."
+    )
+    mes_referencia: date | None = Field(
+        None, description="Forma antiga: primeiro mês com os novos valores (qualquer dia; vale o dia 1). Ignorado se `data_efeito` vier."
+    )
+
+    @model_validator(mode="after")
+    def _uma_das_datas(self) -> "AberturaReajuste":
+        if self.data_efeito is None and self.mes_referencia is None:
+            raise ValueError("Informe a data a partir da qual os novos valores valem (`data_efeito`).")
+        return self
 
 
 class ItemReajusteGravacao(BaseModel):
@@ -166,6 +178,7 @@ class LeituraReajuste(BaseModel):
     vigencia_inicio: date
     vigencia_fim: date
     mes_referencia: date
+    data_efeito: date = Field(..., description="Data a partir da qual os novos valores valem (o mês dela é pago proporcionalmente aos dias de cada preço).")
     competencias_recalculadas: int = Field(..., description="Competências não medidas a partir do mês de referência (recebem o novo preço).")
     competencias_com_diferenca: int = Field(
         0, description="Competências já medidas a partir do mês de referência: a diferença de preço delas é acertada na conclusão."

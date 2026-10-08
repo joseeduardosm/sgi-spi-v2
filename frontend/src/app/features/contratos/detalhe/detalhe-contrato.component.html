@@ -44,6 +44,8 @@
           <div><dt>Periodicidade de execução <app-historico-campo campo="periodicidade_meses" rotulo="periodicidade" [historico]="historico()" /></dt><dd>{{ periodicidade() }}</dd></div>
           <div><dt>Mês de reajuste <app-historico-campo campo="mes_reajuste" rotulo="mês de reajuste" [historico]="historico()" /></dt><dd>{{ meses[c.mes_reajuste - 1] }}</dd></div>
           <div><dt>Liberar todas as competências <app-historico-campo campo="liberar_todas_competencias" rotulo="liberar todas as competências" [historico]="historico()" /></dt><dd>{{ c.liberar_todas_competencias ? 'Sim: medição liberada antes do fim do período' : 'Não: só após o fim do período' }}</dd></div>
+          <div><dt>Medição adicional <app-historico-campo campo="permite_medicao_adicional" rotulo="medição adicional" [historico]="historico()" /></dt><dd>{{ c.permite_medicao_adicional ? 'Permitida: mais de uma medição/pagamento no mesmo mês' : 'Não permitida' }}</dd></div>
+          <div><dt>Desconsiderar alertas a partir de <app-historico-campo campo="alertas_a_partir_de" rotulo="corte de alertas" [historico]="historico()" /></dt><dd>{{ c.alertas_a_partir_de ? (c.alertas_a_partir_de | dataBr) : 'Não definido (vale só o corte geral de 09/2026)' }}</dd></div>
           <div><dt>Base mensal</dt><dd>{{ c.base_mensal | moeda }}</dd></div>
           <div><dt>Valor global (vigência atual) <app-historico-campo campo="valor_global" rotulo="valor global" [historico]="historico()" /></dt><dd><strong>{{ c.valor_global | moeda }}</strong></dd></div>
           <div><dt>Aditamento acumulado</dt><dd>{{ c.aditamento_acumulado_percentual | percentual }}</dd></div>

@@ -45,6 +45,9 @@ def test_checklist_modelo_previa_e_importacao_no_contrato(cliente, admin):
     p = enviar(cliente, admin, f"{base}/previa", planilha).json()
     assert p["pode_importar"] and p["nome"] == "Checklist mensal padrão" and len(p["documentos"]) == 3
     assert p["documentos"][0]["com_validade"] is True and p["documentos"][2]["obrigatorio"] is False
+    # Coluna "Para enviar": os dois primeiros documentos do modelo vão marcados para a empresa enviar
+    assert [d["pedir_envio"] for d in p["documentos"]] == [True, True, False]
+    assert "Para enviar" in [c.value for c in load_workbook(BytesIO(planilha))["Checklist"][6]]
     assert cliente.get(f"/api/contratos/{contrato['id']}/checklists", headers=admin).json() == []
     r = enviar(cliente, admin, base, planilha)
     assert r.status_code == 201, r.text

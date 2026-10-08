@@ -14,7 +14,7 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.acl import NivelAcl
-from app.models.tarefas import ParticipanteTarefa, Tarefa
+from app.models.tarefas import ResponsavelTarefa, Tarefa
 from app.models.usuario import Usuario
 from app.schemas.busca import ResultadoBusca
 from app.services import servico_acl, servico_setores
@@ -65,9 +65,9 @@ def _pessoas(sessao: Session, usuario: Usuario, termo: str) -> list[ResultadoBus
 
 
 def _tarefas(sessao: Session, usuario: Usuario, termo: str) -> list[ResultadoBusca]:
-    """Tarefas em que o usuário é criador, responsável ou participante, por título ou número."""
+    """Tarefas em que o usuário é criador ou responsável, por título ou número."""
     padrao = f"%{termo.lower()}%"
-    participa = select(ParticipanteTarefa.tarefa_id).where(ParticipanteTarefa.usuario_id == usuario.id)
+    participa = select(ResponsavelTarefa.tarefa_id).where(ResponsavelTarefa.usuario_id == usuario.id)
     consulta = (
         select(Tarefa)
         .where(or_(Tarefa.criado_por_id == usuario.id, Tarefa.responsavel_id == usuario.id, Tarefa.id.in_(participa)))

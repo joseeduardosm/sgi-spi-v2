@@ -495,7 +495,7 @@ def analisar(sessao: Session, conteudo: bytes) -> Analise:
         empresa_previa = EmpresaPrevia(existente=False, cnpj=cnpj, razao_social=dados_empresa["razao_social"],
                                        nome_fantasia=dados_empresa["nome_fantasia"], endereco=dados_empresa["endereco"])
 
-    # --- Preposto (opcional): reaproveitado pelo CPF dentro da empresa ou cadastrado ---
+    # --- Preposto (opcional; o CPF também é opcional): reaproveitado pelo CPF (ou pelo nome, sem CPF) dentro da empresa ou cadastrado ---
     preposto_novo: GravacaoPreposto | None = None
     preposto_previa: PrepostoPrevia | None = None
     campos_preposto = ("preposto_nome", "preposto_cpf", "preposto_email", "preposto_telefone")
@@ -512,15 +512,19 @@ def analisar(sessao: Session, conteudo: bytes) -> Analise:
                 leitura.erro(f"preposto_{'email' if campo == 'email' else campo}", _mensagem_validacao(detalhe))
         existente = None
         if validado and empresa_existente is not None:
-            existente = sessao.scalar(select(PrepostoEmpresa).where(
-                PrepostoEmpresa.empresa_id == empresa_existente.id, PrepostoEmpresa.cpf == validado.cpf))
+            if validado.cpf:
+                existente = sessao.scalar(select(PrepostoEmpresa).where(
+                    PrepostoEmpresa.empresa_id == empresa_existente.id, PrepostoEmpresa.cpf == validado.cpf))
+            else:
+                # Sem CPF, o preposto é reconhecido pelo nome (sem acento nem maiúsculas) dentro da empresa
+                existente = next((p for p in empresa_existente.prepostos if normalizar(p.nome) == normalizar(validado.nome)), None)
         if existente is not None:
-            preposto_previa = PrepostoPrevia(existente=True, cpf=existente.cpf, nome=existente.nome, email=existente.email, telefone=existente.telefone)
+            preposto_previa = PrepostoPrevia(existente=True, cpf=existente.cpf or "", nome=existente.nome, email=existente.email, telefone=existente.telefone)
             if normalizar(existente.nome) != normalizar(validado.nome):
                 leitura.avisos.append(f"O preposto de CPF informado já está cadastrado como \"{existente.nome}\" e será mantido como está.")
         else:
             preposto_novo = validado
-            preposto_previa = PrepostoPrevia(existente=False, cpf=somente_digitos(dados_preposto["cpf"]), nome=dados_preposto["nome"],
+            preposto_previa = PrepostoPrevia(existente=False, cpf=somente_digitos(dados_preposto["cpf"] or ""), nome=dados_preposto["nome"],
                                              email=dados_preposto["email"], telefone=dados_preposto["telefone"])
 
     # --- Contrato e itens (validados pelo mesmo schema do cadastro pela tela) ---

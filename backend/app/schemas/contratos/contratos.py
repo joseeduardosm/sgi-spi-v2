@@ -99,6 +99,10 @@ class GravacaoContrato(BaseModel):
     periodicidade_meses: Literal[1, 2, 3, 6, 12] = Field(..., description="1 mensal, 2 bimestral, 3 trimestral, 6 semestral, 12 anual.")
     mes_reajuste: int = Field(..., ge=1, le=12)
     liberar_todas_competencias: bool = Field(False, description="Tira a trava que só libera a medição de uma competência depois do fim do período.")
+    permite_medicao_adicional: bool = Field(False, description="Permite incluir, em qualquer competência, medições adicionais (outra medição e outro pagamento no mesmo mês).")
+    alertas_a_partir_de: date | None = Field(
+        None, description="Competências anteriores a esta data não geram alertas, pendências nem avisos de atraso (vale a maior entre esta data e o corte global de 09/2026). Nulo = só o corte global."
+    )
     sei_gestao_numero: TextoObrigatorio = Field(..., max_length=100)
     sei_gestao_link: Link = Field(..., max_length=1000)
     sei_execucao_numero: TextoObrigatorio = Field(..., max_length=100)
@@ -210,6 +214,8 @@ class DetalheContrato(ResumoContrato):
     periodicidade_meses: int
     mes_reajuste: int
     liberar_todas_competencias: bool
+    permite_medicao_adicional: bool
+    alertas_a_partir_de: date | None = Field(None, description="Competências anteriores a esta data não geram alertas (maior entre ela e o corte global).")
     sei_gestao_numero: str
     sei_gestao_link: str
     sei_execucao_numero: str

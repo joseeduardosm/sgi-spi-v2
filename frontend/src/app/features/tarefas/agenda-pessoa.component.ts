@@ -17,7 +17,7 @@ const DIAS_ANTES = 7;
 const DIAS_JANELA = 28;
 
 /**
- * Mostra a carga e as tarefas de quem está sendo escolhido como responsável ou participante,
+ * Mostra a carga e as tarefas de quem está sendo escolhido como responsável,
  * para decidir a atribuição olhando a agenda da pessoa (como nos apps de gestão de equipes).
  * Por decisão do usuário, os títulos de todas as tarefas aparecem; só as "abríveis" viram link.
  */
@@ -48,7 +48,7 @@ const DIAS_JANELA = 28;
                 @for (i of g.itens; track i.numero) {
                   <li>
                     @if (i.abrivel) { <a [routerLink]="['/tarefas', i.numero]" target="_blank">{{ i.titulo }}</a> } @else { <span>{{ i.titulo }}</span> }
-                    <small>#{{ i.numero }} · {{ i.equipe?.nome ?? 'Pessoal' }}{{ i.papel === 'participante' ? ' · participante' : '' }}</small>
+                    <small>#{{ i.numero }} · {{ i.equipe?.nome ?? 'Pessoal' }}</small>
                     <span class="chip-prazo" [attr.data-situacao]="i.status === 'concluida' ? 'concluida' : i.atrasada ? 'atrasada' : 'normal'">{{ i.prazo | date: 'dd/MM' }}</span>
                     @if (i.prioridade === 'alta' || i.prioridade === 'critica') {
                       <span class="selo-prioridade-tarefa" [attr.data-prioridade]="i.prioridade">{{ rotulosPrioridade[i.prioridade] }}</span>

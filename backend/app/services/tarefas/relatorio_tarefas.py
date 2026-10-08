@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from app.core.banco import em_sao_paulo
 from app.models.tarefas import Tarefa
 from app.models.usuario import Usuario
 from app.services.tarefas import servico_tarefas as servico
@@ -69,11 +70,12 @@ def gerar(sessao: Session, autor: Usuario, titulo_escopo: str, tarefas: list[Tar
         atrasada = t.status in servico.OPERACIONAIS and servico._comparavel(t.prazo) < agora
         linhas.append([
             t.numero, t.titulo, t.equipe.nome if t.equipe else "Pessoal", _nome(sessao, t.responsavel_id),
-            ", ".join(sorted(_nome(sessao, p.usuario_id) for p in t.participantes if p.usuario_id != t.responsavel_id)) or "—",
+            ", ".join(sorted(_nome(sessao, p.usuario_id) for p in t.responsaveis if p.usuario_id != t.responsavel_id)) or "—",
             servico.ROTULOS_PRIORIDADE[t.prioridade], servico.ROTULOS_STATUS[t.status] + (" (atrasada)" if atrasada else ""),
             _local(t.criado_em), _local(t.prazo_original), _local(t.prazo), prorrogacoes.get(t.id, 0), _local(t.concluida_em),
             ", ".join(sorted(m.nome for m in t.marcadores)) or "—",
             f"{sum(1 for i in t.checklist if i.concluido_em)}/{len(t.checklist)}" if t.checklist else "—",
+            _rotulo_sla(sessao, t),
         ])
     pessoas = por_pessoa(sessao, tarefas, agora)
     if formato == "xlsx":
@@ -81,16 +83,16 @@ def gerar(sessao: Session, autor: Usuario, titulo_escopo: str, tarefas: list[Tar
 
         data = "dd/mm/yyyy hh:mm"
         colunas = [Coluna("Nº", "0", 7), Coluna("Tarefa", largura=48), Coluna("Equipe", largura=24), Coluna("Responsável", largura=28),
-                   Coluna("Participantes", largura=34), Coluna("Prioridade", largura=11), Coluna("Situação", largura=22), Coluna("Criada", data, 16),
+                   Coluna("Demais responsáveis", largura=34), Coluna("Prioridade", largura=11), Coluna("Situação", largura=22), Coluna("Criada", data, 16),
                    Coluna("Prazo original", data, 16), Coluna("Prazo", data, 16), Coluna("Prorrogações", "0", 12), Coluna("Concluída", data, 16),
-                   Coluna("Marcadores", largura=26), Coluna("Checklist", largura=10)]
+                   Coluna("Marcadores", largura=26), Coluna("Checklist", largura=10), Coluna("SLA (resolução)", largura=22)]
         colunas_pessoas = [Coluna("Pessoa", largura=34), Coluna("A fazer", "0", 9), Coluna("Em andamento", "0", 13), Coluna("Em validação", "0", 13),
                            Coluna("Concluídas", "0", 11), Coluna("Atrasadas", "0", 10), Coluna("Carga (pts)", "0.0", 11), Coluna("Faixa", largura=20)]
         conteudo = gerar_planilha([
             Aba("Tarefas", colunas, linhas, titulo=titulo, observacoes=[
                 "Tarefas ativas no período: criadas até o fim dele e ainda abertas ou concluídas a partir do início."]),
             Aba("Por pessoa", colunas_pessoas, pessoas, titulo=titulo, observacoes=[
-                "Cada tarefa conta para o responsável e para cada participante. A carga só considera tarefas a fazer e em andamento."]),
+                "Cada tarefa conta para cada um dos seus responsáveis. A carga só considera tarefas a fazer e em andamento."]),
         ])
         return conteudo, f"tarefas-{sufixo}.xlsx", XLSX
     from app.services.documentos.pdf import DocumentoPdf
@@ -115,5 +117,16 @@ def gerar(sessao: Session, autor: Usuario, titulo_escopo: str, tarefas: list[Tar
     return documento.gerar(), f"tarefas-{sufixo}.pdf", "application/pdf"
 
 
+ROTULOS_SLA = {"no_prazo": "No prazo", "em_risco": "Em risco", "estourado": "Estourado", "cumprido": "Cumprido", "cumprido_fora": "Cumprido fora do prazo"}
+
+
+def _rotulo_sla(sessao: Session, t: Tarefa) -> str:
+    """Situação do SLA de resolução (traço nas tarefas controladas por outro módulo, que não têm SLA)."""
+    from app.services.sla import servico_sla
+
+    item = servico_sla.da_tarefa(sessao, t)
+    return ROTULOS_SLA[item.situacao_resolucao] if item else "—"
+
+
 def _texto_local(d: datetime | None) -> str:
-    return d.strftime("%d/%m/%Y %H:%M") if d else "—"
+    return em_sao_paulo(d).strftime("%d/%m/%Y %H:%M") if d else "—"

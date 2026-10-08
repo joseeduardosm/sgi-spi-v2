@@ -6,7 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
-import { AcessoEfetivo, NIVEIS_ACL, NivelAcl, ROTULOS_NIVEL } from '../../../core/acesso/acesso.service';
+import { AcessoEfetivo, descricaoNivel, NiveisTextos, NIVEIS_ACL, NivelAcl, rotuloNivel } from '../../../core/acesso/acesso.service';
 import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { Setor, SetoresApiService } from '../../setores/setores-api.service';
@@ -32,7 +32,8 @@ export class AclComponent implements OnInit {
 
   // Listas fixas para os seletores de nível
   protected readonly niveis = NIVEIS_ACL;
-  protected readonly rotulosNivel = ROTULOS_NIVEL;
+  protected readonly rotuloNivel = rotuloNivel;
+  protected readonly descricaoNivel = descricaoNivel;
   protected readonly aba = signal<Aba>('regras');
   protected readonly aviso = signal<{ texto: string; erro: boolean } | null>(null);
 
@@ -59,6 +60,11 @@ export class AclComponent implements OnInit {
     const termo = this.termoSetor().toLowerCase();
     return this.setores().filter((s) => !termo || s.nome.toLowerCase().includes(termo));
   });
+  // Textos dos níveis do recurso escolhido no formulário (o que cada nível libera naquele módulo)
+  protected niveisDaRegra(): NiveisTextos | undefined {
+    const id = this.formularioRegra.controls.recurso_id.value;
+    return this.recursos().find((r) => r.id === id)?.niveis;
+  }
   protected readonly formularioRegra = this.construtor.group({
     recurso_id: [0, [Validators.min(1)]],
     nivel: ['LEITURA' as NivelAcl],
@@ -181,7 +187,7 @@ export class AclComponent implements OnInit {
 
   /** Pede confirmação e exclui a regra. */
   protected excluirRegra(regra: RegraAcl): void {
-    if (!confirm(`Excluir a regra de ${this.rotulosNivel[regra.nivel]} em "${regra.recurso_nome}"?`)) return;
+    if (!confirm(`Excluir a regra de ${rotuloNivel(regra.niveis, regra.nivel)} em "${regra.recurso_nome}"?`)) return;
     this.api.excluirRegra(regra.id).subscribe({
       next: () => {
         this.aviso.set({ texto: 'Regra excluída.', erro: false });

@@ -89,6 +89,21 @@ def test_prepostos_e_busca_em_qualquer_dado(cliente, admin):
     assert cliente.delete(f"/api/contratos/empresas/{empresa['id']}/prepostos/{preposto_id}", headers=admin).status_code == 204
 
 
+def test_preposto_sem_cpf_e_aceito_e_cpf_informado_continua_validado(cliente, admin):
+    """O CPF do preposto é opcional (vários sem CPF na mesma empresa); se informado, continua válido e único."""
+    empresa = criar_empresa(cliente, admin)
+    base = f"/api/contratos/empresas/{empresa['id']}/prepostos"
+    for corpo in ({"nome": "Sem CPF Um"}, {"nome": "Sem CPF Dois", "cpf": ""}, {"nome": "Sem CPF Três", "cpf": "   "}):
+        assert cliente.post(base, json=corpo, headers=admin).status_code == 201
+    prepostos = cliente.get(f"/api/contratos/empresas/{empresa['id']}", headers=admin).json()["prepostos"]
+    assert len(prepostos) == 3 and all(p["cpf"] is None for p in prepostos)
+    # Informado: precisa ser válido e continua único na empresa
+    assert cliente.post(base, json={"nome": "Cpf Ruim", "cpf": "111.111.111-11"}, headers=admin).status_code == 422
+    valido = {"nome": "Com CPF", "cpf": gerar_cpf("123456789")}
+    assert cliente.post(base, json=valido, headers=admin).status_code == 201
+    assert cliente.post(base, json={**valido, "nome": "Repetido"}, headers=admin).status_code == 409
+
+
 def test_empresa_com_contrato_nao_e_excluida_e_inativa_nao_e_opcao(cliente, admin):
     """Empresa com contrato não é excluída (409); inativa sai das opções e não pode ser usada."""
     contrato = criar_contrato(cliente, admin)

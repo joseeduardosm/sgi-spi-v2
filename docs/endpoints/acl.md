@@ -6,6 +6,8 @@ Tag no OpenAPI: **Controle de acesso (ACL)**. Implementação: `backend/app/api/
 
 Define quem acessa cada módulo do portal. A política e o cálculo do nível efetivo estão descritos em [autenticacao.md](../autenticacao.md#acl-por-recurso).
 
+**Nomes dos níveis:** os valores gravados continuam `LEITURA`, `MODIFICACAO` e `CONTROLE_TOTAL` (hierárquicos). Cada recurso diz o que cada nível libera nele: `GET /acl/recursos`, `GET /acl/regras`, `GET /acl/meus-acessos` e `GET /acl/efetivo/{usuario_id}` trazem `niveis` (`{LEITURA|MODIFICACAO|CONTROLE_TOTAL: {rotulo, descricao}}`), definido em `backend/app/services/acl_niveis.py`. A tela de ACL mostra esses textos (ex.: Protocolo, Modificação = "Reservar números de documentos"). **Todo recurso novo precisa de entrada nesse arquivo** (o teste `test_acl_niveis.py` falha se faltar).
+
 ## Regras gerais
 
 - **Autorização:**
@@ -19,6 +21,9 @@ Define quem acessa cada módulo do portal. A política e o cálculo do nível ef
 - **Recursos criados abertos a todos** (sem regras): `abrir-chamado`, item "Abrir Chamado" da barra lateral (migração `d1f4b8a2e6c9`; ver [chamados.md](chamados.md)). O SuperRoot pode restringir criando regras.
 - **Recursos criados fechados** (só a conta administrativa principal tem CONTROLE_TOTAL; o SuperRoot libera os demais):
   - `importacao-contratos`: botão "Importar XLSX" (migração `d4f7b2c9e1a3`);
+  - `atalhos`: gestão dos atalhos fixos da barra lateral, nasce fechado (migração `b5d9f3a7c1e2`; ver [atalhos.md](atalhos.md));
+  - `documentacao-api`: Swagger, ReDoc e OpenAPI; nasce fechado (migração `c6e0a4b8d2f1`; ver [documentacao-api.md](documentacao-api.md));
+  - `manuais`: módulo Manuais (BookStack); nasce **sem regras**, aberto a todo usuário autenticado (migração `d7a1c5e9b3f2`; ver [manuais.md](manuais.md));
   - `importacao-modelos`: botão "Importar XLSX" de checklists e formulários de avaliação (migração `e5a8c3d7f2b1`; ver [contratos-importacao-modelos-xlsx.md](contratos-importacao-modelos-xlsx.md));
   - `mensageria-setores`: envio de mensagens para setores inteiros, que exige CONTROLE_TOTAL (migração `0c11fdac4f46`; ver [mensagens.md](mensagens.md)).
 

@@ -18,6 +18,21 @@ export const ROTULOS_NIVEL: Record<NivelAcl, string> = {
   MODIFICACAO: 'Modificação',
   CONTROLE_TOTAL: 'Controle total',
 };
+
+/** Nome curto e frase do que um nível libera em um módulo (vem da API, de `services/acl_niveis.py`). */
+export interface TextoNivel { rotulo: string; descricao: string; }
+export type NiveisTextos = Record<NivelAcl, TextoNivel>;
+
+/** Nome do nível no módulo (o genérico se a API não mandou os textos). */
+export function rotuloNivel(niveis: NiveisTextos | undefined, nivel: NivelAcl): string {
+  return niveis?.[nivel]?.rotulo || ROTULOS_NIVEL[nivel];
+}
+
+/** Frase do que o nível libera no módulo; vazia sem os textos. */
+export function descricaoNivel(niveis: NiveisTextos | undefined, nivel: NivelAcl): string {
+  return niveis?.[nivel]?.descricao ?? '';
+}
+
 // Posição numérica de cada nível, para comparar "tem pelo menos"
 const POSICAO: Record<NivelAcl, number> = { LEITURA: 1, MODIFICACAO: 2, CONTROLE_TOTAL: 3 };
 
@@ -28,6 +43,7 @@ export interface AcessoEfetivo {
   slug: string;
   url_base: string;
   nivel: NivelAcl | null;
+  niveis?: NiveisTextos;
 }
 
 /**

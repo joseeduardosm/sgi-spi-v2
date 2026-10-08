@@ -64,10 +64,15 @@ export class ExecucaoApiService {
   }
 
   /** Cria (sem checklistId) ou edita (com checklistId) uma versão do checklist. */
-  salvarChecklist(id: string, dados: { nome: string; itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade?: boolean; vale_outros_contratos?: boolean }[] }, checklistId?: string): Observable<Checklist[]> {
+  salvarChecklist(id: string, dados: { nome: string; itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] }, checklistId?: string): Observable<Checklist[]> {
     return checklistId
       ? this.http.put<Checklist[]>(this.url(id, `/checklists/${checklistId}`), dados)
       : this.http.post<Checklist[]>(this.url(id, '/checklists'), dados);
+  }
+
+  /** Liga ou desliga "Pedir para enviar" de um documento (vale também com o checklist ativo). */
+  definirPedirEnvio(id: string, checklistId: string, itemId: string, pedirEnvio: boolean): Observable<Checklist[]> {
+    return this.http.put<Checklist[]>(this.url(id, `/checklists/${checklistId}/itens/${itemId}/pedir-envio`), { pedir_envio: pedirEnvio });
   }
 
   /** Duplica ou ativa uma versão do checklist. */
@@ -165,8 +170,28 @@ export class ExecucaoApiService {
     return baixarArquivo(this.http, this.competencia(id, competenciaId, `/arquivos/${anexoId}`));
   }
 
+  /**
+   * Abre um arquivo da competência (PDF) em uma nova aba. A aba é aberta no clique (evita o bloqueio de pop-up) e, quando o arquivo
+   * autenticado chega, passa a mostrá-lo; em erro, a aba é fechada e `aoErro` recebe o erro.
+   */
+  abrirEmNovaAba(id: string, competenciaId: string, anexoId: string, aoErro: (erro: unknown) => void): void {
+    const aba = window.open('', '_blank');
+    this.http.get(this.competencia(id, competenciaId, `/arquivos/${anexoId}`), { responseType: 'blob' }).subscribe({
+      next: (corpo) => {
+        const endereco = URL.createObjectURL(new Blob([corpo], { type: corpo.type || 'application/pdf' }));
+        if (aba) aba.location.href = endereco;
+        else window.open(endereco, '_blank');
+        setTimeout(() => URL.revokeObjectURL(endereco), 120000);
+      },
+      error: (erro) => {
+        aba?.close();
+        aoErro(erro);
+      },
+    });
+  }
+
   /** Etapa 1: grava as quantidades medidas e as NEs escolhidas, em ordem. */
-  salvarMedicao(id: string, c: string, itens: { id: string; quantidade_medida: string }[], notas: string[]): Observable<DetalheCompetencia> {
+  salvarMedicao(id: string, c: string, itens: { id: string; quantidade_medida: string; despesa_variavel?: boolean }[], notas: string[]): Observable<DetalheCompetencia> {
     return this.http.put<DetalheCompetencia>(this.competencia(id, c, '/medicao'), { itens, notas_empenho_ids: notas });
   }
 
@@ -207,11 +232,13 @@ export class ExecucaoApiService {
    */
   notaFiscal(id: string, c: string, dados: {
     recebida_em: string; prazo_pagamento_dias: number; notas: { id: string | null; arquivo: number | null; xml: number | null; valor_bruto?: string | null; numero?: string | null }[];
-    arquivos: File[]; xmls: File[]; enviar_email?: boolean; financeiro_ids?: (string | number)[] | null;
+    arquivos: File[]; xmls: File[];
+    /** Documentos de despesas variáveis (obrigatórios com item marcado na medição) e seus PDFs. */
+    despesas?: { id: string | null; tipo: string; numero: string | null; valor: string; arquivo: number | null }[]; arquivosDespesas?: File[];
   }): Observable<DetalheCompetencia> {
-    const corpo = this.formulario({ recebida_em: dados.recebida_em, prazo_pagamento_dias: dados.prazo_pagamento_dias, notas: JSON.stringify(dados.notas), enviar_email: !!dados.enviar_email });
-    // Ids separados por vírgula; vazio = ninguém do Financeiro (ausente = todos)
-    if (dados.enviar_email && dados.financeiro_ids) corpo.append('financeiro_ids', dados.financeiro_ids.join(','));
+    const corpo = this.formulario({ recebida_em: dados.recebida_em, prazo_pagamento_dias: dados.prazo_pagamento_dias, notas: JSON.stringify(dados.notas) });
+    if (dados.despesas?.length) corpo.append('despesas', JSON.stringify(dados.despesas));
+    dados.arquivosDespesas?.forEach((a) => corpo.append('arquivos_despesas', a));
     dados.arquivos.forEach((a) => corpo.append('arquivos', a));
     dados.xmls.forEach((x) => corpo.append('xmls', x));
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/nota-fiscal'), corpo);
@@ -282,6 +309,19 @@ export class ExecucaoApiService {
   /** Reabre a competência numa etapa anterior; as posteriores são descartadas. */
   reabrir(id: string, c: string, etapa: Etapa, justificativa: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/reabrir'), { etapa, justificativa });
+  }
+
+  /** Medição adicional: outra medição e outro pagamento no período da competência (justificativa obrigatória; anexo PDF opcional). */
+  incluirMedicaoAdicional(id: string, competenciaId: string, justificativa: string, arquivo: File | null): Observable<DetalheCompetencia> {
+    const corpo = new FormData();
+    corpo.append('justificativa', justificativa);
+    if (arquivo) corpo.append('arquivo', arquivo, arquivo.name);
+    return this.http.post<DetalheCompetencia>(this.competencia(id, competenciaId, '/adicional'), corpo);
+  }
+
+  /** Exclui a medição adicional (equipe do contrato); a competência regular não pode ser excluída. */
+  excluirMedicaoAdicional(id: string, competenciaId: string): Observable<void> {
+    return this.http.delete<void>(this.competencia(id, competenciaId, ''));
   }
 
   /** Reenvia o e-mail da medição concluída à equipe e ao preposto. */

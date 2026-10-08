@@ -4,7 +4,7 @@
     <h1>{{ titulo() }}</h1>
     <small>
       @switch (escopo().tipo) {
-        @case ('minhas') { Tarefas em que você é responsável ou participante, e as que você criou. }
+        @case ('minhas') { Tarefas em que você é responsável e as que você criou. }
         @case ('equipe') { @if (equipe(); as e) { {{ e.membros.length }} membro{{ e.membros.length === 1 ? '' : 's' }} · {{ e.lideres.length + (e.dono ? 1 : 0) }} na liderança@if (e.lider) { · você lidera } } }
         @default { Todas as tarefas da pessoa (visível à própria pessoa, à liderança das equipes dela e ao SuperRoot). }
       }
@@ -14,10 +14,17 @@
     @if (equipe()?.pode_configurar) {
       <a class="acao-secundaria" [routerLink]="['/tarefas/equipes', equipe()!.id, 'configurar']" title="Nome, liderança, membros e marcadores">⚙ Configurar</a>
     }
+    <a class="acao-secundaria" [routerLink]="escopo().equipeId ? ['/tarefas/equipes', escopo().equipeId, 'recorrencias'] : ['/tarefas/recorrencias']" title="Rotinas que viram tarefa sozinhas">⟳ Recorrências</a>
     <button type="button" class="acao-secundaria" (click)="abrirRelatorio()">Relatório</button>
+    <button type="button" class="acao-secundaria botao-tela-cheia" [class.ativo]="telaCheia()" [attr.aria-pressed]="telaCheia()" (click)="alternarTelaCheia()"
+            [title]="telaCheia() ? 'Sair da tela cheia (Esc)' : 'Usar o máximo da tela (F)'">{{ telaCheia() ? '⤢ Sair da tela cheia' : '⛶ Tela cheia' }}</button>
     <a class="acao-primaria" routerLink="/tarefas/nova" [queryParams]="escopo().equipeId ? { equipe: escopo().equipeId } : {}"><span aria-hidden="true">+</span> Nova tarefa</a>
   </div>
 </header>
+
+@if (escopo().tipo === 'equipe' && equipe(); as e) {
+  <app-faixa-equipe [equipeId]="e.id" [lider]="lider()" [marcoAtivo]="marco() || null" (filtrar)="navegar({ marco: $event })" (alterado)="carregar(true)" />
+}
 
 <div class="barra-espaco">
   <div class="alternar-visao" role="group" aria-label="Visão">
@@ -27,9 +34,13 @@
     @if (escopo().tipo === 'equipe' && lider()) {
       <button type="button" [class.ativo]="visao() === 'pessoas'" [attr.aria-pressed]="visao() === 'pessoas'" (click)="trocarVisao('pessoas')">◔ Pessoas</button>
     }
+    <!-- Desempenho: da equipe (liderança) e individual (em Minhas tarefas e na tela de uma pessoa), com as tarefas pessoais -->
+    @if ((escopo().tipo === 'equipe' && lider()) || (escopo().tipo !== 'equipe' && pessoaDoEscopo())) {
+      <button type="button" [class.ativo]="visao() === 'desempenho'" [attr.aria-pressed]="visao() === 'desempenho'" (click)="trocarVisao('desempenho')">📈 Desempenho</button>
+    }
   </div>
 
-  @if (visao() !== 'pessoas') {
+  @if (visao() !== 'pessoas' && visao() !== 'desempenho') {
     <!-- Avatares: clique filtra pela pessoa; Shift+clique soma pessoas ao filtro -->
     @if (pessoasDoEscopo().length > 1) {
       <div class="filtro-avatares" role="group" aria-label="Filtrar por pessoa (Shift+clique para escolher várias)">
@@ -92,7 +103,7 @@
 
 @if (dados(); as d) {
   <!-- Resumo em uma linha: cada número aplica o recorte correspondente -->
-  @if (visao() !== 'pessoas') {
+  @if (visao() !== 'pessoas' && visao() !== 'desempenho') {
     <div class="resumo-espaco" role="group" aria-label="Resumo">
       <button type="button" [class.ativo]="!recorte()" (click)="aplicarRecorte('')"><b>{{ d.indicadores.operacionais }}</b> em aberto</button>
       <button type="button" class="alerta" [class.ativo]="recorte() === 'atrasadas'" [disabled]="!d.indicadores.atrasadas" (click)="aplicarRecorte('atrasadas')"><b>{{ d.indicadores.atrasadas }}</b> atrasadas</button>
@@ -119,6 +130,13 @@
     }
     @case ('calendario') {
       <app-calendario-tarefas [itens]="filtradas()" (abrir)="abrirTarefa($event)" (reprogramar)="reprogramar($event)" />
+    }
+    @case ('desempenho') {
+      @if (escopo().tipo === 'equipe') {
+        @if (equipe(); as e) { <app-desempenho-tarefas [equipeId]="e.id" /> }
+      } @else if (pessoaDoEscopo(); as pid) {
+        <app-desempenho-tarefas [pessoaId]="pid" />
+      }
     }
     @case ('pessoas') {
       <!-- Visão da liderança: pessoas da equipe, da maior para a menor carga -->
@@ -156,7 +174,7 @@
       @if (!d.itens.length && !podeCriar()) {
         <p class="estado-vazio">Nenhuma tarefa por aqui.</p>
       } @else {
-        <app-quadro-tarefas [itens]="filtradas()" [comRaias]="raias()" [cargas]="pessoasCarga()" [lider]="lider()" [podeCriar]="podeCriar()"
+        <app-quadro-tarefas [itens]="filtradas()" [estagios]="estagios()" [comRaias]="raias()" [cargas]="pessoasCarga()" [lider]="lider()" [podeCriar]="podeCriar()"
                             [destacado]="destacado()" (abrir)="abrirTarefa($event)" (mover)="mover($event)" (criar)="criarRapida($event)" />
       }
     }

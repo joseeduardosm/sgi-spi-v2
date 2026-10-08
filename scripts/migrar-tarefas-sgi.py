@@ -3,7 +3,7 @@
 # Este arquivo serve para migrar o módulo de tarefas do SGI SPI (10.23.1.220) para o Módulo Tarefas do SGI SPI.
 """Migra o módulo de tarefas do SGI SPI (10.23.1.220) para o Módulo Tarefas.
 
-Lê o pacote gerado por `scripts/extrair-tarefas-sgi.py` e carrega equipes, marcadores, tarefas, participantes,
+Lê o pacote gerado por `scripts/extrair-tarefas-sgi.py` e carrega equipes, marcadores, tarefas, responsáveis,
 linha do tempo (com o nome do autor preservado), remoções lógicas e anexos dos comentários.
 
 - usuários (`*UserId`) são convertidos pelo `usuarios.csv`, casando login ou id externo (AD); quem não existe aqui
@@ -41,7 +41,7 @@ from app.core.banco import FabricaSessao  # noqa: E402
 from app.models.anexo import Anexo  # noqa: E402
 from app.models.tarefas import (  # noqa: E402
     AnexoEventoTarefa, EquipeTarefas, EventoTarefa, ItemChecklistTarefa, LiderEquipeTarefas, MarcadorTarefa, MembroEquipeTarefas,
-    ParticipanteTarefa, Tarefa, VinculoMarcadorTarefa,
+    ResponsavelTarefa, Tarefa, VinculoMarcadorTarefa,
 )
 from app.models.usuario import OrigemUsuario, Usuario  # noqa: E402
 from app.services import servico_anexos  # noqa: E402
@@ -257,7 +257,7 @@ def migrar(pacote: Pacote, sessao) -> dict:
             segundos_em_andamento=inteiro(r["OperationalSeconds"]) or 0, concluida_em=instante(r["CompletedAt"]) if status == "concluida" else None,
             versao=inteiro(r["Version"]) or 1, criado_em=instante(r["CreatedAt"]), atualizado_em=instante(r["UpdatedAt"]),
         )
-        tarefa.participantes = [ParticipanteTarefa(usuario_id=u) for u in dict.fromkeys(usuario(x) for x in responsaveis) if u is not None]
+        tarefa.responsaveis = [ResponsavelTarefa(usuario_id=u) for u in dict.fromkeys(usuario(x) for x in responsaveis) if u is not None]
         tarefa.marcadores = [marcadores[m] for m in dict.fromkeys(vinculos.get(r["Id"], [])) if m in marcadores]
         sessao.add(tarefa)
         contador["tarefas"] += 1
@@ -323,7 +323,7 @@ def _evento(e: dict, anterior: dict, nome, marcadores: dict) -> tuple[str, str, 
             anterior[campo] = valor
         atuais, antigos = set(p.get("currentResponsibleIds") or []), set(p.get("previousResponsibleIds") or [])
         if atuais != antigos:
-            campos["participantes"] = {"entraram": sorted(nome(i) for i in atuais - antigos), "sairam": sorted(nome(i) for i in antigos - atuais)}
+            campos["responsaveis"] = {"entraram": sorted(nome(i) for i in atuais - antigos), "sairam": sorted(nome(i) for i in antigos - atuais)}
         return "editada", titulo or "Tarefa editada", texto(p.get("responsibleChangeJustification")) or descricao, {"campos": campos}
     if tipo_sgi == "CommentAdded":
         return "comentario", titulo or ("Comentário" if descricao else "Anexo"), descricao, {}
@@ -343,7 +343,7 @@ def conferir(pacote: Pacote, sessao) -> list[str]:
     pares = (
         ("work_tasks", select(func.count()).select_from(Tarefa).where(Tarefa.id.in_(ids))),
         ("work_task_events", select(func.count()).select_from(EventoTarefa).where(EventoTarefa.tarefa_id.in_(ids))),
-        ("work_task_participants", select(func.count()).select_from(ParticipanteTarefa).where(ParticipanteTarefa.tarefa_id.in_(ids))),
+        ("work_task_participants", select(func.count()).select_from(ResponsavelTarefa).where(ResponsavelTarefa.tarefa_id.in_(ids))),
         ("work_task_markers", select(func.count()).select_from(VinculoMarcadorTarefa).where(VinculoMarcadorTarefa.tarefa_id.in_(ids))),
         ("work_task_event_attachments", select(func.count()).select_from(AnexoEventoTarefa).join(EventoTarefa).where(EventoTarefa.tarefa_id.in_(ids))),
         ("task_teams", select(func.count()).select_from(EquipeTarefas).where(EquipeTarefas.id.in_([id_(r["Id"]) for r in t("task_teams")]))),

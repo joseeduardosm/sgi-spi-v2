@@ -66,7 +66,7 @@ RECURSO = "contratos"
 # Campos do contrato acompanhados pelo histórico "quem alterou, quando, de → para"
 CAMPOS_AUDITADOS = (
     "numero", "empresa_id", "apelido", "objeto", "data_inicio", "data_fim", "vigencia_inicial_meses",
-    "vigencia_maxima_meses", "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "sei_gestao_numero", "sei_gestao_link",
+    "vigencia_maxima_meses", "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "permite_medicao_adicional", "alertas_a_partir_de", "sei_gestao_numero", "sei_gestao_link",
     "sei_execucao_numero", "sei_execucao_link", "situacao_forcada",
 )
 # Campos do item que não mudam depois de salvo (mudar exigiria excluir e criar outro item)
@@ -426,6 +426,8 @@ def detalhar_contrato(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario)
         periodicidade_meses=contrato.periodicidade_meses,
         mes_reajuste=contrato.mes_reajuste,
         liberar_todas_competencias=contrato.liberar_todas_competencias,
+        permite_medicao_adicional=contrato.permite_medicao_adicional,
+        alertas_a_partir_de=contrato.alertas_a_partir_de,
         sei_gestao_numero=contrato.sei_gestao_numero,
         sei_gestao_link=contrato.sei_gestao_link,
         sei_execucao_numero=contrato.sei_execucao_numero,
@@ -542,7 +544,7 @@ def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, numero: str)
     contrato.sequencial, contrato.ano = partes_numero(numero)
     for campo in (
         "empresa_id", "apelido", "objeto", "data_inicio", "vigencia_inicial_meses", "vigencia_maxima_meses",
-        "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero",
+        "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "permite_medicao_adicional", "alertas_a_partir_de", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero",
         "sei_execucao_link", "situacao_forcada",
     ):
         setattr(contrato, campo, getattr(dados, campo))

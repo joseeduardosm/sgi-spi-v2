@@ -14,6 +14,7 @@ import { ContratosApiService } from './contratos-api.service';
 const SECOES: Record<string, string> = {
   Painel: '/contratos/painel',
   Vigências: '/contratos/vigencias',
+  'Calendário de vencimentos': '/contratos/calendario',
   Empresas: '/contratos/empresas',
   Modelos: '/contratos/modelos',
 };

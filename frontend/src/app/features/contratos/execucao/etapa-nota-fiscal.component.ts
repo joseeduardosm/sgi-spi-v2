@@ -8,10 +8,9 @@ import { DatePipe } from '@angular/common';
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
-import { DetalheCompetencia, NotaFiscal } from '../compartilhado/contratos.models';
+import { DespesaVariavel, DetalheCompetencia, NotaFiscal } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { HistoricoRecusasComponent } from './historico-recusas.component';
-import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 
 /** Linha do formulário: uma nota fiscal (registrada e/ou com arquivos novos escolhidos). */
 interface LinhaNota {
@@ -23,17 +22,36 @@ interface LinhaNota {
   numero: string;
 }
 
+/** Linha do formulário: um documento de despesa variável (nota de débito, recibo ou outros). */
+interface LinhaDespesa {
+  existente: DespesaVariavel | null;
+  tipo: 'nota_debito' | 'recibo' | 'outros';
+  numero: string;
+  valor: string;
+  arquivo: File | null;
+}
+
+/** Valor da API (ex.: "771.28") no formato digitado no Brasil ("771,28"). */
+function emReais(valor: string | number | null | undefined): string {
+  if (valor === null || valor === undefined || valor === '') return '';
+  return Number(valor).toFixed(2).replace('.', ',');
+}
+
+/** Lê o valor digitado: "1.234,56" e "771,28" (vírgula decimal); sem vírgula, "771.28" também vale (ponto com 1 ou 2 casas). */
+function lerValor(texto: string | null | undefined): number {
+  const t = String(texto ?? '').trim();
+  if (!t.includes(',') && /^\d+\.\d{1,2}$/.test(t)) return Number(t);
+  return Number(t.replace(/\./g, '').replace(',', '.'));
+}
+
 /** Etapa 3: a equipe junta uma ou mais NFs (PDF + XML de cada). Os valores vêm dos XMLs; as retenções são conferidas na etapa 4. */
 @Component({
   selector: 'app-etapa-nota-fiscal',
-  imports: [FormsModule, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, HistoricoRecusasComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, EnvioPdfComponent, HistoricoRecusasComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-nota-fiscal.component.html',
 })
 export class EtapaNotaFiscalComponent implements OnChanges {
   // "Enviar por e-mail" começa desmarcado: só envia quem marcar
-  protected readonly enviarEmail = signal(false);
-  protected readonly financeiroIds = signal<(string | number)[] | null>(null);
-  protected readonly fonteFinanceiro = () => this.api.gruposFinanceiro(this.detalhe().contrato_id);
   readonly detalhe = input.required<DetalheCompetencia>();
   readonly editavel = input(false);
   readonly atualizado = output<DetalheCompetencia>();
@@ -45,6 +63,8 @@ export class EtapaNotaFiscalComponent implements OnChanges {
   protected prazo = 30;
   /** Uma linha por nota fiscal: a já registrada (`existente`, que mantém os arquivos) e/ou os arquivos novos escolhidos. */
   protected linhas: LinhaNota[] = [];
+  /** Documentos de despesas variáveis (só quando a medição tem item marcado). */
+  protected despesas: LinhaDespesa[] = [];
   protected readonly reenviando = signal(false);
 
   /** Resumo do que já foi registrado: o formulário só é refeito quando isso muda (e não a cada atualização da tela). */
@@ -53,13 +73,52 @@ export class EtapaNotaFiscalComponent implements OnChanges {
   /** Quando o registro da nota fiscal muda, preenche o formulário com o que já foi registrado. */
   ngOnChanges(): void {
     const d = this.detalhe();
-    const registrado = JSON.stringify([d.id, d.nf_recebida_em, d.prazo_pagamento_dias, d.notas_fiscais.map((n) => n.id)]);
+    const registrado = JSON.stringify([d.id, d.nf_recebida_em, d.prazo_pagamento_dias, d.notas_fiscais.map((n) => n.id), (d.despesas_variaveis ?? []).map((x) => x.id), d.tem_despesas_variaveis]);
     // Atualizações sem mudança na nota (ex.: consulta do e-mail) não podem apagar os arquivos já escolhidos
     if (registrado === this.registrado) return;
     this.registrado = registrado;
     this.recebidaEm = d.nf_recebida_em ?? '';
     this.prazo = d.prazo_pagamento_dias ?? 30;
-    this.linhas = d.notas_fiscais.length ? d.notas_fiscais.map((n) => ({ existente: n, arquivo: null, xml: null, valor: n.dados_xml ? '' : String(n.valor_bruto ?? ''), numero: n.dados_xml ? '' : n.numero })) : [{ existente: null, arquivo: null, xml: null, valor: d.valor_autorizado ? String(d.valor_autorizado) : '', numero: '' }];
+    this.linhas = d.notas_fiscais.length ? d.notas_fiscais.map((n) => ({ existente: n, arquivo: null, xml: null, valor: n.dados_xml ? '' : emReais(n.valor_bruto), numero: n.dados_xml ? '' : n.numero })) : [{ existente: null, arquivo: null, xml: null, valor: d.valor_autorizado ? emReais(d.valor_autorizado) : '', numero: '' }];
+    this.carregarDespesas();
+  }
+
+  /** Recarrega as linhas dos documentos de despesas variáveis a partir do que já foi registrado (ou uma linha em branco). */
+  private carregarDespesas(): void {
+    const d = this.detalhe();
+    if (!d.tem_despesas_variaveis) {
+      this.despesas = [];
+      return;
+    }
+    const registradas = d.despesas_variaveis ?? [];
+    this.despesas = registradas.length
+      ? registradas.map((x) => ({ existente: x, tipo: x.tipo, numero: x.numero, valor: emReais(x.valor), arquivo: null }))
+      : [{ existente: null, tipo: 'nota_debito', numero: '', valor: '', arquivo: null }];
+  }
+
+  protected adicionarDespesa(): void {
+    this.despesas = [...this.despesas, { existente: null, tipo: 'nota_debito', numero: '', valor: '', arquivo: null }];
+  }
+
+  protected removerDespesa(linha: LinhaDespesa): void {
+    this.despesas = this.despesas.filter((l) => l !== linha);
+  }
+
+  /** Soma dos valores digitados nos documentos de despesas variáveis. */
+  protected totalDespesas(): number {
+    return this.despesas.reduce((t, l) => t + (Number.isFinite(lerValor(l.valor)) ? lerValor(l.valor) : 0), 0);
+  }
+
+  /** Subtotal - Despesas Variáveis da medição (o que os documentos precisam somar). */
+  protected esperadoDespesas(): number {
+    return Number(this.detalhe().subtotal_despesas_variaveis ?? 0);
+  }
+
+  /** Com despesas variáveis: ao menos um documento, cada um com valor e PDF, e a soma igual ao subtotal da medição. */
+  protected despesasValidas(): boolean {
+    if (!this.detalhe().tem_despesas_variaveis) return true;
+    const completas = this.despesas.length > 0 && this.despesas.every((l) => lerValor(l.valor) > 0 && (!!l.arquivo || !!l.existente?.arquivo));
+    return completas && Math.abs(this.totalDespesas() - this.esperadoDespesas()) < 0.005;
   }
 
   protected adicionarNota(): void {
@@ -98,7 +157,7 @@ export class EtapaNotaFiscalComponent implements OnChanges {
   protected valido(): boolean {
     // O PDF é obrigatório; o XML é opcional (sem ele, informe o valor bruto da nota)
     const completas = this.linhas.length > 0 && this.linhas.every((l) => (!!l.arquivo || !!l.existente?.arquivo) && (this.temXml(l) || this.valorDigitado(l) > 0));
-    return completas && !!this.recebidaEm && this.prazo >= 1 && this.prazo <= 3650;
+    return completas && this.despesasValidas() && !!this.recebidaEm && this.prazo >= 1 && this.prazo <= 3650;
   }
 
   /** A nota tem XML (novo ou já enviado). */
@@ -108,7 +167,7 @@ export class EtapaNotaFiscalComponent implements OnChanges {
 
   /** Valor bruto digitado (aceita vírgula decimal); 0 se vazio ou inválido. */
   protected valorDigitado(linha: LinhaNota): number {
-    const numero = Number(String(linha.valor ?? '').replace(/\./g, '').replace(',', '.'));
+    const numero = lerValor(linha.valor);
     return Number.isFinite(numero) ? numero : 0;
   }
 
@@ -132,7 +191,12 @@ export class EtapaNotaFiscalComponent implements OnChanges {
       valor_bruto: this.temXml(l) ? null : this.valorDigitado(l).toFixed(2),
       numero: this.temXml(l) ? null : l.numero.trim() || null,
     }));
-    const dados = { recebida_em: this.recebidaEm, prazo_pagamento_dias: this.prazo, notas, arquivos, xmls, enviar_email: this.enviarEmail(), financeiro_ids: this.financeiroIds() };
+    const arquivosDespesas: File[] = [];
+    const despesas = this.despesas.map((l) => ({
+      id: l.existente?.id ?? null, tipo: l.tipo, numero: l.numero.trim() || null, valor: lerValor(l.valor).toFixed(2),
+      arquivo: l.arquivo ? arquivosDespesas.push(l.arquivo) - 1 : null,
+    }));
+    const dados = { recebida_em: this.recebidaEm, prazo_pagamento_dias: this.prazo, notas, arquivos, xmls, despesas, arquivosDespesas };
     this.dialogos.executar(this.api.notaFiscal(d.contrato_id, d.id, dados), 'Lendo os XMLs e enviando as notas fiscais…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível juntar a nota fiscal'),

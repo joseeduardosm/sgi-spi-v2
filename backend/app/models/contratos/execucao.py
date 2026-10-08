@@ -38,8 +38,9 @@ from app.models.contratos.contrato import Contrato, _lista_sql
 ETAPAS = ("medicao", "avaliacao", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida")
 # Etapas feitas em paralelo depois da nota fiscal (qualquer ordem); o consolidado só depois de todas
 ETAPAS_PARALELAS = ("retencao", "cadin", "checklist")
-# Competência regular (período de execução) ou complementar, que paga a diferença de um reajuste retroativo
-TIPOS_COMPETENCIA = ("regular", "diferenca_reajuste")
+# Competência regular (período de execução), complementar (paga a diferença de um reajuste retroativo) ou adicional
+# (outra medição e outro pagamento no mesmo mês de uma competência, com justificativa)
+TIPOS_COMPETENCIA = ("regular", "diferenca_reajuste", "adicional")
 
 
 class Checklist(Base):
@@ -85,6 +86,8 @@ class ItemChecklist(Base):
     com_validade: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Documento da empresa (ex.: certidão): se já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo
     vale_outros_contratos: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # "Pedir para enviar": ao concluir a medição, o e-mail à empresa pede este documento (com a observação). Pode ser mudado com o checklist ativo
+    pedir_envio: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     checklist: Mapped[Checklist] = relationship(back_populates="itens")
 
@@ -146,7 +149,7 @@ class Competencia(Base):
     __tablename__ = "contratos_competencias"
     # Regras garantidas pelo banco: uma competência por período e tipo, e valores válidos
     __table_args__ = (
-        UniqueConstraint("contrato_id", "periodo_inicio", "tipo", name="contratos_competencias_contrato_id_periodo_inicio_tipo_key"),
+        UniqueConstraint("contrato_id", "periodo_inicio", "tipo", "numero_adicional", name="contratos_competencias_contrato_id_periodo_inicio_tipo_key"),
         CheckConstraint(f"etapa_atual IN ({_lista_sql(ETAPAS)})", name="ck_contratos_competencias_etapa"),
         CheckConstraint(f"tipo IN ({_lista_sql(TIPOS_COMPETENCIA)})", name="ck_contratos_competencias_tipo"),
         CheckConstraint("origem_valor_nf IS NULL OR origem_valor_nf IN ('medicao', 'manual')", name="ck_contratos_competencias_origem_nf"),
@@ -164,6 +167,11 @@ class Competencia(Base):
     # Etapa em que a competência está agora (uma das `ETAPAS`)
     etapa_atual: Mapped[str] = mapped_column(String(20), default="medicao")
     tipo: Mapped[str] = mapped_column(String(30), default="regular", server_default="regular")
+    # Medição adicional: número (1, 2…; 0 nas demais), justificativa, anexo opcional e quem incluiu
+    numero_adicional: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    adicional_justificativa: Mapped[str] = mapped_column(Text, default="", server_default="")
+    adicional_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    adicional_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
     # Reajuste que originou a competência de diferença (somente tipo = diferenca_reajuste)
     reajuste_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="SET NULL"), index=True)
 
@@ -222,7 +230,7 @@ class Competencia(Base):
 
     # Registros filhos da competência (apagados junto com ela)
     contrato: Mapped[Contrato] = relationship(back_populates="competencias")
-    itens: Mapped[list["ItemMedicao"]] = relationship(back_populates="competencia", cascade="all, delete-orphan", order_by="ItemMedicao.ordem")
+    itens: Mapped[list["ItemMedicao"]] = relationship(back_populates="competencia", cascade="all, delete-orphan", order_by="[ItemMedicao.ordem, ItemMedicao.segmento]")
     notas: Mapped[list["SelecaoNotaEmpenho"]] = relationship(
         back_populates="competencia", cascade="all, delete-orphan", order_by="SelecaoNotaEmpenho.ordem"
     )
@@ -237,6 +245,10 @@ class Competencia(Base):
     )
     notas_fiscais: Mapped[list["NotaFiscalCompetencia"]] = relationship(
         back_populates="competencia", cascade="all, delete-orphan", order_by="NotaFiscalCompetencia.ordem"
+    )
+    # Notas de débito, recibos e outros documentos das despesas variáveis (juntados na etapa da nota fiscal; não passam pela retenção)
+    despesas_variaveis: Mapped[list["DespesaVariavel"]] = relationship(
+        back_populates="competencia", cascade="all, delete-orphan", order_by="DespesaVariavel.ordem"
     )
     # Recusas da nota fiscal pelo Financeiro (histórico do ciclo nota → recusa → nova nota → … → aprovação)
     recusas: Mapped[list["RecusaNota"]] = relationship(
@@ -254,6 +266,7 @@ class Competencia(Base):
     retencao_pdf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[retencao_pdf_anexo_id])
     consolidado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[consolidado_anexo_id])
     ob_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[ob_anexo_id])
+    adicional_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[adicional_anexo_id])
 
     @property
     def parte(self) -> int | None:
@@ -273,6 +286,8 @@ class Competencia(Base):
         """Chave da rota da tela: `AAAA-MM`, `AAAA-MM-1`/`AAAA-MM-2` (mês dividido) ou `AAAA-MM-dif` (diferença de reajuste)."""
         if self.tipo == "diferenca_reajuste":
             return f"{self.competencia:%Y-%m}-dif"
+        if self.tipo == "adicional":
+            return f"{self.competencia:%Y-%m}-adicional-{self.numero_adicional}"
         return f"{self.competencia:%Y-%m}" + (f"-{self.parte}" if self.parte else "")
 
     @property
@@ -280,6 +295,8 @@ class Competencia(Base):
         """Rótulo exibido: `01/2027`, `01/2027 · 1ª parte` ou `Diferença de reajuste 01/2026 a 04/2026`."""
         if self.tipo == "diferenca_reajuste":
             return f"Diferença de reajuste {self.periodo_inicio:%m/%Y} a {self.periodo_fim:%m/%Y}"
+        if self.tipo == "adicional":
+            return f"{self.competencia:%m/%Y} · Medição adicional {self.numero_adicional}"
         return f"{self.competencia:%m/%Y}" + (f" · {self.parte}ª parte" if self.parte else "")
 
 
@@ -287,7 +304,7 @@ class ItemMedicao(Base):
     """Fotografia do item do contrato na competência, com a quantidade prevista e a medida."""
 
     __tablename__ = "contratos_competencias_itens"
-    __table_args__ = (UniqueConstraint("competencia_id", "item_id"),)
+    __table_args__ = (UniqueConstraint("competencia_id", "item_id", "segmento", name="uq_contratos_competencias_itens_trecho"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     # SET NULL: a fotografia continua existindo mesmo se o item for removido do contrato
@@ -304,8 +321,23 @@ class ItemMedicao(Base):
     quantidade_prevista: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     # 28 dígitos (18 inteiros + 10 casas), como o schema: contratos com quantidades na casa dos bilhões
     quantidade_medida: Mapped[Decimal] = mapped_column(Numeric(28, 10), default=Decimal(0))
+    # Mês com virada (prorrogação ou reajuste no meio do mês): o item aparece uma vez por trecho do mês. `segmento` numera os trechos (1, 2…),
+    # `periodo_*` dizem os dias de cada um e `periodo_rotulo` é o texto exibido ("01/09 a 19/09/2026 · preço anterior"). Mês sem virada: segmento 1 e nulos
+    segmento: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    periodo_inicio: Mapped[date | None] = mapped_column(Date)
+    periodo_fim: Mapped[date | None] = mapped_column(Date)
+    periodo_rotulo: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    # Vigência do trecho (nula = a da competência); decide o limite e o executado dos itens sob demanda
+    sequencia_vigencia: Mapped[int | None] = mapped_column(Integer)
+    # Marcado na medição da competência: o item é despesa variável (subtotal à parte; exige documento de despesa na etapa da nota fiscal)
+    despesa_variavel: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     competencia: Mapped[Competencia] = relationship(back_populates="itens")
+
+    @property
+    def descricao_completa(self) -> str:
+        """Descrição com o trecho do mês, quando o mês tem virada ("Item — 01/09 a 19/09/2026 · preço anterior")."""
+        return f"{self.descricao} — {self.periodo_rotulo}" if self.periodo_rotulo else self.descricao
 
 
 class SelecaoNotaEmpenho(Base):
@@ -351,13 +383,16 @@ class MemoriaMedicao(Base):
     competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
     versao: Mapped[int] = mapped_column(Integer)
     anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    # Medição dos itens de despesas variáveis (PDF à parte, só quando a competência tem esses itens)
+    anexo_despesas_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     # Hash dos dados que geraram o PDF; se não mudou, não é preciso gerar outra versão
     hash_origem: Mapped[str] = mapped_column(String(64))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     competencia: Mapped[Competencia] = relationship(back_populates="memorias")
-    anexo: Mapped[Anexo] = relationship()
+    anexo: Mapped[Anexo] = relationship(foreign_keys=[anexo_id])
+    anexo_despesas: Mapped[Anexo | None] = relationship(foreign_keys=[anexo_despesas_id])
 
 
 class ConsultaCadin(Base):
@@ -495,6 +530,38 @@ class NotaFiscalCompetencia(Base):
     def rotulo(self) -> str:
         """"NF 123" (ou "NF 2" pela ordem, se o XML não trouxe número)."""
         return f"NF {self.numero}" if self.numero else f"NF {self.ordem}"
+
+
+TIPOS_DESPESA_VARIAVEL = ("nota_debito", "recibo", "outros")
+
+
+class DespesaVariavel(Base):
+    """Documento de despesa variável (nota de débito, recibo ou outros) juntado na etapa da nota fiscal.
+
+    Não vai para a validação do Financeiro (retenção): fica só como documento juntado e entra no consolidado.
+    """
+    __tablename__ = "contratos_competencias_despesas_variaveis"
+    __table_args__ = (
+        UniqueConstraint("competencia_id", "ordem", name="uq_contratos_despesas_variaveis_competencia_ordem"),
+        CheckConstraint(f"tipo IN ({_lista_sql(TIPOS_DESPESA_VARIAVEL)})", name="ck_contratos_despesas_variaveis_tipo"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    competencia_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="CASCADE"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer)
+    tipo: Mapped[str] = mapped_column(String(20))
+    numero: Mapped[str] = mapped_column(String(100), default="")
+    valor: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+
+    competencia: Mapped["Competencia"] = relationship(back_populates="despesas_variaveis")
+    anexo: Mapped[Anexo | None] = relationship(foreign_keys=[anexo_id])
+
+    @property
+    def rotulo(self) -> str:
+        """"Nota de débito 12", "Recibo 3" ou "Outros 1" (número informado ou posição)."""
+        nome = {"nota_debito": "Nota de débito", "recibo": "Recibo", "outros": "Outros"}[self.tipo]
+        return f"{nome} {self.numero or self.ordem}"
 
 
 class RecusaNota(Base):

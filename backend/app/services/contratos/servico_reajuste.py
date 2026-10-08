@@ -40,7 +40,7 @@ from app.services.contratos import calculos, valores
 from app.services.contratos.documentos_execucao import moeda, moeda_unitaria, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist
-from app.services.contratos.servico_competencias import proxima_competencia_a_medir, registrar_credito_reajuste
+from app.services.contratos.servico_competencias import proxima_competencia_a_medir, registrar_credito_reajuste, sincronizar_competencia
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_MOEDA_UNITARIA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
@@ -98,7 +98,7 @@ def calcular_totais(contrato: Contrato, reajuste: Reajuste) -> None:
     atual = valores.valor_global_vigencia(contrato, vigencia)
     reajuste.base_atual, reajuste.base_reajustada = calculos.arredondar(base_atual), calculos.arredondar(base_nova)
     reajuste.valor_global_atual = atual
-    reajuste.valor_global_reajustado = valores.valor_global_vigencia(contrato, vigencia, (reajuste.mes_referencia, novos))
+    reajuste.valor_global_reajustado = valores.valor_global_vigencia(contrato, vigencia, (reajuste.efeito, novos))
 
 
 def _competencias_afetadas(contrato: Contrato, reajuste: Reajuste) -> list[Competencia]:
@@ -122,8 +122,23 @@ def _competencias_medidas(contrato: Contrato, reajuste: Reajuste) -> list[Compet
     )
 
 
+def _fracao_apos_efeito(competencia: Competencia, linha, efeito) -> Decimal:
+    """Quanto da quantidade medida da linha vale a diferença: tudo, nada ou a fração dos dias a partir da data de efeito.
+
+    Linha de trecho (mês com virada): só os trechos que começam na data de efeito ou depois. Linha de mês inteiro medida antes do
+    reajuste que atravessa a data: a fração dos dias comerciais (30/360) dali até o fim do período.
+    """
+    if linha.periodo_inicio is not None:
+        return Decimal(1) if linha.periodo_inicio >= efeito else ZERO
+    if competencia.periodo_inicio < efeito <= competencia.periodo_fim:
+        depois = calculos.dias_comerciais(efeito, competencia.periodo_fim)
+        total = calculos.dias_comerciais(competencia.periodo_inicio, competencia.periodo_fim) or 1
+        return Decimal(depois) / Decimal(total)
+    return Decimal(1) if competencia.periodo_fim >= efeito else ZERO
+
+
 def _diferencas(contrato: Contrato, reajuste: Reajuste, novos: dict) -> tuple[list[Competencia], dict, dict]:
-    """Competências medidas desde a referência e, por item, a quantidade medida e o valor da diferença."""
+    """Competências medidas desde a referência e, por item, a quantidade medida e o valor da diferença (só dos dias com o novo preço)."""
     medidas = _competencias_medidas(contrato, reajuste)
     quantidades: dict = {}
     valores_diferenca: dict = {}
@@ -131,10 +146,11 @@ def _diferencas(contrato: Contrato, reajuste: Reajuste, novos: dict) -> tuple[li
         for linha in competencia.itens:
             if linha.item_id not in novos or linha.quantidade_medida <= 0:
                 continue
-            quantidades[linha.item_id] = quantidades.get(linha.item_id, ZERO) + linha.quantidade_medida
-            valores_diferenca[linha.item_id] = valores_diferenca.get(linha.item_id, ZERO) + linha.quantidade_medida * (
-                novos[linha.item_id] - linha.valor_unitario
-            )
+            quantidade = linha.quantidade_medida * _fracao_apos_efeito(competencia, linha, reajuste.efeito)
+            if quantidade <= 0:
+                continue
+            quantidades[linha.item_id] = quantidades.get(linha.item_id, ZERO) + quantidade
+            valores_diferenca[linha.item_id] = valores_diferenca.get(linha.item_id, ZERO) + quantidade * (novos[linha.item_id] - linha.valor_unitario)
     return medidas, quantidades, valores_diferenca
 
 
@@ -201,7 +217,7 @@ def leitura(contrato: Contrato, reajuste: Reajuste, anexos: dict) -> LeituraReaj
         ],
         credito_pendente=calculos.arredondar(sum((a.valor for a in abatimentos if a.competencia is None), ZERO)),
         id=reajuste.id, situacao=reajuste.situacao, sequencia_vigencia=reajuste.sequencia_vigencia, vigencia_inicio=reajuste.vigencia_inicio,
-        vigencia_fim=reajuste.vigencia_fim, mes_referencia=reajuste.mes_referencia,
+        vigencia_fim=reajuste.vigencia_fim, mes_referencia=reajuste.mes_referencia, data_efeito=reajuste.efeito,
         competencias_recalculadas=len(_competencias_afetadas(contrato, reajuste)) if reajuste.situacao == "rascunho" else 0,
         competencias_com_diferenca=len(_competencias_medidas(contrato, reajuste)) if reajuste.situacao == "rascunho" else 0,
         competencia_diferenca=next(
@@ -262,17 +278,23 @@ def abrir(sessao: Session, contrato_id: uuid.UUID, dados: AberturaReajuste, auto
     if any(r.situacao == "concluido" and r.sequencia_vigencia == dados.sequencia_vigencia for r in existentes):
         raise ErroRegraContrato("Esta vigência já foi reajustada.")
     vigencia = _vigencia(contrato, dados.sequencia_vigencia)
-    # O mês de referência é normalizado para o dia 1 e precisa estar dentro da vigência
-    referencia = calculos.primeiro_dia(dados.mes_referencia)
-    if not calculos.primeiro_dia(vigencia.inicio) <= referencia <= vigencia.fim:
-        raise ErroRegraContrato("O mês de referência precisa estar dentro da vigência escolhida.")
+    # Data de efeito: a informada (qualquer dia da vigência) ou, na forma antiga, o dia 1 do mês de referência.
+    if dados.data_efeito is not None:
+        efeito = dados.data_efeito
+        if not vigencia.inicio <= efeito <= vigencia.fim:
+            raise ErroRegraContrato("A data de efeito precisa estar dentro da vigência escolhida.")
+    else:
+        efeito = calculos.primeiro_dia(dados.mes_referencia)  # type: ignore[arg-type]
+        if not calculos.primeiro_dia(vigencia.inicio) <= efeito <= vigencia.fim:
+            raise ErroRegraContrato("O mês de referência precisa estar dentro da vigência escolhida.")
+    referencia = calculos.primeiro_dia(efeito)
     reajuste = Reajuste(
         contrato_id=contrato.id, sequencia_vigencia=vigencia.sequencia, vigencia_inicio=vigencia.inicio, vigencia_fim=vigencia.fim,
-        mes_referencia=referencia, criado_por_id=autor.id,
+        mes_referencia=referencia, data_efeito=efeito, criado_por_id=autor.id,
     )
-    # Cada item começa com índice 0 (preço reajustado = preço atual)
+    # Cada item começa com índice 0 (preço reajustado = preço atual na data de efeito)
     for item in contrato.itens:
-        preco = valores.preco_em(contrato, item, referencia)
+        preco = valores.preco_em(contrato, item, efeito)
         reajuste.itens.append(
             ItemReajuste(
                 item_id=item.id, ordem=item.ordem, descricao=item.descricao, tipo=item.tipo,
@@ -283,7 +305,7 @@ def abrir(sessao: Session, contrato_id: uuid.UUID, dados: AberturaReajuste, auto
     sessao.add(reajuste)
     calcular_totais(contrato, reajuste)
     auditar(sessao, autor.login, "contrato.reajuste.abrir", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
-            alvo_id=contrato.id, dados={"vigencia": vigencia.sequencia, "mes_referencia": referencia})
+            alvo_id=contrato.id, dados={"vigencia": vigencia.sequencia, "mes_referencia": referencia, "data_efeito": efeito})
     sessao.commit()
 
 
@@ -331,7 +353,7 @@ def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id:
     # Hash dos dados da memória: se nada mudou desde a última versão, não gera arquivos novos
     origem = hashlib.sha256(json.dumps(
         [[str(i.item_id), str(i.valor_unitario_atual), str(i.indice_percentual), str(i.valor_referencial), str(i.valor_unitario_reajustado)] for i in reajuste.itens]
-        + [str(reajuste.mes_referencia)]
+        + [str(reajuste.mes_referencia), str(reajuste.efeito)]
     ).encode()).hexdigest()
     if reajuste.memorias and reajuste.memorias[-1].hash_origem == origem:
         return
@@ -383,7 +405,7 @@ def _pdf_memoria(contrato: Contrato, reajuste: Reajuste, versao: int, autor: Usu
                              paisagem=True, autor=autor.nome_completo or autor.login)
     documento.secao("Identificação").campos([
         ("Contrato", contrato.numero), ("Contratada", contrato.empresa.razao_social),
-        ("Vigência", f"{reajuste.vigencia_inicio:%d/%m/%Y} a {reajuste.vigencia_fim:%d/%m/%Y}"), ("Mês de referência", f"{reajuste.mes_referencia:%m/%Y}"),
+        ("Vigência", f"{reajuste.vigencia_inicio:%d/%m/%Y} a {reajuste.vigencia_fim:%d/%m/%Y}"), ("Novos valores a partir de", f"{reajuste.efeito:%d/%m/%Y}"),
     ])
     documento.secao("Itens (percentual positivo = reajuste; negativo = desconto)").tabela(
         ["Item", "Descrição", "Qtd. mensal", "Valor atual", "Índice (%)", "Referencial", "Valor reajustado", "Variação", "Subtotal reajustado"],
@@ -408,7 +430,7 @@ def _xlsx_memoria(contrato: Contrato, reajuste: Reajuste) -> bytes:
          Coluna("Índice (%)", "+0.0000;-0.0000;0.0000"), Coluna("Referencial", FORMATO_MOEDA_UNITARIA), Coluna("Valor reajustado", FORMATO_MOEDA_UNITARIA),
          Coluna("Variação", FORMATO_MOEDA_UNITARIA), Coluna("Subtotal reajustado", FORMATO_MOEDA, 20)],
         _linhas(reajuste),
-        titulo=f"Memória de cálculo do reajuste — Contrato {contrato.numero} — referência {reajuste.mes_referencia:%m/%Y}",
+        titulo=f"Memória de cálculo do reajuste — Contrato {contrato.numero} — a partir de {reajuste.efeito:%d/%m/%Y}",
         observacoes=["Índice: percentual positivo = reajuste; negativo = desconto.",
                      f"Base atual: {moeda(reajuste.base_atual)} · Nova base: {moeda(reajuste.base_reajustada)}",
                      f"Valor global atual: {moeda(reajuste.valor_global_atual)} · Novo valor global: {moeda(reajuste.valor_global_reajustado)}",
@@ -435,30 +457,31 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ar
     for item in contrato.itens:
         if item.id in novos and reajuste.sequencia_vigencia == ultima_vigencia:
             item.valor_unitario = novos[item.id]
-    # Competências ainda não medidas passam a usar o novo preço
+    # Competências ainda não medidas passam a usar o novo preço: as linhas são refeitas pelo cadastro, já com a data de efeito
+    # (o mês da virada ganha uma linha por trecho). Precisa vir depois de marcar o reajuste como concluído.
     afetadas = _competencias_afetadas(contrato, reajuste)
+    diferenca_ate_aqui = diferenca_retroativa(contrato, reajuste)
+    reajuste.situacao = "concluido"
     for competencia in afetadas:
-        for linha in competencia.itens:
-            if linha.item_id in novos:
-                linha.valor_unitario = novos[linha.item_id]
+        sincronizar_competencia(contrato, competencia)
     # O valor global reajustado do contrato também só vale para a vigência atual
     if reajuste.sequencia_vigencia == ultima_vigencia:
         contrato.valor_global_reajustado = reajuste.valor_global_reajustado
     # Diferença de preço das competências já medidas (calculada antes de mexer nos preços das não medidas):
     # a positiva vira competência complementar; a negativa, crédito abatido nas próximas medições
-    reajuste.diferenca_retroativa = diferenca_retroativa(contrato, reajuste)
+    reajuste.diferenca_retroativa = diferenca_ate_aqui
     diferenca = gerar_competencia_diferenca(contrato, reajuste, novos)
     if reajuste.diferenca_retroativa < 0:
         registrar_credito_reajuste(sessao, contrato, reajuste, -reajuste.diferenca_retroativa)
     reajuste.situacao, reajuste.concluido_em = "concluido", agora_utc()
     contrato.versao += 1
     auditar(sessao, autor.login, "contrato.reajuste.concluir", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id,
-            dados={"mes_referencia": reajuste.mes_referencia, "competencias_recalculadas": len(afetadas),
+            dados={"mes_referencia": reajuste.mes_referencia, "data_efeito": reajuste.efeito, "competencias_recalculadas": len(afetadas),
                    "competencia_diferenca": diferenca.identificador if diferenca else None,
                    "diferenca_retroativa": reajuste.diferenca_retroativa,
                    "campos": {"valor_global": {"de": reajuste.valor_global_atual, "para": reajuste.valor_global_reajustado}}})
     from app.services.contratos import avisos
-    avisos.alteracao_concluida(sessao, contrato, "reajuste", reajuste.id, f"reajuste aplicado a partir de {reajuste.mes_referencia:%m/%Y}", autor)
+    avisos.alteracao_concluida(sessao, contrato, "reajuste", reajuste.id, f"reajuste aplicado a partir de {reajuste.efeito:%d/%m/%Y}", autor)
     sessao.commit()
 
 

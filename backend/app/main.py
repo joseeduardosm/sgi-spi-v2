@@ -11,6 +11,8 @@ O uvicorn carrega `app.main:app`. Aqui a aplicação é montada nesta ordem:
 """
 
 import logging
+import os
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -59,6 +61,12 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     agendador_parabens.parar()
 
 
+# Fuso do processo = São Paulo: o servidor roda em UTC e qualquer `datetime.now()` ou data/hora gravada por bibliotecas (ex.: metadados dos PDFs)
+# sairia 3 horas adiantada. As datas com hora do banco continuam em UTC (ver `agora_utc`); só a exibição usa o horário de São Paulo.
+os.environ["TZ"] = "America/Sao_Paulo"
+if hasattr(time, "tzset"):
+    time.tzset()
+
 app = FastAPI(
     title="API SGI SPI – Sistema de Gestão Integrada",
     version=config.versao_aplicacao,
@@ -68,10 +76,11 @@ app = FastAPI(
         "`Authorization: Bearer <token>`. Erros seguem o formato `{\"detalhe\": ..., \"codigo\": ...}`. "
         "Documentação textual completa em `docs/` no repositório."
     ),
-    # Documentação automática publicada junto com a API (/api/documentacao e /api/redoc)
-    openapi_url=f"{prefixo}/openapi.json",
-    docs_url=f"{prefixo}/documentacao",
-    redoc_url=f"{prefixo}/redoc",
+    # Documentação (/api/documentacao, /api/redoc e /api/openapi.json) protegida pela ACL `documentacao-api`:
+    # as rotas ficam em `api/routes/documentacao.py`, por isso as automáticas do FastAPI são desligadas
+    openapi_url=None,
+    docs_url=None,
+    redoc_url=None,
     lifespan=ciclo_de_vida,
 )
 

@@ -9,6 +9,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { ImagemAutenticadaDirective } from '../noticias/gestao/imagem-autenticada.directive';
 import { TarefasApiService } from '../tarefas/tarefas-api.service';
+import { textoSla } from '../sla/sla.models';
 import { Equipe, PessoaCarga } from '../tarefas/tarefas.models';
 import { CabecalhoMelhoriasComponent } from './cabecalho-melhorias.component';
 import { MelhoriasApiService } from './melhorias-api.service';
@@ -58,6 +59,9 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
             <textarea id="tr-obs" name="obs" rows="3" maxlength="12000" [(ngModel)]="tratamento.observacao_interna"
                       placeholder="Só quem faz a triagem vê."></textarea></div>
         </div>
+        @if (s.sla; as sla) {
+          <p class="dica-formulario"><span class="selo-sla-texto" [attr.data-situacao]="sla.situacao_resposta">{{ textoSla(sla, 'resposta') }}</span> · <span class="selo-sla-texto" [attr.data-situacao]="sla.situacao_resolucao">{{ textoSla(sla, 'resolucao') }}</span></p>
+        }
         <div class="acoes-cartao">
           @if (s.tarefa_numero) {
             <a class="link-arquivo" [routerLink]="['/tarefas', s.tarefa_numero]">Tarefa #{{ s.tarefa_numero }} ↗</a>
@@ -123,6 +127,7 @@ export class DetalheSugestaoComponent implements OnInit {
   private readonly local = inject(Location);
   protected readonly situacoes = SITUACOES;
   protected readonly rotulos = ROTULOS_SITUACAO;
+  protected readonly textoSla = textoSla;
   protected readonly modulos = ROTULOS_MODULO;
   protected readonly numero = Number(this.rota.snapshot.paramMap.get('numero'));
   protected readonly aberta = signal<SugestaoTriagem | null>(null);

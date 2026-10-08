@@ -34,6 +34,8 @@ export class EtapaMedicaoComponent implements OnChanges {
 
   // Campos editáveis: quantidade medida por item e a lista ordenada de NEs escolhidas
   protected medidas: Record<string, string> = {};
+  /** Itens marcados como despesa variável (por item da competência). */
+  protected marcadas: Record<string, boolean> = {};
   protected readonly notas = signal<NotaSelecionada[]>([]);
   protected notaParaAdicionar = '';
   // Houve alteração não salva (mostra o aviso para salvar)
@@ -48,6 +50,7 @@ export class EtapaMedicaoComponent implements OnChanges {
   ngOnChanges(): void {
     const d = this.detalhe();
     this.medidas = Object.fromEntries(d.itens.map((i) => [i.id, paraDecimalTela(i.quantidade_medida)]));
+    this.marcadas = Object.fromEntries(d.itens.map((i) => [i.id, !!i.despesa_variavel]));
     this.notas.set(d.notas_selecionadas);
     this.alterado.set(false);
   }
@@ -63,6 +66,21 @@ export class EtapaMedicaoComponent implements OnChanges {
   /** Subtotal do item com a quantidade digitada. */
   protected subtotal(itemId: string, preco: string): number {
     return (Number(paraDecimalApi(this.medidas[itemId])) || 0) * Number(preco);
+  }
+
+  /** Há item marcado como despesa variável (mostra os subtotais separados). */
+  protected temDespesasVariaveis(): boolean {
+    return this.detalhe().itens.some((i) => this.marcadas[i.id]);
+  }
+
+  /** Subtotal dos itens que não são despesas variáveis. */
+  protected subtotalMedicao(): number {
+    return this.detalhe().itens.filter((i) => !this.marcadas[i.id]).reduce((t, i) => t + this.subtotal(i.id, i.valor_unitario), 0);
+  }
+
+  /** Subtotal dos itens marcados como despesas variáveis. */
+  protected subtotalDespesas(): number {
+    return this.detalhe().itens.filter((i) => this.marcadas[i.id]).reduce((t, i) => t + this.subtotal(i.id, i.valor_unitario), 0);
   }
 
   /** Total medido com as quantidades digitadas. */
@@ -101,8 +119,14 @@ export class EtapaMedicaoComponent implements OnChanges {
     this.alterado.set(true);
   }
 
-  /** A medição digitada passa do saldo líquido do item? */
+  /** As quantidades podem ser digitadas: competência regular ou medição adicional (a diferença de reajuste tem quantidades fixas). */
+  protected medivel(): boolean {
+    return this.detalhe().tipo === 'regular' || this.detalhe().tipo === 'adicional';
+  }
+
+  /** A medição digitada passa do saldo líquido do item? Na medição adicional, o item contínuo não tem teto (o servidor só avisa). */
   protected acimaDoSaldo(itemId: string, saldoLiquido: string): boolean {
+    if (this.detalhe().tipo === 'adicional' && this.detalhe().itens.find((i) => i.id === itemId)?.tipo === 'continuo') return false;
     const medida = Number(paraDecimalApi(this.medidas[itemId]));
     return Number.isFinite(medida) && medida > Number(saldoLiquido) + 1e-9;
   }
@@ -143,7 +167,7 @@ export class EtapaMedicaoComponent implements OnChanges {
       });
       if (!ok) return;
     }
-    const itens = d.itens.map((i) => ({ id: i.id, quantidade_medida: paraDecimalApi(this.medidas[i.id]) }));
+    const itens = d.itens.map((i) => ({ id: i.id, quantidade_medida: paraDecimalApi(this.medidas[i.id]), despesa_variavel: !!this.marcadas[i.id] }));
     this.api.salvarMedicao(d.contrato_id, d.id, itens, this.notas().map((n) => n.id)).subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível salvar a medição'),

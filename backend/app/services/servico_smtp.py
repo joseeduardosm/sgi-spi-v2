@@ -153,7 +153,7 @@ def enviar_teste(sessao: Session, servidor_id: uuid.UUID, destinatario: str, aut
             sobretitulo="Servidores SMTP",
         ),
     )
-    mensagem = com_brasao(mensagem)
+    mensagem = com_logo(mensagem)
     try:
         resultado = cliente_smtp.enviar(ParametrosSmtp.do_modelo(servidor), mensagem)
     except ErroSmtp as erro:
@@ -167,16 +167,16 @@ def enviar_teste(sessao: Session, servidor_id: uuid.UUID, destinatario: str, aut
     return resultado
 
 
-def com_brasao(mensagem: Mensagem) -> Mensagem:
+def com_logo(mensagem: Mensagem) -> Mensagem:
     """Anexa o brasão (imagem embutida) quando o HTML usa o layout oficial."""
-    if mensagem.html and f"cid:{modelo_email.CID_BRASAO}" in mensagem.html and not any(i.cid == modelo_email.CID_BRASAO for i in mensagem.imagens):
-        return replace(mensagem, imagens=[*mensagem.imagens, modelo_email.imagem_brasao()])
+    if mensagem.html and f"cid:{modelo_email.CID_LOGO}" in mensagem.html and not any(i.cid == modelo_email.CID_LOGO for i in mensagem.imagens):
+        return replace(mensagem, imagens=[*mensagem.imagens, modelo_email.imagem_logo()])
     return mensagem
 
 
 def enviar_email(sessao: Session, mensagem: Mensagem) -> ResultadoSmtp:
     """Envia pelo servidor ativo. Usado pelos módulos que mandam e-mail. Lança `SemServidorAtivo`."""
-    mensagem = com_brasao(mensagem)
+    mensagem = com_logo(mensagem)
     servidor = obter_servidor_ativo(sessao)
     if servidor is None:
         raise SemServidorAtivo("Nenhum servidor SMTP ativo. Cadastre e ative um em Administração > Servidores SMTP.")

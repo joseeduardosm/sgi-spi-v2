@@ -78,8 +78,8 @@ export class AlteracoesApiService {
   }
 
   /** Abre um reajuste para a vigência e o mês de referência. */
-  abrirReajuste(id: string, sequencia: number, mesReferencia: string): Observable<PainelReajuste> {
-    return this.http.post<PainelReajuste>(`${this.base}/${id}/reajustes`, { sequencia_vigencia: sequencia, mes_referencia: mesReferencia });
+  abrirReajuste(id: string, sequencia: number, dataEfeito: string): Observable<PainelReajuste> {
+    return this.http.post<PainelReajuste>(`${this.base}/${id}/reajustes`, { sequencia_vigencia: sequencia, data_efeito: dataEfeito });
   }
 
   /** Anexa a evidência do índice ou o apostilamento (que conclui o reajuste). */

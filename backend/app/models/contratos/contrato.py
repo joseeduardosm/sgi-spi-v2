@@ -87,6 +87,8 @@ class Contrato(Base):
     periodicidade_meses: Mapped[int] = mapped_column(Integer, default=1)
     # Quando ligado, as competências podem ser medidas sem esperar o fim do período (sem a trava do 1º dia do mês seguinte)
     liberar_todas_competencias: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Quando ligado, qualquer competência pode receber medições adicionais (outra medição e outro pagamento no mesmo mês)
+    permite_medicao_adicional: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Mês do ano em que o contrato pode ser reajustado
     mes_reajuste: Mapped[int] = mapped_column(Integer)
     # Processos SEI de gestão e de execução (número e link)
@@ -103,6 +105,8 @@ class Contrato(Base):
     versao: Mapped[int] = mapped_column(Integer, default=1)
     # Sobe a cada mudança nos itens (preço, quantidades, inclusão, exclusão). As competências abertas guardam com qual versão foram calculadas
     versao_cadastro: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # Competências anteriores a esta data não geram alertas nem pendências (vale a maior entre ela e o corte global); nula = só o corte global
+    alertas_a_partir_de: Mapped[date | None] = mapped_column(Date)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 

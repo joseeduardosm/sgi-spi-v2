@@ -15,6 +15,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from app.core.banco import em_sao_paulo
 from app.schemas.painel_executivo import SlideContratos, SlideRh, SlideTarefas
 
 VERMELHO = colors.HexColor("#c82331")
@@ -119,7 +120,7 @@ def contratos(s: SlideContratos) -> bytes:
         _tabela(["Contrato", "Empresa", "Gravidade", "Riscos", "Principal risco"],
                 [[f"{r.contrato_numero} {r.contrato_apelido}".strip(), r.empresa[:38], r.gravidade, str(r.riscos), r.principal[:80]] for r in s.maiores_riscos]),
     ]
-    return _documento("Contratos", f"Exercício {s.exercicio} · gerado em {s.gerado_em:%d/%m/%Y %H:%M}", partes)
+    return _documento("Contratos", f"Exercício {s.exercicio} · gerado em {em_sao_paulo(s.gerado_em):%d/%m/%Y %H:%M}", partes)
 
 
 def rh(s: SlideRh) -> bytes:
@@ -133,7 +134,7 @@ def rh(s: SlideRh) -> bytes:
         Spacer(1, 6), Paragraph("Férias a vencer", SUBTITULO),
         _tabela(["Nome", "Setor", "Dias disponíveis", "Período termina em"], [[f.nome, f.setor, str(f.disponivel), f"{f.periodo_fim:%d/%m/%Y}"] for f in s.ferias_a_vencer]),
     ]
-    return _documento("RH", f"Ano {s.ano} · gerado em {s.gerado_em:%d/%m/%Y %H:%M}", partes)
+    return _documento("RH", f"Ano {s.ano} · gerado em {em_sao_paulo(s.gerado_em):%d/%m/%Y %H:%M}", partes)
 
 
 def tarefas(s: SlideTarefas) -> bytes:
@@ -146,4 +147,4 @@ def tarefas(s: SlideTarefas) -> bytes:
         Paragraph("Equipes", SUBTITULO),
         _tabela(["Equipe", "Abertas", "Atrasadas", "Críticas", "Carga", "Faixa"], [[e.equipe, str(e.abertas), str(e.atrasadas), str(e.criticas), f"{e.carga:g}", e.faixa] for e in s.equipes]),
     ]
-    return _documento("Tarefas", f"gerado em {s.gerado_em:%d/%m/%Y %H:%M}", partes)
+    return _documento("Tarefas", f"gerado em {em_sao_paulo(s.gerado_em):%d/%m/%Y %H:%M}", partes)

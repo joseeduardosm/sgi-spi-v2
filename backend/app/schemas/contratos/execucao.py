@@ -31,7 +31,8 @@ class GravacaoDocumentoChecklist(BaseModel):
     observacao: Texto = Field("", max_length=1000)
     obrigatorio: bool = Field(True, description="Obrigatório precisa estar anexado para concluir a etapa do checklist; opcional, não.")
     com_validade: bool = Field(False, description="Documento com validade: o envio exige a data de validade e, se ainda valer, ele é reaproveitado na competência seguinte.")
-    vale_outros_contratos: bool = Field(False, description="Documento da empresa: se já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo (exige `com_validade`).")
+    vale_outros_contratos: bool = Field(False, description="Documento da empresa: se já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo. Sem `com_validade`, vale o documento juntado na mesma competência (mês) do outro contrato.")
+    pedir_envio: bool = Field(False, description="Pedir para enviar: ao concluir a medição, o e-mail à empresa pede este documento (com a observação).")
 
 
 class GravacaoChecklist(BaseModel):
@@ -49,6 +50,12 @@ class LeituraDocumentoChecklist(BaseModel):
     obrigatorio: bool
     com_validade: bool
     vale_outros_contratos: bool = False
+    pedir_envio: bool = False
+
+
+class AlteracaoPedirEnvio(BaseModel):
+    """Corpo de `PUT .../checklists/{id}/itens/{item_id}/pedir-envio`: liga ou desliga o pedido de envio de um documento (vale com o checklist ativo)."""
+    pedir_envio: bool
 
 
 class LeituraChecklist(BaseModel):
@@ -188,9 +195,10 @@ class ResumoCompetencia(BaseModel):
     """Competência na lista da aba Execução."""
     id: uuid.UUID
     competencia: date
-    tipo: str = Field("regular", description="`regular` ou `diferenca_reajuste` (complementar, paga a diferença de um reajuste retroativo).")
+    tipo: str = Field("regular", description="`regular`, `diferenca_reajuste` (complementar, paga a diferença de um reajuste retroativo) ou `adicional` (outra medição e outro pagamento no mesmo período).")
+    numero_adicional: int = Field(0, description="Número da medição adicional (1, 2…); 0 nas demais.")
     parte: int | None = Field(None, description="1 ou 2 quando o mês se divide entre duas vigências; nulo nos demais casos.")
-    identificador: str = Field(..., description="Chave da rota da tela: `AAAA-MM`, `AAAA-MM-1`, `AAAA-MM-2` ou `AAAA-MM-dif`.")
+    identificador: str = Field(..., description="Chave da rota da tela: `AAAA-MM`, `AAAA-MM-1`, `AAAA-MM-2`, `AAAA-MM-dif` ou `AAAA-MM-adicional-N`.")
     rotulo: str = Field(..., description="Rótulo para exibição. Ex.: `01/2027 · 1ª parte`.")
     sequencia_vigencia: int
     periodo_inicio: date
@@ -221,6 +229,8 @@ class LeituraItemMedicao(BaseModel):
     id: uuid.UUID
     ordem: int
     descricao: str
+    segmento: int = Field(1, description="Trecho do mês (1, 2…) quando o mês tem virada de vigência ou de preço; 1 nos demais meses.")
+    periodo_rotulo: str = Field("", description="Dias do trecho e o que mudou (ex.: `01/09 a 19/09/2026 · preço anterior`); vazio quando o mês não tem virada.")
     tipo: str
     calcula_pro_rata: bool
     valor_unitario: ValorUnitario
@@ -231,6 +241,7 @@ class LeituraItemMedicao(BaseModel):
     saldo: ValorQuantidade = Field(..., description="Contínuo: previsto da competência; sob demanda: saldo do item na vigência.")
     glosas: ValorQuantidade = Field(..., description="Glosas do diário de bordo com data no período da competência.")
     saldo_liquido: ValorQuantidade = Field(..., description="Saldo − glosas (mínimo 0): o máximo que pode ser medido.")
+    despesa_variavel: bool = Field(False, description="Item marcado como despesa variável nesta medição (subtotal à parte; exige nota de débito, recibo ou outros na etapa da nota fiscal).")
 
 
 class GlosaDoPeriodo(BaseModel):
@@ -273,6 +284,7 @@ class LeituraMemoria(BaseModel):
     versao: int
     criada_em: datetime
     arquivo: LeituraArquivo
+    arquivo_despesas: LeituraArquivo | None = Field(None, description="Medição dos itens de despesas variáveis (PDF à parte), quando a competência tem esses itens.")
 
 
 class NotaSelecionada(BaseModel):
@@ -334,6 +346,26 @@ class ItemNotaFiscal(BaseModel):
     numero: str | None = Field(None, max_length=100, description="Número da nota, para a nota sem XML (opcional).")
 
 
+class ItemDespesaVariavel(BaseModel):
+    """Um documento de despesa variável na gravação da etapa 3 (a lista inteira, na ordem final)."""
+    id: uuid.UUID | None = Field(None, description="Documento já registrado, que mantém o arquivo se não for trocado; vazio para um novo.")
+    tipo: Literal["nota_debito", "recibo", "outros"] = Field(..., description="Nota de débito, recibo ou outros.")
+    numero: str | None = Field(None, max_length=100, description="Número do documento (opcional).")
+    valor: Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=2)] = Field(..., description="Valor do documento.")
+    arquivo: int | None = Field(None, ge=0, description="Posição, na lista `arquivos_despesas`, do PDF deste documento.")
+
+
+class LeituraDespesaVariavel(BaseModel):
+    """Documento de despesa variável juntado (não passa pela retenção; entra no consolidado)."""
+    id: uuid.UUID
+    ordem: int
+    tipo: Literal["nota_debito", "recibo", "outros"]
+    numero: str
+    rotulo: str
+    valor: ValorMonetario
+    arquivo: LeituraArquivo | None
+
+
 class GravacaoRetencao(BaseModel):
     """Conferência da etapa 4: retenções de cada nota fiscal e a confirmação da discriminação."""
     notas: list[RetencoesDaNota] = Field(..., min_length=1, description="Uma entrada para cada nota fiscal da competência.")
@@ -393,7 +425,7 @@ class SugestaoOutroContrato(BaseModel):
     origem_id: uuid.UUID = Field(..., description="Id do documento de origem (enviar em `reaproveitar`).")
     contrato_numero: str
     competencia: date = Field(..., description="Mês da competência de origem (dia 1).")
-    validade_ate: date
+    validade_ate: date | None = Field(None, description="Validade do documento de origem (vazio quando o documento não tem validade: vale o da mesma competência).")
     arquivo_nome: str
 
 
@@ -474,16 +506,25 @@ class DetalheCompetencia(ResumoCompetencia):
     contrato_id: uuid.UUID
     contrato_numero: str
     empresa_cnpj: str = Field(..., description="CNPJ da empresa contratada, só dígitos (para copiar na consulta ao CADIN).")
+    pode_incluir_adicional: bool = Field(False, description="O contrato permite medição adicional e o usuário pode incluí-la (botão \"Incluir nova medição\").")
+    pode_excluir_adicional: bool = Field(False, description="A competência é uma medição adicional ainda não paga e o usuário pode excluí-la (botão \"Excluir medição adicional\").")
+    adicional_justificativa: str = Field("", description="Justificativa informada ao incluir a medição adicional (vazio nas demais).")
+    adicional_por_nome: str = Field("", description="Quem incluiu a medição adicional.")
+    adicional_anexo: LeituraArquivo | None = Field(None, description="Anexo opcional da justificativa da medição adicional.")
     etapas: list[Etapa] = Field(..., description="Etapas desta competência, em ordem (sem `avaliacao` se não houver formulário).")
     pode_editar: bool
     integra_equipe: bool = Field(..., description="O usuário pode registrar ciência.")
     pode_gerar_consolidado_novamente: bool = Field(
-        ..., description="O usuário pode substituir o consolidado já gerado (gestor do contrato ou SuperRoot)."
+        ..., description="O usuário pode substituir o consolidado já gerado (todos que podem editar o contrato)."
     )
     liberada: bool = Field(..., description="O período terminou; a medição pode ser feita.")
     itens: list[LeituraItemMedicao]
     total_previsto: ValorMonetario
-    total_medido: ValorMonetario
+    total_medido: ValorMonetario = Field(..., description="Total da medição: Subtotal - Medição + Subtotal - Despesas Variáveis.")
+    subtotal_medicao: ValorMonetario = Field(Decimal(0), description="Subtotal dos itens que não são despesas variáveis.")
+    subtotal_despesas_variaveis: ValorMonetario = Field(Decimal(0), description="Subtotal dos itens marcados como despesas variáveis.")
+    tem_despesas_variaveis: bool = Field(False, description="Há item marcado como despesa variável: a etapa da nota fiscal exige nota fiscal e documento de despesa.")
+    despesas_variaveis: list[LeituraDespesaVariavel] = Field(default_factory=list, description="Notas de débito, recibos e outros juntados na etapa da nota fiscal.")
     notas_selecionadas: list[NotaSelecionada]
     notas_disponiveis: list[NotaSelecionada] = Field(..., description="NEs do contrato com saldo.")
     ciencias: list[LeituraCiencia]
@@ -531,6 +572,7 @@ class ItemMedidoGravacao(BaseModel):
     """Quantidade medida de um item (até 10 casas decimais, como no sistema de origem)."""
     id: uuid.UUID
     quantidade_medida: Annotated[Decimal, Field(ge=0, max_digits=28, decimal_places=10)]
+    despesa_variavel: bool | None = Field(None, description="Marca o item como despesa variável nesta medição; vazio mantém a marca atual.")
 
 
 class GravacaoMedicao(BaseModel):

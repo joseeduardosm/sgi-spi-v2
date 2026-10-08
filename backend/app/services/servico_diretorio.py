@@ -19,6 +19,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.banco import hoje_sao_paulo
 from app.models.anexo import Anexo
 from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
 from app.models.rh import Afastamento
@@ -122,7 +123,7 @@ class FiltrosRamais:
 
 def listar_ramais(sessao: Session, usuario: Usuario, filtros: FiltrosRamais, pagina: int, tamanho: int, hoje: date | None = None) -> PaginaContatos:
     """Lista paginada: favoritos primeiro, depois ordem alfabética."""
-    hoje = hoje or date.today()
+    hoje = hoje or hoje_sao_paulo()
     favoritos = _favoritos(sessao, usuario)
     pessoas = _ativos_com_ramal(sessao)
     ferias = _ferias_hoje(sessao, [p.id for p in pessoas], hoje)
@@ -169,7 +170,7 @@ def obter_contato(sessao: Session, usuario: Usuario, contato_id: int, hoje: date
 
 
 def detalhe_contato(sessao: Session, usuario: Usuario, contato_id: int, hoje: date | None = None) -> ContatoDetalhe:
-    hoje = hoje or date.today()
+    hoje = hoje or hoje_sao_paulo()
     alvo = obter_contato(sessao, usuario, contato_id)
     base = _contato(alvo, _favoritos(sessao, usuario), _ferias_hoje(sessao, [alvo.id], hoje))
     chefe = sessao.get(Usuario, alvo.gestor_id) if alvo.gestor_id else None
@@ -239,7 +240,7 @@ def _proximo(nascimento: date, hoje: date) -> date:
 
 def listar_aniversariantes(sessao: Session, usuario: Usuario, periodo: str, hoje: date | None = None) -> list[Aniversariante]:
     """`dia` = hoje; `semana` = hoje e os 6 dias seguintes; `mes` = todo o mês corrente (inclui dias que já passaram)."""
-    hoje = hoje or date.today()
+    hoje = hoje or hoje_sao_paulo()
     pessoas = sessao.scalars(
         select(Usuario).where(Usuario.ativo.is_(True), Usuario.data_nascimento.is_not(None), Usuario.ocultar_aniversario.is_(False))
     )
@@ -290,7 +291,7 @@ def _aniversariante(sessao: Session, alvo_id: int) -> Usuario:
 
 
 def mural(sessao: Session, usuario: Usuario, alvo_id: int, hoje: date | None = None) -> list[Parabens]:
-    hoje = hoje or date.today()
+    hoje = hoje or hoje_sao_paulo()
     alvo = _aniversariante(sessao, alvo_id)
     ano = ocorrencia_mais_proxima(alvo.data_nascimento, hoje).year
     recados = sessao.scalars(select(ParabensAniversario).where(
@@ -301,7 +302,7 @@ def mural(sessao: Session, usuario: Usuario, alvo_id: int, hoje: date | None = N
 
 def parabenizar(sessao: Session, usuario: Usuario, alvo_id: int, texto: str, hoje: date | None = None) -> Parabens:
     """Grava o recado e avisa o aniversariante por mensagem interna."""
-    hoje = hoje or date.today()
+    hoje = hoje or hoje_sao_paulo()
     alvo = _aniversariante(sessao, alvo_id)
     if alvo.id == usuario.id:
         raise ErroDiretorio("Você não pode deixar recado no seu próprio mural.")
@@ -325,7 +326,7 @@ def parabenizar(sessao: Session, usuario: Usuario, alvo_id: int, texto: str, hoj
 
 
 def apagar_parabens(sessao: Session, usuario: Usuario, alvo_id: int, hoje: date | None = None) -> None:
-    hoje = hoje or date.today()
+    hoje = hoje or hoje_sao_paulo()
     alvo = _aniversariante(sessao, alvo_id)
     ano = ocorrencia_mais_proxima(alvo.data_nascimento, hoje).year
     apagados = sessao.execute(delete(ParabensAniversario).where(
@@ -346,7 +347,7 @@ def corpo_parabens_automatico(nome: str) -> str:
 
 def enviar_parabens_do_dia(sessao: Session, hoje: date | None = None) -> list:
     """Mensagem interna (com e-mail) para quem faz aniversário hoje. Sem repetir no mesmo dia. Devolve as mensagens criadas (já com commit)."""
-    hoje = hoje or date.today()
+    hoje = hoje or hoje_sao_paulo()
     criadas = []
     pessoas = sessao.scalars(select(Usuario).where(
         Usuario.ativo.is_(True), Usuario.data_nascimento.is_not(None), Usuario.ocultar_aniversario.is_(False)))

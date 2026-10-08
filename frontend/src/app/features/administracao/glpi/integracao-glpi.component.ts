@@ -98,6 +98,12 @@ interface ResultadoTeste {
       }
     </section>
   `,
+  // O painel não tem margem interna própria: o conteúdo abaixo do cabeçalho recebe o mesmo recuo (24px) do cabeçalho
+  styles: `
+    .painel-gestao > :not(.barra-ferramentas) { margin-inline: 24px; }
+    .painel-gestao > .barra-ferramentas + * { margin-top: 20px; }
+    .painel-gestao > :last-child { margin-bottom: 22px; }
+  `,
 })
 export class IntegracaoGlpiComponent implements OnInit {
   private readonly http = inject(HttpClient);

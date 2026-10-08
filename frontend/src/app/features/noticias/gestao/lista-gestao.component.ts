@@ -2,7 +2,7 @@
 // Este arquivo serve para listar as notícias na gestão, com abas por situação (a de aprovação mostra o total pendente).
 
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -13,6 +13,8 @@ import { NoticiasApiService } from '../noticias-api.service';
 import { NoticiaGestaoResumo, PapelNoticias, ROTULOS_SITUACAO, SituacaoNoticia } from '../noticias.models';
 import { CabecalhoNoticiasComponent } from './cabecalho-noticias.component';
 import { ImagemAutenticadaDirective } from './imagem-autenticada.directive';
+
+type ColunaOrdem = 'titulo' | 'situacao' | 'publicar_em' | 'autor_nome' | 'atualizado_em';
 
 const ABAS: { valor: '' | SituacaoNoticia; rotulo: string }[] = [
   { valor: '', rotulo: 'Todas' }, { valor: 'em_revisao', rotulo: 'Aguardando aprovação' }, { valor: 'rascunho', rotulo: 'Rascunhos' },
@@ -40,9 +42,9 @@ const ABAS: { valor: '' | SituacaoNoticia; rotulo: string }[] = [
         </div>
         <div class="tabela-gestao-envoltorio">
           <table class="tabela-gestao tabela-noticias">
-            <thead><tr><th>Capa</th><th>Notícia</th><th>Situação</th><th>Publicação</th><th>Autor</th><th>Atualizada</th></tr></thead>
+            <thead><tr><th>Capa</th><th [attr.aria-sort]="sentido('titulo')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'titulo'" (click)="ordenar('titulo')" title="Ordenar por notícia">Notícia<span aria-hidden="true">{{ ordenarPor() === 'titulo' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th><th [attr.aria-sort]="sentido('situacao')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'situacao'" (click)="ordenar('situacao')" title="Ordenar por situação">Situação<span aria-hidden="true">{{ ordenarPor() === 'situacao' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th><th [attr.aria-sort]="sentido('publicar_em')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'publicar_em'" (click)="ordenar('publicar_em')" title="Ordenar por publicação">Publicação<span aria-hidden="true">{{ ordenarPor() === 'publicar_em' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th><th [attr.aria-sort]="sentido('autor_nome')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'autor_nome'" (click)="ordenar('autor_nome')" title="Ordenar por autor">Autor<span aria-hidden="true">{{ ordenarPor() === 'autor_nome' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th><th [attr.aria-sort]="sentido('atualizado_em')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'atualizado_em'" (click)="ordenar('atualizado_em')" title="Ordenar por atualizada">Atualizada<span aria-hidden="true">{{ ordenarPor() === 'atualizado_em' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th></tr></thead>
             <tbody>
-              @for (n of itens(); track n.id) {
+              @for (n of ordenados(); track n.id) {
                 <tr>
                   <td class="coluna-capa"><a [routerLink]="['/noticias/gestao', n.id]">
                     @if (n.capa['400']) { <img [appImagemAutenticada]="n.capa['400']" [alt]="n.titulo" /> } @else { <span class="sem-capa">sem capa</span> }
@@ -79,6 +81,20 @@ export class ListaGestaoComponent implements OnInit {
   protected readonly carregando = signal(true);
   protected readonly semAcesso = signal(false);
   protected busca = '';
+  // Ordenação das colunas (feita aqui: a lista não é paginada). Padrão: a mais recentemente atualizada primeiro
+  protected readonly ordenarPor = signal<ColunaOrdem>('atualizado_em');
+  protected readonly direcao = signal<'asc' | 'desc'>('desc');
+  protected readonly ordenados = computed(() => {
+    const coluna = this.ordenarPor();
+    const sinal = this.direcao() === 'asc' ? 1 : -1;
+    const valor = (n: NoticiaGestaoResumo): string => {
+      // Sem data de publicação = publicação imediata: ordena pela atualização
+      if (coluna === 'publicar_em') return n.publicar_em ?? n.atualizado_em;
+      if (coluna === 'situacao') return this.rotulos[n.situacao];
+      return String(n[coluna] ?? '');
+    };
+    return [...this.itens()].sort((a, b) => sinal * valor(a).localeCompare(valor(b), 'pt-BR', { numeric: true, sensitivity: 'base' }));
+  });
   private readonly digitacao = new Subject<string>();
 
   ngOnInit(): void {
@@ -97,6 +113,19 @@ export class ListaGestaoComponent implements OnInit {
   }
 
   protected digitar(v: string): void { this.digitacao.next(v); }
+
+  /** Clique no título da coluna: ordena por ela; de novo, inverte o sentido. */
+  protected ordenar(coluna: ColunaOrdem): void {
+    if (this.ordenarPor() === coluna) this.direcao.update((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      this.ordenarPor.set(coluna);
+      this.direcao.set(coluna === 'atualizado_em' || coluna === 'publicar_em' ? 'desc' : 'asc');
+    }
+  }
+
+  protected sentido(coluna: ColunaOrdem): 'ascending' | 'descending' | 'none' {
+    return this.ordenarPor() !== coluna ? 'none' : this.direcao() === 'asc' ? 'ascending' : 'descending';
+  }
 
   private carregar(): void {
     this.carregando.set(true);

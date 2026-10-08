@@ -8,6 +8,7 @@ import { filter } from 'rxjs';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { ChamadoService } from '../../../core/chamados/chamado.service';
+import { AtalhosFixosService } from '../../../core/navegacao/atalhos-fixos.service';
 import { AtalhosService } from '../../../core/navegacao/atalhos.service';
 import { ItemNavegacao } from '../../../core/navegacao/navegacao.model';
 import { NavegacaoService } from '../../../core/navegacao/navegacao.service';
@@ -36,6 +37,9 @@ export class BarraLateralComponent {
   protected readonly navegacao = inject(NavegacaoService);
   protected readonly autenticacao = inject(AutenticacaoService);
   protected readonly atalhos = inject(AtalhosService);
+  /** Seção "Recentes" da barra: desativada temporariamente (os favoritos continuam). */
+  protected readonly mostrarRecentes = false;
+  protected readonly atalhosFixos = inject(AtalhosFixosService);
   private readonly chamado = inject(ChamadoService);
   private readonly roteador = inject(Router);
 
@@ -46,6 +50,8 @@ export class BarraLateralComponent {
   private readonly gruposFechados = signal<ReadonlySet<string>>(new Set());
 
   constructor() {
+    // Atalhos fixos (iguais para todos) para o grupo "Atalhos"
+    this.atalhosFixos.carregar();
     // Garante que o grupo da página atual esteja aberto após cada navegação
     this.roteador.events
       .pipe(

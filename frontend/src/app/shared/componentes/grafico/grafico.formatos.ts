@@ -22,6 +22,6 @@ export function abreviar(valor: number): string {
 }
 
 /** Texto para leitores de tela: "Previsto: Jan 10, Fev 12". */
-export function descreverSerie(nome: string, rotulos: string[], dados: number[], formato: FormatoGrafico): string {
+export function descreverSerie(nome: string, rotulos: string[], dados: (number | null)[], formato: FormatoGrafico): string {
   return `${nome}: ` + rotulos.map((r, i) => `${r} ${formatarValor(dados[i] ?? 0, formato)}`).join(', ');
 }

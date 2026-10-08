@@ -17,6 +17,8 @@ import { IconeComponent } from '../../componentes/icone/icone.component';
 import { BotaoMelhoriasComponent } from '../../componentes/botao-melhorias/botao-melhorias.component';
 import { AbrirChamadoComponent } from '../../componentes/abrir-chamado/abrir-chamado.component';
 import { BuscaGlobalComponent } from '../../componentes/busca-global/busca-global.component';
+import { PaletaComandosComponent } from '../../componentes/paleta-comandos/paleta-comandos.component';
+import { PaletaComandosService } from '../../componentes/paleta-comandos/paleta-comandos.service';
 import { BarraLateralComponent } from '../barra-lateral/barra-lateral.component';
 import { LayoutService } from '../layout.service';
 
@@ -25,7 +27,7 @@ import { LayoutService } from '../layout.service';
   selector: 'app-layout-autenticado',
   imports: [
     RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaMensagemComponent, FolhaPontoDialogoComponent,
-    BotaoMelhoriasComponent, BuscaGlobalComponent, AbrirChamadoComponent,
+    BotaoMelhoriasComponent, BuscaGlobalComponent, AbrirChamadoComponent, PaletaComandosComponent,
   ],
   templateUrl: './layout-autenticado.component.html',
   styleUrl: './layout-autenticado.component.scss',
@@ -49,6 +51,7 @@ export class LayoutAutenticadoComponent {
   private readonly roteador = inject(Router);
   protected readonly atalhos = inject(AtalhosService);
   private readonly busca = viewChild<BuscaGlobalComponent>('busca');
+  private readonly paleta = inject(PaletaComandosService);
   private readonly elemento = inject(ElementRef<HTMLElement>);
   // Sino da mensageria (contador de pendentes) e janela de avisos
   protected readonly caixa = inject(CaixaMensagensService);
@@ -90,11 +93,15 @@ export class LayoutAutenticadoComponent {
     this.atalhos.alternar(url, rotulo);
   }
 
-  /** Atalhos de teclado: Ctrl+K (ou Cmd+K) e "/" levam à busca global, exceto quando a pessoa está digitando em um campo. */
+  /** Atalhos de teclado: Ctrl+K (ou Cmd+K) abre a paleta de comandos; "/" leva à busca global, exceto quando a pessoa está digitando em um campo. */
   protected aoTeclar(evento: KeyboardEvent): void {
     const alvo = evento.target as HTMLElement | null;
     const digitando = !!alvo && (alvo.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(alvo.tagName));
-    if (((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === 'k') || (evento.key === '/' && !digitando && !evento.ctrlKey && !evento.metaKey)) {
+    // Ctrl/Cmd+K abre (ou fecha) a paleta de comandos, mesmo digitando; "/" leva o foco à busca do topo (nunca com a paleta aberta)
+    if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === 'k') {
+      evento.preventDefault();
+      this.paleta.alternar();
+    } else if (evento.key === '/' && !digitando && !evento.ctrlKey && !evento.metaKey && !this.paleta.aberta()) {
       const busca = this.busca();
       if (!busca) return;
       evento.preventDefault();

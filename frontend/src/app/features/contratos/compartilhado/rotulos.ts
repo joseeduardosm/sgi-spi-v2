@@ -82,6 +82,8 @@ export const ROTULOS_CAMPO: Record<string, string> = {
   periodicidade_meses: 'Periodicidade',
   mes_reajuste: 'Mês de reajuste',
   liberar_todas_competencias: 'Liberar todas as competências',
+  permite_medicao_adicional: 'Permitir medição adicional',
+  alertas_a_partir_de: 'Desconsiderar alertas a partir de',
   sei_gestao_numero: 'SEI - Gestão (número)',
   sei_gestao_link: 'SEI - Gestão (link)',
   sei_execucao_numero: 'SEI - Execução (número)',
@@ -98,8 +100,9 @@ export function formatarCnpj(cnpj: string): string {
 }
 
 /** CPF com máscara, se tiver 11 dígitos; senão, devolve como veio. */
-export function formatarCpf(cpf: string): string {
-  return cpf?.length === 11 ? cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : cpf;
+export function formatarCpf(cpf: string | null | undefined): string {
+  if (!cpf) return '';
+  return cpf.length === 11 ? cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : cpf;
 }
 
 /** Número decimal digitado no padrão brasileiro ("1.234,5") para o texto da API ("1234.5"). */

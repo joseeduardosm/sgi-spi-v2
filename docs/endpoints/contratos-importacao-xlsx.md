@@ -61,7 +61,7 @@ Modelo: `backend/app/recursos/modelo-importacao-contrato.xlsx`, disponível em `
 **Empresa e preposto existentes.**
 - CNPJ já cadastrado: a empresa é **reaproveitada sem alteração**. Dados diferentes na planilha viram **avisos**.
 - Empresa inativa: é um **erro**; reative-a antes de importar.
-- CPF já cadastrado na empresa: o preposto é reaproveitado, com aviso se o nome for diferente. Senão, é cadastrado.
+- CPF (opcional) já cadastrado na empresa: o preposto é reaproveitado, com aviso se o nome for diferente. Sem CPF na planilha, o preposto é reconhecido pelo **nome** dentro da empresa. Senão, é cadastrado.
 
 ---
 

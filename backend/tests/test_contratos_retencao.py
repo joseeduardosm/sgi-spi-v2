@@ -144,18 +144,17 @@ def test_nf_envia_email_ao_financeiro_com_copia_para_a_equipe(cliente, cenario):
     assert cliente.get(base, headers=gestora).json()["email_nf"]["ok"] is True
 
 
-def test_escolha_dos_usuarios_do_financeiro_que_recebem_o_aviso_da_nf(cliente, cenario):
-    """O seletor agrupa o Financeiro por setor; `financeiro_ids` limita o Para do e-mail (a equipe segue em cópia)."""
+def test_aviso_da_nf_e_obrigatorio_e_vai_a_todo_o_financeiro(cliente, cenario):
+    """Não há mais escolha: mesmo com campos antigos no envio, o Para leva todo o Financeiro e a equipe segue em cópia."""
     contrato, base, gestora = cenario
     grupos = cliente.get(_url(contrato, "/financeiro"), headers=gestora).json()
     usuarios = [u for g in grupos for u in g["usuarios"]]
     assert {u["email"] for u in usuarios} == {"fin1@sp.gov.br", "fin2@sp.gov.br"} and all(g["setor"] for g in grupos)
-    escolhido = next(u for u in usuarios if u["email"] == "fin2@sp.gov.br")
     SmtpSimulado.enviadas.clear()
-    r = juntar_nf(cliente, base, gestora, "2105.00", "123", financeiro_ids=[escolhido["id"]])
+    r = juntar_nf(cliente, base, gestora, "2105.00", "123", extras=())
     assert r.status_code == 200, r.text
     mensagem, _, _, _ = SmtpSimulado.enviadas[0]
-    assert mensagem["To"] == "fin2@sp.gov.br" and mensagem["Cc"] == "gestora@sp.gov.br, fiscal@sp.gov.br"
+    assert mensagem["To"] == "fin1@sp.gov.br, fin2@sp.gov.br" and mensagem["Cc"] == "gestora@sp.gov.br, fiscal@sp.gov.br"
 
 
 def test_mesma_nota_nao_entra_em_duas_competencias(cliente, cenario):
@@ -176,7 +175,7 @@ def test_mesma_nota_nao_entra_em_duas_competencias(cliente, cenario):
 
 def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, cenario, monkeypatch):
     # A competência do cenário é de 01/2026: sem o corte de pendências antigas (09/2026), ela aparece em "Minhas pendências"
-    monkeypatch.setattr("app.services.contratos.servico_painel.PENDENCIAS_A_PARTIR_DE", date(2000, 1, 1))
+    monkeypatch.setattr("app.services.contratos.servico_competencias.PENDENCIAS_A_PARTIR_DE", date(2000, 1, 1))
     contrato, base, gestora = cenario
     juntar_nf(cliente, base, gestora, "2105.00", "123", cnpj_emitente="99888777000100")
     detalhe = cliente.get(base, headers=cabecalho(cliente, "financeiro1")).json()

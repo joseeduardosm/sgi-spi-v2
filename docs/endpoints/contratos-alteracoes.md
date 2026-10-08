@@ -54,7 +54,8 @@ Implementação:
 ## Reajuste
 
 - Um reajuste em elaboração por vez (`409`). Cada vigência é reajustada **uma vez**.
-- **Abertura:** vigência + mês de referência (primeiro mês com os novos preços). Os itens são fotografados com o preço vigente naquele mês.
+- **Abertura:** vigência + **data de efeito** (`data_efeito`: a partir de que dia os novos preços valem, qualquer dia da vigência; o `mes_referencia`, dia 1 do mês dessa data, é derivado e continua aceito no corpo como forma antiga). Os itens são fotografados com o preço vigente naquele dia.
+- **Mês da virada (reajuste ou prorrogação no meio do mês):** o mês continua sendo **uma competência e uma medição só**; cada item aparece **uma vez por trecho do mês**, com o preço do trecho e a quantidade pelos **dias** de cada um (fator 30/360, todos os itens, inclusive os "sempre integral"). Ex.: reajuste a partir de 20/09 → "01/09 a 19/09 · preço anterior" (19/30) e "20/09 a 30/09 · preço reajustado" (11/30). Uma só memória de cálculo, com os dois trechos.  Vale para **qualquer periodicidade**: uma prorrogação nunca corta a competência (ex.: num contrato trimestral prorrogado em 20/01, a competência jan–mar é uma só, com um trecho até 19/01 e outro de 20/01 a 31/03).
 - **Memória:**
   - por item, um `indice_percentual` **independente**, em pontos percentuais:
     - **positivo** reajusta (`2` = +2%);
@@ -71,7 +72,7 @@ Implementação:
   - Os totais trazem o destino da diferença das competências já medidas.
 - **Conclusão:**
   - exige a evidência do índice, a memória gerada e o apostilamento assinado;
-  - atualiza o preço dos itens e as competências ainda não medidas a partir do mês de referência, e grava o novo valor global;
+  - atualiza o preço dos itens e **refaz as linhas** das competências ainda não medidas a partir do mês de referência (com a divisão em trechos, se a data cair no meio do mês), e grava o novo valor global;
   - as competências já medidas mantêm os preços antigos (fotografia);
   - **competências já medidas a partir do mês de referência:** calcula-se a **diferença retroativa líquida** = Σ quantidade medida × (preço novo − preço pago), gravada em `diferenca_retroativa`.
     - **Positiva:** é gerada uma competência `diferenca_reajuste` (identificador `AAAA-MM-dif`) com a medição já preenchida e o checklist copiado.
@@ -87,7 +88,7 @@ Implementação:
 | Método e caminho | Descrição |
 |---|---|
 | `GET /reajustes` | `PainelReajuste`: `em_andamento`, `vigencias_disponiveis`, `historico`, `pode_editar` |
-| `POST /reajustes` | `{ "sequencia_vigencia": 1, "mes_referencia": "2026-05-01" }` → `201` |
+| `POST /reajustes` | `{ "sequencia_vigencia": 1, "data_efeito": "2026-05-20" }` → `201` (ou, na forma antiga, `"mes_referencia": "2026-05-01"`; data fora da vigência → `400`) |
 | `POST /reajustes/{id}/evidencia` | `multipart` `arquivo` |
 | `PUT /reajustes/{id}/memoria` | `{ "itens": [{ "item_id", "indice_percentual", "valor_referencial" }] }` |
 | `POST /reajustes/{id}/memoria/arquivos` | Gera PDF e XLSX |
@@ -96,7 +97,7 @@ Implementação:
 | `GET /reajustes/{id}/arquivos/{anexo_id}` | Download |
 
 `LeituraReajuste` traz:
-- **Identificação:** `situacao`, a vigência e o `mes_referencia`;
+- **Identificação:** `situacao`, a vigência, a `data_efeito` e o `mes_referencia`;
 - **Efeito:**
   - `competencias_recalculadas`;
   - `competencias_com_diferenca` (competências medidas que entram na diferença);

@@ -4,7 +4,7 @@
 
 Planilhas (o modelo é gerado aqui mesmo, com exemplo e instruções):
 - **Checklist** (aba "Checklist"): nome na célula ao lado de "Nome do checklist" e, abaixo, a tabela
-  `Documento | Observação | Obrigatório | Com validade | Vale para outros contratos` (Sim/Não).
+  `Documento | Observação | Obrigatório | Com validade | Vale para outros contratos | Para enviar` (Sim/Não).
 - **Formulário** (abas "Formulário", "Escala", "Faixas" e "Itens"): nome ao lado de "Nome do
   formulário"; escala `Nota | Legenda`; faixas `Mínimo | Máximo | Percentual liberado | Notas zero`;
   itens `Grupo | Item | Descrição | Peso`. Grupo em branco repete o de cima.
@@ -57,6 +57,7 @@ COLUNAS_DOCUMENTOS = {
     "obrigatorio": ("obrigatorio", "Obrigatório"),
     "com validade": ("com_validade", "Com validade"),
     "vale para outros contratos": ("vale_outros_contratos", "Vale para outros contratos"),
+    "para enviar": ("pedir_envio", "Para enviar"),
 }
 COLUNAS_ESCALA = {"nota": ("valor", "Nota"), "legenda": ("legenda", "Legenda")}
 COLUNAS_FAIXAS = {
@@ -72,7 +73,7 @@ COLUNAS_ITENS = {
     "peso": ("peso", "Peso"),
 }
 # Colunas que podem faltar ou ficar em branco
-OPCIONAIS = {"observacao", "obrigatorio", "com_validade", "vale_outros_contratos", "maximo", "notas_zero", "descricao"}
+OPCIONAIS = {"observacao", "obrigatorio", "com_validade", "vale_outros_contratos", "pedir_envio", "maximo", "notas_zero", "descricao"}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -251,7 +252,7 @@ def ler_checklist(conteudo: bytes) -> Leitura:
         return leitura
     leitura.nome = _nome(folha, "nome do checklist", leitura)
     rotulos = {c: r for c, r in COLUNAS_DOCUMENTOS.values()}
-    conversores = {"obrigatorio": lambda v: _sim_nao(v, True), "com_validade": lambda v: _sim_nao(v, False), "vale_outros_contratos": lambda v: _sim_nao(v, False)}
+    conversores = {"obrigatorio": lambda v: _sim_nao(v, True), "com_validade": lambda v: _sim_nao(v, False), "vale_outros_contratos": lambda v: _sim_nao(v, False), "pedir_envio": lambda v: _sim_nao(v, False)}
     linhas = {}
     for n, valores in _tabela(folha, COLUNAS_DOCUMENTOS, "Checklist", leitura):
         documento = _converter(leitura, n, valores, rotulos, conversores)
@@ -350,7 +351,7 @@ def previa(tipo: str, conteudo: bytes) -> PreviaImportacaoModelo:
         nome=leitura.nome,
         documentos=[DocumentoPrevia(linha=d["linha"], nome=d.get("nome", ""), observacao=d.get("observacao", ""),
                                     obrigatorio=d.get("obrigatorio", True), com_validade=d.get("com_validade", False),
-                                    vale_outros_contratos=d.get("vale_outros_contratos", False))
+                                    vale_outros_contratos=d.get("vale_outros_contratos", False), pedir_envio=d.get("pedir_envio", False))
                     for d in leitura.documentos],
         escala=[NotaPrevia(linha=e["linha"], valor=e.get("valor"), legenda=e.get("legenda", "")) for e in leitura.escala],
         faixas=[FaixaPrevia(linha=f["linha"], minimo=f.get("minimo"), maximo=f.get("maximo"), percentual=f.get("percentual"),
@@ -437,7 +438,7 @@ def _montar_checklist(nome: str, documentos: list[tuple], instrucoes: list[str])
     folha.title = "Checklist"
     _instrucoes(folha, instrucoes)
     folha["A4"], folha["B4"] = "Nome do checklist", nome
-    _titulos(folha, 6, ["Documento", "Observação", "Obrigatório", "Com validade", "Vale para outros contratos"])
+    _titulos(folha, 6, ["Documento", "Observação", "Obrigatório", "Com validade", "Vale para outros contratos", "Para enviar"])
     for n, linha in enumerate(documentos, start=7):
         for coluna, valor in enumerate(linha, start=1):
             folha.cell(n, coluna, valor)
@@ -469,12 +470,12 @@ def _montar_formulario(nome: str, escala: list[tuple], faixas: list[tuple], iten
 
 def gerar_modelo_checklist() -> bytes:
     """Planilha em branco do checklist, com um exemplo preenchido."""
-    exemplos = [("Certidão negativa de débitos", "Federal, estadual e municipal", "Sim", "Sim", "Sim"),
-                ("Comprovante de pagamento de encargos", "", "Sim", "Não", "Não"),
-                ("Relatório fotográfico", "Quando houver", "Não", "Não", "Não")]
+    exemplos = [("Certidão negativa de débitos", "Federal, estadual e municipal", "Sim", "Sim", "Sim", "Sim"),
+                ("Comprovante de pagamento de encargos", "", "Sim", "Não", "Não", "Sim"),
+                ("Relatório fotográfico", "Quando houver", "Não", "Não", "Não", "Não")]
     return _montar_checklist("Checklist mensal padrão", exemplos, [
         "Modelo de importação de checklist",
-        "Preencha o nome e os documentos mensais, na ordem. Obrigatório, Com validade e Vale para outros contratos: Sim ou Não (em branco: Sim, Não e Não). Vale para outros contratos (só com validade) marca o documento da empresa, reaproveitável entre contratos da mesma empresa."])
+        "Preencha o nome e os documentos mensais, na ordem. Obrigatório, Com validade, Vale para outros contratos e Para enviar: Sim ou Não (em branco: Sim, Não, Não e Não). Para enviar = Sim pede o documento à empresa, com a observação, no e-mail da medição concluída. Vale para outros contratos (só com validade) marca o documento da empresa, reaproveitável entre contratos da mesma empresa."])
 
 
 def gerar_modelo_formulario() -> bytes:
@@ -498,9 +499,9 @@ def _sim_nao_texto(valor: bool) -> str:
 
 def exportar_checklist(checklist) -> bytes:
     """Planilha de uma versão do checklist, preenchida; pode ser reimportada em outro contrato."""
-    documentos = [(i.nome, i.observacao, _sim_nao_texto(i.obrigatorio), _sim_nao_texto(i.com_validade), _sim_nao_texto(i.vale_outros_contratos))
+    documentos = [(i.nome, i.observacao, _sim_nao_texto(i.obrigatorio), _sim_nao_texto(i.com_validade), _sim_nao_texto(i.vale_outros_contratos), _sim_nao_texto(i.pedir_envio))
                   for i in sorted(checklist.itens, key=lambda i: i.ordem)]
-    return _montar_checklist(checklist.nome, documentos, [f"Checklist · versão {checklist.versao}", "Obrigatório, Com validade e Vale para outros contratos: Sim ou Não."])
+    return _montar_checklist(checklist.nome, documentos, [f"Checklist · versão {checklist.versao}", "Obrigatório, Com validade, Vale para outros contratos e Para enviar: Sim ou Não."])
 
 
 def exportar_formulario(formulario) -> bytes:

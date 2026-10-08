@@ -219,19 +219,27 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     # O índice é a primeira página, com um documento por linha, e a memória de cálculo vem logo depois dele
     assert "Índice do documento consolidado" in textos[0] and "Memória de cálculo" in textos[0]
     assert "Memória de cálculo" in textos[1] and "Resumo executivo" in textos[-1]
+    # A Folha de autenticação vem antes do resumo executivo: código, hash da composição, o SHA-256 de cada documento incluído e como conferir
+    folha = next(i for i, t in enumerate(textos) if "Folha de autenticação" in t and "Código de verificação" in t)
+    assert folha < len(textos) - 1 and re.search(r"[0-9a-f]{64}", textos[folha])
+    assert "Folha de autenticação" in textos[0]  # entra no índice
+    # O consolidado enviado para verificação é reconhecido como o original
+    verificacao = cliente.post("/api/contratos/verificar-documento", files={"arquivo": ("c.pdf", consolidado.content, "application/pdf")}, headers=gestora).json()
+    assert verificacao["valido"] is True and verificacao["documento"]["tipo"] == "Documento consolidado da competência"
     ligacoes = [a.get_object() for a in paginas[0].get("/Annots", [])]
     assert len(ligacoes) >= 2 * 7 and all(a["/Subtype"] == "/Link" for a in ligacoes)
     # Contracapas ("Documento 2 de 8 · Nota fiscal"): a retenção é gerada pelo sistema e não tem contracapa
     etapas = [m.group(1) for texto in textos if (m := re.search(r"Documento \d+ de \d+ · (Nota fiscal|CADIN|Checklist)", texto))]
     assert etapas[0] == "Nota fiscal" and etapas.index("CADIN") < etapas.index("Checklist")
     # A contracapa diz quando e por quem o arquivo foi enviado
-    assert re.search(r"Enviado em \d{2}/\d{2}/\d{4} \d{2}:\d{2} por \S+", textos[2])
+    assert any(re.search(r"Enviado em \d{2}/\d{2}/\d{4} \d{2}:\d{2} por \S+", texto) for texto in textos)
+    # A memória de cálculo vai com a Folha de autenticação (código de verificação e quem deu ciência)
+    assert any("Folha de autenticação" in texto and "Código de verificação" in texto for texto in textos)
     # Documentos gerados pelo sistema em paisagem
     assert float(paginas[0].mediabox.width) > float(paginas[0].mediabox.height)
-    # Gerar novamente: só o gestor do contrato ou o SuperRoot
-    assert cliente.get(base, headers=fiscal).json()["pode_gerar_consolidado_novamente"] is False
-    r = cliente.post(f"{base}/consolidado", headers=fiscal)
-    assert r.status_code == 403 and "gerar novamente" in r.json()["detalhe"]
+    # Gerar novamente: todos que podem editar o contrato têm o mesmo direito (gestor e fiscal), não só o gestor
+    assert cliente.get(base, headers=fiscal).json()["pode_gerar_consolidado_novamente"] is True
+    assert cliente.post(f"{base}/consolidado", headers=fiscal).status_code == 200
     assert cliente.get(base, headers=gestora).json()["pode_gerar_consolidado_novamente"] is True
     assert cliente.post(f"{base}/consolidado", headers=gestora).status_code == 200
     r = cliente.post(f"{base}/ordem-bancaria", files={"arquivo": ("ob.pdf", PDF)}, headers=gestora)
@@ -743,3 +751,128 @@ def test_nota_fiscal_sem_xml_com_valor_informado(cliente, admin, equipe):
     nota = r.json()["notas_fiscais"][0]
     assert r.json()["etapa_atual"] == "retencao" and nota["valor_bruto"] == "2105.00" and nota["numero"] == "99"
     assert nota["dados_xml"] is None and nota["xml"] is None
+
+
+# --- Medição adicional (outra medição e outro pagamento no mesmo mês) ------------------------------
+
+@pytest.fixture
+def equipe_adicional(cliente, admin):
+    """Contrato que permite medição adicional, com gestora e fiscal."""
+    gestora, fiscal = criar_usuario("gestora"), criar_usuario("fiscal")
+    restringir_contratos(cliente, admin, {gestora: "MODIFICACAO", fiscal: "MODIFICACAO"})
+    contrato = criar_contrato(cliente, admin, equipe={"gestor": gestora, "fiscal_tecnico": fiscal}, permite_medicao_adicional=True)
+    return contrato, cabecalho(cliente, "gestora"), cabecalho(cliente, "fiscal")
+
+
+def _medir_e_concluir(cliente, base, gestora, fiscal, ordem_notas, quantidades=None):
+    """Salva a medição (quantidade prevista ou a informada por descrição), registra ciência e conclui."""
+    detalhe = cliente.get(base, headers=gestora).json()
+    linhas = [{"id": i["id"], "quantidade_medida": (quantidades or {}).get(i["descricao"], i["quantidade_prevista"])} for i in detalhe["itens"]]
+    assert cliente.put(f"{base}/medicao", json={"itens": linhas, "notas_empenho_ids": ordem_notas}, headers=gestora).status_code == 200
+    assert cliente.post(f"{base}/medicao/ciencia", headers=gestora).status_code == 200
+    return cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": ordem_notas}, headers=fiscal)
+
+
+def test_medicao_adicional_roda_o_rito_independente_da_competencia(cliente, admin, equipe_adicional):
+    contrato, gestora, fiscal = equipe_adicional
+    assert contrato["permite_medicao_adicional"] is True
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = {n["numero"]: n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
+    ordem = [notas["2026NE00001"], notas["2026NE00002"]]
+    regular = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base_regular = _url(contrato, f"/competencias/{regular['id']}")
+    assert regular["pode_incluir_adicional"] is True
+    assert _medir_e_concluir(cliente, base_regular, gestora, fiscal, ordem).status_code == 200
+
+    # Justificativa é obrigatória; o anexo é opcional
+    url = f"{base_regular}/adicional"
+    assert cliente.post(url, data={"justificativa": "  "}, headers=gestora).status_code == 400
+    r = cliente.post(url, data={"justificativa": "Dois novos funcionários"}, files={"arquivo": ("j.pdf", PDF, "application/pdf")}, headers=gestora)
+    assert r.status_code == 201, r.text
+    adicional = r.json()
+    assert adicional["tipo"] == "adicional" and adicional["numero_adicional"] == 1 and adicional["identificador"] == "2026-01-adicional-1"
+    assert adicional["rotulo"] == "01/2026 · Medição adicional 1" and adicional["adicional_justificativa"] == "Dois novos funcionários"
+    assert adicional["adicional_anexo"] and adicional["etapa_atual"] == "medicao" and adicional["liberada"] is True
+    assert all(Decimal(i["quantidade_medida"]) == 0 and Decimal(i["quantidade_prevista"]) == 0 for i in adicional["itens"])
+    # A segunda recebe o número 2 e aparece logo depois da competência no painel
+    segunda = cliente.post(url, data={"justificativa": "Mais um"}, headers=gestora).json()
+    assert segunda["numero_adicional"] == 2
+    lista = cliente.get(_url(contrato, "/execucao"), headers=gestora).json()["grupos"][0]["competencias"]
+    assert [c["identificador"] for c in lista[:3]] == ["2026-01", "2026-01-adicional-1", "2026-01-adicional-2"]
+    # Resolve pela rota de identificador
+    assert cliente.get(_url(contrato, "/competencias/identificador/2026-01-adicional-1"), headers=gestora).json()["id"] == adicional["id"]
+
+    # Medição adicional: sem nenhuma quantidade não conclui; contínuo passa do previsto (livre) com aviso
+    base = _url(contrato, f"/competencias/{adicional['id']}")
+    r = _medir_e_concluir(cliente, base, gestora, fiscal, ordem)
+    assert r.status_code == 400 and "ao menos um item" in r.json()["detalhe"]
+    continuo = next(i for i in adicional["itens"] if i["tipo"] == "continuo")
+    r = _medir_e_concluir(cliente, base, gestora, fiscal, ordem, {continuo["descricao"]: "2", **{i["descricao"]: "0" for i in adicional["itens"] if i["tipo"] != "continuo"}})
+    assert r.status_code == 200, r.text
+    concluida = r.json()
+    assert concluida["etapa_atual"] == "nota_fiscal" and concluida["total_medido"] == "2000.00"
+    # Competência original intacta
+    assert cliente.get(base_regular, headers=gestora).json()["total_medido"] == "2105.00"
+    # Segue o rito: nota fiscal própria e retenção
+    r = juntar_nf(cliente, base, gestora, "2000.00", "321")
+    assert r.status_code == 200, r.text
+    assert r.json()["etapa_atual"] == "retencao"
+    assert cliente.get(base_regular, headers=gestora).json()["etapa_atual"] == "nota_fiscal"
+
+
+def test_zerar_medicao_adicional_devolve_os_itens_zerados(cliente, admin, equipe_adicional):
+    contrato, gestora, fiscal = equipe_adicional
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = {n["numero"]: n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
+    ordem = [notas["2026NE00001"], notas["2026NE00002"]]
+    regular = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base_regular = _url(contrato, f"/competencias/{regular['id']}")
+    assert _medir_e_concluir(cliente, base_regular, gestora, fiscal, ordem).status_code == 200
+    adicional = cliente.post(f"{base_regular}/adicional", data={"justificativa": "Extra"}, headers=gestora).json()
+    base = _url(contrato, f"/competencias/{adicional['id']}")
+    continuo = next(i for i in adicional["itens"] if i["tipo"] == "continuo")
+    quantidades = {continuo["descricao"]: "2", **{i["descricao"]: "0" for i in adicional["itens"] if i["tipo"] != "continuo"}}
+    assert _medir_e_concluir(cliente, base, gestora, fiscal, ordem, quantidades).status_code == 200
+
+    # Zerar não pode deixar a adicional sem itens: eles voltam zerados e a medição pode ser refeita
+    assert cliente.post(f"{base}/zerar", headers=gestora).status_code == 200
+    detalhe = cliente.get(base, headers=gestora).json()
+    assert detalhe["etapa_atual"] == "medicao" and len(detalhe["itens"]) == len(adicional["itens"])
+    assert all(Decimal(i["quantidade_medida"]) == 0 for i in detalhe["itens"])
+    assert _medir_e_concluir(cliente, base, gestora, fiscal, ordem, quantidades).status_code == 200
+
+
+def test_excluir_medicao_adicional(cliente, admin, equipe_adicional):
+    contrato, gestora, fiscal = equipe_adicional
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    regular = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base_regular = _url(contrato, f"/competencias/{regular['id']}")
+    # A competência regular não se exclui
+    assert cliente.delete(base_regular, headers=gestora).status_code == 409
+    adicional = cliente.post(f"{base_regular}/adicional", data={"justificativa": "Extra"}, headers=gestora).json()
+    base = _url(contrato, f"/competencias/{adicional['id']}")
+    assert adicional["pode_excluir_adicional"] is True and regular["pode_excluir_adicional"] is False
+    criar_usuario("externo")  # fora da ACL do módulo
+    assert cliente.delete(base, headers=cabecalho(cliente, "externo")).status_code == 403
+    # A equipe (fiscal) exclui; a numeração recomeça e a original fica intacta
+    assert cliente.delete(base, headers=fiscal).status_code == 204
+    assert cliente.get(base, headers=gestora).status_code == 404
+    nova = cliente.post(f"{base_regular}/adicional", data={"justificativa": "De novo"}, headers=gestora).json()
+    assert nova["numero_adicional"] == 1
+    assert cliente.get(base_regular, headers=gestora).status_code == 200
+
+
+def test_medicao_adicional_exige_contrato_que_permita_e_edicao(cliente, admin, equipe):
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    assert competencia["pode_incluir_adicional"] is False
+    r = cliente.post(_url(contrato, f"/competencias/{competencia['id']}/adicional"), data={"justificativa": "x"}, headers=gestora)
+    assert r.status_code == 409 and "não permite medição adicional" in r.json()["detalhe"]
+    # Quem não edita o contrato também não inclui
+    r = cliente.post(_url(contrato, f"/competencias/{competencia['id']}/adicional"), data={"justificativa": "x"}, headers=cabecalho(cliente, "externo"))
+    assert r.status_code == 403

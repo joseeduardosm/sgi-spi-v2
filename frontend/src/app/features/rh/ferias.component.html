@@ -64,7 +64,7 @@
               @let af = afastamentoDo(dia.data);
               @let fer = feriadoDo(dia.data);
               <button type="button" class="dia-calendario"
-                      [class.fim-de-semana]="dia.semana >= 5" [class.passado]="dia.data < hoje" [class.selecionado]="selecionado(dia.data)"
+                      [class.fim-de-semana]="dia.semana >= 5" [class.passado]="dia.data < hoje" [class.hoje]="dia.data === hoje" [attr.aria-current]="dia.data === hoje ? 'date' : null" [class.selecionado]="selecionado(dia.data)"
                       [class.pendente]="af?.status === 'pendente'" [class.aprovado]="af && af.status !== 'pendente'"
                       [class.vedado]="inicioVedado(dia)" [class.feriado]="!!fer" [disabled]="dia.data < hoje || !!af"
                       [title]="af ? tipos[af.tipo] + ' · ' + status[af.status] : (fer ? fer.descricao : (inicioVedado(dia) ? 'Períodos não podem começar neste dia da semana' : ''))"

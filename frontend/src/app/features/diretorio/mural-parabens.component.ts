@@ -16,7 +16,7 @@ import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
   imports: [LinkificarPipe, FormsModule, DatePipe, AvatarComponent],
   template: `
     <div class="fundo-modal" (click)="fechar.emit()"></div>
-    <section class="modal-portal" role="dialog" aria-modal="true" aria-label="Mural de parabéns">
+    <section class="modal-portal modal-mural" role="dialog" aria-modal="true" aria-label="Mural de parabéns">
       <header><h2>🎉 Mural de parabéns</h2><button type="button" class="fechar" aria-label="Fechar" (click)="fechar.emit()">×</button></header>
       <div class="corpo-mural">
         <div class="homenageado">

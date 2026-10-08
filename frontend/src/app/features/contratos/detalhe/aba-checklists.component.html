@@ -23,7 +23,8 @@
         @if (aberta(c)) {
         <div [id]="'checklist-' + c.id">
         <ol style="margin: 10px 0; padding-left: 20px; font-size: 12px; color: var(--cor-3d454e)">
-          @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.com_validade) { <span class="etiqueta">Com validade</span> }@if (i.vale_outros_contratos) { <span class="etiqueta">Documento da empresa</span> }@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — <span [innerHTML]="i.observacao | linkificar"></span></small> }</li> }
+          @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.com_validade) { <span class="etiqueta">Com validade</span> }@if (i.vale_outros_contratos) { <span class="etiqueta">Documento da empresa</span> }@if (i.pedir_envio) { <span class="etiqueta">Para enviar</span> }@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — <span [innerHTML]="i.observacao | linkificar"></span></small> }
+            @if (podeEditar()) { <label class="opcao-empresa" title="Pede este documento à empresa, com a observação, no e-mail da medição concluída. Pode ser mudado mesmo com o checklist ativo."><input type="checkbox" [checked]="!!i.pedir_envio" (change)="alternarPedirEnvio(c, i, $any($event.target))" /> Pedir para enviar</label> }</li> }
         </ol>
         <small>Criado por {{ c.criado_por_nome }} em {{ c.criado_em | date: 'dd/MM/yyyy HH:mm' }}{{ c.ativado_em ? ' · ativado em ' + (c.ativado_em | date: 'dd/MM/yyyy HH:mm') : '' }}</small>
         <div class="acoes-cartao esquerda">
@@ -92,10 +93,10 @@
                     <button type="button" role="radio" [attr.aria-checked]="!i.com_validade" [class.ativo]="!i.com_validade" (click)="i.com_validade = false">Sem validade</button>
                     <button type="button" role="radio" [attr.aria-checked]="i.com_validade" [class.ativo]="i.com_validade" (click)="i.com_validade = true">Com validade</button>
                   </div>
-                  @if (i.com_validade) {
-                    <label class="opcao-empresa" title="Se este documento já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo.">
-                      <input type="checkbox" [name]="'empresa-' + $index" [(ngModel)]="i.vale_outros_contratos" /> Documento da empresa</label>
-                  }
+                  <label class="opcao-empresa" title="Se este documento já foi juntado em outro contrato da mesma empresa (e ainda vale, quando tem validade; ou na mesma competência, quando não tem), a execução oferece reaproveitá-lo.">
+                    <input type="checkbox" [name]="'empresa-' + $index" [(ngModel)]="i.vale_outros_contratos" /> Documento da empresa</label>
+                  <label class="opcao-empresa" title="Pede este documento à empresa, com a observação, no e-mail da medição concluída.">
+                    <input type="checkbox" [name]="'envio-' + $index" [(ngModel)]="i.pedir_envio" /> Pedir para enviar</label>
                 </td>
                 <td>
                   <div class="acoes-linha">
@@ -139,6 +140,8 @@
             <label class="opcao-empresa" title="Se este documento já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo.">
               <input type="checkbox" name="novo-vale-outros" [(ngModel)]="novoValeOutros" /> Documento da empresa</label>
           }
+          <label class="opcao-empresa" title="Pede este documento à empresa, com a observação, no e-mail da medição concluída.">
+            <input type="checkbox" name="novo-pedir-envio" [(ngModel)]="novoPedirEnvio" /> Pedir para enviar</label>
         </div>
         <button type="button" class="acao-secundaria" [disabled]="!novoDocumento.trim()" (click)="adicionar()"><span>+</span> Adicionar</button>
       </div>

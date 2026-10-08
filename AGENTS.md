@@ -37,3 +37,4 @@ Qualquer criação, alteração ou remoção de endpoint, parâmetro, schema, re
 - Todo o sistema fica em `/home/administrador/projeto`.
 - Persistência em PostgreSQL (SQLAlchemy 2 + Alembic). Toda alteração de modelo exige migração revisada em `backend/alembic/versions/`.
 - Detalhes de instalação, execução e manutenção: `README.md`.
+- **Recurso novo da ACL** (módulo, `exigir_acl("slug", …)` ou migração que semeia em `acl_recursos`): inclua a entrada em `backend/app/services/acl_niveis.py` com o que **Leitura, Modificação e Controle total liberam naquele módulo** (rótulo curto + frase), a partir do que as rotas realmente exigem. Não deixe nomes genéricos; `test_acl_niveis.py` falha se faltar.

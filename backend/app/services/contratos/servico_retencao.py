@@ -214,6 +214,8 @@ def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uui
         alvo_tipo="contrato", alvo_id=contrato.id,
         dados={"competencia": competencia.competencia, "notas": {nota.rotulo: retencoes[nota.id] for nota in competencia.notas_fiscais}},
     )
+    from app.services.contratos.servico_competencias import sincronizar_tarefas
+    sincronizar_tarefas(sessao, competencia, autor)
     sessao.commit()
     return competencia
 
@@ -263,5 +265,7 @@ def recusar_nota(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.U
         sessao, autor.login, "contrato.execucao.retencao.recusar", f"Contrato {contrato.numero} · {competencia.numero_competencia}", autor_id=autor.id,
         alvo_tipo="contrato", alvo_id=contrato.id, dados={"competencia": competencia.competencia, "recusa": recusa.ordem, "justificativa": justificativa},
     )
+    from app.services.contratos.servico_competencias import sincronizar_tarefas
+    sincronizar_tarefas(sessao, competencia, autor)
     sessao.commit()
     return recusa

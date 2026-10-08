@@ -55,7 +55,7 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
                       } @else if (doc.reaproveitado_de) { <small style="color: #2f6f9f">Reaproveitado da competência de {{ doc.reaproveitado_de | date: 'MM/yyyy' }}: confira e conclua</small> }
                       @if (editavel() && doc.sugestao_outro_contrato; as s) {
                         <div class="sugestao-outro-contrato">
-                          <small>Disponível do contrato {{ s.contrato_numero }} (competência {{ s.competencia | date: 'MM/yyyy' }}) · válido até {{ s.validade_ate | dataBr }}</small>
+                          <small>Disponível do contrato {{ s.contrato_numero }} (competência {{ s.competencia | date: 'MM/yyyy' }})@if (s.validade_ate) { · válido até {{ s.validade_ate | dataBr }} }</small>
                           <button type="button" class="acao-secundaria acao-pequena" (click)="usarDeOutroContrato(doc, s.origem_id)">Usar este documento</button>
                         </div>
                       }
@@ -76,14 +76,14 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
         <section class="cartao-dados" aria-labelledby="titulo-consolidado">
           <header><h2 id="titulo-consolidado">7. Documento consolidado</h2></header>
           <div class="corpo">
-            <p class="dica-formulario" style="margin: 0 0 12px">Um único PDF na ordem de execução: medição, avaliação (quando houver), nota fiscal, retenção de tributos, CADIN, checklist e resumo executivo. Cada documento enviado vem precedido de uma contracapa, e as páginas são numeradas em sequência.</p>
+            <p class="dica-formulario" style="margin: 0 0 12px">Um único PDF na ordem de execução: medição, avaliação (quando houver), nota fiscal, retenção de tributos, CADIN, checklist, folha de autenticação (código e hash) e resumo executivo. Cada documento enviado vem precedido de uma contracapa, e as páginas são numeradas em sequência.</p>
             @if (d.etapa_atual !== 'consolidado' && d.etapa_atual !== 'ordem_bancaria' && d.etapa_atual !== 'concluida') {
               <p class="aviso-bloco">Liberado quando todas as etapas anteriores estiverem concluídas.
                 @if (d.etapas_abertas.length) { Falta concluir: <b>{{ faltando(d) }}</b>. }
               </p>
             }
             <div class="acoes-cartao esquerda">
-              <!-- 1ª geração: quem pode editar. Gerar novamente (substitui o atual): só o gestor ou o SuperRoot, inclusive após a OB -->
+              <!-- 1ª geração: quem pode editar. Gerar novamente (substitui o atual): mesmo direito de quem edita, inclusive após a OB -->
               @if (!d.consolidado && d.pode_editar && (d.etapa_atual === 'consolidado' || d.etapa_atual === 'ordem_bancaria')) {
                 <button type="button" class="acao-primaria" (click)="gerarConsolidado()">Gerar e baixar documento unificado</button>
               }

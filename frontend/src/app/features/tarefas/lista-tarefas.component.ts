@@ -2,6 +2,7 @@
 // Este arquivo serve para a visão em lista (estilo Asana): seções recolhíveis por situação, linhas compactas e ordem manual por arraste.
 
 import { DatePipe } from '@angular/common';
+import { classeMarcador } from './marcadores.paleta';
 import { Component, computed, input, output, signal } from '@angular/core';
 
 import { AvataresComponent } from './avatares.component';
@@ -40,11 +41,11 @@ const PESO_PRIORIDADE: Record<PrioridadeTarefa, number> = { critica: 0, alta: 1,
                 <span class="celula-titulo" role="cell">
                   @if (ordem() === 'manual') { <span class="alca" aria-hidden="true" title="Arraste para reordenar">⋮⋮</span> }
                   <span class="ponto-status" [attr.data-status]="t.status" aria-hidden="true"></span>
-                  <span class="texto-titulo">{{ t.titulo }}</span>
-                  @for (m of t.marcadores; track m.id) { <span class="marcador-tarefa" [style.--cor]="m.cor">{{ m.nome }}</span> }
+                  <span class="texto-titulo">@if (t.bloqueada) { <span class="cadeado-tarefa" title="Bloqueada" aria-label="Tarefa bloqueada">🔒</span> }{{ t.titulo }}</span>@if (t.subtarefas_total) { <small class="numero-lista">▤ {{ t.subtarefas_concluidas }}/{{ t.subtarefas_total }}</small> }@if (t.tarefa_pai_numero) { <small class="numero-lista">↳ #{{ t.tarefa_pai_numero }}</small> }
+                  @for (m of t.marcadores; track m.id) { <span [class]="classeMarcador(m.cor_indice)">{{ m.nome }}</span> }
                   <small class="numero-lista">#{{ t.numero }}@if (t.equipe) { · {{ t.equipe.nome }} }</small>
                 </span>
-                <span role="cell"><app-avatares [pessoas]="t.envolvidos" tamanho="pequeno" /></span>
+                <span role="cell"><app-avatares [pessoas]="t.responsaveis" tamanho="pequeno" /></span>
                 <span role="cell"><span class="chip-prazo" [attr.data-situacao]="situacao(t)">{{ t.prazo | date: 'dd/MM HH:mm' }}</span></span>
                 <span role="cell"><span class="selo-prioridade-tarefa" [attr.data-prioridade]="t.prioridade">{{ rotulosPrioridade[t.prioridade] }}</span></span>
                 <span role="cell" class="celula-checklist">@if (t.checklist_total) { {{ t.checklist_feitos }}/{{ t.checklist_total }} } @else { — }</span>
@@ -57,6 +58,7 @@ const PESO_PRIORIDADE: Record<PrioridadeTarefa, number> = { critica: 0, alta: 1,
   `,
 })
 export class ListaTarefasComponent {
+  protected readonly classeMarcador = classeMarcador;
   readonly itens = input<TarefaResumo[]>([]);
   readonly ordem = input<OrdemLista>('manual');
   readonly abrir = output<number>();

@@ -26,7 +26,7 @@ def test_recusa_envia_email_com_pdf_a_equipe_e_prepostos_e_reabre_a_nf(cliente, 
     contrato, base, gestora = cenario
     _prepostos(cliente, admin, contrato)
     fin = cabecalho(cliente, "financeiro1")
-    juntar_nf(cliente, base, gestora, "2105.00", "123", email=False)
+    juntar_nf(cliente, base, gestora, "2105.00", "123")
     # Justificativa obrigatória; só quem confere recusa
     assert cliente.post(f"{base}/retencao/recusar", json={"justificativa": "curta"}, headers=fin).status_code == 422
     assert cliente.post(f"{base}/retencao/recusar", json={"justificativa": JUSTIFICATIVA}, headers=cabecalho(cliente, "outro")).status_code == 403
@@ -91,7 +91,10 @@ def test_ciclo_recusa_nova_nota_recusa_e_aprovacao_com_trilha_no_consolidado(cli
              "Retenção de tributos (aprovação da nota fiscal)"]
     posicoes = [indice.index(t) for t in ordem]
     assert posicoes == sorted(posicoes)
-    assert "Trilha da nota fiscal" in textos[-1] and "Nota fiscal aprovada" in textos[-1] and "ISS retido incorreto" in textos[-1]
+    # A Folha de autenticação vem antes do resumo executivo, que é o último documento
+    fim = " ".join(textos[-5:])
+    assert "Folha de autenticação" in fim and fim.index("Folha de autenticação") < fim.index("Resumo executivo")
+    assert "Trilha da nota fiscal" in fim and "Nota fiscal aprovada" in fim and "ISS retido incorreto" in fim
 
 
 def test_recusa_so_com_a_retencao_aberta(cliente, admin, cenario):

@@ -28,7 +28,7 @@
         <strong>{{ selecionadas().size }} selecionada(s)</strong>
         <button type="button" class="acao-secundaria acao-pequena" [disabled]="ocupado()" (click)="marcarSelecionadas('lida')">Marcar como lida</button>
         <button type="button" class="acao-secundaria acao-pequena" [disabled]="ocupado()" (click)="marcarSelecionadas('nao_lida')">Marcar como não lida</button>
-        <button type="button" class="acao-aprovar acao-pequena" [disabled]="ocupado()" (click)="marcarSelecionadas('ciente')">Registrar ciência</button>
+        <button type="button" class="acao-positiva acao-pequena" [disabled]="ocupado()" (click)="marcarSelecionadas('ciente')">Registrar ciência</button>
         <button type="button" class="acao-secundaria acao-pequena" (click)="limparSelecao()">Limpar seleção</button>
       </div>
     }

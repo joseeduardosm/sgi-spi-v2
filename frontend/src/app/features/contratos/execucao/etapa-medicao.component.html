@@ -12,39 +12,49 @@
           <th class="num" title="Contínuo: previsto da competência. Sob demanda: saldo do item na vigência.">Saldo</th>
           <th class="num" title="Glosas do diário de bordo com data no período da competência.">Glosas</th>
           <th class="num" title="Saldo − glosas: o máximo que pode ser medido.">Saldo líquido</th>
-          <th class="num">Medição</th><th class="num">Subtotal</th>
+          <th class="num">Medição</th><th class="centro" title="Marque os itens que são despesas variáveis: ficam com subtotal à parte e exigem nota de débito, recibo ou outro documento na etapa da nota fiscal.">Despesas Variáveis</th><th class="num">Subtotal</th>
         </tr>
       </thead>
       <tbody>
         @for (i of d.itens; track i.id) {
           <tr>
             <td>{{ i.ordem }}</td>
-            <td><strong>{{ i.descricao }}</strong><small>{{ i.tipo === 'continuo' ? 'Contínuo' : 'Sob demanda' }}{{ detalhe().tipo === 'regular' && i.tipo === 'continuo' && i.calcula_pro_rata && i.fator_meses !== '1.00000000' ? ' · fração ' + (i.fator_meses | quantidade) : '' }}</small></td>
+            <td><strong>{{ i.descricao }}</strong>@if (i.periodo_rotulo) { <small class="trecho-mes">{{ i.periodo_rotulo }}</small> }<small>{{ i.tipo === 'continuo' ? 'Contínuo' : 'Sob demanda' }}{{ detalhe().tipo === 'regular' && i.tipo === 'continuo' && i.calcula_pro_rata && i.fator_meses !== '1.00000000' ? ' · fração ' + (i.fator_meses | quantidade) : '' }}</small></td>
             <td class="num">{{ i.valor_unitario | moedaUnitaria }}</td>
             <td class="num">{{ i.saldo | quantidade }}</td>
             <td class="num" [class.texto-erro]="i.glosas !== '0.0000'">{{ i.glosas !== '0.0000' ? '− ' : '' }}{{ i.glosas | quantidade }}</td>
             <td class="num"><strong>{{ i.saldo_liquido | quantidade }}</strong></td>
             <td class="num" style="width: 140px">
-              @if (editavel() && detalhe().tipo === 'regular') {
+              @if (editavel() && medivel()) {
                 <input class="campo-tabela" inputmode="decimal" [class.invalido]="acimaDoSaldo(i.id, i.saldo_liquido)" [attr.aria-label]="'Medição de ' + i.descricao"
                        [attr.aria-invalid]="acimaDoSaldo(i.id, i.saldo_liquido)" [(ngModel)]="medidas[i.id]" (ngModelChange)="alterado.set(true)" />
               } @else { {{ i.quantidade_medida | quantidade }} }
+            </td>
+            <td class="centro">
+              <input type="checkbox" [attr.aria-label]="'Despesa variável: ' + i.descricao" [checked]="marcadas[i.id]" [disabled]="!(editavel() && medivel())"
+                     (change)="marcadas[i.id] = $any($event.target).checked; alterado.set(true)" />
             </td>
             <td class="num">{{ subtotal(i.id, i.valor_unitario) | moeda }}</td>
           </tr>
         }
       </tbody>
       <tfoot>
-        <tr><td colspan="7">Total medido</td><td class="num">{{ total() | moeda }}</td></tr>
+        @if (temDespesasVariaveis()) {
+          <tr><td colspan="8">Subtotal - Medição</td><td class="num">{{ subtotalMedicao() | moeda }}</td></tr>
+          <tr><td colspan="8">Subtotal - Despesas Variáveis</td><td class="num">{{ subtotalDespesas() | moeda }}</td></tr>
+          <tr><td colspan="8"><strong>Total</strong> <small>(Subtotal - Medição + Subtotal - Despesas Variáveis)</small></td><td class="num"><strong>{{ total() | moeda }}</strong></td></tr>
+        } @else {
+          <tr><td colspan="8">Total medido</td><td class="num">{{ total() | moeda }}</td></tr>
+        }
         @if (+d.desconto_reajuste > 0) {
           <!-- Crédito de um reajuste com desconto retroativo: abatido do valor autorizado desta competência -->
           <tr class="linha-desconto-reajuste">
-            <td colspan="7">Desconto de reajuste
+            <td colspan="8">Desconto de reajuste
               @for (x of d.descontos_reajuste; track x.reajuste_id) { <small>(crédito do reajuste com referência {{ x.mes_referencia | competencia }})</small> }
             </td>
             <td class="num">− {{ d.desconto_reajuste | moeda }}</td>
           </tr>
-          <tr><td colspan="7">Valor após o desconto</td><td class="num"><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></td></tr>
+          <tr><td colspan="8">Valor após o desconto</td><td class="num"><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></td></tr>
         }
       </tfoot>
     </table>
@@ -134,7 +144,7 @@
       <p class="secao-formulario">Memórias emitidas</p>
       <ul class="lista-ciencias">
         @for (m of d.memorias; track m.versao) {
-          <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span><button type="button" class="link-arquivo" (click)="baixar(m.arquivo.anexo_id)">Baixar PDF</button></li>
+          <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span><button type="button" class="link-arquivo" (click)="baixar(m.arquivo.anexo_id)">Baixar PDF</button>@if (m.arquivo_despesas) { <button type="button" class="link-arquivo" (click)="baixar(m.arquivo_despesas.anexo_id)">Baixar PDF das despesas variáveis</button> }</li>
         }
       </ul>
     }

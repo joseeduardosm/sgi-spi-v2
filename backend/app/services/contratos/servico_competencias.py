@@ -20,12 +20,13 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import BinaryIO
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.banco import agora_utc
 from app.models.anexo import Anexo
 from app.models.contratos import (
+    DespesaVariavel,
     NotaFiscalCompetencia,
     ETAPAS,
     AbatimentoReajuste,
@@ -63,6 +64,7 @@ from app.schemas.contratos.execucao import (
     SugestaoOutroContrato,
     LeituraItemMedicao,
     LeituraMemoria,
+    LeituraDespesaVariavel,
     LeituraNotaFiscal,
     LeituraRetencao,
     NotaSelecionada,
@@ -73,7 +75,7 @@ from app.schemas.contratos.execucao import (
     ResumoCompetencia,
 )
 from app.services import servico_anexos
-from app.services.contratos import avisos, calculos, documentos_execucao, leitor_nota_xml, servico_diario, servico_retencao, valores
+from app.services.contratos import avisos, calculos, documentos_execucao, leitor_nota_xml, servico_autenticacao, servico_diario, servico_retencao, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_configuracao_execucao import (
     _nome_chave,
@@ -139,7 +141,7 @@ def tem_avaliacao(competencia: Competencia) -> bool:
     """
     if competencia.avaliacao is not None:
         return True
-    return competencia.tipo == "regular" and competencia.etapa_atual == "medicao" and formulario_ativo(competencia.contrato) is not None
+    return competencia.tipo in ("regular", "adicional") and competencia.etapa_atual == "medicao" and formulario_ativo(competencia.contrato) is not None
 
 
 def puxar_avaliacao(sessao: Session, contrato: Contrato, competencia: Competencia) -> None:
@@ -151,6 +153,21 @@ def puxar_avaliacao(sessao: Session, contrato: Contrato, competencia: Competenci
     # A exclusão precisa ir ao banco antes da nova linha (há uma avaliação por competência)
     sessao.flush()
     competencia.avaliacao = AvaliacaoCompetencia(formulario_id=formulario.id, definicao=formulario.definicao)
+
+
+# Pendências e alertas de execução (competências) anteriores a esta data foram "limpos": não aparecem em "Minhas pendências",
+# nos alertas da carteira nem geram mais avisos de atraso
+PENDENCIAS_A_PARTIR_DE = date(2026, 9, 1)
+
+
+def anterior_ao_corte(competencia: Competencia) -> bool:
+    """Competência anterior ao corte de alertas: a pendência dela não é cobrada.
+
+    O corte é a maior entre o global (`PENDENCIAS_A_PARTIR_DE`) e a data "Desconsiderar alertas a partir de" do contrato, se houver."""
+    desde = competencia.periodo_fim if competencia.tipo == "regular" else competencia.criado_em.date()
+    contrato = competencia.contrato
+    corte = max(PENDENCIAS_A_PARTIR_DE, contrato.alertas_a_partir_de) if contrato is not None and contrato.alertas_a_partir_de else PENDENCIAS_A_PARTIR_DE
+    return desde < corte
 
 
 def etapas_da_competencia(competencia: Competencia) -> list[str]:
@@ -167,6 +184,25 @@ def proxima_etapa(competencia: Competencia, etapa: str) -> str:
 def total_medido(competencia: Competencia) -> Decimal:
     """Total medido: soma de quantidade medida × preço de cada item, arredondado."""
     return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), ZERO))
+
+
+def subtotal_medicao(competencia: Competencia) -> Decimal:
+    """Subtotal dos itens que não são despesas variáveis."""
+    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if not i.despesa_variavel), ZERO))
+
+
+def subtotal_despesas_variaveis(competencia: Competencia) -> Decimal:
+    """Subtotal dos itens marcados como despesas variáveis."""
+    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if i.despesa_variavel), ZERO))
+
+
+def tem_despesas_variaveis(competencia: Competencia) -> bool:
+    return any(i.despesa_variavel for i in competencia.itens)
+
+
+def total_despesas_juntadas(competencia: Competencia) -> Decimal:
+    """Soma dos valores das notas de débito, recibos e outros documentos de despesas variáveis juntados."""
+    return calculos.arredondar(sum((d.valor for d in competencia.despesas_variaveis), ZERO))
 
 
 def desconto_reajuste(competencia: Competencia) -> Decimal:
@@ -187,12 +223,30 @@ def valor_autorizado(competencia: Competencia) -> Decimal:
 def valor_a_pagar(competencia: Competencia) -> Decimal:
     """Valor que a Ordem Bancária debita nas NEs apontadas.
 
-    Com a nota fiscal concluída: a soma dos valores brutos de todas as notas. Antes disso, a estimativa é
+    Com a nota fiscal concluída: a soma dos valores brutos de todas as notas mais os documentos de despesas variáveis. Antes disso, a estimativa é
     o valor autorizado da medição (medido × % liberado pela avaliação − desconto de reajuste).
     """
     if competencia.nf_concluida_em is not None and competencia.notas_fiscais:
-        return total_bruto_notas(competencia)
+        return calculos.arredondar(total_bruto_notas(competencia) + total_despesas_juntadas(competencia))
     return valor_autorizado(competencia)
+
+
+def vencimento_pagamento(competencia: Competencia) -> date | None:
+    """Vencimento do pagamento: data de recebimento da NF + prazo em dias corridos (vazio até a NF ser juntada)."""
+    if competencia.nf_recebida_em and competencia.prazo_pagamento_dias:
+        return competencia.nf_recebida_em + timedelta(days=competencia.prazo_pagamento_dias)
+    return None
+
+
+# Prazo para a empresa enviar a nota fiscal depois da medição concluída (o e-mail da medição avisa as 48 horas)
+PRAZO_NOTA_FISCAL_HORAS = 48
+
+
+def prazo_nota_fiscal(competencia: Competencia) -> datetime | None:
+    """Limite de 48 h para a NF: conclusão da medição + 48 h, só enquanto a NF não foi juntada."""
+    if competencia.medicao_concluida_em is None or competencia.nf_concluida_em is not None:
+        return None
+    return competencia.medicao_concluida_em + timedelta(hours=PRAZO_NOTA_FISCAL_HORAS)
 
 
 def total_bruto_notas(competencia: Competencia) -> Decimal:
@@ -357,7 +411,7 @@ def _exigir_etapa(competencia: Competencia, etapa: str, descricao: str) -> None:
 
 def _liberada(competencia: Competencia) -> bool:
     """A medição só é liberada depois do fim do período, exceto nos contratos com "Liberar todas as competências"."""
-    return competencia.contrato.liberar_todas_competencias or hoje() > competencia.periodo_fim
+    return competencia.tipo == "adicional" or competencia.contrato.liberar_todas_competencias or hoje() > competencia.periodo_fim
 
 
 def _exigir_liberada(competencia: Competencia) -> None:
@@ -402,6 +456,14 @@ def _auditar(sessao: Session, autor: Usuario, acao: str, contrato: Contrato, com
     """Registra a operação na auditoria, identificando contrato e competência."""
     auditar(sessao, autor.login, acao, f"Contrato {contrato.numero} · {competencia.numero_competencia}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"competencia": competencia.competencia, **dados})
+    sincronizar_tarefas(sessao, competencia, autor)
+
+
+def sincronizar_tarefas(sessao: Session, competencia: Competencia, autor: Usuario) -> None:
+    """Depois de uma ação na competência, leva as tarefas dela no Módulo Tarefas ao estado novo (nunca derruba a ação: falha vira log)."""
+    from app.services.contratos import servico_tarefas_contratos
+
+    servico_tarefas_contratos.sincronizar_seguro(sessao, competencia, autor)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -424,34 +486,65 @@ def requisitos(contrato: Contrato) -> Requisitos:
     return Requisitos(prontos=not pendencias, pendencias=pendencias)
 
 
+def _rotulo_do_trecho(trecho: valores.TrechoCompetencia, precos: list[Decimal], n: int) -> str:
+    """Texto do trecho de um item ("01/09 a 19/09/2026 · preço anterior"): o sufixo só aparece quando o preço muda entre trechos."""
+    base = f"{trecho.inicio:%d/%m} a {trecho.fim:%d/%m/%Y}"
+    if n > 0 and precos[n] != precos[n - 1]:
+        return f"{base} · preço reajustado"
+    if n + 1 < len(precos) and precos[n] != precos[n + 1]:
+        return f"{base} · preço anterior"
+    return base
+
+
 def itens_previstos(contrato: Contrato, periodo: calculos.PeriodoExecucao, itens_do_contrato=None) -> list[ItemMedicao]:
     """Fotografia dos itens na competência: preço vigente e quantidade prevista (pró-rata por item).
 
+    A competência é cortada em trechos nas viradas (mudança de vigência ou data de efeito de reajuste). Sem virada, uma linha por item.
+    Com virada, o item entra uma vez por trecho, com o preço do trecho; o mês cortado é pago pelos dias de cada parte (todos os itens,
+    inclusive os "sempre integral"). Fora dele, vale a regra de sempre: pró-rata nos meses parciais para quem usa; mês cheio para os demais.
+
     `itens_do_contrato` permite calcular com itens alternativos (a prévia de uma correção usa cópias com os valores propostos, sem tocar no cadastro).
     """
-    apontados = apontamentos_da_vigencia(contrato, periodo.sequencia_vigencia)
+    trechos = valores.trechos_da_competencia(contrato, periodo)
+    dividido = len(trechos) > 1
+    partes_por_mes: dict = {}
+    for trecho in trechos:
+        for parte in trecho.partes:
+            partes_por_mes.setdefault(parte.competencia, []).append(parte)
+    apontados_por_vigencia: dict = {}
+
+    def apontados(sequencia: int) -> dict:
+        if sequencia not in apontados_por_vigencia:
+            apontados_por_vigencia[sequencia] = apontamentos_da_vigencia(contrato, sequencia)
+        return apontados_por_vigencia[sequencia]
+
     itens = []
     for item in (contrato.itens if itens_do_contrato is None else itens_do_contrato):
-        preco = valores.preco_em(contrato, item, periodo.competencia)
-        # Contínuo: soma mês a mês, pois quantidade e pró-rata podem variar dentro do período
-        if item.tipo == "continuo":
+        precos = [valores.preco_em(contrato, item, t.inicio) for t in trechos]
+        for n, trecho in enumerate(trechos):
             quantidade, fator = ZERO, ZERO
-            for mes in periodo.meses:
-                q, f = calculos.quantidade_prevista_continua(
-                    valores.quantidade_mensal_em(contrato, item, mes.competencia), item.calcula_pro_rata, [mes]
-                )
-                quantidade, fator = quantidade + q, fator + f
-        else:
-            # Sob demanda: soma dos apontamentos da previsão nos meses do período
-            quantidade = sum((apontados.get((item.id, m.competencia), ZERO) for m in periodo.meses), ZERO)
-            fator = Decimal(len(periodo.meses))
-        itens.append(
-            ItemMedicao(
-                item_id=item.id, ordem=item.ordem, descricao=item.descricao, tipo=item.tipo,
-                calcula_pro_rata=item.calcula_pro_rata, valor_unitario=preco, fator_meses=fator,
-                quantidade_prevista=quantidade.quantize(QUATRO_CASAS), quantidade_medida=ZERO,
+            for parte in trecho.partes:
+                irmas = partes_por_mes[parte.competencia]
+                if item.tipo == "continuo":
+                    # Mês cortado: pelos dias da parte; senão, pró-rata (se o item usar) ou mês cheio
+                    f = parte.fator if (len(irmas) > 1 or item.calcula_pro_rata) else Decimal(1)
+                    quantidade += valores.quantidade_mensal_em(contrato, item, parte.competencia) * f
+                else:
+                    # Sob demanda: o apontamento do mês na vigência da parte, repartido pelos dias se o mês tem mais de um preço nela
+                    mesma_vigencia = [i for i in irmas if i.sequencia_vigencia == parte.sequencia_vigencia]
+                    soma = sum((i.fator for i in mesma_vigencia), ZERO) or Decimal(1)
+                    f = parte.fator / soma if len(mesma_vigencia) > 1 else Decimal(1)
+                    quantidade += apontados(parte.sequencia_vigencia).get((item.id, parte.competencia), ZERO) * f
+                fator += f
+            linha = ItemMedicao(
+                item_id=item.id, ordem=item.ordem, descricao=item.descricao, tipo=item.tipo, calcula_pro_rata=item.calcula_pro_rata,
+                valor_unitario=precos[n], fator_meses=fator, quantidade_prevista=quantidade.quantize(QUATRO_CASAS), quantidade_medida=ZERO,
+                segmento=n + 1, periodo_rotulo="",
             )
-        )
+            if dividido:
+                linha.periodo_inicio, linha.periodo_fim, linha.sequencia_vigencia = trecho.inicio, trecho.fim, trecho.sequencia_vigencia
+                linha.periodo_rotulo = _rotulo_do_trecho(trecho, precos, n)
+            itens.append(linha)
     return itens
 
 
@@ -478,13 +571,17 @@ def sincronizar_competencia(contrato: Contrato, competencia: Competencia, period
     periodo = periodos.get(competencia.periodo_inicio)
     if periodo is None:
         return None
-    atuais = {i.item_id: i for i in competencia.itens if i.item_id is not None}
-    novos = {i.item_id: i for i in itens_previstos(contrato, periodo, itens_do_contrato)}
+    atuais = {(i.item_id, i.segmento): i for i in competencia.itens if i.item_id is not None}
+    novos = {(i.item_id, i.segmento): i for i in itens_previstos(contrato, periodo, itens_do_contrato)}
     resultado: dict = {"alteradas": [], "incluidas": [], "removidas": [], "valor_antes": ZERO, "valor_depois": ZERO}
+    # Mudou a divisão do mês em trechos (reajuste ou prorrogação no meio do mês) e já há quantidade medida: as linhas não são refeitas
+    if {c[1] for c in atuais} != {c[1] for c in novos} and any(i.quantidade_medida > 0 for i in competencia.itens):
+        resultado["estrutura_mantida"] = True
+        return resultado
     for linha in competencia.itens:
         resultado["valor_antes"] += linha.valor_unitario * linha.quantidade_prevista
-    for item_id, novo in novos.items():
-        linha = atuais.get(item_id)
+    for chave, novo in novos.items():
+        linha = atuais.get(chave)
         resultado["valor_depois"] += novo.valor_unitario * novo.quantidade_prevista
         if linha is None:
             resultado["incluidas"].append(novo.descricao)
@@ -497,8 +594,9 @@ def sincronizar_competencia(contrato: Contrato, competencia: Competencia, period
         if aplicar:
             linha.ordem, linha.descricao, linha.tipo, linha.calcula_pro_rata = novo.ordem, novo.descricao, novo.tipo, novo.calcula_pro_rata
             linha.valor_unitario, linha.fator_meses, linha.quantidade_prevista = novo.valor_unitario, novo.fator_meses, novo.quantidade_prevista
-    for item_id, linha in atuais.items():
-        if item_id not in novos and linha.quantidade_medida == 0:
+            linha.periodo_inicio, linha.periodo_fim, linha.periodo_rotulo, linha.sequencia_vigencia = novo.periodo_inicio, novo.periodo_fim, novo.periodo_rotulo, novo.sequencia_vigencia
+    for chave, linha in atuais.items():
+        if chave not in novos and linha.quantidade_medida == 0:
             resultado["removidas"].append(linha.descricao)
             if aplicar:
                 competencia.itens.remove(linha)
@@ -594,7 +692,7 @@ def painel(sessao: Session, contrato_id: uuid.UUID) -> PainelExecucao:
         grupos.append(
             GrupoCompetencias(
                 sequencia_vigencia=vigencia.sequencia, inicio=vigencia.inicio, fim=vigencia.fim,
-                competencias=[resumo(c) for c in sorted(competencias, key=lambda c: c.periodo_inicio)],
+                competencias=[resumo(c) for c in sorted(competencias, key=lambda c: (c.periodo_inicio, c.tipo == "adicional", c.numero_adicional))],
             )
         )
     return PainelExecucao(requisitos=requisitos(contrato), geradas=bool(contrato.competencias), grupos=grupos)
@@ -608,7 +706,7 @@ def resumo(competencia: Competencia) -> ResumoCompetencia:
         periodo_inicio=competencia.periodo_inicio, periodo_fim=competencia.periodo_fim, situacao=situacao_competencia(competencia),
         etapa_atual=competencia.etapa_atual,
         valor_medicao=total_medido(competencia) if competencia.medicao_iniciada_em else None,
-        possui_avaliacao=tem_avaliacao(competencia),
+        possui_avaliacao=tem_avaliacao(competencia), numero_adicional=competencia.numero_adicional,
     )
 
 
@@ -684,11 +782,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         if competencia.tipo == "regular" else []
     )
     # Vencimento do pagamento = data de recebimento da NF + prazo em dias corridos
-    vencimento = (
-        competencia.nf_recebida_em + timedelta(days=competencia.prazo_pagamento_dias)
-        if competencia.nf_recebida_em and competencia.prazo_pagamento_dias
-        else None
-    )
+    vencimento = vencimento_pagamento(competencia)
     return DetalheCompetencia(
         **resumo(competencia).model_dump(),
         contrato_id=contrato.id, contrato_numero=contrato.numero, empresa_cnpj="".join(c for c in contrato.empresa.cnpj if c.isdigit()),
@@ -698,20 +792,26 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         liberada=_liberada(competencia),
         itens=[
             LeituraItemMedicao(
-                id=i.id, ordem=i.ordem, descricao=i.descricao, tipo=i.tipo, calcula_pro_rata=i.calcula_pro_rata,
+                id=i.id, ordem=i.ordem, descricao=i.descricao, segmento=i.segmento, periodo_rotulo=i.periodo_rotulo or "", tipo=i.tipo, calcula_pro_rata=i.calcula_pro_rata,
                 valor_unitario=i.valor_unitario, fator_meses=i.fator_meses, quantidade_prevista=i.quantidade_prevista,
                 quantidade_medida=i.quantidade_medida, subtotal=calculos.arredondar(i.quantidade_medida * i.valor_unitario),
-                saldo=saldos[i.id].saldo, glosas=saldos[i.id].glosas, saldo_liquido=saldos[i.id].saldo_liquido,
+                saldo=saldos[i.id].saldo, glosas=saldos[i.id].glosas, saldo_liquido=saldos[i.id].saldo_liquido, despesa_variavel=i.despesa_variavel,
             )
             for i in competencia.itens
         ],
         total_previsto=calculos.arredondar(sum((i.quantidade_prevista * i.valor_unitario for i in competencia.itens), ZERO)),
         total_medido=medido,
+        subtotal_medicao=subtotal_medicao(competencia), subtotal_despesas_variaveis=subtotal_despesas_variaveis(competencia),
+        tem_despesas_variaveis=tem_despesas_variaveis(competencia),
+        despesas_variaveis=[
+            LeituraDespesaVariavel(id=d.id, ordem=d.ordem, tipo=d.tipo, numero=d.numero, rotulo=d.rotulo, valor=d.valor, arquivo=_arquivo(d.anexo))
+            for d in competencia.despesas_variaveis
+        ],
         notas_selecionadas=[opcao_nota(notas[n]) for n in selecionadas if n in notas],
         notas_disponiveis=[opcao_nota(n) for n in contrato.notas_empenho if n.saldo - reservado.get(n.id, ZERO) > 0],
         ciencias=[LeituraCiencia(usuario_id=c.usuario_id, nome=c.nome, papel=c.papel, registrada_em=c.registrada_em) for c in competencia.ciencias],
         ciencias_minimas=CIENCIAS_MINIMAS,
-        memorias=[LeituraMemoria(versao=m.versao, criada_em=m.criado_em, arquivo=_arquivo(m.anexo)) for m in competencia.memorias],
+        memorias=[LeituraMemoria(versao=m.versao, criada_em=m.criado_em, arquivo=_arquivo(m.anexo), arquivo_despesas=_arquivo(m.anexo_despesas)) for m in competencia.memorias],
         medicao_concluida_em=competencia.medicao_concluida_em,
         avaliacao=_leitura_avaliacao(competencia.avaliacao, anexos, contrato) if competencia.avaliacao else None,
         percentual_autorizado=percentual,
@@ -723,7 +823,11 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         ],
         valor_a_pagar=valor_a_pagar(competencia),
         avisos=(excedentes_da_medicao(contrato, competencia) if competencia.medicao_concluida_em is None else [])
-        + avisos_de_impacto_tardio(contrato, competencia),
+        + avisos_de_impacto_tardio(contrato, competencia) + avisos_da_medicao_adicional(contrato, competencia),
+        pode_incluir_adicional=contrato.permite_medicao_adicional and pode_editar(sessao, contrato, usuario),
+        pode_excluir_adicional=competencia.tipo == "adicional" and competencia.etapa_atual != "concluida" and pode_editar(sessao, contrato, usuario),
+        adicional_justificativa=competencia.adicional_justificativa, adicional_por_nome=competencia.adicional_por_nome,
+        adicional_anexo=_arquivo(competencia.adicional_anexo),
         reaberturas_permitidas=pode_reabrir(sessao, contrato, usuario),
         glosas_periodo=glosas_periodo,
         email_nf=EmailMedicao(enviado_em=competencia.email_nf_enviado_em, ok=competencia.email_nf_ok,
@@ -769,8 +873,9 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
 
 def _ids_anexos(competencia: Competencia) -> set[uuid.UUID]:
     """Todos os anexos da competência (usados no detalhe e para autorizar downloads)."""
-    ids = {competencia.consolidado_anexo_id, competencia.ob_anexo_id, competencia.retencao_pdf_anexo_id}
+    ids = {competencia.consolidado_anexo_id, competencia.ob_anexo_id, competencia.retencao_pdf_anexo_id, competencia.adicional_anexo_id}
     ids |= {n.anexo_id for n in competencia.notas_fiscais} | {n.xml_anexo_id for n in competencia.notas_fiscais}
+    ids |= {d.anexo_id for d in competencia.despesas_variaveis} | {m.anexo_despesas_id for m in competencia.memorias}
     # Recusas da nota fiscal: o PDF da recusa e os arquivos das notas recusadas
     for recusa in competencia.recusas:
         ids.add(recusa.pdf_anexo_id)
@@ -841,19 +946,33 @@ def saldos_da_medicao(contrato: Contrato, competencia: Competencia) -> dict[uuid
     """
     itens = {i.id: i for i in contrato.itens}
     regular = competencia.tipo == "regular"
-    glosas = servico_diario.glosas_do_periodo(contrato, competencia.periodo_inicio, competencia.periodo_fim) if regular else {}
+    adicional = competencia.tipo == "adicional"
+    # Glosas por período: cada trecho do mês (mês com virada) recebe as glosas das datas dele; sem trecho, as do período todo
+    glosas_por_periodo: dict = {}
+
+    def glosas_do_trecho(linha) -> dict:
+        periodo = (linha.periodo_inicio or competencia.periodo_inicio, linha.periodo_fim or competencia.periodo_fim)
+        if periodo not in glosas_por_periodo:
+            glosas_por_periodo[periodo] = servico_diario.glosas_do_periodo(contrato, *periodo) if regular else {}
+        return glosas_por_periodo[periodo]
+
     resultado = {}
     for linha in competencia.itens:
         item = itens.get(linha.item_id)
-        if not regular:
+        if not regular and not (adicional and item is not None and item.tipo == "sob_demanda"):
+            # Diferença de reajuste e medição adicional (itens contínuos): sem teto; a adicional só avisa quando passa do previsto
             saldo = linha.quantidade_medida
         elif item is not None and item.tipo == "sob_demanda":
-            limite = valores.limite_na_vigencia(contrato, item, competencia.sequencia_vigencia)
-            executado = valores.executado_na_vigencia(contrato, item, competencia.sequencia_vigencia, exceto=competencia.id)
-            saldo = max(ZERO, limite - executado)
+            sequencia = linha.sequencia_vigencia or competencia.sequencia_vigencia
+            limite = valores.limite_na_vigencia(contrato, item, sequencia)
+            executado = valores.executado_na_vigencia(contrato, item, sequencia, exceto=competencia.id)
+            # Outras linhas do mesmo item (outros trechos) nesta competência e na mesma vigência já consomem parte do saldo
+            vizinhas = sum((o.quantidade_medida for o in competencia.itens
+                            if o is not linha and o.item_id == linha.item_id and (o.sequencia_vigencia or competencia.sequencia_vigencia) == sequencia), ZERO)
+            saldo = max(ZERO, limite - executado - vizinhas)
         else:
             saldo = linha.quantidade_prevista
-        glosa = glosas.get(linha.item_id, ZERO)
+        glosa = glosas_do_trecho(linha).get(linha.item_id, ZERO)
         resultado[linha.id] = SaldoItem(saldo, glosa, max(ZERO, saldo - glosa))
     return resultado
 
@@ -868,7 +987,7 @@ def excedentes_da_medicao(contrato: Contrato, competencia: Competencia) -> list[
             conta = f"saldo {saldo.saldo:.4f} − glosas {saldo.glosas:.4f}" if saldo.glosas else f"saldo {saldo.saldo:.4f}"
             dica = " Registre um aditamento para ampliar o limite." if linha.tipo == "sob_demanda" and not saldo.glosas else ""
             avisos.append(
-                f"\"{linha.descricao}\": a medição ({linha.quantidade_medida:.4f}) passa do saldo líquido "
+                f"\"{linha.descricao_completa}\": a medição ({linha.quantidade_medida:.4f}) passa do saldo líquido "
                 f"({saldo.saldo_liquido:.4f} = {conta}).{dica}"
             )
     return avisos
@@ -897,6 +1016,9 @@ def salvar_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
         item = itens[linha.id]
         alterou |= item.quantidade_medida != linha.quantidade_medida
         item.quantidade_medida = linha.quantidade_medida
+        if linha.despesa_variavel is not None:
+            alterou |= item.despesa_variavel != linha.despesa_variavel
+            item.despesa_variavel = linha.despesa_variavel
     # Nenhum item pode ser medido acima do saldo líquido (saldo − glosas do diário de bordo)
     excedentes = excedentes_da_medicao(contrato, competencia)
     if excedentes:
@@ -946,7 +1068,7 @@ def _hash_medicao(contrato: Contrato, competencia: Competencia) -> str:
     origem = {
         "contrato": contrato.numero,
         "competencia": competencia.competencia.isoformat(),
-        "itens": [[i.ordem, i.descricao, str(i.valor_unitario), str(i.quantidade_prevista), str(i.quantidade_medida)] for i in competencia.itens],
+        "itens": [[i.ordem, i.descricao_completa, str(i.valor_unitario), str(i.quantidade_prevista), str(i.quantidade_medida), i.despesa_variavel] for i in competencia.itens],
         "ciencias": [[c.usuario_id, c.nome, c.papel] for c in competencia.ciencias],
         "notas": [str(n.nota_id) for n in competencia.notas],
         "desconto_reajuste": str(desconto_reajuste(competencia)),
@@ -964,6 +1086,8 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     sincronizar_se_defasada(contrato, competencia)
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
+    if competencia.tipo == "adicional" and not any(i.quantidade_medida > 0 for i in competencia.itens):
+        raise ErroRegraContrato("Informe a quantidade de ao menos um item para concluir a medição adicional.")
     # Regras para concluir: ciências mínimas, mesma seleção de NEs salva, saldo e limite dos itens sob demanda
     if len({c.usuario_id for c in competencia.ciencias}) < CIENCIAS_MINIMAS:
         raise ErroRegraContrato("A conclusão exige ao menos uma ciência de integrante da equipe.")
@@ -1000,8 +1124,18 @@ def gerar_memoria(sessao: Session, contrato: Contrato, competencia: Competencia,
     notas = {n.id: n for n in contrato.notas_empenho}
     conteudo = documentos_execucao.memoria_medicao(contrato, competencia, [notas[n.nota_id] for n in competencia.notas], versao, _nome(autor))
     nome = f"memoria-medicao-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}-v{versao}.pdf"
-    anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-memoria", autor.id, contrato_id=contrato.id)
-    memoria = MemoriaMedicao(versao=versao, anexo=anexo, hash_origem=origem, criado_por_id=autor.id, criado_em=agora_utc())
+    anexo = servico_autenticacao.guardar_autenticado(
+        sessao, conteudo, nome, "contrato-execucao-memoria", "memoria_medicao", contrato, competencia, autor.id, _nome(autor),
+        [{"nome": c.nome, "papel": c.papel, "em": c.registrada_em} for c in competencia.ciencias],
+    )
+    # Com despesas variáveis, a medição delas sai em outro PDF (no consolidado vem depois da nota fiscal)
+    anexo_despesas = None
+    if tem_despesas_variaveis(competencia):
+        conteudo_despesas = documentos_execucao.memoria_despesas_variaveis(contrato, competencia, versao, _nome(autor))
+        anexo_despesas = servico_anexos.guardar_pdf_gerado(
+            sessao, conteudo_despesas, f"medicao-despesas-variaveis-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}-v{versao}.pdf",
+            "contrato-execucao-memoria", autor.id, contrato_id=contrato.id)
+    memoria = MemoriaMedicao(versao=versao, anexo=anexo, anexo_despesas=anexo_despesas, hash_origem=origem, criado_por_id=autor.id, criado_em=agora_utc())
     competencia.memorias.append(memoria)
     return memoria
 
@@ -1013,7 +1147,7 @@ def atualizar_executado(contrato: Contrato) -> None:
             (
                 linha.quantidade_medida
                 for c in contrato.competencias
-                if c.medicao_concluida_em is not None and c.tipo == "regular"
+                if c.medicao_concluida_em is not None and c.tipo in ("regular", "adicional")
                 for linha in c.itens
                 if linha.item_id == item.id
             ),
@@ -1140,6 +1274,95 @@ def ocorrencias_da_avaliacao(contrato: Contrato, competencia: Competencia) -> li
 def _utc(valor: datetime) -> datetime:
     """Data com fuso UTC (o SQLite dos testes devolve datas sem fuso)."""
     return valor if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
+
+
+def avisos_da_medicao_adicional(contrato: Contrato, competencia: Competencia) -> list[str]:
+    """Aviso informativo (não bloqueia): itens contínuos cuja soma das medições do mesmo período passa da quantidade prevista."""
+    if competencia.tipo != "adicional":
+        return []
+    do_periodo = [c for c in contrato.competencias if c.periodo_inicio == competencia.periodo_inicio and c.tipo in ("regular", "adicional")]
+    previstas: dict = {}
+    medidas: dict = {}
+    for c in do_periodo:
+        for linha in c.itens:
+            if linha.tipo != "continuo" or linha.item_id is None:
+                continue
+            if c.tipo == "regular":
+                previstas[linha.item_id] = previstas.get(linha.item_id, ZERO) + linha.quantidade_prevista
+            medidas[linha.item_id] = medidas.get(linha.item_id, ZERO) + linha.quantidade_medida
+    descricoes = {i.item_id: i.descricao for i in competencia.itens}
+    return [
+        f"\"{descricoes[item_id]}\": somando as medições do período ({total:.4f}), passa da quantidade prevista ({previstas[item_id]:.4f}); "
+        "fica registrado como medição adicional."
+        for item_id, total in medidas.items() if item_id in previstas and item_id in descricoes and total > previstas[item_id]
+    ]
+
+
+def excluir_medicao_adicional(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, autor: Usuario) -> None:
+    """Exclui a medição adicional com tudo o que ela tem (itens, ciências, avaliação, nota fiscal etc.), para a equipe refazê-la do zero.
+
+    Só vale para `tipo = adicional` e para quem edita a execução. Uma adicional já paga precisa ser zerada antes (o estorno da OB
+    fica no extrato das NEs). Os arquivos continuam guardados no histórico de anexos.
+    """
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    if competencia.tipo != "adicional":
+        raise ErroRegraContrato("Somente medições adicionais podem ser excluídas.", conflito=True)
+    if competencia.etapa_atual == "concluida":
+        raise ErroRegraContrato("Esta medição adicional já foi paga. Zere a competência (o que estorna a ordem bancária) antes de excluí-la.", conflito=True)
+    auditar(sessao, autor.login, "contrato.execucao.adicional.excluir", f"Contrato {contrato.numero} · {competencia.numero_competencia}", autor_id=autor.id,
+            alvo_tipo="contrato", alvo_id=contrato.id,
+            dados={"competencia": competencia.competencia, "numero_adicional": competencia.numero_adicional, "etapa": competencia.etapa_atual,
+                   "justificativa_original": competencia.adicional_justificativa})
+    sessao.delete(competencia)
+    sessao.commit()
+
+
+def _itens_zerados_da_adicional(contrato: Contrato, periodo_inicio: date) -> list[ItemMedicao]:
+    """Itens do contrato com quantidades zeradas e o preço do início do período (início de uma medição adicional)."""
+    return [
+        ItemMedicao(
+            item_id=item.id, ordem=item.ordem, descricao=item.descricao, tipo=item.tipo, calcula_pro_rata=item.calcula_pro_rata,
+            valor_unitario=valores.preco_em(contrato, item, periodo_inicio), fator_meses=Decimal(1), quantidade_prevista=ZERO,
+            quantidade_medida=ZERO, segmento=1, periodo_rotulo="",
+        )
+        for item in contrato.itens
+    ]
+
+
+def incluir_medicao_adicional(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, justificativa: str,
+                              arquivo: BinaryIO | None, nome_arquivo: str, autor: Usuario) -> Competencia:
+    """Cria outra medição (e outro pagamento) no período da competência, com justificativa e anexo opcional.
+
+    Exige o contrato com "medição adicional" permitida. Os itens do contrato entram zerados, com o preço do início do período;
+    o resto do rito (ciências, avaliação, nota fiscal, retenção, CADIN, checklist, consolidado e OB) é o das demais competências.
+    """
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    if not contrato.permite_medicao_adicional:
+        raise ErroRegraContrato("Este contrato não permite medição adicional. Ative a opção no cadastro do contrato.", conflito=True)
+    origem = _carregar_competencia(sessao, contrato, competencia_id)
+    justificativa = justificativa.strip()
+    if not justificativa:
+        raise ErroRegraContrato("Informe a justificativa da nova medição.")
+    numero = 1 + max((c.numero_adicional for c in contrato.competencias if c.tipo == "adicional" and c.periodo_inicio == origem.periodo_inicio), default=0)
+    adicional = Competencia(
+        tipo="adicional", numero_adicional=numero, competencia=origem.competencia, periodo_inicio=origem.periodo_inicio, periodo_fim=origem.periodo_fim,
+        sequencia_vigencia=origem.sequencia_vigencia, etapa_atual="medicao", versao_cadastro_sincronizada=contrato.versao_cadastro,
+        adicional_justificativa=justificativa, adicional_por_nome=_nome(autor),
+    )
+    adicional.itens.extend(_itens_zerados_da_adicional(contrato, origem.periodo_inicio))
+    if arquivo is not None:
+        adicional.adicional_anexo = servico_anexos.guardar_pdf(
+            sessao, arquivo, nome_arquivo, "contrato-execucao-medicao-adicional", autor.id, contrato_id=contrato.id
+        )
+    contrato.competencias.append(adicional)
+    sessao.flush()
+    _auditar(sessao, autor, "contrato.execucao.adicional.incluir", contrato, adicional, numero=numero, justificativa=justificativa)
+    avisos.medicao_adicional_incluida(sessao, contrato, adicional, autor)
+    sessao.commit()
+    return adicional
 
 
 def avisos_de_impacto_tardio(contrato: Contrato, competencia: Competencia) -> list[str]:
@@ -1293,7 +1516,11 @@ def gerar_pdf_avaliacao(sessao: Session, contrato_id, competencia_id, autor: Usu
         raise ErroRegraContrato("Registre ao menos uma ciência da equipe no ateste antes de exportar o PDF.")
     conteudo = documentos_execucao.relatorio_avaliacao(contrato, competencia, nota_final(avaliacao), percentual_liberado(competencia), _nome(autor))
     nome = f"avaliacao-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf"
-    anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-avaliacao", autor.id, contrato_id=contrato.id)
+    # O PDF leva a Folha de autenticação (código, hash e quem deu ciência no ateste); a via assinada pela contratada continua sendo enviada à parte
+    anexo = servico_autenticacao.guardar_autenticado(
+        sessao, conteudo, nome, "contrato-execucao-avaliacao", "avaliacao", contrato, competencia, autor.id, _nome(autor),
+        [{"nome": c["nome"], "papel": c["papel"], "em": c["ciencia_em"]} for c in ciencias_ateste(avaliacao)],
+    )
     sessao.flush()
     avaliacao.pdf_gerado_anexo_id = anexo.id
     _auditar(sessao, autor, "contrato.execucao.avaliacao.pdf", contrato, competencia)
@@ -1369,7 +1596,7 @@ MAXIMO_NOTAS = 20
 
 def registrar_nota_fiscal(
     sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: dict, notas: list[dict], arquivos: list[tuple],
-    xmls: list[tuple], autor: Usuario,
+    xmls: list[tuple], autor: Usuario, despesas: list[dict] | None = None, arquivos_despesas: list[tuple] | None = None,
 ) -> None:
     """Etapa 3: junta uma ou mais notas fiscais (PDF obrigatório; XML opcional); os valores vêm dos XMLs ou, sem XML, são informados.
 
@@ -1377,6 +1604,10 @@ def registrar_nota_fiscal(
     registrada, que mantém os arquivos que não forem trocados) e/ou `arquivo` e `xml` (posições nas listas `arquivos` e `xmls`).
     Notas que ficam fora da lista são removidas. As retenções lidas dos XMLs ficam como sugestão para a etapa de retenção
     de tributos, onde o Financeiro confere e confirma.
+
+    Com item marcado como despesa variável na medição, a etapa exige ao menos uma nota fiscal **e** ao menos um documento de despesa
+    (`despesas`: nota de débito, recibo ou outros, com valor e PDF), e a soma dos documentos precisa ser igual ao Subtotal - Despesas
+    Variáveis. Os documentos não vão para a retenção (só a nota fiscal passa pela validação do Financeiro); ficam juntados e entram no consolidado.
     """
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
@@ -1417,10 +1648,12 @@ def registrar_nota_fiscal(
             chaves[chave] = posicao
             _exigir_nota_inedita(sessao, competencia, chave, str(posicao))
         preparadas.append((existente, ipdf, ixml, lido, posicao))
-    # Todas as notas são pagas pelas NEs apontadas na medição: o saldo livre delas precisa cobrir o total
+    preparadas_despesas = _preparar_despesas(competencia, despesas or [], arquivos_despesas or [])
+    # Todas as notas (e os documentos de despesas variáveis) são pagas pelas NEs apontadas na medição: o saldo livre delas precisa cobrir o total
     total = calculos.arredondar(sum((Decimal(lido[1]["valor_bruto"]) for _, _, _, lido, _ in preparadas), ZERO))
+    total_despesas = calculos.arredondar(sum((item["valor"] for item, *_ in preparadas_despesas), ZERO))
     ne = _resolver_notas(contrato, [n.nota_id for n in competencia.notas])
-    _exigir_saldo(ne, total, compromissos(contrato, exceto=competencia.id))
+    _exigir_saldo(ne, total + total_despesas, compromissos(contrato, exceto=competencia.id))
 
     # Remove as notas que ficaram de fora e libera a ordem (a restrição de unicidade é por competência e ordem)
     mantidas = {e.id for e, *_ in preparadas if e is not None}
@@ -1444,6 +1677,7 @@ def registrar_nota_fiscal(
             nota.xml_anexo = servico_anexos.guardar_arquivo_gerado(
                 sessao, lido[0], xmls[ixml][1] or "nota_fiscal.xml", "application/xml", categoria_xml, autor.id, contrato_id=contrato.id)
         _aplicar_nota(nota, lido[1])
+    _gravar_despesas(sessao, contrato, competencia, preparadas_despesas, arquivos_despesas or [], autor)
     competencia.nf_recebida_em, competencia.prazo_pagamento_dias = dados["recebida_em"], dados["prazo_pagamento_dias"]
     competencia.origem_valor_nf = None
     competencia.nf_concluida_em = agora_utc()
@@ -1455,9 +1689,62 @@ def registrar_nota_fiscal(
     competencia.etapa_atual = proxima_etapa(competencia, "nota_fiscal")
     sessao.flush()
     _auditar(sessao, autor, "contrato.execucao.nota_fiscal.concluir", contrato, competencia,
-             notas=[{"numero": n.numero, "chave": n.chave, "bruto": n.valor_bruto} for n in competencia.notas_fiscais], bruto=total)
+             notas=[{"numero": n.numero, "chave": n.chave, "bruto": n.valor_bruto} for n in competencia.notas_fiscais], bruto=total,
+             despesas_variaveis=[{"tipo": d.tipo, "numero": d.numero, "valor": d.valor} for d in competencia.despesas_variaveis])
     avisos.nota_fiscal_juntada(sessao, contrato, competencia, autor)
     sessao.commit()
+
+
+def _preparar_despesas(competencia: Competencia, despesas: list[dict], arquivos: list[tuple]) -> list[tuple]:
+    """Confere os documentos de despesas variáveis: obrigatórios com item marcado, PDF em cada um e soma igual ao subtotal marcado.
+
+    Devolve `(item, existente | None, posição do PDF)` na ordem final. Sem item marcado, não há documentos (a lista precisa vir vazia)."""
+    if not tem_despesas_variaveis(competencia):
+        if despesas:
+            raise ErroRegraContrato("Esta competência não tem item marcado como despesa variável: não junte documentos de despesas variáveis.")
+        return []
+    if not despesas:
+        raise ErroRegraContrato("Há itens de despesas variáveis na medição: junte ao menos uma nota de débito, recibo ou outro documento da despesa.")
+    if len(despesas) > MAXIMO_NOTAS:
+        raise ErroRegraContrato(f"No máximo {MAXIMO_NOTAS} documentos de despesas variáveis por competência.")
+    existentes = {d.id: d for d in competencia.despesas_variaveis}
+    preparadas = []
+    for posicao, item in enumerate(despesas, start=1):
+        existente = existentes.get(item.get("id")) if item.get("id") else None
+        if item.get("id") and existente is None:
+            raise ErroRegraContrato(f"O documento de despesa {posicao} não pertence a esta competência.")
+        indice = item.get("arquivo")
+        if indice is not None and not 0 <= indice < len(arquivos):
+            raise ErroRegraContrato(f"O PDF do documento de despesa {posicao} não foi enviado.")
+        if indice is None and (existente is None or existente.anexo_id is None):
+            raise ErroRegraContrato(f"Selecione o PDF do documento de despesa {posicao}.")
+        preparadas.append((item, existente, indice))
+    esperado, informado = subtotal_despesas_variaveis(competencia), calculos.arredondar(sum((item["valor"] for item, *_ in preparadas), ZERO))
+    if informado != esperado:
+        raise ErroRegraContrato(
+            f"A soma dos documentos de despesas variáveis (R$ {informado:,.2f}) precisa ser igual ao Subtotal - Despesas Variáveis da medição (R$ {esperado:,.2f})."
+        )
+    return preparadas
+
+
+def _gravar_despesas(sessao: Session, contrato: Contrato, competencia: Competencia, preparadas: list[tuple], arquivos: list[tuple], autor: Usuario) -> None:
+    """Substitui a lista de documentos de despesas variáveis pela final (mantém o PDF dos que não foram trocados)."""
+    mantidas = {e.id for _, e, _ in preparadas if e is not None}
+    for documento in list(competencia.despesas_variaveis):
+        if documento.id not in mantidas:
+            competencia.despesas_variaveis.remove(documento)
+    sessao.flush()
+    for documento in competencia.despesas_variaveis:
+        documento.ordem += 1000
+    sessao.flush()
+    for posicao, (item, existente, indice) in enumerate(preparadas, start=1):
+        documento = existente
+        if documento is None:
+            documento = DespesaVariavel(competencia_id=competencia.id, ordem=posicao, tipo=item["tipo"], valor=item["valor"])
+            competencia.despesas_variaveis.append(documento)
+        documento.ordem, documento.tipo, documento.valor, documento.numero = posicao, item["tipo"], item["valor"], (item.get("numero") or "")[:100]
+        if indice is not None:
+            documento.anexo = servico_anexos.guardar_pdf(sessao, arquivos[indice][0], arquivos[indice][1], "contrato-execucao-despesa-variavel", autor.id, contrato_id=contrato.id)
 
 
 def _aplicar_nota(nota: NotaFiscalCompetencia, dados: dict) -> None:
@@ -1520,11 +1807,11 @@ def registrar_cadin(
 def _candidatos_outros_contratos(sessao: Session, contrato: Contrato, competencia: Competencia) -> dict[str, tuple[DocumentoMensal, Competencia, Contrato]]:
     """Documentos da empresa ainda válidos, já juntados em OUTROS contratos da mesma empresa, por nome (sem diferenciar maiúsculas/espaços).
 
-    Só entram os marcados como "documento da empresa" e com validade que cubra o último dia do período desta competência (mesmo critério do
-    reaproveitamento entre competências). Havendo mais de um com o mesmo nome, vale o de maior validade. Só procura se esta competência tem
+    Só entram os marcados como "documento da empresa": com validade, a que cubra o último dia do período desta competência (mesmo critério do
+    reaproveitamento entre competências); sem validade, os juntados na mesma competência (mês) do outro contrato. Havendo mais de um com o mesmo nome, vale o de maior validade. Só procura se esta competência tem
     algum documento da empresa ainda sem anexo.
     """
-    if not any(d.vale_outros_contratos and d.com_validade and d.anexo_id is None for d in competencia.documentos):
+    if not any(d.vale_outros_contratos and d.anexo_id is None for d in competencia.documentos):
         return {}
     consulta = (
         select(DocumentoMensal, Competencia, Contrato)
@@ -1532,22 +1819,26 @@ def _candidatos_outros_contratos(sessao: Session, contrato: Contrato, competenci
         .join(Contrato, Competencia.contrato_id == Contrato.id)
         .where(
             Contrato.empresa_id == contrato.empresa_id, Contrato.id != contrato.id,
-            DocumentoMensal.vale_outros_contratos.is_(True), DocumentoMensal.com_validade.is_(True),
-            DocumentoMensal.anexo_id.is_not(None), DocumentoMensal.validade_ate >= competencia.periodo_fim,
+            DocumentoMensal.vale_outros_contratos.is_(True), DocumentoMensal.anexo_id.is_not(None),
+            or_(
+                # Com validade: ainda vale no fim do período; sem validade: foi juntado na mesma competência (mês) do outro contrato
+                and_(DocumentoMensal.com_validade.is_(True), DocumentoMensal.validade_ate >= competencia.periodo_fim),
+                and_(DocumentoMensal.com_validade.is_(False), Competencia.tipo == "regular", Competencia.competencia == competencia.competencia),
+            ),
         )
     )
     melhores: dict[str, tuple[DocumentoMensal, Competencia, Contrato]] = {}
     for documento, origem_competencia, origem_contrato in sessao.execute(consulta):
         chave = _nome_chave(documento.nome)
         atual = melhores.get(chave)
-        if atual is None or documento.validade_ate > atual[0].validade_ate:
+        if atual is None or (documento.validade_ate or date.min) > (atual[0].validade_ate or date.min):
             melhores[chave] = (documento, origem_competencia, origem_contrato)
     return melhores
 
 
 def _sugestao(documento: DocumentoMensal, sugestoes: dict) -> SugestaoOutroContrato | None:
     """Sugestão de reaproveitamento para um documento da empresa ainda sem anexo."""
-    par = sugestoes.get(_nome_chave(documento.nome)) if documento.vale_outros_contratos and documento.com_validade and documento.anexo_id is None else None
+    par = sugestoes.get(_nome_chave(documento.nome)) if documento.vale_outros_contratos and documento.anexo_id is None else None
     if par is None:
         return None
     origem, origem_competencia, origem_contrato = par
@@ -1582,11 +1873,11 @@ def reaproveitar_de_outro_contrato(sessao: Session, contrato_id, competencia_id,
     documento = next((d for d in competencia.documentos if d.id == documento_id), None)
     if documento is None:
         raise RegistroNaoEncontrado("Documento do checklist")
-    if not (documento.vale_outros_contratos and documento.com_validade) or documento.anexo_id is not None:
-        raise ErroRegraContrato("Este documento não aceita reaproveitamento de outro contrato (precisa ser documento da empresa, com validade e sem anexo).")
+    if not documento.vale_outros_contratos or documento.anexo_id is not None:
+        raise ErroRegraContrato("Este documento não aceita reaproveitamento de outro contrato (precisa ser documento da empresa e estar sem anexo).")
     par = _candidatos_outros_contratos(sessao, contrato, competencia).get(_nome_chave(documento.nome))
     if par is None or par[0].id != origem_id:
-        raise ErroRegraContrato("O documento de origem não está mais disponível ou não cobre o período desta competência.")
+        raise ErroRegraContrato("O documento de origem não está mais disponível ou não vale para esta competência.")
     _copiar_de_outro_contrato(documento, par)
     sessao.flush()
     _concluir_se_completo(sessao, contrato, competencia, autor)
@@ -1605,7 +1896,7 @@ def reaproveitar_todos_de_outros_contratos(sessao: Session, contrato_id, compete
     trazidos, origens = [], set()
     for documento in competencia.documentos:
         par = candidatos.get(_nome_chave(documento.nome))
-        if par is not None and documento.vale_outros_contratos and documento.com_validade and documento.anexo_id is None:
+        if par is not None and documento.vale_outros_contratos and documento.anexo_id is None:
             _copiar_de_outro_contrato(documento, par)
             trazidos.append(documento.nome)
             origens.add(par[2].numero)
@@ -1672,21 +1963,21 @@ def concluir_checklist(sessao: Session, contrato_id, competencia_id, autor: Usua
 # ---------------------------------------------------------------------------------------------
 
 def pode_gerar_consolidado_novamente(contrato: Contrato, usuario: Usuario) -> bool:
-    """Gerar o consolidado **novamente** (já existe um) é só do gestor titular vigente ou do SuperRoot."""
-    return usuario.superusuario or _papel_do_usuario(contrato, usuario) == "gestor"
+    """Gerar o consolidado **novamente** (já existe um) é de todos que podem editar o contrato, com os mesmos direitos da primeira geração.
+
+    A edição já é exigida por `gerar_consolidado` e pelo detalhe da competência (`pode_gerar_consolidado_novamente and pode_editar`); aqui não há restrição extra."""
+    return True
 
 
 def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
     """Etapa 6: gera o PDF consolidado (todos os documentos da competência, na ordem de execução).
 
-    A primeira geração é de quem pode editar o contrato. Gerar novamente (substituir um
+    Quem pode editar o contrato gera e gera novamente (substituir um
     consolidado existente) é só do gestor do contrato ou do SuperRoot, inclusive depois da OB.
     """
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
-    if competencia.consolidado_anexo_id is not None and not pode_gerar_consolidado_novamente(contrato, autor):
-        raise SemPermissaoContrato("Somente o gestor do contrato ou o SuperRoot podem gerar novamente o documento consolidado.")
     if competencia.etapa_atual not in ("consolidado", "ordem_bancaria", "concluida"):
         rotulos = {"medicao": "medição", "avaliacao": "avaliação", "nota_fiscal": "nota fiscal", "retencao": "retenção de tributos",
                    "cadin": "CADIN", "checklist": "checklist"}
@@ -1699,10 +1990,17 @@ def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuar
     ids_envio = {a.enviado_por_id for a in anexos.values() if a.enviado_por_id}
     enviados_por = {u.id: _nome(u) for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(ids_envio)))} if ids_envio else {}
     detalhe = detalhar(sessao, contrato_id, competencia_id, autor)
-    conteudo = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor), enviados_por)
+    # Ciências que valem para a Folha de autenticação: as da medição e as do ateste da avaliação
+    ciencias = [{"nome": c.nome, "papel": c.papel, "em": c.registrada_em} for c in competencia.ciencias]
+    if competencia.avaliacao is not None:
+        ciencias += [{"nome": c["nome"], "papel": c["papel"], "em": c["ciencia_em"]} for c in ciencias_ateste(competencia.avaliacao)]
+    conteudo, sha_composicao = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor), enviados_por, ciencias)
     nome = f"consolidado-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-consolidado", autor.id, contrato_id=contrato.id)
     competencia.consolidado_anexo, competencia.consolidado_em = anexo, agora_utc()
+    sessao.flush()
+    servico_autenticacao.registrar(sessao, anexo, sha_composicao, "consolidado", contrato, competencia, _nome(autor), competencia.consolidado_em,
+                                   servico_autenticacao.retrato_ciencias(ciencias))
     if competencia.etapa_atual == "consolidado":
         competencia.etapa_atual = "ordem_bancaria"
     _auditar(sessao, autor, "contrato.execucao.consolidado", contrato, competencia)
@@ -1753,6 +2051,7 @@ def _descartar_checklist(sessao: Session, competencia: Competencia) -> None:
 def _descartar_nota_fiscal(competencia: Competencia) -> None:
     """Remove as notas fiscais juntadas, o histórico de recusas e os dados de recebimento e de e-mail da etapa."""
     competencia.notas_fiscais.clear()
+    competencia.despesas_variaveis.clear()
     competencia.recusas.clear()
     competencia.nf_recebida_em = competencia.prazo_pagamento_dias = competencia.origem_valor_nf = None
     competencia.email_nf_enviado_em = competencia.email_nf_ok = competencia.email_nf_erro = None
@@ -1796,15 +2095,20 @@ def zerar(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
 
     Estorna a OB se já paga, descarta avaliação, nota fiscal, retenção, CADIN, checklist e consolidado e apaga a medição
     (itens copiados, quantidades medidas, ciências, memórias, NEs escolhidas e e-mail). Anexos e
-    histórico continuam guardados.
+    histórico continuam guardados. Na medição adicional os itens são mantidos (só as quantidades voltam a zero), pois ela não os recopia.
     """
     contrato = obter_contrato(sessao, contrato_id)
     if not pode_reabrir(sessao, contrato, autor):
         raise SemPermissaoContrato("Somente o SuperRoot ou o gestor do contrato podem zerar a competência.")
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     _reabrir_etapa(sessao, contrato, competencia, Reabertura(etapa="medicao", justificativa="Competência zerada"), autor)
-    # Os itens saem junto: a medição recomeça e copia o cadastro de novo no próximo acesso
-    competencia.itens.clear()
+    # Na regular os itens saem junto: a medição recomeça e copia o cadastro de novo no próximo acesso
+    if competencia.tipo == "adicional":
+        # A adicional não recopia o cadastro sozinha (`garantir_itens` só atende a regular): os itens ficam e só as quantidades voltam a zero
+        for item in competencia.itens:
+            item.quantidade_medida = ZERO
+    else:
+        competencia.itens.clear()
     competencia.notas.clear()
     competencia.memorias.clear()
     competencia.medicao_iniciada_em = None

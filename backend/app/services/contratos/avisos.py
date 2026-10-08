@@ -67,6 +67,15 @@ def medicao_concluida(sessao: Session, contrato: Contrato, competencia: Competen
     )
 
 
+def medicao_adicional_incluida(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
+    """Informativo à equipe: foi incluída uma nova medição (e pagamento) em uma competência, com a justificativa."""
+    avisar_equipe(
+        sessao, contrato, f"{_identificacao(contrato)}: nova medição incluída ({competencia.numero_competencia})",
+        f"{autor.nome_completo or autor.login} incluiu a {competencia.numero_competencia} no contrato. Justificativa: {competencia.adicional_justificativa}",
+        chave=f"medicao-adicional:{competencia.id}", link=_rota_competencia(contrato, competencia), autor=autor,
+    )
+
+
 def nota_fiscal_juntada(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
     """Pendência do Financeiro: conferir a retenção de tributos (encerrada em `retencao_conferida`); encerra a pendência da recusa, se houver."""
     from app.services.contratos.servico_retencao import usuarios_financeiro

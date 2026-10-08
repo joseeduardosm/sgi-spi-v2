@@ -25,6 +25,7 @@ from app.schemas.melhorias import (
     ConversaoTarefa, EventoLeitura, GravacaoSugestao, PaginaSugestoesAutor, PaginaSugestoesTriagem, PodeTriar, PrintLeitura, SugestaoAutor,
     SugestaoTriagem, TratamentoSugestao,
 )
+from app.services.sla import servico_sla
 from app.services import servico_anexos
 from app.services import servico_melhorias as servico
 from app.services.servico_melhorias import ErroMelhoria, Filtros
@@ -58,7 +59,7 @@ def _autor(s: SugestaoMelhoria) -> SugestaoAutor:
 def _triagem(sessao: Session, s: SugestaoMelhoria) -> SugestaoTriagem:
     return SugestaoTriagem(
         **_autor(s).model_dump(), autor_id=s.autor_id, autor_nome=s.autor_nome, autor_login=s.autor_login, observacao_interna=s.observacao_interna,
-        atualizado_por_nome=s.atualizado_por_nome, tarefa_numero=servico.numero_da_tarefa(sessao, s),
+        atualizado_por_nome=s.atualizado_por_nome, tarefa_numero=servico.numero_da_tarefa(sessao, s), sla=servico_sla.da_sugestao(sessao, s),
         eventos=[EventoLeitura.model_validate(e, from_attributes=True) for e in s.eventos],
     )
 

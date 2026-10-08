@@ -14,6 +14,7 @@ from app.models.acl import RecursoAcl, RegraAcl
 from app.models.setor import Setor
 from app.models.usuario import Usuario
 from app.schemas.acl import GravacaoRecurso, GravacaoRegra, LeituraRecurso, LeituraRegra, OpcaoSetor
+from app.services.acl_niveis import textos_do_recurso
 from app.services.servico_admin_usuarios import para_opcao
 from app.services.servico_auditoria import auditar
 
@@ -50,6 +51,7 @@ def listar_recursos(sessao: Session) -> list[LeituraRecurso]:
             url_base=r.url_base,
             ativo=r.ativo,
             total_regras=totais.get(r.id, 0),
+            niveis=textos_do_recurso(r.slug),
             criado_em=r.criado_em,
             atualizado_em=r.atualizado_em,
         )
@@ -112,6 +114,7 @@ def para_leitura_regra(regra: RegraAcl) -> LeituraRegra:
         recurso_nome=regra.recurso.nome,
         recurso_slug=regra.recurso.slug,
         nivel=regra.nivel,
+        niveis=textos_do_recurso(regra.recurso.slug),
         usuarios=[para_opcao(u) for u in regra.usuarios],
         setores=[OpcaoSetor(id=s.id, nome=s.nome, sistemico=s.sistemico) for s in regra.setores],
         criado_em=regra.criado_em,

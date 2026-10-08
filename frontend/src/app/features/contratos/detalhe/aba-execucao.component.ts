@@ -38,7 +38,7 @@ import { ROTULOS_ETAPA, ROTULOS_SITUACAO_COMPETENCIA } from '../compartilhado/ro
                 <tbody>
                   @for (c of g.competencias; track c.id) {
                     <tr class="linha-clicavel" (click)="abrir(c)">
-                      <td><strong>{{ c.rotulo }}</strong></td>
+                      <td><strong>{{ c.rotulo }}</strong>@if (c.tipo === 'adicional') { <span class="etiqueta">Adicional {{ c.numero_adicional }}</span> }</td>
                       <td>{{ c.periodo_inicio | dataBr }} a {{ c.periodo_fim | dataBr }}</td>
                       <td><span class="selo-situacao" [class]="'selo-situacao ' + c.situacao">{{ situacoes[c.situacao] }}</span></td>
                       <td>{{ c.situacao === 'pendente' ? '—' : etapas[c.etapa_atual] }}</td>
@@ -84,7 +84,7 @@ export class AbaExecucaoComponent implements OnInit {
     }
     const ok = await this.dialogos.confirmar({
       titulo: painel.geradas ? 'Atualizar as competências?' : 'Gerar as competências de execução?',
-      mensagem: 'Depois disso, os itens não poderão mais ser editados (só pelo SuperRoot). O checklist ativo será copiado para cada competência; o formulário de avaliação só será aplicado se houver versão ativa.',
+      mensagem: 'Depois disso, os itens não poderão mais ser editados (só pelo SuperRoot). As competências nascem vazias: os itens, o formulário de avaliação e o checklist são copiados quando cada etapa começar. Os itens ficam bloqueados para edição depois da geração.',
       rotuloConfirmar: painel.geradas ? 'Atualizar' : 'Gerar',
       segundos: 5,
     });

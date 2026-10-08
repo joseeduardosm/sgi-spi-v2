@@ -107,7 +107,7 @@ def test_credito_expiracao_e_avisos(cliente, equipe):
     assert ("Férias a vencer: Ana Souza tem 30 dia(s) até 28/02/2027", "ana@sp.gov.br") in assuntos
     assert {para for _, para in assuntos} == {"ana@sp.gov.br", "chefe@sp.gov.br", "rh@sp.gov.br"}
     corpo = next(m for m, _, _, _ in SmtpSimulado.enviadas).get_body(("html",)).get_content()
-    assert "cid:brasao-spi" in corpo and "31/12/2026" in corpo
+    assert "cid:logo-sp" in corpo and "31/12/2026" in corpo
     # No início do novo período: crédito e expiração do saldo anterior
     Relogio.dia = date(2027, 3, 1)
     with FabricaSessao() as sessao:

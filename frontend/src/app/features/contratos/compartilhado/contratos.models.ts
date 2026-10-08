@@ -72,7 +72,8 @@ export interface ResumoEmpresa {
 /** Preposto (representante) da empresa. */
 export interface Preposto {
   id: string;
-  cpf: string;
+  /** Opcional: nulo quando o preposto não tem CPF cadastrado. */
+  cpf: string | null;
   nome: string;
   telefone: string;
   email: string;
@@ -184,6 +185,9 @@ export interface DetalheContrato extends ResumoContrato {
   periodicidade_meses: number;
   mes_reajuste: number;
   liberar_todas_competencias: boolean;
+  permite_medicao_adicional: boolean;
+  /** Competências anteriores a esta data não geram alertas (vale a maior entre ela e o corte global). */
+  alertas_a_partir_de: string | null;
   sei_gestao_numero: string;
   sei_gestao_link: string;
   sei_execucao_numero: string;
@@ -236,6 +240,9 @@ export interface GravacaoContrato {
   periodicidade_meses: number;
   mes_reajuste: number;
   liberar_todas_competencias: boolean;
+  permite_medicao_adicional: boolean;
+  /** Competências anteriores a esta data não geram alertas (vale a maior entre ela e o corte global). */
+  alertas_a_partir_de: string | null;
   sei_gestao_numero: string;
   sei_gestao_link: string;
   sei_execucao_numero: string;
@@ -371,6 +378,8 @@ export interface DocumentoChecklist {
   com_validade: boolean;
   /** Documento da empresa: a execução oferece reaproveitar o igual, ainda válido, de outro contrato da mesma empresa. */
   vale_outros_contratos?: boolean;
+  /** Pedir para enviar: o e-mail da medição concluída pede este documento à empresa, com a observação. Editável mesmo com o checklist ativo. */
+  pedir_envio?: boolean;
 }
 
 /** Versão do checklist do contrato. */
@@ -438,7 +447,7 @@ export interface Modelo {
   id: string;
   tipo: 'checklist' | 'formulario';
   nome: string;
-  conteudo: { itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean }[] } & Partial<DefinicaoFormulario>;
+  conteudo: { itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] } & Partial<DefinicaoFormulario>;
   ativo: boolean;
   atualizado_em: string;
 }
@@ -447,7 +456,9 @@ export interface Modelo {
 export interface ResumoCompetencia {
   id: string;
   competencia: string;
-  tipo: 'regular' | 'diferenca_reajuste';
+  tipo: 'regular' | 'diferenca_reajuste' | 'adicional';
+  /** Número da medição adicional (1, 2…); 0 nas demais. */
+  numero_adicional: number;
   parte: number | null;
   identificador: string;
   rotulo: string;
@@ -468,10 +479,25 @@ export interface PainelExecucao {
 }
 
 /** Item medido na competência. */
+/** Nota de débito, recibo ou outro documento de despesa variável juntado na etapa da nota fiscal. */
+export interface DespesaVariavel {
+  id: string;
+  ordem: number;
+  tipo: 'nota_debito' | 'recibo' | 'outros';
+  numero: string;
+  rotulo: string;
+  valor: Decimal;
+  arquivo: Arquivo | null;
+}
+
 export interface ItemMedicao {
   id: string;
   ordem: number;
   descricao: string;
+  /** Trecho do mês (1, 2…) quando o mês tem virada de vigência ou de preço. */
+  segmento: number;
+  /** Dias do trecho e o que mudou (ex.: "01/09 a 19/09/2026 · preço anterior"); vazio sem virada. */
+  periodo_rotulo: string;
   tipo: TipoItem;
   calcula_pro_rata: boolean;
   valor_unitario: Decimal;
@@ -485,6 +511,8 @@ export interface ItemMedicao {
   glosas: Decimal;
   /** Saldo − glosas: o máximo que pode ser medido. */
   saldo_liquido: Decimal;
+  /** Item marcado como despesa variável na medição. */
+  despesa_variavel?: boolean;
 }
 
 export interface GlosaDoPeriodo {
@@ -652,7 +680,7 @@ export interface SugestaoOutroContrato {
   contrato_numero: string;
   /** Mês (YYYY-MM-DD, dia 1) da competência de origem. */
   competencia: string;
-  validade_ate: string;
+  validade_ate: string | null;
   arquivo_nome: string;
 }
 
@@ -681,6 +709,13 @@ export interface RecusaNota {
 }
 
 export interface DetalheCompetencia extends ResumoCompetencia {
+  /** O contrato permite medição adicional e o usuário pode incluí-la ("Incluir nova medição"). */
+  pode_incluir_adicional: boolean;
+  pode_excluir_adicional: boolean;
+  /** Medição adicional: justificativa, quem incluiu e o anexo opcional (vazios nas demais). */
+  adicional_justificativa: string;
+  adicional_por_nome: string;
+  adicional_anexo: Arquivo | null;
   contrato_id: string;
   contrato_numero: string;
   /** CNPJ da contratada, só dígitos. */
@@ -688,17 +723,21 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   etapas: Etapa[];
   pode_editar: boolean;
   integra_equipe: boolean;
-  // Substituir o consolidado já gerado: só o gestor do contrato ou o SuperRoot
+  // Substituir o consolidado já gerado: todos que podem editar o contrato
   pode_gerar_consolidado_novamente: boolean;
   liberada: boolean;
   itens: ItemMedicao[];
   total_previsto: Decimal;
   total_medido: Decimal;
+  subtotal_medicao?: Decimal;
+  subtotal_despesas_variaveis?: Decimal;
+  tem_despesas_variaveis?: boolean;
+  despesas_variaveis?: DespesaVariavel[];
   notas_selecionadas: NotaSelecionada[];
   notas_disponiveis: NotaSelecionada[];
   ciencias: Ciencia[];
   ciencias_minimas: number;
-  memorias: { versao: number; criada_em: string; arquivo: Arquivo }[];
+  memorias: { versao: number; criada_em: string; arquivo: Arquivo; arquivo_despesas?: Arquivo | null }[];
   medicao_concluida_em: string | null;
   avaliacao: Avaliacao | null;
   percentual_autorizado: Decimal;
@@ -820,6 +859,8 @@ export interface Reajuste {
   vigencia_inicio: string;
   vigencia_fim: string;
   mes_referencia: string;
+  /** Data a partir da qual os novos valores valem; o mês dela é pago proporcionalmente aos dias de cada preço. */
+  data_efeito: string;
   competencias_recalculadas: number;
   competencias_com_diferenca: number;
   competencia_diferenca: string | null;
@@ -989,6 +1030,37 @@ export interface VigenciaContratoPainel {
 }
 
 /** Resposta do painel de vigências. */
+/** Resultado da verificação de um PDF gerado pelo sistema (por código ou por arquivo). */
+export interface VerificacaoDocumento {
+  valido: boolean;
+  motivo: string;
+  documento: {
+    tipo: string; contrato_id: string; contrato_numero: string; competencia: string | null; gerado_por: string; gerado_em: string;
+    codigo: string; sha256: string; ciencias: { nome: string; papel: string; em: string }[];
+  } | null;
+}
+
+/** Tipos de evento do calendário de vencimentos. */
+export type TipoEventoCalendario = 'vigencia_fim' | 'vigencia_maxima' | 'reajuste' | 'pagamento_nf' | 'prazo_nf_48h' | 'validade_documento'
+  | 'medicao_atrasada' | 'empenho_insuficiente' | 'tarefa_contrato';
+
+/** Um vencimento ou prazo de contrato numa data (`GET /api/contratos/calendario`). */
+export interface EventoVencimento {
+  data: string;
+  hora?: string | null;
+  tipo: TipoEventoCalendario;
+  contrato_id: string;
+  contrato_numero: string;
+  contrato_apelido: string;
+  rotulo: string;
+  rota: string;
+  severidade: 'alta' | 'media' | 'info';
+  competencia_id?: string | null;
+  valor?: Decimal | null;
+}
+
+export interface CalendarioVencimentos { de: string; ate: string; eventos: EventoVencimento[] }
+
 export interface PainelVigencias {
   hoje: string;
   contratos: VigenciaContratoPainel[];

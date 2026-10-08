@@ -212,8 +212,10 @@ def _obter_preposto(sessao: Session, empresa_id: uuid.UUID, preposto_id: uuid.UU
     return preposto
 
 
-def _cpf_em_uso(sessao: Session, empresa_id: uuid.UUID, cpf: str, preposto_id: uuid.UUID | None) -> bool:
-    """Indica se o CPF já pertence a outro preposto da mesma empresa."""
+def _cpf_em_uso(sessao: Session, empresa_id: uuid.UUID, cpf: str | None, preposto_id: uuid.UUID | None) -> bool:
+    """Indica se o CPF já pertence a outro preposto da mesma empresa (sem CPF, nunca há conflito)."""
+    if not cpf:
+        return False
     existente = sessao.scalar(
         select(PrepostoEmpresa.id).where(PrepostoEmpresa.empresa_id == empresa_id, PrepostoEmpresa.cpf == cpf)
     )

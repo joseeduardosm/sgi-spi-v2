@@ -6,7 +6,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../../environments/ambiente';
-import { AcessoEfetivo, NivelAcl } from '../../../core/acesso/acesso.service';
+import { AcessoEfetivo, NiveisTextos, NivelAcl } from '../../../core/acesso/acesso.service';
 import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
 
 /** Contratos de /api/acl (ver docs/endpoints/acl.md). */
@@ -18,6 +18,7 @@ export interface RecursoAcl {
   url_base: string;
   ativo: boolean;
   total_regras: number;
+  niveis?: NiveisTextos;
   criado_em: string;
   atualizado_em: string;
 }
@@ -39,6 +40,7 @@ export interface RegraAcl {
   recurso_nome: string;
   recurso_slug: string;
   nivel: NivelAcl;
+  niveis?: NiveisTextos;
   usuarios: OpcaoUsuario[];
   setores: OpcaoSetor[];
   criado_em: string;

@@ -1,6 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para definir os tipos e os rótulos do Módulo Melhorias (sugestões dos usuários e triagem).
 
+import type { SlaItem } from '../sla/sla.models';
+
 export type SituacaoSugestao = 'nova' | 'em_analise' | 'aceita' | 'recusada' | 'concluida';
 
 export const ROTULOS_SITUACAO: Record<SituacaoSugestao, string> = {
@@ -65,6 +67,8 @@ export interface SugestaoTriagem extends SugestaoAutor {
   observacao_interna: string;
   atualizado_por_nome: string;
   tarefa_numero: number | null;
+  /** SLA da triagem (resposta e resolução em dias úteis). */
+  sla?: SlaItem | null;
   eventos: EventoSugestao[];
 }
 

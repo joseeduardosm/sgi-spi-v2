@@ -100,7 +100,7 @@ Todos os e-mails do sistema (mensageria, avisos dos contratos, lembretes e teste
 - **corpo:** título, texto e botão "Abrir no SGI SPI";
 - **rodapé:** "SGI SPI – Sistema de Gestão Integrada" e a nota de mensagem automática.
 
-O brasão vai **embutido** no e-mail (imagem `Content-ID: <brasao-spi>`, arquivo `backend/app/recursos/brasao-email.png`). Por isso ele aparece sem acesso à rede interna e sem o bloqueio de imagens externas do Outlook. `servico_smtp.enviar_email` anexa o brasão sempre que o HTML o referencia.
+O logo do cabeçalho (`apoio/2-horizontal-slogan-para-emails.png`: Secretaria de Parcerias em Investimentos + Governo do Estado de São Paulo) vai **embutido e centralizado** no e-mail (imagem `Content-ID: <logo-sp>`, arquivo `backend/app/recursos/logo-sp-email.png`, 1168 px exibido a 584 px). Para trocar o logo, substitua esse arquivo. Por isso ele aparece sem acesso à rede interna e sem o bloqueio de imagens externas do Outlook. `servico_smtp.enviar_email` anexa o brasão sempre que o HTML o referencia.
 
 ## Avisos automáticos
 
@@ -130,7 +130,7 @@ Excluir um contrato apaga todos os avisos dele (`mensagens.contrato_id` com `ON 
 - **Vencimento do contrato:** quando faltam 90, 60 e 30 dias para o fim da vigência atual, só para contratos ativos ou a vencer.
   - Aviso `prazo` à equipe, com e-mail. Chave `vencimento:{contrato}:{AAAAMMDD do fim}:{marco}`.
   - Uma prorrogação muda a data de fim, e os marcos voltam a valer.
-- **Medição atrasada:** competência regular com período encerrado há mais de 30 dias e medição não concluída.
+- **Medição atrasada:** competência regular com período encerrado há mais de 30 dias e medição não concluída. **Só competências de 09/2026 em diante**: as anteriores foram "limpas" e não geram aviso (os avisos pendentes delas foram encerrados em 06/10/2026).
   - Pendência à equipe, com e-mail. Chave `atraso:{competencia}`, encerrada ao concluir a medição.
 - **Ciência pendente:** mensagens de prioridade alta ou crítica sem ciência no 3º dia recebem um e-mail "Lembrete: …".
 - **Sem resumo diário:** o e-mail diário "N mensagem(ns) aguardando sua ciência" foi retirado (05/10/2026); as pendências continuam na caixa de mensagens e nos lembretes de ciência pendente.

@@ -7,6 +7,12 @@
     <div class="acoes-formulario" style="align-items: center">
       <span class="selo-situacao" [class]="'selo-situacao ' + d.situacao">{{ situacoes[d.situacao] }}</span>
       @if (d.notas_selecionadas.length) { <small class="dica-formulario" style="margin: 0">NE: {{ d.notas_selecionadas.map(n => n.numero).join(', ') }}</small> }
+      @if (d.pode_incluir_adicional) {
+        <button type="button" class="acao-primaria acao-pequena" (click)="abrirInclusao()">Incluir nova medição</button>
+      }
+      @if (d.pode_excluir_adicional) {
+        <button type="button" class="acao-perigo acao-pequena" (click)="excluirAdicional()">Excluir medição adicional</button>
+      }
       @if (d.reaberturas_permitidas && etapasAnteriores().length) {
         <button type="button" class="acao-perigo acao-pequena" (click)="reabrindo.set(true)">Reabrir etapa</button>
       }
@@ -22,6 +28,11 @@
 
   @if (d.tipo === 'diferenca_reajuste') {
     <p class="aviso-bloco informativo">Competência complementar: paga a diferença de preço do reajuste sobre as quantidades já medidas. As quantidades não podem ser alteradas e não há avaliação.</p>
+  }
+  @if (d.tipo === 'adicional') {
+    <p class="aviso-bloco informativo">Medição adicional incluída por {{ d.adicional_por_nome }}: {{ d.adicional_justificativa }}
+      @if (d.adicional_anexo; as anexo) { · <a href="javascript:void(0)" (click)="abrirAnexoAdicional(anexo.anexo_id)">{{ anexo.nome }}</a> }
+      Ela tem as mesmas etapas da competência, de forma independente (nota fiscal, retenção e pagamento próprios).</p>
   }
   @for (a of d.avisos; track a) { <p class="aviso-bloco">{{ a }}</p> }
 
@@ -45,6 +56,27 @@
   }
 } @else {
   <p class="estado-vazio">Carregando…</p>
+}
+
+@if (incluindo()) {
+  <div class="fundo-modal" role="presentation" (click)="incluindo.set(false)"></div>
+  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-incluir">
+    <header>
+      <div><span class="modal-sobretitulo">Medição adicional</span><h2 id="titulo-incluir">Incluir nova medição</h2></div>
+      <button type="button" aria-label="Fechar" (click)="incluindo.set(false)">×</button>
+    </header>
+    <form (ngSubmit)="incluirMedicao()">
+      <p class="dica-formulario" style="margin: 0 0 14px">Cria outra medição, com outra nota fiscal e outro pagamento, no mesmo período desta competência. A medição já feita não é alterada; a nova começa com os itens zerados e segue todas as etapas.</p>
+      <div class="grade-formulario">
+        <div class="ocupa-duas"><label for="adicional-justificativa">Justificativa *</label><textarea id="adicional-justificativa" name="justificativa" required maxlength="2000" [(ngModel)]="justificativaAdicional"></textarea></div>
+        <div class="ocupa-duas"><label for="adicional-anexo">Anexo (PDF, opcional)</label><input id="adicional-anexo" name="anexo" type="file" accept="application/pdf,.pdf" (change)="escolherAnexoAdicional($event)" /></div>
+      </div>
+      <footer>
+        <button type="button" class="acao-secundaria" (click)="incluindo.set(false)">Cancelar</button>
+        <button type="submit" class="acao-primaria" [disabled]="!justificativaAdicional.trim() || enviandoAdicional()">Incluir medição</button>
+      </footer>
+    </form>
+  </section>
 }
 
 @if (reabrindo()) {

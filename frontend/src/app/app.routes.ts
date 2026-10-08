@@ -136,6 +136,11 @@ export const rotas: Routes = [
         loadComponent: () => import('./features/painel-executivo/pagina-painel-executivo.component').then((m) => m.PaginaPainelExecutivoComponent),
       },
       {
+        // Manuais do BookStack lidos pelo portal: a ACL `manuais` é conferida em cada rota filha (sem regras = todo usuário logado)
+        path: 'manuais',
+        loadChildren: () => import('./features/manuais/manuais.routes').then((m) => m.ROTAS_MANUAIS),
+      },
+      {
         // Diretório de ramais (cartões de visita): todo usuário autenticado
         path: 'ramais',
         loadChildren: () => import('./features/diretorio/diretorio.routes').then((m) => m.ROTAS_DIRETORIO),
@@ -149,6 +154,11 @@ export const rotas: Routes = [
         // Módulo Tarefas: todo usuário autenticado (a API confere o papel em cada tarefa e equipe)
         path: 'tarefas',
         loadChildren: () => import('./features/tarefas/tarefas.routes').then((m) => m.ROTAS_TAREFAS),
+      },
+      {
+        // Reserva de Espaços: todo usuário autenticado (a API confere o papel de fiscal nas telas e ações restritas)
+        path: 'reserva-espacos',
+        loadChildren: () => import('./features/reserva-espacos/reserva-espacos.routes').then((m) => m.ROTAS_RESERVA_ESPACOS),
       },
       {
         // Módulo de contratos: todas as telas exigem ACL `contratos` (a API valida o nível de cada ação)
@@ -182,12 +192,46 @@ export const rotas: Routes = [
           import('./features/administracao/smtp/servidores-smtp.component').then((m) => m.ServidoresSmtpComponent),
       },
       {
+        path: 'admin/bookstack',
+        title: 'Integração BookStack | SGI SPI',
+        canActivate: [guardaPapel],
+        data: { papeis: ['SuperRoot'] },
+        loadComponent: () =>
+          import('./features/administracao/bookstack/integracao-bookstack.component').then((m) => m.IntegracaoBookstackComponent),
+      },
+      {
         path: 'admin/glpi',
         title: 'Integração GLPI | SGI SPI',
         canActivate: [guardaPapel],
         data: { papeis: ['SuperRoot'] },
         loadComponent: () =>
           import('./features/administracao/glpi/integracao-glpi.component').then((m) => m.IntegracaoGlpiComponent),
+      },
+      {
+        // Política de SLA de prazos: quem tem ao menos LEITURA no recurso `sla` (gravar exige MODIFICACAO)
+        path: 'admin/sla',
+        title: 'SLA de prazos | SGI SPI',
+        canActivate: [guardaAcl],
+        data: { acl: 'sla', nivelAcl: 'LEITURA' },
+        loadComponent: () => import('./features/administracao/sla/gestao-sla.component').then((m) => m.GestaoSlaComponent),
+      },
+      {
+        // Atalhos fixos da barra lateral: quem tem MODIFICACAO no recurso `atalhos`
+        path: 'admin/atalhos',
+        title: 'Atalhos | SGI SPI',
+        canActivate: [guardaAcl],
+        data: { acl: 'atalhos', nivelAcl: 'MODIFICACAO' },
+        loadComponent: () =>
+          import('./features/administracao/atalhos/gestao-atalhos.component').then((m) => m.GestaoAtalhosComponent),
+      },
+      {
+        // Atalhos fixos da barra lateral: quem tem MODIFICACAO no recurso `atalhos`
+        path: 'admin/atalhos',
+        title: 'Atalhos | SGI SPI',
+        canActivate: [guardaAcl],
+        data: { acl: 'atalhos', nivelAcl: 'MODIFICACAO' },
+        loadComponent: () =>
+          import('./features/administracao/atalhos/gestao-atalhos.component').then((m) => m.GestaoAtalhosComponent),
       },
       {
         // Mensageria (e-mail de changelog): exclusiva da conta root

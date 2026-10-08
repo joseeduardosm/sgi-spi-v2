@@ -8,14 +8,16 @@ import { RouterLink } from '@angular/router';
 
 import { AutenticacaoService } from '../../core/autenticacao/autenticacao.service';
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
+import { SeletorMarcadoresComponent } from './seletor-marcadores.component';
 import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
+import { textoSla } from '../sla/sla.models';
 import { AgendaPessoaComponent } from './agenda-pessoa.component';
 import { AvataresComponent } from './avatares.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
 import { TarefasApiService } from './tarefas-api.service';
 import {
-  AcaoPipeline, AnexoEvento, duracao, EventoTarefa, Marcador, Pessoa, prazoRelativo, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS,
+  AcaoPipeline, AnexoEvento, duracao, EventoTarefa, Marcador, Pessoa, TarefaResumo, Atividade, Marco, ICONES_TIPO_ATIVIDADE, ROTULOS_TIPO_ATIVIDADE, TipoAtividade, PessoaCarga, prazoRelativo, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS,
   situacaoPrazo, StatusTarefa, TarefaDetalhe, tamanhoLegivel,
 } from './tarefas.models';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
@@ -51,10 +53,10 @@ const ICONES: Record<string, string> = {
 export const CLIPE = 'M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5';
 
 /** Rótulos dos campos da edição ("dados.campos"). */
-const CAMPOS: Record<string, string> = { titulo: 'Título', descricao: 'Descrição', prioridade: 'Prioridade', participantes: 'Participantes', marcadores: 'Marcadores' };
+const CAMPOS: Record<string, string> = { titulo: 'Título', descricao: 'Descrição', prioridade: 'Prioridade', responsaveis: 'Responsáveis', participantes: 'Participantes (antes)', marcadores: 'Marcadores' };
 
 /** Campos que o `PUT /api/tarefas/{numero}` grava de uma vez (a janela altera um de cada vez). */
-interface CamposEdicao { titulo: string; descricao: string; prioridade: PrioridadeTarefa; participantes_ids: number[]; marcadores_ids: string[] }
+interface CamposEdicao { titulo: string; descricao: string; prioridade: PrioridadeTarefa; responsaveis_ids: number[]; marcadores_ids: string[] }
 
 /**
  * Detalhe da tarefa, exibido na tela própria `/tarefas/:numero` (`pagina`) ou, se preciso, como janela.
@@ -65,7 +67,7 @@ interface CamposEdicao { titulo: string; descricao: string; prioridade: Priorida
  */
 @Component({
   selector: 'app-janela-detalhe-tarefa',
-  imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
+  imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, SeletorMarcadoresComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
   templateUrl: './janela-detalhe-tarefa.component.html',
   // Esc fecha a janela, a menos que uma janela interna (prazo, motivo, remoção) esteja aberta: ela fecha primeiro
   host: { '(document:keydown.escape)': 'aoEsc()', '(window:focus)': 'recarregarAoVoltar()' },
@@ -85,6 +87,7 @@ export class JanelaDetalheTarefaComponent {
 
   protected readonly FILTROS = FILTROS;
   protected readonly CLIPE = CLIPE;
+  protected readonly textoSla = textoSla;
   protected readonly rotulosStatus = ROTULOS_STATUS;
   protected readonly rotulosPrioridade = ROTULOS_PRIORIDADE;
   protected readonly prioridades: PrioridadeTarefa[] = ['baixa', 'normal', 'alta', 'critica'];
@@ -118,6 +121,9 @@ export class JanelaDetalheTarefaComponent {
 
   // Comentário
   protected textoComentario = '';
+  /** Comentário que está sendo respondido (a resposta o cita e entra no topo, como qualquer comentário novo). */
+  protected readonly respondendoA = signal<EventoTarefa | null>(null);
+  private readonly campoComentario = viewChild<ElementRef<HTMLTextAreaElement>>('campoComentario');
   protected readonly arquivos = signal<File[]>([]);
   protected readonly enviando = signal(false);
 
@@ -125,15 +131,27 @@ export class JanelaDetalheTarefaComponent {
   protected novoItem = '';
 
   // Edição no lugar: qual propriedade está aberta e os valores em edição
-  protected readonly editandoCampo = signal<'titulo' | 'descricao' | 'participantes' | 'marcadores' | null>(null);
+  protected readonly editandoCampo = signal<'titulo' | 'descricao' | 'responsaveis' | null>(null);
   protected edicaoTitulo = '';
   private readonly campoTitulo = viewChild<ElementRef<HTMLInputElement>>('campoTitulo');
   protected edicaoDescricao = '';
-  protected participantes: OpcaoUsuario[] = [];
-  /** Pessoa cuja agenda aparece ao escolher participantes (a última incluída). */
+  protected responsaveis: OpcaoUsuario[] = [];
+  // Atividades agendadas e menções
+  protected readonly icones = ICONES_TIPO_ATIVIDADE;
+  protected readonly tiposAtividade = ROTULOS_TIPO_ATIVIDADE;
+  protected readonly tiposLista = Object.keys(ROTULOS_TIPO_ATIVIDADE) as TipoAtividade[];
+  protected readonly atividades = signal<Atividade[]>([]);
+  protected readonly concluindo = signal<string | null>(null);
+  protected readonly pessoasMencao = signal<PessoaCarga[]>([]);
+  protected feedbackAtividade = '';
+  protected novaAtividade: { tipo: string; resumo: string; prazo: string; responsavel_id: number | null } = { tipo: 'fazer', resumo: '', prazo: '', responsavel_id: null };
+  protected readonly marcosEquipe = signal<Marco[]>([]);
+  // Subtarefas e dependências
+  protected novaSubtarefa = '';
+  protected buscaDependencia = '';
+  private readonly equipeTarefas = signal<TarefaResumo[]>([]);
+  /** Pessoa cuja agenda aparece ao escolher responsáveis (a última incluída). */
   protected readonly pessoaAgenda = signal<number | null>(null);
-  protected readonly marcadoresEquipe = signal<Marcador[]>([]);
-  protected readonly marcadoresIds = signal<string[]>([]);
 
   // Janelas internas
   protected readonly modoJanela = signal<ModoJanela | null>(null);
@@ -146,10 +164,12 @@ export class JanelaDetalheTarefaComponent {
       this.naoEncontrada.set(false);
       this.editandoCampo.set(null);
       this.eventos.set([]);
+      this.atividades.set([]);
+      this.pessoasMencao.set([]);
       this.filtro.set('');
       if (!numero) return;
       this.api.detalhe(numero).subscribe({
-        next: (t) => { this.tarefa.set(t); this.carregarEventos(true); },
+        next: (t) => { this.tarefa.set(t); this.carregarEventos(true); this.carregarAtividades(); },
         error: (e) => { if (e?.status === 404) this.naoEncontrada.set(true); else this.dialogos.mostrarErro(e); },
       });
     });
@@ -160,7 +180,7 @@ export class JanelaDetalheTarefaComponent {
     const numero = this.numeroTarefa();
     if (!numero) return;
     this.api.detalhe(numero).subscribe({
-      next: (t) => { this.tarefa.set(t); this.carregarEventos(true); this.alterada.emit(t); },
+      next: (t) => { this.tarefa.set(t); this.carregarEventos(true); this.carregarAtividades(); this.alterada.emit(t); },
       error: () => undefined,
     });
   }
@@ -225,7 +245,7 @@ export class JanelaDetalheTarefaComponent {
     const t = this.tarefa()!;
     const atual: CamposEdicao = {
       titulo: t.titulo, descricao: t.descricao, prioridade: t.prioridade,
-      participantes_ids: t.pessoas.filter((p) => p.id !== t.responsavel?.id).map((p) => p.id), marcadores_ids: t.marcadores.map((m) => m.id),
+      responsaveis_ids: t.responsaveis.map((p) => p.id), marcadores_ids: t.marcadores.map((m) => m.id),
     };
     this.dialogos.executar(this.api.editar(t.numero, { ...atual, ...parcial, versao: t.versao })).subscribe({
       next: (n) => { this.editandoCampo.set(null); this.atualizar(n); },
@@ -249,11 +269,6 @@ export class JanelaDetalheTarefaComponent {
     if (titulo && titulo !== this.tarefa()!.titulo) this.salvarCampos({ titulo });
   }
 
-  /** Participantes além do responsável (coluna lateral). */
-  protected participantesDe(t: TarefaDetalhe): Pessoa[] {
-    return t.pessoas.filter((p) => p.id !== t.responsavel?.id);
-  }
-
   protected editarDescricao(): void {
     this.edicaoDescricao = this.tarefa()!.descricao;
     this.editandoCampo.set('descricao');
@@ -267,40 +282,29 @@ export class JanelaDetalheTarefaComponent {
     if (prioridade !== this.tarefa()!.prioridade) this.salvarCampos({ prioridade });
   }
 
-  protected editarParticipantes(): void {
+  protected editarResponsaveis(): void {
     const t = this.tarefa()!;
-    this.participantes = t.pessoas.filter((p) => p.id !== t.responsavel?.id)
+    this.responsaveis = t.responsaveis
       .map((p) => ({ id: p.id, login: p.login, nome_completo: p.nome, cargo: '', ativo: true }));
     this.pessoaAgenda.set(null);
-    this.editandoCampo.set('participantes');
+    this.editandoCampo.set('responsaveis');
   }
 
   /** Ao incluir alguém, a agenda dessa pessoa aparece ao lado (para ver a carga antes de salvar). */
-  protected aoMudarParticipantes(lista: OpcaoUsuario[]): void {
-    const novo = lista.find((p) => !this.participantes.some((x) => x.id === p.id));
-    this.participantes = lista;
+  protected aoMudarResponsaveis(lista: OpcaoUsuario[]): void {
+    const novo = lista.find((p) => !this.responsaveis.some((x) => x.id === p.id));
+    this.responsaveis = lista;
     if (novo) this.pessoaAgenda.set(novo.id);
     else if (!lista.some((p) => p.id === this.pessoaAgenda())) this.pessoaAgenda.set(lista.at(-1)?.id ?? null);
   }
 
-  protected salvarParticipantes(): void {
-    this.salvarCampos({ participantes_ids: this.participantes.map((p) => p.id) });
+  protected salvarResponsaveis(): void {
+    this.salvarCampos({ responsaveis_ids: this.responsaveis.map((p) => p.id) });
   }
 
-  protected editarMarcadores(): void {
-    const t = this.tarefa()!;
-    this.marcadoresIds.set(t.marcadores.map((m) => m.id));
-    this.marcadoresEquipe.set([]);
-    if (t.equipe) this.api.marcadores(t.equipe.id).subscribe({ next: (m) => this.marcadoresEquipe.set(m), error: () => undefined });
-    this.editandoCampo.set('marcadores');
-  }
-
-  protected alternarMarcador(id: string): void {
-    this.marcadoresIds.update((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
-  }
-
-  protected salvarMarcadores(): void {
-    this.salvarCampos({ marcadores_ids: this.marcadoresIds() });
+  /** Marcadores gravam na hora, a cada pílula incluída ou tirada (sem botão Salvar). */
+  protected salvarMarcadores(lista: Marcador[]): void {
+    this.salvarCampos({ marcadores_ids: lista.map((m) => m.id) });
   }
 
   // --- Checklist ------------------------------------------------------------------------------------
@@ -325,6 +329,30 @@ export class JanelaDetalheTarefaComponent {
     this.arquivos.set(todos.slice(0, 5));
   }
 
+  /** Escolhe o comentário a responder: mostra a citação acima do campo e leva o foco para ele. */
+  protected responder(evento: EventoTarefa): void {
+    this.respondendoA.set(evento);
+    setTimeout(() => this.campoComentario()?.nativeElement.focus());
+  }
+
+  protected cancelarResposta(): void {
+    this.respondendoA.set(null);
+  }
+
+  /** Trecho curto do comentário para a citação (a API já limita o que guarda nas respostas). */
+  protected trecho(texto: string, limite = 140): string {
+    return texto.length > limite ? texto.slice(0, limite).trimEnd() + '…' : texto;
+  }
+
+  /** Leva à citação: rola até o comentário original (se já está na lista) e o destaca por um instante. */
+  protected irParaComentario(id: unknown): void {
+    const alvo = typeof id === 'string' ? document.getElementById(`evento-${id}`) : null;
+    if (!alvo) return;
+    alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    alvo.classList.add('destacado-evento');
+    setTimeout(() => alvo.classList.remove('destacado-evento'), 1800);
+  }
+
   protected removerArquivo(i: number): void {
     this.arquivos.update((l) => l.filter((_, j) => j !== i));
   }
@@ -332,9 +360,10 @@ export class JanelaDetalheTarefaComponent {
   protected comentar(): void {
     if (!this.textoComentario.trim() && !this.arquivos().length) return;
     this.enviando.set(true);
-    this.dialogos.executar(this.api.comentar(this.numero(), this.textoComentario.trim(), this.arquivos()), 'Enviando o comentário…').subscribe({
+    this.dialogos.executar(this.api.comentar(this.numero(), this.textoComentario.trim(), this.arquivos(), this.respondendoA()?.id ?? null), 'Enviando o comentário…').subscribe({
       next: () => {
         this.enviando.set(false);
+        this.respondendoA.set(null);
         this.textoComentario = '';
         this.arquivos.set([]);
         this.carregarEventos(true);
@@ -398,13 +427,13 @@ export class JanelaDetalheTarefaComponent {
     return ROTULOS_STATUS[valor as StatusTarefa] ?? String(valor ?? '');
   }
 
-  /** Mudanças da edição em texto: "Prioridade: Normal → Alta", "Participantes: entrou Ana". */
+  /** Mudanças da edição em texto: "Prioridade: Normal → Alta", "Responsáveis: entrou Ana". */
   protected camposEditados(e: EventoTarefa): string[] {
     const campos = (e.dados['campos'] ?? {}) as Record<string, Record<string, unknown>>;
     return Object.entries(campos).map(([nome, v]) => {
       const rotulo = CAMPOS[nome] ?? nome;
       if (nome === 'descricao') return `${rotulo} alterada`;
-      if (nome === 'participantes') {
+      if (nome === 'responsaveis' || nome === 'participantes') {
         const entraram = (v['entraram'] as string[]) ?? [];
         const sairam = (v['sairam'] as string[]) ?? [];
         return `${rotulo}: ${[entraram.length ? `entrou ${entraram.join(', ')}` : '', sairam.length ? `saiu ${sairam.join(', ')}` : ''].filter(Boolean).join('; ')}`;
@@ -427,5 +456,124 @@ export class JanelaDetalheTarefaComponent {
     if (d.toDateString() === hoje.toDateString()) return 'Hoje';
     if (d.toDateString() === ontem.toDateString()) return 'Ontem';
     return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  // --- Subtarefas e dependências ---
+
+  protected concluidasSub(t: TarefaDetalhe): number {
+    return t.subtarefas.filter((x) => x.status === 'concluida').length;
+  }
+
+  protected criarSubtarefa(): void {
+    const t = this.tarefa();
+    const titulo = this.novaSubtarefa.trim();
+    if (!t || !titulo) return;
+    this.dialogos.executar(this.api.criarSubtarefa(t.numero, { titulo })).subscribe({
+      next: () => { this.novaSubtarefa = ''; this.recarregar(); },
+      error: (e) => this.falha(e),
+    });
+  }
+
+  /** Tarefas da equipe que ainda podem bloquear esta (abertas, fora ela mesma, a mãe, as subtarefas e as já escolhidas). */
+  protected candidatas(t: TarefaDetalhe): TarefaResumo[] {
+    const fora = new Set([t.numero, t.tarefa_pai?.numero, ...t.subtarefas.map((s) => s.numero), ...t.bloqueada_por.map((b) => b.numero)]);
+    return this.equipeTarefas().filter((c) => c.status !== 'concluida' && !fora.has(c.numero));
+  }
+
+  protected carregarCandidatas(t: TarefaDetalhe): void {
+    if (!t.equipe || this.equipeTarefas().length) return;
+    const vazio = { status: [], prioridade: '' as const, marcador_id: '', responsavel_id: null, busca: '' };
+    this.api.listar({ tipo: 'equipe', equipeId: t.equipe.id }, vazio).subscribe({ next: (l) => this.equipeTarefas.set(l.itens), error: () => undefined });
+  }
+
+  /** O campo é um datalist: ao escolher uma opção ("#12 Título"), grava a dependência. */
+  protected escolherDependencia(t: TarefaDetalhe, texto: string): void {
+    this.buscaDependencia = texto;
+    const numero = /^#(\d+)\s/.exec(texto)?.[1];
+    if (!numero) return;
+    this.buscaDependencia = '';
+    this.gravarDependencias(t, [...t.bloqueada_por.map((b) => b.numero), Number(numero)]);
+  }
+
+  protected removerDependencia(t: TarefaDetalhe, numero: number): void {
+    this.gravarDependencias(t, t.bloqueada_por.map((b) => b.numero).filter((n) => n !== numero));
+  }
+
+  private gravarDependencias(t: TarefaDetalhe, numeros: number[]): void {
+    this.dialogos.executar(this.api.definirDependencias(t.numero, numeros)).subscribe({ next: (n) => this.atualizar(n), error: (e) => this.falha(e) });
+  }
+
+  // --- Atividades agendadas, seguidores e menções ---
+
+  protected atividadesAbertas(): Atividade[] {
+    return this.atividades().filter((a) => a.situacao !== 'concluida');
+  }
+
+  protected carregarAtividades(): void {
+    const t = this.tarefa();
+    if (!t) return;
+    this.api.atividadesDaTarefa(t.numero).subscribe({ next: (l) => this.atividades.set(l), error: () => undefined });
+    if (t.equipe && !this.pessoasMencao().length) this.api.pessoas(t.equipe.id).subscribe({ next: (p) => this.pessoasMencao.set(p), error: () => undefined });
+  }
+
+  protected agendarAtividade(): void {
+    const t = this.tarefa();
+    const n = this.novaAtividade;
+    if (!t || !n.resumo.trim()) return;
+    this.dialogos.executar(this.api.agendarAtividade(t.numero, { resumo: n.resumo.trim(), tipo: n.tipo, nota: '', prazo: n.prazo || null, responsavel_id: n.responsavel_id })).subscribe({
+      next: () => { this.novaAtividade = { ...n, resumo: '' }; this.recarregar(); },
+      error: (e) => this.falha(e),
+    });
+  }
+
+  protected abrirConclusao(a: Atividade): void {
+    this.feedbackAtividade = '';
+    this.concluindo.set(a.id);
+  }
+
+  /** Conclui com o feedback; "e agendar a próxima" já deixa o formulário de nova atividade preenchido com o mesmo tipo. */
+  protected concluirAtividade(a: Atividade, proxima: boolean): void {
+    this.api.concluirAtividade(a.id, this.feedbackAtividade.trim()).subscribe({
+      next: () => {
+        this.concluindo.set(null);
+        if (proxima) this.novaAtividade = { tipo: a.tipo, resumo: '', prazo: '', responsavel_id: a.responsavel?.id ?? null };
+        this.recarregar();
+      },
+      error: (e) => this.falha(e),
+    });
+  }
+
+  protected async excluirAtividade(a: Atividade): Promise<void> {
+    const ok = await this.dialogos.confirmar({ titulo: 'Excluir esta atividade?', mensagem: `"${a.resumo}" será removida.`, rotuloConfirmar: 'Excluir', perigo: true });
+    if (ok) this.api.excluirAtividade(a.id).subscribe({ next: () => this.carregarAtividades(), error: (e) => this.falha(e) });
+  }
+
+  protected alternarSeguir(t: TarefaDetalhe): void {
+    this.api.seguir(t.numero, !t.seguindo).subscribe({ next: (n) => this.atualizar(n), error: (e) => this.falha(e) });
+  }
+
+  protected nomesSeguidores(t: TarefaDetalhe): string {
+    return t.seguidores.map((p) => p.nome).join(', ');
+  }
+
+  /** Insere `@login` no comentário (o campo volta para "Mencionar alguém…"). */
+  protected mencionar(login: string): void {
+    if (!login) return;
+    this.textoComentario = `${this.textoComentario}${this.textoComentario && !this.textoComentario.endsWith(' ') ? ' ' : ''}@${login} `;
+  }
+
+  // --- Marco da tarefa ---
+
+  protected carregarMarcos(t: TarefaDetalhe): void {
+    if (t.equipe && !this.marcosEquipe().length) this.api.marcos(t.equipe.id).subscribe({ next: (m) => this.marcosEquipe.set(m), error: () => undefined });
+  }
+
+  protected trocarMarco(t: TarefaDetalhe, marcoId: string | null): void {
+    if (marcoId === t.marco_id) return;
+    this.dialogos.executar(this.api.definirMarco(t.numero, marcoId)).subscribe({ next: (n) => this.atualizar(n), error: (e) => this.falha(e) });
+  }
+
+  protected nomeMarco(t: TarefaDetalhe): string {
+    return this.marcosEquipe().find((m) => m.id === t.marco_id)?.nome ?? (t.marco_id ? 'Marco da equipe' : 'Nenhum');
   }
 }

@@ -386,3 +386,40 @@
     font-size: 25px;
   }
 }
+
+// Categorias dobráveis dos atalhos fixos (dentro do submenu "Atalhos")
+.nav-categoria {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 7px;
+  border: 0;
+  background: transparent;
+  color: #c9d0d8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+
+  b {
+    transition: transform 0.15s;
+  }
+
+  b.aberto {
+    transform: rotate(180deg);
+  }
+
+  &:hover,
+  &:focus-visible {
+    color: #fff;
+    outline: none;
+  }
+}
+
+.nav-categoria-itens {
+  margin-left: 8px;
+  padding-left: 10px;
+  border-left: 1px solid #ffffff14;
+}

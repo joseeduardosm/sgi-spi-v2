@@ -1,0 +1,136 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para os estilos do módulo Manuais (estantes, sumário e conteúdo vindo do BookStack).
+
+.manuais-busca {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+
+  input { flex: 1; }
+}
+
+.manuais-painel { margin-bottom: 16px; }
+
+.manuais-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 18px 24px 22px;
+}
+
+.manuais-livro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--spi-borda);
+  border-radius: 10px;
+  color: var(--spi-texto);
+  background: var(--cor-f9f9fa);
+  text-decoration: none;
+
+  strong { color: var(--spi-titulo); font-size: 14px; }
+  small { color: var(--spi-apagado); font-size: 12px; }
+  &:hover, &:focus-visible { border-color: var(--spi-vermelho); outline: none; }
+}
+
+.manuais-resultado {
+  display: block;
+  padding: 14px 24px;
+  border-top: 1px solid var(--cor-eff0f2);
+  color: var(--spi-texto);
+  text-decoration: none;
+
+  small { display: block; color: var(--spi-apagado); font-size: 11px; }
+  &:hover, &:focus-visible { background: var(--cor-f9f9fa); outline: none; }
+}
+
+.manuais-trecho { display: block; margin-top: 4px; color: var(--spi-apagado); font-size: 12px; }
+
+.manuais-sumario {
+  margin: 0;
+  padding: 18px 24px 22px 44px;
+  line-height: 1.9;
+
+  ul { padding-left: 22px; }
+  a { color: var(--spi-link); }
+}
+
+.manuais-leitura {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.manuais-lateral {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--spi-borda);
+  border-radius: 12px;
+  background: var(--cor-ffffff);
+  font-size: 12px;
+
+  ul { margin: 6px 0 0; padding-left: 16px; list-style: none; }
+  li { margin: 3px 0; }
+  a { color: var(--spi-apagado); text-decoration: none; }
+  a:hover, a.ativo { color: var(--spi-vermelho); }
+  a.ativo { font-weight: 700; }
+  .manuais-capitulo { color: var(--spi-titulo); font-weight: 700; }
+}
+
+.manuais-artigo { padding: 24px 28px; overflow: visible; }
+
+.manuais-navegacao {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cor-eff0f2);
+}
+
+// Conteúdo das páginas: HTML do BookStack (já sanitizado no servidor) com a identidade do portal
+.conteudo-manual {
+  color: var(--spi-texto);
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+
+  h1, h2, h3, h4, h5, h6 { margin: 1.4em 0 .5em; color: var(--spi-titulo); font-weight: 700; line-height: 1.3; }
+  h1 { font-size: 24px; }
+  h2 { font-size: 20px; }
+  h3 { font-size: 17px; }
+  h4, h5, h6 { font-size: 15px; }
+  p, ul, ol { margin: 0 0 1em; }
+  a { color: var(--spi-link); }
+  img { max-width: 100%; height: auto; border-radius: 6px; }
+  img.imagem-indisponivel { min-height: 40px; background: var(--cor-f6f7f8); }
+  blockquote { margin: 0 0 1em; padding: 8px 16px; border-left: 4px solid var(--spi-borda-campo); color: var(--spi-apagado); }
+  hr { border-color: var(--spi-borda); }
+  pre, code { border-radius: 6px; background: var(--cor-f6f7f8); font-size: 12.5px; }
+  pre { padding: 12px 14px; overflow-x: auto; }
+  code { padding: 1px 5px; }
+  pre code { padding: 0; background: none; }
+  table { width: 100%; margin: 0 0 1em; border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { padding: 8px 10px; border: 1px solid var(--spi-borda); vertical-align: top; }
+  th { background: var(--cor-f9f9fa); }
+
+  // Alinhamentos e destaques usados pelo editor do BookStack
+  .align-center, &.align-center { text-align: center; }
+  .align-right { text-align: right; }
+  .align-left { text-align: left; }
+  .callout { margin: 0 0 1em; padding: 10px 14px; border-left: 4px solid var(--spi-link); border-radius: 6px; background: var(--cor-f9f9fa); }
+  .callout.danger { border-left-color: var(--spi-vermelho); }
+  .callout.warning { border-left-color: #c88a00; }
+  .callout.success { border-left-color: #218365; }
+}
+
+@media (max-width: 900px) {
+  .manuais-leitura { grid-template-columns: 1fr; }
+  .manuais-lateral { position: static; max-height: none; }
+  .manuais-artigo { padding: 18px 16px; }
+}

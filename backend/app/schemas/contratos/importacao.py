@@ -109,6 +109,7 @@ class DocumentoPrevia(BaseModel):
     obrigatorio: bool = True
     com_validade: bool = False
     vale_outros_contratos: bool = False
+    pedir_envio: bool = False
 
 
 class NotaPrevia(BaseModel):

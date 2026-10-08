@@ -30,6 +30,10 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           // Notícias: gestão editorial do portal (a página inicial é o próprio portal)
           { id: 'noticias', rotulo: 'Notícias', rota: '/noticias/gestao', acl: 'noticias' },
           { id: 'tarefas', rotulo: 'Tarefas', rota: '/tarefas' },
+          // Reserva de Espaços: agenda de salas e anfiteatro para todos; a fila e o painel aparecem só para fiscais
+          { id: 'reserva-espacos', rotulo: 'Reserva de Espaços', rota: '/reserva-espacos' },
+          // Manuais: instruções do BookStack lidas dentro do portal (ACL `manuais`; sem regras, todo usuário logado)
+          { id: 'manuais', rotulo: 'Manuais', rota: '/manuais', acl: 'manuais' },
           // Melhorias: minhas sugestões para todos; triagem para quem tem CONTROLE_TOTAL em `melhorias`
           { id: 'melhorias', rotulo: 'Melhorias', rota: '/melhorias' },
           // Painel Executivo: gráficos de contratos, RH e tarefas para a Diretoria (acesso decidido pela API)
@@ -48,6 +52,20 @@ export const NAVEGACAO: SecaoNavegacao[] = [
       { id: 'abrir-chamado', rotulo: 'Abrir Chamado', icone: 'ajuda', acao: 'abrir-chamado', acl: 'abrir-chamado' },
       { id: 'usuarios', rotulo: 'Usuários', icone: 'usuarios', rota: '/usuarios', acl: 'usuarios' },
       { id: 'setores', rotulo: 'Setores', icone: 'organograma', rota: '/setores', acl: 'setores' },
+      // Documentação interativa da API (nova aba): visível a quem tem o recurso de ACL `documentacao-api` (nasce fechado)
+      {
+        id: 'api',
+        rotulo: 'Documentação da API',
+        icone: 'codigo',
+        acl: 'documentacao-api',
+        filhos: [
+          { id: 'api-swagger', rotulo: 'Swagger (OpenAPI)', href: '/api/documentacao', novaAba: true },
+          { id: 'api-redoc', rotulo: 'ReDoc', href: '/api/redoc', novaAba: true },
+        ],
+      },
+      // Gerenciar atalhos fixos da barra lateral (ACL `atalhos`, recurso fechado: só quem o SuperRoot liberar)
+      { id: 'gerenciar-atalhos', rotulo: 'Gerenciar atalhos', icone: 'alfinete', rota: '/admin/atalhos', acl: 'atalhos' },
+      { id: 'sla-prazos', rotulo: 'SLA de prazos', icone: 'alfinete', rota: '/admin/sla', acl: 'sla' },
     ],
   },
   {
@@ -59,18 +77,9 @@ export const NAVEGACAO: SecaoNavegacao[] = [
       { id: 'ldap', rotulo: 'Diretórios LDAP', icone: 'banco-dados', rota: '/admin/ldap' },
       { id: 'smtp', rotulo: 'Servidores SMTP', icone: 'envelope', rota: '/admin/smtp' },
       { id: 'glpi', rotulo: 'Integração GLPI', icone: 'ajuda', rota: '/admin/glpi' },
+      { id: 'bookstack', rotulo: 'Integração BookStack', icone: 'arquivo', rota: '/admin/bookstack' },
       // Mensageria (e-mail de changelog): só a conta root
       { id: 'mensageria', rotulo: 'Mensageria', icone: 'megafone', rota: '/admin/mensageria', somenteRoot: true },
-      // Links externos para a documentação interativa da API (abrem em nova aba)
-      {
-        id: 'api',
-        rotulo: 'Documentação da API',
-        icone: 'codigo',
-        filhos: [
-          { id: 'api-swagger', rotulo: 'Swagger (OpenAPI)', href: '/api/documentacao', novaAba: true },
-          { id: 'api-redoc', rotulo: 'ReDoc', href: '/api/redoc', novaAba: true },
-        ],
-      },
     ],
   },
 ];

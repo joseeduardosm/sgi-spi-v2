@@ -10,6 +10,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { ambiente } from '../../../../environments/ambiente';
 import { NavegacaoService } from '../../../core/navegacao/navegacao.service';
+import { normalizarTexto, telasDoMenu } from '../../../core/navegacao/telas-menu';
 
 /** Resultado da busca (`ResultadoBusca` da API; as telas do menu usam o tipo `tela`). */
 export interface ResultadoBusca {
@@ -32,9 +33,7 @@ export const GRUPOS_BUSCA: { tipo: ResultadoBusca['tipo']; titulo: string }[] = 
 ];
 
 /** Minúsculas e sem acento, para comparar textos na busca. */
-export function normalizar(texto: string): string {
-  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-}
+export const normalizar = normalizarTexto;
 
 /**
  * Busca global do topo. Procura nas telas do menu (já filtradas pelo que o usuário pode ver) e, pela API, em contratos,
@@ -86,9 +85,7 @@ export class BuscaGlobalComponent {
   private readonly telas = computed<ResultadoBusca[]>(() => {
     const alvo = normalizar(this.termo());
     if (alvo.length < 2) return [];
-    const achatar = (itens: readonly { id: string; rotulo: string; rota?: string; destino?: string; filhos?: any[] }[]): ResultadoBusca[] =>
-      itens.flatMap((i) => [...(i.rota ? [{ tipo: 'tela' as const, id: i.id, titulo: i.rotulo, subtitulo: '', rota: i.destino ?? i.rota }] : []), ...achatar(i.filhos ?? [])]);
-    return achatar(this.navegacao.secoes().flatMap((s) => s.itens)).filter((t) => normalizar(t.titulo).includes(alvo));
+    return telasDoMenu(this.navegacao.secoes()).filter((t) => normalizar(t.titulo).includes(alvo)).map((t) => ({ tipo: 'tela' as const, id: t.id, titulo: t.titulo, subtitulo: '', rota: t.rota }));
   });
 
   /** Resultados agrupados, na ordem de `GRUPOS_BUSCA`, sem grupos vazios. */

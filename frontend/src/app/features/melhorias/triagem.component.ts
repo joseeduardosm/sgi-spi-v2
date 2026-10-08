@@ -17,6 +17,7 @@ import {
   ConversaoTarefa, FiltrosTriagem, PaginaTriagem, PrintSugestao, ROTULOS_MODULO, ROTULOS_SITUACAO, SituacaoSugestao, SugestaoTriagem, Tratamento,
 } from './melhorias.models';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
+import { ROTULOS_SLA, textoSla } from '../sla/sla.models';
 
 const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
 
@@ -53,7 +54,7 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
         </div>
         <div class="tabela-gestao-envoltorio">
           <table class="tabela-gestao tabela-melhorias">
-            <thead><tr><th>Nº</th><th>Sugestão</th><th>Autor</th><th>Módulo</th><th>Situação</th><th>Enviada</th></tr></thead>
+            <thead><tr><th>Nº</th><th>Sugestão</th><th>Autor</th><th>Módulo</th><th>Situação</th><th>SLA</th><th>Enviada</th></tr></thead>
             <tbody>
               @for (s of pagina()?.itens ?? []; track s.id) {
                 <tr (click)="abrir(s)" (keydown.enter)="abrir(s)" tabindex="0" class="linha-clicavel">
@@ -63,6 +64,7 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
                   <td>{{ s.autor_nome }}<small>&#64;{{ s.autor_login }}</small></td>
                   <td>{{ modulos[s.modulo] ?? s.modulo }}</td>
                   <td><span class="selo-sugestao" [attr.data-situacao]="s.situacao">{{ rotulos[s.situacao] }}</span></td>
+                  <td>@if (s.sla; as sla) { <span class="selo-sla-texto" [attr.data-situacao]="sla.situacao_resolucao" [title]="textoSla(sla, 'resposta') + ' · ' + textoSla(sla, 'resolucao')">{{ rotulosSla[sla.situacao_resolucao] }}</span> }</td>
                   <td>{{ s.criado_em | date: 'dd/MM/yyyy HH:mm' }}</td>
                 </tr>
               } @empty {
@@ -91,6 +93,8 @@ export class TriagemComponent implements OnInit {
   private readonly destruir = inject(DestroyRef);
   protected readonly situacoes = SITUACOES;
   protected readonly rotulos = ROTULOS_SITUACAO;
+  protected readonly rotulosSla = ROTULOS_SLA;
+  protected readonly textoSla = textoSla;
   protected readonly modulos = ROTULOS_MODULO;
   protected readonly pagina = signal<PaginaTriagem | null>(null);
   protected readonly carregando = signal(true);

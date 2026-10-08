@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.sla import SlaItem
 from app.schemas.tarefas import PrioridadeTarefa
 
 SituacaoSugestao = Literal["nova", "em_analise", "aceita", "recusada", "concluida"]
@@ -78,6 +79,7 @@ class SugestaoTriagem(SugestaoAutor):
     observacao_interna: str
     atualizado_por_nome: str
     tarefa_numero: int | None = Field(None, description="Tarefa criada a partir da sugestão (Módulo Tarefas).")
+    sla: SlaItem | None = Field(None, description="SLA da triagem: resposta (primeira mudança de situação) e resolução (conclusão ou recusa), em dias úteis.")
     eventos: list[EventoLeitura]
 
 

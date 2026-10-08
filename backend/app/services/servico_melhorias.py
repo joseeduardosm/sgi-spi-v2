@@ -273,7 +273,7 @@ def converter_em_tarefa(sessao: Session, numero: int, titulo: str, prazo: dateti
                  f"Tela: {sugestao.tela or '—'}\n\n{sugestao.texto}")
     try:
         tarefa = servico_tarefas.criar(sessao, usuario, servico_tarefas.DadosTarefa(
-            titulo=titulo.strip(), descricao=descricao, prazo=prazo, prioridade=prioridade, equipe_id=equipe_id, responsavel_id=responsavel_id))
+            titulo=titulo.strip(), descricao=descricao, prazo=prazo, prioridade=prioridade, equipe_id=equipe_id, responsaveis_ids=(responsavel_id,) if responsavel_id else ()))
     except servico_tarefas.ErroTarefa as erro:
         raise ErroMelhoria(str(erro), erro.status, erro.codigo) from erro
     sugestao.tarefa_id = tarefa.id
@@ -317,15 +317,26 @@ def _descricao_filtros(filtros: Filtros) -> str:
     return "Filtros: " + ", ".join(partes) if partes else "Todas as sugestões"
 
 
+ROTULOS_SLA = {"no_prazo": "No prazo", "em_risco": "Em risco", "estourado": "Estourado", "cumprido": "Cumprido", "cumprido_fora": "Cumprido fora do prazo"}
+
+
+def _sla_planilha(sessao: Session, s: SugestaoMelhoria) -> tuple[str, str]:
+    """Situação do SLA de resposta e de resolução da sugestão, para a planilha."""
+    from app.services.sla import servico_sla
+
+    sla = servico_sla.da_sugestao(sessao, s)
+    return ROTULOS_SLA[sla.situacao_resposta], ROTULOS_SLA[sla.situacao_resolucao]
+
+
 def planilha(sessao: Session, filtros: Filtros) -> bytes:
     lista = _todas(sessao, filtros)
     colunas = [Coluna("Nº", largura=7), Coluna("Enviada em", largura=17), Coluna("Autor", largura=28), Coluna("Login", largura=16),
                Coluna("Módulo", largura=14), Coluna("Tela", largura=34), Coluna("Sugestão", largura=70), Coluna("Situação", largura=13),
                Coluna("Resposta ao autor", largura=50), Coluna("Observação interna", largura=50), Coluna("Tarefa", largura=9),
-               Coluna("Prints", largura=8), Coluna("Tratada por", largura=26), Coluna("Tratada em", largura=17)]
+               Coluna("Prints", largura=8), Coluna("Tratada por", largura=26), Coluna("Tratada em", largura=17), Coluna("SLA resposta", largura=15), Coluna("SLA resolução", largura=15)]
     linhas = [[s.numero, _local(s.criado_em), s.autor_nome, s.autor_login, ROTULOS_MODULO.get(s.modulo, s.modulo), s.tela, s.texto,
                ROTULOS_SITUACAO[s.situacao], s.resposta_publica, s.observacao_interna,
-               (f"#{numero_da_tarefa(sessao, s)}" if s.tarefa_id else ""), len(s.anexos), s.atualizado_por_nome, _local(s.atualizado_em)]
+               (f"#{numero_da_tarefa(sessao, s)}" if s.tarefa_id else ""), len(s.anexos), s.atualizado_por_nome, _local(s.atualizado_em), *_sla_planilha(sessao, s)]
               for s in lista]
     return gerar_planilha([Aba(nome="Melhorias", colunas=colunas, linhas=linhas, titulo=f"Sugestões de melhoria — {_descricao_filtros(filtros)}")])
 

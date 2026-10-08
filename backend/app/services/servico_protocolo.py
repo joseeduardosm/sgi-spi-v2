@@ -22,6 +22,7 @@ from typing import BinaryIO
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.banco import hoje_sao_paulo
 from app.core.banco import agora_utc
 from app.core.configuracao import obter_configuracao
 from app.models.acl import NivelAcl
@@ -455,7 +456,7 @@ def exportar(sessao: Session, tipo_id: uuid.UUID | None, exercicio: int | None, 
     linhas = [[n.sequencia.tipo.nome, n.sequencia.exercicio, formatar_numero(n.numero, n.sequencia.exercicio), ROTULOS_ESTADO[n.estado], n.finalidade,
                n.reservado_por_nome, _local(n.reservado_em), _local(n.usado_em), contratos.get(n.contrato_id, ""), "Sim" if n.sigiloso else "",
                n.motivo_anulacao or ""] for n in numeros]
-    sufixo = date.today().strftime("%Y-%m-%d")
+    sufixo = hoje_sao_paulo().strftime("%Y-%m-%d")
     if formato == "xlsx":
         colunas = [Coluna("Tipo", largura=18), Coluna("Exercício", "0", 10), Coluna("Número", largura=11), Coluna("Situação", largura=12), Coluna("Finalidade", largura=50),
                    Coluna("Responsável", largura=30), Coluna("Reservado em", largura=17), Coluna("Utilizado em", largura=17), Coluna("Contrato", largura=18),

@@ -18,6 +18,7 @@
             <h3>Nº {{ x?.numero ?? n.nota.numero }}@if (x?.serie) { · série {{ x?.serie }} }</h3>
           </div>
           <div class="valor-nota"><small>Valor da nota</small><strong>{{ n.nota.valor_bruto | moeda }}</strong></div>
+          @if (n.nota.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="verNota(n)">Ver nota</button> }
         </header>
         @if (x) {
           <div class="partes-nota">
@@ -74,10 +75,29 @@
       </article>
     }
 
+    <!-- Total das notas: só com mais de uma; os valores acompanham o que está digitado -->
+    @if (notas.length > 1) {
+      <p class="secao-formulario">Total das notas</p>
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao">
+          <thead><tr><th>Nota</th><th class="num">Bruto</th><th class="num">Retenções</th><th class="num">Líquido a pagar</th><th></th></tr></thead>
+          <tbody>
+            @for (n of notas; track n.titulo) {
+              <tr>
+                <td>NF {{ n.nota.numero || n.nota.ordem }}</td><td class="num">{{ n.nota.valor_bruto | moeda }}</td><td class="num">{{ totalRetido(n) | moeda }}</td><td class="num">{{ liquido(n) | moeda }}</td>
+                <td>@if (n.nota.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="verNota(n)">Ver nota</button> }</td>
+              </tr>
+            }
+            <tr class="linha-total"><td><strong>Total</strong></td><td class="num"><strong>{{ totalGeral('bruto') | moeda }}</strong></td><td class="num"><strong>{{ totalGeral('retido') | moeda }}</strong></td><td class="num"><strong>{{ totalGeral('liquido') | moeda }}</strong></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    }
+
     @if (editavel()) {
       <label class="confirmacao-discriminacao">
         <input type="checkbox" [(ngModel)]="discriminacaoConferida" />
-        Conferi que a <b>discriminação dos serviços</b> é compatível com o que foi contratado e medido no processo.
+        Conferi que as <b>retenções de tributos</b> estão de acordo com o valor da nota fiscal apresentada.
       </label>
       <div class="acoes-cartao"><app-opcao-email [(marcado)]="enviarEmail" descricao="PDF da conferência à equipe" />
         @if (d.pode_recusar) { <button type="button" class="acao-perigo" (click)="recusando.set(true)">Recusar nota</button> }

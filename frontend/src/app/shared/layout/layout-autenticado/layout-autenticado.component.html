@@ -37,10 +37,10 @@
         <div class="barra-topo-acoes">
         @if (!usuario.perfil_restrito) {
           <!-- Sino da mensageria: abre a caixa de mensagens -->
-          <a class="sino-mensagens" routerLink="/mensagens" [attr.aria-label]="'Caixa de mensagens: ' + caixa.pendentes() + ' pendente(s)'"
+          <a class="sino-mensagens" routerLink="/mensagens" [attr.aria-label]="'Caixa de mensagens: ' + caixa.naoLidas() + ' não lida(s)'"
              title="Caixa de mensagens">
             <app-icone nome="sino" />
-            @if (caixa.pendentes()) { <span class="contador-sino">{{ caixa.pendentes() > 99 ? '99+' : caixa.pendentes() }}</span> }
+            @if (caixa.naoLidas()) { <span class="contador-sino">{{ caixa.naoLidas() > 99 ? '99+' : caixa.naoLidas() }}</span> }
           </a>
         }
         <div class="menu-usuario">
@@ -90,6 +90,7 @@
 <!-- Avisos da mensageria que abrem em janela (não bloqueiam a navegação) -->
 <app-janela-mensagem />
 <app-abrir-chamado />
+<app-paleta-comandos />
 <!-- Folha de ponto (menu do usuário): escolha da competência e download do PDF -->
 @if (folhaPontoAberta()) { <app-folha-ponto-dialogo [(aberta)]="folhaPontoAberta" /> }
 <!-- Botão flutuante "Sugerir melhoria" (arrastável; fechado vale só nesta aba). Com o perfil pendente, não aparece -->

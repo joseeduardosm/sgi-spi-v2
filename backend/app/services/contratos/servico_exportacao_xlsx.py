@@ -49,7 +49,7 @@ def gerar(contrato: Contrato) -> bytes:
     campos = {
         2: contrato.numero,
         3: _mascara(empresa.cnpj, "{}{}.{}{}{}.{}{}{}/{}{}{}{}-{}{}"), 4: empresa.razao_social, 5: empresa.nome_fantasia, 6: empresa.endereco,
-        7: preposto.nome if preposto else "", 8: _mascara(preposto.cpf, "{}{}{}.{}{}{}.{}{}{}-{}{}") if preposto else "",
+        7: preposto.nome if preposto else "", 8: _mascara(preposto.cpf, "{}{}{}.{}{}{}.{}{}{}-{}{}") if preposto and preposto.cpf else "",
         9: preposto.email if preposto else "", 10: preposto.telefone if preposto else "",
         11: contrato.apelido, 12: contrato.data_inicio, 13: contrato.vigencia_inicial_meses, 14: contrato.vigencia_maxima_meses,
         15: PERIODICIDADES.get(contrato.periodicidade_meses, contrato.periodicidade_meses), 16: MESES[contrato.mes_reajuste - 1],

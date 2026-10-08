@@ -106,6 +106,14 @@
         @if (a.pdf_gerado) { <button type="button" class="link-arquivo" (click)="baixar(a.pdf_gerado.anexo_id)">Baixar PDF gerado</button> }
         @if (a.pdf_assinado) { <button type="button" class="link-arquivo" (click)="baixar(a.pdf_assinado.anexo_id)">Baixar via assinada</button> }
       </div>
+      @if (a.pdf_gerado && editavel() && !a.concluida_em) {
+        <ol class="passos-assinatura">
+          <li>Baixe o <b>PDF gerado</b> (ele traz a Folha de autenticação, com o código de verificação e quem deu ciência).</li>
+          <li>A contratada assina o PDF no <a href="https://assinador.iti.br" target="_blank" rel="noopener">assinador do gov.br</a> (assinatura eletrônica ou com certificado digital).</li>
+          <li>Selecione a <b>via assinada</b> abaixo e envie.</li>
+        </ol>
+        <p class="dica-formulario">Para conferir se um PDF é o original gerado pelo sistema: <a routerLink="/contratos/verificar">Verificar documento</a>.</p>
+      }
       @if (editavel() && !a.concluida_em) {
         <div class="acoes-cartao esquerda">
           <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail." descricao="PDF aos prepostos escolhidos, pedindo a devolução assinada" />

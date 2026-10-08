@@ -64,6 +64,7 @@ Os campos de `SugestaoAutor`, mais:
 - `autor_id`, `autor_nome`, `autor_login` (retrato do momento do envio);
 - `observacao_interna`, `atualizado_por_nome`;
 - `tarefa_numero`, a tarefa criada a partir da sugestão, se houver;
+- `sla` (`SlaItem`, só na triagem; o autor não vê): resposta = primeira mudança de situação, resolução = conclusão ou recusa, em dias úteis com a política de [sla.md](sla.md); a planilha ganhou as colunas "SLA resposta" e "SLA resolução";
 - `eventos[]`, com `descricao`, `situacao_anterior`, `situacao_nova`, `autor_nome` e `criado_em`.
 
 ### `PaginaSugestoesTriagem`

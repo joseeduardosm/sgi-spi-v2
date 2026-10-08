@@ -9,7 +9,8 @@ Todo acesso ao banco passa por aqui:
 """
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -24,6 +25,20 @@ class Base(DeclarativeBase):
     """
 
     pass
+
+
+# Fuso oficial do sistema: tudo que o usuário lê (telas, PDFs, e-mails, nomes de arquivo) está no horário de São Paulo
+FUSO_SAO_PAULO = ZoneInfo("America/Sao_Paulo")
+
+
+def em_sao_paulo(valor: datetime) -> datetime:
+    """Converte para o horário de São Paulo; valor sem fuso é tratado como UTC (como o banco grava)."""
+    return (valor if valor.tzinfo else valor.replace(tzinfo=UTC)).astimezone(FUSO_SAO_PAULO)
+
+
+def hoje_sao_paulo() -> date:
+    """Data de hoje em São Paulo (o `date.today()` usaria o fuso do servidor, UTC, e viraria o dia às 21h)."""
+    return datetime.now(FUSO_SAO_PAULO).date()
 
 
 def agora_utc() -> datetime:

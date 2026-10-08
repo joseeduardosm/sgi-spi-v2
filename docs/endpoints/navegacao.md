@@ -46,7 +46,8 @@ Substitui a lista inteira, na ordem enviada.
 
 ## No Angular
 
-- Busca: caixa no topo do layout autenticado (`shared/componentes/busca-global`), com atalho Ctrl+K ou `/`, setas, Enter e Esc.
+- Busca: caixa no topo do layout autenticado (`shared/componentes/busca-global`), com atalho `/`, setas, Enter e Esc.
+- **Paleta de comandos** (`shared/componentes/paleta-comandos`): **Ctrl/Cmd+K** abre (e fecha) um modal central. Vazio, mostra as **Ações**, os **Favoritos** e os **Recentes**; digitando, as ações que combinam, as telas do menu (já filtradas por papel e ACL) e os resultados de `GET /api/busca`. Setas escolhem, Enter executa, Esc fecha só a paleta. Os comandos ficam em `paleta-comandos.registro.ts` (rótulo, palavras, ACL e rota ou ação): nova tarefa, minhas tarefas e atividades, reservar espaço, novo contrato e nova empresa (MODIFICACAO em `contratos`), abrir chamado, sugerir melhoria, nova mensagem (`/mensagens?nova=1`) e alternar tema. Só frontend, sem endpoint novo.
 - Favoritos: estrela ao lado do título da página e seção "Favoritos" na barra lateral. A lista fica também no navegador (`localStorage`, por usuário), para aparecer na hora; depois do login, a da conta prevalece.
 - Recentes: **sempre as últimas 5 telas** abertas (a sexta empurra a mais antiga; a repetida sobe), só no navegador e **por usuário** (`sgi-spi.recentes.<id>`): outra pessoa no mesmo computador não vê as suas, e sair da conta esvazia a lista na tela. Os favoritos também ficam por usuário (`sgi-spi.favoritos.<id>`). As chaves antigas (`sgi-spi.recentes` e `sgi-spi.favoritos`) são apagadas.
 - Anterior/próximo: a carteira guarda a busca, o filtro "Meus contratos" e a ordenação em `sessionStorage`; o detalhe do contrato mostra ‹ 3 de 34 › com o `GET /vizinhos`.

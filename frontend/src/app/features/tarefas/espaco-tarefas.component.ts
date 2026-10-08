@@ -11,16 +11,18 @@ import { combineLatest, debounceTime, Subject } from 'rxjs';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CalendarioTarefasComponent, Reprogramacao } from './calendario-tarefas.component';
 import { EstadoTarefasService } from './estado-tarefas.service';
+import { DesempenhoTarefasComponent } from './desempenho-tarefas.component';
+import { FaixaEquipeComponent } from './faixa-equipe.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
 import { ListaTarefasComponent, OrdemLista } from './lista-tarefas.component';
 import { MovimentoQuadro, QuadroTarefasComponent } from './quadro-tarefas.component';
 import { Escopo, TarefasApiService } from './tarefas-api.service';
 import {
-  acaoEntre, corAvatar, iniciais, ListaTarefas, Marcador, Pessoa, PessoaCarga, prazoPadrao, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS, StatusTarefa,
+  acaoEntre, corAvatar, Estagio, iniciais, ListaTarefas, Marcador, Pessoa, PessoaCarga, prazoPadrao, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS, StatusTarefa,
   TarefaResumo,
 } from './tarefas.models';
 
-type Visao = 'quadro' | 'lista' | 'calendario' | 'pessoas';
+type Visao = 'quadro' | 'lista' | 'calendario' | 'pessoas' | 'desempenho';
 /** Recortes rápidos (linha de resumo e filtros): cada um vira um filtro na URL (`recorte`). */
 type Recorte = '' | 'atrasadas' | 'hoje' | 'semana' | 'criticas' | 'validacao';
 
@@ -29,6 +31,8 @@ const ROTULOS_RECORTE: Record<Exclude<Recorte, ''>, string> = {
 };
 /** Quantos segundos o cartão recém-criado fica destacado. */
 const SEGUNDOS_DESTAQUE = 4;
+/** Chave (localStorage) da preferência pelo modo tela cheia. */
+const CHAVE_TELA_CHEIA = 'tarefas.espaco.tela-cheia';
 
 /**
  * Tela de trabalho do módulo, como um quadro do Trello:
@@ -40,11 +44,17 @@ const SEGUNDOS_DESTAQUE = 4;
   selector: 'app-espaco-tarefas',
   imports: [
     FormsModule, RouterLink, DecimalPipe, QuadroTarefasComponent, ListaTarefasComponent, CalendarioTarefasComponent,
-    JanelaTarefaComponent,
+    JanelaTarefaComponent, DesempenhoTarefasComponent, FaixaEquipeComponent,
   ],
   templateUrl: './espaco-tarefas.component.html',
   // Clique fora do popover de filtros o fecha
-  host: { '(document:click)': 'filtrosAbertos.set(false)' },
+  host: {
+    '(document:click)': 'filtrosAbertos.set(false)',
+    '(document:fullscreenchange)': 'aoMudarFullscreen()',
+    '(document:keydown)': 'aoTeclar($event)',
+    '[class.tela-cheia]': 'telaCheia()',
+    '[class.visao-quadro]': "visao() === 'quadro'",
+  },
 })
 export class EspacoTarefasComponent implements OnInit {
   private readonly api = inject(TarefasApiService);
@@ -69,6 +79,8 @@ export class EspacoTarefasComponent implements OnInit {
   protected readonly busca = signal('');
   protected readonly prioridade = signal<PrioridadeTarefa | ''>('');
   protected readonly marcador = signal('');
+  /** Marco (milestone) usado como filtro. */
+  protected readonly marco = signal('');
   /** Pessoas escolhidas nos avatares (ids). */
   protected readonly pessoasFiltro = signal<number[]>([]);
   protected readonly recorte = signal<Recorte>('');
@@ -79,6 +91,10 @@ export class EspacoTarefasComponent implements OnInit {
 
   // --- Estado da tela ---------------------------------------------------------------------------------
   protected readonly filtrosAbertos = signal(false);
+  /** Modo tela cheia: o espaço cobre o portal (e pede o fullscreen do navegador) para usar o máximo da tela. */
+  protected readonly telaCheia = signal(lerTelaCheia());
+  /** O fullscreen do navegador foi entrado por este espaço (para sair dele junto com a tela cheia). */
+  private pediuFullscreen = false;
   protected readonly destacado = signal<number | null>(null);
   protected readonly modoJanela = signal<ModoJanela | null>(null);
   protected readonly tarefaJanela = signal<TarefaResumo | null>(null);
@@ -86,6 +102,8 @@ export class EspacoTarefasComponent implements OnInit {
 
   protected readonly titulo = computed(() => this.dados()?.contexto.titulo ?? (this.escopo().tipo === 'minhas' ? 'Minhas tarefas' : 'Tarefas'));
   protected readonly lider = computed(() => !!this.dados()?.contexto.lider);
+  /** Pessoa do contexto (Minhas tarefas = eu; tela de pessoa = ela), para o Desempenho individual. */
+  protected readonly pessoaDoEscopo = computed(() => this.dados()?.contexto.pessoa_id ?? null);
   /** Equipe do escopo (para "Configurar" e para a criação rápida). */
   protected readonly equipe = computed(() => this.estado.equipes().find((e) => e.id === this.escopo().equipeId) ?? null);
   /** Criação rápida: em Minhas (tarefa pessoal) e na equipe; na tela de outra pessoa, não. */
@@ -95,7 +113,7 @@ export class EspacoTarefasComponent implements OnInit {
   protected readonly pessoasDoEscopo = computed(() => {
     const contagem = new Map<number, { pessoa: Pessoa; total: number }>();
     for (const t of this.dados()?.itens ?? []) {
-      for (const p of t.envolvidos) contagem.set(p.id, { pessoa: p, total: (contagem.get(p.id)?.total ?? 0) + 1 });
+      for (const p of t.responsaveis) contagem.set(p.id, { pessoa: p, total: (contagem.get(p.id)?.total ?? 0) + 1 });
     }
     return [...contagem.values()].sort((a, b) => b.total - a.total || a.pessoa.nome.localeCompare(b.pessoa.nome)).map((c) => c.pessoa);
   });
@@ -119,14 +137,15 @@ export class EspacoTarefasComponent implements OnInit {
       const aberta = t.status !== 'concluida';
       return (!this.prioridade() || t.prioridade === this.prioridade())
         && (!this.marcador() || t.marcadores.some((m) => m.id === this.marcador()))
-        && (!pessoas.size || t.envolvidos.some((p) => pessoas.has(p.id)))
+        && (!this.marco() || t.marco_id === this.marco())
+        && (!pessoas.size || t.responsaveis.some((p) => pessoas.has(p.id)))
         && (r !== 'atrasadas' || (t.atrasada && aberta))
         && (r !== 'hoje' || (aberta && new Date(t.prazo).toDateString() === hoje))
         && (r !== 'semana' || (aberta && new Date(t.prazo) < fimSemana))
         && (r !== 'criticas' || (aberta && t.prioridade === 'critica'))
         && (r !== 'validacao' || t.status === 'em_validacao')
         && (!termo || t.titulo.toLowerCase().includes(termo) || String(t.numero) === termo.replace('#', '')
-          || t.envolvidos.some((p) => p.nome.toLowerCase().includes(termo)));
+          || t.responsaveis.some((p) => p.nome.toLowerCase().includes(termo)));
     });
   });
 
@@ -138,6 +157,7 @@ export class EspacoTarefasComponent implements OnInit {
     if (this.prioridade()) lista.push({ rotulo: `Prioridade: ${ROTULOS_PRIORIDADE[this.prioridade() as PrioridadeTarefa]}`, limpar: { prioridade: null } });
     const m = this.marcadoresDisponiveis().find((x) => x.id === this.marcador());
     if (this.marcador()) lista.push({ rotulo: `Marcador: ${m?.nome ?? '…'}`, limpar: { marcador: null } });
+    if (this.marco()) lista.push({ rotulo: 'Marco', limpar: { marco: null } });
     for (const id of this.pessoasFiltro()) {
       const p = this.pessoasDoEscopo().find((x) => x.id === id);
       lista.push({ rotulo: `Pessoa: ${p?.nome ?? '…'}`, limpar: { pessoas: this.textoPessoas(this.pessoasFiltro().filter((x) => x !== id)) } });
@@ -146,21 +166,55 @@ export class EspacoTarefasComponent implements OnInit {
     return lista;
   });
 
+  /** Entra ou sai da tela cheia; entrando, também pede o fullscreen do navegador (se negado, o espaço só cobre o portal). */
+  protected alternarTelaCheia(): void {
+    const ligar = !this.telaCheia();
+    this.telaCheia.set(ligar);
+    try {
+      localStorage.setItem(CHAVE_TELA_CHEIA, ligar ? '1' : '0');
+    } catch {
+      // Navegador sem armazenamento: a preferência só vale nesta visita
+    }
+    if (ligar) document.documentElement.requestFullscreen?.().catch(() => undefined);
+    else if (document.fullscreenElement) document.exitFullscreen?.().catch(() => undefined);
+  }
+
+  /** O navegador saiu do fullscreen (ex.: Esc): o modo tela cheia sai junto. */
+  protected aoMudarFullscreen(): void {
+    if (!document.fullscreenElement && this.telaCheia() && this.pediuFullscreen) this.alternarTelaCheia();
+    this.pediuFullscreen = !!document.fullscreenElement;
+  }
+
+  /** Esc sai da tela cheia (sem atrapalhar quem está digitando ou com janela aberta); F alterna fora dos campos de texto. */
+  protected aoTeclar(evento: KeyboardEvent): void {
+    const alvo = evento.target as HTMLElement | null;
+    const digitando = !!alvo && (['INPUT', 'TEXTAREA', 'SELECT'].includes(alvo.tagName) || alvo.isContentEditable);
+    if (evento.key === 'Escape' && this.telaCheia() && !this.modoJanela() && !this.relatorioAberto() && !digitando) this.alternarTelaCheia();
+    else if ((evento.key === 'f' || evento.key === 'F') && !digitando && !evento.ctrlKey && !evento.metaKey && !evento.altKey) this.alternarTelaCheia();
+  }
+
   ngOnInit(): void {
+    // Saindo do espaço, o fullscreen do navegador que ele pediu também termina
+    this.destruir.onDestroy(() => {
+      if (document.fullscreenElement && this.pediuFullscreen) document.exitFullscreen?.().catch(() => undefined);
+    });
     // Escopo pela rota (minhas, equipe ou pessoa)
     combineLatest([this.rota.paramMap, this.rota.data]).pipe(takeUntilDestroyed(this.destruir)).subscribe(([p, d]) => {
       this.escopo.set({ tipo: (d['escopo'] ?? 'minhas') as Escopo['tipo'], equipeId: p.get('equipeId'), login: p.get('login') });
       this.dados.set(null);
       this.pessoasCarga.set([]);
+      this.estagios.set([]);
+      this.carregarEstagios();
       this.carregar();
     });
     // Visão e filtros pela query string
     this.rota.queryParamMap.pipe(takeUntilDestroyed(this.destruir)).subscribe((q) => {
       const visao = q.get('visao');
-      this.visao.set(visao === 'lista' || visao === 'calendario' || visao === 'pessoas' ? visao : 'quadro');
+      this.visao.set(visao === 'lista' || visao === 'calendario' || visao === 'pessoas' || visao === 'desempenho' ? visao : 'quadro');
       this.busca.set(q.get('busca') ?? '');
       this.prioridade.set((q.get('prioridade') ?? '') as PrioridadeTarefa | '');
       this.marcador.set(q.get('marcador') ?? '');
+      this.marco.set(q.get('marco') ?? '');
       this.pessoasFiltro.set((q.get('pessoas') ?? '').split(',').filter(Boolean).map(Number));
       this.recorte.set((q.get('recorte') ?? '') as Recorte);
       this.raias.set(q.get('raias') === 'pessoa');
@@ -169,24 +223,64 @@ export class EspacoTarefasComponent implements OnInit {
       if (Number(q.get('tarefa')) > 0) void this.roteador.navigate(['/tarefas', Number(q.get('tarefa'))], { replaceUrl: true });
       if (this.visao() === 'pessoas' || this.raias()) this.carregarPessoas();
     });
+    this.iniciarAtualizacaoAutomatica();
     // Busca com atraso: a URL muda 300 ms depois da última tecla
     this.digitacao.pipe(debounceTime(300), takeUntilDestroyed(this.destruir)).subscribe((b) => this.navegar({ busca: b.trim() || null }));
   }
 
+  // --- Atualização automática ---------------------------------------------------------------------------
+
+  /** Tarefa sendo arrastada no quadro: a atualização espera o arraste terminar (trocar a lista no meio cancelaria o gesto). */
+  private arrastandoCartao = false;
+  private buscando = false;
+
+  /**
+   * Mantém a tela em dia sem recarregar a página: a cada 15 s (e ao voltar para a aba) busca as tarefas em silêncio, para que
+   * tarefas criadas ou alteradas por outras pessoas apareçam sozinhas. Pausa com a aba escondida ou durante um arraste.
+   */
+  private iniciarAtualizacaoAutomatica(): void {
+    const atualizar = () => {
+      if (document.hidden || this.arrastandoCartao || this.buscando) return;
+      this.buscando = true;
+      this.carregar(true, () => (this.buscando = false));
+    };
+    const marcar = (valor: boolean) => () => (this.arrastandoCartao = valor);
+    const iniciouArraste = marcar(true), terminouArraste = marcar(false);
+    document.addEventListener('dragstart', iniciouArraste);
+    document.addEventListener('dragend', terminouArraste);
+    document.addEventListener('visibilitychange', atualizar);
+    const intervalo = setInterval(atualizar, 15000);
+    this.destruir.onDestroy(() => {
+      clearInterval(intervalo);
+      document.removeEventListener('dragstart', iniciouArraste);
+      document.removeEventListener('dragend', terminouArraste);
+      document.removeEventListener('visibilitychange', atualizar);
+    });
+  }
+
   // --- Carga ------------------------------------------------------------------------------------------
 
-  /** Busca as tarefas do escopo. `silenciosa`: sem o "Carregando…" (depois de uma ação). */
-  protected carregar(silenciosa = false): void {
+  /** Busca as tarefas do escopo. `silenciosa`: sem o "Carregando…" (depois de uma ação); `aoFim` roda ao terminar (com sucesso ou erro). */
+  protected carregar(silenciosa = false, aoFim?: () => void): void {
     if (!silenciosa) this.carregando.set(true);
     const vazio = { status: [], prioridade: '' as const, marcador_id: '', responsavel_id: null, busca: '' };
     this.api.listar(this.escopo(), vazio).subscribe({
-      next: (d) => { this.dados.set(d); this.carregando.set(false); },
-      error: (e) => { this.carregando.set(false); this.dialogos.mostrarErro(e, 'Não foi possível carregar as tarefas'); },
+      next: (d) => { this.dados.set(d); this.carregando.set(false); aoFim?.(); },
+      // Na atualização automática um erro passageiro (rede, API reiniciando) não abre aviso: a próxima tentativa corrige
+      error: (e) => { this.carregando.set(false); aoFim?.(); if (!aoFim) this.dialogos.mostrarErro(e, 'Não foi possível carregar as tarefas'); },
     });
   }
 
   /** Carga de cada pessoa da equipe (visão Pessoas e cabeçalho das raias). */
   protected readonly pessoasCarga = signal<PessoaCarga[]>([]);
+  /** Colunas da equipe (estágios); vazio nas visões que não são de uma equipe. */
+  protected readonly estagios = signal<Estagio[]>([]);
+  private carregarEstagios(): void {
+    const id = this.escopo().equipeId;
+    if (this.escopo().tipo !== 'equipe' || !id) { this.estagios.set([]); return; }
+    this.api.estagios(id).subscribe({ next: (l) => this.estagios.set(l), error: () => this.estagios.set([]) });
+  }
+
   private carregarPessoas(): void {
     const id = this.escopo().equipeId;
     if (this.escopo().tipo !== 'equipe' || !id || this.pessoasCarga().length) return;
@@ -237,7 +331,7 @@ export class EspacoTarefasComponent implements OnInit {
   }
 
   protected limparFiltros(): void {
-    this.navegar({ recorte: null, prioridade: null, marcador: null, pessoas: null, busca: null });
+    this.navegar({ recorte: null, prioridade: null, marcador: null, marco: null, pessoas: null, busca: null });
   }
 
   // --- Tela da tarefa (/tarefas/123) ---------------------------------------------------------------------
@@ -250,7 +344,20 @@ export class EspacoTarefasComponent implements OnInit {
 
   /** Quadro: arraste ou menu "⋯". Devolver e reabrir pedem o motivo; entregar sem equipe conclui. */
   protected mover(m: MovimentoQuadro): void {
-    const { tarefa: t, para } = m;
+    const { tarefa: t, para, estagioId } = m;
+    // Mesma situação, outra coluna: só troca o estágio
+    if (para === t.status && estagioId) {
+      const anteriorEstagio = t.estagio_id;
+      this.dados.update((d) => d && { ...d, itens: d.itens.map((x) => (x.numero === t.numero ? { ...x, estagio_id: estagioId } : x)) });
+      this.api.mudarEstagio(t.numero, estagioId).subscribe({
+        next: () => this.carregar(true),
+        error: (e) => {
+          this.dados.update((d) => d && { ...d, itens: d.itens.map((x) => (x.numero === t.numero ? { ...x, estagio_id: anteriorEstagio } : x)) });
+          this.dialogos.mostrarErro(e, 'Movimento não realizado');
+        },
+      });
+      return;
+    }
     const acao = acaoEntre(t.status, para, !t.equipe);
     if (!acao) {
       this.dialogos.avisar('Movimento não permitido', `Não é possível ir de "${ROTULOS_STATUS[t.status]}" para "${ROTULOS_STATUS[para]}". `
@@ -266,7 +373,7 @@ export class EspacoTarefasComponent implements OnInit {
     // Movimento otimista: o cartão muda de coluna na hora e volta se a API recusar
     const anterior = t.status;
     this.trocarStatus(t.numero, acao === 'entregar' && !t.equipe ? 'concluida' : para);
-    this.api.mover(t.numero, acao).subscribe({
+    this.api.mover(t.numero, acao, '', undefined, estagioId).subscribe({
       next: () => this.carregar(true),
       error: (e) => { this.trocarStatus(t.numero, anterior); this.dialogos.mostrarErro(e, 'Movimento não realizado'); },
     });
@@ -281,7 +388,7 @@ export class EspacoTarefasComponent implements OnInit {
     const escopo = this.escopo();
     this.api.criar({
       titulo, descricao: '', prazo: prazoPadrao().toISOString(), prioridade: 'normal',
-      equipe_id: escopo.tipo === 'equipe' ? escopo.equipeId ?? null : null, responsavel_id: null, participantes_ids: [], marcadores_ids: [],
+      equipe_id: escopo.tipo === 'equipe' ? escopo.equipeId ?? null : null, responsaveis_ids: [], marcadores_ids: [],
     }).subscribe({
       next: (t) => {
         this.destacado.set(t.numero);
@@ -329,5 +436,14 @@ export class EspacoTarefasComponent implements OnInit {
       next: () => this.relatorioAberto.set(false),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o relatório'),
     });
+  }
+}
+
+/** Lê a preferência pelo modo tela cheia; sem armazenamento disponível, começa no modo normal. */
+function lerTelaCheia(): boolean {
+  try {
+    return localStorage.getItem(CHAVE_TELA_CHEIA) === '1';
+  } catch {
+    return false;
   }
 }

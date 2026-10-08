@@ -120,6 +120,16 @@
               <span>Liberar todas as competências</span></label>
             <small>Tira a trava que só libera a medição de uma competência no 1º dia do mês seguinte ao período.</small>
           </div>
+          <div class="ocupa-4 liberar-competencias">
+            <label for="permite-adicional"><input id="permite-adicional" type="checkbox" name="permite_medicao_adicional" [(ngModel)]="dados.permite_medicao_adicional" />
+              <span>Permitir mais de uma medição/pagamento no mesmo mês (medição adicional)</span></label>
+            <small>Habilita "Incluir nova medição" em qualquer competência, com justificativa, para medir e pagar de novo no mesmo mês (ex.: novos funcionários).</small>
+          </div>
+          <div class="ocupa-2">
+            <label for="alertas-a-partir-de">Desconsiderar alertas a partir de</label>
+            <input id="alertas-a-partir-de" type="date" name="alertas_a_partir_de" [(ngModel)]="dados.alertas_a_partir_de" />
+            <small class="dica-formulario">Competências anteriores a esta data não geram alertas, pendências nem avisos de atraso (útil em contratos cadastrados com início muito antigo). O corte geral de 09/2026 sempre vale.</small>
+          </div>
         </div>
       </div>
     </section>

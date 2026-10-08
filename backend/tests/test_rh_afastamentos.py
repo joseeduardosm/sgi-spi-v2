@@ -5,6 +5,7 @@
 from datetime import date
 
 import pytest
+from sqlalchemy import select
 
 from app.core.banco import FabricaSessao
 from app.models.rh import Afastamento
@@ -343,3 +344,19 @@ def test_cancelamento_avisa_cgp_superior_e_aprovador_na_etapa_de_aprovacao(clien
     todos = _assuntos_enviados()
     assert sorted(p[0] for a, p in todos if "Cancelamento" in a) == ["rh@sp.gov.br", "sub@sp.gov.br"]
     assert [p[0] for a, p in todos if a.startswith("Afastamento cancelado")] == ["ana@sp.gov.br"]
+
+
+def test_boas_vindas_no_dia_seguinte_ao_fim_das_ferias(cliente, equipe):
+    ids, _, _ = equipe
+    with FabricaSessao() as sessao:
+        # Férias até quinta 12/11 (aviso na sexta 13/11); até sexta 20/11 (aviso na segunda 23/11)
+        sessao.add(Afastamento(usuario_id=ids["ana"], tipo="ferias", inicio=date(2026, 11, 3), fim=date(2026, 11, 12), dias=10, exercicio=2026, status="aprovado"))
+        sessao.add(Afastamento(usuario_id=ids["bia"], tipo="ferias", inicio=date(2026, 11, 9), fim=date(2026, 11, 20), dias=12, exercicio=2026, status="aprovado"))
+        sessao.commit()
+        assert servico_afastamentos.dar_boas_vindas(sessao, date(2026, 11, 12)) == 0
+        assert servico_afastamentos.dar_boas_vindas(sessao, date(2026, 11, 13)) == 1
+        assert servico_afastamentos.dar_boas_vindas(sessao, date(2026, 11, 13)) == 0  # idempotente
+        assert servico_afastamentos.dar_boas_vindas(sessao, date(2026, 11, 21)) == 0  # sábado não envia
+        assert servico_afastamentos.dar_boas_vindas(sessao, date(2026, 11, 23)) == 1
+        texto = servico_afastamentos._boas_vindas("Ana Souza", sessao.scalar(select(Afastamento).where(Afastamento.usuario_id == ids["ana"])))
+        assert texto.startswith("Olá, Ana!") and "03/11/2026 a 12/11/2026" in texto

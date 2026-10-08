@@ -68,15 +68,24 @@ def meses_previstos(contrato: Contrato) -> list[MesPrevisao]:
         for periodo in calculos.meses_da_vigencia(vigencia):
             itens: list[ItemMesPrevisao] = []
             base = ZERO
-            # Preço vigente no mês (considera reajustes já aplicados)
+            # Trechos do mês nesta vigência (mês com virada de vigência ou de preço: cada trecho com o seu preço e os seus dias)
+            todos = valores.trechos_do_mes(contrato, periodo.competencia)
+            trechos = [t for t in todos if t.sequencia_vigencia == vigencia.sequencia] or [valores.Trecho(periodo.competencia, periodo.inicio, periodo.fim, vigencia.sequencia)]
+            dividido = len(todos) > 1
             for item in contrato.itens:
-                preco = valores.preco_em(contrato, item, periodo.competencia)
-                # Contínuo: quantidade do mês (considera aditamentos/supressões) com pró-rata, se o item usar
+                # Preço vigente no mês (considera reajustes já aplicados); no último trecho, o preço do fim do mês
+                preco = valores.preco_em(contrato, item, trechos[-1].inicio)
+                # Contínuo: quantidade do mês (considera aditamentos/supressões) com pró-rata, se o item usar (mês dividido: pelos dias, todos os itens)
                 if item.tipo == "continuo":
                     quantidade = valores.quantidade_mensal_em(contrato, item, periodo.competencia)
-                    fator = periodo.fator if item.calcula_pro_rata else Decimal(1)
                     # A base mensal ignora o pró-rata: é o valor de um mês cheio
                     base += quantidade * preco
+                    if dividido:
+                        subtotal_bruto = sum((quantidade * valores.preco_em(contrato, item, t.inicio) * t.fator for t in trechos), ZERO)
+                        fator = sum((t.fator for t in trechos), ZERO)
+                        preco = (subtotal_bruto / (quantidade * fator)) if quantidade * fator else preco
+                    else:
+                        fator = periodo.fator if item.calcula_pro_rata else Decimal(1)
                 else:
                     # Sob demanda: só entra no mês se houver apontamento
                     quantidade = apontados.get((item.id, periodo.competencia), ZERO)

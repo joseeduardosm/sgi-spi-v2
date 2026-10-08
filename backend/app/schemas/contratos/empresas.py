@@ -34,6 +34,13 @@ def _email(valor: str) -> str:
     return valor
 
 
+def _cpf_opcional(valor: object) -> str | None:
+    """CPF opcional: vazio (ou só espaços) vira `None`; preenchido, é conferido e fica só com os 11 dígitos."""
+    if valor is None or (isinstance(valor, str) and not valor.strip()):
+        return None
+    return normalizar_cpf(str(valor))
+
+
 # Tipos reutilizáveis: texto aparado e texto aparado obrigatório
 Texto = Annotated[str, BeforeValidator(_aparar)]
 TextoObrigatorio = Annotated[str, BeforeValidator(_aparar), AfterValidator(_nao_vazio)]
@@ -52,8 +59,8 @@ class GravacaoEmpresa(BaseModel):
 
 class GravacaoPreposto(BaseModel):
     """Dados enviados para cadastrar ou alterar um preposto."""
-    cpf: Annotated[str, AfterValidator(normalizar_cpf)] = Field(
-        ..., max_length=14, description="CPF com ou sem máscara. Gravado só com os 11 dígitos; único na empresa."
+    cpf: Annotated[str | None, BeforeValidator(_cpf_opcional)] = Field(
+        None, max_length=14, description="Opcional. CPF com ou sem máscara. Gravado só com os 11 dígitos; único na empresa (quando informado)."
     )
     nome: TextoObrigatorio = Field(..., max_length=200)
     telefone: Texto = Field("", max_length=30)
@@ -65,7 +72,7 @@ class GravacaoPreposto(BaseModel):
 class LeituraPreposto(BaseModel):
     """Preposto como é devolvido pela API."""
     id: uuid.UUID
-    cpf: str = Field(..., description="11 dígitos, sem máscara.")
+    cpf: str | None = Field(None, description="11 dígitos, sem máscara; vazio quando o preposto não tem CPF cadastrado.")
     nome: str
     telefone: str
     email: str

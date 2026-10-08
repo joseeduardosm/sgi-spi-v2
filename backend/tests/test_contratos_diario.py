@@ -241,6 +241,35 @@ def test_escolha_dos_prepostos_que_recebem_o_email_da_medicao(cliente, admin, ce
     assert "paulo@acme.com" in cliente.get(base, headers=gestora).json()["email_medicao"]["destinatarios"]
 
 
+def test_documento_marcado_para_enviar_vai_no_email_da_medicao_com_a_observacao(cliente, admin, cenario):
+    """"Pedir para enviar" pode ser ligado no checklist ativo e, ao concluir a medição, o mesmo e-mail pede os documentos marcados."""
+    contrato, gestora, fiscal = cenario
+    _preparar_execucao(cliente, contrato, gestora)  # checklist ativo: "Folha de pagamento" e "FGTS"
+    ativo = next(c for c in cliente.get(_url(contrato, "/checklists"), headers=gestora).json() if c["ativo"])
+    fgts = next(i for i in ativo["itens"] if i["nome"] == "FGTS")
+    assert fgts["pedir_envio"] is False
+    r = cliente.put(_url(contrato, f"/checklists/{ativo['id']}/itens/{fgts['id']}/pedir-envio"), json={"pedir_envio": True}, headers=gestora)
+    assert r.status_code == 200, r.text
+    marcado = next(c for c in r.json() if c["id"] == ativo["id"])
+    assert [i["pedir_envio"] for i in marcado["itens"] if i["nome"] == "FGTS"] == [True]
+    # Documento que não pertence ao checklist não existe (404)
+    zero = "00000000-0000-0000-0000-000000000000"
+    assert cliente.put(_url(contrato, f"/checklists/{ativo['id']}/itens/{zero}/pedir-envio"), json={"pedir_envio": True}, headers=gestora).status_code == 404
+
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    SmtpSimulado.enviadas.clear()
+    competencia = _competencia(cliente, contrato, gestora)
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    itens = [{"id": i["id"], "quantidade_medida": i["saldo_liquido"]} for i in competencia["itens"]]
+    cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas, "enviar_email": True}, headers=gestora)
+    assert r.status_code == 200, r.text
+    corpo = SmtpSimulado.enviadas[0][0].get_body(("html",)).get_content()
+    assert "Solicitamos também o envio dos documentos abaixo" in corpo and "FGTS" in corpo and "Folha de pagamento" not in corpo
+
+
 # --- Anexos, impacto na avaliação e e-mail da avaliação ----------------------------------------------
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 100

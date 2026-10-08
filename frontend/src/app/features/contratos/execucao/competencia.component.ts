@@ -3,7 +3,7 @@
 
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
@@ -30,7 +30,7 @@ const LIMITE_CONSULTAS_EMAIL = 8;
   ],
   templateUrl: './competencia.component.html',
   // Esc fecha a janela de reabertura
-  host: { '(document:keydown.escape)': 'reabrindo.set(false)' },
+  host: { '(document:keydown.escape)': 'reabrindo.set(false); incluindo.set(false)' },
 })
 export class CompetenciaComponent implements OnInit {
   // Parâmetros da URL /contratos/:id/execucao/:competencia (id do contrato e identificador, ex.: 2026-03)
@@ -41,6 +41,7 @@ export class CompetenciaComponent implements OnInit {
 
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
+  private readonly roteador = inject(Router);
 
   // Competência carregada e a etapa mostrada na tela (pode ser uma já concluída, só para consulta)
   protected readonly detalhe = signal<DetalheCompetencia | null>(null);
@@ -53,6 +54,11 @@ export class CompetenciaComponent implements OnInit {
   protected readonly reabrindo = signal(false);
   protected etapaReabrir: Etapa | '' = '';
   protected justificativa = '';
+  // Janela "Incluir nova medição" (medição adicional): justificativa e anexo PDF opcional
+  protected readonly incluindo = signal(false);
+  protected readonly enviandoAdicional = signal(false);
+  protected justificativaAdicional = '';
+  protected anexoAdicional: File | null = null;
 
   /** Carrega a competência pelo identificador da URL. */
   ngOnInit(): void {
@@ -152,5 +158,58 @@ export class CompetenciaComponent implements OnInit {
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível reabrir a etapa'),
     });
+  }
+
+  /** Abre a janela de justificativa da nova medição. */
+  protected abrirInclusao(): void {
+    this.justificativaAdicional = '';
+    this.anexoAdicional = null;
+    this.incluindo.set(true);
+  }
+
+  protected escolherAnexoAdicional(evento: Event): void {
+    this.anexoAdicional = (evento.target as HTMLInputElement).files?.[0] ?? null;
+  }
+
+  /** Cria a medição adicional e abre a tela dela. */
+  protected incluirMedicao(): void {
+    const d = this.detalhe();
+    if (!d || !this.justificativaAdicional.trim()) return;
+    this.enviandoAdicional.set(true);
+    this.api.incluirMedicaoAdicional(d.contrato_id, d.id, this.justificativaAdicional.trim(), this.anexoAdicional).subscribe({
+      next: (nova) => {
+        this.enviandoAdicional.set(false);
+        this.incluindo.set(false);
+        void this.roteador.navigate(['/contratos', nova.contrato_id, 'execucao', nova.identificador]);
+      },
+      error: (e) => {
+        this.enviandoAdicional.set(false);
+        this.dialogos.mostrarErro(e, 'Não foi possível incluir a nova medição');
+      },
+    });
+  }
+
+  /** Exclui a medição adicional (para refazê-la do zero) e volta à lista de execução do contrato. */
+  protected async excluirAdicional(): Promise<void> {
+    const d = this.detalhe();
+    if (!d) return;
+    const ok = await this.dialogos.confirmar({
+      titulo: `Excluir a ${d.rotulo}?`,
+      mensagem: 'A medição adicional será apagada com tudo o que foi preenchido nela (quantidades, ciências, avaliação, nota fiscal, retenção, CADIN e checklist). Depois você pode incluir uma nova medição do zero. Esta ação não pode ser desfeita.',
+      rotuloConfirmar: 'Excluir medição adicional',
+      segundos: 5,
+      perigo: true,
+    });
+    if (!ok) return;
+    this.api.excluirMedicaoAdicional(d.contrato_id, d.id).subscribe({
+      next: () => void this.roteador.navigate(['/contratos', d.contrato_id], { queryParams: { aba: 'execucao' } }),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível excluir a medição adicional'),
+    });
+  }
+
+  /** Abre o anexo da justificativa em outra aba. */
+  protected abrirAnexoAdicional(anexoId: string): void {
+    const d = this.detalhe();
+    if (d) this.api.abrirEmNovaAba(d.contrato_id, d.id, anexoId, (e) => this.dialogos.mostrarErro(e, 'Não foi possível abrir o anexo'));
   }
 }

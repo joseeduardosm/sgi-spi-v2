@@ -13,6 +13,16 @@ from app.schemas.usuarios import OpcaoUsuario
 Nivel = Literal["LEITURA", "MODIFICACAO", "CONTROLE_TOTAL"]
 
 
+class TextoNivel(BaseModel):
+    """Como um nível aparece em um recurso: nome curto e o que ele libera ali."""
+    rotulo: str = Field(..., description="Nome curto do nível neste módulo. Ex.: `Reservar números de documentos`.")
+    descricao: str = Field(..., description="Frase do que o nível libera neste módulo.")
+
+
+NiveisTextos = dict[Nivel, TextoNivel]
+DESCRICAO_NIVEIS = "Textos dos três níveis neste recurso (definidos em `services/acl_niveis.py`): o que cada um libera naquele módulo."
+
+
 class GravacaoRecurso(BaseModel):
     """Dados para cadastrar ou alterar um recurso (módulo) protegido."""
     nome: str = Field(..., min_length=1, max_length=100)
@@ -37,6 +47,7 @@ class LeituraRecurso(BaseModel):
     url_base: str
     ativo: bool
     total_regras: int = Field(..., description="Quantidade de regras. Zero = recurso aberto.")
+    niveis: NiveisTextos = Field(..., description=DESCRICAO_NIVEIS)
     criado_em: datetime
     atualizado_em: datetime
 
@@ -63,6 +74,7 @@ class LeituraRegra(BaseModel):
     recurso_nome: str
     recurso_slug: str
     nivel: Nivel
+    niveis: NiveisTextos = Field(..., description=DESCRICAO_NIVEIS)
     usuarios: list[OpcaoUsuario]
     setores: list[OpcaoSetor]
     criado_em: datetime
@@ -76,3 +88,4 @@ class AcessoEfetivo(BaseModel):
     slug: str
     url_base: str
     nivel: Nivel | None = Field(..., description="Nível efetivo; nulo = sem acesso.")
+    niveis: NiveisTextos = Field(..., description=DESCRICAO_NIVEIS)

@@ -241,6 +241,7 @@ a.acao-primaria {
 }
 
 /* Tabelas numéricas */
+.tabela-gestao .centro { text-align: center; }
 .tabela-gestao {
   .num {
     text-align: right;
@@ -1918,7 +1919,7 @@ $prazo-normal: #2b4468;
 // Opção "Documento da empresa" (checklist) e sugestão de documento de outro contrato (etapa do checklist)
 .opcao-empresa { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: var(--spi-apagado); cursor: pointer; input { margin: 0; } }
 .sugestao-outro-contrato {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 6px; padding: 8px 10px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 8px 0 12px; padding: 10px 12px;
   border: 1px dashed var(--spi-borda-campo); border-radius: 8px; background: var(--cor-eaf1fb);
 }
 .reaproveitado-contrato { display: block; color: var(--spi-link); }
@@ -1952,3 +1953,24 @@ th.num .ordenar-coluna { justify-content: flex-end; width: 100%; }
   .justificativa-recusa { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .notas-recusadas { margin: 4px 0 8px; padding-left: 18px; font-size: 12px; }
 }
+
+/* Trecho do mês na medição (mês com virada de vigência ou de preço): destaca o período do item */
+small.trecho-mes {
+  display: block;
+  color: var(--spi-vermelho);
+  font-weight: 700;
+}
+
+// Calendário de vencimentos: filtro por tipo e legenda de gravidade
+.chips-tipos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chip-tipo {
+  padding: 3px 10px; border: 1px solid var(--spi-borda-campo); border-radius: 999px; color: var(--cor-3d454e); background: var(--cor-ffffff); font-size: 12px; cursor: pointer;
+  &.ativo { color: #fff; border-color: var(--spi-vermelho); background: var(--spi-vermelho); }
+}
+.legenda-evento { display: inline-block; width: 10px; height: 10px; margin-right: 3px; border-radius: 3px; background: #5d8ee4;
+  &[data-severidade='alta'] { background: var(--spi-vermelho); }
+  &[data-severidade='media'] { background: #e0a526; }
+}
+
+// Passos da assinatura externa da avaliação (baixar, assinar no gov.br, enviar)
+.passos-assinatura { margin: 8px 0 4px; padding-left: 22px; color: var(--cor-3d454e); font-size: 13px; line-height: 1.6; a { color: var(--spi-link); } }

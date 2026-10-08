@@ -22,25 +22,34 @@ from app.models.contratos import (
     PrepostoEmpresa,
 )
 from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
+from app.models.atalho_fixo import AtalhoFixo, CategoriaAtalho
+from app.models.sla import SlaPolitica
 from app.models.favorito_menu import FavoritoMenu
+from app.models.integracao_bookstack import IntegracaoBookstack
 from app.models.integracao_glpi import ChamadoGlpi, IntegracaoGlpi
 from app.models.diretorio_ldap import DiretorioLdap
 from app.models.envio_changelog import EnvioChangelog
 from app.models.melhorias import AnexoSugestao, EventoSugestao, SugestaoMelhoria
 from app.models.mensagem import EntregaMensagem, Mensagem
 from app.models.noticias import AnexoNoticia, AtalhoPortal, CategoriaNoticia, ConfiguracaoPortal, Noticia, RevisaoNoticia
+from app.models.reserva_espacos import ConfiguracaoReservaEspacos, EspacoReservavel, EventoReservaEspaco, FiscalReservaEspacos, ReservaEspaco
 from app.models.protocolo import EventoProtocolo, NumeroProtocolo, SequenciaProtocolo, TipoProtocolo
 from app.models.rh import AlteracaoCadastral, Afastamento, DadosFuncionais, EventoAfastamento, Feriado, ParametrosRh, PeriodoAquisitivo
 from app.models.servidor_smtp import ServidorSmtp
 from app.models.setor import MembroSetor, Setor
 from app.models.tarefas import (
-    AnexoEventoTarefa, EquipeTarefas, EventoTarefa, ItemChecklistTarefa, LiderEquipeTarefas, MarcadorTarefa, MembroEquipeTarefas,
-    ParticipanteTarefa, Tarefa, VinculoMarcadorTarefa,
+    AnexoEventoTarefa, AtividadeTarefa, AtualizacaoStatusEquipe, DependenciaTarefa, EquipeTarefas, EstagioTarefa, EventoTarefa, ItemChecklistTarefa, LiderEquipeTarefas, MarcadorTarefa, MarcoTarefa, MembroEquipeTarefas,
+    RecorrenciaTarefa, ResponsavelRecorrencia, ResponsavelTarefa, SeguidorTarefa, Tarefa, VinculoMarcadorRecorrencia, VinculoMarcadorTarefa,
 )
 from app.models.usuario import OrigemUsuario, Papel, Usuario
 
 # Nomes exportados por `from app.models import *`
 __all__ = [
+    "ConfiguracaoReservaEspacos",
+    "EspacoReservavel",
+    "EventoReservaEspaco",
+    "FiscalReservaEspacos",
+    "ReservaEspaco",
     "ComentarioImportado",
     "DocumentoContratacao",
     "HistoricoItem",
@@ -72,7 +81,7 @@ __all__ = [
     "PrepostoEmpresa",
     "DiretorioLdap",
     "EnvioChangelog", "FavoritoDiretorio",
-    "FavoritoMenu", "ChamadoGlpi", "IntegracaoGlpi", "ParabensAniversario",
+    "FavoritoMenu", "AtalhoFixo", "CategoriaAtalho", "ChamadoGlpi", "IntegracaoBookstack", "IntegracaoGlpi", "ParabensAniversario",
     "EntregaMensagem",
     "Mensagem",
     "AlteracaoCadastral",
@@ -87,7 +96,16 @@ __all__ = [
     "LiderEquipeTarefas",
     "MarcadorTarefa",
     "MembroEquipeTarefas",
-    "ParticipanteTarefa",
+    "AtividadeTarefa",
+    "AtualizacaoStatusEquipe",
+    "MarcoTarefa",
+    "DependenciaTarefa",
+    "SeguidorTarefa",
+    "EstagioTarefa",
+    "RecorrenciaTarefa",
+    "ResponsavelRecorrencia",
+    "ResponsavelTarefa",
+    "VinculoMarcadorRecorrencia",
     "Tarefa",
     "VinculoMarcadorTarefa",
     "ParametrosRh",

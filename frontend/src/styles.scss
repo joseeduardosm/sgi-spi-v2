@@ -14,8 +14,10 @@
 @use 'styles/rh';
 @use 'styles/assinatura';
 @use 'styles/protocolo';
+@use 'styles/reserva-espacos';
 @use 'styles/contratacoes';
 @use 'styles/navegacao';
+@use 'styles/manuais';
 @use 'styles/tema';
 
 :root {
@@ -547,6 +549,18 @@ textarea {
   }
 }
 
+// Frase do que o nível libera naquele módulo (lista de regras, acesso efetivo e recursos)
+.descricao-nivel {
+  display: block;
+  margin-top: 4px;
+  max-width: 46ch;
+  color: inherit;
+  opacity: 0.75;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .etiqueta {
   display: inline-block;
   margin: 0 4px 4px 0;
@@ -985,6 +999,8 @@ $rh-aprovado-fundo: #e5f4ec;
   &.feriado { color: #2f5a8f; background: var(--cor-eaf1fb); border-color: var(--cor-c9d9f0); }
   &.vedado { border-style: dashed; border-color: var(--cor-e2c4c7); }
   &.passado { opacity: .4; cursor: default; }
+  // Dia de hoje: anel e negrito na cor da marca, para localizar a data atual de relance
+  &.hoje { font-weight: 700; border: 2px solid var(--spi-vermelho); box-shadow: 0 0 0 2px var(--spi-vermelho-suave); }
   &:hover:not(:disabled) { border-color: var(--spi-vermelho); }
   &.selecionado { color: #fff; background: var(--spi-vermelho); }
   &.pendente { color: #6d4b00; background: $rh-pendente-fundo; border-color: $rh-pendente; opacity: 1; cursor: default; }

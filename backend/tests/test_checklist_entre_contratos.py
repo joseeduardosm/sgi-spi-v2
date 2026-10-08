@@ -119,6 +119,19 @@ def test_trazer_todos_conclui_a_etapa_e_o_consolidado_nao_mostra_o_reaproveitame
     assert "Certidão negativa" in texto and "001/2026" not in texto.replace("Contrato 002/2026", "")
 
 
+def test_documento_da_empresa_sem_validade_vale_na_mesma_competencia(cliente, dois_contratos):
+    a, b, hg, hf = dois_contratos
+    itens = [{"nome": "SICAF - Situação do Fornecedor", "vale_outros_contratos": True}]
+    base_a, base_b = _ate_o_checklist(cliente, a, hg, hf, itens), _ate_o_checklist(cliente, b, hg, hf, itens)
+    nome = "SICAF - Situação do Fornecedor"
+    assert _documentos(cliente, base_b, hg)[nome]["sugestao_outro_contrato"] is None
+    doc_a = _documentos(cliente, base_a, hg)[nome]
+    assert cliente.post(f"{base_a}/checklist/{doc_a['id']}", files={"arquivo": ("s.pdf", PDF)}, headers=hg).status_code == 200
+    sugestao = _documentos(cliente, base_b, hg)[nome]["sugestao_outro_contrato"]
+    assert sugestao is not None and sugestao["validade_ate"] is None and sugestao["competencia"] == "2026-01-01"
+    assert cliente.post(f"{base_b}/checklist/reaproveitar-todos", headers=hg).status_code == 200
+
+
 def test_recusas(cliente, admin, dois_contratos):
     a, b, hg, hf = dois_contratos
     base_a, base_b = _ate_o_checklist(cliente, a, hg, hf), _ate_o_checklist(cliente, b, hg, hf)

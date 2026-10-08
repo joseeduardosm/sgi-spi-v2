@@ -4,6 +4,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, OnChanges, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
@@ -21,7 +22,7 @@ type Resposta = { nota: string; justificativa: string };
 /** Etapa 2: avaliação inicial, avaliação do gestor, ateste, PDF assinado e reconsideração. */
 @Component({
   selector: 'app-etapa-avaliacao',
-  imports: [LinkificarPipe, FormsModule, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-avaliacao.component.html',
 })
 export class EtapaAvaliacaoComponent implements OnChanges {

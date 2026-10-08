@@ -97,26 +97,27 @@ def test_notas_zero_limitam_a_liberacao_mesmo_com_nota_alta():
 # --- Competência dividida na virada da vigência -----------------------------------------------------
 
 
-def test_mes_dividido_entre_vigencias_vira_duas_partes():
-    """Janeiro de 2027 dividido pela prorrogação vira duas competências com identificadores "-1" e "-2"."""
+def test_mes_com_virada_de_vigencia_e_uma_competencia_so_com_duas_partes():
+    """Janeiro de 2027 cortado pela prorrogação continua uma competência (periodicidade mensal), com as duas partes dentro dela."""
     vigencias = calculos.montar_vigencias(date(2026, 1, 15), date(2027, 1, 14), 12, [(date(2027, 1, 15), date(2028, 1, 14))])
     janeiro = [p for p in calculos.periodos_de_execucao(vigencias, 1) if p.competencia == date(2027, 1, 1)]
-    assert [(p.inicio, p.fim, p.sequencia_vigencia) for p in janeiro] == [
+    assert len(janeiro) == 1
+    periodo = janeiro[0]
+    assert (periodo.inicio, periodo.fim, periodo.sequencia_vigencia) == (date(2027, 1, 1), date(2027, 1, 31), 2)
+    assert [(p.inicio, p.fim, p.sequencia_vigencia) for p in periodo.meses] == [
         (date(2027, 1, 1), date(2027, 1, 14), 1), (date(2027, 1, 15), date(2027, 1, 31), 2),
     ]
-    # Monta as competências em memória (sem banco) para testar parte, identificador e rótulo
+    # Qualquer periodicidade: a prorrogação não corta a competência. Trimestral: jan–mar/2027 é uma só, com as duas vigências dentro
+    trimestral = [p for p in calculos.periodos_de_execucao(vigencias, 3) if p.competencia == date(2027, 1, 1)]
+    assert len(trimestral) == 1 and (trimestral[0].inicio, trimestral[0].fim, trimestral[0].sequencia_vigencia) == (date(2027, 1, 1), date(2027, 3, 31), 2)
+    assert {p.sequencia_vigencia for p in trimestral[0].meses} == {1, 2}
+    trimestral = [p for p in calculos.periodos_de_execucao(vigencias, 3) if p.competencia == date(2027, 1, 1)]
+    # Competência complementar mantém o identificador "-dif"
     contrato = Contrato()
     unica = Competencia(tipo="regular", competencia=date(2026, 12, 1), periodo_inicio=date(2026, 12, 1), periodo_fim=date(2026, 12, 31))
-    partes = [
-        Competencia(tipo="regular", competencia=p.competencia, periodo_inicio=p.inicio, periodo_fim=p.fim, sequencia_vigencia=p.sequencia_vigencia)
-        for p in janeiro
-    ]
     diferenca = Competencia(tipo="diferenca_reajuste", competencia=date(2026, 1, 1), periodo_inicio=date(2026, 1, 15), periodo_fim=date(2026, 4, 30))
-    contrato.competencias.extend([unica, *reversed(partes), diferenca])
+    contrato.competencias.extend([unica, diferenca])
     assert (unica.parte, unica.identificador, unica.numero_competencia) == (None, "2026-12", "12/2026")
-    assert [(c.parte, c.identificador, c.numero_competencia) for c in partes] == [
-        (1, "2027-01-1", "01/2027 · 1ª parte"), (2, "2027-01-2", "01/2027 · 2ª parte"),
-    ]
     assert diferenca.identificador == "2026-01-dif" and diferenca.numero_competencia == "Diferença de reajuste 01/2026 a 04/2026"
 
 
@@ -166,7 +167,13 @@ def test_ob_debita_nf_e_nf_adicional_e_saldo_fica_comprometido(cliente, admin, e
     cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
     for documento in cliente.get(base, headers=gestora).json()["documentos"]:
         cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
-    cliente.post(f"{base}/consolidado", headers=gestora)
+    consolidado = cliente.post(f"{base}/consolidado", headers=gestora)
+    # Com duas notas, o "Total das notas" (retenção e resumo executivo) soma os brutos e diz em que páginas do consolidado cada nota está
+    from io import BytesIO
+    from pypdf import PdfReader
+    pdf = cliente.get(f"{base}/arquivos/{consolidado.json()['consolidado']['anexo_id']}", headers=gestora).content
+    texto = " ".join(p.extract_text() for p in PdfReader(BytesIO(pdf)).pages)
+    assert texto.count("Total das notas") == 2 and "2.605,00" in texto and "Páginas" in texto
     assert cliente.post(f"{base}/ordem-bancaria", files={"arquivo": ("ob.pdf", PDF)}, headers=gestora).json()["situacao"] == "concluida"
     lidas = {n["numero"]: n for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
     assert lidas["2026NE00001"]["saldo"] == "0.00" and lidas["2026NE00002"]["saldo"] == "48395.00"

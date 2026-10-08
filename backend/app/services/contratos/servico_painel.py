@@ -39,6 +39,7 @@ from app.schemas.contratos.painel import (
 from app.services.contratos import calculos
 from app.services.contratos.servico_competencias import (
     CIENCIAS_MINIMAS,
+    anterior_ao_corte,
     avaliacao_pronta_para_ciencia,
     ciencias_ateste,
     compromissos,
@@ -46,6 +47,7 @@ from app.services.contratos.servico_competencias import (
     etapas_abertas,
     requisitos,
     total_medido,
+    vencimento_pagamento,
 )
 from app.services.contratos.servico_contratos import chave_ordem, designacoes_vigentes, hoje, opcoes_carga_completa, situacao, totais, vigencias
 from app.services.contratos.servico_orcamento import meses_previstos
@@ -89,13 +91,7 @@ def _medir_desde(competencia: Competencia) -> date:
     return competencia.periodo_fim if competencia.tipo == "regular" else competencia.criado_em.date()
 
 
-# Pendências de execução (competências) anteriores a esta data foram "limpas" e não aparecem mais em "Minhas pendências"
-PENDENCIAS_A_PARTIR_DE = date(2026, 9, 1)
-
-
-def _anterior_ao_corte(competencia: Competencia) -> bool:
-    """Competência de antes de 09/2026: a pendência dela não é mais cobrada."""
-    return _medir_desde(competencia) < PENDENCIAS_A_PARTIR_DE
+_anterior_ao_corte = anterior_ao_corte
 
 
 def _rota_competencia(contrato: Contrato, competencia: Competencia) -> str:
@@ -154,7 +150,7 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
                 lista.append(_pendencia(contrato, "ciencia_ateste", f"{mes}: registrar sua ciência no ateste da avaliação", rota, competencia.periodo_fim))
                 continue
             # Nos demais casos, a pendência é a etapa atual (com o vencimento do pagamento, se já houver NF)
-            vencimento = competencia.nf_recebida_em + timedelta(days=competencia.prazo_pagamento_dias) if competencia.nf_recebida_em and competencia.prazo_pagamento_dias else None
+            vencimento = vencimento_pagamento(competencia)
             prazo = f" · pagamento vence {vencimento:%d/%m/%Y}" if vencimento else ""
             # Depois da NF, retenção, CADIN e checklist correm em paralelo: uma pendência por etapa em aberto
             for aberta in etapas_abertas(competencia):
@@ -220,7 +216,7 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
         # Empenho: o saldo livre (descontado o comprometido com medições a pagar) cobre a próxima competência a medir?
         reservado = compromissos(contrato)
         livre = sum((n.saldo - reservado.get(n.id, ZERO) for n in contrato.notas_empenho), ZERO)
-        a_medir = sorted((c for c in contrato.competencias if c.medicao_concluida_em is None and c.tipo == "regular"), key=lambda c: c.periodo_inicio)
+        a_medir = sorted((c for c in contrato.competencias if c.medicao_concluida_em is None and c.tipo == "regular" and not _anterior_ao_corte(c)), key=lambda c: c.periodo_inicio)
         if a_medir:
             proxima = a_medir[0]
             necessario = total_previsto_na_hora(contrato, proxima)
@@ -230,10 +226,10 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
                       f"/contratos/{contrato.id}", proxima.periodo_fim, necessario - livre)
 
         # Pagamentos: NFs com vencimento passado ou próximo
-        abertas = [c for c in contrato.competencias if c.etapa_atual != "concluida"]
+        abertas = [c for c in contrato.competencias if c.etapa_atual != "concluida" and not _anterior_ao_corte(c)]
         for competencia in abertas:
-            if competencia.nf_recebida_em and competencia.prazo_pagamento_dias:
-                vencimento = competencia.nf_recebida_em + timedelta(days=competencia.prazo_pagamento_dias)
+            vencimento = vencimento_pagamento(competencia)
+            if vencimento is not None:
                 if vencimento < referencia:
                     risco("pagamento_vencido", "alta", f"Pagamento da competência {competencia.numero_competencia} venceu em {vencimento:%d/%m/%Y}",
                           _rota_competencia(contrato, competencia), vencimento)

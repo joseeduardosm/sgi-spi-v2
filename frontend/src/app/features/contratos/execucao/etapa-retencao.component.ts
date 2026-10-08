@@ -77,6 +77,17 @@ export class EtapaRetencaoComponent implements OnChanges {
     return Number(n.nota.valor_bruto ?? 0) - this.totalRetido(n);
   }
 
+  /** Abre o PDF da nota em uma nova aba. */
+  protected verNota(n: NotaEmConferencia): void {
+    const d = this.detalhe();
+    if (n.nota.arquivo) this.api.abrirEmNovaAba(d.contrato_id, d.id, n.nota.arquivo.anexo_id, (e) => this.dialogos.mostrarErro(e, 'Não foi possível abrir a nota'));
+  }
+
+  /** Soma de uma coluna do quadro "Total das notas" (bruto ou retenções), com os valores digitados. */
+  protected totalGeral(campo: 'bruto' | 'retido' | 'liquido'): number {
+    return this.notas.reduce((t, n) => t + (campo === 'bruto' ? Number(n.nota.valor_bruto ?? 0) : campo === 'retido' ? this.totalRetido(n) : this.liquido(n)), 0);
+  }
+
   /** CNPJ formatado (00.000.000/0000-00). */
   protected cnpj(valor: string | null): string {
     const d = (valor ?? '').replace(/\D/g, '');

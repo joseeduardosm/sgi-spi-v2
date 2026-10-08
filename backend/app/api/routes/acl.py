@@ -21,6 +21,7 @@ from app.models.usuario import Papel, Usuario
 from app.schemas.acl import AcessoEfetivo, GravacaoRecurso, GravacaoRegra, LeituraRecurso, LeituraRegra
 from app.services import servico_acl
 from app.services import servico_admin_acl as servico
+from app.services.acl_niveis import textos_do_recurso
 from app.services.servico_admin_acl import AclNaoEncontrado, ErroRegraAcl
 
 roteador = APIRouter(prefix="/acl", tags=["Controle de acesso (ACL)"], responses=RESPOSTAS_AUTENTICADAS)
@@ -36,7 +37,7 @@ def _efetivos(sessao: Session, usuario: Usuario, somente_concedidos: bool) -> li
     consulta do SuperRoot.
     """
     return [
-        AcessoEfetivo(recurso_id=r.id, nome=r.nome, slug=r.slug, url_base=r.url_base, nivel=nivel)
+        AcessoEfetivo(recurso_id=r.id, nome=r.nome, slug=r.slug, url_base=r.url_base, nivel=nivel, niveis=textos_do_recurso(r.slug))
         for r, nivel in servico_acl.acessos_efetivos(sessao, usuario)
         if nivel is not None or not somente_concedidos
     ]

@@ -95,7 +95,7 @@ def _cenario_prorrogacoes(sessao: Session, linha: LinhaContrato, exercicio: int)
         if mes.competencia.year != exercicio:
             continue
         for item in contrato.itens:
-            preco = valores.preco_em(contrato, item, mes.competencia)
+            preco = valores.preco_em(contrato, item, mes.inicio)
             # Contínuos: quantidade mensal com pró-rata; sob demanda: apontamentos do plano da prorrogação
             if item.tipo == "continuo":
                 fator = mes.fator if item.calcula_pro_rata else Decimal(1)

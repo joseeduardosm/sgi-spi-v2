@@ -38,13 +38,13 @@ class EmpresaContratada(Base):
 class PrepostoEmpresa(Base):
     """Preposto: representante da empresa junto à Administração."""
     __tablename__ = "contratos_empresas_prepostos"
-    # O mesmo CPF não pode aparecer duas vezes na mesma empresa (mas pode em empresas diferentes)
+    # O mesmo CPF não pode aparecer duas vezes na mesma empresa (mas pode em empresas diferentes); prepostos sem CPF não colidem
     __table_args__ = (UniqueConstraint("empresa_id", "cpf"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_empresas.id", ondelete="CASCADE"), index=True)
-    # Somente dígitos (11)
-    cpf: Mapped[str] = mapped_column(String(11))
+    # Somente dígitos (11); opcional (nulo = sem CPF). Vários nulos na mesma empresa são aceitos pela restrição de unicidade
+    cpf: Mapped[str | None] = mapped_column(String(11))
     nome: Mapped[str] = mapped_column(String(200))
     telefone: Mapped[str] = mapped_column(String(30), default="")
     email: Mapped[str] = mapped_column(String(250), default="")

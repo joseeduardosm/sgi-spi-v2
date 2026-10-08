@@ -1,7 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para exibir o botão flutuante "Sugerir melhoria" (arrastável e que pode ser fechado na aba) e a janela de envio.
 
-import { Component, computed, inject, OnDestroy, signal } from '@angular/core';
+import { Component, computed, effect, inject, OnDestroy, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
@@ -9,6 +9,7 @@ import { MelhoriasApiService } from '../../../features/melhorias/melhorias-api.s
 import { MAXIMO_PRINTS, MAXIMO_TEXTO, moduloDaTela, ROTULOS_MODULO } from '../../../features/melhorias/melhorias.models';
 import { LayoutService } from '../../layout/layout.service';
 import { DialogosService } from '../../servicos/dialogos.service';
+import { MelhoriasJanelaService } from './melhorias-janela.service';
 
 /** Posição guardada por aba: distância da borda direita e da inferior (acompanha o redimensionamento da janela). */
 interface EstadoBotao {
@@ -91,6 +92,15 @@ export class BotaoMelhoriasComponent implements OnDestroy {
   private readonly api = inject(MelhoriasApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
+  private readonly pedidosExternos = inject(MelhoriasJanelaService);
+  private pedidosAtendidos = this.pedidosExternos.pedidos();
+  // Pedido de fora (paleta de comandos): abre a janela mesmo com o botão escondido nesta aba
+  private readonly abrirAPedido = effect(() => {
+    const n = this.pedidosExternos.pedidos();
+    if (n === this.pedidosAtendidos) return;
+    this.pedidosAtendidos = n;
+    untracked(() => this.abrirJanela());
+  });
 
   protected readonly estado = signal<EstadoBotao>(this.ler());
   protected readonly arrastando = signal(false);

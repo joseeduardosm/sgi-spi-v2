@@ -5,7 +5,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { CaixaMensagensService } from '../../core/mensagens/caixa-mensagens.service';
 import { MensagensApiService } from '../../core/mensagens/mensagens-api.service';
@@ -38,6 +38,12 @@ function envioVazio(): EnvioMensagem {
   selector: 'app-mensagens',
   imports: [FormsModule, DatePipe, PaginacaoComponent, TrilhaComponent],
   templateUrl: './mensagens.component.html',
+  // O painel não tem margem interna própria: a trilha, as abas e os avisos soltos recebem o mesmo recuo (24px) do cabeçalho do painel
+  styles: `
+    .painel-gestao > app-trilha { display: block; padding: 18px 24px 0; }
+    .painel-gestao > .abas { margin: 0 24px 16px; }
+    .painel-gestao > .dica-formulario { margin: 0 24px 16px; }
+  `,
   host: { '(document:keydown.escape)': 'fecharJanelas()' },
 })
 export class MensagensComponent implements OnInit {
@@ -45,6 +51,7 @@ export class MensagensComponent implements OnInit {
   private readonly caixa = inject(CaixaMensagensService);
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
+  private readonly rota = inject(ActivatedRoute);
   private readonly sanitizador = inject(DomSanitizer);
 
   protected readonly prioridades = ROTULOS_PRIORIDADE;
@@ -93,6 +100,11 @@ export class MensagensComponent implements OnInit {
 
   ngOnInit(): void {
     this.carregar(1);
+    // `?nova=1` (paleta de comandos) abre direto a janela de nova mensagem
+    if (this.rota.snapshot.queryParamMap.get('nova') === '1') {
+      this.abrirNova();
+      void this.roteador.navigate([], { queryParams: { nova: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    }
   }
 
   protected escolherAba(aba: 'recebidas' | 'enviadas'): void {

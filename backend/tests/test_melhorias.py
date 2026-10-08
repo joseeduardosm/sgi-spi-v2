@@ -98,6 +98,10 @@ def test_triagem_resposta_ao_autor_e_observacao_interna(cliente, admin, pessoas)
     r = cliente.put(f"{URL}/sugestoes/1", json=corpo, headers=h["tito"])
     assert r.status_code == 200, r.text
     assert r.json()["situacao"] == "em_analise" and r.json()["eventos"][0]["situacao_nova"] == "em_analise"
+    # SLA da triagem: a primeira mudança de situação é a resposta (dentro do prazo de 3 dias úteis) e ainda falta resolver
+    sla = r.json()["sla"]
+    assert (sla["meta_resposta_dias"], sla["meta_resolucao_dias"], sla["situacao_resposta"]) == (3, 15, "cumprido") and sla["resolvido_em"] is None
+    assert "sla" not in cliente.get(f"{URL}/minhas/1", headers=h["ana"]).json()  # o autor não vê o SLA interno
     # A autora recebe o aviso e vê a resposta, mas não a observação interna
     assert _avisos("melhoria-tratada:") == [(ids["ana"], "Sugestão de melhoria #1: Em análise")]
     minha = cliente.get(f"{URL}/minhas/1", headers=h["ana"]).json()

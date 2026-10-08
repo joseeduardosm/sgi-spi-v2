@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.banco import em_sao_paulo
 from app.core.banco import agora_utc
 from app.core.configuracao import obter_configuracao
 from app.models.contratacoes import (
@@ -217,6 +218,6 @@ def restaurar_item(sessao: Session, documento: DocumentoContratacao, historico_i
     antes_da_edicao(sessao, documento, autor)
     anterior = item.conteudo_html or item.conteudo
     item.conteudo, item.conteudo_html = conteudo.normalizar(None, alvo)
-    historico(sessao, documento, item.id, "restaurou", anterior, item.conteudo_html or item.conteudo, autor, f"Voltou ao estado {'anterior' if estado == 'antes' else 'posterior'} de uma edição de {entrada.ocorrido_em:%d/%m/%Y %H:%M}")
+    historico(sessao, documento, item.id, "restaurou", anterior, item.conteudo_html or item.conteudo, autor, f"Voltou ao estado {'anterior' if estado == 'antes' else 'posterior'} de uma edição de {em_sao_paulo(entrada.ocorrido_em):%d/%m/%Y %H:%M}")
     documento.atualizado_por_id = autor.id
     return item

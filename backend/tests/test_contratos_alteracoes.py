@@ -3,6 +3,7 @@
 """MVPs 5 a 7: prorrogação, reajuste e aditamento/supressão."""
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
@@ -225,6 +226,8 @@ def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkey
     assert any("09/2026" in d for d in medicoes)
     atrasos = [r for g in painel["alertas"] for r in g["riscos"] if r["tipo"] == "competencias_atrasadas"]
     assert len(atrasos) == 1  # um risco agregado por contrato, não um por competência
+    # Competências de antes de 09/2026 não geram alerta: a mais antiga em atraso é a de 09/2026
+    assert "1 competência(s)" in atrasos[0]["descricao"] and "09/2026" in atrasos[0]["descricao"]
     assert painel["execucao"]["total_previsto"] == "24105.00" and painel["execucao"]["empenhado"] == "51000.00"
     assert painel["numeros"]["contratos_a_vencer"] == 1
     # O criador também recebe as pendências; filtro por empresa inexistente zera os números
@@ -332,3 +335,137 @@ def test_aditamento_apos_reajuste_soma_ao_valor_global_e_contrato_completo_pode_
     # Exclusão do contrato com execução, reajuste e aditamento (chaves estrangeiras verificadas)
     assert cliente.delete(_url(contrato), headers=admin).status_code == 204
     assert cliente.delete(f"/api/contratos/empresas/{contrato['empresa']['id']}", headers=admin).status_code == 204
+
+
+# --- Mês da virada: reajuste a partir de uma data e uma medição só --------------------------------------
+
+def test_reajuste_a_partir_de_20_do_mes_gera_uma_competencia_com_dois_trechos(cliente, admin):
+    """Prorrogação e reajuste em 20/01/2027: janeiro é UMA competência, cada item com uma linha por trecho, pagos pelos dias."""
+    import uuid
+
+    from app.core.banco import FabricaSessao
+    from app.models.contratos import Contrato
+
+    gestora = criar_usuario("gestora")
+    restringir_contratos(cliente, admin, {gestora: "MODIFICACAO"})
+    contrato = criar_contrato(cliente, admin, equipe={"gestor": gestora}, data_inicio="2026-01-20", vigencia_maxima_meses=24)
+    h = cabecalho(cliente, "gestora")
+    _preparar_execucao(cliente, contrato, h)
+    cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12, "regra_sob_demanda": "repetir_inicial"}, headers=h)
+    r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10"}, files={"termo": ("ta.pdf", PDF)}, headers=h)
+    assert r.status_code == 200, r.text
+    assert cliente.get(_url(contrato), headers=h).json()["vigencias"][1]["inicio"] == "2027-01-20"
+
+    # Reajuste de 10% a partir de 20/01/2027 (início da 2ª vigência); data fora da vigência é recusada
+    assert cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 2, "data_efeito": "2027-01-19"}, headers=h).status_code == 400
+    reajuste = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 2, "data_efeito": "2027-01-20"}, headers=h).json()["em_andamento"]
+    assert reajuste["data_efeito"] == "2027-01-20" and reajuste["mes_referencia"] == "2027-01-01"
+    url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    itens = [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]
+    assert cliente.put(f"{url}/memoria", json={"itens": itens}, headers=h).status_code == 200
+    cliente.post(f"{url}/evidencia", files={"arquivo": ("ev.pdf", PDF)}, headers=h)
+    cliente.post(f"{url}/memoria/arquivos", headers=h)
+    assert cliente.post(f"{url}/concluir", files={"arquivo": ("ap.pdf", PDF)}, headers=h).status_code == 200
+
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=h)
+    with FabricaSessao() as sessao:
+        sessao.get(Contrato, uuid.UUID(contrato["id"])).liberar_todas_competencias = True
+        sessao.commit()
+    # Uma competência só em janeiro/2027, sem "1ª/2ª parte"
+    lista = cliente.get(_url(contrato, "/execucao"), headers=h).json()
+    janeiros = [c for g in lista["grupos"] for c in g["competencias"] if c["competencia"] == "2027-01-01"]
+    assert len(janeiros) == 1 and janeiros[0]["identificador"] == "2027-01"
+    janeiro = cliente.get(_url(contrato, "/competencias/identificador/2027-01"), headers=h).json()
+    continuos = [i for i in janeiro["itens"] if i["tipo"] == "continuo"]
+    assert [(i["segmento"], i["valor_unitario"], i["periodo_rotulo"]) for i in continuos] == [
+        (1, "1000.0000", "01/01 a 19/01/2027 · preço anterior"), (2, "1100.0000", "20/01 a 31/01/2027 · preço reajustado"),
+    ]
+    # Pelos dias (19/30 e 11/30 do mês): 2 postos × fator
+    assert [i["quantidade_prevista"] for i in continuos] == ["1.2667", "0.7333"]
+    # Total previsto do item contínuo = 1,2667 × 1000 + 0,7333 × 1100
+    assert abs(sum(float(i["quantidade_prevista"]) * float(i["valor_unitario"]) for i in continuos) - 2073.3) < 0.1
+    # Medição única com os dois trechos: o total é a soma dos trechos
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=h).json()]
+    base = _url(contrato, f"/competencias/{janeiro['id']}")
+    corpo = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in janeiro["itens"]], "notas_empenho_ids": notas}
+    assert cliente.put(f"{base}/medicao", json=corpo, headers=h).status_code == 200
+    medida = cliente.get(base, headers=h).json()
+    assert Decimal(medida["total_medido"]) == sum((Decimal(i["subtotal"]) for i in medida["itens"]), Decimal(0))
+
+
+def test_trimestral_prorrogado_tem_uma_competencia_so_atravessando_as_vigencias(cliente, admin):
+    """Contrato trimestral prorrogado em 20/01/2027: a competência jan–mar/2027 é uma só, atravessa as vigências e leva dois trechos."""
+    import uuid
+
+    from app.core.banco import FabricaSessao
+    from app.models.contratos import Contrato
+
+    gestora = criar_usuario("gestora")
+    restringir_contratos(cliente, admin, {gestora: "MODIFICACAO"})
+    contrato = criar_contrato(cliente, admin, equipe={"gestor": gestora}, data_inicio="2026-01-20", vigencia_maxima_meses=24, periodicidade_meses=3)
+    h = cabecalho(cliente, "gestora")
+    _preparar_execucao(cliente, contrato, h)
+    cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12, "regra_sob_demanda": "repetir_inicial"}, headers=h)
+    r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10"}, files={"termo": ("ta.pdf", PDF)}, headers=h)
+    assert r.status_code == 200, r.text
+    assert cliente.get(_url(contrato), headers=h).json()["vigencias"][1]["inicio"] == "2027-01-20"
+
+    # Reajuste de 10% a partir de 20/01/2027 (início da 2ª vigência); data fora da vigência é recusada
+    assert cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 2, "data_efeito": "2027-01-19"}, headers=h).status_code == 400
+    reajuste = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 2, "data_efeito": "2027-01-20"}, headers=h).json()["em_andamento"]
+    assert reajuste["data_efeito"] == "2027-01-20" and reajuste["mes_referencia"] == "2027-01-01"
+    url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    itens = [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]
+    assert cliente.put(f"{url}/memoria", json={"itens": itens}, headers=h).status_code == 200
+    cliente.post(f"{url}/evidencia", files={"arquivo": ("ev.pdf", PDF)}, headers=h)
+    cliente.post(f"{url}/memoria/arquivos", headers=h)
+    assert cliente.post(f"{url}/concluir", files={"arquivo": ("ap.pdf", PDF)}, headers=h).status_code == 200
+
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=h)
+    with FabricaSessao() as sessao:
+        sessao.get(Contrato, uuid.UUID(contrato["id"])).liberar_todas_competencias = True
+        sessao.commit()
+    # Uma competência só para jan–mar/2027 (identificador do 1º mês), sem corte na virada da vigência
+    lista = cliente.get(_url(contrato, "/execucao"), headers=h).json()
+    trimestres = [c for g in lista["grupos"] for c in g["competencias"] if c["competencia"] == "2027-01-01"]
+    assert len(trimestres) == 1 and trimestres[0]["identificador"] == "2027-01"
+    assert (trimestres[0]["periodo_inicio"], trimestres[0]["periodo_fim"]) == ("2027-01-01", "2027-03-31")
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2027-01"), headers=h).json()
+    continuos = [i for i in competencia["itens"] if i["tipo"] == "continuo"]
+    assert [(i["segmento"], i["valor_unitario"], i["periodo_rotulo"]) for i in continuos] == [
+        (1, "1000.0000", "01/01 a 19/01/2027 · preço anterior"), (2, "1100.0000", "20/01 a 31/03/2027 · preço reajustado"),
+    ]
+    # 2 postos: 19/30 do mês de janeiro no 1º trecho; 11/30 de janeiro + fevereiro e março inteiros no 2º
+    assert [i["quantidade_prevista"] for i in continuos] == ["1.2667", "4.7333"]
+
+
+def test_alertas_a_partir_de_do_contrato_empurra_o_corte_para_depois(cliente, admin, equipe, monkeypatch):
+    """"Desconsiderar alertas a partir de": vale a maior entre a data do contrato e o corte global; sem a data, só o global."""
+    import uuid
+    from datetime import date as data
+
+    from app.core.banco import FabricaSessao
+    from app.models.contratos import Contrato
+
+    for modulo in ("servico_painel", "servico_contratos", "servico_competencias"):
+        monkeypatch.setattr(f"app.services.contratos.{modulo}.hoje", lambda: data(2026, 11, 1))
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+
+    def tipos():
+        painel = cliente.get("/api/contratos/painel", headers=gestora).json()
+        return {r["tipo"] for g in painel["alertas"] for r in g["riscos"]}, [p["descricao"] for p in painel["minhas_pendencias"] if p["tipo"] == "medicao"]
+
+    riscos, medicoes = tipos()
+    assert "competencias_atrasadas" in riscos and any("09/2026" in d for d in medicoes)  # só o corte global (09/2026)
+    with FabricaSessao() as sessao:
+        sessao.get(Contrato, uuid.UUID(contrato["id"])).alertas_a_partir_de = data(2026, 11, 1)
+        sessao.commit()
+    riscos, medicoes = tipos()
+    assert "competencias_atrasadas" not in riscos and not any("09/2026" in d or "10/2026" in d for d in medicoes)
+    # Data anterior ao corte global não "devolve" os alertas antigos: continua valendo o global
+    with FabricaSessao() as sessao:
+        sessao.get(Contrato, uuid.UUID(contrato["id"])).alertas_a_partir_de = data(2025, 1, 1)
+        sessao.commit()
+    assert not any(f"0{m}/2026" in d for d in tipos()[1] for m in range(1, 9))

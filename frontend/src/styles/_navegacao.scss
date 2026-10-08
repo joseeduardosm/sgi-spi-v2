@@ -81,3 +81,14 @@
   small { font-size: 9px; font-weight: 400; }
   &:hover { border-color: var(--spi-vermelho); color: var(--spi-vermelho); }
 }
+
+// ---- Paleta de comandos (Ctrl+K) ----
+.paleta-fundo { position: fixed; inset: 0; z-index: 1200; background: #12171c66; }
+.paleta {
+  position: fixed; z-index: 1210; top: 12vh; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; width: min(640px, calc(100vw - 24px));
+  max-height: 70vh; border: 1px solid var(--spi-borda); border-radius: 14px; background: var(--cor-ffffff); box-shadow: 0 24px 60px #25292e40; overflow: hidden;
+}
+.paleta-campo { height: 52px; padding: 0 18px; border: 0; border-bottom: 1px solid var(--spi-borda); border-radius: 0; background: transparent; font-size: 15px; outline: none; }
+.paleta-lista { flex: 1 1 auto; min-height: 0; padding: 6px 8px 8px; overflow-y: auto; }
+.paleta-rodape { display: flex; gap: 14px; padding: 8px 16px; border-top: 1px solid var(--spi-borda); color: var(--spi-apagado); font-size: 11px; }
+@media (max-width: 767px) { .paleta { top: 6vh; max-height: 80vh; } .paleta-rodape { display: none; } }

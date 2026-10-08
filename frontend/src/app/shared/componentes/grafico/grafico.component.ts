@@ -19,11 +19,18 @@ export const CORES_GRAFICO = ['#c82331', '#2f5d8a', '#2f9e6b', '#e0a100', '#7b84
 
 export interface SerieGrafico {
   nome: string;
-  dados: number[];
+  /** `null` deixa um buraco na linha (ex.: dias futuros do burndown). */
+  dados: (number | null)[];
   /** Cor da série; sem ela, usa a paleta na ordem. */
   cor?: string;
   /** Só para gráficos de barras: desenha esta série como linha por cima. */
   linha?: boolean;
+  /** Linha pontilhada (ex.: a linha ideal do burndown). */
+  tracejada?: boolean;
+  /** Preenche a área sob a linha (com `empilhado`, vira área empilhada). */
+  area?: boolean;
+  /** Linha sem bolinhas nos pontos (séries diárias longas). */
+  semPontos?: boolean;
 }
 
 /**
@@ -96,8 +103,9 @@ export class GraficoComponent {
       ? [{ label: series[0]?.nome ?? '', data: series[0]?.dados ?? [], backgroundColor: this.rotulos().map((_, i) => CORES_GRAFICO[i % CORES_GRAFICO.length]), borderWidth: 2 }]
       : series.map((s, i) => ({
           type: (s.linha ? 'line' : tipo) as 'bar' | 'line', label: s.nome, data: s.dados, borderColor: cor(s, i), cubicInterpolationMode: 'monotone' as const,
-          backgroundColor: tipo === 'line' || s.linha ? cor(s, i) + '33' : cor(s, i), fill: tipo === 'line' && series.length === 1,
-          borderWidth: tipo === 'line' || s.linha ? 2.5 : 0, pointRadius: tipo === 'line' || s.linha ? 3 : 0, borderRadius: tipo === 'bar' && !s.linha ? 4 : 0,
+          backgroundColor: tipo === 'line' || s.linha ? cor(s, i) + (s.area ? '66' : '33') : cor(s, i), fill: s.area ?? (tipo === 'line' && series.length === 1),
+          borderDash: s.tracejada ? [6, 4] : [],
+          borderWidth: tipo === 'line' || s.linha ? 2.5 : 0, pointRadius: s.semPontos ? 0 : tipo === 'line' || s.linha ? 3 : 0, borderRadius: tipo === 'bar' && !s.linha ? 4 : 0,
           maxBarThickness: 36,
         }));
     return {

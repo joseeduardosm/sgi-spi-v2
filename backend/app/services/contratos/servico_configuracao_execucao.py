@@ -54,7 +54,7 @@ def leitura_checklist(checklist: Checklist) -> LeituraChecklist:
     """Converte o checklist do banco para o formato da API."""
     return LeituraChecklist(
         id=checklist.id, versao=checklist.versao, nome=checklist.nome, ativo=checklist.ativo,
-        itens=[LeituraDocumentoChecklist(id=i.id, ordem=i.ordem, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade, vale_outros_contratos=i.vale_outros_contratos) for i in sorted(checklist.itens, key=_ordem_checklist)],
+        itens=[LeituraDocumentoChecklist(id=i.id, ordem=i.ordem, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade, vale_outros_contratos=i.vale_outros_contratos, pedir_envio=i.pedir_envio) for i in sorted(checklist.itens, key=_ordem_checklist)],
         criado_por_nome=checklist.criado_por_nome, criado_em=checklist.criado_em, ativado_em=checklist.ativado_em,
     )
 
@@ -97,7 +97,7 @@ def criar_checklist(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoChec
         contrato_id=contrato.id, versao=_proxima_versao(sessao, Checklist, contrato.id), nome=dados.nome,
         criado_por_id=autor.id, criado_por_nome=_nome(autor),
     )
-    checklist.itens = [ItemChecklist(ordem=n, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade, vale_outros_contratos=i.com_validade and i.vale_outros_contratos) for n, i in enumerate(dados.itens, start=1)]
+    checklist.itens = [ItemChecklist(ordem=n, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade, vale_outros_contratos=i.vale_outros_contratos, pedir_envio=i.pedir_envio) for n, i in enumerate(dados.itens, start=1)]
     sessao.add(checklist)
     auditar(sessao, autor.login, "contrato.checklist.criar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": checklist.versao, "nome": dados.nome, "itens": len(dados.itens)})
@@ -115,16 +115,31 @@ def alterar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uui
     # Limpa os documentos antigos (flush grava a remoção) antes de inserir a nova lista
     checklist.itens.clear()
     sessao.flush()
-    checklist.itens.extend(ItemChecklist(ordem=n, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade, vale_outros_contratos=i.com_validade and i.vale_outros_contratos) for n, i in enumerate(dados.itens, start=1))
+    checklist.itens.extend(ItemChecklist(ordem=n, nome=i.nome, observacao=i.observacao, obrigatorio=i.obrigatorio, com_validade=i.com_validade, vale_outros_contratos=i.vale_outros_contratos, pedir_envio=i.pedir_envio) for n, i in enumerate(dados.itens, start=1))
     auditar(sessao, autor.login, "contrato.checklist.alterar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": checklist.versao, "nome": dados.nome})
+    sessao.commit()
+
+
+def definir_pedir_envio(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid.UUID, item_id: uuid.UUID, pedir: bool, autor: Usuario) -> None:
+    """Liga ou desliga "Pedir para enviar" de um documento. Vale também com o checklist ativo (é a única opção editável nele)."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    checklist = _obter_checklist(sessao, contrato_id, checklist_id)
+    item = next((i for i in checklist.itens if i.id == item_id), None)
+    if item is None:
+        raise RegistroNaoEncontrado("Documento do checklist")
+    if item.pedir_envio != pedir:
+        item.pedir_envio = pedir
+        auditar(sessao, autor.login, "contrato.checklist.pedir_envio", f"Contrato {contrato.numero}", autor_id=autor.id,
+                alvo_tipo="contrato", alvo_id=contrato.id, dados={"versao": checklist.versao, "documento": item.nome, "pedir_envio": pedir})
     sessao.commit()
 
 
 def duplicar_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uuid.UUID, autor: Usuario) -> None:
     """Cria uma nova versão com o mesmo conteúdo da versão de origem."""
     origem = _obter_checklist(sessao, contrato_id, checklist_id)
-    dados = GravacaoChecklist(nome=origem.nome, itens=[{"nome": i.nome, "observacao": i.observacao, "obrigatorio": i.obrigatorio, "com_validade": i.com_validade, "vale_outros_contratos": i.vale_outros_contratos} for i in origem.itens])
+    dados = GravacaoChecklist(nome=origem.nome, itens=[{"nome": i.nome, "observacao": i.observacao, "obrigatorio": i.obrigatorio, "com_validade": i.com_validade, "vale_outros_contratos": i.vale_outros_contratos, "pedir_envio": i.pedir_envio} for i in origem.itens])
     criar_checklist(sessao, contrato_id, dados, autor)
 
 
@@ -156,7 +171,7 @@ def copiar_checklist(competencia: Competencia, checklist: Checklist) -> None:
         competencia.documentos.append(
             DocumentoMensal(
                 checklist_id=checklist.id, ordem=item.ordem, nome=item.nome, observacao=item.observacao, obrigatorio=item.obrigatorio,
-                com_validade=item.com_validade, vale_outros_contratos=item.com_validade and item.vale_outros_contratos,
+                com_validade=item.com_validade, vale_outros_contratos=item.vale_outros_contratos,
                 reaproveitado_contrato=anterior.reaproveitado_contrato if anterior and item.com_validade else None,
                 validade_ate=anterior.validade_ate if anterior and item.com_validade else None,
                 reaproveitado_de=anterior.reaproveitado_de if anterior and item.com_validade else None,

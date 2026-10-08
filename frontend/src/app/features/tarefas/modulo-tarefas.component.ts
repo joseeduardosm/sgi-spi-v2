@@ -32,6 +32,7 @@ const CHAVE_RECOLHIDA = 'tarefas.navegacao.recolhida';
 
           <a class="item-navegacao" routerLink="/tarefas" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">
             <span class="icone-navegacao" aria-hidden="true">★</span> Minhas tarefas</a>
+          <a class="item-navegacao" routerLink="/tarefas/atividades" routerLinkActive="ativo"><span class="icone-navegacao" aria-hidden="true">☑</span> Minhas atividades</a>
           @if (estado.paraValidar(); as n) {
             <a class="item-navegacao" [routerLink]="rotaValidar()" [queryParams]="{ recorte: 'validacao' }">
               <span class="icone-navegacao" aria-hidden="true">◷</span> Para validar <span class="contagem-navegacao alerta">{{ n }}</span></a>

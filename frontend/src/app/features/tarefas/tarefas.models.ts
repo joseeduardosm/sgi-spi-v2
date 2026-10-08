@@ -16,7 +16,10 @@ export const ROTULOS_PRIORIDADE: Record<PrioridadeTarefa, string> = { baixa: 'Ba
 
 export interface Pessoa { id: number; nome: string; login: string }
 export interface EquipeResumo { id: string; nome: string }
-export interface Marcador { id: string; nome: string; cor: string; equipe_id: string | null }
+/** Marcador: `cor_indice` é a cor da paleta de 12 cores; `usos` só vem na listagem da equipe (mais usados primeiro). */
+export interface Marcador { id: string; nome: string; cor: string; cor_indice: number; equipe_id: string | null; usos?: number }
+
+import type { SlaItem } from '../sla/sla.models';
 
 export interface TarefaResumo {
   id: string;
@@ -30,9 +33,8 @@ export interface TarefaResumo {
   atrasada: boolean;
   equipe: EquipeResumo | null;
   responsavel: Pessoa | null;
-  participantes: number;
-  /** Responsável (primeiro) e participantes: avatares do cartão. */
-  envolvidos: Pessoa[];
+  /** Todos os responsáveis (o principal primeiro): avatares do cartão. */
+  responsaveis: Pessoa[];
   marcadores: Marcador[];
   checklist_feitos: number;
   checklist_total: number;
@@ -44,7 +46,29 @@ export interface TarefaResumo {
   iniciada_em: string | null;
   concluida_em: string | null;
   atualizado_em: string;
+  /** Número da tarefa mãe, quando esta é uma subtarefa. */
+  tarefa_pai_numero: number | null;
+  subtarefas_total: number;
+  subtarefas_concluidas: number;
+  /** Há tarefa bloqueadora ainda não concluída: a tarefa não pode iniciar. */
+  bloqueada: boolean;
+  /** Coluna (estágio) atual na equipe; vazio em tarefa pessoal. */
+  estagio_id: string | null;
+  /** Marco (milestone) da equipe a que a tarefa pertence. */
+  marco_id: string | null;
+  /** Módulo de origem (`contrato_competencia` = etapa de uma competência de contrato). */
+  origem_tipo?: string | null;
+  /** O módulo de origem move e conclui a tarefa: o usuário só comenta, anexa e segue. */
+  controlada_externamente?: boolean;
+  /** SLA de prazos (vazio nas tarefas controladas por outro módulo). */
+  sla?: SlaItem | null;
 }
+
+/** Coluna do quadro da equipe; a `categoria` é a situação do pipeline que ela representa. */
+export interface Estagio { id: string; nome: string; categoria: StatusTarefa; posicao: number; cor_indice: number }
+
+/** Tarefa relacionada (mãe, subtarefa, bloqueadora ou bloqueada). */
+export interface TarefaLigada { numero: number; titulo: string; status: StatusTarefa; prazo: string; responsavel: Pessoa | null }
 
 export interface Indicadores {
   operacionais: number;
@@ -57,15 +81,29 @@ export interface Indicadores {
   faixa: string;
 }
 
-export interface Contexto { tipo: 'minhas' | 'equipe' | 'pessoa'; titulo: string; equipe_id: string | null; login: string | null; lider: boolean }
+export interface Contexto { tipo: 'minhas' | 'equipe' | 'pessoa'; titulo: string; equipe_id: string | null; login: string | null; pessoa_id: number | null; lider: boolean }
 export interface ListaTarefas { contexto: Contexto; indicadores: Indicadores; itens: TarefaResumo[] }
 
 export interface Etapa { status: StatusTarefa; rotulo: string; em: string | null; por: string | null; atual: boolean; alcancada: boolean }
 
 export interface TarefaDetalhe extends TarefaResumo {
+  /** Série a que a tarefa pertence (tarefa recorrente). */
+  recorrencia: RecorrenciaResumo | null;
+  tarefa_pai: TarefaLigada | null;
+  subtarefas: TarefaLigada[];
+  bloqueada_por: TarefaLigada[];
+  bloqueia: TarefaLigada[];
+  pode_criar_subtarefa: boolean;
+  /** Rota do portal onde a etapa é tratada (ex.: a competência do contrato) e o texto do link. */
+  origem_link?: string | null;
+  origem_rotulo?: string | null;
+  /** O usuário segue a tarefa; `seguidores` são todos que a seguem. */
+  seguindo: boolean;
+  seguidores: Pessoa[];
   descricao: string;
+  /** O usuário lidera a equipe: troca cor, renomeia e exclui marcadores. */
+  usuario_lidera: boolean;
   criado_por: Pessoa | null;
-  pessoas: Pessoa[];
   checklist: { id: string; texto: string; concluido: boolean }[];
   etapas: Etapa[];
   segundos_em_andamento: number;
@@ -126,7 +164,6 @@ export interface ItemAgenda {
   concluida_em: string | null;
   atrasada: boolean;
   equipe: EquipeResumo | null;
-  papel: 'responsavel' | 'participante';
   /** Quem consulta pode abrir a tarefa. */
   abrivel: boolean;
 }
@@ -312,3 +349,130 @@ export function barraGantt(item: Pick<ItemAgenda, 'inicio' | 'prazo' | 'concluid
     cortadaFim: fim > janelaFim,
   };
 }
+
+// --- Tarefas recorrentes ---------------------------------------------------------------------------
+
+export type FrequenciaRecorrencia = 'diaria' | 'semanal' | 'mensal' | 'anual';
+
+/** Regra de repetição (pelo calendário). `dias_semana`: 0 = segunda … 6 = domingo. */
+export interface RegraRecorrencia {
+  frequencia: FrequenciaRecorrencia;
+  intervalo: number;
+  dias_semana: number[];
+  somente_dias_uteis: boolean;
+  antecedencia_dias: number;
+  fim: string | null;
+  max_ocorrencias: number | null;
+}
+
+export interface RecorrenciaResumo { id: string; resumo: string; ativa: boolean; proxima_data: string | null; ocorrencia_em: string | null }
+
+export interface Recorrencia {
+  id: string;
+  equipe: EquipeResumo | null;
+  titulo: string;
+  descricao: string;
+  prioridade: PrioridadeTarefa;
+  checklist: string[];
+  responsaveis: Pessoa[];
+  marcadores: Marcador[];
+  regra: RegraRecorrencia;
+  resumo: string;
+  inicio: string;
+  hora_prazo: string;
+  ativa: boolean;
+  proxima_data: string | null;
+  proximas: string[];
+  geradas: number;
+  ultimo_erro: string;
+  criado_por: Pessoa | null;
+  pode_gerir: boolean;
+}
+
+export const DIAS_SEMANA_CURTOS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+/** Regra padrão ao ligar "Repetir": toda semana, no dia da semana do prazo. */
+export function regraPadrao(diaDaSemana: number): RegraRecorrencia {
+  return { frequencia: 'semanal', intervalo: 1, dias_semana: [diaDaSemana], somente_dias_uteis: false, antecedencia_dias: 0, fim: null, max_ocorrencias: null };
+}
+
+// --- Desempenho da equipe (burndown e vazão) ------------------------------------------------------
+
+/** Cumprimento do SLA no período (Desempenho). */
+export interface ResumoSlaDesempenho {
+  resolucoes_no_prazo: number;
+  resolucoes_fora: number;
+  percentual_resolucao: number | null;
+  respostas_no_prazo: number;
+  respostas_fora: number;
+  percentual_resposta: number | null;
+  abertas_estouradas: number;
+  abertas_em_risco: number;
+}
+
+export interface DesempenhoEquipe {
+  /** `equipe` (padrão) ou `pessoa`: neste caso `equipe_id` vem vazio e `equipe_nome` traz o nome da pessoa. */
+  escopo?: 'equipe' | 'pessoa';
+  equipe_id: string | null;
+  equipe_nome: string;
+  de: string;
+  ate: string;
+  tarefas_no_periodo: number;
+  resumo: { abertas_agora: number; concluidas_no_periodo: number; criadas_no_periodo: number; vazao_media_semanal: number; ciclo_mediano_dias: number | null; lead_mediano_dias: number | null };
+  burndown: { dias: string[]; real: (number | null)[]; ideal: number[]; escopo: number[]; inicial: number };
+  vazao: { semana_inicio: string; criadas: number; concluidas: number; media_movel: number }[];
+  ciclo: { semana_inicio: string; concluidas: number; ciclo_mediana: number | null; ciclo_p85: number | null; lead_mediana: number | null; lead_p85: number | null }[];
+  fluxo: { dias: string[]; a_fazer: number[]; em_andamento: number[]; em_validacao: number[]; concluida: number[] };
+  pessoas: { usuario_id: number; nome: string; concluidas: number; lead_medio_dias: number | null; sla_percentual?: number | null }[];
+  sla?: ResumoSlaDesempenho | null;
+  marcos: Marco[];
+  status_atual: AtualizacaoStatus | null;
+}
+
+// --- Atividades agendadas ---------------------------------------------------------------------------
+
+export type TipoAtividade = 'fazer' | 'ligar' | 'email' | 'reuniao' | 'revisar' | 'enviar_documento';
+
+export const ROTULOS_TIPO_ATIVIDADE: Record<TipoAtividade, string> = {
+  fazer: 'A fazer', ligar: 'Ligar', email: 'E-mail', reuniao: 'Reunião', revisar: 'Revisar', enviar_documento: 'Enviar documento',
+};
+export const ICONES_TIPO_ATIVIDADE: Record<TipoAtividade, string> = { fazer: '✔', ligar: '☎', email: '✉', reuniao: '👥', revisar: '🔍', enviar_documento: '📎' };
+
+export interface Atividade {
+  id: string;
+  tarefa_numero: number;
+  tarefa_titulo: string;
+  tipo: TipoAtividade;
+  resumo: string;
+  nota: string;
+  prazo: string;
+  situacao: 'atrasada' | 'hoje' | 'futura' | 'concluida';
+  responsavel: Pessoa | null;
+  criada_por: Pessoa | null;
+  concluida_em: string | null;
+  concluida_por: Pessoa | null;
+  feedback: string;
+  pode_mexer: boolean;
+}
+
+// --- Marcos e status da equipe ---------------------------------------------------------------------
+
+export type SituacaoMarco = 'no_prazo' | 'em_risco' | 'atrasado' | 'atingido';
+export type SituacaoStatusEquipe = 'no_prazo' | 'em_risco' | 'atrasado' | 'em_espera' | 'concluido';
+
+export interface Marco {
+  id: string;
+  nome: string;
+  descricao: string;
+  data_alvo: string;
+  atingido_em: string | null;
+  situacao: SituacaoMarco;
+  total: number;
+  concluidas: number;
+  atrasadas: number;
+}
+
+export interface AtualizacaoStatus { id: string; situacao: SituacaoStatusEquipe; texto: string; autor_nome: string; criado_em: string }
+
+export const ROTULOS_SITUACAO_MARCO: Record<SituacaoMarco, string> = { no_prazo: 'No prazo', em_risco: 'Em risco', atrasado: 'Atrasado', atingido: 'Atingido' };
+export const ROTULOS_STATUS_EQUIPE: Record<SituacaoStatusEquipe, string> = { no_prazo: 'No prazo', em_risco: 'Em risco', atrasado: 'Atrasado', em_espera: 'Em espera', concluido: 'Concluído' };

@@ -17,6 +17,15 @@
         <button type="button" class="fechar-janela" [attr.aria-label]="pagina() ? 'Voltar' : 'Fechar'" [title]="pagina() ? 'Voltar às tarefas' : 'Fechar'" (click)="fechar.emit()">×</button>
       </header>
 
+      @if (t.controlada_externamente) {
+        <p class="faixa-origem" role="note"><strong>Controlada pelo módulo Contratos.</strong> Esta tarefa existe só para dimensionar e monitorar o trabalho: ela anda
+          sozinha conforme a etapa evolui. Trate a etapa no módulo Contratos@if (t.origem_link) { — <a [routerLink]="t.origem_link">{{ t.origem_rotulo || 'abrir a competência' }}</a> }.</p>
+      }
+      @if (t.recorrencia; as rec) {
+        <p class="faixa-recorrencia">⟳ Tarefa recorrente · {{ rec.resumo }}@if (rec.ativa && rec.proxima_data) { · próxima em {{ rec.proxima_data + 'T12:00:00' | date: 'dd/MM/yyyy' }} }@else if (!rec.ativa) { · pausada }
+          · <a [routerLink]="t.equipe ? ['/tarefas/equipes', t.equipe.id, 'recorrencias'] : ['/tarefas/recorrencias']">Gerenciar</a></p>
+      }
+
       <!-- Etapas do pipeline em linha (a validação só existe em tarefa de equipe) -->
       <ol class="etapas-tarefa compactas" aria-label="Etapas da tarefa">
         @for (e of t.etapas; track e.status) {
@@ -50,7 +59,85 @@
             }
           </section>
 
+          <!-- Marcadores (acima das subtarefas) -->
+          @if (t.equipe) {
+            <section class="bloco-janela">
+              <div class="titulo-bloco"><h3>Marcadores</h3></div>
+              <app-seletor-marcadores [equipeId]="t.equipe.id" [valor]="t.marcadores" [desabilitado]="!pode('editar')" [podeGerir]="t.usuario_lidera"
+                                      placeholder="Adicionar marcador…" (valorChange)="salvarMarcadores($event)" />
+            </section>
+          }
+
           <!-- Checklist -->
+          @if (!t.tarefa_pai && (t.subtarefas.length || t.pode_criar_subtarefa)) {
+            <section class="bloco-janela">
+              <div class="titulo-bloco"><h3>Subtarefas</h3>@if (t.subtarefas.length) { <small>{{ concluidasSub(t) }} de {{ t.subtarefas.length }}</small> }</div>
+              @if (t.subtarefas.length) {
+                <div class="barra-progresso" role="progressbar" [attr.aria-valuenow]="concluidasSub(t)" aria-valuemin="0" [attr.aria-valuemax]="t.subtarefas.length"><i [style.width.%]="100 * concluidasSub(t) / t.subtarefas.length"></i></div>
+                <ul class="lista-subtarefas">
+                  @for (s of t.subtarefas; track s.numero) {
+                    <li><a [routerLink]="['/tarefas', s.numero]"><span class="ponto-status" [attr.data-status]="s.status" aria-hidden="true"></span>
+                      <span class="titulo-sub">#{{ s.numero }} {{ s.titulo }}</span></a>
+                      <small>{{ rotulosStatus[s.status] }}@if (s.responsavel) { · {{ s.responsavel.nome }} } · {{ s.prazo | date: 'dd/MM' }}</small></li>
+                  }
+                </ul>
+              }
+              @if (t.pode_criar_subtarefa) {
+                <form class="nova-subtarefa" (submit)="$event.preventDefault(); criarSubtarefa()">
+                  <input name="subtarefa" maxlength="200" placeholder="Nova subtarefa (herda equipe, marcadores, responsáveis e prazo)" aria-label="Título da subtarefa" [(ngModel)]="novaSubtarefa" />
+                  <button type="submit" class="acao-secundaria" [disabled]="!novaSubtarefa.trim()">Adicionar</button>
+                </form>
+              }
+            </section>
+          } @else if (t.tarefa_pai) {
+            <p class="faixa-recorrencia">↳ Subtarefa de <a [routerLink]="['/tarefas', t.tarefa_pai.numero]">#{{ t.tarefa_pai.numero }} {{ t.tarefa_pai.titulo }}</a></p>
+          }
+
+          <section class="bloco-janela">
+            <div class="titulo-bloco"><h3>Atividades</h3>@if (atividadesAbertas().length) { <small>{{ atividadesAbertas().length }} aberta(s)</small> }</div>
+            <ul class="lista-atividades">
+              @for (a of atividades(); track a.id) {
+                <li [class.concluida]="a.situacao === 'concluida'">
+                  <span class="icone-atividade" aria-hidden="true">{{ icones[a.tipo] }}</span>
+                  <div class="texto-atividade"><strong>{{ a.resumo }}</strong>
+                    <small>{{ tiposAtividade[a.tipo] }} · {{ a.responsavel?.nome ?? '—' }} ·
+                      <span class="prazo-atividade" [attr.data-situacao]="a.situacao">{{ a.prazo + 'T12:00:00' | date: 'dd/MM/yyyy' }}@if (a.situacao === 'atrasada') { (atrasada) } @else if (a.situacao === 'hoje') { (hoje) }</span></small>
+                    @if (a.nota) { <small>{{ a.nota }}</small> }
+                    @if (a.feedback) { <small class="feedback-atividade">“{{ a.feedback }}”</small> }
+                    @if (concluindo() === a.id) {
+                      <div class="concluir-atividade">
+                        <input name="feedback" maxlength="4000" placeholder="O que foi feito ou combinado? (opcional)" aria-label="Feedback" [(ngModel)]="feedbackAtividade" />
+                        <button type="button" class="acao-positiva" (click)="concluirAtividade(a, false)">Concluir</button>
+                        <button type="button" class="acao-secundaria" (click)="concluirAtividade(a, true)">Concluir e agendar a próxima</button>
+                        <button type="button" class="link-simples" (click)="concluindo.set(null)">Cancelar</button>
+                      </div>
+                    }
+                  </div>
+                  @if (a.pode_mexer && concluindo() !== a.id) {
+                    <div class="acoes-atividade">
+                      <button type="button" class="acao-secundaria acao-pequena" (click)="abrirConclusao(a)">✓ Concluir</button>
+                      <button type="button" class="link-simples" [attr.aria-label]="'Excluir ' + a.resumo" (click)="excluirAtividade(a)">×</button>
+                    </div>
+                  }
+                </li>
+              } @empty { <li class="dica-formulario">Nenhuma atividade agendada.</li> }
+            </ul>
+            @if (pode('comentar') && t.status !== 'concluida') {
+              <form class="nova-atividade" (submit)="$event.preventDefault(); agendarAtividade()">
+                <select name="tipoAtividade" aria-label="Tipo da atividade" [(ngModel)]="novaAtividade.tipo">
+                  @for (k of tiposLista; track k) { <option [value]="k">{{ icones[k] }} {{ tiposAtividade[k] }}</option> }
+                </select>
+                <input name="resumoAtividade" maxlength="200" placeholder="Nova atividade (ex.: ligar para a empresa)" aria-label="Resumo da atividade" [(ngModel)]="novaAtividade.resumo" />
+                <input name="prazoAtividade" type="date" aria-label="Data da atividade" [(ngModel)]="novaAtividade.prazo" />
+                <select name="quemAtividade" aria-label="Responsável pela atividade" [(ngModel)]="novaAtividade.responsavel_id">
+                  <option [ngValue]="null">Eu</option>
+                  @for (p of t.responsaveis; track p.id) { <option [ngValue]="p.id">{{ p.nome }}</option> }
+                </select>
+                <button type="submit" class="acao-secundaria" [disabled]="!novaAtividade.resumo.trim()">Agendar</button>
+              </form>
+            }
+          </section>
+
           <section class="bloco-janela">
             <div class="titulo-bloco"><h3>Checklist</h3>@if (t.checklist.length) { <small>{{ t.checklist_feitos }} de {{ t.checklist_total }}</small> }</div>
             @if (t.checklist.length) {
@@ -74,11 +161,11 @@
             }
           </section>
 
-          <!-- Atividade: comentário no topo e a linha do tempo abaixo -->
+          <!-- Histórico: comentário no topo e a linha do tempo abaixo -->
           <section class="bloco-janela">
             <div class="titulo-bloco">
-              <h3>Atividade</h3><small>{{ totalEventos() }} registro{{ totalEventos() === 1 ? '' : 's' }}</small>
-              <div class="chips-linha" role="group" aria-label="Filtrar a atividade">
+              <h3>Histórico</h3><small>{{ totalEventos() }} registro{{ totalEventos() === 1 ? '' : 's' }}</small>
+              <div class="chips-linha" role="group" aria-label="Filtrar o histórico">
                 @for (f of FILTROS; track f.valor) {
                   <button type="button" [class.ativo]="filtro() === f.valor" [attr.aria-pressed]="filtro() === f.valor" (click)="trocarFiltro(f.valor)">{{ f.rotulo }}</button>
                 }
@@ -86,8 +173,20 @@
             </div>
             @if (pode('comentar')) {
               <form class="formulario-comentario" (submit)="$event.preventDefault(); comentar()">
-                <textarea name="comentario" rows="2" maxlength="4000" placeholder="Escreva um comentário… (os envolvidos são avisados)" aria-label="Comentário"
+                @if (respondendoA(); as r) {
+                  <div class="citacao-resposta" role="status">
+                    <div><strong>Respondendo a {{ r.autor }}</strong><span>{{ trecho(r.texto) }}</span></div>
+                    <button type="button" class="link-simples" aria-label="Cancelar a resposta" (click)="cancelarResposta()">×</button>
+                  </div>
+                }
+                <textarea #campoComentario name="comentario" rows="2" maxlength="4000" placeholder="Escreva um comentário… (os envolvidos são avisados; use @login para avisar alguém)" aria-label="Comentário"
                           [(ngModel)]="textoComentario"></textarea>
+                @if (pessoasMencao().length) {
+                  <select class="mencionar" name="mencionar" aria-label="Mencionar alguém" [ngModel]="''" (ngModelChange)="mencionar($event)">
+                    <option value="">@ Mencionar alguém…</option>
+                    @for (p of pessoasMencao(); track p.id) { <option [value]="p.login">{{ p.nome }} (&#64;{{ p.login }})</option> }
+                  </select>
+                }
                 @if (arquivos().length) {
                   <ul class="arquivos-escolhidos">
                     @for (a of arquivos(); track $index) {
@@ -96,16 +195,12 @@
                     }
                   </ul>
                 }
-                @if (textoComentario.trim() || arquivos().length) {
-                  <div class="acoes-formulario">
-                    <label class="acao-secundaria botao-arquivo">Anexar
-                      <input type="file" multiple accept=".pdf,.docx,.xlsx,.pptx,.odt,.ods,.odp,.doc,.xls,.ppt,.png,.jpg,.jpeg,.txt,.csv" (change)="escolherArquivos($event)" /></label>
-                    <button type="submit" class="acao-primaria" [disabled]="enviando()">Comentar</button>
-                  </div>
-                } @else {
-                  <label class="link-simples anexar-discreto">📎 Anexar arquivos (até 5)
+                <!-- Os dois botões ficam sempre à vista: "Anexar" não some ao digitar; "Comentar" só vale com texto ou arquivo -->
+                <div class="acoes-formulario">
+                  <label class="acao-secundaria botao-arquivo" title="Anexar até 5 arquivos">📎 Anexar arquivos
                     <input type="file" multiple accept=".pdf,.docx,.xlsx,.pptx,.odt,.ods,.odp,.doc,.xls,.ppt,.png,.jpg,.jpeg,.txt,.csv" (change)="escolherArquivos($event)" /></label>
-                }
+                  <button type="submit" class="acao-primaria" [disabled]="enviando() || !(textoComentario.trim() || arquivos().length)">Comentar</button>
+                </div>
               </form>
             }
 
@@ -113,12 +208,15 @@
               <h4 class="dia-linha">{{ g.dia }}</h4>
               <ol class="linha-do-tempo">
                 @for (e of g.itens; track e.id) {
-                  <li [attr.data-tipo]="e.tipo" [class.removido]="e.removido">
+                  <li [attr.data-tipo]="e.tipo" [class.removido]="e.removido" [id]="'evento-' + e.id">
                     <span class="icone-evento" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="icone(e.tipo)" /></svg></span>
                     <div class="conteudo-evento">
                       <div class="topo-evento">
                         <strong>{{ e.titulo }}</strong>
                         <small>{{ e.autor }} · {{ e.criado_em | date: 'HH:mm' }}</small>
+                        @if (pode('comentar') && e.tipo === 'comentario' && !e.removido && e.texto) {
+                          <button type="button" class="link-simples responder-evento" title="Responder a este comentário" (click)="responder(e)">Responder</button>
+                        }
                         @if (superRoot() && !e.removido && e.tipo !== 'removido') {
                           <button type="button" class="link-simples remover-evento" (click)="pedirRemocao(e)" title="Remover (SuperRoot)">Remover</button>
                         }
@@ -148,6 +246,11 @@
                               </p>
                             }
                           }
+                        }
+                        @if (e.tipo === 'comentario' && e.dados['resposta_a']) {
+                          <blockquote class="citacao-evento" [class.clicavel]="true" tabindex="0" (click)="irParaComentario(e.dados['resposta_a'])" (keydown.enter)="irParaComentario(e.dados['resposta_a'])">
+                            <strong>↩ {{ texto(e.dados['resposta_autor']) }}</strong> <span>{{ texto(e.dados['resposta_texto']) }}</span>
+                          </blockquote>
                         }
                         @if (e.texto) { <p class="texto-evento" [class.justificativa]="e.tipo !== 'comentario'" [innerHTML]="e.texto | linkificar"></p> }
                         @if (e.anexos.length) {
@@ -190,39 +293,71 @@
           </div>
 
           <div class="grupo-lateral">
-            <span class="rotulo-lateral">Responsável</span>
-            <div class="pessoa-lateral">
-              @if (t.responsavel; as r) { <app-avatares [pessoas]="[r]" /> <span>{{ r.nome }}</span> } @else { <span>—</span> }
+            <div class="titulo-lateral"><span class="rotulo-lateral">Responsáveis</span>
+              @if (pode('editar') && editandoCampo() !== 'responsaveis') { <button type="button" class="link-simples" (click)="editarResponsaveis()">Editar</button> }
             </div>
-            @if (pode('transferir')) { <button type="button" class="link-simples" (click)="modoJanela.set('transferir')">Transferir…</button> }
-          </div>
-
-          <div class="grupo-lateral">
-            <div class="titulo-lateral"><span class="rotulo-lateral">Participantes</span>
-              @if (pode('editar') && editandoCampo() !== 'participantes') { <button type="button" class="link-simples" (click)="editarParticipantes()">Editar</button> }
-            </div>
-            @if (editandoCampo() === 'participantes') {
-              <app-seletor-usuarios idCampo="jd-participantes" [selecionados]="participantes" (selecionadosChange)="aoMudarParticipantes($event)"
+            @if (editandoCampo() === 'responsaveis') {
+              <app-seletor-usuarios idCampo="jd-responsaveis" [selecionados]="responsaveis" (selecionadosChange)="aoMudarResponsaveis($event)"
                                     [fonte]="api.opcoesPessoas" textoAjuda="Ao incluir alguém, a agenda da pessoa aparece abaixo" />
               <app-agenda-pessoa [pessoaId]="pessoaAgenda()" />
               <div class="acoes-formulario">
                 <button type="button" class="acao-secundaria" (click)="editandoCampo.set(null)">Cancelar</button>
-                <button type="button" class="acao-primaria" (click)="salvarParticipantes()">Salvar</button>
+                <button type="button" class="acao-primaria" [disabled]="!responsaveis.length" (click)="salvarResponsaveis()">Salvar</button>
               </div>
             } @else {
-              @let outros = participantesDe(t);
-              @if (outros.length) {
+              @if (t.responsaveis.length) {
                 <ul class="lista-pessoas-lateral">
-                  @for (p of outros; track p.id) { <li><app-avatares [pessoas]="[p]" tamanho="pequeno" /> {{ p.nome }}</li> }
+                  @for (p of t.responsaveis; track p.id) { <li><app-avatares [pessoas]="[p]" tamanho="pequeno" /> {{ p.nome }}</li> }
                 </ul>
-              } @else { <span class="dica-formulario">Ninguém além do responsável.</span> }
+              } @else { <span>—</span> }
+            }
+            @if (pode('transferir')) { <button type="button" class="link-simples" (click)="modoJanela.set('transferir')">Transferir…</button> }
+          </div>
+
+          <div class="grupo-lateral">
+            <span class="rotulo-lateral">Bloqueada por</span>
+            @for (b of t.bloqueada_por; track b.numero) {
+              <div class="linha-bloqueio"><a [routerLink]="['/tarefas', b.numero]" [class.concluida]="b.status === 'concluida'">#{{ b.numero }} {{ b.titulo }}</a>
+                @if (pode('editar')) { <button type="button" class="link-simples" [attr.aria-label]="'Remover dependência de ' + b.numero" (click)="removerDependencia(t, b.numero)">×</button> }</div>
+            } @empty { <span class="dica-formulario">Nenhuma.</span> }
+            @if (pode('editar') && t.equipe) {
+              <input class="busca-dependencia" list="candidatas-dependencia" name="dependencia" placeholder="Buscar tarefa (#número ou título)" aria-label="Adicionar dependência"
+                     [ngModel]="buscaDependencia" (focus)="carregarCandidatas(t)" (ngModelChange)="escolherDependencia(t, $event)" autocomplete="off" />
+              <datalist id="candidatas-dependencia">@for (c of candidatas(t); track c.numero) { <option [value]="'#' + c.numero + ' ' + c.titulo"></option> }</datalist>
+            }
+            @if (t.bloqueia.length) {
+              <span class="rotulo-lateral" style="margin-top: 8px">Bloqueia</span>
+              @for (b of t.bloqueia; track b.numero) { <div class="linha-bloqueio"><a [routerLink]="['/tarefas', b.numero]">#{{ b.numero }} {{ b.titulo }}</a></div> }
             }
           </div>
+
+          <div class="grupo-lateral">
+            <span class="rotulo-lateral">Seguidores</span>
+            <button type="button" class="acao-secundaria acao-pequena" [class.ativo]="t.seguindo" (click)="alternarSeguir(t)">{{ t.seguindo ? '✓ Seguindo' : '+ Seguir' }}</button>
+            @if (t.seguidores.length) { <small class="d-block">{{ nomesSeguidores(t) }}</small> }
+            @else { <small class="d-block">Quem segue recebe os avisos de comentários, prazos e validação.</small> }
+          </div>
+
+          @if (t.equipe) {
+            <div class="grupo-lateral">
+              <label class="rotulo-lateral" for="jd-marco">Marco</label>
+              @if (pode('editar')) {
+                <select id="jd-marco" class="seletor-lateral" [ngModel]="t.marco_id" (ngModelChange)="trocarMarco(t, $event)" (focus)="carregarMarcos(t)">
+                  <option [ngValue]="null">Nenhum</option>
+                  @for (m of marcosEquipe(); track m.id) { <option [ngValue]="m.id">{{ m.nome }} ({{ m.data_alvo + 'T12:00:00' | date: 'dd/MM' }})</option> }
+                </select>
+              } @else { <span>{{ nomeMarco(t) }}</span> }
+            </div>
+          }
 
           <div class="grupo-lateral">
             <span class="rotulo-lateral">Prazo</span>
             <span class="chip-prazo grande" [attr.data-situacao]="situacao(t)">{{ t.prazo | date: 'dd/MM/yyyy HH:mm' }}</span>
             @if (t.status !== 'concluida') { <small class="d-block">{{ prazoRelativo(t.prazo) }}</small> }
+            @if (t.sla; as sla) {
+              <small class="d-block selo-sla-texto" [attr.data-situacao]="sla.situacao_resposta" title="Prazos em dias úteis a partir da criação da tarefa">{{ textoSla(sla, 'resposta') }}</small>
+              <small class="d-block selo-sla-texto" [attr.data-situacao]="sla.situacao_resolucao">{{ textoSla(sla, 'resolucao') }}</small>
+            }
             @if (t.prorrogacoes) { <small class="d-block">Original: <s>{{ t.prazo_original | date: 'dd/MM/yyyy HH:mm' }}</s> · alterado {{ t.prorrogacoes }}×</small> }
             @if (pode('prazo')) { <button type="button" class="link-simples" (click)="modoJanela.set('prazo')">Alterar prazo…</button> }
           </div>
@@ -235,28 +370,6 @@
               </select>
             } @else {
               <span class="selo-prioridade-tarefa" [attr.data-prioridade]="t.prioridade">{{ rotulosPrioridade[t.prioridade] }}</span>
-            }
-          </div>
-
-          <div class="grupo-lateral">
-            <div class="titulo-lateral"><span class="rotulo-lateral">Marcadores</span>
-              @if (pode('editar') && t.equipe && editandoCampo() !== 'marcadores') { <button type="button" class="link-simples" (click)="editarMarcadores()">Editar</button> }
-            </div>
-            @if (editandoCampo() === 'marcadores') {
-              <div class="linha-caixas vertical">
-                @for (m of marcadoresEquipe(); track m.id) {
-                  <label><input type="checkbox" [checked]="marcadoresIds().includes(m.id)" (change)="alternarMarcador(m.id)" />
-                    <span class="marcador-tarefa" [style.--cor]="m.cor">{{ m.nome }}</span></label>
-                } @empty { <span class="dica-formulario">A equipe ainda não tem marcadores.</span> }
-              </div>
-              <div class="acoes-formulario">
-                <button type="button" class="acao-secundaria" (click)="editandoCampo.set(null)">Cancelar</button>
-                <button type="button" class="acao-primaria" (click)="salvarMarcadores()">Salvar</button>
-              </div>
-            } @else {
-              @if (t.marcadores.length) {
-                <div class="marcadores">@for (m of t.marcadores; track m.id) { <span class="marcador-tarefa" [style.--cor]="m.cor">{{ m.nome }}</span> }</div>
-              } @else { <span class="dica-formulario">Nenhum.</span> }
             }
           </div>
 

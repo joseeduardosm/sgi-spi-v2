@@ -25,6 +25,8 @@ import {
   Pagina,
   PainelContratos,
   PainelVigencias,
+  CalendarioVencimentos,
+  VerificacaoDocumento,
   Previsao,
   PreviaImportacao,
   PreviaImportacaoModelo,
@@ -208,6 +210,26 @@ export class ContratosApiService {
     let params = new HttpParams();
     for (const [chave, valor] of Object.entries(filtros)) if (valor) params = params.set(chave, valor);
     return this.http.get<PainelContratos>(`${this.base}/painel`, { params });
+  }
+
+  /** Verifica um PDF gerado pelo sistema pelo código de verificação da Folha de autenticação. */
+  verificarCodigo(codigo: string): Observable<VerificacaoDocumento> {
+    return this.http.get<VerificacaoDocumento>(`${this.base}/verificar-documento`, { params: new HttpParams().set('codigo', codigo) });
+  }
+
+  /** Verifica se um PDF é exatamente o gerado pelo sistema (confere o hash do arquivo). */
+  verificarArquivo(arquivo: File): Observable<VerificacaoDocumento> {
+    const corpo = new FormData();
+    corpo.append('arquivo', arquivo);
+    return this.http.post<VerificacaoDocumento>(`${this.base}/verificar-documento`, corpo);
+  }
+
+  /** Calendário de vencimentos: eventos de `de` a `ate` (até 366 dias), com os filtros preenchidos. */
+  calendario(de: string, ate: string, meus: boolean, tipos: string[]): Observable<CalendarioVencimentos> {
+    let params = new HttpParams().set('de', de).set('ate', ate);
+    if (meus) params = params.set('meus', 'true');
+    if (tipos.length) params = params.set('tipos', tipos.join(','));
+    return this.http.get<CalendarioVencimentos>(`${this.base}/calendario`, { params });
   }
 
   /** Painel de vigências: vigência de cada contrato vigente, do que vence primeiro ao último. */

@@ -9,7 +9,7 @@ import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { ambiente } from '../../../environments/ambiente';
 import { baixarArquivo } from '../../shared/utilitarios/download';
 import {
-  AcaoPipeline, AgendaPessoa, Equipe, EventoTarefa, FiltrosTarefas, LinhaDoTempo, ListaTarefas, Marcador, PessoaCarga, PrioridadeTarefa, TarefaDetalhe,
+  AcaoPipeline, AgendaPessoa, Atividade, AtualizacaoStatus, Marco, DesempenhoEquipe, Equipe, Estagio, Recorrencia, RegraRecorrencia, EventoTarefa, FiltrosTarefas, LinhaDoTempo, ListaTarefas, Marcador, PessoaCarga, PrioridadeTarefa, TarefaDetalhe,
 } from './tarefas.models';
 
 export interface Escopo { tipo: 'minhas' | 'equipe' | 'pessoa'; equipeId?: string | null; login?: string | null }
@@ -37,7 +37,7 @@ export class TarefasApiService {
 
   criar(dados: {
     titulo: string; descricao: string; prazo: string; prioridade: PrioridadeTarefa; equipe_id: string | null;
-    responsavel_id: number | null; participantes_ids: number[]; marcadores_ids: string[];
+    responsaveis_ids: number[]; marcadores_ids: string[]; recorrencia?: RegraRecorrencia | null;
   }): Observable<TarefaDetalhe> {
     return this.http.post<TarefaDetalhe>(this.base, dados);
   }
@@ -45,7 +45,7 @@ export class TarefasApiService {
   /** Cria a tarefa já com anexos (até 5), em `multipart`: os arquivos ficam no evento "Tarefa criada". */
   criarComAnexos(dados: {
     titulo: string; descricao: string; prazo: string; prioridade: PrioridadeTarefa; equipe_id: string | null;
-    responsavel_id: number | null; participantes_ids: number[]; marcadores_ids: string[];
+    responsaveis_ids: number[]; marcadores_ids: string[]; recorrencia?: RegraRecorrencia | null;
   }, arquivos: File[]): Observable<TarefaDetalhe> {
     const corpo = new FormData();
     corpo.append('dados', JSON.stringify(dados));
@@ -53,7 +53,7 @@ export class TarefasApiService {
     return this.http.post<TarefaDetalhe>(`${this.base}/com-anexos`, corpo);
   }
 
-  editar(numero: number, dados: { titulo: string; descricao: string; prioridade: PrioridadeTarefa; participantes_ids: number[]; marcadores_ids: string[]; versao: number }) {
+  editar(numero: number, dados: { titulo: string; descricao: string; prioridade: PrioridadeTarefa; responsaveis_ids: number[]; marcadores_ids: string[]; versao: number }) {
     return this.http.put<TarefaDetalhe>(`${this.base}/${numero}`, dados);
   }
 
@@ -61,17 +61,31 @@ export class TarefasApiService {
     return this.http.post<TarefaDetalhe>(`${this.base}/${numero}/prazo`, { prazo, justificativa, versao });
   }
 
-  mover(numero: number, acao: AcaoPipeline, texto = '', versao?: number) {
-    return this.http.post<TarefaDetalhe>(`${this.base}/${numero}/mover`, { acao, texto, versao });
+  mover(numero: number, acao: AcaoPipeline, texto = '', versao?: number, estagioId?: string) {
+    return this.http.post<TarefaDetalhe>(`${this.base}/${numero}/mover`, { acao, texto, versao, estagio_id: estagioId ?? null });
+  }
+
+  /** Troca a coluna da tarefa dentro da mesma situação. */
+  mudarEstagio(numero: number, estagioId: string) {
+    return this.http.post<TarefaDetalhe>(`${this.base}/${numero}/estagio`, { estagio_id: estagioId });
+  }
+
+  estagios(equipeId: string): Observable<Estagio[]> {
+    return this.http.get<Estagio[]>(`${this.base}/equipes/${equipeId}/estagios`);
+  }
+
+  gravarEstagios(equipeId: string, estagios: { id: string | null; nome: string; categoria: string; cor_indice: number }[]): Observable<Estagio[]> {
+    return this.http.put<Estagio[]>(`${this.base}/equipes/${equipeId}/estagios`, { estagios });
   }
 
   transferir(numero: number, para_id: number, justificativa: string, novo_prazo: string | null, versao: number) {
     return this.http.post<TarefaDetalhe>(`${this.base}/${numero}/transferir`, { para_id, justificativa, novo_prazo, versao });
   }
 
-  comentar(numero: number, texto: string, arquivos: File[]): Observable<EventoTarefa> {
+  comentar(numero: number, texto: string, arquivos: File[], emRespostaA: string | null = null): Observable<EventoTarefa> {
     const corpo = new FormData();
     corpo.append('texto', texto);
+    if (emRespostaA) corpo.append('em_resposta_a', emRespostaA);
     for (const a of arquivos) corpo.append('arquivos', a);
     return this.http.post<EventoTarefa>(`${this.base}/${numero}/comentarios`, corpo);
   }
@@ -148,12 +162,129 @@ export class TarefasApiService {
     return this.http.delete<void>(`${this.base}/equipes/${id}`);
   }
 
-  marcadores(equipeId: string): Observable<Marcador[]> {
-    return this.http.get<Marcador[]>(`${this.base}/equipes/${equipeId}/marcadores`);
+  // --- Marcos e status da equipe ---
+
+  marcos(equipeId: string): Observable<Marco[]> {
+    return this.http.get<Marco[]>(`${this.base}/equipes/${equipeId}/marcos`);
   }
 
-  criarMarcador(equipeId: string, nome: string, cor: string) {
-    return this.http.post<Marcador>(`${this.base}/equipes/${equipeId}/marcadores`, { nome, cor });
+  salvarMarco(equipeId: string, dados: { nome: string; descricao: string; data_alvo: string }, id?: string) {
+    return id ? this.http.put<Marco>(`${this.base}/marcos/${id}`, dados) : this.http.post<Marco>(`${this.base}/equipes/${equipeId}/marcos`, dados);
+  }
+
+  excluirMarco(id: string) {
+    return this.http.delete<void>(`${this.base}/marcos/${id}`);
+  }
+
+  atingirMarco(id: string, atingido: boolean) {
+    return this.http.post<Marco>(`${this.base}/marcos/${id}/${atingido ? 'atingir' : 'reabrir'}`, null);
+  }
+
+  definirMarco(numero: number, marcoId: string | null) {
+    return this.http.put<TarefaDetalhe>(`${this.base}/${numero}/marco`, { marco_id: marcoId });
+  }
+
+  historicoStatus(equipeId: string): Observable<AtualizacaoStatus[]> {
+    return this.http.get<AtualizacaoStatus[]>(`${this.base}/equipes/${equipeId}/status`);
+  }
+
+  publicarStatus(equipeId: string, situacao: string, texto: string) {
+    return this.http.post<AtualizacaoStatus>(`${this.base}/equipes/${equipeId}/status`, { situacao, texto });
+  }
+
+  // --- Atividades agendadas e seguidores ---
+
+  atividadesDaTarefa(numero: number): Observable<Atividade[]> {
+    return this.http.get<Atividade[]>(`${this.base}/${numero}/atividades`);
+  }
+
+  minhasAtividades(concluidas = false): Observable<Atividade[]> {
+    return this.http.get<Atividade[]>(`${this.base}/atividades`, { params: { concluidas } });
+  }
+
+  agendarAtividade(numero: number, dados: { resumo: string; tipo: string; nota: string; prazo: string | null; responsavel_id: number | null }) {
+    return this.http.post<Atividade>(`${this.base}/${numero}/atividades`, dados);
+  }
+
+  concluirAtividade(id: string, feedback: string) {
+    return this.http.post<Atividade>(`${this.base}/atividades/${id}/concluir`, { feedback });
+  }
+
+  excluirAtividade(id: string) {
+    return this.http.delete<void>(`${this.base}/atividades/${id}`);
+  }
+
+  seguir(numero: number, seguir: boolean) {
+    return seguir ? this.http.post<TarefaDetalhe>(`${this.base}/${numero}/seguir`, null) : this.http.delete<TarefaDetalhe>(`${this.base}/${numero}/seguir`);
+  }
+
+  /** Cria uma subtarefa (herda equipe, marcadores, responsáveis e prazo da mãe quando não informados). */
+  criarSubtarefa(numero: number, dados: { titulo: string }) {
+    return this.http.post<TarefaDetalhe>(`${this.base}/${numero}/subtarefas`, dados);
+  }
+
+  /** Substitui a lista de tarefas que bloqueiam esta (por número). */
+  definirDependencias(numero: number, numeros: number[]) {
+    return this.http.put<TarefaDetalhe>(`${this.base}/${numero}/dependencias`, { numeros });
+  }
+
+  /** Burndown, vazão, ciclo, fluxo acumulado e produtividade da equipe (só liderança). */
+  desempenho(equipeId: string, de: string, ate: string, marcadorId = ''): Observable<DesempenhoEquipe> {
+    let params = new HttpParams().set('de', de).set('ate', ate);
+    if (marcadorId) params = params.set('marcador_id', marcadorId);
+    return this.http.get<DesempenhoEquipe>(`${this.base}/equipes/${equipeId}/desempenho`, { params });
+  }
+
+  /** Os mesmos gráficos para uma pessoa (tarefas em que é responsável, inclusive as pessoais); vale para a própria pessoa, a liderança e o SuperRoot. */
+  desempenhoPessoa(usuarioId: number, de: string, ate: string, marcadorId = ''): Observable<DesempenhoEquipe> {
+    let params = new HttpParams().set('de', de).set('ate', ate);
+    if (marcadorId) params = params.set('marcador_id', marcadorId);
+    return this.http.get<DesempenhoEquipe>(`${this.base}/pessoas/${usuarioId}/desempenho`, { params });
+  }
+
+  // --- Tarefas recorrentes ---
+
+  /** Texto da regra e as próximas datas de prazo (mesmo cálculo da geração). */
+  previaRecorrencia(prazo: string, regra: RegraRecorrencia) {
+    return this.http.post<{ resumo: string; proximas: string[] }>(`${this.base}/recorrencias/previa`, { prazo, regra });
+  }
+
+  recorrencias(equipeId: string | null): Observable<Recorrencia[]> {
+    return this.http.get<Recorrencia[]>(`${this.base}/recorrencias`, { params: equipeId ? { equipe_id: equipeId } : {} });
+  }
+
+  alterarRecorrencia(id: string, dados: {
+    titulo: string; descricao: string; prioridade: PrioridadeTarefa; checklist: string[]; responsaveis_ids: number[]; marcadores_ids: string[];
+    regra: RegraRecorrencia; hora_prazo?: string | null;
+  }) {
+    return this.http.put<Recorrencia>(`${this.base}/recorrencias/${id}`, dados);
+  }
+
+  pausarRecorrencia(id: string) {
+    return this.http.post<Recorrencia>(`${this.base}/recorrencias/${id}/pausar`, null);
+  }
+
+  retomarRecorrencia(id: string) {
+    return this.http.post<Recorrencia>(`${this.base}/recorrencias/${id}/retomar`, null);
+  }
+
+  excluirRecorrencia(id: string) {
+    return this.http.delete<void>(`${this.base}/recorrencias/${id}`);
+  }
+
+  /** Marcadores da equipe (e globais), os mais usados primeiro; `busca` filtra por trecho do nome. */
+  marcadores(equipeId: string, busca = '', limite = 100): Observable<Marcador[]> {
+    return this.http.get<Marcador[]>(`${this.base}/equipes/${equipeId}/marcadores`, { params: { busca, limite } });
+  }
+
+  /** Cria o marcador na hora (nome repetido devolve o existente); sem cor, a API sorteia. */
+  criarMarcador(equipeId: string, nome: string, corIndice?: number) {
+    return this.http.post<Marcador>(`${this.base}/equipes/${equipeId}/marcadores`, { nome, cor_indice: corIndice ?? null });
+  }
+
+  /** Renomeia e/ou troca a cor (liderança). */
+  alterarMarcador(equipeId: string, id: string, nome: string, corIndice: number) {
+    return this.http.put<Marcador>(`${this.base}/equipes/${equipeId}/marcadores/${id}`, { nome, cor_indice: corIndice });
   }
 
   excluirMarcador(id: string) {

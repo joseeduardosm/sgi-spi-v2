@@ -136,6 +136,8 @@ class Reajuste(Base):
     vigencia_fim: Mapped[date] = mapped_column(Date)
     # Primeiro mês com os novos preços (dia 1)
     mes_referencia: Mapped[date] = mapped_column(Date)
+    # Data a partir da qual os novos preços valem (qualquer dia da vigência); nula = o dia 1 de `mes_referencia`
+    data_efeito: Mapped[date | None] = mapped_column(Date)
     situacao: Mapped[str] = mapped_column(String(20), default="rascunho")
     # Totais antes e depois do reajuste (base mensal e valor global da vigência)
     base_atual: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
@@ -154,6 +156,12 @@ class Reajuste(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     contrato: Mapped[Contrato] = relationship(back_populates="reajustes")
+
+    @property
+    def efeito(self) -> date:
+        """Data a partir da qual valem os novos preços (a data de efeito ou, sem ela, o 1º dia do mês de referência)."""
+        return self.data_efeito or self.mes_referencia
+
     itens: Mapped[list["ItemReajuste"]] = relationship(back_populates="reajuste", cascade="all, delete-orphan", order_by="ItemReajuste.ordem")
     memorias: Mapped[list["MemoriaReajuste"]] = relationship(
         back_populates="reajuste", cascade="all, delete-orphan", order_by="MemoriaReajuste.versao"

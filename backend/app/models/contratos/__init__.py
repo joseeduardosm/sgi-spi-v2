@@ -13,6 +13,7 @@ Organização dos arquivos:
 Este arquivo reexporta as classes para que o restante do código importe de um lugar só.
 """
 
+from app.models.contratos.autenticacao import DocumentoAutenticado
 from app.models.contratos.alteracoes import (
     AbatimentoReajuste,
     AlteracaoQuantidade,
@@ -44,6 +45,7 @@ from app.models.contratos.execucao import (
     ConsultaCadin,
     DocumentoMensal,
     NotaFiscalCompetencia,
+    DespesaVariavel,
     RecusaNota,
     FormularioAvaliacao,
     ItemChecklist,
@@ -82,6 +84,8 @@ __all__ = [
     "DocumentoContrato",
     "DocumentoMensal",
     "NotaFiscalCompetencia",
+    "DespesaVariavel",
+    "DocumentoAutenticado",
     "RecusaNota",
     "EmpresaContratada",
     "FormularioAvaliacao",

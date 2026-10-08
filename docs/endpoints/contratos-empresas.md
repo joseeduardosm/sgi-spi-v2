@@ -13,7 +13,7 @@ Cadastro das empresas contratadas e de seus **prepostos**. O preposto é um cont
   - **Cadastro, alteração e prepostos:** ACL `contratos` ≥ `MODIFICACAO`.
   - **Exclusão da empresa:** ACL `contratos` = `CONTROLE_TOTAL`.
 - **CNPJ:** aceito com ou sem máscara, gravado com os 14 dígitos, validado pelos dígitos verificadores e **único**.
-- **CPF do preposto:** mesmas regras (11 dígitos), único **dentro da empresa**.
+- **CPF do preposto:** **opcional** (vazio = sem CPF, gravado como nulo). Se informado: mesmas regras (11 dígitos, válido) e único **dentro da empresa**; prepostos sem CPF não colidem entre si. Migração `f9c3e7a1b5d2`.
 - **Exclusão:** só para empresas **sem contratos**. As demais podem ser inativadas.
 - **Auditoria:** `contrato.empresa.criar`, `contrato.empresa.alterar`, `contrato.empresa.excluir`, `contrato.preposto.salvar` e `contrato.preposto.excluir`. As alterações guardam o "de → para" de cada campo (`alvo_tipo = empresa`).
 
@@ -33,7 +33,7 @@ Cadastro das empresas contratadas e de seus **prepostos**. O preposto é um cont
 
 | Campo | Tipo | Obrigatório | Regras |
 |---|---|---|---|
-| `cpf` | string | sim | Com ou sem máscara; válido; único na empresa |
+| `cpf` | string | não | Com ou sem máscara; válido; único na empresa (quando informado) |
 | `nome` | string | sim | 1 a 200 |
 | `telefone` | string | não | Até 30 |
 | `email` | string | não | Até 250; formato de e-mail |

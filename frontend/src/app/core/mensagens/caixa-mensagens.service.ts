@@ -20,6 +20,8 @@ export class CaixaMensagensService {
   private readonly autenticacao = inject(AutenticacaoService);
 
   readonly pendentes = signal(0);
+  /** Mensagens ainda não abertas: é o número do sino. */
+  readonly naoLidas = signal(0);
   readonly janela = signal<EntregaDetalhe | null>(null);
   private relogio: ReturnType<typeof setInterval> | null = null;
 
@@ -40,6 +42,7 @@ export class CaixaMensagensService {
     this.api.resumo().subscribe({
       next: (r) => {
         this.pendentes.set(r.pendentes);
+        this.naoLidas.set(r.nao_lidas);
         // Não troca a janela que já está aberta
         if (!this.janela() && r.janela) this.janela.set(r.janela);
       },

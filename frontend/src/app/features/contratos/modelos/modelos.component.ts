@@ -71,7 +71,7 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
                 <select [id]="'modelo-val-' + $index" [name]="'val' + $index" [(ngModel)]="i.com_validade">
                   <option [ngValue]="false">Sem validade</option><option [ngValue]="true">Com validade</option>
                 </select>
-                @if (i.com_validade) { <label class="opcao-empresa"><input type="checkbox" [name]="'emp' + $index" [(ngModel)]="i.vale_outros_contratos" /> Documento da empresa</label> }</div>
+                <label class="opcao-empresa"><input type="checkbox" [name]="'emp' + $index" [(ngModel)]="i.vale_outros_contratos" /> Documento da empresa</label></div>
               <div style="align-self: center"><button type="button" class="link-arquivo" (click)="itens.splice($index, 1)">remover</button></div>
             </div>
           }

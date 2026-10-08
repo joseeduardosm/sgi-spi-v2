@@ -57,17 +57,35 @@ $status: (
 
 .marcadores { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 
+// Marcador: pílula com fundo suave, borda fina e texto escuro; a cor vem do índice da paleta (`.marcador-cor-N`)
 .marcador-tarefa {
-  --cor: #5364ce;
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--cor) 40%, transparent);
-  color: color-mix(in srgb, var(--cor) 80%, var(--cor-000000));
-  background: color-mix(in srgb, var(--cor) 12%, var(--cor-ffffff));
-  font-size: 10px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid #8f8f8f;
+  color: #3d3d3d;
+  background: #d7d7d7;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
 }
+
+@mixin cor-marcador($borda, $fundo, $texto) { border-color: $borda; background: $fundo; color: $texto; }
+.marcador-tarefa.marcador-cor-0 { @include cor-marcador(#8f8f8f, #d7d7d7, #3d3d3d); }
+.marcador-tarefa.marcador-cor-1 { @include cor-marcador(#d76a58, #fedbd5, #6b1f15); }
+.marcador-tarefa.marcador-cor-2 { @include cor-marcador(#cc7724, #fedec5, #5c3003); }
+.marcador-tarefa.marcador-cor-3 { @include cor-marcador(#c09910, #f4dc9d, #4c3b04); }
+.marcador-tarefa.marcador-cor-4 { @include cor-marcador(#179dc5, #c2ecfe, #044457); }
+.marcador-tarefa.marcador-cor-5 { @include cor-marcador(#b271c6, #ebcaf6, #542662); }
+.marcador-tarefa.marcador-cor-6 { @include cor-marcador(#af8563, #f2e1d4, #4d3827); }
+.marcador-tarefa.marcador-cor-7 { @include cor-marcador(#17a49d, #aef4ee, #034744); }
+.marcador-tarefa.marcador-cor-8 { @include cor-marcador(#5d8ee4, #c3d9fe, #193a76); }
+.marcador-tarefa.marcador-cor-9 { @include cor-marcador(#d06792, #fec5d9, #671d3f); }
+.marcador-tarefa.marcador-cor-10 { @include cor-marcador(#4ca65a, #bae5bd, #044b18); }
+.marcador-tarefa.marcador-cor-11 { @include cor-marcador(#8f7ede, #e4e1fe, #3e2f72); }
 
 .link-simples {
   padding: 0;
@@ -1418,3 +1436,335 @@ a.botao-link { display: inline-flex; align-items: center; text-decoration: none;
   .barra-espaco .busca-espaco { width: 100%; }
 }
 
+
+// Campo de marcadores (estilo Odoo): pílulas com ×, lista dos mais usados, criar na hora e janelinha de cores
+app-seletor-marcadores { position: relative; display: block; }
+.campo-marcadores {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 40px; padding: 4px 8px;
+  border: 1px solid var(--cor-e2e5e8); border-radius: 7px; background: var(--cor-fcfcfc); cursor: text;
+  &:focus-within { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; }
+  &.desabilitado { cursor: default; background: transparent; border-color: transparent; padding-left: 0; }
+  input { flex: 1; min-width: 120px; height: 28px; border: 0; outline: 0; background: transparent; font-size: 13px; }
+  .pilula-marcador { display: inline-flex; align-items: center; gap: 2px;
+    > button:first-child { cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; padding: 2px 10px; }
+    .tirar { border: 0; background: none; color: var(--spi-apagado); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; &:hover { color: var(--spi-vermelho); } } }
+}
+.lista-opcoes-marcador {
+  position: absolute; z-index: 40; left: 0; right: 0; margin: 4px 0 0; padding: 4px; list-style: none; max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--cor-e8eaec); border-radius: 8px; background: var(--cor-ffffff); box-shadow: 0 10px 30px #181b1f26;
+  li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    small { color: var(--spi-apagado); font-size: 11px; }
+    &.ativa { background: var(--cor-f7f8f9); } &.vazia { color: var(--spi-apagado); cursor: default; } &.criar { justify-content: flex-start; gap: 4px; color: var(--spi-link); } }
+}
+.janela-cor-marcador {
+  position: absolute; z-index: 41; left: 0; margin-top: 4px; display: grid; gap: 10px; padding: 12px; width: 260px;
+  border: 1px solid var(--cor-e8eaec); border-radius: 10px; background: var(--cor-ffffff); box-shadow: 0 10px 30px #181b1f33;
+  .cores { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;
+    .cor { width: 28px; height: 28px; border-radius: 50%; border: 2px solid; cursor: pointer; &.atual { outline: 2px solid #17202a; outline-offset: 2px; } } }
+  .renomear { display: flex; gap: 6px; input { flex: 1; height: 32px; padding: 0 8px; border: 1px solid var(--cor-e2e5e8); border-radius: 6px; } }
+  .perigo { color: var(--spi-vermelho); }
+}
+
+// Edição de cor e nome do marcador na configuração da equipe
+.edicao-marcador { display: grid; gap: 10px; margin: 0 0 14px; padding: 12px; border: 1px solid var(--cor-e8eaec); border-radius: 10px;
+  .cores { display: flex; flex-wrap: wrap; gap: 8px;
+    .cor { width: 28px; height: 28px; border-radius: 50%; border: 2px solid; cursor: pointer; &.atual { outline: 2px solid #17202a; outline-offset: 2px; } } }
+  .renomear { display: flex; flex-wrap: wrap; gap: 8px; input { flex: 1; min-width: 160px; height: 36px; padding: 0 10px; border: 1px solid var(--cor-e2e5e8); border-radius: 6px; } } }
+.lista-marcadores button.marcador-tarefa { cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
+
+// Bloco "Repetir" da nova tarefa (tarefas recorrentes): cartão que abre as opções ao ligar
+.bloco-recorrencia { margin-top: 4px; padding: 14px 16px; border: 1px solid var(--cor-e2e5e8); border-radius: 10px; background: var(--cor-fcfcfc);
+  &.ligado { border-color: #e6b8bd; background: var(--cor-fff7f8); }
+  .linha-caixa { display: flex; align-items: center; gap: 12px; margin: 0; cursor: pointer;
+    input[type='checkbox'] { flex: none; width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--spi-vermelho); }
+    strong { display: block; font-size: 14px; color: var(--cor-32383f); } small { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--spi-apagado); }
+    &.simples { align-items: flex-start; strong { display: inline; } span { font-size: 13px; font-weight: 600; } small { display: inline; } } }
+  .grade-recorrencia { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--cor-e8eaec);
+    .largo { grid-column: 1 / -1; }
+    .campo-rec > label:first-child:not(.linha-caixa) { display: block; margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--cor-464f5a); }
+    .intervalo { display: flex; align-items: center; gap: 8px; input, select { height: 38px; margin: 0; } input[type='number'] { width: 84px; } select { flex: 1; min-width: 0; } small { color: var(--spi-apagado); } } }
+  .dias-semana { display: flex; flex-wrap: wrap; gap: 6px;
+    button { min-width: 50px; height: 34px; border: 1px solid var(--cor-e2e5e8); border-radius: 17px; background: var(--cor-ffffff); cursor: pointer; font-weight: 700; font-size: 12px;
+      &.ativo { color: #fff; background: var(--spi-vermelho); border-color: var(--spi-vermelho); } } }
+  // "Termina": três opções lado a lado, cada uma com o campo dela na mesma linha
+  .termino { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+    .opcao-termino { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; min-height: 48px; border: 1px solid var(--cor-e2e5e8); border-radius: 8px; background: var(--cor-ffffff);
+      font-size: 13px; font-weight: 600; cursor: pointer; flex-wrap: nowrap; white-space: nowrap;
+      &.escolhida { border-color: var(--spi-vermelho); background: var(--cor-fff7f8); }
+      input[type='radio'] { flex: none; width: 16px; height: 16px; margin: 0; padding: 0; accent-color: var(--spi-vermelho); }
+      input[type='date'], input[type='number'] { flex: 1; min-width: 0; width: auto; height: 32px; margin: 0; padding: 0 8px; }
+      input[type='number'] { max-width: 64px; } } }
+  .resumo-recorrencia { margin: 14px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--cor-ffffff); border: 1px dashed #e6b8bd; small { color: var(--spi-apagado); } }
+}
+
+// Nova tarefa: formulário em seções numeradas, com a barra de ações sempre visível
+.secao-tarefa { margin: 0 0 22px; padding-bottom: 6px;
+  h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 15px; color: var(--cor-32383f);
+    span { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; color: #fff; background: var(--spi-vermelho); font-size: 12px; }
+    small { font-size: 12px; font-weight: 400; color: var(--spi-apagado); } }
+  .grade-formulario input, .grade-formulario select, .grade-formulario textarea { margin-bottom: 14px; }
+  .grade-formulario.tres-colunas { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 1.2fr); }
+  .grade-formulario .lista-carga { margin-bottom: 8px; }
+  .botao-arquivo input[type='file'] { display: none; } }
+.secao-tarefa + .secao-tarefa { padding-top: 18px; border-top: 1px solid var(--cor-e8eaec); }
+.acoes-fixas { position: sticky; bottom: 0; z-index: 3; margin: 0 -16px -16px; padding: 12px 16px; border-top: 1px solid var(--cor-e8eaec); background: var(--cor-ffffff); border-radius: 0 0 12px 12px; }
+@media (max-width: 760px) {
+  .secao-tarefa .grade-formulario.tres-colunas { grid-template-columns: minmax(0, 1fr); }
+  .bloco-recorrencia .grade-recorrencia, .bloco-recorrencia .termino { grid-template-columns: minmax(0, 1fr); }
+}
+
+// Séries recorrentes: cartão, selo de estado e faixa no detalhe da tarefa
+.cartao-recorrencia { .linha-dados { margin: 0 0 6px; font-size: 13px; } .acoes-formulario { margin-top: 10px; flex-wrap: wrap; } }
+.selo-recorrencia { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; color: #fff; background: #2e9d5b;
+  &[data-estado='pausada'] { background: #c09910; } &[data-estado='erro'] { background: #c82331; } &[data-estado='encerrada'] { background: #8f8f8f; } }
+.faixa-recorrencia { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--cor-f7f8f9); color: var(--spi-apagado); font-size: 12px; }
+
+// Visão Desempenho da equipe (burndown, vazão, ciclo e fluxo acumulado)
+.desempenho { display: grid; gap: 16px;
+  .filtros-desempenho { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end;
+    .campo { display: flex; flex-direction: column; gap: 6px; label { font-size: 12px; font-weight: 700; } select, input { height: 38px; padding: 0 10px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px; background: var(--cor-fcfcfc); } } }
+  .indicadores-desempenho { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
+    div { padding: 12px 14px; border: 1px solid var(--cor-e8eaec); border-radius: 10px; background: var(--cor-ffffff); b { display: block; font-size: 24px; } small { color: var(--spi-apagado); } } }
+  .grade-graficos-desempenho { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px;
+    .cartao-dados { position: relative; padding-bottom: 34px; } }
+}
+
+// Botão "?" discreto no canto inferior esquerdo dos gráficos e o balão com a explicação
+app-ajuda-grafico { position: absolute; left: 12px; bottom: 8px; z-index: 5; }
+.botao-ajuda-grafico { width: 20px; height: 20px; padding: 0; border: 1px solid var(--cor-e2e5e8); border-radius: 50%; background: var(--cor-ffffff);
+  color: var(--spi-apagado); font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer; opacity: .75;
+  &:hover, &:focus-visible, &[aria-expanded='true'] { opacity: 1; color: var(--spi-link); border-color: var(--spi-link); } }
+.balao-ajuda-grafico { position: absolute; left: 0; bottom: 28px; width: min(380px, 80vw); padding: 12px 14px; display: grid; gap: 6px;
+  border: 1px solid var(--cor-e8eaec); border-radius: 10px; background: var(--cor-ffffff); box-shadow: 0 10px 30px #181b1f33; font-size: 13px; line-height: 1.45;
+  strong { font-size: 14px; } p { margin: 0; } }
+
+// Subtarefas e dependências: barra de progresso, lista, cadeado e busca de bloqueadoras
+.barra-progresso { height: 6px; margin: 4px 0 10px; border-radius: 3px; background: var(--cor-e8eaec); overflow: hidden; i { display: block; height: 100%; background: #2e9d5b; } }
+.lista-subtarefas { margin: 0 0 10px; padding: 0; list-style: none;
+  li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--cor-e8eaec); font-size: 13px;
+    a { display: flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; &:hover { color: var(--spi-vermelho); } } small { color: var(--spi-apagado); white-space: nowrap; } } }
+.nova-subtarefa { display: flex; gap: 8px; input { flex: 1; height: 38px; padding: 0 10px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px; } }
+.linha-bloqueio { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; a.concluida { text-decoration: line-through; color: var(--spi-apagado); } }
+.busca-dependencia { width: 100%; height: 34px; margin-top: 6px; padding: 0 8px; border: 1px solid var(--cor-e2e5e8); border-radius: 6px; font-size: 12px; }
+.cadeado-tarefa { margin-right: 4px; }
+.rastro-subtarefa { display: block; color: var(--spi-apagado); font-size: 11px; }
+.progresso-subtarefas { display: flex; align-items: center; gap: 6px; margin: 4px 0; height: 14px;
+  .trilho { flex: 1; height: 5px; border-radius: 3px; background: var(--cor-e8eaec); overflow: hidden; i { display: block; height: 100%; background: #2e9d5b; } }
+  small { color: var(--spi-apagado); font-size: 11px; flex: none; } }
+
+// Estágios do quadro: edição na configuração da equipe e destaque da coluna
+.lista-estagios { display: grid; gap: 8px; margin-bottom: 12px;
+  .linha-estagio { display: grid; grid-template-columns: 22px 1fr 160px 110px auto auto auto; gap: 8px; align-items: center;
+    input, select { height: 36px; padding: 0 8px; border: 1px solid var(--cor-e2e5e8); border-radius: 6px; background: var(--cor-fcfcfc); }
+    .amostra-estagio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid; } } }
+.lista-quadro[style*='--cor-estagio'] > header { border-top: 3px solid var(--cor-estagio); }
+
+// Atividades agendadas, seguidores e menções
+.lista-atividades { margin: 0 0 10px; padding: 0; list-style: none;
+  li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--cor-e8eaec); &.concluida { opacity: 0.65; strong { text-decoration: line-through; } } }
+  .icone-atividade { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--cor-f7f8f9); }
+  .texto-atividade { flex: 1; min-width: 0; strong { display: block; } small { display: block; color: var(--spi-apagado); } a { color: var(--spi-link); } }
+  .prazo-atividade { font-weight: 700; &[data-situacao='atrasada'] { color: var(--spi-vermelho); } &[data-situacao='hoje'] { color: #a86b00; } }
+  .feedback-atividade { font-style: italic; }
+  .acoes-atividade { display: flex; align-items: center; gap: 6px; }
+  .concluir-atividade { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; input { flex: 1; min-width: 200px; height: 34px; padding: 0 8px; border: 1px solid var(--cor-e2e5e8); border-radius: 6px; } } }
+.nova-atividade { display: flex; flex-wrap: wrap; gap: 8px; select, input { height: 36px; padding: 0 8px; border: 1px solid var(--cor-e2e5e8); border-radius: 6px; background: var(--cor-fcfcfc); } input[name='resumoAtividade'] { flex: 1; min-width: 200px; } }
+.mencionar { margin-top: 6px; height: 32px; padding: 0 8px; border: 1px solid var(--cor-e2e5e8); border-radius: 6px; font-size: 12px; }
+
+// Faixa da equipe: status atual e marcos
+.faixa-equipe { display: grid; gap: 10px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--cor-e8eaec); border-radius: 12px; background: var(--cor-ffffff);
+  .situacao-equipe { display: flex; align-items: center; gap: 10px; strong { display: block; } small { display: block; color: var(--spi-apagado); } .espacador { flex: 1; } }
+  .marcos-equipe { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch;
+    .marco { display: grid; gap: 3px; min-width: 190px; padding: 8px 10px; border: 1px solid var(--cor-e2e5e8); border-left: 4px solid #8f8f8f; border-radius: 8px; background: var(--cor-fcfcfc); text-align: left; cursor: pointer;
+      &.ativo { outline: 2px solid var(--spi-vermelho); }
+      &[data-situacao='no_prazo'] { border-left-color: #2e9d5b; } &[data-situacao='em_risco'] { border-left-color: #e0a100; } &[data-situacao='atrasado'] { border-left-color: #c82331; } &[data-situacao='atingido'] { border-left-color: #2f5d8a; }
+      small { color: var(--spi-apagado); font-size: 11px; }
+      .barra { height: 5px; border-radius: 3px; background: var(--cor-e8eaec); overflow: hidden; i { display: block; height: 100%; background: #2e9d5b; } } } } }
+.ponto-situacao { flex: none; width: 14px; height: 14px; border-radius: 50%; background: #8f8f8f;
+  &[data-situacao='no_prazo'] { background: #2e9d5b; } &[data-situacao='em_risco'] { background: #e0a100; } &[data-situacao='atrasado'] { background: #c82331; } &[data-situacao='em_espera'] { background: #5d8ee4; } &[data-situacao='concluido'] { background: #2f5d8a; } }
+.historico-status { margin: 0; padding: 14px 24px; list-style: none; li { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--cor-e8eaec); p { margin: 4px 0 0; } small { color: var(--spi-apagado); } } }
+.corpo-marcos { padding: 16px 24px; display: grid; gap: 16px; }
+.lista-gestao-marcos { margin: 0; padding: 0; list-style: none; li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--cor-e8eaec); small { color: var(--spi-apagado); } } }
+
+// Tarefa controlada por outro módulo (etapas das competências de contratos)
+.faixa-origem { margin: 0 0 12px; padding: 10px 14px; border: 1px solid #c2d6ec; border-left: 4px solid #2f5d8a; border-radius: 8px; background: #eef4fb; color: #1e3f63; font-size: 13px; line-height: 1.45;
+  a { font-weight: 700; } }
+.selo-origem { margin-right: 4px; font-size: 12px; }
+
+/* --- Densidade do quadro: duas subcolunas e cartão reduzido ---------------------------------------------
+   O quadro escolhe sozinho o nível de cada coluna (`data-nivel` em `.cartoes`): 1 normal, 2 duas subcolunas, 3 duas subcolunas com cartão
+   reduzido (#número · prazo · criticidade · marcadores). Os cartões entram por linha, mantendo a ordem crescente de prazo. */
+.cartoes[data-nivel='2'], .cartoes[data-nivel='3'] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px;
+
+  > .lista-vazia, > .ver-todas-concluidas { grid-column: 1 / -1; }
+  .envoltorio-cartao { min-width: 0; }
+}
+
+.cartoes[data-nivel='2'] .cartao-quadro { padding: 6px 8px; .titulo-quadro { margin-bottom: 5px; font-size: 12px; } }
+
+/* O bloco reduzido existe em todo cartão, mas só aparece no nível 3 (que esconde o resto) */
+.cartao-quadro .mini-cartao { display: none; }
+
+.cartoes[data-nivel='3'] .cartao-quadro {
+  padding: 4px 6px;
+  border-radius: 6px;
+
+  > :not(.mini-cartao) { display: none; }
+
+  .mini-cartao {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 26px;
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .mini-numero { color: var(--cor-3d454e); font-size: 11px; font-weight: 800; letter-spacing: -.01em; }
+
+  .mini-prazo {
+    padding: 2px 5px;
+    border-radius: 4px;
+    color: var(--cor-5a6673);
+    background: var(--cor-eef0f2);
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+
+    &[data-situacao='atrasada'] { color: #fff; background: var(--spi-vermelho); }
+    &[data-situacao='proxima'] { color: #7a4d00; background: var(--cor-fde9b5); }
+    &[data-situacao='concluida'] { color: var(--cor-1d6b43); background: var(--cor-e5f4ec); }
+  }
+
+  .mini-prioridade {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    color: var(--cor-5a6673);
+    background: var(--cor-eef0f2);
+    font-size: 9px;
+    font-style: normal;
+    font-weight: 800;
+    line-height: 15px;
+    text-align: center;
+
+    &[data-prioridade='alta'] { color: #6b4a00; background: #f3d27a; }
+    &[data-prioridade='critica'] { color: #fff; background: var(--spi-vermelho); }
+  }
+
+  /* Marcadores viram faixas coloridas pequenas (o nome está na dica) */
+  .mini-marcadores {
+    display: flex;
+    flex: 1 1 auto;
+    gap: 3px;
+    min-width: 0;
+    overflow: hidden;
+    i { flex: 0 0 14px; width: 14px; min-width: 14px; height: 6px; max-width: 14px; padding: 0; border-radius: 3px; overflow: hidden; }
+  }
+}
+
+/* Menu "⋯" do cartão reduzido só aparece ao passar o mouse (não cobre as informações) */
+.cartoes[data-nivel='3'] .envoltorio-cartao .menu-cartao { top: 3px; right: 3px; width: 20px; height: 20px; opacity: 0; transition: opacity .12s; }
+.cartoes[data-nivel='3'] .envoltorio-cartao:hover .menu-cartao, .cartoes[data-nivel='3'] .envoltorio-cartao:focus-within .menu-cartao { opacity: 1; }
+
+/* Dica do cartão reduzido */
+.dica-tarefa {
+  position: fixed;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 320px;
+  padding: 10px 12px;
+  border: 1px solid var(--cor-cfd4da);
+  border-radius: 8px;
+  color: var(--cor-32383f);
+  background: var(--cor-ffffff);
+  box-shadow: 0 8px 24px #0f172a33;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+
+  strong { color: var(--cor-22292f); font-size: 13px; overflow-wrap: anywhere; }
+  span { color: var(--cor-5a6673); }
+}
+
+/* --- Modo tela cheia ---------------------------------------------------------------------------------
+   O espaço cobre o portal (menu e cabeçalho) para usar o máximo da tela; o quadro ocupa toda a altura que sobra, sem rolagem da página. */
+.botao-tela-cheia.ativo { color: var(--spi-vermelho); border-color: var(--spi-vermelho); }
+
+app-espaco-tarefas.tela-cheia {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px 10px;
+  overflow-y: auto;
+  background: var(--spi-fundo);
+
+  .cabecalho-espaco { margin-bottom: 6px; gap: 8px; align-items: center; h1 { font-size: 17px; } .titulo-espaco small { display: none; } }
+  .barra-espaco { margin-bottom: 6px; gap: 8px; }
+  .resumo-espaco { margin-bottom: 6px; }
+  .chips-filtro { padding-bottom: 6px; }
+  app-faixa-equipe { display: none; }
+
+  &.visao-quadro {
+    overflow: hidden;
+
+    app-quadro-tarefas { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+    /* Sem raias: um quadro que ocupa a altura toda; com raias, as raias rolam na vertical */
+    app-quadro-tarefas .quadro:only-child { flex: 1 1 auto; min-height: 0; align-items: stretch; padding-bottom: 0; overflow-y: hidden; }
+    app-quadro-tarefas .quadro:only-child .lista-quadro { max-height: none; height: 100%; min-height: 0; }
+    app-quadro-tarefas .quadro:only-child .cartoes { flex: 1 1 auto; min-height: 0; }
+    app-quadro-tarefas:has(.cabecalho-raia) { overflow-y: auto; }
+  }
+
+  /* Colunas dividem a largura toda (o mínimo continua valendo em telas estreitas, com rolagem horizontal) */
+  .quadro { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); }
+}
+
+/* Dica do cartão fora do modo normal também precisa estar acima de tudo */
+@media (max-width: 860px) {
+  app-espaco-tarefas.tela-cheia .quadro { grid-template-columns: repeat(4, 82vw); grid-auto-flow: row; }
+}
+
+/* Calendário genérico de eventos (vencimentos de contratos): pílula colorida pela gravidade */
+.pilula-evento {
+  display: block; width: 100%; margin-top: 2px; padding: 2px 6px; border: 0; border-left: 3px solid var(--cor-8f8f8f, #8f8f8f); border-radius: 4px; color: var(--cor-32383f);
+  background: var(--cor-eef0f2); font-size: 11px; line-height: 1.3; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  b { margin-right: 4px; font-weight: 800; }
+  &:hover { filter: brightness(.96); }
+  &[data-severidade='alta'] { border-left-color: var(--spi-vermelho); background: var(--cor-fcecee); }
+  &[data-severidade='media'] { border-left-color: #e0a526; background: var(--cor-fde9b5); }
+  &[data-severidade='info'] { border-left-color: #5d8ee4; }
+}
+
+/* SLA de prazos: selo no cartão e texto nas telas (cores pela situação) */
+.selo-sla { padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; letter-spacing: .04em; color: #7a4d00; background: var(--cor-fde9b5);
+  &[data-situacao='estourado'] { color: #fff; background: var(--spi-vermelho); } }
+.selo-sla-texto { color: var(--cor-5a6673);
+  &[data-situacao='em_risco'] { color: #9a6400; font-weight: 700; }
+  &[data-situacao='estourado'], &[data-situacao='cumprido_fora'] { color: var(--spi-vermelho); font-weight: 700; }
+  &[data-situacao='cumprido'] { color: var(--cor-1d6b43); } }
+
+/* Resposta a comentário: citação acima do campo e dentro do comentário que responde */
+.citacao-resposta {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; padding: 6px 10px; border-left: 3px solid var(--spi-vermelho);
+  border-radius: 6px; background: var(--cor-eef0f3); font-size: 12px;
+  div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  span { color: var(--cor-5a6673); overflow-wrap: anywhere; }
+}
+.citacao-evento {
+  margin: 4px 0 6px; padding: 5px 10px; border-left: 3px solid var(--cor-cfd4da); border-radius: 4px; background: var(--cor-eef0f3); color: var(--cor-5a6673); font-size: 12px;
+  &.clicavel { cursor: pointer; &:hover { border-left-color: var(--spi-vermelho); } }
+  strong { color: var(--cor-3d454e); }
+}
+.responder-evento { margin-left: 8px; font-size: 11px; }
+.linha-do-tempo li.destacado-evento { animation: destaque-cartao 1.2s ease-in-out 1; border-radius: 8px; }

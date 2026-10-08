@@ -26,6 +26,7 @@ from typing import Any
 import paramiko
 from sqlalchemy import func, select
 
+from app.core.banco import FUSO_SAO_PAULO
 from app.core.banco import FabricaSessao, agora_utc
 from app.core.configuracao import obter_configuracao
 from app.models.contratos import Contrato, EmpresaContratada
@@ -191,7 +192,7 @@ def _rodar(etapa: str, mensagem: str, comando: list[str], ambiente: dict[str, st
 def executar(autor_id: int, autor_login: str) -> None:
     """Corpo do processo separado: extrai do SGI, carrega aqui e registra o resultado."""
     ambiente = {**os.environ}
-    pacote = _diretorio() / f"pacote-{datetime.now():%Y%m%d-%H%M%S}"
+    pacote = _diretorio() / f"pacote-{datetime.now(FUSO_SAO_PAULO):%Y%m%d-%H%M%S}"
     acao, dados = "contrato.migracao_sgi.falhar", None
     try:
         _rodar("extraindo", "Extraindo os dados do SGI (somente leitura)…", [sys.executable, str(SCRIPT_EXTRACAO), str(pacote)], ambiente)

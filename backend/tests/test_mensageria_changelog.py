@@ -86,7 +86,7 @@ def test_previa_no_layout_oficial_com_brasao_embutido(cliente, admin):
     r = cliente.post(f"{URL}/previa", json={"assunto": "Novidades", "corpo": "Olá!\n\n## Novidades\n- **Um**\n  - dois\n- três <b>"}, headers=admin)
     assert r.status_code == 200
     html = r.json()["html"]
-    assert "data:image/png;base64," in html and "cid:brasao-spi" not in html
+    assert "data:image/png;base64," in html and "cid:logo-sp" not in html
     assert "<strong>Um</strong>" in html and html.count("<ul") == 2 and "&lt;b&gt;" in html
     assert "SGI SPI – Sistema de Gestão Integrada" in html
 

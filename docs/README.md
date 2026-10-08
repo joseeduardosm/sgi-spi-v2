@@ -22,6 +22,7 @@ Esta pasta é parte do código-fonte. Ela é a referência para o desenvolviment
 | [endpoints/melhorias.md](endpoints/melhorias.md) | `/api/melhorias/*`: sugestões de melhoria (botão flutuante), minhas sugestões, triagem, tarefa, XLSX e PDF |
 | [endpoints/diretorio.md](endpoints/diretorio.md) | `/api/diretorio/*`: ramais em cartões, aniversariantes (dia/semana/mês), mural de parabéns, favoritos, vCard/QR Code, foto e selo de férias |
 | [endpoints/painel-executivo.md](endpoints/painel-executivo.md) | `/api/painel-executivo/*`: slides de contratos, RH e tarefas para a Diretoria, PDF e verificação de acesso (ACL `painel-executivo`) |
+| [endpoints/sla.md](endpoints/sla.md) | `/api/sla/politicas`: política de SLA de prazos (Tarefas e Melhorias), cálculo e onde aparece |
 | [endpoints/tarefas.md](endpoints/tarefas.md) | `/api/tarefas/*`: Módulo Tarefas (pipeline com validação, linha do tempo, equipes, avisos) |
 | [endpoints/rh-folha-ponto.md](endpoints/rh-folha-ponto.md) | `/api/rh/folha-ponto`: folha de ponto do usuário em PDF |
 | [endpoints/assinatura-email.md](endpoints/assinatura-email.md) | `/api/assinatura-email`: assinatura de e-mail institucional (PNG em alta resolução e HTML) |
@@ -47,7 +48,7 @@ O FastAPI gera a especificação a partir do código. Ela permanece sempre habil
 
 | Recurso | URL |
 |---|---|
-| Swagger UI | `/api/documentacao` |
+| Swagger UI | `/api/documentacao` | (exige login e ACL `documentacao-api`)
 | ReDoc | `/api/redoc` |
 | Especificação OpenAPI (JSON) | `/api/openapi.json` |
 

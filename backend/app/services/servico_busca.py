@@ -71,7 +71,7 @@ def _tarefas(sessao: Session, usuario: Usuario, termo: str) -> list[ResultadoBus
     consulta = (
         select(Tarefa)
         .where(or_(Tarefa.criado_por_id == usuario.id, Tarefa.responsavel_id == usuario.id, Tarefa.id.in_(participa)))
-        .where(or_(func.lower(Tarefa.titulo).like(padrao), cast(Tarefa.numero, String).like(padrao.replace("#", ""))))
+        .where(or_(func.lower(Tarefa.titulo).like(padrao), cast(Tarefa.numero, String).like(padrao.replace("#", ""))), Tarefa.tarefa_pai_id.is_(None))
         .order_by(Tarefa.numero.desc())
         .limit(POR_MODULO)
     )

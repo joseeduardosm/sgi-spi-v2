@@ -6,6 +6,24 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-09
+
+### Adicionado
+- **Contratos: portarias de designação de gestão e fiscalização.** Nova aba **Portarias** no contrato (depois de Execução). Quem edita o contrato solicita a portaria escolhendo a autoridade signatária; o número é **reservado no Protocolo** (tipo "Portaria", faixa do ano) e vinculado ao contrato. A autoridade (o usuário vinculado a ela) dá o **aceite** ou devolve; o solicitante reenvia ou cancela (o número volta a ficar livre). Word e PDF saem com a marca d'água **MINUTA**, antes e depois do aceite, para postar no SEI e no DOE; o **PDF publicado** volta pela própria aba e fica anexado ao número do Protocolo e em Documentos Importantes (tipo 16). O aceite é bloqueado se faltar o RS (lido do RH, sem aparecer na tela), o processo SEI ou o objeto. O cadastro das **autoridades** fica na mesma aba (controle total em Contratos). Migração `d6f1a3c5e7b9`; endpoints `/api/contratos/{id}/portarias*` e `/api/portarias/autoridades*` (`docs/endpoints/contratos-portarias.md`).
+- **Contratos: máscaras de portaria em Contratos → Modelos.** O texto da portaria vem de **duas máscaras** (com e sem portaria anterior, escolhida sozinha), editadas em página própria com editor de texto formatado e a lista de placeholders ao lado (clique insere). Aceita **somente os placeholders da lista** (`#nomegestor`, `#rsgestor`, `#numerodocontrato`, `#objetodocontrato`…); qualquer outro `#` impede salvar. Parágrafos de pessoa sem valor somem e os incisos são renumerados. Editável por SuperRoot ou por quem tem controle total em Contratos. Migração `e7a2b4d6f8c1` (tipo `portaria` em `contratos_modelos` e as duas máscaras iniciais); `GET /api/contratos/modelos/portaria/placeholders`.
+- **Contratos: carteira com marcadores da competência atual.** Nova coluna **Competência** com chips: a competência em aberto mais antiga, a(s) etapa(s) aberta(s) (Medição pendente/disponível, Avaliação, Nota fiscal, Retenção, CADIN, Checklist…), **Atrasada**, **Sem competências** ou **Em dia**. Clicar abre a execução da competência. `ResumoContrato` ganha `competencia_atual`, `sem_competencias` e `criador_id`.
+- **Tarefas: dias em aberto.** O cartão do quadro (ex.: "12d"), o detalhe da tarefa e o memorial das tarefas atrasadas mostram há quantos dias a tarefa está aberta (`dias_em_aberto`).
+- **Tarefas: relatório memorial da tarefa (PDF e XLSX).** No detalhe da tarefa, botões que emitem o memorial com os dados da tarefa e **todos os acontecimentos** da linha do tempo, do mais antigo ao mais recente. `GET /api/tarefas/{numero}/memorial?formato=pdf|xlsx`.
+- **Tarefas: quadro próprio das subtarefas.** O detalhe da tarefa-mãe tem o atalho **Abrir quadro de subtarefas** (`/tarefas/{numero}/subtarefas`, título "Equipe X - Tarefa Título - Subtarefas"), com visões Quadro e Lista e andamento independente. `GET /api/tarefas?escopo=subtarefas&tarefa=N`.
+- **Tarefas: colunas da Lista ordenáveis.** Clicar no título de Tarefa, Pessoas, Prazo, Prioridade ou Checklist ordena (crescente, decrescente e ordem manual); a escolha fica na URL.
+
+### Alterado
+- **Tarefas: subtarefas fora do quadro principal.** Quadro, lista, calendário, contadores, "Minhas tarefas", agenda, carga das pessoas, busca global, painel executivo e contagem das equipes mostram só tarefas-mãe. A tarefa-mãe **não é mais bloqueada** por subtarefa em aberto (acabou o erro "Conclua antes as subtarefas em aberto"): ao mover a mãe (situação ou estágio), cada subtarefa só recebe um registro no histórico, sem mudar de posição.
+- **Tarefas: cartões do quadro com altura fixa** (título em até 2 linhas) e novo nível de densidade **compacto** entre o normal e o reduzido, para os cartões não encolherem à toa quando há espaço.
+- **Contratos: ACL.** **Controle total** passa a fazer tudo em qualquer contrato (editar, itens com execução gerada, previsão selada, desfazer prorrogação, reabrir competência, correção de itens e **dar ciência**, com o papel "administrador"); o nível agora se chama "Administrar contratos e empresas". **Modificação** passa a poder **excluir os contratos que ele mesmo criou**. `permissoes` do contrato ganha `pode_administrar`.
+- **Contratos → Modelos** ganha a coluna **Portarias**; a tela é acessível também a quem tem controle total em Contratos (só vê as portarias).
+- **Protocolo:** `anexar` aceita anexar o documento de um número reservado por outro módulo (usado pela publicação da portaria).
+
 ## 2026-10-08
 
 ### Adicionado

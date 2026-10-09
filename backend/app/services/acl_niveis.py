@@ -36,8 +36,8 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
     },
     "contratos": {
         "LEITURA": _n("Consultar contratos", "Vê contratos, empresas, execução, calendário de vencimentos e relatórios do módulo."),
-        "MODIFICACAO": _n("Editar contratos e conduzir a execução", "Cria contratos e empresas, importa planilhas e, sendo da equipe do contrato (ou o criador), edita o contrato e conduz as etapas da competência."),
-        "CONTROLE_TOTAL": _n("Excluir contratos e empresas", "Tudo isso e também exclui contratos e empresas."),
+        "MODIFICACAO": _n("Editar contratos e conduzir a execução", "Cria contratos e empresas, importa planilhas e, sendo da equipe do contrato (ou o criador), edita o contrato, conduz as etapas da competência e solicita a portaria de designação. Exclui os contratos que ele mesmo criou."),
+        "CONTROLE_TOTAL": _n("Administrar contratos e empresas", "Tudo isso, em qualquer contrato (mesmo sem ser da equipe nem o criador), e também exclui contratos e empresas e cadastra as autoridades signatárias e as máscaras das portarias."),
     },
     "importacao-contratos": {
         "LEITURA": _n("Sem acesso útil", "Este módulo não tem consulta: use Modificação para importar."),

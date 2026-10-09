@@ -14,7 +14,7 @@ import { EstadoTarefasService } from './estado-tarefas.service';
 import { DesempenhoTarefasComponent } from './desempenho-tarefas.component';
 import { FaixaEquipeComponent } from './faixa-equipe.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
-import { ListaTarefasComponent, OrdemLista } from './lista-tarefas.component';
+import { ListaTarefasComponent, OrdemLista, SentidoOrdem } from './lista-tarefas.component';
 import { MovimentoQuadro, QuadroTarefasComponent } from './quadro-tarefas.component';
 import { Escopo, TarefasApiService } from './tarefas-api.service';
 import {
@@ -86,6 +86,7 @@ export class EspacoTarefasComponent implements OnInit {
   protected readonly recorte = signal<Recorte>('');
   protected readonly raias = signal(false);
   protected readonly ordem = signal<OrdemLista>('manual');
+  protected readonly sentido = signal<SentidoOrdem>('asc');
   /** Número da tarefa aberta na janela. */
   private readonly digitacao = new Subject<string>();
 
@@ -200,7 +201,7 @@ export class EspacoTarefasComponent implements OnInit {
     });
     // Escopo pela rota (minhas, equipe ou pessoa)
     combineLatest([this.rota.paramMap, this.rota.data]).pipe(takeUntilDestroyed(this.destruir)).subscribe(([p, d]) => {
-      this.escopo.set({ tipo: (d['escopo'] ?? 'minhas') as Escopo['tipo'], equipeId: p.get('equipeId'), login: p.get('login') });
+      this.escopo.set({ tipo: (d['escopo'] ?? 'minhas') as Escopo['tipo'], equipeId: p.get('equipeId'), login: p.get('login'), tarefa: Number(p.get('numero')) || null });
       this.dados.set(null);
       this.pessoasCarga.set([]);
       this.estagios.set([]);
@@ -210,7 +211,9 @@ export class EspacoTarefasComponent implements OnInit {
     // Visão e filtros pela query string
     this.rota.queryParamMap.pipe(takeUntilDestroyed(this.destruir)).subscribe((q) => {
       const visao = q.get('visao');
-      this.visao.set(visao === 'lista' || visao === 'calendario' || visao === 'pessoas' || visao === 'desempenho' ? visao : 'quadro');
+      // O quadro de subtarefas só tem as visões quadro e lista
+      const soBasicas = this.escopo().tipo === 'subtarefas';
+      this.visao.set(visao === 'lista' || (!soBasicas && (visao === 'calendario' || visao === 'pessoas' || visao === 'desempenho')) ? visao : 'quadro');
       this.busca.set(q.get('busca') ?? '');
       this.prioridade.set((q.get('prioridade') ?? '') as PrioridadeTarefa | '');
       this.marcador.set(q.get('marcador') ?? '');
@@ -219,6 +222,7 @@ export class EspacoTarefasComponent implements OnInit {
       this.recorte.set((q.get('recorte') ?? '') as Recorte);
       this.raias.set(q.get('raias') === 'pessoa');
       this.ordem.set((q.get('ordem') ?? 'manual') as OrdemLista);
+      this.sentido.set(q.get('sentido') === 'desc' ? 'desc' : 'asc');
       // Links antigos (?tarefa=123) seguem para a tela própria da tarefa
       if (Number(q.get('tarefa')) > 0) void this.roteador.navigate(['/tarefas', Number(q.get('tarefa'))], { replaceUrl: true });
       if (this.visao() === 'pessoas' || this.raias()) this.carregarPessoas();
@@ -265,7 +269,15 @@ export class EspacoTarefasComponent implements OnInit {
     if (!silenciosa) this.carregando.set(true);
     const vazio = { status: [], prioridade: '' as const, marcador_id: '', responsavel_id: null, busca: '' };
     this.api.listar(this.escopo(), vazio).subscribe({
-      next: (d) => { this.dados.set(d); this.carregando.set(false); aoFim?.(); },
+      next: (d) => {
+        this.dados.set(d);
+        this.carregando.set(false);
+        // Subtarefas usam as colunas da equipe da tarefa-mãe (só se conhece a equipe depois da primeira carga)
+        if (this.escopo().tipo === 'subtarefas' && d.contexto.equipe_id && !this.estagios().length) {
+          this.api.estagios(d.contexto.equipe_id).subscribe({ next: (l) => this.estagios.set(l), error: () => this.estagios.set([]) });
+        }
+        aoFim?.();
+      },
       // Na atualização automática um erro passageiro (rede, API reiniciando) não abre aviso: a próxima tentativa corrige
       error: (e) => { this.carregando.set(false); aoFim?.(); if (!aoFim) this.dialogos.mostrarErro(e, 'Não foi possível carregar as tarefas'); },
     });
@@ -386,6 +398,18 @@ export class EspacoTarefasComponent implements OnInit {
   /** Criação rápida (só o título): você como responsável, prioridade normal, prazo em 7 dias às 18:00. */
   protected criarRapida(titulo: string): void {
     const escopo = this.escopo();
+    // No quadro de subtarefas, a criação rápida cria uma subtarefa da tarefa-mãe
+    if (escopo.tipo === 'subtarefas' && escopo.tarefa) {
+      this.api.criarSubtarefa(escopo.tarefa, { titulo }).subscribe({
+        next: (t) => {
+          this.destacado.set(t.numero);
+          setTimeout(() => { if (this.destacado() === t.numero) this.destacado.set(null); }, SEGUNDOS_DESTAQUE * 1000);
+          this.carregar(true);
+        },
+        error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível criar a subtarefa'),
+      });
+      return;
+    }
     this.api.criar({
       titulo, descricao: '', prazo: prazoPadrao().toISOString(), prioridade: 'normal',
       equipe_id: escopo.tipo === 'equipe' ? escopo.equipeId ?? null : null, responsaveis_ids: [], marcadores_ids: [],
@@ -397,6 +421,13 @@ export class EspacoTarefasComponent implements OnInit {
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível criar a tarefa'),
     });
+  }
+
+  /** Lista: clique no título de uma coluna (crescente → decrescente → ordem manual). */
+  protected ordenarPor(coluna: OrdemLista): void {
+    if (this.ordem() !== coluna) this.navegar({ ordem: coluna, sentido: null });
+    else if (this.sentido() === 'asc') this.navegar({ ordem: coluna, sentido: 'desc' });
+    else this.navegar({ ordem: null, sentido: null });
   }
 
   /** Lista: nova ordem manual (aplica na tela e grava). */

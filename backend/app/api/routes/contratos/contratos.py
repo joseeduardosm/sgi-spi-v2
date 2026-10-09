@@ -143,10 +143,10 @@ def alterar_contrato(
     "/{contrato_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Excluir contrato",
-    description="Remove o contrato e tudo o que depende dele. Exige ACL `contratos` = CONTROLE_TOTAL.",
+    description="Remove o contrato e tudo o que depende dele. Controle total em Contratos exclui qualquer contrato; quem tem ACL ≥ MODIFICACAO exclui só os que criou (`403` nos demais casos).",
     responses=NAO_ENCONTRADO,
 )
-def excluir_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(controle_total)) -> Response:
+def excluir_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)) -> Response:
     """Exclui o contrato e todos os registros dependentes (itens, competências, anexos...)."""
     with traduzir_erros(sessao):
         servico.excluir_contrato(sessao, contrato_id, autor)

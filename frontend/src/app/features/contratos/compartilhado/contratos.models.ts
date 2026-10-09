@@ -112,12 +112,25 @@ export type GravacaoPreposto = Omit<Preposto, 'id'>;
 // --- Contrato ---------------------------------------------------------------------------------
 
 /** Contrato na carteira. */
+export interface CompetenciaAtualCarteira {
+  identificador: string;
+  rotulo: string;
+  situacao: 'pendente' | 'disponivel' | 'em_andamento';
+  etapas: string[];
+  atrasada: boolean;
+}
+
 export interface ResumoContrato {
   id: string;
   numero: string;
   apelido: string;
   empresa_razao_social: string;
   objeto: string;
+  criador_id: number | null;
+  /** Competência mais antiga ainda não concluída (marcadores da carteira); null se não há. */
+  competencia_atual: CompetenciaAtualCarteira | null;
+  /** A execução do contrato ainda não foi gerada. */
+  sem_competencias: boolean;
   data_inicio: string;
   data_fim: string;
   situacao: Situacao;
@@ -201,7 +214,7 @@ export interface DetalheContrato extends ResumoContrato {
   equipe: MembroEquipe[];
   criador_nome: string | null;
   // O que o usuário logado pode fazer neste contrato (controla os botões)
-  permissoes: { pode_editar: boolean; pode_excluir: boolean };
+  permissoes: { pode_editar: boolean; pode_excluir: boolean; pode_administrar: boolean };
   // Controle de concorrência: enviar de volta na alteração
   versao: number;
   criado_em: string;
@@ -442,12 +455,22 @@ export interface Formulario {
   ativado_em: string | null;
 }
 
-/** Modelo global de checklist ou formulário (conteúdo conforme o tipo). */
+/** Máscara da portaria usada quando o contrato tem (ou não) portaria anterior. */
+export type VarianteMascara = 'com_anterior' | 'sem_anterior';
+
+/** Placeholder permitido nas máscaras de portaria. */
+export interface PlaceholderPortaria {
+  nome: string;
+  descricao: string;
+  da_anterior: boolean;
+}
+
+/** Modelo global de checklist, formulário ou máscara de portaria (conteúdo conforme o tipo). */
 export interface Modelo {
   id: string;
-  tipo: 'checklist' | 'formulario';
+  tipo: 'checklist' | 'formulario' | 'portaria';
   nome: string;
-  conteudo: { itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] } & Partial<DefinicaoFormulario>;
+  conteudo: { html?: string; variante?: VarianteMascara; itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] } & Partial<DefinicaoFormulario>;
   ativo: boolean;
   atualizado_em: string;
 }
@@ -1300,4 +1323,62 @@ export interface VizinhosContrato {
   proximo_id: string | null;
   posicao: number | null;
   total: number;
+}
+
+// --- Portaria de designação (docs/endpoints/contratos-portarias.md) ---
+
+export type StatusPortaria = 'aguardando_aceite' | 'devolvida' | 'aceita' | 'publicada' | 'cancelada';
+
+export interface AutoridadePortaria {
+  id: string;
+  sigla: string;
+  nome: string;
+  cargo: string;
+  setor: string;
+  usuario_id: number | null;
+  usuario_nome: string | null;
+  ativa: boolean;
+}
+
+export interface GravacaoAutoridade {
+  sigla: string;
+  nome: string;
+  cargo: string;
+  setor: string;
+  usuario_id: number | null;
+  ativa: boolean;
+}
+
+export interface PessoaPortaria {
+  papel: string;
+  papel_rotulo: string;
+  nome: string;
+  rs_informado: boolean;
+}
+
+export interface Portaria {
+  id: string;
+  titulo: string;
+  numero: number;
+  exercicio: number;
+  status: StatusPortaria;
+  status_rotulo: string;
+  motivo: string;
+  autoridade_nome: string;
+  solicitada_por_nome: string;
+  solicitada_em: string;
+  aceita_por_nome: string | null;
+  aceita_em: string | null;
+  publicada_em: string | null;
+  anterior: string | null;
+  equipe: PessoaPortaria[];
+  pendencias: string[];
+  pode_decidir: boolean;
+  pode_alterar: boolean;
+}
+
+export interface PainelPortarias {
+  portarias: Portaria[];
+  autoridades: AutoridadePortaria[];
+  em_andamento: boolean;
 }

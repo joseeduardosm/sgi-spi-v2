@@ -9,7 +9,7 @@ caminhos podem coincidir (ver comentário abaixo).
 from fastapi import APIRouter
 
 from app.api.routes import acl, assinatura_email, autenticacao, atalhos, busca, chamados, contratacoes, documentacao, diretorio, favoritos, integracao_bookstack, integracao_glpi, ldap, manuais, melhorias, sla, painel_executivo, mensageria, mensagens, noticias, protocolo, reserva_espacos, rh, tarefas, saude, setores, smtp, usuarios
-from app.api.routes.contratos import alteracoes, contratos, correcoes, diario, empresas, execucao, exportacao, importacao, importacao_modelos, migracao, modelos, orcamento, relatorios
+from app.api.routes.contratos import alteracoes, portarias, contratos, correcoes, diario, empresas, execucao, exportacao, importacao, importacao_modelos, migracao, modelos, orcamento, relatorios
 
 roteador_api = APIRouter()
 # Módulos do portal: saúde, autenticação, usuários, setores, ACL, diretórios LDAP e servidores SMTP
@@ -56,5 +56,6 @@ roteador_api.include_router(contratos.roteador)
 roteador_api.include_router(orcamento.roteador)
 roteador_api.include_router(execucao.roteador)
 roteador_api.include_router(alteracoes.roteador)
+roteador_api.include_router(portarias.roteador)
 roteador_api.include_router(correcoes.roteador)
 roteador_api.include_router(diario.roteador)

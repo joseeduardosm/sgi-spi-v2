@@ -117,9 +117,10 @@ Checklists e formulários reutilizáveis, que a tela copia para o contrato como 
 | Método e caminho | Autorização | Descrição |
 |---|---|---|
 | `GET /api/contratos/modelos?tipo=&somente_ativos=true` | ACL `contratos` ≥ LEITURA | `LeituraModelo[]` (`id`, `tipo`, `nome`, `conteudo`, `ativo`, `atualizado_em`) |
-| `POST /api/contratos/modelos` | SuperRoot | `{ "tipo": "checklist", "nome", "itens": [{ "nome", "observacao", "obrigatorio" }] }` ou `{ "tipo": "formulario", "nome", "definicao": {…} }` → `201` |
-| `PUT /api/contratos/modelos/{modelo_id}` | SuperRoot | Altera (o tipo não muda) |
-| `DELETE /api/contratos/modelos/{modelo_id}` | SuperRoot | `204` |
+| `GET /api/contratos/modelos/portaria/placeholders` | ACL `contratos` ≥ LEITURA | `[{ nome, descricao, da_anterior }]`: lista fechada de placeholders das máscaras de portaria |
+| `POST /api/contratos/modelos` | SuperRoot (checklist e formulário); SuperRoot ou controle total em Contratos (portaria) | `{ "tipo": "portaria", "nome", "variante": "com_anterior"\|"sem_anterior", "html", "ativo" }` (veja [contratos-portarias.md](contratos-portarias.md#máscaras)), `{ "tipo": "checklist", "nome", "itens": [{ "nome", "observacao", "obrigatorio" }] }` ou `{ "tipo": "formulario", "nome", "definicao": {…} }` → `201` |
+| `PUT /api/contratos/modelos/{modelo_id}` | idem (por tipo) | Altera (o tipo não muda) |
+| `DELETE /api/contratos/modelos/{modelo_id}` | idem (por tipo) | `204` |
 
 `conteudo` do checklist: `{ "itens": [...] }`. Do formulário: a mesma `definicao` do formulário do contrato.
 
@@ -132,4 +133,4 @@ Checklists e formulários reutilizáveis, que a tela copia para o contrato como 
   - A cor segue `dias_restantes`: vermelho até 90 dias, âmbar até 180 e azul acima disso.
   - Filtro de empresa.
 - `/contratos`: botões **Exportar Previsão Orçamentária** e **Relatório Executivo de Notas de Empenho**, só para o SuperRoot.
-- `/contratos/modelos`: modelos globais, só para o SuperRoot.
+- `/contratos/modelos`: modelos globais; checklists e formulários só para o SuperRoot, máscaras de portaria também para quem tem controle total em Contratos (a tela mostra só as portarias a esses).

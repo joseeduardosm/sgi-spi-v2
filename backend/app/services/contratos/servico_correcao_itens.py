@@ -22,7 +22,7 @@ from app.services import servico_mensagens
 from app.services.contratos import calculos, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_competencias import _periodos_por_inicio, competencias_abertas, sincronizar_abertas, sincronizar_competencia
-from app.services.contratos.servico_contratos import designacoes_vigentes, obter_contrato, pode_editar
+from app.services.contratos.servico_contratos import designacoes_vigentes, eh_administrador, obter_contrato, pode_editar
 from app.services.servico_auditoria import auditar
 
 CAMPOS = ("valor_unitario", "quantidade_mensal", "quantidade_total", "unidade_fornecimento", "codigo_classe", "codigo_natureza_despesa", "codigo_siafisico",
@@ -43,9 +43,9 @@ def eh_gestor(contrato: Contrato, usuario: Usuario) -> bool:
     return any(d.usuario_id == usuario.id and d.papel == "gestor" for d in designacoes_vigentes(contrato))
 
 
-def pode_propor(contrato: Contrato, usuario: Usuario) -> bool:
-    """Gestor titular vigente ou SuperRoot."""
-    return usuario.superusuario or eh_gestor(contrato, usuario)
+def pode_propor(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
+    """Gestor titular vigente, controle total em Contratos ou SuperRoot."""
+    return eh_administrador(sessao, usuario) or eh_gestor(contrato, usuario)
 
 
 def pode_decidir(sessao: Session, contrato: Contrato, correcao: CorrecaoItens, usuario: Usuario) -> bool:
@@ -165,7 +165,7 @@ def obter_correcao(sessao: Session, contrato_id: uuid.UUID, correcao_id: uuid.UU
 
 def calcular_previa(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCorrecao, autor: Usuario) -> dict:
     contrato = obter_contrato(sessao, contrato_id)
-    if not pode_propor(contrato, autor):
+    if not pode_propor(sessao, contrato, autor):
         raise SemPermissaoContrato("Só o gestor titular do contrato ou o SuperRoot propõem correções dos itens.")
     return previa(contrato, montar_mudancas(contrato, dados))
 
@@ -173,7 +173,7 @@ def calcular_previa(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCorr
 def propor(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCorrecao, autor: Usuario) -> CorrecaoItens:
     """Registra a proposta (pendente) e avisa a equipe: outra pessoa precisa confirmar."""
     contrato = obter_contrato(sessao, contrato_id)
-    if not pode_propor(contrato, autor):
+    if not pode_propor(sessao, contrato, autor):
         raise SemPermissaoContrato("Só o gestor titular do contrato ou o SuperRoot propõem correções dos itens.")
     mudancas = montar_mudancas(contrato, dados)
     correcao = CorrecaoItens(contrato_id=contrato.id, autor_id=autor.id, autor_nome=_nome(autor), justificativa=dados.justificativa.strip(),
@@ -250,8 +250,8 @@ def recusar(sessao: Session, contrato_id: uuid.UUID, correcao_id: uuid.UUID, usu
 
 def cancelar(sessao: Session, contrato_id: uuid.UUID, correcao_id: uuid.UUID, usuario: Usuario) -> CorrecaoItens:
     contrato, correcao = _pendente(sessao, contrato_id, correcao_id)
-    if correcao.autor_id != usuario.id and not usuario.superusuario:
-        raise SemPermissaoContrato("Só quem propôs (ou o SuperRoot) cancela a proposta.")
+    if correcao.autor_id != usuario.id and not eh_administrador(sessao, usuario):
+        raise SemPermissaoContrato("Só quem propôs, o SuperRoot ou quem tem controle total em Contratos cancela a proposta.")
     correcao.situacao, correcao.decidido_por_id, correcao.decidido_por_nome, correcao.decidido_em = "cancelada", usuario.id, _nome(usuario), agora_utc()
     auditar(sessao, usuario.login, "contrato.itens.correcao.cancelar", f"Contrato {contrato.numero}", autor_id=usuario.id, alvo_tipo="contrato", alvo_id=contrato.id,
             dados={"correcao": str(correcao.id)})

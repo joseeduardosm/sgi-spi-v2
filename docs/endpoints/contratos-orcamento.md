@@ -10,7 +10,7 @@ Previsão orçamentária mensal por vigência e controle das Notas de Empenho (N
 
 - **Autorização:**
   - **Leitura:** ACL `contratos` ≥ `LEITURA`.
-  - **Gravação:** poder editar o contrato (ACL ≥ `MODIFICACAO` e ser SuperRoot, criador ou integrante vigente da equipe).
+  - **Gravação:** poder editar o contrato (ACL ≥ `MODIFICACAO` e ser SuperRoot, ter controle total, ser criador ou integrante vigente da equipe).
 - **Previsão mensal** (sempre por mês civil, em todas as vigências):
   - itens **contínuos** entram em todos os meses: quantidade mensal × preço × fator;
   - o **fator** usa a convenção comercial 30/360 (o último dia do mês vale 30; 15/01 a 31/01 = 16/30). Itens "sempre integral" usam fator 1;

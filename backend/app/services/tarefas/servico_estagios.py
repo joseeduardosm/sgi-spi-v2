@@ -118,6 +118,7 @@ def definir_estagio(sessao: Session, autor: Usuario, tarefa: Tarefa, estagio_id:
     atual = sessao.get(EstagioTarefa, tarefa.estagio_id) if tarefa.estagio_id else None
     if atual is None or atual.id != estagio.id:
         servico._evento(sessao, tarefa, "editada", autor, f"Estágio: {atual.nome if atual else '—'} → {estagio.nome}", estagio_de=atual.nome if atual else None, estagio_para=estagio.nome)
+        servico.registrar_nas_subtarefas(sessao, tarefa, autor, f"estágio {atual.nome if atual else '—'} → {estagio.nome}", estagio_de=atual.nome if atual else None, estagio_para=estagio.nome)
         tarefa.estagio_id = estagio.id
         tarefa.versao += 1
     sessao.commit()

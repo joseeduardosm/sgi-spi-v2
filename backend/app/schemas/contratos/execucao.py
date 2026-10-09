@@ -155,10 +155,12 @@ class LeituraFormulario(BaseModel):
 
 class GravacaoModelo(BaseModel):
     """Corpo para criar ou alterar um modelo global. O conteúdo exigido depende do `tipo`."""
-    tipo: Literal["checklist", "formulario"]
+    tipo: Literal["checklist", "formulario", "portaria"]
     nome: TextoObrigatorio = Field(..., max_length=300)
     itens: list[GravacaoDocumentoChecklist] | None = Field(None, description="Obrigatório para `checklist`.")
     definicao: DefinicaoFormulario | None = Field(None, description="Obrigatório para `formulario`.")
+    html: str | None = Field(None, description="Obrigatório para `portaria`: máscara em HTML com os placeholders permitidos (`#nomegestor`...).")
+    variante: Literal["com_anterior", "sem_anterior"] | None = Field(None, description="Obrigatório para `portaria`: máscara usada com ou sem portaria anterior do contrato.")
     ativo: bool = True
 
     @model_validator(mode="after")
@@ -168,7 +170,16 @@ class GravacaoModelo(BaseModel):
             raise ValueError("o modelo de checklist precisa de ao menos um documento")
         if self.tipo == "formulario" and self.definicao is None:
             raise ValueError("o modelo de formulário precisa da definição")
+        if self.tipo == "portaria" and (not (self.html or "").strip() or self.variante is None):
+            raise ValueError("o modelo de portaria precisa do texto e da variante (com ou sem portaria anterior)")
         return self
+
+
+class PlaceholderPortaria(BaseModel):
+    """Placeholder aceito nas máscaras de portaria (escrito `#nome` no texto)."""
+    nome: str
+    descricao: str
+    da_anterior: bool = Field(..., description="Só vale na máscara com portaria anterior.")
 
 
 class LeituraModelo(BaseModel):

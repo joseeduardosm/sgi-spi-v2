@@ -40,7 +40,7 @@ from app.schemas.contratos.orcamento import (
 )
 from app.services.contratos import calculos, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
-from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, ordem_contratos, pode_editar, vigencias
+from app.services.contratos.servico_contratos import eh_administrador, exigir_edicao, obter_contrato, ordem_contratos, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_MOEDA_UNITARIA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
 from app.services.servico_auditoria import auditar
@@ -116,6 +116,7 @@ def montar_previsao(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -
     contrato = obter_contrato(sessao, contrato_id)
     meses = meses_previstos(contrato)
     editor = pode_editar(sessao, contrato, usuario)
+    administrador = eh_administrador(sessao, usuario)
     # Nomes dos usuários para exibir quem selou cada previsão
     nomes = dict(sessao.execute(select(Usuario.id, func.coalesce(Usuario.nome_completo, Usuario.login))).all())
     sob_demanda = [i for i in contrato.itens if i.tipo == "sob_demanda"]
@@ -142,7 +143,7 @@ def montar_previsao(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -
                 salva_em=previsao.salva_em if previsao else None,
                 salva_por_nome=nomes.get(previsao.salva_por_id) if previsao and previsao.salva_por_id else None,
                 # Antes do selo, quem pode editar o contrato grava; depois, só o SuperRoot
-                pode_editar=editor and (not salva or usuario.superusuario),
+                pode_editar=editor and (not salva or administrador),
                 itens_sob_demanda=itens,
                 total_previsto=sum((m.valor for m in meses if m.sequencia_vigencia == vigencia.sequencia), ZERO),
             )
@@ -167,8 +168,8 @@ def salvar_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int, dad
     if vigencia is None:
         raise RegistroNaoEncontrado("Vigência")
     previsao = obter_ou_criar_previsao(contrato, sequencia)
-    if previsao.salva and not autor.superusuario:
-        raise ErroRegraContrato("A previsão desta vigência já foi salva e está selada. Somente o SuperRoot pode alterá-la.")
+    if previsao.salva and not eh_administrador(sessao, autor):
+        raise ErroRegraContrato("A previsão desta vigência já foi salva e está selada. Somente o SuperRoot ou quem tem controle total em Contratos pode alterá-la.")
     # Só itens sob demanda recebem apontamento, e só nos meses da vigência
     itens = {i.id: i for i in contrato.itens if i.tipo == "sob_demanda"}
     competencias = {p.competencia for p in calculos.meses_da_vigencia(vigencia)}

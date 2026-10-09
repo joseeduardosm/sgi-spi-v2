@@ -161,8 +161,18 @@ class LeituraVigencia(BaseModel):
 
 class PermissoesContrato(BaseModel):
     """O que o usuário logado pode fazer neste contrato (a tela mostra ou esconde botões com isso)."""
-    pode_editar: bool = Field(..., description="SuperRoot, criador ou integrante vigente da equipe, com ACL ≥ MODIFICACAO.")
-    pode_excluir: bool = Field(..., description="ACL `contratos` = CONTROLE_TOTAL.")
+    pode_editar: bool = Field(..., description="SuperRoot, controle total em Contratos, criador ou integrante vigente da equipe, com ACL ≥ MODIFICACAO.")
+    pode_excluir: bool = Field(..., description="Controle total em Contratos (qualquer contrato) ou criador do contrato com ACL ≥ MODIFICACAO.")
+    pode_administrar: bool = Field(False, description="SuperRoot ou controle total em Contratos: faz tudo sobre qualquer contrato.")
+
+
+class CompetenciaAtualCarteira(BaseModel):
+    """Competência em aberto mostrada como marcadores na carteira."""
+    identificador: str = Field(..., description="Identificador da competência na URL da execução (`AAAA-MM`, `-1`/`-2`, `-dif`).")
+    rotulo: str = Field(..., description="Rótulo, ex.: `01/2027 · 1ª parte`.")
+    situacao: Literal["pendente", "disponivel", "em_andamento"] = Field(..., description="`pendente`: o período ainda não terminou; `disponivel`: liberada, sem medição iniciada.")
+    etapas: list[str] = Field(..., description="Etapas abertas agora (até três depois da nota fiscal: retenção, CADIN e checklist).")
+    atrasada: bool = Field(..., description="Medição não concluída há mais de 30 dias do fim do período (mesmo critério dos alertas).")
 
 
 class ResumoContrato(BaseModel):
@@ -172,11 +182,14 @@ class ResumoContrato(BaseModel):
     apelido: str
     empresa_razao_social: str
     objeto: str
+    criador_id: int | None = Field(None, description="Quem cadastrou o contrato (pode excluí-lo com ACL ≥ MODIFICACAO).")
     data_inicio: date
     data_fim: date = Field(..., description="Fim da vigência atual.")
     situacao: Situacao
     base_mensal: ValorMonetario = Field(..., description="Soma dos subtotais mensais dos itens contínuos.")
     valor_global: ValorMonetario = Field(..., description="Valor da vigência atual (ou o valor reajustado).")
+    competencia_atual: CompetenciaAtualCarteira | None = Field(None, description="Competência mais antiga ainda não concluída (regular ou diferença de reajuste, depois do corte de cobrança); `null` se não há.")
+    sem_competencias: bool = Field(False, description="A execução do contrato ainda não foi gerada (nenhuma competência).")
 
 
 class VizinhosContrato(BaseModel):

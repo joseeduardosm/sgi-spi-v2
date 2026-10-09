@@ -5,12 +5,16 @@
     <small>
       @switch (escopo().tipo) {
         @case ('minhas') { Tarefas em que você é responsável e as que você criou. }
+        @case ('subtarefas') { Andamento próprio de cada subtarefa da tarefa #{{ escopo().tarefa }}. Mover a tarefa-mãe não muda a posição delas, só deixa um registro no histórico. }
         @case ('equipe') { @if (equipe(); as e) { {{ e.membros.length }} membro{{ e.membros.length === 1 ? '' : 's' }} · {{ e.lideres.length + (e.dono ? 1 : 0) }} na liderança@if (e.lider) { · você lidera } } }
         @default { Todas as tarefas da pessoa (visível à própria pessoa, à liderança das equipes dela e ao SuperRoot). }
       }
     </small>
   </div>
   <div class="acoes-espaco">
+    @if (escopo().tipo === 'subtarefas') {
+      <a class="acao-secundaria" [routerLink]="['/tarefas', escopo().tarefa]">← Tarefa #{{ escopo().tarefa }}</a>
+    } @else {
     @if (equipe()?.pode_configurar) {
       <a class="acao-secundaria" [routerLink]="['/tarefas/equipes', equipe()!.id, 'configurar']" title="Nome, liderança, membros e marcadores">⚙ Configurar</a>
     }
@@ -19,6 +23,7 @@
     <button type="button" class="acao-secundaria botao-tela-cheia" [class.ativo]="telaCheia()" [attr.aria-pressed]="telaCheia()" (click)="alternarTelaCheia()"
             [title]="telaCheia() ? 'Sair da tela cheia (Esc)' : 'Usar o máximo da tela (F)'">{{ telaCheia() ? '⤢ Sair da tela cheia' : '⛶ Tela cheia' }}</button>
     <a class="acao-primaria" routerLink="/tarefas/nova" [queryParams]="escopo().equipeId ? { equipe: escopo().equipeId } : {}"><span aria-hidden="true">+</span> Nova tarefa</a>
+    }
   </div>
 </header>
 
@@ -30,12 +35,14 @@
   <div class="alternar-visao" role="group" aria-label="Visão">
     <button type="button" [class.ativo]="visao() === 'quadro'" [attr.aria-pressed]="visao() === 'quadro'" (click)="trocarVisao('quadro')">▦ Quadro</button>
     <button type="button" [class.ativo]="visao() === 'lista'" [attr.aria-pressed]="visao() === 'lista'" (click)="trocarVisao('lista')">☰ Lista</button>
-    <button type="button" [class.ativo]="visao() === 'calendario'" [attr.aria-pressed]="visao() === 'calendario'" (click)="trocarVisao('calendario')">▤ Calendário</button>
+    @if (escopo().tipo !== 'subtarefas') {
+      <button type="button" [class.ativo]="visao() === 'calendario'" [attr.aria-pressed]="visao() === 'calendario'" (click)="trocarVisao('calendario')">▤ Calendário</button>
+    }
     @if (escopo().tipo === 'equipe' && lider()) {
       <button type="button" [class.ativo]="visao() === 'pessoas'" [attr.aria-pressed]="visao() === 'pessoas'" (click)="trocarVisao('pessoas')">◔ Pessoas</button>
     }
     <!-- Desempenho: da equipe (liderança) e individual (em Minhas tarefas e na tela de uma pessoa), com as tarefas pessoais -->
-    @if ((escopo().tipo === 'equipe' && lider()) || (escopo().tipo !== 'equipe' && pessoaDoEscopo())) {
+    @if ((escopo().tipo === 'equipe' && lider()) || (escopo().tipo !== 'equipe' && escopo().tipo !== 'subtarefas' && pessoaDoEscopo())) {
       <button type="button" [class.ativo]="visao() === 'desempenho'" [attr.aria-pressed]="visao() === 'desempenho'" (click)="trocarVisao('desempenho')">📈 Desempenho</button>
     }
   </div>
@@ -92,10 +99,13 @@
         <input type="checkbox" [checked]="raias()" (change)="navegar({ raias: raias() ? null : 'pessoa' })" /> Raias por pessoa</label>
     }
     @if (visao() === 'lista') {
-      <select class="ordem-lista" aria-label="Ordenar" [ngModel]="ordem()" (ngModelChange)="navegar({ ordem: $event === 'manual' ? null : $event })">
+      <select class="ordem-lista" aria-label="Ordenar" [ngModel]="ordem()" (ngModelChange)="navegar({ ordem: $event === 'manual' ? null : $event, sentido: null })">
         <option value="manual">Ordem manual</option>
         <option value="prazo">Prazo mais próximo</option>
         <option value="prioridade">Prioridade</option>
+        <option value="titulo">Título (A–Z)</option>
+        <option value="pessoas">Pessoas (A–Z)</option>
+        <option value="checklist">Checklist</option>
       </select>
     }
   }
@@ -126,7 +136,7 @@
 
   @switch (visao()) {
     @case ('lista') {
-      <app-lista-tarefas [itens]="filtradas()" [ordem]="ordem()" (abrir)="abrirTarefa($event)" (reordenar)="reordenar($event)" />
+      <app-lista-tarefas [itens]="filtradas()" [ordem]="ordem()" [sentido]="sentido()" (ordenarPor)="ordenarPor($event)" (abrir)="abrirTarefa($event)" (reordenar)="reordenar($event)" />
     }
     @case ('calendario') {
       <app-calendario-tarefas [itens]="filtradas()" (abrir)="abrirTarefa($event)" (reprogramar)="reprogramar($event)" />

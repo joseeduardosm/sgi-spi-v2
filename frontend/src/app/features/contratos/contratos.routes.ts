@@ -68,12 +68,20 @@ export const ROTAS_CONTRATOS: Routes = [
     loadComponent: () => import('./empresas/empresa-detalhe.component').then((m) => m.EmpresaDetalheComponent),
   },
   {
-    // Modelos globais de checklist e formulário (só SuperRoot)
+    // Modelos globais: checklist e formulário (só SuperRoot) e máscaras de portaria (SuperRoot ou controle total em Contratos)
     path: 'modelos',
     title: 'Modelos globais | SGI SPI',
-    canActivate: [guardaPapel],
-    data: { papeis: ['SuperRoot'] },
+    canActivate: [guardaAcl],
+    data: { acl: 'contratos', nivelAcl: 'CONTROLE_TOTAL' },
     loadComponent: () => import('./modelos/modelos.component').then((m) => m.ModelosComponent),
+  },
+  {
+    // Página da máscara de portaria: `novo` ou o id (mesmas permissões da lista de modelos)
+    path: 'modelos/portaria/:id',
+    title: 'Máscara de portaria | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'contratos', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./modelos/modelo-portaria.component').then((m) => m.ModeloPortariaComponent),
   },
   {
     // Cadastro de contrato; "novo" precisa vir antes de ":id" para não ser lido como um id

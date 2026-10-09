@@ -44,7 +44,7 @@ from app.services.contratos import calculos, valores
 from app.services.contratos.documentos_execucao import PAPEIS, data_hora, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo
-from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, papel_para_ciencia, pode_dar_ciencia, obter_contrato, pode_editar, vigencias
+from app.services.contratos.servico_contratos import designacoes_vigentes, eh_administrador, exigir_edicao, papel_para_ciencia, pode_dar_ciencia, obter_contrato, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.servico_auditoria import auditar
 
@@ -141,7 +141,7 @@ def consultar(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> Leit
         ciencias=[LeituraCiencia(usuario_id=c.usuario_id, nome=c.nome, papel=c.papel, registrada_em=c.registrada_em) for c in (processo.ciencias if processo else [])],
         relatorio=_arquivo(processo.relatorio_anexo) if processo else None,
         exige_checklist_ativo=bool(contrato.competencias) and checklist_ativo(contrato) is None,
-        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(contrato, usuario),
+        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(sessao, contrato, usuario),
     )
 
 
@@ -207,7 +207,7 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -
     processo = _rascunho(sessao, contrato)
     if processo is None or not _possui_parecer(processo):
         raise ErroRegraContrato("Preencha e salve o parecer antes de registrar ciência.")
-    papel = papel_para_ciencia(contrato, autor)
+    papel = papel_para_ciencia(sessao, contrato, autor)
     if papel is None:
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
     # Uma ciência por pessoa; a nova ciência invalida o PDF do parecer gerado antes
@@ -373,8 +373,8 @@ def pode_desfazer(sessao: Session, contrato: Contrato, prorrogacao: Prorrogacao,
     sequencia = contrato.prorrogacoes.index(prorrogacao) + 2
     # Competências geradas na vigência criada por esta prorrogação
     competencias = [c for c in contrato.competencias if c.sequencia_vigencia == sequencia]
-    if competencias and not usuario.superusuario:
-        return False, "A execução da nova vigência já foi gerada: somente o SuperRoot pode desfazer."
+    if competencias and not eh_administrador(sessao, usuario):
+        return False, "A execução da nova vigência já foi gerada: somente o SuperRoot ou quem tem controle total em Contratos pode desfazer."
     if any(c.medicao_iniciada_em or c.etapa_atual != "medicao" for c in competencias):
         return False, "Há medição registrada na nova vigência. Reabra ou desfaça a execução antes."
     if any(r.sequencia_vigencia == sequencia and r.situacao != "cancelado" for r in contrato.reajustes) or any(

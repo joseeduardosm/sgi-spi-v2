@@ -138,7 +138,7 @@ def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelA
         em_andamento=leitura(sessao, contrato, andamento, alteracoes) if andamento else None,
         vigencias=[VigenciaDisponivel(sequencia=v.sequencia, inicio=v.inicio, fim=v.fim) for v in vigencias(contrato)],
         historico=[leitura(sessao, contrato, a, alteracoes) for a in alteracoes if a is not andamento],
-        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(contrato, usuario),
+        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(sessao, contrato, usuario),
     )
 
 
@@ -269,7 +269,7 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uui
     alteracao, _ = _em_andamento(sessao, contrato, alteracao_id)
     if alteracao.situacao != "aguardando_ciencias":
         raise ErroRegraContrato("Salve os quantitativos antes de registrar ciência.")
-    papel = papel_para_ciencia(contrato, autor)
+    papel = papel_para_ciencia(sessao, contrato, autor)
     if papel is None:
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
     if not any(c.usuario_id == autor.id for c in alteracao.ciencias):

@@ -22,6 +22,8 @@ export interface Marcador { id: string; nome: string; cor: string; cor_indice: n
 import type { SlaItem } from '../sla/sla.models';
 
 export interface TarefaResumo {
+  /** Dias corridos desde a criação, enquanto a tarefa não está concluída (null se concluída). */
+  dias_em_aberto: number | null;
   id: string;
   numero: number;
   titulo: string;
@@ -81,7 +83,7 @@ export interface Indicadores {
   faixa: string;
 }
 
-export interface Contexto { tipo: 'minhas' | 'equipe' | 'pessoa'; titulo: string; equipe_id: string | null; login: string | null; pessoa_id: number | null; lider: boolean }
+export interface Contexto { tipo: 'minhas' | 'equipe' | 'pessoa' | 'subtarefas'; titulo: string; tarefa_numero: number | null; tarefa_titulo: string | null; equipe_id: string | null; login: string | null; pessoa_id: number | null; lider: boolean }
 export interface ListaTarefas { contexto: Contexto; indicadores: Indicadores; itens: TarefaResumo[] }
 
 export interface Etapa { status: StatusTarefa; rotulo: string; em: string | null; por: string | null; atual: boolean; alcancada: boolean }

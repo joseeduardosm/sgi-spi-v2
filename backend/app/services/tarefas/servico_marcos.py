@@ -162,7 +162,7 @@ def lembrar(sessao: Session, dia: date | None = None) -> int:
     lembradas = 0
     limite = datetime.combine(dia - timedelta(days=7), datetime.min.time(), tzinfo=servico.FUSO_LOCAL)
     for equipe in sessao.scalars(select(EquipeTarefas).where(EquipeTarefas.ativa.is_(True))):
-        abertas = sessao.scalar(select(func.count(Tarefa.id)).where(Tarefa.equipe_id == equipe.id, Tarefa.status != "concluida")) or 0
+        abertas = sessao.scalar(select(func.count(Tarefa.id)).where(Tarefa.equipe_id == equipe.id, Tarefa.status != "concluida", Tarefa.tarefa_pai_id.is_(None))) or 0
         ultima = sessao.scalar(select(func.max(AtualizacaoStatusEquipe.criado_em)).where(AtualizacaoStatusEquipe.equipe_id == equipe.id))
         if not abertas or (ultima is not None and servico._comparavel(ultima) > limite):
             continue

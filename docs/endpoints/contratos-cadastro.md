@@ -11,8 +11,8 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 - **Autorização:**
   - **Leitura:** ACL `contratos` ≥ `LEITURA`.
   - **Cadastro:** ACL `contratos` ≥ `MODIFICACAO`. Quem cadastra vira o **criador**.
-  - **Alteração e anexos (pode editar):** ACL ≥ `MODIFICACAO` **e** ser SuperRoot, o criador ou integrante **vigente** da equipe. Sem esse vínculo: `403 acesso_negado`. Os seis papéis da equipe têm os mesmos poderes.
-  - **Exclusão:** ACL `contratos` = `CONTROLE_TOTAL`.
+  - **Alteração e anexos (pode editar):** ACL ≥ `MODIFICACAO` **e** ser SuperRoot, ter **controle total** em Contratos (qualquer contrato; faz tudo sobre o contrato, como um SuperRoot do módulo: itens com execução gerada, previsão selada, desfazer prorrogação, reabrir competência, propor/cancelar correção de itens e **registrar ciência** em qualquer etapa, com o papel `administrador` mesmo sem ser da equipe), o criador ou integrante **vigente** da equipe. Sem esse vínculo: `403 acesso_negado`. Os seis papéis da equipe têm os mesmos poderes.
+  - **Exclusão:** controle total em Contratos (qualquer contrato) ou ACL ≥ `MODIFICACAO` para os contratos que o próprio usuário **criou** (`403 acesso_negado` nos demais). `permissoes.pode_excluir` diz se o botão aparece; `permissoes.pode_administrar` é SuperRoot/controle total.
 - **Número:** formato livre (ex.: `012/2026`, `CT-45/2025`, `20214514`), até 60 caracteres, sem espaços nas pontas.
   - É **único** sem diferenciar maiúsculas. No padrão `NNN/AAAA`, `1/2026` e `001/2026` também contam como o mesmo número (`409`).
   - `sequencial` e `ano` são preenchidos só quando o número segue `NNN/AAAA` (nulos nos demais). Servem para a ordenação da carteira e para `GET /proximo-numero`, que sugere o maior sequencial do ano + 1.
@@ -65,7 +65,8 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 
 ### Respostas
 
-- `ResumoContrato`: `id`, `numero`, `apelido`, `empresa_razao_social`, `objeto`, `data_inicio`, `data_fim`, `situacao`, `base_mensal`, `valor_global`.
+- `ResumoContrato`: `id`, `numero`, `apelido`, `empresa_razao_social`, `objeto`, `data_inicio`, `data_fim`, `situacao`, `base_mensal`, `valor_global`, `criador_id`, `competencia_atual` e `sem_competencias`.
+  - **`competencia_atual`** (marcadores da coluna **Competência** da carteira): a competência **regular ou de diferença de reajuste mais antiga ainda não concluída**, ignorando as anteriores ao corte de cobrança (`PENDENCIAS_A_PARTIR_DE` e `alertas_a_partir_de` do contrato, a mesma regra das pendências) e as medições adicionais. Traz `identificador` (rota `/contratos/{id}/execucao/{identificador}`), `rotulo`, `situacao` (`pendente`: o período não terminou; `disponivel`: liberada sem medição iniciada; `em_andamento`), `etapas` (etapas abertas agora, até três depois da nota fiscal) e `atrasada` (medição não concluída há mais de 30 dias do fim do período, o critério dos alertas). `null` quando não há competência em aberto ("Em dia"); `sem_competencias = true` quando a execução ainda não foi gerada. Os campos vêm das competências já carregadas na página, sem consulta extra por contrato; `DetalheContrato` os herda.
 - `PaginaContratos`: `itens`, `total`, `pagina`, `tamanho_pagina`.
 - `DetalheContrato` = `ResumoContrato` +
   - `sequencial`, `ano` e `empresa` (`OpcaoEmpresa`);
@@ -74,7 +75,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
   - `vigencias` (`[{sequencia, inicio, fim, meses}]`);
   - `itens` (`LeituraItem`: dados do item + `quantidade_total` da vigência atual, `quantidade_original` (teto inicial do item sob demanda), `quantidade_executada`, `quantidade_disponivel`, `subtotal_mensal`, `vigencia_meses`);
   - `equipe` (`[{papel, usuario_id, nome, login, desde}]`, só as designações vigentes);
-  - `criador_nome`, `permissoes` (`{pode_editar, pode_excluir}`), `versao`, `criado_em`, `atualizado_em`.
+  - `criador_nome`, `permissoes` (`{pode_editar, pode_excluir, pode_administrar}`), `versao`, `criado_em`, `atualizado_em`.
 - `LeituraDocumento`: `codigo`, `numero` (`"012"`), `titulo`, `anexado`, `nome_arquivo`, `tamanho`, `enviado_em`, `enviado_por_nome`.
 - `AlteracaoCampo`: `campo`, `de`, `para`, `autor`, `ocorrido_em`.
 
@@ -141,7 +142,7 @@ Mesmo corpo, com `versao` e o `id` de cada item existente. Resposta `200`: `Deta
 
 ## `DELETE /api/contratos/{contrato_id}`
 
-Resposta **`204`**. Remove o contrato e seus dependentes; **todos** os PDFs e arquivos gerados ligados ao contrato (documentos, execução, reajuste, prorrogação, alterações) passam a excluídos (exclusão lógica). Erro: `404`.
+Resposta **`204`**. Exige ACL ≥ `MODIFICACAO`; excluir contrato de outra pessoa exige controle total (`403`). Remove o contrato e seus dependentes; **todos** os PDFs e arquivos gerados ligados ao contrato (documentos, execução, reajuste, prorrogação, alterações) passam a excluídos (exclusão lógica). Erro: `404`.
 
 ## `GET /api/contratos/{contrato_id}/historico`
 

@@ -8,7 +8,8 @@ import { Component, computed, input, output, signal } from '@angular/core';
 import { AvataresComponent } from './avatares.component';
 import { PrioridadeTarefa, ROTULOS_PRIORIDADE, situacaoPrazo, STATUS, StatusTarefa, TarefaResumo } from './tarefas.models';
 
-export type OrdemLista = 'manual' | 'prazo' | 'prioridade';
+export type OrdemLista = 'manual' | 'titulo' | 'pessoas' | 'prazo' | 'prioridade' | 'checklist';
+export type SentidoOrdem = 'asc' | 'desc';
 
 /** Peso da prioridade na ordenação "Prioridade" (crítica primeiro). */
 const PESO_PRIORIDADE: Record<PrioridadeTarefa, number> = { critica: 0, alta: 1, normal: 2, baixa: 3 };
@@ -23,8 +24,13 @@ const PESO_PRIORIDADE: Record<PrioridadeTarefa, number> = { critica: 0, alta: 1,
   template: `
     <div class="lista-asana" role="table" aria-label="Tarefas">
       <div class="cabecalho-lista" role="row">
-        <span role="columnheader">Tarefa</span><span role="columnheader">Pessoas</span><span role="columnheader">Prazo</span>
-        <span role="columnheader">Prioridade</span><span role="columnheader">Checklist</span>
+        @for (c of colunas; track c.ordem) {
+          <span role="columnheader" [attr.aria-sort]="ordem() === c.ordem ? (sentido() === 'asc' ? 'ascending' : 'descending') : 'none'">
+            <button type="button" class="ordenar-coluna" [class.ativa]="ordem() === c.ordem" [title]="'Ordenar por ' + c.rotulo.toLowerCase()" (click)="ordenarPor.emit(c.ordem)">
+              {{ c.rotulo }}<i aria-hidden="true">{{ ordem() === c.ordem ? (sentido() === 'asc' ? '▲' : '▼') : '↕' }}</i>
+            </button>
+          </span>
+        }
       </div>
       @for (s of secoes(); track s.valor) {
         <section class="secao-lista" [attr.data-status]="s.valor" role="rowgroup">
@@ -61,6 +67,13 @@ export class ListaTarefasComponent {
   protected readonly classeMarcador = classeMarcador;
   readonly itens = input<TarefaResumo[]>([]);
   readonly ordem = input<OrdemLista>('manual');
+  readonly sentido = input<SentidoOrdem>('asc');
+  /** Clique no título de uma coluna: o espaço alterna crescente, decrescente e ordem manual. */
+  readonly ordenarPor = output<OrdemLista>();
+  protected readonly colunas: { ordem: OrdemLista; rotulo: string }[] = [
+    { ordem: 'titulo', rotulo: 'Tarefa' }, { ordem: 'pessoas', rotulo: 'Pessoas' }, { ordem: 'prazo', rotulo: 'Prazo' },
+    { ordem: 'prioridade', rotulo: 'Prioridade' }, { ordem: 'checklist', rotulo: 'Checklist' },
+  ];
   readonly abrir = output<number>();
   /** Nova ordem manual (números de todas as tarefas da seção, de cima para baixo). */
   readonly reordenar = output<number[]>();
@@ -114,8 +127,20 @@ export class ListaTarefasComponent {
   private ordenar(lista: TarefaResumo[]): TarefaResumo[] {
     const copia = [...lista];
     const o = this.ordem();
-    if (o === 'prazo') return copia.sort((a, b) => a.prazo.localeCompare(b.prazo));
-    if (o === 'prioridade') return copia.sort((a, b) => PESO_PRIORIDADE[a.prioridade] - PESO_PRIORIDADE[b.prioridade] || a.prazo.localeCompare(b.prazo));
-    return copia.sort((a, b) => a.ordem - b.ordem);
+    const texto = (a: string, b: string) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true });
+    const prazo = (a: TarefaResumo, b: TarefaResumo) => a.prazo.localeCompare(b.prazo);
+    const primeiro = (t: TarefaResumo) => t.responsaveis[0]?.nome ?? '';
+    const andamento = (t: TarefaResumo) => (t.checklist_total ? t.checklist_feitos / t.checklist_total : -1);
+    let ordenada: TarefaResumo[];
+    switch (o) {
+      case 'titulo': ordenada = copia.sort((a, b) => texto(a.titulo, b.titulo)); break;
+      // Quem não tem responsável vai para o fim na ordem crescente
+      case 'pessoas': ordenada = copia.sort((a, b) => (primeiro(a) === '' ? 1 : 0) - (primeiro(b) === '' ? 1 : 0) || texto(primeiro(a), primeiro(b)) || prazo(a, b)); break;
+      case 'prazo': ordenada = copia.sort(prazo); break;
+      case 'prioridade': ordenada = copia.sort((a, b) => PESO_PRIORIDADE[a.prioridade] - PESO_PRIORIDADE[b.prioridade] || prazo(a, b)); break;
+      case 'checklist': ordenada = copia.sort((a, b) => andamento(b) - andamento(a) || prazo(a, b)); break;
+      default: return copia.sort((a, b) => a.ordem - b.ordem);
+    }
+    return this.sentido() === 'desc' ? ordenada.reverse() : ordenada;
   }
 }

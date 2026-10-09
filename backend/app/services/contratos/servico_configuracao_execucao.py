@@ -25,7 +25,9 @@ from app.models.contratos import (
     ItemChecklist,
     ModeloGlobal,
 )
+from app.models.acl import NivelAcl
 from app.models.usuario import Usuario
+from app.services import servico_acl
 from app.schemas.contratos.execucao import (
     DefinicaoFormulario,
     GravacaoChecklist,
@@ -36,7 +38,9 @@ from app.schemas.contratos.execucao import (
     LeituraFormulario,
     LeituraModelo,
 )
-from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
+from app.services.contratacoes import conteudo as conteudo_html
+from app.services.contratos import portaria_mascara
+from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato
 from app.services.servico_auditoria import auditar, valor_json
 
@@ -380,10 +384,29 @@ def formulario_ativo(contrato: Contrato) -> FormularioAvaliacao | None:
 # ---------------------------------------------------------------------------------------------
 
 def _conteudo(dados: GravacaoModelo) -> dict[str, Any]:
-    """Conteúdo JSON do modelo: lista de documentos (checklist) ou definição com ids (formulário)."""
+    """Conteúdo JSON do modelo: documentos (checklist), definição com ids (formulário) ou HTML validado (portaria)."""
     if dados.tipo == "checklist":
         return {"itens": [i.model_dump() for i in dados.itens or []]}
+    if dados.tipo == "portaria":
+        try:
+            html = conteudo_html.sanitizar(dados.html or "")
+        except conteudo_html.ErroConteudo as erro:
+            raise ErroRegraContrato(str(erro)) from erro
+        ruins = portaria_mascara.invalidos(html, dados.variante)
+        if ruins:
+            raise ErroRegraContrato("Placeholders não permitidos na máscara: " + ", ".join(ruins) + ". Use somente os da lista ao lado do editor"
+                                    + (" (a máscara sem portaria anterior não aceita os da portaria anterior)." if dados.variante == "sem_anterior" else "."))
+        return {"html": html, "variante": dados.variante}
     return definicao_com_ids(dados.definicao)
+
+
+def exigir_permissao_modelo(sessao: Session, usuario: Usuario, tipo: str) -> None:
+    """Máscaras de portaria: SuperRoot ou controle total em Contratos. Checklists e formulários: só SuperRoot."""
+    if usuario.superusuario:
+        return
+    if tipo == "portaria" and servico_acl.resolver_acesso(sessao, usuario, "contratos") == NivelAcl.CONTROLE_TOTAL:
+        return
+    raise SemPermissaoContrato("Somente o SuperRoot altera este tipo de modelo; as máscaras de portaria também exigem controle total em Contratos.")
 
 
 def leitura_modelo(modelo: ModeloGlobal) -> LeituraModelo:
@@ -411,10 +434,17 @@ def _obter_modelo(sessao: Session, modelo_id: uuid.UUID) -> ModeloGlobal:
 
 def salvar_modelo(sessao: Session, dados: GravacaoModelo, autor: Usuario, modelo_id: uuid.UUID | None = None) -> ModeloGlobal:
     """Cria (sem `modelo_id`) ou altera um modelo global; o tipo não pode mudar."""
+    exigir_permissao_modelo(sessao, autor, dados.tipo)
     modelo = _obter_modelo(sessao, modelo_id) if modelo_id else ModeloGlobal(tipo=dados.tipo)
     if modelo_id and modelo.tipo != dados.tipo:
         raise ErroRegraContrato("O tipo do modelo não pode ser alterado.")
-    modelo.nome, modelo.conteudo, modelo.ativo = dados.nome, _conteudo(dados), dados.ativo
+    conteudo = _conteudo(dados)
+    if dados.tipo == "portaria" and dados.ativo:
+        outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == "portaria", ModeloGlobal.ativo.is_(True)))
+                      if m.id != modelo.id and m.conteudo.get("variante") == dados.variante), None)
+        if outro is not None:
+            raise ErroRegraContrato(f"Já existe uma máscara ativa para esta variante (\"{outro.nome}\"): desative-a antes.", conflito=True)
+    modelo.nome, modelo.conteudo, modelo.ativo = dados.nome, conteudo, dados.ativo
     if modelo_id is None:
         sessao.add(modelo)
     sessao.flush()
@@ -427,6 +457,7 @@ def salvar_modelo(sessao: Session, dados: GravacaoModelo, autor: Usuario, modelo
 def excluir_modelo(sessao: Session, modelo_id: uuid.UUID, autor: Usuario) -> None:
     """Exclui o modelo global (as cópias já feitas nos contratos continuam)."""
     modelo = _obter_modelo(sessao, modelo_id)
+    exigir_permissao_modelo(sessao, autor, modelo.tipo)
     auditar(sessao, autor.login, "contrato.modelo.excluir", f"Modelo {modelo.nome}", autor_id=autor.id,
             alvo_tipo="modelo", alvo_id=modelo.id, dados={"tipo": modelo.tipo})
     sessao.delete(modelo)

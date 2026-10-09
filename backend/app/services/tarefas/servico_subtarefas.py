@@ -98,3 +98,8 @@ def definir_dependencias(sessao: Session, autor: Usuario, tarefa: Tarefa, numero
         auditar(sessao, autor.login, "tarefas.dependencias", servico._rotulo(tarefa), texto, autor_id=autor.id, alvo_tipo="tarefa", alvo_id=tarefa.id)
     sessao.commit()
     return tarefa
+
+
+def da_mae(sessao: Session, mae: Tarefa) -> list[Tarefa]:
+    """Subtarefas da tarefa-mãe (quadro próprio de subtarefas)."""
+    return list(sessao.scalars(select(Tarefa).where(Tarefa.tarefa_pai_id == mae.id)))

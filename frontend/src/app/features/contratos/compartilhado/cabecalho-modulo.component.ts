@@ -5,6 +5,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
+import { AcessoService } from '../../../core/acesso/acesso.service';
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { ItemTrilha, TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
@@ -45,11 +46,14 @@ export class CabecalhoModuloComponent {
   ]);
 
   private readonly autenticacao = inject(AutenticacaoService);
+  private readonly acesso = inject(AcessoService);
   private readonly api = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
 
   // Estado do menu "Relatórios" e da janela aberta (previsão consolidada ou NEs)
   protected readonly superRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
+  // Controle total em Contratos (ou SuperRoot) edita as máscaras de portaria em Modelos
+  protected readonly editaModelos = computed(() => this.acesso.pode('contratos', 'CONTROLE_TOTAL'));
   protected readonly janela = signal<'previsao' | 'notas' | null>(null);
   protected readonly menuRelatorios = signal(false);
   protected formato: 'xlsx' | 'pdf' = 'xlsx';

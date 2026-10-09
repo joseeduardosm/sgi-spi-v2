@@ -120,14 +120,14 @@ class FormularioAvaliacao(Base):
 
 
 class ModeloGlobal(Base):
-    """Modelo reutilizável (SuperRoot) de checklist ou de formulário, clonado para os contratos.
+    """Modelo reutilizável de checklist ou de formulário (SuperRoot), clonado para os contratos, ou máscara de portaria (SuperRoot ou controle total).
 
     `conteudo`: checklist → {"itens": [{"nome", "observacao"}]}; formulário → a mesma `definicao`.
     """
 
     __tablename__ = "contratos_modelos"
-    # Só dois tipos de modelo são aceitos
-    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario')", name="ck_contratos_modelos_tipo"),)
+    # Tipos aceitos; `portaria` guarda a máscara do texto da portaria de designação ({"html", "variante"})
+    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria')", name="ck_contratos_modelos_tipo"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     tipo: Mapped[str] = mapped_column(String(20), index=True)

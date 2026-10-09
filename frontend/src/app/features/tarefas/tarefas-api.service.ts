@@ -12,7 +12,7 @@ import {
   AcaoPipeline, AgendaPessoa, Atividade, AtualizacaoStatus, Marco, DesempenhoEquipe, Equipe, Estagio, Recorrencia, RegraRecorrencia, EventoTarefa, FiltrosTarefas, LinhaDoTempo, ListaTarefas, Marcador, PessoaCarga, PrioridadeTarefa, TarefaDetalhe,
 } from './tarefas.models';
 
-export interface Escopo { tipo: 'minhas' | 'equipe' | 'pessoa'; equipeId?: string | null; login?: string | null }
+export interface Escopo { tipo: 'minhas' | 'equipe' | 'pessoa' | 'subtarefas'; equipeId?: string | null; login?: string | null; tarefa?: number | null }
 
 @Injectable({ providedIn: 'root' })
 export class TarefasApiService {
@@ -23,6 +23,7 @@ export class TarefasApiService {
     let p = new HttpParams().set('escopo', escopo.tipo);
     if (escopo.equipeId) p = p.set('equipe_id', escopo.equipeId);
     if (escopo.login) p = p.set('login', escopo.login);
+    if (escopo.tarefa) p = p.set('tarefa', escopo.tarefa);
     for (const s of filtros.status) p = p.append('status', s);
     if (filtros.prioridade) p = p.set('prioridade', filtros.prioridade);
     if (filtros.marcador_id) p = p.set('marcador_id', filtros.marcador_id);
@@ -138,6 +139,11 @@ export class TarefasApiService {
       id: p.id, login: p.login, nome_completo: p.nome, ativo: true,
       cargo: `${p.faixa} · ${p.a_fazer + p.em_andamento} em aberto${p.atrasadas ? ` · ${p.atrasadas} atrasada(s)` : ''}`,
     }))));
+
+  /** Relatório memorial da tarefa (todos os acontecimentos), em PDF ou XLSX. */
+  memorial(numero: number, formato: 'pdf' | 'xlsx') {
+    return baixarArquivo(this.http, `${this.base}/${numero}/memorial?formato=${formato}`, `memorial-tarefa-${numero}.${formato}`);
+  }
 
   /** Relatório XLSX ou PDF do escopo, no período (datas aaaa-mm-dd) e, opcionalmente, de um marcador. */
   relatorio(escopo: Escopo, formato: 'xlsx' | 'pdf', de: string, ate: string, marcadorId: string) {

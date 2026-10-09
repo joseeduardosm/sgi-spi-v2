@@ -356,7 +356,7 @@ def test_escalonamento_gera_um_memorial_por_lider_por_dia(cliente, admin, equipe
         assert len(memorial) == 1 and memorial[0].enviar_email and memorial[0].assunto == "Tarefas atrasadas das suas equipes: 2"
         corpo = memorial[0].corpo
     # Tabela: número, título (sem quebrar a tabela), responsável, atraso e link
-    assert "| Nº | Título | Responsável | Atraso | Link |" in corpo and "Enviar / relatório" in corpo
+    assert "| Nº | Título | Responsável | Atraso | Em aberto | Link |" in corpo and "Enviar / relatório" in corpo
     assert f"| #{a['numero']} | Revisar edital | Ana Executora |" in corpo and f"/tarefas/{b['numero']} |" in corpo
     # Rodar de novo no mesmo dia não repete o aviso
     _rodar_lembretes()

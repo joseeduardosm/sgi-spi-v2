@@ -20,6 +20,7 @@ import { MESES, PAPEIS, PERIODICIDADES, ROTULOS_CAMPO, ROTULOS_SITUACAO, ROTULOS
 import { AbaChecklistsComponent } from './aba-checklists.component';
 import { AbaCorrecoesComponent } from './aba-correcoes.component';
 import { AbaDocumentosComponent } from './aba-documentos.component';
+import { AbaPortariaComponent } from './aba-portaria.component';
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { AbaDiarioComponent } from './aba-diario.component';
 import { AbaExecucaoComponent } from './aba-execucao.component';
@@ -28,14 +29,14 @@ import { AbaNotasComponent } from './aba-notas.component';
 import { AbaPrevisaoComponent } from './aba-previsao.component';
 
 /** Abas da tela de detalhe. */
-type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'correcoes' | 'notas' | 'diario' | 'execucao';
+type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'correcoes' | 'notas' | 'diario' | 'execucao' | 'portaria';
 
 /** Tela 3: detalhe do contrato com abas. */
 @Component({
   selector: 'app-detalhe-contrato',
   imports: [
     RouterLink, CabecalhoModuloComponent, HistoricoCampoComponent, LinhaDoTempoComponent, AbaPrevisaoComponent, AbaDocumentosComponent,
-    AbaChecklistsComponent, AbaCorrecoesComponent, AbaFormulariosComponent, AbaNotasComponent, AbaDiarioComponent, AbaExecucaoComponent, ...PIPES_FORMATACAO,
+    AbaChecklistsComponent, AbaCorrecoesComponent, AbaFormulariosComponent, AbaNotasComponent, AbaDiarioComponent, AbaExecucaoComponent, AbaPortariaComponent, ...PIPES_FORMATACAO,
   ],
   templateUrl: './detalhe-contrato.component.html',
 })
@@ -68,6 +69,7 @@ export class DetalheContratoComponent {
     { id: 'notas', rotulo: 'Notas de Empenho' },
     { id: 'diario', rotulo: 'Diário de bordo' },
     { id: 'execucao', rotulo: 'Execução' },
+    { id: 'portaria', rotulo: 'Portarias' },
   ];
   // Estado: aba aberta, contrato, histórico de campos e prorrogações
   protected readonly aba = signal<Aba>('principal');

@@ -318,8 +318,10 @@ def anular(sessao: Session, numero_id: uuid.UUID, motivo: str, autor: Usuario) -
     return numero
 
 
-def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo: str, autor: Usuario) -> NumeroProtocolo:
-    """Anexa o documento ao número reservado: ele passa a utilizado. Só quem reservou ou a administração; um documento por número."""
+def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo: str, autor: Usuario, *, ignorar_dono: bool = False) -> NumeroProtocolo:
+    """Anexa o documento ao número reservado: ele passa a utilizado. Só quem reservou ou a administração; um documento por número.
+
+    `ignorar_dono=True` é para módulos que reservam o número por trás de um fluxo próprio (portarias dos contratos) e já conferiram a permissão."""
     numero = _numero(sessao, numero_id)
     if numero.anulado_em is not None:
         raise ErroProtocolo("Este número foi anulado.", 409, "conflito")
@@ -327,7 +329,7 @@ def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo
         raise ErroProtocolo("Reserve o número antes de anexar o documento.", 409, "conflito")
     if numero.anexo_id is not None:
         raise ErroProtocolo("Este número já possui documento anexado e não pode ser reutilizado.", 409, "conflito")
-    if not _dono_ou_admin(sessao, numero, autor):
+    if not ignorar_dono and not _dono_ou_admin(sessao, numero, autor):
         raise ErroProtocolo("Só quem reservou o número ou a administração do Protocolo pode anexar o documento.", 403, "sem_permissao")
     try:
         anexo = servico_anexos.guardar_arquivo(sessao, origem, nome_arquivo, "protocolo-documento", autor.id)

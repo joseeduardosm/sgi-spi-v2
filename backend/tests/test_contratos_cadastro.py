@@ -128,7 +128,7 @@ def test_cadastro_calcula_data_final_e_valor_global(cliente, admin):
     assert contrato["itens"][0]["unidade_fornecimento"] == "posto"
     assert contrato["itens"][0]["quantidade_total"] == "24.0000" and contrato["itens"][1]["quantidade_total"] == "100.0000"
     assert contrato["equipe"] == [{**contrato["equipe"][0], "papel": "gestor", "usuario_id": usuario_id, "login": "gestora"}]
-    assert contrato["permissoes"] == {"pode_editar": True, "pode_excluir": True}
+    assert contrato["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": True}
     assert contrato["data_limite_maxima"] == "2030-12-31"
     assert cliente.get("/api/contratos/proximo-numero", params={"ano": 2026}, headers=admin).json()["numero"] == "002/2026"
 
@@ -226,7 +226,8 @@ def test_equipe_troca_encerra_designacao_anterior(cliente, admin):
 def test_poderes_iguais_da_equipe_e_bloqueio_de_estranhos(cliente, admin):
     """Os papéis da equipe têm poderes iguais; estranhos (mesmo com ACL) e leitores não alteram."""
     membro, estranho, leitor = criar_usuario("suplente"), criar_usuario("estranho"), criar_usuario("leitor")
-    restringir_contratos(cliente, admin, {membro: "MODIFICACAO", estranho: "MODIFICACAO", leitor: "LEITURA"})
+    chefe = criar_usuario("chefe")
+    restringir_contratos(cliente, admin, {membro: "MODIFICACAO", estranho: "MODIFICACAO", leitor: "LEITURA", chefe: "CONTROLE_TOTAL"})
     contrato = criar_contrato(cliente, admin, equipe={"fiscal_tecnico_suplente": membro})
     dados = {**dados_contrato(contrato["empresa"]["id"], apelido="Novo"), "versao": 1}
     dados["itens"] = [{**item(), "id": contrato["itens"][0]["id"]}]
@@ -238,6 +239,10 @@ def test_poderes_iguais_da_equipe_e_bloqueio_de_estranhos(cliente, admin):
     assert cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=cabecalho(cliente, "leitor")).status_code == 403
     r = cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=cabecalho(cliente, "suplente"))
     assert r.status_code == 200, r.text
+    # Quem tem CONTROLE_TOTAL também edita qualquer contrato, mesmo sem ser da equipe nem o criador
+    assert cliente.get(f"/api/contratos/{contrato['id']}", headers=cabecalho(cliente, "chefe")).json()["permissoes"]["pode_editar"] is True
+    dados["versao"] = 2
+    assert cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=cabecalho(cliente, "chefe")).status_code == 200
     # Exclusão só com CONTROLE_TOTAL
     assert cliente.delete(f"/api/contratos/{contrato['id']}", headers=cabecalho(cliente, "suplente")).status_code == 403
     assert cliente.delete(f"/api/contratos/{contrato['id']}", headers=admin).status_code == 204
@@ -318,3 +323,17 @@ def test_carteira_meus_contratos_so_da_equipe_vigente(cliente, admin):
     assert {i["id"] for i in todos["itens"]} >= {c1["id"], c2["id"]}
     meus = cliente.get("/api/contratos", params={"meus": "true"}, headers=h).json()
     assert [i["id"] for i in meus["itens"]] == [c1["id"]] and meus["total"] == 1
+
+
+def test_exclusao_do_proprio_contrato_com_modificacao_e_qualquer_um_com_controle_total(cliente, admin):
+    """ACL Modificação exclui só o que criou; controle total exclui qualquer contrato."""
+    ana, bia, chefe = criar_usuario("ana-c"), criar_usuario("bia-c"), criar_usuario("chefe-c")
+    restringir_contratos(cliente, admin, {ana: "MODIFICACAO", bia: "MODIFICACAO", chefe: "CONTROLE_TOTAL"})
+    h_ana, h_bia, h_chefe = cabecalho(cliente, "ana-c"), cabecalho(cliente, "bia-c"), cabecalho(cliente, "chefe-c")
+    dela = criar_contrato(cliente, h_ana, numero="010/2026")
+    da_bia = criar_contrato(cliente, h_bia, numero="011/2026", empresa_id=dela["empresa"]["id"])
+    assert cliente.get(f"/api/contratos/{dela['id']}", headers=h_ana).json()["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": False}
+    assert cliente.delete(f"/api/contratos/{da_bia['id']}", headers=h_ana).status_code == 403
+    assert cliente.delete(f"/api/contratos/{dela['id']}", headers=h_ana).status_code == 204
+    assert cliente.get(f"/api/contratos/{da_bia['id']}", headers=h_chefe).json()["permissoes"]["pode_administrar"] is True
+    assert cliente.delete(f"/api/contratos/{da_bia['id']}", headers=h_chefe).status_code == 204

@@ -139,26 +139,40 @@ def integra_equipe(contrato: Contrato, usuario: Usuario) -> bool:
     return any(d.usuario_id == usuario.id for d in designacoes_vigentes(contrato))
 
 
-def papel_para_ciencia(contrato: Contrato, usuario: Usuario) -> str | None:
-    """Papel com que o usuário registra ciência: o da equipe vigente ou, para o SuperRoot (testes), "administrador"."""
+def papel_para_ciencia(sessao: Session, contrato: Contrato, usuario: Usuario) -> str | None:
+    """Papel com que o usuário registra ciência: o da equipe vigente ou, para o SuperRoot e quem tem controle total em Contratos, "administrador"."""
     designacao = next((d for d in designacoes_vigentes(contrato) if d.usuario_id == usuario.id), None)
     if designacao:
         return designacao.papel
-    return PAPEL_ADMINISTRADOR if usuario.superusuario else None
+    return PAPEL_ADMINISTRADOR if eh_administrador(sessao, usuario) else None
 
 
-def pode_dar_ciencia(contrato: Contrato, usuario: Usuario) -> bool:
+def pode_dar_ciencia(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
     """Integrante vigente da equipe ou SuperRoot (que registra ciência em qualquer contrato, para efeito de teste)."""
-    return papel_para_ciencia(contrato, usuario) is not None
+    return papel_para_ciencia(sessao, contrato, usuario) is not None
+
+
+def eh_administrador(sessao: Session, usuario: Usuario) -> bool:
+    """SuperRoot ou controle total em Contratos: faz tudo sobre qualquer contrato (como um SuperRoot do módulo)."""
+    return usuario.superusuario or servico_acl.resolver_acesso(sessao, usuario, RECURSO) == NivelAcl.CONTROLE_TOTAL
+
+
+def pode_excluir(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
+    """Administrador (qualquer contrato) ou quem tem ACL ≥ MODIFICACAO e criou o contrato."""
+    if eh_administrador(sessao, usuario):
+        return True
+    nivel = servico_acl.resolver_acesso(sessao, usuario, RECURSO)
+    return NivelAcl.posicao(nivel) >= NivelAcl.posicao(NivelAcl.MODIFICACAO) and contrato.criador_id == usuario.id
 
 
 def pode_editar(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
-    """SuperRoot, criador ou integrante vigente da equipe — sempre com ACL ≥ MODIFICACAO."""
+    """SuperRoot, controle total em Contratos (qualquer contrato), criador ou integrante vigente da equipe — sempre com ACL ≥ MODIFICACAO."""
     # Primeiro a ACL: sem pelo menos MODIFICACAO, ninguém edita
     nivel = servico_acl.resolver_acesso(sessao, usuario, RECURSO)
     if NivelAcl.posicao(nivel) < NivelAcl.posicao(NivelAcl.MODIFICACAO):
         return False
-    return usuario.superusuario or contrato.criador_id == usuario.id or integra_equipe(contrato, usuario)
+    # Quem pode excluir (controle total) também edita qualquer contrato, mesmo sem ser da equipe nem o criador
+    return eh_administrador(sessao, usuario) or contrato.criador_id == usuario.id or integra_equipe(contrato, usuario)
 
 
 def exigir_edicao(sessao: Session, contrato: Contrato, usuario: Usuario) -> None:
@@ -174,7 +188,8 @@ def permissoes(sessao: Session, contrato: Contrato, usuario: Usuario) -> Permiss
     nivel = servico_acl.resolver_acesso(sessao, usuario, RECURSO)
     return PermissoesContrato(
         pode_editar=pode_editar(sessao, contrato, usuario),
-        pode_excluir=nivel == NivelAcl.CONTROLE_TOTAL,
+        pode_excluir=pode_excluir(sessao, contrato, usuario),
+        pode_administrar=eh_administrador(sessao, usuario),
     )
 
 
@@ -353,6 +368,8 @@ def opcoes_carga_resumo() -> list:
 
 def resumo(contrato: Contrato) -> ResumoContrato:
     """Converte o contrato na linha da carteira (com base mensal e valor global calculados)."""
+    from app.services.contratos.competencia_atual import competencia_atual
+
     base, valor = totais(contrato)
     return ResumoContrato(
         id=contrato.id,
@@ -360,11 +377,14 @@ def resumo(contrato: Contrato) -> ResumoContrato:
         apelido=contrato.apelido,
         empresa_razao_social=contrato.empresa.razao_social,
         objeto=contrato.objeto,
+        criador_id=contrato.criador_id,
         data_inicio=contrato.data_inicio,
         data_fim=contrato.data_fim,
         situacao=situacao(contrato),
         base_mensal=base,
         valor_global=valor,
+        competencia_atual=competencia_atual(contrato),
+        sem_competencias=not contrato.competencias,
     )
 
 
@@ -558,7 +578,7 @@ def itens_bloqueados(contrato: Contrato) -> bool:
     return bool(contrato.id and contrato.competencias)
 
 
-def _aplicar_itens(contrato: Contrato, itens: list[GravacaoItem], usuario: Usuario) -> dict:
+def _aplicar_itens(contrato: Contrato, itens: list[GravacaoItem], usuario: Usuario, administrador: bool = False) -> dict:
     """Sincroniza a lista de itens e devolve o resumo das mudanças para a auditoria."""
     atuais = {i.id: i for i in contrato.itens}
     # Mapa dos itens atuais e conjunto dos ids enviados
@@ -602,8 +622,8 @@ def _aplicar_itens(contrato: Contrato, itens: list[GravacaoItem], usuario: Usuar
             mudancas["alterados"][item.descricao] = alterados
     houve = any(mudancas[c] for c in mudancas)
     # Com competências já geradas, só o SuperRoot pode mexer nos itens
-    if houve and itens_bloqueados(contrato) and not usuario.superusuario:
-        raise ErroRegraContrato("As competências de execução já foram geradas: itens e ordem só podem ser alterados pelo SuperRoot.")
+    if houve and itens_bloqueados(contrato) and not administrador:
+        raise ErroRegraContrato("As competências de execução já foram geradas: itens e ordem só podem ser alterados pelo SuperRoot ou por quem tem controle total em Contratos.")
     return mudancas if houve else {}
 
 
@@ -692,7 +712,7 @@ def alterar_contrato(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCon
     numero = _validar_cabecalho(sessao, dados, contrato)
     antes = _dados_auditados(contrato)
     _aplicar_cabecalho(contrato, dados, numero)
-    mudancas_itens = _aplicar_itens(contrato, dados.itens, autor)
+    mudancas_itens = _aplicar_itens(contrato, dados.itens, autor, eh_administrador(sessao, autor))
     mudancas_equipe = _aplicar_equipe(sessao, contrato, dados)
     _avisar_designados(sessao, contrato, dados, mudancas_equipe, autor)
     # Cada gravação incrementa a versão
@@ -724,8 +744,10 @@ def alterar_contrato(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCon
 
 
 def excluir_contrato(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> None:
-    """Exclui o contrato; os anexos são marcados como excluídos (os arquivos ficam em disco)."""
+    """Exclui o contrato (administrador, ou quem o criou com ACL ≥ MODIFICACAO); os anexos são marcados como excluídos (os arquivos ficam em disco)."""
     contrato = obter_contrato(sessao, contrato_id)
+    if not pode_excluir(sessao, contrato, autor):
+        raise SemPermissaoContrato("Somente quem tem controle total em Contratos, ou quem criou o contrato, pode excluí-lo.")
     # Todos os arquivos do contrato (documentos, execução, prorrogações, reajustes e alterações)
     for anexo in sessao.scalars(select(Anexo).where(Anexo.contrato_id == contrato.id, Anexo.excluido_em.is_(None))):
         servico_anexos.descartar(anexo)

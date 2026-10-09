@@ -62,6 +62,13 @@ export const ROTAS_TAREFAS: Routes = [
         loadComponent: () => import('./espaco-tarefas.component').then((m) => m.EspacoTarefasComponent),
       },
       {
+        // Quadro só das subtarefas de uma tarefa ("Equipe X - Tarefa #N - Subtarefas"), com andamento independente
+        path: ':numero/subtarefas',
+        title: 'Subtarefas | SGI SPI',
+        data: { escopo: 'subtarefas' },
+        loadComponent: () => import('./espaco-tarefas.component').then((m) => m.EspacoTarefasComponent),
+      },
+      {
         // Tela própria da tarefa (também é o link dos e-mails e avisos)
         path: ':numero',
         title: 'Tarefa | SGI SPI',

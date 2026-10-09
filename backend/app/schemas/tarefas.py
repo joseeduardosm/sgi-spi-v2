@@ -52,6 +52,7 @@ class TarefaResumo(BaseModel):
     prazo_original: datetime
     prorrogacoes: int = Field(..., description="Quantas vezes o prazo foi alterado.")
     atrasada: bool
+    dias_em_aberto: int | None = Field(None, description="Dias corridos desde a criação, enquanto a tarefa não está concluída (`null` se concluída).")
     equipe: EquipeResumo | None
     responsavel: Pessoa | None
     responsaveis: list[Pessoa] = Field(..., description="Todos os responsáveis (o principal primeiro, depois os demais por nome), para os avatares do cartão.")
@@ -89,9 +90,11 @@ class Indicadores(BaseModel):
 
 
 class Contexto(BaseModel):
-    tipo: Literal["minhas", "equipe", "pessoa"]
+    tipo: Literal["minhas", "equipe", "pessoa", "subtarefas"]
     titulo: str
     equipe_id: uuid.UUID | None = None
+    tarefa_numero: int | None = Field(None, description="`subtarefas`: número da tarefa-mãe cujo quadro de subtarefas está aberto.")
+    tarefa_titulo: str | None = Field(None, description="`subtarefas`: título da tarefa-mãe.")
     login: str | None = None
     pessoa_id: int | None = Field(None, description="Id da pessoa do contexto (`minhas` = o próprio usuário; `pessoa` = a pessoa consultada), para o Desempenho individual.")
     lider: bool = Field(False, description="O usuário lidera o contexto (vê a fila de validação e ações de liderança).")

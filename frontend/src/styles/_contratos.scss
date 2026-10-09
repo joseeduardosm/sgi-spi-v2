@@ -1974,3 +1974,6 @@ small.trecho-mes {
 
 // Passos da assinatura externa da avaliação (baixar, assinar no gov.br, enviar)
 .passos-assinatura { margin: 8px 0 4px; padding-left: 22px; color: var(--cor-3d454e); font-size: 13px; line-height: 1.6; a { color: var(--spi-link); } }
+
+/* Carteira: marcadores da competência atual e das etapas abertas */
+.celula-marcadores { min-width: 150px; max-width: 230px; .marcadores { display: flex; flex-wrap: wrap; gap: 4px; } a.marcador-tarefa { text-decoration: none; &:hover { filter: brightness(.95); } } }

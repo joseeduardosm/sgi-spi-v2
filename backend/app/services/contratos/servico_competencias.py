@@ -87,6 +87,7 @@ from app.services.contratos.servico_configuracao_execucao import (
 )
 from app.services.contratos.servico_contratos import (
     designacoes_vigentes,
+    eh_administrador,
     exigir_edicao,
     hoje,
     pode_dar_ciencia,
@@ -787,7 +788,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         **resumo(competencia).model_dump(),
         contrato_id=contrato.id, contrato_numero=contrato.numero, empresa_cnpj="".join(c for c in contrato.empresa.cnpj if c.isdigit()),
         etapas=etapas_da_competencia(competencia),
-        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(contrato, usuario),
+        pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(sessao, contrato, usuario),
         pode_gerar_consolidado_novamente=pode_gerar_consolidado_novamente(contrato, usuario) and pode_editar(sessao, contrato, usuario),
         liberada=_liberada(competencia),
         itens=[
@@ -1052,7 +1053,7 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, competencia_id: u
     _exigir_etapa(competencia, "medicao", "A medição")
     if competencia.medicao_iniciada_em is None:
         raise ErroRegraContrato("Salve a medição antes de registrar a ciência.")
-    papel = papel_para_ciencia(contrato, autor)
+    papel = papel_para_ciencia(sessao, contrato, autor)
     if papel is None:
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
     # Ciência repetida da mesma pessoa é ignorada (não gera erro)
@@ -1413,7 +1414,7 @@ def _avaliacao_aberta(sessao: Session, contrato_id: uuid.UUID, competencia_id: u
     if competencia.avaliacao is None:
         raise ErroRegraContrato("Esta competência não tem formulário de avaliação.")
     _exigir_etapa(competencia, "avaliacao", "A avaliação")
-    if exigir_equipe and not pode_dar_ciencia(contrato, autor):
+    if exigir_equipe and not pode_dar_ciencia(sessao, contrato, autor):
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização avaliam os serviços.")
     return contrato, competencia, competencia.avaliacao
 
@@ -1495,7 +1496,7 @@ def registrar_ciencia_ateste(sessao: Session, contrato_id, competencia_id, autor
     _exigir_etapa(competencia, "avaliacao", "A avaliação")
     if not avaliacao_pronta_para_ciencia(avaliacao):
         raise ErroRegraContrato("Conclua as notas da avaliação antes de registrar a ciência no ateste.")
-    papel = papel_para_ciencia(contrato, autor)
+    papel = papel_para_ciencia(sessao, contrato, autor)
     if papel is None:
         raise ErroRegraContrato("Somente integrantes da equipe de gestão e fiscalização registram ciência.")
     # Ciência repetida da mesma pessoa é ignorada (não gera erro)
@@ -2065,8 +2066,8 @@ def _descartar_avaliacao(sessao: Session, competencia: Competencia) -> None:
 
 
 def pode_reabrir(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
-    """SuperRoot, ou o gestor vigente do contrato (papel `gestor`) com permissão de edição."""
-    if usuario.superusuario:
+    """SuperRoot, controle total em Contratos, ou o gestor vigente do contrato (papel `gestor`) com permissão de edição."""
+    if eh_administrador(sessao, usuario):
         return True
     return _papel_do_usuario(contrato, usuario) == "gestor" and pode_editar(sessao, contrato, usuario)
 

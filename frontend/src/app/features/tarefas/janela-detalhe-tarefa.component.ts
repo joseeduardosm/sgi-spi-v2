@@ -460,6 +460,13 @@ export class JanelaDetalheTarefaComponent {
 
   // --- Subtarefas e dependências ---
 
+  /** Baixa o relatório memorial da tarefa (todos os acontecimentos) em PDF ou XLSX. */
+  protected memorial(formato: 'pdf' | 'xlsx'): void {
+    const t = this.tarefa();
+    if (!t) return;
+    this.dialogos.executar(this.api.memorial(t.numero, formato), 'Gerando o memorial…').subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o memorial') });
+  }
+
   protected concluidasSub(t: TarefaDetalhe): number {
     return t.subtarefas.filter((x) => x.status === 'concluida').length;
   }

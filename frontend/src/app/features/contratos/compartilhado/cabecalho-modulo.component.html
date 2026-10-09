@@ -12,7 +12,7 @@
     <a class="acao-secundaria" routerLink="/contratos/calendario" routerLinkActive="ativo">Calendário</a>
     <a class="acao-secundaria" routerLink="/contratos" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">Contratos</a>
     <a class="acao-secundaria" routerLink="/contratos/empresas" routerLinkActive="ativo">Empresas</a>
-    @if (superRoot()) { <a class="acao-secundaria" routerLink="/contratos/modelos" routerLinkActive="ativo">Modelos</a> }
+    @if (editaModelos()) { <a class="acao-secundaria" routerLink="/contratos/modelos" routerLinkActive="ativo">Modelos</a> }
     @if (superRoot()) {
       <div class="menu-relatorios">
         <button type="button" class="acao-secundaria" aria-haspopup="menu" [attr.aria-expanded]="menuRelatorios()" (click)="menuRelatorios.set(!menuRelatorios())">Relatórios ▾</button>

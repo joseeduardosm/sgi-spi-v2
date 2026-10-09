@@ -52,7 +52,7 @@ interface OpcaoMenu { rotulo: string; para: StatusTarefa }
               }
             </header>
             @if (!(c.categoria === 'concluida' && recolhida())) {
-              <!-- data-nivel: densidade escolhida pelo quadro para esta coluna (1 normal, 2 duas subcolunas, 3 reduzido) -->
+              <!-- data-nivel: densidade escolhida pelo quadro para esta coluna (1 normal, 2 duas subcolunas, 3 compacto, 4 reduzido) -->
               <div class="cartoes" [attr.data-col]="raia.chave + c.chave" [attr.data-nivel]="nivelDe(raia.chave + c.chave)">
                 @for (t of c.itens; track t.numero) {
                   <div class="envoltorio-cartao" draggable="true" [class.arrastando]="arrastando()?.numero === t.numero"
@@ -199,7 +199,7 @@ export class QuadroTarefasComponent {
   // --- Dica do cartão reduzido -----------------------------------------------------------------------
 
   protected mostrarDica(evento: Event, t: TarefaResumo, coluna: string): void {
-    if (this.nivelDe(coluna) !== 3 || this.arrastando()) {
+    if (this.nivelDe(coluna) !== 4 || this.arrastando()) {
       this.dica.set(null);
       return;
     }

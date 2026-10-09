@@ -117,7 +117,7 @@ def _segunda(dia: date) -> date:
 def tarefas(sessao: Session) -> SlideTarefas:
     """Totais da organização, situação por equipe e criadas × concluídas nas últimas 12 semanas."""
     agora = agora_utc()
-    todas = list(sessao.scalars(select(Tarefa)))
+    todas = list(sessao.scalars(select(Tarefa).where(Tarefa.tarefa_pai_id.is_(None))))
     geral = servico_tarefas.indicadores(todas, agora)
     equipes = []
     for equipe in sessao.scalars(select(EquipeTarefas).where(EquipeTarefas.ativa.is_(True)).order_by(EquipeTarefas.nome)):

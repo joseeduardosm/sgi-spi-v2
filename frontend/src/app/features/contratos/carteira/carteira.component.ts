@@ -28,6 +28,9 @@ function lerMeus(): boolean {
 }
 
 /** Colunas da carteira que a API sabe ordenar. */
+import { classeMarcador } from '../../tarefas/marcadores.paleta';
+import { marcadoresCompetencia } from './marcadores-competencia';
+
 export type ColunaCarteira = 'numero' | 'empresa' | 'data_inicio' | 'data_fim' | 'situacao' | 'base_mensal' | 'valor_global';
 
 @Component({
@@ -57,6 +60,8 @@ export class CarteiraComponent implements OnInit {
   protected readonly carregando = signal(true);
   protected readonly menuAberto = signal<string | null>(null);
   // Ordenação por coluna (feita na API, antes de paginar); padrão: número, mais recentes primeiro
+  protected readonly classeMarcador = classeMarcador;
+  protected readonly marcadores = marcadoresCompetencia;
   protected readonly ordenarPor = signal<ColunaCarteira>('numero');
   protected readonly direcao = signal<'asc' | 'desc'>('desc');
   private readonly pesquisa$ = new Subject<void>();
@@ -150,6 +155,11 @@ export class CarteiraComponent implements OnInit {
   protected alternarMenu(evento: Event, id: string): void {
     evento.stopPropagation();
     this.menuAberto.set(this.menuAberto() === id ? null : id);
+  }
+
+  /** Controle total exclui qualquer contrato; quem tem Modificação, só os que criou. */
+  protected podeExcluir(contrato: ResumoContrato): boolean {
+    return this.acesso.pode('contratos', 'CONTROLE_TOTAL') || (this.acesso.pode('contratos', 'MODIFICACAO') && contrato.criador_id === this.autenticacao.usuario()?.id);
   }
 
   /** Pede confirmação (com contagem de 5 s) e exclui o contrato. */

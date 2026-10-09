@@ -71,7 +71,8 @@
           <!-- Checklist -->
           @if (!t.tarefa_pai && (t.subtarefas.length || t.pode_criar_subtarefa)) {
             <section class="bloco-janela">
-              <div class="titulo-bloco"><h3>Subtarefas</h3>@if (t.subtarefas.length) { <small>{{ concluidasSub(t) }} de {{ t.subtarefas.length }}</small> }</div>
+              <div class="titulo-bloco"><h3>Subtarefas</h3>@if (t.subtarefas.length) { <small>{{ concluidasSub(t) }} de {{ t.subtarefas.length }}</small> }
+                @if (t.subtarefas.length) { <a class="acao-secundaria acao-pequena" [routerLink]="['/tarefas', t.numero, 'subtarefas']" title="Quadro só das subtarefas, com andamento independente">Abrir quadro de subtarefas</a> }</div>
               @if (t.subtarefas.length) {
                 <div class="barra-progresso" role="progressbar" [attr.aria-valuenow]="concluidasSub(t)" aria-valuemin="0" [attr.aria-valuemax]="t.subtarefas.length"><i [style.width.%]="100 * concluidasSub(t) / t.subtarefas.length"></i></div>
                 <ul class="lista-subtarefas">
@@ -376,8 +377,15 @@
           <dl class="dados-lateral">
             <div><dt>Carga</dt><dd>{{ t.carga | number: '1.0-1' }} pts</dd></div>
             <div><dt>Em andamento há</dt><dd>{{ duracao(t.segundos_em_andamento) }}</dd></div>
+            @if (t.dias_em_aberto !== null) { <div><dt>Em aberto há</dt><dd>{{ t.dias_em_aberto }} {{ t.dias_em_aberto === 1 ? 'dia' : 'dias' }}</dd></div> }
             <div><dt>Criada</dt><dd>{{ t.criado_em | date: 'dd/MM/yyyy HH:mm' }} · {{ t.criado_por?.nome ?? '—' }}</dd></div>
           </dl>
+
+          <div class="memorial-tarefa">
+            <small>Relatório memorial (todos os acontecimentos)</small>
+            <div class="acoes-memorial"><button type="button" class="acao-secundaria acao-pequena" (click)="memorial('pdf')">PDF</button>
+              <button type="button" class="acao-secundaria acao-pequena" (click)="memorial('xlsx')">XLSX</button></div>
+          </div>
 
           @if (pode('excluir')) { <button type="button" class="acao-secundaria botao-excluir largura-total" (click)="excluir()">Excluir tarefa</button> }
         </aside>

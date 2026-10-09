@@ -44,7 +44,7 @@ export function nomeCurto(nome: string): string {
         </div>
       }
       @if (t.tarefa_pai_numero) { <small class="rastro-subtarefa">↳ subtarefa de #{{ t.tarefa_pai_numero }}</small> }
-      <p class="titulo-quadro">@if (t.controlada_externamente) { <span class="selo-origem" title="Controlada pelo módulo Contratos: anda sozinha conforme a etapa evolui" aria-label="Controlada pelo módulo Contratos">📄</span> }@if (t.bloqueada) { <span class="cadeado-tarefa" title="Bloqueada: há tarefa que precisa ser concluída antes" aria-label="Tarefa bloqueada">🔒</span> }{{ t.titulo }}</p>
+      <p class="titulo-quadro" [title]="t.titulo">@if (t.controlada_externamente) { <span class="selo-origem" title="Controlada pelo módulo Contratos: anda sozinha conforme a etapa evolui" aria-label="Controlada pelo módulo Contratos">📄</span> }@if (t.bloqueada) { <span class="cadeado-tarefa" title="Bloqueada: há tarefa que precisa ser concluída antes" aria-label="Tarefa bloqueada">🔒</span> }{{ t.titulo }}</p>
       @if (t.subtarefas_total) {
         <div class="progresso-subtarefas" [title]="t.subtarefas_concluidas + ' de ' + t.subtarefas_total + ' subtarefas concluídas'"><span class="trilho"><i [style.width.%]="100 * t.subtarefas_concluidas / t.subtarefas_total"></i></span><small>{{ t.subtarefas_concluidas }}/{{ t.subtarefas_total }}</small></div>
       }
@@ -56,6 +56,9 @@ export function nomeCurto(nome: string): string {
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
           {{ t.prazo | date: 'dd/MM' }}@if (t.prorrogacoes) { <b title="Prazo alterado">↻{{ t.prorrogacoes }}</b> }
         </span>
+        @if (t.dias_em_aberto !== null) {
+          <span class="contador dias-aberto" [title]="'Em aberto há ' + t.dias_em_aberto + (t.dias_em_aberto === 1 ? ' dia' : ' dias')">{{ t.dias_em_aberto }}d</span>
+        }
         @if (t.checklist_total) {
           <span class="contador" [class.completo]="t.checklist_feitos === t.checklist_total" title="Checklist">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>

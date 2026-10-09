@@ -78,6 +78,7 @@ Navegador
 | `contratos_reajustes`, `contratos_reajustes_itens`, `contratos_reajustes_memorias` | Reajustes e memórias versionadas |
 | `contratos_abatimentos_reajuste` | Crédito de desconto de reajuste retroativo abatido no valor autorizado das competências (`competencia_id` nulo = pendente) |
 | `contratos_alteracoes`, `contratos_alteracoes_itens`, `contratos_alteracoes_ciencias` | Aditamentos e supressões |
+| `portarias_autoridades`, `contratos_portarias` | Autoridades signatárias e portarias de designação (texto congelado, número do Protocolo, aceite e publicação) |
 | `anexos` | Metadados dos PDFs enviados ou gerados (nome original, chave em disco, SHA-256, tamanho, categoria, autor e `contrato_id` quando pertence a um contrato — usado para descartar os arquivos ao excluir o contrato). O arquivo fica em `ANEXOS_DIRETORIO/AAAA/MM/<uuid>.pdf` |
 
 ## URL base
@@ -218,7 +219,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/contratos/painel/vigencias` | ACL `contratos` ≥ LEITURA | Painel de vigências: vigência de cada contrato vigente, do que vence primeiro | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` | `/api/contratos/relatorios/notas-empenho` | SuperRoot | Relatório Executivo de NEs (XLSX/PDF) | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` | `/api/contratos/relatorios/previsao-orcamentaria` | SuperRoot | Previsão consolidada com cenários | [contratos-painel.md](endpoints/contratos-painel.md) |
-| `GET` `POST` `PUT` `DELETE` | `/api/contratos/modelos[/{modelo_id}]` | LEITURA / SuperRoot | Modelos globais de checklist e formulário | [contratos-painel.md](endpoints/contratos-painel.md) |
+| `GET` `POST` `PUT` `DELETE` | `/api/contratos/modelos[/{modelo_id}]`, `/modelos/portaria/placeholders` | LEITURA / SuperRoot (portaria: ou controle total) | Modelos globais de checklist e formulário e máscaras de portaria | [contratos-painel.md](endpoints/contratos-painel.md) |
 | `GET` `POST` | `/api/contratos/{contrato_id}/diario` | LEITURA / edição do contrato | Diário de bordo: lista / registra ocorrência (e-mail à equipe e ao preposto) | [contratos-diario.md](endpoints/contratos-diario.md) |
 | `POST` | `/api/contratos/{contrato_id}/diario/{ocorrencia_id}/reenviar` | Edição do contrato | Reenvia o e-mail da ocorrência | [contratos-diario.md](endpoints/contratos-diario.md) |
 | `GET` | `/api/contratos/{contrato_id}/diario/{ocorrencia_id}/anexos/{anexo_id}` | LEITURA | Baixa um anexo da ocorrência | [contratos-diario.md](endpoints/contratos-diario.md) |
@@ -250,9 +251,10 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | vários | `/api/contratos/{contrato_id}/prorrogacao*`, `/prorrogacoes/*` | LEITURA / pode editar (2) | Prorrogação | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#prorrogação) |
 | vários | `/api/contratos/{contrato_id}/reajustes/*` | LEITURA / pode editar (2) | Reajuste | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#reajuste) |
 | vários | `/api/contratos/{contrato_id}/alteracoes/*` | LEITURA / pode editar (2) | Aditamento e supressão | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#aditamento--supressão) |
+| vários | `/api/contratos/{contrato_id}/portarias*`, `/api/portarias/autoridades*` | LEITURA / pode editar (2) / autoridade signatária / CONTROLE_TOTAL (autoridades) | Portaria de designação de gestão e fiscalização, com número reservado no Protocolo | [contratos-portarias.md](endpoints/contratos-portarias.md) |
 (1) Funciona mesmo com o perfil institucional pendente. Todos os demais endpoints autenticados exigem perfil em dia, exceto para o SuperRoot.
 
-(2) **Pode editar** o contrato: ACL `contratos` ≥ MODIFICACAO **e** ser SuperRoot, criador do contrato ou integrante vigente da equipe (gestor, fiscais e suplentes). Sem vínculo: `403 acesso_negado`.
+(2) **Pode editar** o contrato: ACL `contratos` ≥ MODIFICACAO **e** ser SuperRoot, ter **controle total** em Contratos (qualquer contrato), criador do contrato ou integrante vigente da equipe (gestor, fiscais e suplentes). Sem vínculo: `403 acesso_negado`.
 
 ## Códigos HTTP e tratamento de erros
 

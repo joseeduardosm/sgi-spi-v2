@@ -26,7 +26,7 @@ from app.schemas.tarefas import (
 )
 from app.services import servico_anexos
 from app.services.sla import servico_sla
-from app.services.tarefas import desempenho_tarefas, paleta, relatorio_tarefas, servico_atividades, servico_estagios, servico_marcos, servico_recorrencias, servico_subtarefas
+from app.services.tarefas import desempenho_tarefas, memorial_tarefa, paleta, relatorio_tarefas, servico_atividades, servico_estagios, servico_marcos, servico_recorrencias, servico_subtarefas
 from app.services.tarefas import servico_tarefas as servico
 from app.services.tarefas.servico_tarefas import ROTULOS_STATUS, ErroTarefa
 
@@ -134,7 +134,7 @@ def _resumo(sessao: Session, t: Tarefa, contagens: dict, agora: datetime, pais: 
     return {
         "id": t.id, "numero": t.numero, "titulo": t.titulo, "status": t.status, "prioridade": t.prioridade, "prazo": _utc(t.prazo),
         "prazo_original": _utc(t.prazo_original), "prorrogacoes": numeros.get("prorrogacoes", 0),
-        "atrasada": t.status in servico.OPERACIONAIS and servico._comparavel(t.prazo) < agora,
+        "atrasada": t.status in servico.OPERACIONAIS and servico._comparavel(t.prazo) < agora, "dias_em_aberto": servico.dias_em_aberto(t, agora),
         "equipe": EquipeResumo(id=t.equipe.id, nome=t.equipe.nome) if t.equipe else None, "responsavel": _pessoa(sessao, t.responsavel_id),
         "responsaveis": _envolvidos(sessao, t),
         "marcadores": [MarcadorLeitura.model_validate(m, from_attributes=True) for m in t.marcadores],
@@ -252,10 +252,19 @@ def _filtrar(tarefas: list[Tarefa], status_: list[str], prioridade: str | None, 
 
 
 def _escopo(sessao: Session, usuario: Usuario, escopo: str, equipe_id: uuid.UUID | None, login: str | None,
-            agora: datetime) -> tuple[list[Tarefa], Contexto, dict]:
-    """Tarefas, contexto e indicadores de um escopo (minhas, equipe ou pessoa), com as permissões conferidas."""
+            agora: datetime, tarefa: int | None = None) -> tuple[list[Tarefa], Contexto, dict]:
+    """Tarefas, contexto e indicadores de um escopo (minhas, equipe, pessoa ou subtarefas de uma tarefa), com as permissões conferidas."""
     with _traduzir():
-        if escopo == "equipe":
+        if escopo == "subtarefas":
+            if tarefa is None:
+                raise ErroTarefa("Informe a tarefa.")
+            mae = servico.obter(sessao, usuario, tarefa)
+            tarefas = servico_subtarefas.da_mae(sessao, mae)
+            rotulo_equipe = (mae.equipe.nome if mae.equipe.nome.lower().startswith("equipe") else f"Equipe {mae.equipe.nome}") if mae.equipe else "Sem equipe"
+            contexto = Contexto(tipo="subtarefas", titulo=f"{rotulo_equipe} - Tarefa {mae.titulo} - Subtarefas", equipe_id=mae.equipe_id, tarefa_numero=mae.numero,
+                                tarefa_titulo=mae.titulo, lider=servico.eh_lider(sessao, usuario, mae))
+            ind = servico.indicadores(tarefas, agora)
+        elif escopo == "equipe":
             if equipe_id is None:
                 raise ErroTarefa("Informe a equipe.")
             equipe, tarefas = servico.da_equipe(sessao, usuario, equipe_id)
@@ -283,17 +292,20 @@ def _escopo(sessao: Session, usuario: Usuario, escopo: str, equipe_id: uuid.UUID
 
 @roteador.get("", response_model=ListaTarefas, summary="Listar tarefas (minhas, de uma equipe ou de uma pessoa)",
               description="`escopo`: `minhas` (padrão: envolvida ou criada por mim), `equipe` (`equipe_id`; a liderança vê também as equipes "
-                          "abaixo) ou `pessoa` (`login`; a própria pessoa, a liderança das equipes dela ou o SuperRoot). Filtros: `status` "
+                          "abaixo), `pessoa` (`login`; a própria pessoa, a liderança das equipes dela ou o SuperRoot) ou `subtarefas` (`tarefa`: as "
+                          "subtarefas de uma tarefa-mãe visível ao usuário, com título \"Equipe X - Tarefa Título - Subtarefas\"). Só tarefas-mãe entram em "
+                          "`minhas`, `equipe` e `pessoa`: subtarefas têm quadro próprio. Filtros: `status` "
                           "(repetível), `prioridade`, `marcador_id`, `responsavel_id`, `origem` (`contratos` = tarefas das competências de contratos; "
                           "`manual` = as demais) e `busca` (título, descrição ou número). Os indicadores "
                           "são do escopo inteiro (sem os filtros).", responses={**SEM_PERMISSAO, **resposta_nao_encontrado("Equipe ou pessoa")})
-def listar(escopo: str = Query("minhas", pattern="^(minhas|equipe|pessoa)$"), equipe_id: uuid.UUID | None = None, login: str | None = None,
+def listar(escopo: str = Query("minhas", pattern="^(minhas|equipe|pessoa|subtarefas)$"), equipe_id: uuid.UUID | None = None, login: str | None = None,
+           tarefa: int | None = Query(None, description="Número da tarefa-mãe (escopo `subtarefas`)."),
            status_: list[str] = Query([], alias="status"), prioridade: str | None = None, marcador_id: uuid.UUID | None = None,
            responsavel_id: int | None = None, busca: str = Query("", max_length=200),
            origem: str | None = Query(None, pattern="^(contratos|manual)$"), sessao: Session = Depends(obter_sessao),
            usuario: Usuario = Depends(obter_usuario_atual)) -> ListaTarefas:
     agora = agora_utc()
-    tarefas, contexto, ind = _escopo(sessao, usuario, escopo, equipe_id, login, agora)
+    tarefas, contexto, ind = _escopo(sessao, usuario, escopo, equipe_id, login, agora, tarefa)
     filtradas = _filtrar(tarefas, status_, prioridade, marcador_id, busca, responsavel_id, origem)
     contagens = _contagens(sessao, [t.id for t in filtradas])
     maes = _numeros_das_maes(sessao, filtradas)
@@ -841,7 +853,7 @@ def editar(numero: int, dados: EdicaoTarefa, sessao: Session = Depends(obter_ses
 
 @roteador.post("/{numero}/subtarefas", response_model=TarefaDetalhe, status_code=status.HTTP_201_CREATED, summary="Criar subtarefa",
                description="Cria uma subtarefa da tarefa (um só nível). Herda equipe e marcadores; sem prazo, usa o da mãe (que não pode ser ultrapassado); sem responsáveis, "
-                           "usa os da mãe. A mãe só entra em validação ou conclui com todas as subtarefas concluídas. Devolve a subtarefa criada.",
+                           "usa os da mãe. A subtarefa tem andamento próprio (a mãe se move sem depender dela; ao mover a mãe, cada subtarefa só ganha um registro na linha do tempo). Devolve a subtarefa criada.",
                responses={**SEM_PERMISSAO, **INVALIDO, **NAO_ENCONTRADA})
 def criar_subtarefa(numero: int, dados: NovaSubtarefa, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> TarefaDetalhe:
     with _traduzir():
@@ -980,6 +992,19 @@ def linha_do_tempo(numero: int, filtro: str = Query("", pattern="^(|comentarios|
         consulta = consulta.where(EventoTarefa.criado_em < antes_de)
     itens = list(sessao.scalars(consulta.order_by(EventoTarefa.criado_em.desc()).limit(limite + 1)))
     return LinhaDoTempo(total=total, itens=[_evento(e) for e in itens[:limite]], tem_mais=len(itens) > limite)
+
+
+@roteador.get("/{numero}/memorial", summary="Relatório memorial da tarefa (PDF ou XLSX)", response_class=Response,
+              description="Dados da tarefa, dias em aberto e **todos** os acontecimentos da linha do tempo (comentários, situação, prazos, atribuições, anexos, checklist, "
+                          "escalonamentos), do mais antigo ao mais recente. Itens removidos aparecem identificados, sem o conteúdo. Quem vê a tarefa pode emitir. "
+                          "XLSX: abas **Resumo** e **Acontecimentos**.",
+              responses={200: {"content": {memorial_tarefa.XLSX: {}, "application/pdf": {}}, "description": "Arquivo gerado."}, **NAO_ENCONTRADA})
+def memorial(numero: int, formato: str = Query("pdf", pattern="^(pdf|xlsx)$"), sessao: Session = Depends(obter_sessao),
+             usuario: Usuario = Depends(obter_usuario_atual)) -> Response:
+    with _traduzir():
+        t = servico.obter(sessao, usuario, numero)
+    conteudo, nome, midia = memorial_tarefa.gerar(sessao, usuario, t, formato, agora_utc())
+    return Response(conteudo, media_type=midia, headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 @roteador.get("/{numero}/anexos/{anexo_id}", response_class=FileResponse, summary="Baixar anexo",

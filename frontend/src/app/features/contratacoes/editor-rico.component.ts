@@ -114,6 +114,11 @@ export class EditorRicoComponent implements AfterViewInit, OnDestroy {
     this.editor?.destroy();
   }
 
+  /** Insere o texto na posição do cursor (usado, por exemplo, para os placeholders das máscaras). */
+  inserir(texto: string): void {
+    this.editor?.chain().focus().insertContent(texto).run();
+  }
+
   protected ativo(nome: string): boolean {
     return this.editor?.isActive(nome) ?? false;
   }

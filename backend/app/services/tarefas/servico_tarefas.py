@@ -443,9 +443,28 @@ def _avisar_equipe_marco(sessao: Session, equipe: EquipeTarefas, marco: MarcoTar
     )
 
 
-def subtarefas_abertas(sessao: Session, tarefa: Tarefa) -> list[Tarefa]:
-    """Subtarefas ainda não concluídas (a tarefa mãe só entra em validação ou conclui sem nenhuma)."""
-    return list(sessao.scalars(select(Tarefa).where(Tarefa.tarefa_pai_id == tarefa.id, Tarefa.status != "concluida").order_by(Tarefa.numero)))
+def dias_em_aberto(tarefa: Tarefa, agora: datetime) -> int | None:
+    """Dias corridos (no calendário de São Paulo) desde a criação, enquanto a tarefa não está concluída; `None` se já concluiu."""
+    if tarefa.status == "concluida":
+        return None
+    return max(0, (agora.astimezone(FUSO_LOCAL).date() - _comparavel(tarefa.criado_em).astimezone(FUSO_LOCAL).date()).days)
+
+
+def dias_ate_concluir(tarefa: Tarefa) -> int:
+    """Dias corridos da criação até a conclusão (tarefa concluída)."""
+    fim = _comparavel(tarefa.concluida_em or tarefa.atualizado_em).astimezone(FUSO_LOCAL).date()
+    return max(0, (fim - _comparavel(tarefa.criado_em).astimezone(FUSO_LOCAL).date()).days)
+
+
+def somente_maes():
+    """Condição que deixa só as tarefas-mãe: as subtarefas têm quadro próprio e não entram nas listas, buscas e painéis."""
+    return Tarefa.tarefa_pai_id.is_(None)
+
+
+def registrar_nas_subtarefas(sessao: Session, mae: Tarefa, autor: Usuario, movimento: str, **dados) -> None:
+    """Registra no histórico de cada subtarefa que a mãe foi movida (sem alterar situação, estágio, ordem nem versão da subtarefa). Sem commit."""
+    for sub in sessao.scalars(select(Tarefa).where(Tarefa.tarefa_pai_id == mae.id).order_by(Tarefa.numero)):
+        _evento(sessao, sub, "editada", autor, f"Tarefa mãe #{mae.numero} movida: {movimento}", mae=mae.numero, **dados)
 
 
 def bloqueadoras_abertas(sessao: Session, tarefa: Tarefa) -> list[Tarefa]:
@@ -474,11 +493,9 @@ def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str
     # Tarefa sem equipe não passa por validação: a entrega já conclui
     if acao == "entregar" and tarefa.equipe is None:
         para = "concluida"
-    # Dependências e subtarefas: tarefa bloqueada não inicia; a mãe só entra em validação ou conclui com todas as subtarefas concluídas
+    # Dependências: tarefa bloqueada não inicia. As subtarefas têm andamento próprio: a mãe se move livremente e cada subtarefa só registra o fato
     if acao == "iniciar" and (bloqueio := bloqueadoras_abertas(sessao, tarefa)):
         raise ErroTarefa(f"Esta tarefa está bloqueada: conclua antes {_numeros(bloqueio)}.")
-    if para in ("em_validacao", "concluida") and (abertas := subtarefas_abertas(sessao, tarefa)):
-        raise ErroTarefa(f"Conclua antes as subtarefas em aberto: {_numeros(abertas)}.")
     agora = agora_utc()
     if tarefa.em_andamento_desde is not None:
         tarefa.segundos_em_andamento += max(0, int((agora - _comparavel(tarefa.em_andamento_desde)).total_seconds()))
@@ -501,6 +518,7 @@ def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str
     if acao == "entregar" and para == "concluida":
         tipo, titulos["entregar"] = "status", "Tarefa concluída"
     _evento(sessao, tarefa, tipo, autor, titulos[acao], texto, de=de, para=para)
+    registrar_nas_subtarefas(sessao, tarefa, autor, f"{ROTULOS_STATUS[de]} → {ROTULOS_STATUS[para]}", de=de, para=para)
     _avisos_pipeline(sessao, autor, tarefa, acao, para, texto)
     sessao.commit()
     return tarefa
@@ -720,7 +738,7 @@ def minhas(sessao: Session, usuario: Usuario) -> list[Tarefa]:
     """Tarefas em que a pessoa está envolvida ou que criou. As nascidas de outro módulo (Contratos) ficam só na equipe, fora da fila pessoal."""
     envolvida = select(ResponsavelTarefa.tarefa_id).where(ResponsavelTarefa.usuario_id == usuario.id)
     return list(sessao.scalars(select(Tarefa).where(
-        or_(Tarefa.id.in_(envolvida), Tarefa.criado_por_id == usuario.id, Tarefa.responsavel_id == usuario.id), Tarefa.origem_tipo.is_(None))))
+        or_(Tarefa.id.in_(envolvida), Tarefa.criado_por_id == usuario.id, Tarefa.responsavel_id == usuario.id), Tarefa.origem_tipo.is_(None), somente_maes())))
 
 
 def agenda(sessao: Session, pessoa: Usuario, de: datetime, ate: datetime) -> list[Tarefa]:
@@ -732,7 +750,7 @@ def agenda(sessao: Session, pessoa: Usuario, de: datetime, ate: datetime) -> lis
     envolvida = select(ResponsavelTarefa.tarefa_id).where(ResponsavelTarefa.usuario_id == pessoa.id)
     consulta = select(Tarefa).where(
         or_(Tarefa.id.in_(envolvida), Tarefa.responsavel_id == pessoa.id),
-        or_(Tarefa.status != "concluida", Tarefa.concluida_em.between(de, ate)),
+        or_(Tarefa.status != "concluida", Tarefa.concluida_em.between(de, ate)), somente_maes(),
     )
     return sorted(sessao.scalars(consulta), key=lambda t: (_comparavel(t.prazo), t.numero))
 
@@ -742,7 +760,7 @@ def da_equipe(sessao: Session, usuario: Usuario, equipe_id: uuid.UUID) -> tuple[
     if equipe is None or equipe not in equipes_visiveis(sessao, usuario):
         raise ErroTarefa("Equipe não encontrada.", 404, "nao_encontrado")
     ids = [e.id for e in _com_subequipes(sessao, equipe)] if (usuario.superusuario or usuario.id in lideranca(sessao, equipe)) else [equipe.id]
-    return equipe, list(sessao.scalars(select(Tarefa).where(Tarefa.equipe_id.in_(ids))))
+    return equipe, list(sessao.scalars(select(Tarefa).where(Tarefa.equipe_id.in_(ids), somente_maes())))
 
 
 def _com_subequipes(sessao: Session, equipe: EquipeTarefas) -> list[EquipeTarefas]:
@@ -774,7 +792,7 @@ def carga_das_pessoas(sessao: Session, ids: set[int], agora: datetime) -> dict[i
     if not ids:
         return resultado
     linhas = sessao.execute(select(ResponsavelTarefa.usuario_id, Tarefa).join(Tarefa, Tarefa.id == ResponsavelTarefa.tarefa_id)
-                            .where(ResponsavelTarefa.usuario_id.in_(ids), Tarefa.status.in_(OPERACIONAIS)))
+                            .where(ResponsavelTarefa.usuario_id.in_(ids), Tarefa.status.in_(OPERACIONAIS), somente_maes()))
     for usuario_id, tarefa in linhas:
         r = resultado[usuario_id]
         r["carga"] += carga(tarefa, agora)
@@ -821,14 +839,15 @@ def _registrar_escalonamento(sessao: Session, tarefa: Tarefa, dias_atraso: int, 
 def _enviar_memoriais(sessao: Session, memorial: dict[int, list[tuple[Tarefa, int]]], dia: date) -> int:
     """Um aviso (caixa + e-mail) por líder e por dia, com a tabela das tarefas atrasadas escalonadas para ele. Devolve quantos líderes receberam."""
     base = obter_configuracao().url_publica.rstrip("/")
+    agora = agora_utc()
     nomes = {u.id: (u.nome_completo or u.login) for u in sessao.scalars(
         select(Usuario).where(Usuario.id.in_({t.responsavel_id for lista in memorial.values() for t, _ in lista if t.responsavel_id}))
     )}
     enviados = 0
     for uid, lista in memorial.items():
         unicas = sorted({t.id: (t, d) for t, d in lista}.values(), key=lambda x: (-x[1], x[0].numero))
-        linhas = ["| Nº | Título | Responsável | Atraso | Link |", "| --- | --- | --- | --- | --- |"]
-        linhas += [f"| #{t.numero} | {t.titulo.replace('|', '/')} | {nomes.get(t.responsavel_id, 'sem responsável')} | {d} dia(s) | {base}/tarefas/{t.numero} |" for t, d in unicas]
+        linhas = ["| Nº | Título | Responsável | Atraso | Em aberto | Link |", "| --- | --- | --- | --- | --- | --- |"]
+        linhas += [f"| #{t.numero} | {t.titulo.replace('|', '/')} | {nomes.get(t.responsavel_id, 'sem responsável')} | {d} dia(s) | {dias_em_aberto(t, agora) or 0} dia(s) | {base}/tarefas/{t.numero} |" for t, d in unicas]
         corpo = (f"Você tem **{len(unicas)} tarefa(s) atrasada(s)** nas equipes que lidera. Cobre o andamento ou renegocie os prazos.\n\n" + "\n".join(linhas))
         aviso = servico_mensagens.notificar(
             sessao, [uid], f"Tarefas atrasadas das suas equipes: {len(unicas)}", corpo, chave=f"tarefa-escalonada:{uid}:{dia}",

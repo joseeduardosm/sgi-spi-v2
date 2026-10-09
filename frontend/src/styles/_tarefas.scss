@@ -913,6 +913,11 @@ a.botao-link { display: inline-flex; align-items: center; text-decoration: none;
 }
 
 .cartao-quadro {
+  // Altura fixa: todos os cartões do quadro têm o mesmo tamanho; título em até 2 linhas e rodapé sempre na base
+  display: flex;
+  flex-direction: column;
+  height: 152px;
+  overflow: hidden;
   padding: 8px 10px 8px;
   border: 1px solid var(--cor-e3e6ea);
   border-left: 3px solid transparent;
@@ -928,7 +933,10 @@ a.botao-link { display: inline-flex; align-items: center; text-decoration: none;
   &[data-prioridade='critica'] { border-left-color: var(--spi-vermelho); }
   &.destacado { animation: destaque-cartao 1.2s ease-in-out 3; }
 
-  .etiquetas { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  .etiquetas { display: flex; flex: none; flex-wrap: nowrap; gap: 4px; margin-bottom: 6px; overflow: hidden; }
+  // Sem etiquetas, reserva o espaço delas para os títulos ficarem alinhados entre os cartões
+  &:not(:has(.etiquetas)) { padding-top: 32px; }
+  > * { flex: none; }
 
   .etiqueta {
     min-width: 36px;
@@ -943,11 +951,23 @@ a.botao-link { display: inline-flex; align-items: center; text-decoration: none;
     white-space: nowrap;
   }
 
-  .titulo-quadro { margin: 0 22px 8px 0; color: var(--cor-22292f); font-size: 13px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+  .titulo-quadro {
+    display: -webkit-box;
+    margin: 0 22px 8px 0;
+    overflow: hidden;
+    color: var(--cor-22292f);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
 
   .nomes-quadro { margin: 0 0 6px; overflow: hidden; color: var(--cor-44505c); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; b { color: var(--cor-6a7786); } }
 
   .rodape-quadro {
+    margin-top: auto;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -1053,6 +1073,7 @@ a.botao-link { display: inline-flex; align-items: center; text-decoration: none;
     padding: 8px 16px;
   }
 
+  .cabecalho-lista .ordenar-coluna { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; i { font-style: normal; opacity: .5; } &:hover, &.ativa { color: var(--cor-32383f); i { opacity: 1; } } }
   .cabecalho-lista { color: #8e99a6; background: var(--cor-fafbfc); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
 
   .titulo-secao {
@@ -1592,9 +1613,9 @@ app-ajuda-grafico { position: absolute; left: 12px; bottom: 8px; z-index: 5; }
 .selo-origem { margin-right: 4px; font-size: 12px; }
 
 /* --- Densidade do quadro: duas subcolunas e cartão reduzido ---------------------------------------------
-   O quadro escolhe sozinho o nível de cada coluna (`data-nivel` em `.cartoes`): 1 normal, 2 duas subcolunas, 3 duas subcolunas com cartão
+   O quadro escolhe sozinho o nível de cada coluna (`data-nivel` em `.cartoes`): 1 normal, 2 duas subcolunas, 3 duas subcolunas com cartão compacto (sem etiquetas e nomes), 4 duas subcolunas com cartão
    reduzido (#número · prazo · criticidade · marcadores). Os cartões entram por linha, mantendo a ordem crescente de prazo. */
-.cartoes[data-nivel='2'], .cartoes[data-nivel='3'] {
+.cartoes[data-nivel='2'], .cartoes[data-nivel='3'], .cartoes[data-nivel='4'] {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
@@ -1604,13 +1625,22 @@ app-ajuda-grafico { position: absolute; left: 12px; bottom: 8px; z-index: 5; }
   .envoltorio-cartao { min-width: 0; }
 }
 
-.cartoes[data-nivel='2'] .cartao-quadro { padding: 6px 8px; .titulo-quadro { margin-bottom: 5px; font-size: 12px; } }
+.cartoes[data-nivel='2'] .cartao-quadro { height: 128px; padding: 6px 8px; &:not(:has(.etiquetas)) { padding-top: 28px; } .titulo-quadro { margin-bottom: 5px; font-size: 12px; } }
 
-/* O bloco reduzido existe em todo cartão, mas só aparece no nível 3 (que esconde o resto) */
+/* Nível 3: cartão compacto de altura fixa (título em até 2 linhas, prazo, contadores e avatares; sem etiquetas, nomes e progresso) */
+.cartoes[data-nivel='3'] .cartao-quadro {
+  height: 86px;
+  padding: 6px 8px !important;
+  .etiquetas, .nomes-quadro, .progresso-subtarefas, .rastro-subtarefa { display: none; }
+  .titulo-quadro { margin: 0 0 4px; font-size: 12px; line-height: 1.3; -webkit-line-clamp: 2; }
+}
+
+/* O bloco reduzido existe em todo cartão, mas só aparece no nível 4 (que esconde o resto) */
 .cartao-quadro .mini-cartao { display: none; }
 
-.cartoes[data-nivel='3'] .cartao-quadro {
-  padding: 4px 6px;
+.cartoes[data-nivel='4'] .cartao-quadro {
+  height: auto;
+  padding: 4px 6px !important;
   border-radius: 6px;
 
   > :not(.mini-cartao) { display: none; }
@@ -1670,8 +1700,8 @@ app-ajuda-grafico { position: absolute; left: 12px; bottom: 8px; z-index: 5; }
 }
 
 /* Menu "⋯" do cartão reduzido só aparece ao passar o mouse (não cobre as informações) */
-.cartoes[data-nivel='3'] .envoltorio-cartao .menu-cartao { top: 3px; right: 3px; width: 20px; height: 20px; opacity: 0; transition: opacity .12s; }
-.cartoes[data-nivel='3'] .envoltorio-cartao:hover .menu-cartao, .cartoes[data-nivel='3'] .envoltorio-cartao:focus-within .menu-cartao { opacity: 1; }
+.cartoes[data-nivel='4'] .envoltorio-cartao .menu-cartao { top: 3px; right: 3px; width: 20px; height: 20px; opacity: 0; transition: opacity .12s; }
+.cartoes[data-nivel='4'] .envoltorio-cartao:hover .menu-cartao, .cartoes[data-nivel='4'] .envoltorio-cartao:focus-within .menu-cartao { opacity: 1; }
 
 /* Dica do cartão reduzido */
 .dica-tarefa {
@@ -1768,3 +1798,7 @@ app-espaco-tarefas.tela-cheia {
 }
 .responder-evento { margin-left: 8px; font-size: 11px; }
 .linha-do-tempo li.destacado-evento { animation: destaque-cartao 1.2s ease-in-out 1; border-radius: 8px; }
+
+/* Dias em aberto no cartão e memorial no detalhe */
+.cartao-quadro .dias-aberto { padding: 0 5px; border-radius: 4px; color: var(--cor-5a6673); background: var(--cor-eef0f2); font-size: 10px; font-weight: 700; }
+.memorial-tarefa { display: grid; gap: 6px; margin: 12px 0; small { color: var(--spi-apagado); font-weight: 700; } .acoes-memorial { display: flex; gap: 6px; } }

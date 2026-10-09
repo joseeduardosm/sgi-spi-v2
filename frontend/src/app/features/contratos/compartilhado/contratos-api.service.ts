@@ -18,7 +18,7 @@ import {
   GravacaoEmpresa,
   GravacaoOcorrencia,
   GravacaoPreposto,
-  Modelo,
+  Modelo, PlaceholderPortaria,
   NotaEmpenho,
   OcorrenciaDiario,
   OpcaoEmpresa,
@@ -250,10 +250,15 @@ export class ContratosApiService {
   }
 
   /** Modelos globais, opcionalmente de um tipo. */
-  modelos(tipo?: 'checklist' | 'formulario', somenteAtivos = true): Observable<Modelo[]> {
+  modelos(tipo?: 'checklist' | 'formulario' | 'portaria', somenteAtivos = true): Observable<Modelo[]> {
     let params = new HttpParams().set('somente_ativos', somenteAtivos);
     if (tipo) params = params.set('tipo', tipo);
     return this.http.get<Modelo[]>(`${this.base}/modelos`, { params });
+  }
+
+  /** Placeholders permitidos nas máscaras de portaria. */
+  placeholdersPortaria(): Observable<PlaceholderPortaria[]> {
+    return this.http.get<PlaceholderPortaria[]>(`${this.base}/modelos/portaria/placeholders`);
   }
 
   /** Cria (sem id) ou altera (com id) um modelo global. */

@@ -54,6 +54,7 @@ from app.models.contratos.execucao import (
     ModeloGlobal,
     SelecaoNotaEmpenho,
 )
+from app.models.contratos.portaria import AutoridadePortaria, PortariaContrato
 from app.models.contratos.orcamento import (
     ApontamentoPrevisao,
     LimitePrevisao,
@@ -64,6 +65,8 @@ from app.models.contratos.orcamento import (
 
 __all__ = [
     "AbatimentoReajuste",
+    "AutoridadePortaria",
+    "PortariaContrato",
     "AnexoOcorrencia",
     "ItemAvaliacaoOcorrencia",
     "ETAPAS",

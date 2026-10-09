@@ -1,13 +1,15 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para controlar a tela de modelos globais de checklist e de formulário (só SuperRoot).
+// Este arquivo serve para controlar a tela de modelos globais: checklists e formulários (SuperRoot) e máscaras de portaria (SuperRoot ou controle total).
 
 import { DatePipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
+import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { DefinicaoFormulario, Modelo } from '../compartilhado/contratos.models';
 import { ImportacaoModeloXlsxComponent } from '../compartilhado/importacao-modelo-xlsx.component';
 import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-formulario.component';
@@ -15,19 +17,20 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
 /** Modelos globais (SuperRoot): checklists e formulários clonados nos contratos. */
 @Component({
   selector: 'app-modelos',
-  imports: [FormsModule, DatePipe, CabecalhoModuloComponent, EditorFormularioComponent, ImportacaoModeloXlsxComponent],
+  imports: [FormsModule, DatePipe, CabecalhoModuloComponent, EditorFormularioComponent, ImportacaoModeloXlsxComponent, RouterLink],
   // Esc fecha a janela do checklist
   host: { '(document:keydown.escape)': 'checklistAberto.set(false)' },
   template: `
-    <app-cabecalho-modulo titulo="Modelos globais" [trilha]="['Modelos']" descricao="Checklists e formulários de avaliação que as equipes copiam para os contratos. As cópias não mudam quando o modelo muda." />
-    <div class="duas-colunas">
-      @for (tipo of tipos; track tipo.id) {
+    <app-cabecalho-modulo titulo="Modelos globais" [trilha]="['Modelos']" descricao="Checklists e formulários de avaliação que as equipes copiam para os contratos (as cópias não mudam quando o modelo muda) e as máscaras das portarias de designação." />
+    <div class="duas-colunas" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr))">
+      @for (tipo of tiposVisiveis(); track tipo.id) {
         <section class="cartao-dados" [attr.aria-labelledby]="'titulo-modelos-' + tipo.id">
           <header>
             <h2 [id]="'titulo-modelos-' + tipo.id">{{ tipo.rotulo }}</h2>
             <div class="acoes-cartao">
-              <app-importacao-modelo-xlsx [tipo]="tipo.id" [pequeno]="true" (importado)="carregar()" />
-              <button type="button" class="acao-primaria acao-pequena" (click)="abrir(tipo.id)">+ Novo</button>
+              @if (tipo.id !== 'portaria') { <app-importacao-modelo-xlsx [tipo]="tipo.id" [pequeno]="true" (importado)="carregar()" /> }
+              @if (tipo.id === 'portaria') { <a class="acao-primaria acao-pequena" routerLink="/contratos/modelos/portaria/novo">+ Nova</a> }
+              @else { <button type="button" class="acao-primaria acao-pequena" (click)="abrir(tipo.id)">+ Novo</button> }
             </div>
           </header>
           <div class="corpo">
@@ -37,9 +40,10 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
                   <strong style="font-size: 14px">{{ m.nome }}</strong>
                   <span class="selo-situacao" [class.inativo]="!m.ativo">{{ m.ativo ? 'Ativo' : 'Inativo' }}</span>
                 </div>
-                <small>{{ m.tipo === 'checklist' ? (m.conteudo.itens?.length ?? 0) + ' documento(s)' : (m.conteudo.grupos?.length ?? 0) + ' grupo(s)' }} · atualizado em {{ m.atualizado_em | date: 'dd/MM/yyyy' }}</small>
+                <small>{{ m.tipo === 'portaria' ? (m.conteudo.variante === 'com_anterior' ? 'Com portaria anterior' : 'Sem portaria anterior') : m.tipo === 'checklist' ? (m.conteudo.itens?.length ?? 0) + ' documento(s)' : (m.conteudo.grupos?.length ?? 0) + ' grupo(s)' }} · atualizado em {{ m.atualizado_em | date: 'dd/MM/yyyy' }}</small>
                 <div class="acoes-cartao esquerda">
-                  <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(m.tipo, m)">Editar</button>
+                  @if (m.tipo === 'portaria') { <a class="acao-secundaria acao-pequena" [routerLink]="['/contratos/modelos/portaria', m.id]">Editar</a> }
+                  @else { <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(m.tipo, m)">Editar</button> }
                   <button type="button" class="acao-perigo acao-pequena" (click)="excluir(m)">Excluir</button>
                 </div>
               </article>
@@ -93,9 +97,13 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
 export class ModelosComponent implements OnInit {
   private readonly api = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
+  private readonly autenticacao = inject(AutenticacaoService);
 
-  // As duas colunas da tela (checklists e formulários)
-  protected readonly tipos = [{ id: 'checklist' as const, rotulo: 'Checklists' }, { id: 'formulario' as const, rotulo: 'Formulários de avaliação' }];
+  // As colunas da tela; quem não é SuperRoot (apenas controle total em Contratos) vê só as portarias
+  protected readonly tipos = [
+    { id: 'checklist' as const, rotulo: 'Checklists' }, { id: 'formulario' as const, rotulo: 'Formulários de avaliação' }, { id: 'portaria' as const, rotulo: 'Portarias' },
+  ];
+  protected readonly tiposVisiveis = computed(() => (this.autenticacao.possuiPapel('SuperRoot') ? this.tipos : this.tipos.filter((t) => t.id === 'portaria')));
   // Modelos carregados e o estado das janelas de edição
   protected readonly modelos = signal<Modelo[]>([]);
   protected readonly checklistAberto = signal(false);

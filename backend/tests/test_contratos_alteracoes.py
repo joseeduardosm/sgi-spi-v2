@@ -469,3 +469,23 @@ def test_alertas_a_partir_de_do_contrato_empurra_o_corte_para_depois(cliente, ad
         sessao.get(Contrato, uuid.UUID(contrato["id"])).alertas_a_partir_de = data(2025, 1, 1)
         sessao.commit()
     assert not any(f"0{m}/2026" in d for d in tipos()[1] for m in range(1, 9))
+
+
+def test_controle_total_registra_ciencia_como_administrador(cliente, admin, equipe):
+    """Quem tem controle total em Contratos dá ciência mesmo sem ser da equipe; quem só tem Modificação e não é da equipe, não."""
+    contrato, gestora, _fiscal = equipe
+    chefe, estranho = criar_usuario("chefe-ciencia"), criar_usuario("estranho-ciencia")
+    restringir_contratos_extra(cliente, admin, {chefe: "CONTROLE_TOTAL", estranho: "MODIFICACAO"})
+    cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 6, "parecer": "Favorável"}, headers=gestora)
+    r = cliente.post(_url(contrato, "/prorrogacao/ciencia"), headers=cabecalho(cliente, "chefe-ciencia"))
+    assert r.status_code == 200, r.text
+    assert [c["papel"] for c in r.json()["ciencias"]] == ["administrador"]
+    assert cliente.post(_url(contrato, "/prorrogacao/ciencia"), headers=cabecalho(cliente, "estranho-ciencia")).status_code == 400
+
+
+def restringir_contratos_extra(cliente, admin, niveis):
+    """Acrescenta regras ao recurso `contratos` já criado (o fixture da equipe o cadastrou)."""
+    recurso = next(r for r in cliente.get("/api/acl/recursos", headers=admin).json() if r["slug"] == "contratos")
+    for usuario_id, nivel in niveis.items():
+        corpo = {"recurso_id": recurso["id"], "nivel": nivel, "usuarios_ids": [usuario_id], "setores_ids": []}
+        assert cliente.post("/api/acl/regras", json=corpo, headers=admin).status_code == 201

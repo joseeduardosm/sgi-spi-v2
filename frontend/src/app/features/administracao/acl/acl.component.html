@@ -146,8 +146,8 @@
 }
 
 @if (regraAberta()) {
-  <div class="fundo-modal" role="presentation" (click)="fecharFormularios()"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-regra">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fecharFormularios()"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-regra">
     <header>
       <div>
         <span class="modal-sobretitulo">Controle de acesso</span>
@@ -195,16 +195,16 @@
         <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
       }
       <footer>
-        <button class="acao-secundaria" type="button" (click)="fecharFormularios()" [disabled]="salvando()">Cancelar</button>
-        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar regra' }}</button>
+        <button [class.carregando]="salvando()" class="acao-secundaria" type="button" (click)="fecharFormularios()" [disabled]="salvando()">Cancelar</button>
+        <button [class.carregando]="salvando()" class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar regra' }}</button>
       </footer>
     </form>
   </section>
 }
 
 @if (recursoAberto()) {
-  <div class="fundo-modal" role="presentation" (click)="fecharFormularios()"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-recurso">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fecharFormularios()"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-recurso">
     <header>
       <div>
         <span class="modal-sobretitulo">Controle de acesso</span>
@@ -241,8 +241,8 @@
         <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
       }
       <footer>
-        <button class="acao-secundaria" type="button" (click)="fecharFormularios()" [disabled]="salvando()">Cancelar</button>
-        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar recurso' }}</button>
+        <button [class.carregando]="salvando()" class="acao-secundaria" type="button" (click)="fecharFormularios()" [disabled]="salvando()">Cancelar</button>
+        <button [class.carregando]="salvando()" class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar recurso' }}</button>
       </footer>
     </form>
   </section>

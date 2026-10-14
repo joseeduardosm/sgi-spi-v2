@@ -52,8 +52,11 @@ export interface TarefaResumo {
   tarefa_pai_numero: number | null;
   subtarefas_total: number;
   subtarefas_concluidas: number;
+  subtarefas_em_validacao: number;
   /** Há tarefa bloqueadora ainda não concluída: a tarefa não pode iniciar. */
   bloqueada: boolean;
+  /** Números das tarefas que bloqueiam esta (inclui as já concluídas); o Gantt desenha as setas. */
+  bloqueada_por_numeros: number[];
   /** Coluna (estágio) atual na equipe; vazio em tarefa pessoal. */
   estagio_id: string | null;
   /** Marco (milestone) da equipe a que a tarefa pertence. */
@@ -78,6 +81,8 @@ export interface Indicadores {
   vencem_hoje: number;
   criticas: number;
   em_validacao: number;
+  /** Subtarefas que aguardam validação (não entram em `em_validacao`: têm quadro próprio). */
+  subtarefas_em_validacao: number;
   concluidas: number;
   carga: number;
   faixa: string;
@@ -126,6 +131,18 @@ export interface EventoTarefa {
   removido: boolean;
   motivo_remocao: string | null;
 }
+/** Um acontecimento de uma tarefa no dia (visão "O que aconteceu"). */
+export interface AtividadeDiariaItem {
+  id: string; hora: string; tipo: string; titulo: string; texto: string; autor: string; autor_id: number | null; dados: Record<string, unknown>;
+  automatico: boolean; agrupados: number;
+}
+export interface AtividadeDiariaTarefa {
+  numero: number; titulo: string; status: StatusTarefa; equipe_nome: string | null; tarefa_pai_numero: number | null; ultima: string; itens: AtividadeDiariaItem[];
+}
+export interface AtividadeDiariaResumo { tarefas: number; entregues: number; concluidas: number; comentarios: number; automaticos_ocultos: number }
+export interface AtividadeDiariaDia { data: string; resumo: AtividadeDiariaResumo; tarefas: AtividadeDiariaTarefa[] }
+export interface AtividadeDiaria { de: string; ate: string; equipe_id: string; dias: AtividadeDiariaDia[] }
+
 export interface LinhaDoTempo { total: number; itens: EventoTarefa[]; tem_mais: boolean }
 
 export interface PessoaCarga {

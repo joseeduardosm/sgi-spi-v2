@@ -1,6 +1,6 @@
 # Criado por José Eduardo Santana Martins
-# Este arquivo serve para gerar os avisos automáticos dos contratos na caixa de mensagens.
-"""Avisos automáticos do módulo de contratos (caixa de mensagens).
+# Este arquivo serve para gerar os avisos automáticos dos contratos na caixa de notificações.
+"""Avisos automáticos do módulo de contratos (caixa de notificações).
 
 Cada função é chamada no ponto do fluxo em que o evento acontece, antes do commit da operação: o aviso é
 gravado na mesma transação. As chaves impedem avisos repetidos; os de pendência são encerrados quando a
@@ -13,7 +13,7 @@ Chaves:
 - `finais:{competencia}`: pendência da equipe (CADIN e checklist), encerrada ao gerar o consolidado;
 - `prorrogacao:{id}`, `reajuste:{id}`, `alteracao:{id}`: informativos à equipe;
 - `atraso:{competencia}` e `vencimento:{contrato}:{AAAAMMDD}:{marco}`: gerados pelos lembretes diários
-  (`app.tarefas.mensageria`), encerrados ao concluir a medição e ao registrar a prorrogação.
+  (`app.tarefas.notificacoes`), encerrados ao concluir a medição e ao registrar a prorrogação.
 """
 
 from sqlalchemy.orm import Session
@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.banco import agora_utc
 from app.models.contratos import Competencia, Contrato
 from app.models.usuario import Usuario
-from app.services import servico_mensagens
+from app.services import notificacoes
 
 
 def ids_da_equipe(contrato: Contrato) -> list[int]:
@@ -40,10 +40,10 @@ def _rota_competencia(contrato: Contrato, competencia: Competencia, etapa: str |
 
 
 def avisar_equipe(sessao: Session, contrato: Contrato, assunto: str, corpo: str, *, chave: str, link: str,
-                  categoria: str = "comunicado", prioridade: str = "normal", autor: Usuario | None = None) -> None:
+                  categoria: str = "comunicado", prioridade: str = "normal", autor: Usuario | None = None, evento: str) -> None:
     """Aviso à equipe vigente (menos o autor da ação)."""
-    servico_mensagens.notificar(sessao, ids_da_equipe(contrato), assunto, corpo, chave=chave, categoria=categoria, prioridade=prioridade,
-                                link=link, contrato_id=contrato.id, autor=autor)
+    notificacoes.notificar(sessao, ids_da_equipe(contrato), assunto, corpo, chave=chave, categoria=categoria, prioridade=prioridade,
+                                link=link, contrato_id=contrato.id, autor=autor, evento=evento)
 
 
 def ocorrencia_registrada(sessao: Session, contrato: Contrato, ocorrencia, autor: Usuario) -> None:
@@ -52,19 +52,17 @@ def ocorrencia_registrada(sessao: Session, contrato: Contrato, ocorrencia, autor
         sessao, contrato, f"{_identificacao(contrato)}: nova ocorrência no diário de bordo{glosa}",
         f"{ocorrencia.registrada_por_nome} registrou uma ocorrência em {ocorrencia.data_ocorrencia:%d/%m/%Y}{glosa}:\n\n{ocorrencia.descricao}",
         chave=f"diario:{ocorrencia.id}", link=f"/contratos/{contrato.id}?aba=diario",
-        prioridade="alta" if ocorrencia.possui_glosa else "normal", autor=autor,
-    )
+        prioridade="alta" if ocorrencia.possui_glosa else "normal", autor=autor, evento="contratos.ocorrencia_diario")
 
 
 def medicao_concluida(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
     """Informativo à equipe; encerra o aviso de medição atrasada, se houver."""
-    servico_mensagens.encerrar(sessao, chave=f"atraso:{competencia.id}")
+    notificacoes.encerrar(sessao, chave=f"atraso:{competencia.id}")
     avisar_equipe(
         sessao, contrato, f"{_identificacao(contrato)}: medição de {competencia.numero_competencia} concluída",
         f"{autor.nome_completo or autor.login} concluiu a medição da competência {competencia.numero_competencia}. "
         "A próxima etapa já está liberada.",
-        chave=f"medicao:{competencia.id}:{agora_utc():%Y%m%d%H%M%S}", link=_rota_competencia(contrato, competencia), autor=autor,
-    )
+        chave=f"medicao:{competencia.id}:{agora_utc():%Y%m%d%H%M%S}", link=_rota_competencia(contrato, competencia), autor=autor, evento="contratos.medicao_concluida")
 
 
 def medicao_adicional_incluida(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
@@ -72,8 +70,7 @@ def medicao_adicional_incluida(sessao: Session, contrato: Contrato, competencia:
     avisar_equipe(
         sessao, contrato, f"{_identificacao(contrato)}: nova medição incluída ({competencia.numero_competencia})",
         f"{autor.nome_completo or autor.login} incluiu a {competencia.numero_competencia} no contrato. Justificativa: {competencia.adicional_justificativa}",
-        chave=f"medicao-adicional:{competencia.id}", link=_rota_competencia(contrato, competencia), autor=autor,
-    )
+        chave=f"medicao-adicional:{competencia.id}", link=_rota_competencia(contrato, competencia), autor=autor, evento="contratos.medicao_adicional")
 
 
 def nota_fiscal_juntada(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
@@ -81,33 +78,31 @@ def nota_fiscal_juntada(sessao: Session, contrato: Contrato, competencia: Compet
     from app.services.contratos.servico_retencao import usuarios_financeiro
 
     for recusa in competencia.recusas:
-        servico_mensagens.encerrar(sessao, chave=f"recusa-nf:{competencia.id}:{recusa.ordem}")
+        notificacoes.encerrar(sessao, chave=f"recusa-nf:{competencia.id}:{recusa.ordem}")
 
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, [u.id for u in usuarios_financeiro(sessao)],
         f"{_identificacao(contrato)}: conferir retenção de tributos ({competencia.numero_competencia})",
         f"A nota fiscal da competência {competencia.numero_competencia} foi juntada por {autor.nome_completo or autor.login}. "
         "Confira a tributação e as retenções na etapa \"Retenção de tributos\".",
         chave=f"retencao:{competencia.id}", categoria="pendencia", prioridade="alta",
-        link=_rota_competencia(contrato, competencia, "retencao"), contrato_id=contrato.id, autor=autor,
-    )
+        link=_rota_competencia(contrato, competencia, "retencao"), contrato_id=contrato.id, autor=autor, evento="contratos.conferir_retencao")
 
 
 def nota_recusada(sessao: Session, contrato: Contrato, competencia: Competencia, recusa, autor: Usuario) -> None:
     """Encerra a pendência do Financeiro e avisa a equipe (pendência) de que a nota foi recusada e outra deve ser juntada."""
-    servico_mensagens.encerrar(sessao, chave=f"retencao:{competencia.id}")
+    notificacoes.encerrar(sessao, chave=f"retencao:{competencia.id}")
     avisar_equipe(
         sessao, contrato, f"{_identificacao(contrato)}: nota fiscal recusada ({competencia.numero_competencia})",
         f"{recusa.recusada_por_nome} recusou a nota fiscal da competência {competencia.numero_competencia} (recusa nº {recusa.ordem}). "
         f"Justificativa: {recusa.justificativa}\n\nJunte outra nota fiscal na etapa \"Nota fiscal\".",
         chave=f"recusa-nf:{competencia.id}:{recusa.ordem}", link=_rota_competencia(contrato, competencia, "nota_fiscal"), categoria="pendencia",
-        prioridade="alta", autor=autor,
-    )
+        prioridade="alta", autor=autor, evento="contratos.nota_recusada")
 
 
 def retencao_conferida(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
     """Encerra a pendência do Financeiro e avisa a equipe do que falta (encerrado ao gerar o consolidado)."""
-    servico_mensagens.encerrar(sessao, chave=f"retencao:{competencia.id}")
+    notificacoes.encerrar(sessao, chave=f"retencao:{competencia.id}")
     from app.services.contratos.servico_competencias import etapas_abertas
 
     faltam = [e for e in etapas_abertas(competencia) if e in ("cadin", "checklist")]
@@ -116,12 +111,11 @@ def retencao_conferida(sessao: Session, contrato: Contrato, competencia: Compete
         sessao, contrato, f"{_identificacao(contrato)}: retenção conferida ({competencia.numero_competencia})",
         f"{autor.nome_completo or autor.login} conferiu a retenção de tributos da competência {competencia.numero_competencia}."
         + (f" Falta concluir: {texto_faltam}; depois, gere o documento consolidado." if faltam else " Já é possível gerar o documento consolidado."),
-        chave=f"finais:{competencia.id}", link=_rota_competencia(contrato, competencia), categoria="pendencia", autor=autor,
-    )
+        chave=f"finais:{competencia.id}", link=_rota_competencia(contrato, competencia), categoria="pendencia", autor=autor, evento="contratos.retencao_conferida")
 
 
 def consolidado_gerado(sessao: Session, competencia: Competencia) -> None:
-    servico_mensagens.encerrar(sessao, chave=f"finais:{competencia.id}")
+    notificacoes.encerrar(sessao, chave=f"finais:{competencia.id}")
 
 
 def alteracao_concluida(sessao: Session, contrato: Contrato, tipo: str, registro_id, descricao: str, autor: Usuario) -> None:
@@ -130,9 +124,8 @@ def alteracao_concluida(sessao: Session, contrato: Contrato, tipo: str, registro
     A prorrogação encerra os avisos de vencimento da vigência anterior.
     """
     if tipo == "prorrogacao":
-        servico_mensagens.encerrar(sessao, prefixo=f"vencimento:{contrato.id}:")
+        notificacoes.encerrar(sessao, prefixo=f"vencimento:{contrato.id}:")
     avisar_equipe(
         sessao, contrato, f"{_identificacao(contrato)}: {descricao}",
         f"{autor.nome_completo or autor.login} concluiu: {descricao}.", chave=f"{tipo}:{registro_id}",
-        link=f"/contratos/{contrato.id}", autor=autor,
-    )
+        link=f"/contratos/{contrato.id}", autor=autor, evento="contratos.alteracao_concluida")

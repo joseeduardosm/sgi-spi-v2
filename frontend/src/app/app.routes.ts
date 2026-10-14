@@ -73,11 +73,20 @@ export const rotas: Routes = [
       },
       { path: 'noticias', title: 'Todas as notícias | SGI SPI', loadComponent: () => import('./features/noticias/publico/arquivo-noticias.component').then((m) => m.ArquivoNoticiasComponent) },
       { path: 'noticias/:slug', title: 'Notícia | SGI SPI', loadComponent: () => import('./features/noticias/publico/noticia.component').then((m) => m.NoticiaComponent) },
+      // Rotas antigas (Mensagens e Mensageria): quem tem o endereço salvo cai na tela nova
+      { path: 'mensagens', redirectTo: 'notificacoes', pathMatch: 'full' },
+      { path: 'admin/mensageria', redirectTo: 'admin/notificacoes-sistema', pathMatch: 'full' },
       {
-        // Caixa de mensagens: todo usuário autenticado (sem ACL)
-        path: 'mensagens',
-        title: 'Caixa de mensagens | SGI SPI',
-        loadComponent: () => import('./features/mensagens/mensagens.component').then((m) => m.MensagensComponent),
+        // Notificações: todo usuário autenticado (sem ACL)
+        path: 'notificacoes',
+        title: 'Notificações | SGI SPI',
+        loadComponent: () => import('./features/notificacoes/notificacoes.component').then((m) => m.NotificacoesComponent),
+      },
+      {
+        // Link do pop-up do navegador: abre a notificação da entrega
+        path: 'notificacoes/:entregaId',
+        title: 'Notificações | SGI SPI',
+        loadComponent: () => import('./features/notificacoes/notificacoes.component').then((m) => m.NotificacoesComponent),
       },
       {
         path: 'perfil',
@@ -117,6 +126,11 @@ export const rotas: Routes = [
         // Módulo RH: todo usuário autenticado (as telas de CGP e autorizador conferem o papel na API)
         path: 'rh',
         loadChildren: () => import('./features/rh/rh.routes').then((m) => m.ROTAS_RH),
+      },
+      {
+        // Módulo Patrimônio (bens móveis do prédio SPI, uso no celular): cada rota confere o recurso ACL `patrimonio` e a API confere em toda ação
+        path: 'patrimonio',
+        loadChildren: () => import('./features/patrimonio/patrimonio.routes').then((m) => m.ROTAS_PATRIMONIO),
       },
       {
         // Módulo Protocolo: numeração institucional; cada rota confere o recurso ACL `protocolo` e a API confere em toda ação
@@ -234,12 +248,12 @@ export const rotas: Routes = [
           import('./features/administracao/atalhos/gestao-atalhos.component').then((m) => m.GestaoAtalhosComponent),
       },
       {
-        // Mensageria (e-mail de changelog): exclusiva da conta root
-        path: 'admin/mensageria',
-        title: 'Mensageria | SGI SPI',
+        // Notificações do sistema (e-mail de changelog): exclusiva da conta root
+        path: 'admin/notificacoes-sistema',
+        title: 'Notificações do sistema | SGI SPI',
         canActivate: [guardaContaRoot],
         loadComponent: () =>
-          import('./features/administracao/mensageria/mensageria.component').then((m) => m.MensageriaComponent),
+          import('./features/administracao/notificacoes-sistema/notificacoes-sistema.component').then((m) => m.NotificacoesSistemaComponent),
       },
     ],
   },

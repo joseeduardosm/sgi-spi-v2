@@ -1,0 +1,41 @@
+.aviso-notificacoes {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1080;
+  width: min(380px, calc(100vw - 32px));
+  padding: 20px;
+  background: var(--bs-body-bg, #fff);
+  color: var(--spi-texto);
+  border: 1px solid var(--spi-borda);
+  border-left: 4px solid var(--spi-vermelho);
+  border-radius: var(--spi-raio-g);
+  box-shadow: var(--spi-sombra-flutuante);
+
+  h2 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0 0 16px;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .erro {
+    color: var(--spi-vermelho);
+  }
+
+  .acoes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .botao-acao {
+    min-width: 0;
+  }
+}

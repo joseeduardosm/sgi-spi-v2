@@ -214,7 +214,7 @@ export interface DetalheContrato extends ResumoContrato {
   equipe: MembroEquipe[];
   criador_nome: string | null;
   // O que o usuário logado pode fazer neste contrato (controla os botões)
-  permissoes: { pode_editar: boolean; pode_excluir: boolean; pode_administrar: boolean };
+  permissoes: { pode_editar: boolean; pode_excluir: boolean; pode_administrar: boolean; pode_gerir_autoridades: boolean };
   // Controle de concorrência: enviar de volta na alteração
   versao: number;
   criado_em: string;
@@ -360,12 +360,23 @@ export interface MovimentoNota {
   autor: string | null;
 }
 
+/** NE de cancelamento aplicada a uma NE original. */
+export interface CancelamentoNota {
+  id: string;
+  numero: string;
+  valor: Decimal;
+  justificativa: string;
+  autor: string | null;
+  criado_em: string;
+}
+
 /** Nota de Empenho com saldo, reservas e extrato. */
 export interface NotaEmpenho {
   id: string;
   numero: string;
   valor_original: Decimal;
   consumido: Decimal;
+  cancelado: Decimal;
   saldo: Decimal;
   comprometido: Decimal;
   saldo_livre: Decimal;
@@ -374,6 +385,7 @@ export interface NotaEmpenho {
   faixa: 'verde' | 'amarelo' | 'vermelho';
   vinculada: boolean;
   movimentos: MovimentoNota[];
+  cancelamentos: CancelamentoNota[];
   criado_em: string;
 }
 
@@ -527,6 +539,8 @@ export interface ItemMedicao {
   fator_meses: Decimal;
   quantidade_prevista: Decimal;
   quantidade_medida: Decimal;
+  /** Acerto de centavos lançado na medição (ex.: 0.01 ou -0.02); soma ao subtotal. */
+  acerto: Decimal;
   subtotal: Decimal;
   /** Contínuo: previsto da competência; sob demanda: saldo do item na vigência. */
   saldo: Decimal;
@@ -1347,6 +1361,15 @@ export interface GravacaoAutoridade {
   setor: string;
   usuario_id: number | null;
   ativa: boolean;
+}
+
+/** Usuário do sistema que pode ser a autoridade; cargo e departamento vêm do cadastro dele. */
+export interface UsuarioAutoridade {
+  id: number;
+  login: string;
+  nome_completo: string;
+  cargo: string;
+  departamento: string;
 }
 
 export interface PessoaPortaria {

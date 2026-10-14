@@ -19,11 +19,12 @@ import {
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 import { ROTULOS_SLA, textoSla } from '../sla/sla.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
 
 @Component({
   selector: 'app-triagem-melhorias',
-  imports: [LinkificarPipe, FormsModule, DatePipe, CabecalhoMelhoriasComponent],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, CabecalhoMelhoriasComponent],
   template: `
     <app-cabecalho-melhorias titulo="Triagem de melhorias" descricao="Sugestões enviadas pelos usuários: analise, responda ao autor e transforme em tarefa." />
     @if (semAcesso()) {
@@ -68,7 +69,7 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
                   <td>{{ s.criado_em | date: 'dd/MM/yyyy HH:mm' }}</td>
                 </tr>
               } @empty {
-                <tr><td class="estado-vazio" colspan="6">{{ carregando() ? 'Carregando…' : 'Nenhuma sugestão com estes filtros.' }}</td></tr>
+                <tr><td class="estado-vazio" colspan="6">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="6" [linhas]="4" /> } @else { {{ 'Nenhuma sugestão com estes filtros.' }} }</td></tr>
               }
             </tbody>
           </table>

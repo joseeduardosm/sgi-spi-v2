@@ -60,7 +60,7 @@ def test_substitui_institucionais_mantem_sistemicos_e_limpa_departamentos(client
         assert opcoes[0].nome == "Secretaria de Parcerias em Investimentos" and opcoes[0].nivel == 0
         assert len(opcoes) == 28 and "Auditores" not in {o.nome for o in opcoes}
     # Na API, o usuário comum é mandado revisar o perfil
-    r = cliente.get("/api/mensagens/resumo", headers=cabecalho(cliente, "comum"))
+    r = cliente.get("/api/notificacoes/resumo", headers=cabecalho(cliente, "comum"))
     assert r.status_code == 403 and r.json()["codigo"] == "revisao_perfil_obrigatoria"
 
 

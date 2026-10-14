@@ -101,7 +101,7 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
                                   titulo="Medição do serviço", rotulo_total="Subtotal - Medição" if variaveis else "Total medido")
     if variaveis:
         _quadro_subtotais(documento, competencia)
-        total = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), Decimal(0)))
+        total = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), Decimal(0))) + sum((i.acerto or Decimal(0) for i in competencia.itens), Decimal(0))
     _secao_desconto_reajuste(documento, competencia, arredondar(total))
     # Glosas do diário de bordo que valem nesta competência (data no período)
     glosas = [
@@ -126,6 +126,13 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
     return documento.gerar()
 
 
+def moeda_acerto(acerto: Decimal | None) -> str:
+    """Acerto com sinal explícito (+R$ 0,01 / -R$ 0,02); sem acerto, um traço."""
+    if not acerto:
+        return "—"
+    return ("+" if acerto > 0 else "-") + moeda(abs(acerto))
+
+
 def _tabela_itens_medicao(documento: DocumentoPdf, competencia: Competencia, saldos: dict, variavel: bool | None, titulo: str, rotulo_total: str) -> Decimal:
     """Tabela dos itens medidos (`variavel`: só despesas variáveis, só os demais ou todos); devolve o subtotal das linhas."""
     total = Decimal(0)
@@ -133,25 +140,25 @@ def _tabela_itens_medicao(documento: DocumentoPdf, competencia: Competencia, sal
     for item in competencia.itens:
         if variavel is not None and item.despesa_variavel != variavel:
             continue
-        subtotal = arredondar(item.quantidade_medida * item.valor_unitario)
+        subtotal = arredondar(item.quantidade_medida * item.valor_unitario) + (item.acerto or Decimal(0))
         total += subtotal
         saldo = saldos[item.id]
         linhas.append(
             [str(item.ordem), item.descricao_completa, "Contínuo" if item.tipo == "continuo" else "Sob demanda", moeda_unitaria(item.valor_unitario),
-             quantidade(saldo.saldo), quantidade(saldo.glosas), quantidade(saldo.saldo_liquido), quantidade(item.quantidade_medida), moeda(subtotal)]
+             quantidade(saldo.saldo), quantidade(saldo.glosas), quantidade(saldo.saldo_liquido), quantidade(item.quantidade_medida), moeda_acerto(item.acerto), moeda(subtotal)]
         )
     documento.secao(titulo).tabela(
-        ["Item", "Descrição", "Tipo", "Valor unitário", "Saldo", "Glosas", "Saldo líquido", "Medição", "Subtotal"], linhas,
-        larguras=[0.5, 4.4, 1.2, 1.4, 1.1, 1.1, 1.2, 1.1, 1.5], alinhar_direita=[3, 4, 5, 6, 7, 8],
-        rodape=["", rotulo_total, "", "", "", "", "", "", moeda(arredondar(total))],
+        ["Item", "Descrição", "Tipo", "Valor unitário", "Saldo", "Glosas", "Saldo líquido", "Medição", "Acerto", "Subtotal"], linhas,
+        larguras=[0.5, 4.0, 1.2, 1.4, 1.1, 1.1, 1.2, 1.1, 1.0, 1.5], alinhar_direita=[3, 4, 5, 6, 7, 8, 9],
+        rodape=["", rotulo_total, "", "", "", "", "", "", "", moeda(arredondar(total))],
     )
     return arredondar(total)
 
 
 def _quadro_subtotais(documento: DocumentoPdf, competencia: Competencia) -> None:
     """Subtotal - Medição, Subtotal - Despesas Variáveis e o Total da medição."""
-    medicao = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if not i.despesa_variavel), Decimal(0)))
-    despesas = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if i.despesa_variavel), Decimal(0)))
+    medicao = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if not i.despesa_variavel), Decimal(0))) + sum((i.acerto or Decimal(0) for i in competencia.itens if not i.despesa_variavel), Decimal(0))
+    despesas = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if i.despesa_variavel), Decimal(0))) + sum((i.acerto or Decimal(0) for i in competencia.itens if i.despesa_variavel), Decimal(0))
     documento.secao("Total da medição").campos([
         ("Subtotal - Medição", moeda(medicao)), ("Subtotal - Despesas Variáveis", moeda(despesas)), ("Total", moeda(medicao + despesas)),
     ])

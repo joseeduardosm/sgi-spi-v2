@@ -21,8 +21,8 @@ import { TipoAfastamento } from './rh.models';
   host: { '(document:keydown.escape)': 'aberta.set(false)' },
   template: `
     @if (aberta()) {
-      <div class="fundo-modal" role="presentation" (click)="aberta.set(false)"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-lancamento">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="aberta.set(false)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-lancamento">
         <header>
           <div><span class="modal-sobretitulo">CGP</span><h2 id="titulo-lancamento">Lançar afastamento</h2></div>
           <button type="button" aria-label="Fechar" (click)="aberta.set(false)">×</button>

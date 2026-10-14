@@ -59,7 +59,7 @@ interface OpcaoMenu { rotulo: string; para: StatusTarefa }
                        (dragstart)="iniciarArraste($event, t); dica.set(null)" (dragend)="terminarArraste()"
                        (mouseenter)="mostrarDica($event, t, raia.chave + c.chave)" (mouseleave)="dica.set(null)"
                        (focusin)="mostrarDica($event, t, raia.chave + c.chave)" (focusout)="dica.set(null)">
-                    <app-cartao-tarefa [tarefa]="t" [destacado]="destacado() === t.numero" (abrir)="abrir.emit($event)" />
+                    <app-cartao-tarefa [tarefa]="t" [lider]="lider()" [destacado]="destacado() === t.numero" (abrir)="abrir.emit($event)" />
                     @if (opcoes(t).length) {
                       <button type="button" class="menu-cartao" [attr.aria-label]="'Ações da tarefa ' + t.numero" [attr.aria-expanded]="menuAberto() === t.numero"
                               (click)="$event.stopPropagation(); menuAberto.set(menuAberto() === t.numero ? null : t.numero)">⋯</button>
@@ -125,6 +125,8 @@ export class QuadroTarefasComponent {
   readonly cargas = input<PessoaCarga[]>([]);
   /** O usuário lidera o contexto (vê "Validar" e "Devolver" no menu). */
   readonly lider = input(false);
+  /** Cartões no tamanho normal em todas as colunas (a coluna rola) em vez de o quadro reduzi-los para caberem sem rolagem. */
+  readonly cartoesGrandes = input(false);
   /** Mostrar a criação rápida na coluna A fazer. */
   readonly podeCriar = input(false);
   /** Tarefa em destaque (recém-criada). */
@@ -155,6 +157,7 @@ export class QuadroTarefasComponent {
     // Mudou o que está na tela (tarefas, colunas, Concluída): mede de novo. Mudou o tamanho do quadro (janela, tela cheia): idem.
     effect(() => {
       this.raias();
+      this.cartoesGrandes();
       this.recolhida();
       this.criando();
       this.agendarDensidade();
@@ -186,6 +189,7 @@ export class QuadroTarefasComponent {
     const novos: Record<string, NivelDensidade> = {};
     colunas.forEach((el) => {
       const chave = el.dataset['col'] ?? '';
+      if (this.cartoesGrandes()) { el.dataset['nivel'] = '1'; novos[chave] = 1; return; }
       novos[chave] = escolherNivel((nivel) => {
         el.dataset['nivel'] = String(nivel);
         return el.scrollHeight <= el.clientHeight + 1;

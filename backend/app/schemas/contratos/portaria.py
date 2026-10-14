@@ -11,10 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 class GravacaoAutoridade(BaseModel):
     """Corpo de criação e alteração de uma autoridade signatária."""
     sigla: str = Field(..., max_length=60, description="Sigla do título da portaria, ex.: `SPI SSGC`.")
-    nome: str = Field(..., max_length=200)
-    cargo: str = Field(..., max_length=200)
-    setor: str = Field(..., max_length=200)
-    usuario_id: int | None = Field(None, description="Usuário que dá o aceite pela autoridade.")
+    usuario_id: int = Field(..., description="Usuário do sistema que é a autoridade: ele mesmo dá o aceite.")
+    nome: str = Field("", max_length=200, description="Em branco: usa o nome do cadastro do usuário.")
+    cargo: str = Field("", max_length=200, description="Em branco: usa o cargo do cadastro do usuário.")
+    setor: str = Field("", max_length=200, description="Em branco: usa o departamento do cadastro do usuário.")
     ativa: bool = True
 
 
@@ -22,6 +22,15 @@ class LeituraAutoridade(GravacaoAutoridade):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     usuario_nome: str | None = Field(None, description="Nome do usuário que dá o aceite.")
+
+
+class UsuarioAutoridade(BaseModel):
+    """Usuário que pode ser escolhido como autoridade, com os dados do cadastro que preenchem o formulário."""
+    id: int
+    login: str
+    nome_completo: str
+    cargo: str = ""
+    departamento: str = ""
 
 
 class SolicitacaoPortaria(BaseModel):

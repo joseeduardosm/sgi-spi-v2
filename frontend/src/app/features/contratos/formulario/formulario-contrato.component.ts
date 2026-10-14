@@ -18,6 +18,7 @@ import { DetalheContrato, GravacaoContrato, GravacaoItem, OpcaoEmpresa, Papel, R
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { MESES, PAPEIS, PERIODICIDADES, paraDecimalApi, paraDecimalTela, ROTULOS_SITUACAO, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Item na lista da tela (com a marca de item já salvo). */
 interface ItemEdicao extends GravacaoItem {
   /** Item já salvo: nome, tipo e faturamento não mudam. */
@@ -44,7 +45,7 @@ const ITEM_VAZIO: ItemEdicao = {
 /** Tela 2: cadastro e edição do contrato (dados, processos SEI, equipe e itens financeiros). */
 @Component({
   selector: 'app-formulario-contrato',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, SeletorUsuariosComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, SeletorUsuariosComponent, ...PIPES_FORMATACAO],
   templateUrl: './formulario-contrato.component.html',
   // Esc fecha a janela do item
   host: { '(document:keydown.escape)': 'fecharItem()' },

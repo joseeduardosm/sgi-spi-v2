@@ -75,7 +75,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
   - `vigencias` (`[{sequencia, inicio, fim, meses}]`);
   - `itens` (`LeituraItem`: dados do item + `quantidade_total` da vigência atual, `quantidade_original` (teto inicial do item sob demanda), `quantidade_executada`, `quantidade_disponivel`, `subtotal_mensal`, `vigencia_meses`);
   - `equipe` (`[{papel, usuario_id, nome, login, desde}]`, só as designações vigentes);
-  - `criador_nome`, `permissoes` (`{pode_editar, pode_excluir, pode_administrar}`), `versao`, `criado_em`, `atualizado_em`.
+  - `criador_nome`, `permissoes` (`{pode_editar, pode_excluir, pode_administrar, pode_gerir_autoridades}`), `versao`, `criado_em`, `atualizado_em`.
 - `LeituraDocumento`: `codigo`, `numero` (`"012"`), `titulo`, `anexado`, `nome_arquivo`, `tamanho`, `enviado_em`, `enviado_por_nome`.
 - `AlteracaoCampo`: `campo`, `de`, `para`, `autor`, `ocorrido_em`.
 

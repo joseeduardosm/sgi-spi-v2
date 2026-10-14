@@ -42,8 +42,8 @@ type Janela = 'status' | 'historico' | 'marcos' | null;
     </section>
 
     @if (janela() === 'status') {
-      <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-status-equipe">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-status-equipe">
         <header><div><h2 id="titulo-status-equipe">Atualizar status da equipe</h2><small>Os membros e a liderança são avisados.</small></div><button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
         <form class="grade-formulario" (submit)="$event.preventDefault(); publicar()">
           <div class="ocupa-duas"><label for="st-situacao">Situação</label>
@@ -55,8 +55,8 @@ type Janela = 'status' | 'historico' | 'marcos' | null;
     }
 
     @if (janela() === 'historico') {
-      <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
-      <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-historico-status">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-historico-status">
         <header><div><h2 id="titulo-historico-status">Histórico de status</h2></div><button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
         <ul class="historico-status">
           @for (h of historico(); track h.id) {
@@ -68,8 +68,8 @@ type Janela = 'status' | 'historico' | 'marcos' | null;
     }
 
     @if (janela() === 'marcos') {
-      <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
-      <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-marcos">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-marcos">
         <header><div><h2 id="titulo-marcos">Marcos da equipe</h2><small>Um marco fica atingido quando todas as tarefas ligadas a ele concluem (ou por decisão da liderança).</small></div>
           <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
         <div class="corpo-marcos">

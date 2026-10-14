@@ -55,12 +55,12 @@
     @default { <app-etapa-finais [detalhe]="d" [etapa]="selecionada()" [editavel]="editavel(selecionada())" (atualizado)="aplicar($event)" /> }
   }
 } @else {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="formulario" [linhas]="5" />
 }
 
 @if (incluindo()) {
-  <div class="fundo-modal" role="presentation" (click)="incluindo.set(false)"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-incluir">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="incluindo.set(false)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-incluir">
     <header>
       <div><span class="modal-sobretitulo">Medição adicional</span><h2 id="titulo-incluir">Incluir nova medição</h2></div>
       <button type="button" aria-label="Fechar" (click)="incluindo.set(false)">×</button>
@@ -80,8 +80,8 @@
 }
 
 @if (reabrindo()) {
-  <div class="fundo-modal" role="presentation" (click)="reabrindo.set(false)"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-reabrir">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="reabrindo.set(false)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-reabrir">
     <header>
       <div><span class="modal-sobretitulo">SuperRoot ou gestor do contrato</span><h2 id="titulo-reabrir">Reabrir etapa</h2></div>
       <button type="button" aria-label="Fechar" (click)="reabrindo.set(false)">×</button>

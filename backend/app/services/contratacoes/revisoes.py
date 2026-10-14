@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.banco import agora_utc
 from app.models.contratacoes import DocumentoContratacao, ItemContratacao, RevisaoItem
 from app.models.usuario import Usuario
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.contratacoes import arvore, conteudo, versoes
 from app.services.contratacoes.acesso import ErroContratacao
 from app.services.servico_auditoria import auditar
@@ -49,11 +49,10 @@ def criar(sessao: Session, documento: DocumentoContratacao, item_id: uuid.UUID, 
     if documento.situacao == "rascunho":
         documento.situacao = "em_revisao"
     documento.atualizado_em = agora_utc()
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, _destinatarios(documento, autor), "Nova proposta de alteração" if proposto else "Novo comentário em documento",
         f"{_nome(autor)} registrou uma {'proposta de alteração' if proposto else 'revisão'} em “{documento.nome}”.\n\n{comentario[:300]}",
-        chave=f"contratacao-revisao:{revisao.id}:criada", categoria="comunicado", link=f"/contratacoes/{documento.id}", email=True, autor=autor,
-    )
+        chave=f"contratacao-revisao:{revisao.id}:criada", categoria="comunicado", link=f"/contratacoes/{documento.id}", autor=autor, evento="contratacoes.revisao_nova")
     auditar(sessao, autor.login, "contratacao.revisao.proposta" if proposto else "contratacao.revisao.comentario", documento.nome, autor_id=autor.id,
             alvo_tipo="contratacao", alvo_id=documento.id, dados={"item": str(item.id)})
     sessao.commit()
@@ -86,11 +85,10 @@ def aplicar(sessao: Session, documento: DocumentoContratacao, item_id: uuid.UUID
     sessao.flush()
     versoes.registrar(sessao, documento, "proposta", autor, f"Proposta de {revisao.autor_nome} aplicada")
     if revisao.autor_id and revisao.autor_id != autor.id:
-        servico_mensagens.notificar(
+        notificacoes.notificar(
             sessao, [revisao.autor_id], "Proposta de alteração aplicada", f"{_nome(autor)} aplicou a sua proposta em “{documento.nome}”.",
-            chave=f"contratacao-revisao:{revisao.id}:aplicada", categoria="comunicado", link=f"/contratacoes/{documento.id}", email=True, autor=autor,
-        )
-    servico_mensagens.encerrar(sessao, chave=f"contratacao-revisao:{revisao.id}:criada")
+            chave=f"contratacao-revisao:{revisao.id}:aplicada", categoria="comunicado", link=f"/contratacoes/{documento.id}", autor=autor, evento="contratacoes.proposta_aplicada")
+    notificacoes.encerrar(sessao, chave=f"contratacao-revisao:{revisao.id}:criada")
     auditar(sessao, autor.login, "contratacao.revisao.aplicar", documento.nome, autor_id=autor.id, alvo_tipo="contratacao", alvo_id=documento.id, dados={"item": str(item.id)})
     sessao.commit()
     return revisao
@@ -103,7 +101,7 @@ def resolver(sessao: Session, documento: DocumentoContratacao, item_id: uuid.UUI
         raise ErroContratacao("Uma proposta aplicada não volta a ficar aberta.", 409, "conflito")
     revisao.resolvida_em, revisao.resolvida_por_nome = (agora_utc(), _nome(autor)) if resolvida else (None, None)
     if resolvida:
-        servico_mensagens.encerrar(sessao, chave=f"contratacao-revisao:{revisao.id}:criada")
+        notificacoes.encerrar(sessao, chave=f"contratacao-revisao:{revisao.id}:criada")
     sessao.commit()
     return revisao
 

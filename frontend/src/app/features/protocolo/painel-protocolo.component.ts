@@ -10,12 +10,13 @@ import { CabecalhoProtocoloComponent } from './cabecalho-protocolo.component';
 import { ProtocoloApiService } from './protocolo-api.service';
 import { PainelProtocolo, PessoaPainel, TipoProtocolo } from './protocolo.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 /** Painel por tipo e exercício. As barras são CSS puro (reservados sem documento + utilizados no mês). */
 @Component({
   selector: 'app-painel-protocolo',
-  imports: [FormsModule, DatePipe, CabecalhoProtocoloComponent],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, CabecalhoProtocoloComponent],
   template: `
     <app-cabecalho-protocolo titulo="Painel do Protocolo" descricao="Reservas e utilizações por mês, quem mais usa e o que está sem documento." />
     <section class="painel-gestao protocolo">
@@ -77,7 +78,7 @@ const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'O
           </div>
         </div>
       } @else {
-        <p class="estado-vazio">{{ tipoId() ? 'Carregando…' : 'Nenhum tipo de documento cadastrado.' }}</p>
+        <div class="estado-vazio">@if (tipoId()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Nenhum tipo de documento cadastrado.' }} }</div>
       }
     </section>
   `,

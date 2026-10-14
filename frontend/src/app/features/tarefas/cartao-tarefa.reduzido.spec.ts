@@ -2,12 +2,14 @@
 // Este arquivo serve para testar a versão reduzida do cartão da tarefa (número, prazo, criticidade e marcadores).
 
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { CartaoTarefaComponent } from './cartao-tarefa.component';
 import { TarefaResumo } from './tarefas.models';
 
 describe('CartaoTarefaComponent (versão reduzida)', () => {
   it('traz número, prazo, sigla da criticidade e um marcador por etiqueta', () => {
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(CartaoTarefaComponent);
     const tarefa = {
       numero: 1234, titulo: 'Teste', status: 'a_fazer', prioridade: 'critica', prazo: '2026-10-20T21:00:00Z', responsaveis: [], prorrogacoes: 0,

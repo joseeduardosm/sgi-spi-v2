@@ -1,6 +1,8 @@
+<!-- Barra de progresso do topo: aparece quando há navegação ou requisição passando de 150 ms -->
+<app-barra-progresso />
 <a class="link-pular" href="#conteudo-principal">Pular para o conteúdo</a>
 
-<div class="portal" [class.barra-lateral-expandida]="layout.barraExpandida()">
+<div class="portal" [class.barra-lateral-expandida]="layout.barraExpandida()" [class.menu-celular-aberto]="layout.menuCelularAberto()">
   @if (layout.menuCelularAberto()) {
     <button class="fundo-gaveta" type="button" aria-label="Fechar menu" (click)="layout.menuCelularAberto.set(false)"></button>
   }
@@ -36,9 +38,9 @@
       @if (autenticacao.usuario(); as usuario) {
         <div class="barra-topo-acoes">
         @if (!usuario.perfil_restrito) {
-          <!-- Sino da mensageria: abre a caixa de mensagens -->
-          <a class="sino-mensagens" routerLink="/mensagens" [attr.aria-label]="'Caixa de mensagens: ' + caixa.naoLidas() + ' não lida(s)'"
-             title="Caixa de mensagens">
+          <!-- Sino das notificações: abre a caixa de notificações -->
+          <a class="sino-notificacoes" routerLink="/notificacoes" [attr.aria-label]="'Notificações: ' + caixa.naoLidas() + ' não lida(s)'"
+             title="Notificações">
             <app-icone nome="sino" />
             @if (caixa.naoLidas()) { <span class="contador-sino">{{ caixa.naoLidas() > 99 ? '99+' : caixa.naoLidas() }}</span> }
           </a>
@@ -51,7 +53,7 @@
             <b aria-hidden="true">⌄</b>
           </button>
           @if (layout.menuUsuarioAberto()) {
-            <div class="menu-usuario-lista" role="menu">
+            <div class="menu-usuario-lista" role="menu" animate.leave="mov-sai">
               <div><strong>{{ usuario.nome_completo }}</strong><small>{{ usuario.papeis.length ? usuario.papeis.join(', ') : 'Usuário' }} · &#64;{{ usuario.login }}</small></div>
               <button type="button" role="menuitem" (click)="abrirPerfil()"><app-icone nome="usuario" /> Meu perfil</button>
               <!-- A conta root não tem vínculo funcional: sem folha de ponto -->
@@ -87,8 +89,10 @@
 
 <!-- Confirmações, erros e "Executando a solicitação" de todas as telas -->
 <app-dialogos />
-<!-- Avisos da mensageria que abrem em janela (não bloqueiam a navegação) -->
-<app-janela-mensagem />
+<!-- Avisos das notificações que abrem em janela (não bloqueiam a navegação) -->
+<app-janela-notificacao />
+<!-- Pede a permissão do navegador para as notificações (Web Push) quando o canal está ligado e este navegador ainda não está inscrito -->
+<app-aviso-notificacoes-navegador />
 <app-abrir-chamado />
 <app-paleta-comandos />
 <!-- Folha de ponto (menu do usuário): escolha da competência e download do PDF -->

@@ -7,23 +7,25 @@ import { Router, RouterLink } from '@angular/router';
 
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { EditorRicoComponent } from '../../contratacoes/editor-rico.component';
+import { semAcento } from '../../tarefas/marcadores.paleta';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { Modelo, PlaceholderPortaria, VarianteMascara } from '../compartilhado/contratos.models';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /**
  * Página da máscara de portaria (`/contratos/modelos/portaria/novo` ou `.../portaria/:id`). O editor ocupa a largura toda e a lista de
  * placeholders fica ao lado, sempre visível; a barra de ações fica fixa no pé da página. A API só aceita os placeholders da lista.
  */
 @Component({
   selector: 'app-modelo-portaria',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, EditorRicoComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, EditorRicoComponent],
   template: `
     <app-cabecalho-modulo [titulo]="id() === 'novo' ? 'Nova máscara de portaria' : 'Máscara de portaria'" [trilha]="['Modelos', 'Portaria']"
       descricao="Texto-base da portaria de designação. Os placeholders (#nome) são trocados pelos dados do contrato na emissão." />
 
     @if (carregando()) {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="formulario" [linhas]="5" />
     } @else {
       <form class="pagina-mascara" (ngSubmit)="salvar()">
         <section class="cartao-dados dados-mascara">
@@ -41,22 +43,23 @@ import { Modelo, PlaceholderPortaria, VarianteMascara } from '../compartilhado/c
         <div class="corpo-mascara">
           <section class="cartao-dados editor-mascara" aria-labelledby="titulo-texto-mascara">
             <header><h2 id="titulo-texto-mascara">Texto da portaria</h2></header>
-            <app-editor-rico [(html)]="html" rotulo="Texto da máscara da portaria" />
+            @defer (on idle) { <app-editor-rico [(html)]="html" rotulo="Texto da máscara da portaria" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="3" /> }
           </section>
           <aside class="cartao-dados placeholders-mascara" aria-labelledby="titulo-placeholders">
             <header><div><h2 id="titulo-placeholders">Placeholders permitidos</h2>
               <small>Clique para inserir no cursor. Qualquer outro <code>#</code> impede salvar.</small></div></header>
+            <div class="busca-placeholders"><input type="search" name="busca-placeholder" autocomplete="off" placeholder="Pesquisar placeholder…" aria-label="Pesquisar placeholder" [ngModel]="busca()" (ngModelChange)="busca.set($event)" /></div>
             <ul>
               @for (p of placeholdersDaVariante(); track p.nome) {
                 <li><button type="button" class="link-arquivo" (click)="inserir(p)">#{{ p.nome }}</button><small>{{ p.descricao }}</small></li>
-              }
+              } @empty { <li><small>Nenhum placeholder encontrado.</small></li> }
             </ul>
           </aside>
         </div>
 
         <footer class="acoes-mascara">
           <a class="acao-secundaria" routerLink="/contratos/modelos">Voltar aos modelos</a>
-          <button type="submit" class="acao-primaria" [disabled]="salvando() || !nome.trim() || !html.trim()">Salvar máscara</button>
+          <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="salvando() || !nome.trim() || !html.trim()">Salvar máscara</button>
         </footer>
       </form>
     }
@@ -64,12 +67,13 @@ import { Modelo, PlaceholderPortaria, VarianteMascara } from '../compartilhado/c
   styles: `
     .pagina-mascara { display: grid; gap: 16px; }
     .dados-mascara { padding: 16px 20px 0; }
-    .corpo-mascara { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+    .corpo-mascara { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 16px; align-items: start; }
     .editor-mascara { padding-bottom: 16px; }
     .editor-mascara > header, .placeholders-mascara > header { padding: 14px 20px 8px; }
     .editor-mascara app-editor-rico { display: block; margin: 0 20px; }
     :host ::ng-deep .editor-mascara .editor-rico .superficie-editor { min-height: max(420px, calc(100vh - 430px)); font-size: 14px; line-height: 1.6; }
-    .placeholders-mascara { position: sticky; top: 12px; max-height: calc(100vh - 100px); overflow: auto; padding-bottom: 12px; }
+    .placeholders-mascara { position: sticky; top: 12px; max-height: min(520px, calc(100vh - 100px)); overflow: auto; padding-bottom: 12px; }
+    .busca-placeholders { padding: 0 20px 10px; }
     .placeholders-mascara ul { display: grid; gap: 10px; margin: 0; padding: 0 20px; list-style: none; }
     .placeholders-mascara li { display: grid; gap: 1px; }
     .placeholders-mascara li small { color: var(--spi-apagado); }
@@ -90,6 +94,7 @@ export class ModeloPortariaComponent implements OnInit {
   protected readonly carregando = signal(true);
   protected readonly salvando = signal(false);
   protected readonly placeholders = signal<PlaceholderPortaria[]>([]);
+  protected readonly busca = signal('');
   protected nome = '';
   protected ativo = true;
   protected variante: VarianteMascara = 'sem_anterior';
@@ -119,9 +124,10 @@ export class ModeloPortariaComponent implements OnInit {
     this.html = modelo.conteudo.html ?? '';
   }
 
-  /** A máscara sem portaria anterior não usa os placeholders da anterior. */
+  /** A máscara sem portaria anterior não usa os placeholders da anterior; a pesquisa casa o nome ou a descrição (sem acento). */
   protected placeholdersDaVariante(): PlaceholderPortaria[] {
-    return this.placeholders().filter((p) => this.variante === 'com_anterior' || !p.da_anterior);
+    const termo = semAcento(this.busca().trim().replace(/^#/, ''));
+    return this.placeholders().filter((p) => (this.variante === 'com_anterior' || !p.da_anterior) && (!termo || semAcento(`${p.nome} ${p.descricao}`).includes(termo)));
   }
 
   protected inserir(placeholder: PlaceholderPortaria): void {

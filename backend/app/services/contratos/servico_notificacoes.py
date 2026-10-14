@@ -400,7 +400,7 @@ def notificar_ocorrencia(ocorrencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID
 def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -> tuple[str, str, str]:
     """Assunto, texto e HTML do e-mail da medição concluída (pede a NF em PDF e XML em até 48 h)."""
     from app.services.contratos.servico_competencias import (
-        saldos_da_medicao, subtotal_despesas_variaveis, subtotal_medicao, tem_despesas_variaveis, total_medido,
+        saldos_da_medicao, subtotal_despesas_variaveis, subtotal_item, subtotal_medicao, tem_despesas_variaveis, total_medido,
     )
 
     rotulo = competencia.numero_competencia
@@ -408,7 +408,7 @@ def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -
     total = total_medido(competencia)
     saldos = saldos_da_medicao(contrato, competencia)
     itens = [
-        [i.descricao_completa, quantidade(i.quantidade_medida), quantidade(saldos[i.id].glosas), moeda(i.quantidade_medida * i.valor_unitario)]
+        [i.descricao_completa, quantidade(i.quantidade_medida), quantidade(saldos[i.id].glosas), moeda(subtotal_item(i))]
         for i in competencia.itens
     ]
     assunto = f"Contrato {contrato.numero} — medição {rotulo} concluída: emitir nota fiscal"

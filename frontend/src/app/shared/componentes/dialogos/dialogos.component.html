@@ -1,6 +1,6 @@
 @if (dialogos.confirmacao(); as confirmacao) {
-  <div class="fundo-modal camada-dialogo" role="presentation" (click)="dialogos.responderConfirmacao(false)"></div>
-  <section class="modal-portal camada-dialogo" role="alertdialog" aria-modal="true" aria-labelledby="titulo-confirmacao" aria-describedby="texto-confirmacao">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal camada-dialogo" role="presentation" (click)="dialogos.responderConfirmacao(false)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal camada-dialogo" role="alertdialog" aria-modal="true" aria-labelledby="titulo-confirmacao" aria-describedby="texto-confirmacao">
     <header>
       <div>
         <span class="modal-sobretitulo">Confirmação</span>
@@ -22,8 +22,8 @@
 }
 
 @if (dialogos.erro(); as erro) {
-  <div class="fundo-modal camada-dialogo" role="presentation" (click)="dialogos.fecharErro()"></div>
-  <section class="modal-portal camada-dialogo" role="alertdialog" aria-modal="true" aria-labelledby="titulo-erro" aria-describedby="texto-erro">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal camada-dialogo" role="presentation" (click)="dialogos.fecharErro()"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal camada-dialogo" role="alertdialog" aria-modal="true" aria-labelledby="titulo-erro" aria-describedby="texto-erro">
     <header>
       <div>
         <span class="modal-sobretitulo">Erro</span>
@@ -44,8 +44,8 @@
 }
 
 @if (dialogos.processando().length) {
-  <div class="fundo-modal camada-processando" role="presentation"></div>
-  <section class="modal-portal camada-processando janela-processando" role="status" aria-live="polite">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal camada-processando" role="presentation"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal camada-processando janela-processando" role="status" aria-live="polite">
     <span class="indicador" aria-hidden="true"></span>
     <div>
       <strong>Executando a solicitação</strong>

@@ -9,7 +9,7 @@ import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { ambiente } from '../../../environments/ambiente';
 import { baixarArquivo } from '../../shared/utilitarios/download';
 import {
-  AcaoPipeline, AgendaPessoa, Atividade, AtualizacaoStatus, Marco, DesempenhoEquipe, Equipe, Estagio, Recorrencia, RegraRecorrencia, EventoTarefa, FiltrosTarefas, LinhaDoTempo, ListaTarefas, Marcador, PessoaCarga, PrioridadeTarefa, TarefaDetalhe,
+  AcaoPipeline, AtividadeDiaria, AgendaPessoa, Atividade, AtualizacaoStatus, Marco, DesempenhoEquipe, Equipe, Estagio, Recorrencia, RegraRecorrencia, EventoTarefa, FiltrosTarefas, LinhaDoTempo, ListaTarefas, Marcador, PessoaCarga, PrioridadeTarefa, TarefaDetalhe,
 } from './tarefas.models';
 
 export interface Escopo { tipo: 'minhas' | 'equipe' | 'pessoa' | 'subtarefas'; equipeId?: string | null; login?: string | null; tarefa?: number | null }
@@ -225,7 +225,7 @@ export class TarefasApiService {
   }
 
   /** Cria uma subtarefa (herda equipe, marcadores, responsáveis e prazo da mãe quando não informados). */
-  criarSubtarefa(numero: number, dados: { titulo: string }) {
+  criarSubtarefa(numero: number, dados: { titulo: string; descricao?: string; prazo?: string; prioridade?: PrioridadeTarefa; responsaveis_ids?: number[]; bloqueada_por_numeros?: number[]; depende_da_anterior?: boolean }) {
     return this.http.post<TarefaDetalhe>(`${this.base}/${numero}/subtarefas`, dados);
   }
 
@@ -235,6 +235,16 @@ export class TarefasApiService {
   }
 
   /** Burndown, vazão, ciclo, fluxo acumulado e produtividade da equipe (só liderança). */
+  /** "O que aconteceu": atividade diária da equipe (só a liderança). */
+  atividadeDaEquipe(equipeId: string, filtros: { de: string; ate: string; pessoaId?: number | null; tipos?: string[]; busca?: string; automaticos?: boolean }): Observable<AtividadeDiaria> {
+    let p = new HttpParams().set('de', filtros.de).set('ate', filtros.ate);
+    if (filtros.pessoaId) p = p.set('pessoa_id', filtros.pessoaId);
+    if (filtros.tipos?.length) p = p.set('tipos', filtros.tipos.join(','));
+    if (filtros.busca?.trim()) p = p.set('busca', filtros.busca.trim());
+    if (filtros.automaticos) p = p.set('automaticos', true);
+    return this.http.get<AtividadeDiaria>(`${this.base}/equipes/${equipeId}/atividade`, { params: p });
+  }
+
   desempenho(equipeId: string, de: string, ate: string, marcadorId = ''): Observable<DesempenhoEquipe> {
     let params = new HttpParams().set('de', de).set('ate', ate);
     if (marcadorId) params = params.set('marcador_id', marcadorId);

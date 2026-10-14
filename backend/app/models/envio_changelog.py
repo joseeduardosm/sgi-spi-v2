@@ -1,6 +1,6 @@
 # Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir a tabela dos e-mails de changelog (novidades do sistema) enviados pela mensageria.
-"""E-mail de changelog: o registro de cada envio feito pela conta root na tela Mensageria.
+# Este arquivo serve para definir a tabela dos e-mails de changelog (novidades do sistema) enviados pelas notificações.
+"""E-mail de changelog: o registro de cada envio feito pela conta root na tela Notificações do sistema.
 
 O rascunho do próximo e-mail parte das entradas do `CHANGELOG.md` posteriores à última data já enviada a todos
 (`ate_data`); envios de teste ficam registrados, mas não contam para essa data.
@@ -17,9 +17,9 @@ from app.core.banco import Base, agora_utc
 
 class EnvioChangelog(Base):
     """Um e-mail de changelog enviado: a todos os ativos, a usuários e setores escolhidos, ou só a um endereço de teste."""
-    __tablename__ = "mensageria_envios_changelog"
+    __tablename__ = "notificacoes_envios_changelog"
     __table_args__ = (
-        CheckConstraint("destino IN ('todos', 'teste', 'selecionados')", name="ck_mensageria_envios_changelog_destino"),
+        CheckConstraint("destino IN ('todos', 'teste', 'selecionados')", name="ck_notificacoes_envios_changelog_destino"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)

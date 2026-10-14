@@ -2,7 +2,7 @@
                         [trilha]="[{ rotulo: nova() ? 'Nova notícia' : 'Editar' }]" />
 
 @if (carregando()) {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="formulario" [linhas]="5" />
 } @else {
   @if (noticia(); as n) {
     <div class="faixa-situacao" [attr.data-situacao]="n.situacao">
@@ -153,8 +153,8 @@
 }
 
 @if (janela() === 'aprovar') {
-  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-aprovar">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-aprovar">
     <header><div><span class="modal-sobretitulo">Aprovação</span><h2 id="titulo-aprovar">Aprovar e publicar</h2></div>
       <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
     <form (submit)="$event.preventDefault(); aprovar()">
@@ -168,8 +168,8 @@
 }
 
 @if (janela() === 'devolver') {
-  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-devolver">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-devolver">
     <header><div><span class="modal-sobretitulo">Aprovação</span><h2 id="titulo-devolver">Devolver para ajustes</h2></div>
       <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
     <form (submit)="$event.preventDefault(); devolver()">
@@ -182,8 +182,8 @@
 }
 
 @if (janela() === 'previa') {
-  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
-  <section class="modal-portal modal-previa" role="dialog" aria-modal="true" aria-labelledby="titulo-previa">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-previa" role="dialog" aria-modal="true" aria-labelledby="titulo-previa">
     <header><div><span class="modal-sobretitulo">Prévia</span><h2 id="titulo-previa">Como a notícia vai aparecer</h2></div>
       <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button></header>
     <div class="corpo-previa">
@@ -198,8 +198,8 @@
 }
 
 @if (revisoes(); as lista) {
-  <div class="fundo-modal" role="presentation" (click)="revisoes.set(null)"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-historico">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="revisoes.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-historico">
     <header><div><span class="modal-sobretitulo">Histórico</span><h2 id="titulo-historico">Versões da notícia</h2></div>
       <button type="button" aria-label="Fechar" (click)="revisoes.set(null)">×</button></header>
     <div class="corpo-previa">
@@ -214,8 +214,8 @@
 }
 
 @if (ciencias(); as c) {
-  <div class="fundo-modal" role="presentation" (click)="ciencias.set(null)"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-ciencias">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="ciencias.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-ciencias">
     <header><div><span class="modal-sobretitulo">Aviso</span><h2 id="titulo-ciencias">{{ c.cientes }} de {{ c.total }} deram ciência</h2></div>
       <button type="button" aria-label="Fechar" (click)="ciencias.set(null)">×</button></header>
     <div class="corpo-previa">

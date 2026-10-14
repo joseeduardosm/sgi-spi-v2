@@ -30,6 +30,8 @@ class DadosSubtarefa:
     prazo: datetime | None = None
     prioridade: str | None = None
     responsaveis_ids: tuple[int, ...] = ()
+    depende_da_anterior: bool = False
+    bloqueada_por: tuple[int, ...] = ()
 
 
 def criar_subtarefa(sessao: Session, autor: Usuario, mae: Tarefa, dados: DadosSubtarefa) -> Tarefa:
@@ -42,6 +44,19 @@ def criar_subtarefa(sessao: Session, autor: Usuario, mae: Tarefa, dados: DadosSu
     prazo = dados.prazo or mae.prazo
     if servico._comparavel(prazo) > servico._comparavel(mae.prazo):
         raise ErroTarefa("O prazo da subtarefa não pode passar do prazo da tarefa mãe.")
+    # Valida as bloqueadoras antes de criar (assim um erro não deixa a subtarefa criada pela metade)
+    bloqueadoras = list(dict.fromkeys(dados.bloqueada_por))
+    if bloqueadoras:
+        achadas = {t.numero: t for t in sessao.scalars(select(Tarefa).where(Tarefa.numero.in_(bloqueadoras)))}
+        if len(achadas) != len(bloqueadoras):
+            raise ErroTarefa("Alguma tarefa informada não existe.")
+        for b in achadas.values():
+            if not servico.pode_ver(sessao, autor, b):
+                raise ErroTarefa(f"Você não tem acesso à tarefa #{b.numero}.")
+            if b.equipe_id != mae.equipe_id:
+                raise ErroTarefa(f"A tarefa #{b.numero} é de outra equipe: só é possível depender de tarefas da mesma equipe.")
+            if b.id == mae.id:
+                raise ErroTarefa("Uma subtarefa não pode depender da própria tarefa mãe.")
     responsaveis = dados.responsaveis_ids or tuple([mae.responsavel_id, *sorted(servico.envolvidos(mae) - {mae.responsavel_id})] if mae.responsavel_id else sorted(servico.envolvidos(mae)))
     sub = servico.criar(sessao, autor, DadosTarefa(
         titulo=dados.titulo, descricao=dados.descricao, prazo=prazo, prioridade=dados.prioridade or mae.prioridade, equipe_id=mae.equipe_id,
@@ -49,6 +64,13 @@ def criar_subtarefa(sessao: Session, autor: Usuario, mae: Tarefa, dados: DadosSu
     ))
     servico._evento(sessao, mae, "editada", autor, f"Subtarefa criada: #{sub.numero} {sub.titulo}")
     sessao.commit()
+    numeros = list(bloqueadoras)
+    if dados.depende_da_anterior:
+        anterior = sessao.scalar(select(Tarefa).where(Tarefa.tarefa_pai_id == mae.id, Tarefa.id != sub.id, Tarefa.status != "concluida").order_by(Tarefa.numero.desc()))
+        if anterior is not None and anterior.numero not in numeros:
+            numeros.append(anterior.numero)
+    if numeros:
+        definir_dependencias(sessao, autor, sub, numeros)
     return sub
 
 

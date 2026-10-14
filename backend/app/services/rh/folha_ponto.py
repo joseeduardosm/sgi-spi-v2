@@ -40,7 +40,7 @@ from sqlalchemy.orm import Session
 from app.models.rh import Afastamento, DadosFuncionais
 from app.models.usuario import Usuario
 from app.services.documentos.pdf import CAMINHO_BRASAO
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.rh import servico_feriados
 
 MESES = ("JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO")
@@ -114,12 +114,11 @@ def verificar(sessao: Session, usuario: Usuario, hoje: date) -> None:
     pendentes = pendentes_do_usuario(sessao, usuario.id)
     if pendentes:
         campos = ", ".join(dict.fromkeys(ROTULOS.get(a.campo, a.campo) for a in pendentes))
-        servico_mensagens.notificar(
+        notificacoes.notificar(
             sessao, cgp, f"{nome} quer baixar a folha de ponto, mas tem alterações de cadastro aguardando validação",
             f"{nome} tentou gerar a folha de ponto, mas tem alterações de cadastro aguardando validação da CGP: {campos}.\n\n"
             "A folha fica disponível assim que as alterações forem validadas ou recusadas.",
-            chave=f"{PREFIXO_AVISO_VALIDACAO}{usuario.id}:{hoje:%Y%m%d}", categoria="pendencia", link=link, email=True,
-        )
+            chave=f"{PREFIXO_AVISO_VALIDACAO}{usuario.id}:{hoje:%Y%m%d}", categoria="pendencia", link=link, evento="rh.folha_ponto_bloqueada")
         sessao.commit()
         raise FolhaBloqueada(
             f"Você tem alterações de cadastro aguardando validação da CGP ({campos}). A folha de ponto fica disponível "
@@ -128,12 +127,11 @@ def verificar(sessao: Session, usuario: Usuario, hoje: date) -> None:
     faltantes = campos_faltantes(sessao.get(DadosFuncionais, usuario.id))
     if faltantes:
         lista = ", ".join(faltantes)
-        servico_mensagens.notificar(
+        notificacoes.notificar(
             sessao, cgp, f"{nome} quer baixar a folha de ponto, mas ainda não tem os dados preenchidos",
             f"{nome} tentou gerar a folha de ponto, mas os dados funcionais dele(a) ainda não foram preenchidos pela CGP: {lista}.\n\n"
             "Preencha em Usuários (janela de edição) ou em RH › Validações, bloco \"Jornada e documentos\".",
-            chave=f"{PREFIXO_AVISO_DADOS}{usuario.id}:{hoje:%Y%m%d}", categoria="pendencia", link=link, email=True,
-        )
+            chave=f"{PREFIXO_AVISO_DADOS}{usuario.id}:{hoje:%Y%m%d}", categoria="pendencia", link=link, evento="rh.folha_ponto_bloqueada")
         sessao.commit()
         raise FolhaBloqueada(
             f"Seus dados funcionais ainda não foram preenchidos pela CGP ({lista}). A folha de ponto fica disponível "
@@ -144,7 +142,7 @@ def verificar(sessao: Session, usuario: Usuario, hoje: date) -> None:
 def encerrar_aviso_dados(sessao: Session, funcionais: DadosFuncionais) -> None:
     """Com os dados completos, os avisos "dados não preenchidos" deste usuário deixam de pedir ação da CGP."""
     if not campos_faltantes(funcionais):
-        servico_mensagens.encerrar(sessao, prefixo=f"{PREFIXO_AVISO_DADOS}{funcionais.usuario_id}:")
+        notificacoes.encerrar(sessao, prefixo=f"{PREFIXO_AVISO_DADOS}{funcionais.usuario_id}:")
 
 
 def rotulo_competencia(ano: int, mes: int) -> str:

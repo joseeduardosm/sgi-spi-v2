@@ -2,7 +2,7 @@
 # Este arquivo serve para montar o layout oficial dos e-mails do SGI SPI (logo do Governo, cabeçalho institucional e rodapé).
 """Layout oficial dos e-mails do SGI SPI.
 
-Todos os e-mails do sistema (mensageria, avisos dos contratos, teste do servidor SMTP) usam `pagina`:
+Todos os e-mails do sistema (notificações, avisos dos contratos, teste do servidor SMTP) usam `pagina`:
 - cabeçalho com o **logo centralizado** (`2-horizontal-slogan-para-emails.png`: Secretaria de Parcerias em Investimentos e
   Governo do Estado de São Paulo; imagem embutida, `cid:logo-sp`: aparece sem depender de acesso à rede interna nem do
   bloqueio de imagens externas do Outlook), com o filete vermelho institucional;

@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para exibir uma notícia publicada: capa, texto, anexos (PDF incorporado) e "leia também".
 
+import { BotaoCopiarComponent } from '../../../shared/componentes/botao-copiar/botao-copiar.component';
 import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -10,9 +11,10 @@ import { NoticiasApiService } from '../noticias-api.service';
 import { dataCurta, NoticiaPublica, srcsetCapa, tamanhoLegivel } from '../noticias.models';
 import { CartaoNoticiaComponent } from './cartao-noticia.component';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-noticia',
-  imports: [RouterLink, CartaoNoticiaComponent],
+  imports: [BotaoCopiarComponent, EsqueletoComponent, RouterLink, CartaoNoticiaComponent],
   template: `
     @if (noticia(); as n) {
       <article class="noticia-publica">
@@ -23,7 +25,7 @@ import { CartaoNoticiaComponent } from './cartao-noticia.component';
           @if (n.linha_fina) { <p class="linha-fina-noticia">{{ n.linha_fina }}</p> }
           <div class="meta-noticia">
             <span>{{ data(n.publicada_em) }}</span>
-            <button type="button" class="link-simples" (click)="copiarLink()">{{ copiado() ? 'Link copiado' : 'Copiar link' }}</button>
+            <app-botao-copiar [valor]="endereco" rotulo="Copiar link" tamanho="pequeno" />
           </div>
         </header>
         @if (n.capa['1600']) {
@@ -49,7 +51,7 @@ import { CartaoNoticiaComponent } from './cartao-noticia.component';
     } @else if (naoEncontrada()) {
       <div class="estado-vazio"><p>Notícia não encontrada ou ainda não publicada.</p><a routerLink="/noticias">Ver todas as notícias</a></div>
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="lista" [linhas]="4" />
     }
   `,
 })
@@ -60,7 +62,6 @@ export class NoticiaComponent implements OnInit {
   private readonly sanitizador = inject(DomSanitizer);
   protected readonly noticia = signal<NoticiaPublica | null>(null);
   protected readonly naoEncontrada = signal(false);
-  protected readonly copiado = signal(false);
   protected readonly data = dataCurta;
   protected readonly tamanho = tamanhoLegivel;
   protected readonly srcset = (n: NoticiaPublica) => srcsetCapa(n.capa);
@@ -81,7 +82,5 @@ export class NoticiaComponent implements OnInit {
     });
   }
 
-  protected copiarLink(): void {
-    void navigator.clipboard?.writeText(location.href).then(() => { this.copiado.set(true); setTimeout(() => this.copiado.set(false), 2000); });
-  }
+  protected get endereco(): string { return location.href; }
 }

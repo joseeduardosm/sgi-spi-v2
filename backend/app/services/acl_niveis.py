@@ -34,6 +34,11 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
         "MODIFICACAO": _n("Reservar números de documentos", "Reserva o próximo número de ofício, portaria ou resolução, anexa o documento, marca sigilo, vincula a contrato e libera a própria reserva."),
         "CONTROLE_TOTAL": _n("Administrar o Protocolo", "Tudo isso e também cria tipos de documento e faixas de numeração, lança números já usados e anula números."),
     },
+    "patrimonio": {
+        "LEITURA": _n("Consultar o patrimônio", "Vê bens, locais, histórico, trajeto, movimentações e painéis, e exporta para Excel e PDF."),
+        "MODIFICACAO": _n("Cadastrar bens e solicitar", "Cadastra e edita bens (avulso e em lote), informa a sala dos bens ainda sem local (levantamento inicial) e solicita movimentações, classificações como inservível ou extraviado e baixas, sem aprovar nenhuma."),
+        "CONTROLE_TOTAL": _n("Administrar o patrimônio", "Tudo isso e também autoriza, recusa e confirma o recebimento das movimentações, aprova ou recusa classificações e baixas, cadastra salas e grupos, ajusta a UFESP e muda o local de um bem sem movimentação."),
+    },
     "contratos": {
         "LEITURA": _n("Consultar contratos", "Vê contratos, empresas, execução, calendário de vencimentos e relatórios do módulo."),
         "MODIFICACAO": _n("Editar contratos e conduzir a execução", "Cria contratos e empresas, importa planilhas e, sendo da equipe do contrato (ou o criador), edita o contrato, conduz as etapas da competência e solicita a portaria de designação. Exclui os contratos que ele mesmo criou."),
@@ -74,10 +79,15 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
         "MODIFICACAO": _n("Redigir notícias", "Tudo isso e também escreve e edita notícias e as envia para aprovação."),
         "CONTROLE_TOTAL": _n("Aprovar e publicar notícias", "Tudo isso e também aprova e publica; recebe o pedido de aprovação."),
     },
-    "mensageria-setores": {
+    "notificacoes-setores": {
         "LEITURA": _n("Sem efeito", "O envio para setores só existe no Controle total."),
         "MODIFICACAO": _n("Sem efeito", "O envio para setores só existe no Controle total."),
-        "CONTROLE_TOTAL": _n("Enviar mensagens a setores", "Envia mensagens para setores inteiros."),
+        "CONTROLE_TOTAL": _n("Enviar notificações a setores", "Envia notificações para setores inteiros."),
+    },
+    "notificacoes-obrigatorias": {
+        "LEITURA": _n("Sem efeito", "Definir eventos obrigatórios só existe no Controle total."),
+        "MODIFICACAO": _n("Sem efeito", "Definir eventos obrigatórios só existe no Controle total."),
+        "CONTROLE_TOTAL": _n("Definir notificações obrigatórias", "Escolhe quais eventos e canais (e-mail, navegador, desktop) são obrigatórios para um setor ou usuário; ninguém consegue desligar."),
     },
     "usuarios": {
         "LEITURA": _n("Consultar usuários", "Vê a lista e os dados dos usuários."),

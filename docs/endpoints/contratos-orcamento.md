@@ -57,7 +57,9 @@ Planilha com as abas "Previsão mensal" e "Itens por competência".
 
 ## `GET /api/contratos/{contrato_id}/notas-empenho`
 
-`LeituraNotaEmpenho[]`: `id`, `numero`, `valor_original`, `consumido`, `saldo`, `comprometido`, `saldo_livre`, `percentual_consumido`, `faixa`, `vinculada`, `criado_em` e `movimentos[]` (`data`, `tipo` — `pagamento` ou `estorno`, `competencia`, `competencia_id`, `competencia_rotulo`, `debito` — negativo no estorno, `saldo_apos`, `justificativa` — motivo da reabertura no estorno, `autor`).
+`LeituraNotaEmpenho[]`: `id`, `numero`, `valor_original`, `consumido`, `cancelado`, `saldo`, `comprometido`, `saldo_livre`, `percentual_consumido`, `faixa`, `vinculada`, `criado_em` e `movimentos[]` (`data`, `tipo` — `pagamento` ou `estorno`, `competencia`, `competencia_id`, `competencia_rotulo`, `debito` — negativo no estorno, `saldo_apos`, `justificativa` — motivo da reabertura no estorno, `autor`).
+
+`cancelamentos[]` traz as NEs de cancelamento aplicadas (`id`, `numero`, `valor`, `justificativa`, `autor`, `criado_em`). Saldo = valor original − débitos − cancelamentos.
 
 O estorno surge quando uma competência paga é reaberta (ver [contratos-execucao.md](contratos-execucao.md)); o pagamento original continua no extrato.
 
@@ -73,9 +75,19 @@ Resposta **`201`**: a lista atualizada. Erros: `409` (número repetido), `422` (
 
 Mesmo corpo. Resposta `200`: a lista. Erros: `400` (valor abaixo do consumido), `409`, `404`.
 
+## `POST /api/contratos/{contrato_id}/notas-empenho/{nota_id}/cancelamentos`
+
+Registra a **NE de cancelamento**: abate `valor` do saldo da NE original (parcial ou total).
+
+```json
+{ "numero": "2026NE00099", "valor": "50000.00", "justificativa": "Redução do escopo" }
+```
+
+Regras: o `numero` (até 30) é único no contrato entre NEs e cancelamentos (sem diferenciar maiúsculas); `valor` > 0 e até o saldo atual da NE, mesmo que parte esteja reservada por medições. Se, depois do cancelamento, nenhuma NE do contrato tiver saldo, **salvar e concluir a medição** são recusados (`400`, "As NEs de cancelamento consumiram todo o saldo…"); as demais etapas não mudam. NE com cancelamento não pode ser excluída nem ter o valor abaixo de consumido + cancelado. Resposta **`201`**: a lista de NEs. Erros: `400` (valor acima do saldo), `404`, `409` (número repetido), `422`, `403`.
+
 ## `DELETE /api/contratos/{contrato_id}/notas-empenho/{nota_id}`
 
-Resposta **`204`**. Erros: `400` (NE ligada a competência ou com débitos), `404`.
+Resposta **`204`**. Erros: `400` (NE ligada a competência, com débitos ou com cancelamentos), `404`.
 
 ## Consumo no Angular
 

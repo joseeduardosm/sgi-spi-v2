@@ -110,6 +110,39 @@ def test_notas_de_empenho(cliente, admin, equipe):
     assert cliente.get("/api/contratos/relatorios/notas-empenho", headers=gestora).status_code == 403
 
 
+def test_ne_de_cancelamento_abate_saldo_e_bloqueia_medicao_sem_saldo(cliente, admin, equipe):
+    """Cancelamento: número próprio e único, até o saldo, parcial ou total; sem saldo em nenhuma NE, a medição é bloqueada."""
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()
+    nota = notas[0]
+    url = _url(contrato, f"/notas-empenho/{nota['id']}/cancelamentos")
+    saldo = nota["saldo"]
+    # Parcial: abate o saldo, aparece na lista e a faixa sobe
+    r = cliente.post(url, json={"numero": "2026NC1", "valor": "10.00", "justificativa": "Redução"}, headers=gestora)
+    assert r.status_code == 201
+    atual = next(n for n in r.json() if n["id"] == nota["id"])
+    assert atual["cancelado"] == "10.00" and atual["cancelamentos"][0]["numero"] == "2026NC1"
+    assert Decimal(atual["saldo"]) == Decimal(saldo) - 10
+    # Número repetido (inclusive o de uma NE), valor acima do saldo e valor zero
+    assert cliente.post(url, json={"numero": "2026nc1", "valor": "1"}, headers=gestora).status_code == 409
+    assert cliente.post(url, json={"numero": nota["numero"], "valor": "1"}, headers=gestora).status_code == 409
+    assert cliente.post(url, json={"numero": "NC2", "valor": str(Decimal(atual["saldo"]) + 1)}, headers=gestora).status_code == 400
+    assert cliente.post(url, json={"numero": "NC3", "valor": "0"}, headers=gestora).status_code == 422
+    # NE com cancelamento não pode ser excluída
+    assert cliente.delete(_url(contrato, f"/notas-empenho/{nota['id']}"), headers=gestora).status_code == 400
+    # Cancelando todo o saldo de todas as NEs, medir fica bloqueado
+    for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json():
+        if Decimal(n["saldo"]) > 0:
+            u = _url(contrato, f"/notas-empenho/{n['id']}/cancelamentos")
+            assert cliente.post(u, json={"numero": f"NC-{n['numero']}", "valor": n["saldo"]}, headers=gestora).status_code == 201
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": [nota["id"]]}
+    r = cliente.put(_url(contrato, f"/competencias/{competencia['id']}/medicao"), json=medicao, headers=gestora)
+    assert r.status_code == 400 and "cancelamento" in r.json()["detalhe"]
+
+
 # --- MVP 3: execução ponta a ponta -------------------------------------------------------------
 
 def test_requisitos_e_geracao_das_competencias(cliente, admin, equipe):
@@ -717,6 +750,15 @@ def test_zerar_competencia_apaga_a_medicao_e_as_etapas(cliente, admin, equipe):
     d = r.json()
     assert d["etapa_atual"] == "medicao" and d["ciencias"] == [] and d["notas_selecionadas"] == []
     assert all(i["quantidade_medida"] in ("0", "0.0000") or float(i["quantidade_medida"]) == 0 for i in d["itens"])
+    # Os arquivos das etapas descartadas (memória de cálculo) também são excluídos; o arquivo continua em disco para a auditoria
+    from sqlalchemy import select
+
+    from app.core.banco import FabricaSessao
+    from app.models.anexo import Anexo
+
+    with FabricaSessao() as sessao:
+        memorias = list(sessao.scalars(select(Anexo).where(Anexo.categoria == "contrato-execucao-memoria")))
+        assert memorias and all(m.excluido_em is not None for m in memorias)
 
 
 def test_itens_so_sao_copiados_no_primeiro_acesso_da_medicao(cliente, admin, equipe):
@@ -876,3 +918,40 @@ def test_medicao_adicional_exige_contrato_que_permita_e_edicao(cliente, admin, e
     # Quem não edita o contrato também não inclui
     r = cliente.post(_url(contrato, f"/competencias/{competencia['id']}/adicional"), data={"justificativa": "x"}, headers=cabecalho(cliente, "externo"))
     assert r.status_code == 403
+
+
+def test_acerto_de_centavos_por_item_soma_ao_valor_e_ao_total(cliente, admin, equipe):
+    """O acerto (+0,01, -0,02...) corrige dízimas item a item; soma ao subtotal do item e ao total medido, com validações."""
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = {n["numero"]: n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
+    ordem_notas = [notas["2026NE00001"], notas["2026NE00002"]]
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    itens = competencia["itens"]
+    assert all(i["acerto"] == "0" or float(i["acerto"]) == 0 for i in itens)
+
+    def gravar(acertos):
+        corpo = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"], **({"acerto": a} if a is not None else {})} for i, a in zip(itens, acertos)],
+                 "notas_empenho_ids": ordem_notas}
+        return cliente.put(f"{base}/medicao", json=corpo, headers=gestora)
+
+    sem = gravar([None, None]).json()
+    assert sem["total_medido"] == "2105.00"
+    r = gravar(["0.01", "-0.02"])
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["total_medido"] == "2104.99"  # 2105,00 + 0,01 - 0,02
+    assert [float(i["acerto"]) for i in d["itens"]] == [0.01, -0.02]
+    assert float(d["itens"][0]["subtotal"]) == float(sem["itens"][0]["subtotal"]) + 0.01
+    # Vazio mantém o acerto atual; zerar volta ao total original
+    assert gravar([None, None]).json()["total_medido"] == "2104.99"
+    assert gravar(["0", "0"]).json()["total_medido"] == "2105.00"
+    # Limite de R$ 1,00, só centavos (duas casas) e nunca negativando o item
+    assert gravar(["1.01", None]).status_code == 422
+    assert gravar(["0.005", None]).status_code == 422
+    corpo = {"itens": [{"id": itens[0]["id"], "quantidade_medida": "0", "acerto": "0.01"}, {"id": itens[1]["id"], "quantidade_medida": itens[1]["quantidade_prevista"]}],
+             "notas_empenho_ids": ordem_notas}
+    r = cliente.put(f"{base}/medicao", json=corpo, headers=gestora)
+    assert r.status_code == 400 and "medido" in r.json()["detalhe"]

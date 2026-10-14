@@ -9,10 +9,13 @@ import pytest
 from app.core.banco import FabricaSessao
 from app.models.rh import PeriodoAquisitivo
 from app.services.rh import servico_periodos
-from app.tarefas import mensageria
+from app.tarefas import notificacoes as tarefa_notificacoes
 from tests.apoio_rh import criar_cgp, funcionais, simular_smtp
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_smtp import SmtpSimulado, dados_servidor
+from tests.apoio_notificacoes import todos_com_email  # noqa: F401 - fixture usada por `usefixtures`
+
+pytestmark = pytest.mark.usefixtures("todos_com_email")
 
 URL = "/api/rh/afastamentos"
 
@@ -102,7 +105,7 @@ def test_credito_expiracao_e_avisos(cliente, equipe):
             avisos.append(servico_periodos.processar(sessao, dia)["avisos"])
     assert avisos == [0, 1, 0, 1, 1, 0]
     with FabricaSessao() as sessao:
-        mensageria.enviar_emails_pendentes(sessao)
+        tarefa_notificacoes.despachar_pendentes(sessao)
     assuntos = {(m["Subject"], para[0]) for m, _, para, _ in SmtpSimulado.enviadas}
     assert ("Férias a vencer: Ana Souza tem 30 dia(s) até 28/02/2027", "ana@sp.gov.br") in assuntos
     assert {para for _, para in assuntos} == {"ana@sp.gov.br", "chefe@sp.gov.br", "rh@sp.gov.br"}

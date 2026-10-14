@@ -39,8 +39,8 @@
         <div class="indicador destaque"><span>Pago</span><strong>{{ p.execucao.total_pago | moeda }}</strong><small>{{ percentualPago() | percentual }} do previsto</small></div>
         <div class="indicador"><span>Saldo de empenho</span><strong>{{ p.execucao.saldo_empenho | moeda }}</strong><small>de {{ p.execucao.empenhado | moeda }} empenhados</small></div>
       </div>
-      <app-grafico tipo="bar" titulo="Gráfico mensal de previsto, medido e pago (em milhares de reais)" formato="moedaMil"
-                   [rotulos]="rotulosMeses()" [series]="series()" [altura]="260" />
+      @defer (on idle) { <app-grafico tipo="bar" titulo="Gráfico mensal de previsto, medido e pago (em milhares de reais)" formato="moedaMil"
+                   [rotulos]="rotulosMeses()" [series]="series()" [altura]="260" /> } @placeholder { <app-esqueleto tipo="cartao" /> }
     </div>
   </section>
 
@@ -52,5 +52,5 @@
     <div class="indicador"><span>Base mensal dos ativos</span><strong>{{ p.numeros.base_mensal_ativos | moeda }}</strong></div>
   </div>
 } @else {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="painel" [linhas]="4" />
 }

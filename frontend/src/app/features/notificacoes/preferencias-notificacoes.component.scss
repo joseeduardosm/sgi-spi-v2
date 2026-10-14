@@ -1,0 +1,23 @@
+// Preferências das Notificações: mesmo recuo (24px) do cabeçalho do painel, blocos com respiro e matriz com colunas de canal estreitas.
+.pref-corpo { padding: 0 24px 24px; display: grid; gap: 22px; }
+.pref-corpo > .dica-formulario { margin: 0; }
+.pref-bloco { padding: 16px 18px; border: 1px solid var(--cor-e8eaec); border-radius: var(--spi-raio-g); background: var(--cor-fafbfc); }
+.pref-bloco h3 { margin: 0 0 10px; font-size: 15px; }
+.pref-bloco p { margin: 0 0 10px; }
+.pref-aviso { padding: 10px 14px; border-radius: var(--spi-raio-m); border: 1px solid var(--cor-e2e5e8); background: var(--cor-ffffff); }
+.pref-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.pref-marca { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.pref-matriz { th, td { vertical-align: middle; } }
+.pref-matriz .pref-canal { text-align: center; white-space: nowrap; width: 150px; }
+.pref-matriz .pref-canal .acao-pequena { display: block; margin: 6px auto 0; }
+.pref-matriz .pref-modulo th { padding-top: 14px; background: var(--cor-fafbfc); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+.pref-celula { text-align: center; }
+.pref-descricao { display: block; margin-top: 2px; color: var(--cor-7c8998); font-size: 12px; font-weight: 400; }
+.pref-obrigatoria { display: block; margin-top: 2px; color: var(--spi-vermelho-destaque); font-size: 11px; }
+.pref-indisponivel { color: var(--cor-7c8998); }
+.pref-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px 24px; }
+.pref-horas { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.pref-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pref-lista li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--cor-e2e5e8); border-radius: var(--spi-raio-m); background: var(--cor-ffffff); }
+.pref-rodape { display: flex; justify-content: flex-end; }
+@media (max-width: 767px) { .pref-matriz .pref-canal { width: auto; } .pref-corpo { padding: 0 14px 18px; } }

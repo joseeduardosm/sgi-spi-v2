@@ -8,10 +8,11 @@ import { DetalheLivro, ManuaisService } from '../../core/manuais/manuais.service
 import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 import { erroExibivel } from '../../shared/utilitarios/erros-api';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Sumário do livro: capítulos (com as páginas) e páginas soltas, na ordem do BookStack. */
 @Component({
   selector: 'app-livro-manual',
-  imports: [RouterLink, TrilhaComponent],
+  imports: [EsqueletoComponent, RouterLink, TrilhaComponent],
   template: `
     @if (livro(); as l) {
       <div class="cabecalho-pagina">
@@ -41,7 +42,7 @@ import { erroExibivel } from '../../shared/utilitarios/erros-api';
     } @else if (erro()) {
       <p class="aviso-admin erro" role="alert">{{ erro() }}</p>
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="lista" [linhas]="4" />
     }
   `,
 })

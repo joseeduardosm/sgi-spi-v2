@@ -248,6 +248,7 @@ class LeituraItemMedicao(BaseModel):
     fator_meses: ValorFator
     quantidade_prevista: ValorQuantidade
     quantidade_medida: Annotated[Decimal, Field(description="Até 10 casas.")]
+    acerto: Annotated[Decimal, Field(description="Acerto de centavos lançado na medição (ex.: 0,01 ou -0,02); soma ao `subtotal`.")] = Decimal(0)
     subtotal: ValorMonetario
     saldo: ValorQuantidade = Field(..., description="Contínuo: previsto da competência; sob demanda: saldo do item na vigência.")
     glosas: ValorQuantidade = Field(..., description="Glosas do diário de bordo com data no período da competência.")
@@ -583,6 +584,7 @@ class ItemMedidoGravacao(BaseModel):
     """Quantidade medida de um item (até 10 casas decimais, como no sistema de origem)."""
     id: uuid.UUID
     quantidade_medida: Annotated[Decimal, Field(ge=0, max_digits=28, decimal_places=10)]
+    acerto: Annotated[Decimal, Field(ge=-1, le=1, max_digits=6, decimal_places=2, description="Acerto de centavos do item (de -1,00 a +1,00; ex.: 0,01 ou -0,02) para absorver dízimas e arredondamentos. Só em item medido; vazio mantém o acerto atual.")] | None = None
     despesa_variavel: bool | None = Field(None, description="Marca o item como despesa variável nesta medição; vazio mantém a marca atual.")
 
 

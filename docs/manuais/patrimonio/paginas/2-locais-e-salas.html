@@ -1,0 +1,28 @@
+<p>Todo bem fica em uma <strong>sala</strong>. As salas formam uma árvore de até cinco níveis: o <strong>prédio SPI</strong>, o <strong>andar</strong>, o <strong>lado</strong> (A ou B), a <strong>sala</strong> e um nível reservado para usos futuros. Os andares vão do <strong>subsolo</strong> (andar -1) e do <strong>térreo</strong> (andar 0) até o <strong>13º</strong>.</p>
+<p>Toda a estrutura já vem pronta: todo andar tem os dois lados, com 15 salas em cada um. Abra <strong>Patrimônio › Locais</strong>:</p>
+[[l01-arvore-de-locais]]
+<h2>O código da sala</h2>
+<p>O código junta o <strong>andar</strong>, o <strong>lado</strong> e o <strong>número da sala</strong>:</p>
+<ul>
+<li>no quinto andar, as salas vão de <strong>05A01</strong> a <strong>05A15</strong> e de <strong>05B01</strong> a <strong>05B15</strong>;</li>
+<li>no térreo, de <strong>00A01</strong> a <strong>00B15</strong>;</li>
+<li>no subsolo, de <strong>-1A01</strong> a <strong>-1B15</strong>.</li>
+</ul>
+<p>O código é único: o sistema não aceita um repetido. Nas telas a sala aparece de forma curta, como <strong>5º andar › 05A03 — Setor Financeiro</strong> (o prédio e o lado não aparecem, porque o código já mostra o lado).</p>
+<h2>Setor e responsável da sala</h2>
+<p>Cada sala tem um <strong>setor</strong> e um <strong>responsável</strong>, que são informados <strong>no primeiro cadastro de bem feito ali</strong>: se a sala ainda não tem esses dados, o sistema mostra, na própria tela de cadastro do bem, os campos de setor e responsável, que são salvos junto com ele. Depois, só quem tem Controle total altera.</p>
+<ol>
+<li>Em <strong>Locais</strong>, abra o andar e o lado e localize a sala (ou pesquise pelo código, setor ou responsável).</li>
+<li>Clique em <strong>Setor e responsável</strong>, escolha o setor e pesquise o responsável.</li>
+<li>Clique em <strong>Salvar</strong>.</li>
+</ol>
+[[l02-setor-e-responsavel]]
+<p class="callout warn"><strong>Trocar o responsável atualiza todos os bens da sala de uma vez</strong>, e o histórico de cada bem registra a mudança. Quando um bem é movimentado, ele passa a ter o responsável da sala de destino.</p>
+<h2>Salas extras, inativar e excluir (Controle total)</h2>
+<ul>
+<li><strong>+ Sala</strong> (no lado) cria uma sala nova: você digita só o número, porque o andar e o lado vêm do nível de cima.</li>
+<li><strong>Inativar</strong> tira a sala de uso (ela deixa de aparecer para novos cadastros); <strong>Reativar</strong> a devolve.</li>
+<li><strong>Excluir</strong> só funciona em sala <strong>sem bens</strong>. Sala com bens vinculados só pode ser inativada.</li>
+</ul>
+<h2>O depósito de inservíveis</h2>
+<p>O depósito de inservíveis ainda não existe como sala própria. Quando for criado, basta dar a uma sala o setor <strong>"Depósito inservível"</strong>: a partir daí, é para ela que os bens inservíveis podem ser movimentados (e só para ela).</p>

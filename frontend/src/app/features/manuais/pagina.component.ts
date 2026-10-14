@@ -10,10 +10,11 @@ import { DetalheLivro, DetalhePagina, ManuaisService } from '../../core/manuais/
 import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 import { erroExibivel } from '../../shared/utilitarios/erros-api';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Página de manual: sumário do livro ao lado e o conteúdo (já sanitizado pela API) no centro. */
 @Component({
   selector: 'app-pagina-manual',
-  imports: [RouterLink, DatePipe, NgTemplateOutlet, TrilhaComponent],
+  imports: [EsqueletoComponent, RouterLink, DatePipe, NgTemplateOutlet, TrilhaComponent],
   template: `
     @if (pagina(); as p) {
       <div class="cabecalho-pagina">
@@ -46,7 +47,7 @@ import { erroExibivel } from '../../shared/utilitarios/erros-api';
     } @else if (erro()) {
       <p class="aviso-admin erro" role="alert">{{ erro() }}</p>
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="lista" [linhas]="4" />
     }
 
     <ng-template #entrada let-item="item" let-atual="atual">

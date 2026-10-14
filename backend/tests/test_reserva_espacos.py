@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from sqlalchemy import select
 
 from app.core.banco import FabricaSessao, hoje_sao_paulo
-from app.models.mensagem import Mensagem
+from app.models.notificacao import Notificacao
 from app.models.reserva_espacos import EventoReservaEspaco
 from app.services import servico_reserva_espacos as servico
 from tests.conftest import cabecalho, criar_usuario
@@ -72,7 +72,7 @@ def test_solicitar_deferir_e_conflito(cliente, admin):
     b = outra.json()["reservas"][0]
     # O fiscal recebeu aviso da nova solicitação
     with FabricaSessao() as sessao:
-        assert any("Nova solicitação" in m.assunto for m in sessao.scalars(select(Mensagem)))
+        assert any("Nova solicitação" in m.assunto for m in sessao.scalars(select(Notificacao)))
     r = cliente.post(f"{URL}/reservas/{a['id']}/analise", json={"decisao": "deferir"}, headers=fiscal)
     assert r.status_code == 200 and r.json()[0]["status"] == "DEFERIDA" and r.json()[0]["fiscal_nome"] == "Fiscal Um"
     # Agora o horário está ocupado: nova solicitação e deferimento da outra dão 409; horário colado (fim = início) é permitido
@@ -132,7 +132,7 @@ def test_recorrencia_e_acoes_em_serie(cliente, admin):
     assert len(resto.json()) == 1
     # Cancelamento do solicitante avisa os fiscais
     with FabricaSessao() as sessao:
-        assert any("Reserva cancelada" in m.assunto for m in sessao.scalars(select(Mensagem)))
+        assert any("Reserva cancelada" in m.assunto for m in sessao.scalars(select(Notificacao)))
         assert sessao.scalar(select(EventoReservaEspaco).where(EventoReservaEspaco.tipo == "CANCELAMENTO")) is not None
 
 

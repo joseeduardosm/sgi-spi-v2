@@ -28,13 +28,13 @@
       height: 40px;
       padding: 0 12px;
       border: 1px solid var(--cor-e2e5e8);
-      border-radius: 7px;
+      border-radius: var(--spi-raio-p);
       outline: 0;
       color: var(--cor-3d454e);
       background: var(--cor-fcfcfc);
       font-size: 13px;
 
-      &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; }
+      &:focus { border-color: #bc3843; box-shadow: var(--spi-anel-foco); }
     }
 
     .ajuda { color: #8c97a4; font-size: 11.5px; }
@@ -64,7 +64,7 @@
       height: 34px;
       padding: 0 10px;
       border: 1px solid var(--cor-dfe3e7);
-      border-radius: 999px;
+      border-radius: var(--spi-raio-pilula);
       color: var(--cor-5a6673);
       background: var(--cor-ffffff);
       font-size: 12px;
@@ -76,7 +76,7 @@
       input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
       &:hover { border-color: #bc3843; }
       &.marcado { border-color: #bc3843; color: #8d1f2b; background: var(--cor-fcf0f1); }
-      &:has(input:focus-visible) { box-shadow: 0 0 0 3px #af374122; }
+      &:has(input:focus-visible) { box-shadow: var(--spi-anel-foco); }
     }
   }
 
@@ -94,7 +94,7 @@
       margin: 0;
       padding: 12px 14px;
       border: 1px solid var(--cor-e8eaec);
-      border-radius: 9px;
+      border-radius: var(--spi-raio-m);
       background: var(--cor-fcfcfc);
       cursor: pointer;
 
@@ -139,9 +139,9 @@
     margin-top: 4px;
     padding: 12px 22px;
     border: 1px solid var(--cor-e8eaec);
-    border-radius: 12px;
+    border-radius: var(--spi-raio-g);
     background: var(--cor-ffffff);
-    box-shadow: 0 -6px 18px #401e2010;
+    box-shadow: var(--spi-sombra-sutil);
 
     .atualizacao { color: var(--cor-7c8998); font-size: 12px; b { color: var(--cor-4b5663); } }
   }

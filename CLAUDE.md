@@ -2,14 +2,26 @@
 
 **Leia e siga `AGENTS.md`**: código em pt-BR (nomes e comentários), documentação obrigatória da API e escopo.
 
+- **Elemento ou tela que ainda não existe no SGI:** se não houver tela equivalente para copiar, **não implemente direto**. Consulte as referências da seção "Referências para elementos novos" do `DESIGN.md`, proponha 2 ou 3 opções e **espere eu escolher** antes de escrever código.
+
 - Todo o sistema fica em `/home/administrador/projeto` (sem cópia em /var/www). Nginx e systemd apontam para cá; API em 127.0.0.1:8000.
 
 - Backend FastAPI em `backend/` (venv em `backend/.venv`, testes `backend/.venv/bin/pytest -q -n 8`, em paralelo; evite rodar a suíte inteira sem necessidade, prefira os testes afetados). Frontend Angular em `frontend/` (`npx ng test --watch=false`, `npx ng build`).
 - **Regra obrigatória:** toda criação, alteração ou remoção de endpoint, parâmetro, schema, resposta, código HTTP, autenticação/autorização ou funcionalidade consumida pelo frontend deve atualizar `docs/` (em português) **na mesma alteração**. Siga o modelo de `docs/endpoints/autenticacao.md` e o índice de `docs/api.md`. Atualize também `test_openapi_documenta_endpoints`.
 - **CHANGELOG, BookStack e GitHub (commit/push) só quando o usuário mandar**; até lá, as alterações ficam no working tree e o foco é o que foi pedido (ver `AGENTS.md`).
 - Fluxo: implementação → endpoint → schemas e regras → docs/ → OpenAPI (summary, description, response_model, responses) → Angular → testes.
+
+## Interface (frontend)
+
+- **Leia e siga `DESIGN.md`** antes de criar ou alterar qualquer tela: cores, tipografia, raios, espaçamento, componentes, status, celular e movimento estão lá. A identidade é a de `frontend/src/styles.scss` (referência: portal em 10.23.3.190). Não invente outra identidade.
+- **Vocabulário fechado (DESIGN.md):** raios só `var(--spi-raio-p|m|g|gg|pilula)`; pesos 400/600/700 (800 só em título de página e sobretítulo); **borda de 1px em vez de sombra** em cards, tabelas e formulários (sombra só em menus, modais e foco: `--spi-sombra-*`, `--spi-anel-foco`); status sempre em pílula `.selo-*` com `--spi-sucesso/alerta/perigo/info(-suave)`; filtros rápidos em `.chips-filtro`; códigos e números de identificação (chapa, processo, contrato, CNPJ) com `.texto-codigo` (Geist Mono). Fonte da interface: Inter.
+- **Só variáveis de cor:** use `var(--spi-*)` ou uma `--cor-*` existente, nunca hex fixo em componente, para valer nos temas claro e escuro. O vermelho SPI é o único acento: ação principal, item ativo e foco. Outras cores só com significado de status (`--spi-sucesso`, `--spi-alerta`, `--spi-perigo`, `--spi-info`).
 - Campos de formulário (`select`, `textarea`, `input`) já têm **estilo base global** em `frontend/src/styles.scss`: não precisam de classe nem de CSS próprio para ficar no padrão (o estilo por contexto, como `.grade-formulario select`, só ajusta o que for específico). Nunca deixe um campo no visual nativo do navegador.
-- Novas telas usam a identidade visual de `frontend/src/styles.scss` (referência: portal em 10.23.3.190). Não invente outra identidade.
+- **Margens, paddings e alinhamento (sem erro visual):** antes de escrever o HTML/CSS de uma tela, **procure uma tela existente equivalente e copie a estrutura e as classes dela** (ex.: filtros e busca do Protocolo usam `.barra-protocolo` + `.campo` com o `label` **acima** do campo; ações no rodapé de cartão usam `footer.acoes-formulario` com padding; telas em `.painel-gestao`; status em `.selo-*`; filtros rápidos em `.chips-filtro`). Nunca crie classe própria de campo/barra quando já existe uma global; **cheque se o nome da classe já existe** (`grep -rn "nome-da-classe" frontend/src`), pois classes globais de outros módulos vazam e quebram o layout. Todo botão, campo e cartão precisa ter espaçamento interno e entre vizinhos (nada colado na borda ou em outro elemento). Depois do `ng build`, descreva ao usuário o que conferiu; se não abriu a tela, diga.
+- **Movimento (ver `docs/movimento.md`):** toda carga de dados usa `<app-esqueleto>` (nunca o texto "Carregando…"), modais/menus usam as classes e `animate.leave` de `_movimento.scss`, botões de salvar levam `[class.carregando]`, imagens levam `loading="lazy"`, e gráficos/editor rico ficam em `@defer`. Nada anima ação frequente ou de teclado, e `prefers-reduced-motion` é respeitado. Rode `npm run verificar:movimento` em `frontend/`.
+
+## Rotas, ACL, segurança e banco
+
 - Novas rotas autenticadas entram como filhas da rota `''` (`LayoutAutenticadoComponent` + `guardaAutenticacao`/`guardaPerfil`) em `frontend/src/app/app.routes.ts`; módulos usam `guardaAcl`. Todo módulo novo ganha item na barra lateral em `frontend/src/app/core/navegacao/navegacao.ts` (grupo `modulos`) e recurso na ACL; no backend, `exigir_acl("slug", nivel)`.
 - Senhas nunca em texto puro no código ou no `.env`: use hash bcrypt (`scripts/gerar-hash-senha.py`).
 - Banco PostgreSQL via SQLAlchemy 2 + Alembic: toda alteração de modelo em `backend/app/models/` exige migração em `backend/alembic/versions/` (autogenerate + revisão manual).

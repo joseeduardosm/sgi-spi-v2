@@ -20,6 +20,7 @@ import { ResultadoBusca } from '../busca-global/busca-global.component';
 import { COMANDOS, ComandoPaleta, filtrarComandos } from './paleta-comandos.registro';
 import { PaletaComandosService } from './paleta-comandos.service';
 
+import { EsqueletoComponent } from '../esqueleto/esqueleto.component';
 /** Linha da paleta: o que mostra e o que faz ao escolher. */
 interface Entrada {
   chave: string;
@@ -36,7 +37,7 @@ interface Entrada {
  */
 @Component({
   selector: 'app-paleta-comandos',
-  imports: [FormsModule],
+  imports: [EsqueletoComponent, FormsModule],
   template: `
     @if (paleta.aberta()) {
       <div class="paleta-fundo" role="presentation" (click)="paleta.fechar()"></div>
@@ -52,7 +53,7 @@ interface Entrada {
               <strong>{{ e.rotulo }}</strong>@if (e.descricao) { <small>{{ e.descricao }}</small> }
             </button>
           } @empty {
-            <p class="sem-resultado-busca">{{ carregando() ? 'Buscando…' : 'Nada encontrado para "' + termo().trim() + '".' }}</p>
+            <div class="sem-resultado-busca">@if (carregando()) { <app-esqueleto tipo="texto" [linhas]="2" /> } @else { {{ 'Nada encontrado para "' + termo().trim() + '".' }} }</div>
           }
         </div>
         <footer class="paleta-rodape"><span>↑↓ escolher</span><span>Enter abrir</span><span>Esc fechar</span></footer>

@@ -30,7 +30,7 @@ import { VerificacaoDocumento } from '../compartilhado/contratos.models';
         <div class="grade-formulario">
           <div><label for="codigo-verificacao">Código de verificação (da Folha de autenticação)</label>
             <input id="codigo-verificacao" name="codigo" maxlength="40" placeholder="XXXX-XXXX-XXXX-XXXX" [(ngModel)]="codigo" (keydown.enter)="verificarCodigo()" /></div>
-          <div class="acoes-formulario" style="align-self: end"><button type="button" class="acao-primaria" [disabled]="!codigo.trim() || carregando()" (click)="verificarCodigo()">Verificar código</button></div>
+          <div class="acoes-formulario" style="align-self: end"><button type="button" class="acao-primaria" [class.carregando]="carregando()" [disabled]="!codigo.trim() || carregando()" (click)="verificarCodigo()">Verificar código</button></div>
         </div>
         <p class="secao-formulario">Ou envie o PDF</p>
         <div class="acoes-cartao esquerda"><app-envio-pdf rotulo="Selecionar PDF para verificar" (selecionado)="verificarArquivo($event)" /></div>

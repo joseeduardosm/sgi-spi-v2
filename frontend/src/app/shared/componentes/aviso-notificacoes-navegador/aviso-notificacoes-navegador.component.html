@@ -1,0 +1,11 @@
+@if (visivel()) {
+  <section class="aviso-notificacoes" animate.leave="mov-sai" role="dialog" aria-label="Notificações do navegador">
+    <h2>Receber avisos neste navegador?</h2>
+    <p>Ative as notificações para ser avisado de comunicados, tarefas e demais eventos do SGI SPI mesmo com a aba em segundo plano. Em seguida o navegador vai pedir a sua permissão.</p>
+    @if (erro()) { <p class="erro">{{ erro() }}</p> }
+    <div class="acoes">
+      <button type="button" class="btn btn-outline-secondary" (click)="agoraNao()" [disabled]="ativando()">Agora não</button>
+      <button type="button" class="btn btn-primary botao-acao" (click)="ativar()" [disabled]="ativando()">{{ ativando() ? 'Ativando…' : 'Ativar notificações' }}</button>
+    </div>
+  </section>
+}

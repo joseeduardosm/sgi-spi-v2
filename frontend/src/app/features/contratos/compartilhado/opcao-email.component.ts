@@ -4,6 +4,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, model, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Um destinatário possível (preposto, usuário do Financeiro…). */
 export interface Destinatario {
   id: string | number;
@@ -24,6 +25,7 @@ export interface GrupoDestinatarios {
  * `selecionados` devolve os ids escolhidos (lista vazia = ninguém dessa lista; `null` enquanto a lista não carregou = todos).
  */
 @Component({
+  imports: [EsqueletoComponent],
   selector: 'app-opcao-email',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -39,7 +41,7 @@ export interface GrupoDestinatarios {
             <small>{{ rotuloLista() }}: {{ escolhidos().size }} de {{ total() }}</small>
           </div>
           @if (carregando()) {
-            <p class="dica-formulario">Carregando…</p>
+            <app-esqueleto tipo="lista" [linhas]="4" />
           } @else if (!total()) {
             <p class="dica-formulario">{{ vazio() }}</p>
           }
@@ -62,7 +64,7 @@ export interface GrupoDestinatarios {
     .opcao-email { display: inline-flex; align-items: center; gap: 8px; color: var(--cor-464f5a); font-size: 13px; font-weight: 600; cursor: pointer; }
     input[type='checkbox'] { width: 16px; height: 16px; margin: 0; accent-color: #af3741; }
     small { display: block; color: var(--cor-6a7786); font-size: 11.5px; font-weight: 400; }
-    .seletor-destinatarios { min-width: 340px; max-width: 520px; max-height: 260px; margin-top: 8px; padding: 10px 12px; overflow: auto; border: 1px solid var(--cor-e2e5e8); border-radius: 8px; background: var(--cor-fbfbfc); }
+    .seletor-destinatarios { min-width: 340px; max-width: 520px; max-height: 260px; margin-top: 8px; padding: 10px 12px; overflow: auto; border: 1px solid var(--cor-e2e5e8); border-radius: var(--spi-raio-m); background: var(--cor-fbfbfc); }
     .cabecalho-seletor { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--cor-eceef0); font-size: 12.5px; }
     .cabecalho-seletor label, .titulo-grupo, .destinatario { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .grupo-destinatarios { margin-top: 8px; }

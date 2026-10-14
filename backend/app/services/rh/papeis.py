@@ -43,6 +43,13 @@ def setores_cgp(sessao: Session) -> list[Setor]:
     return setor_com_descendentes(sessao, raizes)
 
 
+def setores_apoio_administrativo(sessao: Session) -> list[Setor]:
+    """Setor do Serviço de Apoio Administrativo (SAA) e seus descendentes; vazio se o setor não existir."""
+    nome = obter_configuracao().setor_apoio_administrativo.strip().lower()
+    raizes = [s.id for s in sessao.scalars(select(Setor)) if s.nome.strip().lower() == nome]
+    return setor_com_descendentes(sessao, raizes)
+
+
 def usuarios_dos_setores(sessao: Session, setores: list[Setor]) -> list[Usuario]:
     """Usuários ativos que são membros dos setores ou têm um deles como Departamento."""
     if not setores:
@@ -62,6 +69,11 @@ def usuarios_cgp(sessao: Session) -> list[Usuario]:
 
 def eh_cgp(sessao: Session, usuario: Usuario) -> bool:
     return usuario.superusuario or any(u.id == usuario.id for u in usuarios_cgp(sessao))
+
+
+def eh_apoio_administrativo(sessao: Session, usuario: Usuario) -> bool:
+    """Usuário alocado no Serviço de Apoio Administrativo (membro do setor ou com o setor como Departamento). O SuperRoot não entra por aqui."""
+    return any(u.id == usuario.id for u in usuarios_dos_setores(sessao, setores_apoio_administrativo(sessao)))
 
 
 def exigir_cgp(sessao: Session, usuario: Usuario) -> None:

@@ -47,8 +47,9 @@ const CHAVE_RECOLHIDA = 'tarefas.navegacao.recolhida';
                [routerLink]="['/tarefas/equipes', item.equipe.id]" routerLinkActive="ativo" [title]="item.equipe.nome">
               <span class="ponto-equipe" aria-hidden="true"></span>
               <span class="nome-navegacao">{{ item.equipe.nome }}</span>
-              @if (item.equipe.lider && item.equipe.indicadores.em_validacao) {
-                <span class="contagem-navegacao alerta" title="Entregas para validar">{{ item.equipe.indicadores.em_validacao }}</span>
+              @if (item.equipe.indicadores.em_validacao + item.equipe.indicadores.subtarefas_em_validacao; as aguardando) {
+                <span class="contagem-navegacao" [class.alerta]="item.equipe.lider"
+                      [title]="item.equipe.lider ? 'Entregas e subtarefas para você validar' : 'Entregas e subtarefas aguardando validação da liderança'">◷ {{ aguardando }}</span>
               }
               <span class="contagem-navegacao" title="Tarefas em aberto">{{ item.equipe.indicadores.operacionais }}</span>
             </a>

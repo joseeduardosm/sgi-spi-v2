@@ -13,12 +13,13 @@ import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.componen
 import { ContratacoesApiService } from './contratacoes-api.service';
 import { DocumentoResumo, ListaDocumentos, PainelContratacoes, PreviaImportacao, ROTULOS_PAPEL, ROTULOS_SITUACAO, ROTULOS_TIPO, TipoDocumento } from './contratacoes.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 type Janela = null | 'novo' | 'importar';
 
 /** Lista os ETP e TR que o usuário enxerga (criador, membro ou administração) e cria ou importa novos. */
 @Component({
   selector: 'app-lista-contratacoes',
-  imports: [FormsModule, DatePipe, RouterLink, TrilhaComponent],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, RouterLink, TrilhaComponent],
   template: `
     <div class="cabecalho-pagina">
       <div>
@@ -58,7 +59,7 @@ type Janela = null | 'novo' | 'importar';
       </div>
 
       @if (!lista()) {
-        <p class="estado-vazio">Carregando…</p>
+        <app-esqueleto tipo="lista" [linhas]="4" />
       } @else if (!lista()!.itens.length) {
         <p class="estado-vazio">Nenhum documento encontrado.</p>
       } @else {
@@ -85,8 +86,8 @@ type Janela = null | 'novo' | 'importar';
     </section>
 
     @if (janela() === 'novo') {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-novo">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-novo">
         <header><div><span class="modal-sobretitulo">Contratações</span><h2 id="titulo-novo">Novo documento</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
         <form (ngSubmit)="criar()" class="form-contratacoes">
           <div class="grade-formulario uma-coluna">
@@ -102,8 +103,8 @@ type Janela = null | 'novo' | 'importar';
     }
 
     @if (janela() === 'importar') {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-imp">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-imp">
         <header><div><span class="modal-sobretitulo">Contratações</span><h2 id="titulo-imp">Importar um Word</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
         <div class="form-contratacoes">
           <div class="grade-formulario">

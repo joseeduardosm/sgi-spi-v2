@@ -9,6 +9,9 @@ import { ambiente } from '../../../environments/ambiente';
 import { baixarArquivo } from '../../shared/utilitarios/download';
 import { ListaNumeros, ListaTipos, NumeroProtocolo, PainelProtocolo, SequenciaProtocolo, TipoProtocolo } from './protocolo.models';
 
+/** Faixa de um exercício; `liberar_a_partir_de` (opcional) reserva ao SAA o início da faixa. */
+export interface DadosSequencia { exercicio: number; inicio: number; fim: number; liberar_a_partir_de?: number | null }
+
 @Injectable({ providedIn: 'root' })
 export class ProtocoloApiService {
   private readonly http = inject(HttpClient);
@@ -18,23 +21,28 @@ export class ProtocoloApiService {
     return this.http.get<ListaTipos>(`${this.base}/tipos`);
   }
 
-  criarTipo(nome: string): Observable<TipoProtocolo> {
-    return this.http.post<TipoProtocolo>(`${this.base}/tipos`, { nome });
+  /** Cria o tipo e, com `sequencia`, a faixa do primeiro exercício na mesma chamada. */
+  criarTipo(nome: string, sequencia?: DadosSequencia): Observable<TipoProtocolo> {
+    return this.http.post<TipoProtocolo>(`${this.base}/tipos`, sequencia ? { nome, sequencia } : { nome });
   }
 
   renomearTipo(id: string, nome: string): Observable<TipoProtocolo> {
     return this.http.put<TipoProtocolo>(`${this.base}/tipos/${id}`, { nome });
   }
 
+  excluirSequencia(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/sequencias/${id}`);
+  }
+
   excluirTipo(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/tipos/${id}`);
   }
 
-  criarSequencia(tipoId: string, dados: { exercicio: number; inicio: number; fim: number }): Observable<SequenciaProtocolo> {
+  criarSequencia(tipoId: string, dados: DadosSequencia): Observable<SequenciaProtocolo> {
     return this.http.post<SequenciaProtocolo>(`${this.base}/tipos/${tipoId}/sequencias`, dados);
   }
 
-  alterarFaixa(sequenciaId: string, dados: { inicio: number; fim: number }): Observable<SequenciaProtocolo> {
+  alterarFaixa(sequenciaId: string, dados: { inicio: number; fim: number; liberar_a_partir_de?: number | null }): Observable<SequenciaProtocolo> {
     return this.http.put<SequenciaProtocolo>(`${this.base}/sequencias/${sequenciaId}/faixa`, dados);
   }
 

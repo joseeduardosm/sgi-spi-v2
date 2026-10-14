@@ -15,7 +15,7 @@ from sqlalchemy import text
 from app.core.banco import FUSO_SAO_PAULO
 from app.core.banco import FabricaSessao
 from app.core.configuracao import obter_configuracao
-from app.services import servico_diretorio, servico_mensagens
+from app.services import servico_diretorio
 
 registro_log = logging.getLogger(__name__)
 ID_TRAVA = 7_300_002  # identificador arbitrário do advisory lock (o da sincronização LDAP é 7_300_001)
@@ -64,7 +64,6 @@ class AgendadorParabens:
             finally:
                 sessao.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": ID_TRAVA})
                 sessao.commit()
-        for mensagem_id in ids:
-            servico_mensagens.enviar_emails(mensagem_id)
+        # Os e-mails e pop-ups saem sozinhos no commit (cada pessoa recebe pelos canais que ligou em Preferências)
         registro_log.info("Parabéns automático: %s mensagem(ns) para %s.", len(ids), hoje.isoformat())
         return len(ids)

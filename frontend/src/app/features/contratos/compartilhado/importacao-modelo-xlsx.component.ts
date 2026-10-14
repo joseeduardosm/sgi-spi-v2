@@ -23,8 +23,8 @@ import { PreviaImportacaoModelo } from './contratos.models';
     }
 
     @if (aberta()) {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-modelo">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-modelo">
         <header>
           <div>
             <span class="modal-sobretitulo">{{ contratoId() ? 'Contrato' : 'Modelos globais' }}</span>
@@ -36,7 +36,7 @@ import { PreviaImportacaoModelo } from './contratos.models';
         <div class="corpo-importacao">
           <p class="dica-formulario" style="margin-top: 0">
             {{ contratoId() ? 'A importação cria uma versão inativa; ative-a depois de conferir.' : 'A importação cria um modelo global.' }}
-            <button type="button" class="link-arquivo" (click)="baixarModelo()">Baixar modelo</button>
+            <button type="button" class="acao-secundaria acao-pequena" (click)="baixarModelo()">Baixar modelo</button>
           </p>
           <div class="acoes-cartao esquerda" style="margin: 0 0 14px">
             <input #campo type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden (change)="aoEscolher(campo)" />

@@ -32,7 +32,7 @@
             <button type="button" [class.ativo]="cadastro()?.usuario_id === p.usuario_id" (click)="abrir(p.usuario_id)">
             <strong>{{ p.nome }}</strong><small>{{ p.departamento || 'Sem setor' }} · {{ p.alteracoes.length }} campo(s)</small></button></li>
         } @empty {
-          <li class="estado-vazio">{{ pendencias() ? 'Nenhuma alteração pendente.' : 'Carregando…' }}</li>
+          <li class="estado-vazio">@if (pendencias()) { {{ 'Nenhuma alteração pendente.' }} } @else { <app-esqueleto tipo="lista" [linhas]="3" /> }</li>
         }
       </ul>
       <div class="corpo">
@@ -100,8 +100,8 @@
 }
 
 @if (recusando(); as a) {
-  <div class="fundo-modal" role="presentation" (click)="recusando.set(null)"></div>
-  <section class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa-cadastro">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="recusando.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa-cadastro">
     <header>
       <div><span class="modal-sobretitulo">{{ a.rotulo }}: proposto "{{ a.valor_proposto_rotulo }}"</span><h2 id="titulo-recusa-cadastro">Recusar e corrigir</h2></div>
       <button type="button" aria-label="Fechar" (click)="recusando.set(null)">×</button>

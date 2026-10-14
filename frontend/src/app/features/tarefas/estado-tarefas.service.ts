@@ -34,8 +34,8 @@ export class EstadoTarefasService {
     return resultado;
   });
 
-  /** Entregas aguardando a validação do usuário (somadas nas equipes que ele lidera). */
-  readonly paraValidar = computed(() => this.equipes().filter((e) => e.lider).reduce((total, e) => total + e.indicadores.em_validacao, 0));
+  /** Entregas e subtarefas aguardando a validação do usuário (somadas nas equipes que ele lidera). */
+  readonly paraValidar = computed(() => this.equipes().filter((e) => e.lider).reduce((total, e) => total + e.indicadores.em_validacao + e.indicadores.subtarefas_em_validacao, 0));
 
   /** Busca as equipes de novo (depois de navegar, criar ou configurar). Erros aqui não interrompem a tela. */
   recarregar(): void {

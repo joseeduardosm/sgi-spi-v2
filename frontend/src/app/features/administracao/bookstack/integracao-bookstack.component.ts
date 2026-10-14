@@ -10,6 +10,7 @@ import { ambiente } from '../../../../environments/ambiente';
 import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 import { erroExibivel } from '../../../shared/utilitarios/erros-api';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Configuração como a API devolve (o token nunca vem, só se existe). */
 interface ConfiguracaoBookstack {
   ativo: boolean;
@@ -31,7 +32,7 @@ interface ResultadoTeste {
 /** Integração com o BookStack (restrita ao SuperRoot): é por ela que o módulo Manuais lê as instruções. */
 @Component({
   selector: 'app-integracao-bookstack',
-  imports: [FormsModule, DatePipe, TrilhaComponent],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, TrilhaComponent],
   template: `
     <div class="cabecalho-pagina">
       <div>
@@ -83,7 +84,7 @@ interface ResultadoTeste {
         }
         <p class="dica-formulario">Atualizado por {{ c.atualizado_por || '—' }} em {{ c.atualizado_em | date: 'dd/MM/yyyy HH:mm' }}.</p>
       } @else {
-        <p class="estado-vazio">Carregando…</p>
+        <app-esqueleto tipo="formulario" [linhas]="5" />
       }
     </section>
   `,

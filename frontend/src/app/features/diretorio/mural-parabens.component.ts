@@ -11,12 +11,13 @@ import { DiretorioApiService } from './diretorio-api.service';
 import { AvatarComponent } from './avatar.component';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-mural-parabens',
-  imports: [LinkificarPipe, FormsModule, DatePipe, AvatarComponent],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, AvatarComponent],
   template: `
-    <div class="fundo-modal" (click)="fechar.emit()"></div>
-    <section class="modal-portal modal-mural" role="dialog" aria-modal="true" aria-label="Mural de parabéns">
+    <div animate.leave="mov-fundo-sai" class="fundo-modal" (click)="fechar.emit()"></div>
+    <section animate.leave="mov-modal-sai" class="modal-portal modal-mural" role="dialog" aria-modal="true" aria-label="Mural de parabéns">
       <header><h2>🎉 Mural de parabéns</h2><button type="button" class="fechar" aria-label="Fechar" (click)="fechar.emit()">×</button></header>
       <div class="corpo-mural">
         <div class="homenageado">
@@ -28,7 +29,7 @@ import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
             <li><p [innerHTML]="r.texto | linkificar"></p>
               <small>{{ r.autor_nome }} · {{ r.criado_em | date: 'dd/MM HH:mm' }}
                 @if (r.meu) { · <button type="button" class="link-apagar" (click)="apagar()">apagar</button> }</small></li>
-          } @empty { <li class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Ainda não há recados. Seja o primeiro!' }}</li> }
+          } @empty { <li class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Ainda não há recados. Seja o primeiro!' }} }</li> }
         </ul>
         @if (pessoa().pode_parabenizar && !jaEscrevi()) {
           <form (submit)="$event.preventDefault(); enviar()">

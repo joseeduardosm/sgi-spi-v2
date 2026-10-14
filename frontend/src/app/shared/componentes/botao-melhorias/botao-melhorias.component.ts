@@ -50,8 +50,8 @@ interface PrintEscolhido {
     }
 
     @if (aberta()) {
-      <div class="fundo-modal" role="presentation" (click)="fecharJanela()"></div>
-      <section class="modal-portal modal-largo janela-melhorias" role="dialog" aria-modal="true" aria-labelledby="titulo-melhorias"
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fecharJanela()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo janela-melhorias" role="dialog" aria-modal="true" aria-labelledby="titulo-melhorias"
                (paste)="aoColar($event)">
         <header><div><span class="modal-sobretitulo">Sua opinião importa</span><h2 id="titulo-melhorias">Sugerir uma melhoria</h2></div>
           <button type="button" aria-label="Fechar" (click)="fecharJanela()">×</button></header>
@@ -68,7 +68,7 @@ interface PrintEscolhido {
             <div class="prints-melhorias">
               @for (p of prints(); track p.previa) {
                 <figure>
-                  <img [src]="p.previa" [alt]="'Print ' + ($index + 1)" />
+                  <img loading="lazy" decoding="async" [src]="p.previa" [alt]="'Print ' + ($index + 1)" />
                   <button type="button" class="link-arquivo" [attr.aria-label]="'Remover print ' + ($index + 1)" (click)="removerPrint($index)">remover</button>
                 </figure>
               }

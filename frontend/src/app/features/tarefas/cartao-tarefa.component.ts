@@ -4,6 +4,7 @@
 import { DatePipe } from '@angular/common';
 import { classeMarcador } from './marcadores.paleta';
 import { Component, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { AvataresComponent } from './avatares.component';
 import { textoSla } from '../sla/sla.models';
@@ -24,7 +25,7 @@ export function nomeCurto(nome: string): string {
  */
 @Component({
   selector: 'app-cartao-tarefa',
-  imports: [DatePipe, AvataresComponent],
+  imports: [DatePipe, RouterLink, AvataresComponent],
   template: `
     @let t = tarefa();
     <article class="cartao-quadro" [attr.data-prioridade]="t.prioridade" [class.destacado]="destacado()" tabindex="0" role="button"
@@ -43,8 +44,14 @@ export function nomeCurto(nome: string): string {
           @for (m of t.marcadores; track m.id) { <span [class]="classeMarcador(m.cor_indice)" [title]="m.nome">{{ m.nome }}</span> }
         </div>
       }
+      @if (t.status === 'em_validacao') {
+        <small class="selo-validacao" [class.sua-vez]="lider()" [title]="lider() ? 'Entrega aguardando a sua validação' : 'Entrega aguardando a validação da liderança'">◷ Aguardando validação{{ lider() ? ' · sua vez' : '' }}</small>
+      }
+      @if (t.subtarefas_em_validacao) {
+        <small class="selo-validacao subtarefas" [class.sua-vez]="lider()" [title]="'Subtarefas aguardando validação. A tarefa-mãe não muda de situação.'">◷ {{ t.subtarefas_em_validacao }} {{ t.subtarefas_em_validacao === 1 ? 'subtarefa aguardando' : 'subtarefas aguardando' }} validação</small>
+      }
       @if (t.tarefa_pai_numero) { <small class="rastro-subtarefa">↳ subtarefa de #{{ t.tarefa_pai_numero }}</small> }
-      <p class="titulo-quadro" [title]="t.titulo">@if (t.controlada_externamente) { <span class="selo-origem" title="Controlada pelo módulo Contratos: anda sozinha conforme a etapa evolui" aria-label="Controlada pelo módulo Contratos">📄</span> }@if (t.bloqueada) { <span class="cadeado-tarefa" title="Bloqueada: há tarefa que precisa ser concluída antes" aria-label="Tarefa bloqueada">🔒</span> }{{ t.titulo }}</p>
+      <p class="titulo-quadro" [title]="t.titulo">@if (t.controlada_externamente) { <span class="selo-origem" title="Controlada pelo módulo Contratos: anda sozinha conforme a etapa evolui" aria-label="Controlada pelo módulo Contratos">📄</span> }@if (t.bloqueada) { <span class="cadeado-tarefa" title="Bloqueada: há tarefa que precisa ser concluída antes" aria-label="Tarefa bloqueada">🔒</span> }<a class="link-tarefa" [routerLink]="['/tarefas', t.numero]" (click)="$event.stopPropagation()" title="Ctrl+clique abre em outra aba">{{ t.titulo }}</a><a class="abrir-nova-aba" [href]="'/tarefas/' + t.numero" target="_blank" rel="noopener" (click)="$event.stopPropagation()" [attr.aria-label]="'Abrir a tarefa ' + t.numero + ' em nova aba'" title="Abrir em nova aba">↗</a></p>
       @if (t.subtarefas_total) {
         <div class="progresso-subtarefas" [title]="t.subtarefas_concluidas + ' de ' + t.subtarefas_total + ' subtarefas concluídas'"><span class="trilho"><i [style.width.%]="100 * t.subtarefas_concluidas / t.subtarefas_total"></i></span><small>{{ t.subtarefas_concluidas }}/{{ t.subtarefas_total }}</small></div>
       }
@@ -89,6 +96,8 @@ export class CartaoTarefaComponent {
   readonly tarefa = input.required<TarefaResumo>();
   /** Destaque temporário (ex.: tarefa recém-criada pela criação rápida). */
   readonly destacado = input(false);
+  /** O usuário lidera a equipe (o selo de validação vira "sua vez"). */
+  readonly lider = input(false);
   readonly abrir = output<number>();
 
   protected readonly rotulosPrioridade = ROTULOS_PRIORIDADE;

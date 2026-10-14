@@ -1,5 +1,7 @@
 # Módulo RH: atualização cadastral validada pela CGP (`/api/rh/cadastro`, `/api/rh/papeis`)
 
+> **Canais dos avisos:** todo aviso deste módulo chega **sempre** na caixa de [notificações](notificacoes.md). O e-mail, o pop-up do navegador e o alerta do desktop só saem para quem ligou o evento correspondente em `/notificacoes` › Preferências (tudo começa desmarcado). Onde este documento fala em "e-mail" dos avisos, leia "para quem ligou o e-mail".
+
 Tag no OpenAPI: **Módulo RH**. Implementação:
 - rotas: `backend/app/api/routes/rh.py`;
 - regras: `backend/app/services/rh/servico_cadastro.py`;
@@ -22,7 +24,7 @@ Tag no OpenAPI: **Módulo RH**. Implementação:
 2. **Alteração pendente:**
    - cada campo alterado vira uma `AlteracaoCadastral` com status `pendente`, e os valores em vigor continuam os anteriores;
    - uma nova proposta para o mesmo campo substitui a pendente (`substituida`).
-   - Todos da CGP recebem na caixa de mensagens, com e-mail: "[Nome] alterou seu cadastro e aguarda validação da CGP".
+   - Todos da CGP recebem na caixa de notificações, com e-mail: "[Nome] alterou seu cadastro e aguarda validação da CGP".
 3. **Análise da CGP:**
    - **validar:** o valor proposto passa a valer, e o campo exibe "Validado por [nome] em [data]";
      - quando o campo é o **Departamento**, o usuário também vira membro do setor de mesmo nome (e sai do anterior); ver [setores.md](setores.md#departamento-do-perfil--participação-no-setor);

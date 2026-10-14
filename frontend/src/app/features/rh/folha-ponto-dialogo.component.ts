@@ -19,8 +19,8 @@ import { CompetenciaFolha } from './rh.models';
   host: { '(document:keydown.escape)': 'aberta.set(false)' },
   template: `
     @if (aberta()) {
-      <div class="fundo-modal" role="presentation" (click)="aberta.set(false)"></div>
-      <section class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-folha-ponto">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="aberta.set(false)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-folha-ponto">
         <header>
           <div><span class="modal-sobretitulo">Registro de frequência</span><h2 id="titulo-folha-ponto">Folha de ponto</h2></div>
           <button type="button" aria-label="Fechar" (click)="aberta.set(false)">×</button>

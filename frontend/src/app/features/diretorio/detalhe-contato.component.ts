@@ -8,12 +8,13 @@ import { AvatarComponent } from './avatar.component';
 import { ContatoDetalhe, ContatoResumo, dataBr } from './diretorio.models';
 import { DiretorioApiService } from './diretorio-api.service';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-detalhe-contato',
-  imports: [AvatarComponent],
+  imports: [EsqueletoComponent, AvatarComponent],
   template: `
-    <div class="fundo-modal" (click)="fechar.emit()"></div>
-    <section class="modal-portal modal-largo detalhe-contato" role="dialog" aria-modal="true" aria-label="Cartão do contato">
+    <div animate.leave="mov-fundo-sai" class="fundo-modal" (click)="fechar.emit()"></div>
+    <section animate.leave="mov-modal-sai" class="modal-portal modal-largo detalhe-contato" role="dialog" aria-modal="true" aria-label="Cartão do contato">
       <header>
         <h2>Cartão de contato</h2>
         <button type="button" class="fechar" aria-label="Fechar" (click)="fechar.emit()">×</button>
@@ -50,7 +51,7 @@ import { DiretorioApiService } from './diretorio-api.service';
             </div>
           }
           <div class="qr-detalhe">
-            @if (qr()) { <img [src]="qr()" alt="QR Code com o contato (vCard)" width="132" height="132" /> }
+            @if (qr()) { <img loading="lazy" decoding="async" [src]="qr()" alt="QR Code com o contato (vCard)" width="132" height="132" /> }
             <p>Aponte a câmera do celular para salvar o contato.</p>
           </div>
         </div>
@@ -59,7 +60,7 @@ import { DiretorioApiService } from './diretorio-api.service';
           <button type="button" class="acao-primaria" (click)="fechar.emit()">Fechar</button>
         </footer>
       } @else {
-        <p class="estado-vazio">Carregando…</p>
+        <app-esqueleto tipo="formulario" [linhas]="5" />
       }
     </section>
   `,

@@ -9,9 +9,10 @@ import { AvatarComponent } from './avatar.component';
 import { Preferencias } from './diretorio.models';
 import { DiretorioApiService } from './diretorio-api.service';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-foto-perfil',
-  imports: [AvatarComponent],
+  imports: [EsqueletoComponent, AvatarComponent],
   template: `
     @if (prefs(); as p) {
       <div class="corpo-preferencias">
@@ -30,7 +31,7 @@ import { DiretorioApiService } from './diretorio-api.service';
         <input type="checkbox" [checked]="p.ocultar_aniversario" (change)="ocultar($event)" />
         <span>Não mostrar meu aniversário<small>Você sai das listas de aniversariantes, não recebe recados no mural nem o parabéns automático.</small></span>
       </label>
-    } @else { <p class="estado-vazio">Carregando…</p> }
+    } @else { <app-esqueleto tipo="formulario" [linhas]="5" /> }
   `,
 })
 export class FotoPerfilComponent implements OnInit {

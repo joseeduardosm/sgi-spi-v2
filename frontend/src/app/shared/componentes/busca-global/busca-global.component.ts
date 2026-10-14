@@ -12,6 +12,7 @@ import { ambiente } from '../../../../environments/ambiente';
 import { NavegacaoService } from '../../../core/navegacao/navegacao.service';
 import { normalizarTexto, telasDoMenu } from '../../../core/navegacao/telas-menu';
 
+import { EsqueletoComponent } from '../esqueleto/esqueleto.component';
 /** Resultado da busca (`ResultadoBusca` da API; as telas do menu usam o tipo `tela`). */
 export interface ResultadoBusca {
   tipo: 'tela' | 'contrato' | 'empresa' | 'contratacao' | 'tarefa' | 'pessoa' | 'setor';
@@ -42,7 +43,7 @@ export const normalizar = normalizarTexto;
  */
 @Component({
   selector: 'app-busca-global',
-  imports: [FormsModule],
+  imports: [EsqueletoComponent, FormsModule],
   host: { '(document:click)': 'aoClicarFora($event)' },
   template: `
     <div class="busca-global" role="search">
@@ -60,7 +61,7 @@ export const normalizar = normalizarTexto;
               </button>
             }
           } @empty {
-            <p class="sem-resultado-busca">{{ carregando() ? 'Buscando…' : 'Nenhum resultado para "' + termo().trim() + '".' }}</p>
+            <div class="sem-resultado-busca">@if (carregando()) { <app-esqueleto tipo="texto" [linhas]="2" /> } @else { {{ 'Nenhum resultado para "' + termo().trim() + '".' }} }</div>
           }
         </div>
       }

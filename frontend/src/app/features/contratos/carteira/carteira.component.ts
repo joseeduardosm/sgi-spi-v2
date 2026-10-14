@@ -13,7 +13,7 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { CHAVE_CONTEXTO_CARTEIRA, ContratosApiService } from '../compartilhado/contratos-api.service';
-import { ResumoContrato } from '../compartilhado/contratos.models';
+import { ResumoContrato, Situacao } from '../compartilhado/contratos.models';
 import { ROTULOS_SITUACAO } from '../compartilhado/rotulos';
 import { AcessoService } from '../../../core/acesso/acesso.service';
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
@@ -31,11 +31,12 @@ function lerMeus(): boolean {
 import { classeMarcador } from '../../tarefas/marcadores.paleta';
 import { marcadoresCompetencia } from './marcadores-competencia';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 export type ColunaCarteira = 'numero' | 'empresa' | 'data_inicio' | 'data_fim' | 'situacao' | 'base_mensal' | 'valor_global';
 
 @Component({
   selector: 'app-carteira',
-  imports: [UpperCasePipe, FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent, ImportacaoSgiComponent, ImportacaoXlsxComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, UpperCasePipe, FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent, ImportacaoSgiComponent, ImportacaoXlsxComponent, ...PIPES_FORMATACAO],
   templateUrl: './carteira.component.html',
   // Qualquer clique fora fecha o menu de ações aberto
   host: { '(document:click)': 'menuAberto.set(null)' },
@@ -61,6 +62,8 @@ export class CarteiraComponent implements OnInit {
   protected readonly menuAberto = signal<string | null>(null);
   // Ordenação por coluna (feita na API, antes de paginar); padrão: número, mais recentes primeiro
   protected readonly classeMarcador = classeMarcador;
+  /** Cor (índice da paleta dos marcadores) de cada situação: verde, amarelo, cinza e vermelho. */
+  protected readonly coresSituacao: Record<Situacao, number> = { ativo: 10, a_vencer: 3, encerrado: 0, suspenso: 1 };
   protected readonly marcadores = marcadoresCompetencia;
   protected readonly ordenarPor = signal<ColunaCarteira>('numero');
   protected readonly direcao = signal<'asc' | 'desc'>('desc');

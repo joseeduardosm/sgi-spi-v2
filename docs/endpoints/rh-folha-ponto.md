@@ -1,5 +1,7 @@
 # Módulo RH: folha de ponto em PDF (`/api/rh/folha-ponto`)
 
+> **Canais dos avisos:** todo aviso deste módulo chega **sempre** na caixa de [notificações](notificacoes.md). O e-mail, o pop-up do navegador e o alerta do desktop só saem para quem ligou o evento correspondente em `/notificacoes` › Preferências (tudo começa desmarcado). Onde este documento fala em "e-mail" dos avisos, leia "para quem ligou o e-mail".
+
 Tag no OpenAPI: **Módulo RH**. Implementação:
 - rotas: `backend/app/api/routes/rh.py`;
 - PDF: `backend/app/services/rh/folha_ponto.py` (reportlab, A4 retrato), no modelo de frequência da SPI (`apoio/10-2026 - FOLHA DE FREQUENCIA.doc`).
@@ -42,7 +44,7 @@ A geração é auditada como `rh.folha_ponto` (competência).
 A folha só é gerada quando **não há alteração de cadastro aguardando validação** e os **dados funcionais obrigatórios** estão preenchidos. Regime de plantão e horário de estudante já valem "Não" por padrão e não bloqueiam. A pendência de cadastro é conferida primeiro.
 
 Quando a folha é recusada (`409`):
-- **todos da CGP** recebem na caixa de mensagens, com e-mail oficial:
+- **todos da CGP** recebem na caixa de notificações, com e-mail oficial:
   - "[Nome] quer baixar a folha de ponto, mas ainda não tem os dados preenchidos", com a lista dos campos; ou
   - "[Nome] quer baixar a folha de ponto, mas tem alterações de cadastro aguardando validação".
   - O link leva a RH › Validações do usuário.

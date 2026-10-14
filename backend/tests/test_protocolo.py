@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.banco import FabricaSessao, agora_utc
-from app.models.mensagem import Mensagem
+from app.models.notificacao import Notificacao
 from app.models.protocolo import NumeroProtocolo
 from app.services import servico_protocolo
 from tests.apoio_contratos import PDF, criar_contrato
@@ -191,12 +191,12 @@ def test_aviso_de_reserva_sem_documento_uma_vez_por_marco_e_encerra_ao_anexar(cl
         sessao.commit()
         assert servico_protocolo.lembrar_reservas(sessao) == 1
         assert servico_protocolo.lembrar_reservas(sessao) == 0  # mesmo marco: não repete
-        assert sessao.scalars(select(Mensagem.assunto).where(Mensagem.chave.like(f"protocolo:{n['id']}:%"))).all() == ["Documento pendente no Protocolo: Portaria 001/2026"]
-    pendentes = cliente.get("/api/mensagens", headers=h["ana"]).json()["itens"]
+        assert sessao.scalars(select(Notificacao.assunto).where(Notificacao.chave.like(f"protocolo:{n['id']}:%"))).all() == ["Documento pendente no Protocolo: Portaria 001/2026"]
+    pendentes = cliente.get("/api/notificacoes", headers=h["ana"]).json()["itens"]
     assert pendentes and pendentes[0]["pendente"] is True
     # Ao anexar o documento, o aviso é encerrado (some das pendências)
     cliente.post(f"{URL}/numeros/{n['id']}/anexo", files={"arquivo": ("d.pdf", io.BytesIO(PDF), "application/pdf")}, headers=h["ana"])
-    assert cliente.get("/api/mensagens/resumo", headers=h["ana"]).json()["pendentes"] == 0
+    assert cliente.get("/api/notificacoes/resumo", headers=h["ana"]).json()["pendentes"] == 0
 
 
 def test_excluir_tipo_so_sem_movimento_e_sequencia_unica_por_exercicio(cliente, equipe, sequencia):
@@ -208,3 +208,24 @@ def test_excluir_tipo_so_sem_movimento_e_sequencia_unica_por_exercicio(cliente, 
     assert cliente.delete(f"{URL}/tipos/{vazio['id']}", headers=h["carla"]).status_code == 204
     _proximo(cliente, h["ana"], seq)
     assert cliente.delete(f"{URL}/tipos/{tipo['id']}", headers=h["carla"]).status_code == 409
+
+
+def test_excluir_exercicio_so_sem_movimento_e_mantem_os_demais(cliente, equipe, sequencia):
+    ids, h = equipe
+    tipo, seq = sequencia
+    seq27 = cliente.post(f"{URL}/tipos/{tipo['id']}/sequencias", json={"exercicio": 2027, "inicio": 1, "fim": 9}, headers=h["carla"]).json()
+    # Quem não administra não exclui; o exercício sem movimento sai e o outro permanece
+    assert cliente.delete(f"{URL}/sequencias/{seq27['id']}", headers=h["ana"]).status_code == 403
+    assert cliente.delete(f"{URL}/sequencias/{seq27['id']}", headers=h["carla"]).status_code == 204
+    assert cliente.delete(f"{URL}/sequencias/{seq27['id']}", headers=h["carla"]).status_code == 404
+    exercicios = [s["exercicio"] for t in cliente.get(f"{URL}/tipos", headers=h["carla"]).json()["itens"] if t["id"] == tipo["id"] for s in t["sequencias"]]
+    assert exercicios == [2026]
+    # Com número reservado, o exercício não pode ser excluído
+    _proximo(cliente, h["ana"], seq)
+    assert cliente.delete(f"{URL}/sequencias/{seq['id']}", headers=h["carla"]).status_code == 409
+
+
+def test_excluir_tipo_sem_movimento_apaga_tambem_os_exercicios(cliente, equipe):
+    ids, h = equipe
+    tipo = cliente.post(f"{URL}/tipos", json={"nome": "Memorando", "sequencia": {"exercicio": 2026, "inicio": 1, "fim": 5}}, headers=h["carla"]).json()
+    assert cliente.delete(f"{URL}/tipos/{tipo['id']}", headers=h["carla"]).status_code == 204

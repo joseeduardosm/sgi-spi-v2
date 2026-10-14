@@ -10,6 +10,7 @@ import { PainelExecutivoApiService } from './painel-executivo-api.service';
 import { IdSlide, ORDEM_SLIDES, ROTULOS_SLIDE, SlideContratos, SlideRh, SlideTarefas } from './painel-executivo.models';
 import { SlideContratosComponent, SlideRhComponent, SlideTarefasComponent } from './slides';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 interface Dados { contratos: SlideContratos; rh: SlideRh; tarefas: SlideTarefas }
 
 /**
@@ -18,7 +19,7 @@ interface Dados { contratos: SlideContratos; rh: SlideRh; tarefas: SlideTarefas 
  */
 @Component({
   selector: 'app-painel-executivo',
-  imports: [CarrosselComponent, SlideContratosComponent, SlideRhComponent, SlideTarefasComponent],
+  imports: [EsqueletoComponent, CarrosselComponent, SlideContratosComponent, SlideRhComponent, SlideTarefasComponent],
   template: `
     @if (dados(); as d) {
       <section #quadro class="painel-executivo" [class.compacto]="compacto()" [class.tela-cheia]="telaCheia()" aria-label="Painel Executivo">
@@ -40,7 +41,7 @@ interface Dados { contratos: SlideContratos; rh: SlideRh; tarefas: SlideTarefas 
     } @else if (erro()) {
       <p class="estado-vazio">Não foi possível carregar o Painel Executivo agora.</p>
     } @else if (!compacto()) {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="painel" [linhas]="4" />
     }
   `,
 })

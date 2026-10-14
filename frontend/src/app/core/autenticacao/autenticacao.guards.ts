@@ -28,7 +28,7 @@ export const guardaVisitante: CanActivateFn = () => {
  * Exige ao menos um dos papéis em `route.data.papeis`. Usar junto com guardaAutenticacao:
  * `{ path: 'admin', canActivate: [guardaPapel], data: { papeis: ['SuperRoot'] } }`
  */
-/** Só a conta root (login `LOGIN_ADMIN`) entra; os demais voltam ao início. Ex.: a Mensageria. */
+/** Só a conta root (login `LOGIN_ADMIN`) entra; os demais voltam ao início. Ex.: as Notificações do sistema. */
 export const guardaContaRoot: CanActivateFn = () =>
   inject(AutenticacaoService).usuario()?.conta_root ? true : inject(Router).createUrlTree(['/']);
 

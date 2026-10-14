@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import BinaryIO
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.banco import agora_utc
@@ -96,7 +96,7 @@ from app.services.contratos.servico_contratos import (
     pode_editar,
     vigencias,
 )
-from app.services.contratos.servico_orcamento import apontamentos_da_vigencia, movimentos_em_ordem, previsao_salva_em_todas
+from app.services.contratos.servico_orcamento import apontamentos_da_vigencia, exigir_saldo_para_medir, movimentos_em_ordem, previsao_salva_em_todas
 from app.services.servico_auditoria import auditar
 
 ZERO = Decimal(0)
@@ -182,19 +182,27 @@ def proxima_etapa(competencia: Competencia, etapa: str) -> str:
     return etapas[etapas.index(etapa) + 1]
 
 
+LIMITE_ACERTO = Decimal("1.00")
+
+
+def subtotal_item(item: ItemMedicao) -> Decimal:
+    """Valor do item na medição: quantidade medida × preço, arredondado, mais o acerto de centavos lançado."""
+    return calculos.arredondar(item.quantidade_medida * item.valor_unitario) + (item.acerto or ZERO)
+
+
 def total_medido(competencia: Competencia) -> Decimal:
-    """Total medido: soma de quantidade medida × preço de cada item, arredondado."""
-    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), ZERO))
+    """Total medido: soma de quantidade medida × preço de cada item, arredondada, mais os acertos de centavos (sem acertos, o resultado é o de sempre)."""
+    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), ZERO)) + sum((i.acerto or ZERO for i in competencia.itens), ZERO)
 
 
 def subtotal_medicao(competencia: Competencia) -> Decimal:
     """Subtotal dos itens que não são despesas variáveis."""
-    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if not i.despesa_variavel), ZERO))
+    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if not i.despesa_variavel), ZERO)) + sum((i.acerto or ZERO for i in competencia.itens if not i.despesa_variavel), ZERO)
 
 
 def subtotal_despesas_variaveis(competencia: Competencia) -> Decimal:
     """Subtotal dos itens marcados como despesas variáveis."""
-    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if i.despesa_variavel), ZERO))
+    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if i.despesa_variavel), ZERO)) + sum((i.acerto or ZERO for i in competencia.itens if i.despesa_variavel), ZERO)
 
 
 def tem_despesas_variaveis(competencia: Competencia) -> bool:
@@ -795,7 +803,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
             LeituraItemMedicao(
                 id=i.id, ordem=i.ordem, descricao=i.descricao, segmento=i.segmento, periodo_rotulo=i.periodo_rotulo or "", tipo=i.tipo, calcula_pro_rata=i.calcula_pro_rata,
                 valor_unitario=i.valor_unitario, fator_meses=i.fator_meses, quantidade_prevista=i.quantidade_prevista,
-                quantidade_medida=i.quantidade_medida, subtotal=calculos.arredondar(i.quantidade_medida * i.valor_unitario),
+                quantidade_medida=i.quantidade_medida, acerto=i.acerto or ZERO, subtotal=subtotal_item(i),
                 saldo=saldos[i.id].saldo, glosas=saldos[i.id].glosas, saldo_liquido=saldos[i.id].saldo_liquido, despesa_variavel=i.despesa_variavel,
             )
             for i in competencia.itens
@@ -1003,6 +1011,7 @@ def salvar_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
     sincronizar_se_defasada(contrato, competencia)
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
+    exigir_saldo_para_medir(sessao, contrato)
     # A medição precisa trazer todos os itens da competência, nem mais nem menos
     itens = {i.id: i for i in competencia.itens}
     if {i.id for i in dados.itens} != set(itens) or len(dados.itens) != len(itens):
@@ -1015,7 +1024,10 @@ def salvar_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
     alterou = False
     for linha in dados.itens:
         item = itens[linha.id]
-        alterou |= item.quantidade_medida != linha.quantidade_medida
+        acerto = linha.acerto if linha.acerto is not None else (item.acerto or ZERO)
+        _validar_acerto(competencia, item, linha.quantidade_medida, acerto)
+        alterou |= item.quantidade_medida != linha.quantidade_medida or (item.acerto or ZERO) != acerto
+        item.acerto = acerto
         item.quantidade_medida = linha.quantidade_medida
         if linha.despesa_variavel is not None:
             alterou |= item.despesa_variavel != linha.despesa_variavel
@@ -1064,12 +1076,28 @@ def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, competencia_id: u
     sessao.commit()
 
 
+def _validar_acerto(competencia: Competencia, item: ItemMedicao, quantidade_medida: Decimal, acerto: Decimal) -> None:
+    """Acerto de centavos: até R$ 1,00 para mais ou para menos, só em item medido, sem deixar o valor do item negativo e não na diferença de reajuste."""
+    if acerto == ZERO:
+        return
+    if acerto != acerto.quantize(Decimal("0.01")):
+        raise ErroRegraContrato("O acerto é em centavos (duas casas decimais).")
+    if abs(acerto) > LIMITE_ACERTO:
+        raise ErroRegraContrato(f"O acerto de \"{item.descricao_completa}\" passa de R$ 1,00: é só para centavos de dízimas e arredondamentos.")
+    if competencia.tipo == "diferenca_reajuste":
+        raise ErroRegraContrato("Na diferença de reajuste os valores vêm do reajuste: não há acerto.")
+    if quantidade_medida <= ZERO:
+        raise ErroRegraContrato(f"Só se acerta item medido: \"{item.descricao_completa}\" está sem quantidade medida.")
+    if calculos.arredondar(quantidade_medida * item.valor_unitario) + acerto < ZERO:
+        raise ErroRegraContrato(f"O acerto de \"{item.descricao_completa}\" deixaria o valor do item negativo.")
+
+
 def _hash_medicao(contrato: Contrato, competencia: Competencia) -> str:
     """Impressão digital dos dados da medição, para saber se a memória em PDF precisa de nova versão."""
     origem = {
         "contrato": contrato.numero,
         "competencia": competencia.competencia.isoformat(),
-        "itens": [[i.ordem, i.descricao_completa, str(i.valor_unitario), str(i.quantidade_prevista), str(i.quantidade_medida), i.despesa_variavel] for i in competencia.itens],
+        "itens": [[i.ordem, i.descricao_completa, str(i.valor_unitario), str(i.quantidade_prevista), str(i.quantidade_medida), i.despesa_variavel, str(i.acerto or ZERO)] for i in competencia.itens],
         "ciencias": [[c.usuario_id, c.nome, c.papel] for c in competencia.ciencias],
         "notas": [str(n.nota_id) for n in competencia.notas],
         "desconto_reajuste": str(desconto_reajuste(competencia)),
@@ -1087,6 +1115,7 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     sincronizar_se_defasada(contrato, competencia)
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
+    exigir_saldo_para_medir(sessao, contrato)
     if competencia.tipo == "adicional" and not any(i.quantidade_medida > 0 for i in competencia.itens):
         raise ErroRegraContrato("Informe a quantidade de ao menos um item para concluir a medição adicional.")
     # Regras para concluir: ciências mínimas, mesma seleção de NEs salva, saldo e limite dos itens sob demanda
@@ -2091,18 +2120,62 @@ def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, aut
     sessao.commit()
 
 
+def _anexos_para_descartar(sessao: Session, competencia: Competencia) -> list[Anexo]:
+    """Arquivos de todas as etapas da competência (memórias, avaliação, notas, despesas, retenção, CADIN, checklist, consolidado e OB).
+
+    Documentos do checklist reaproveitados de outra competência (documento da empresa) são de quem os juntou e ficam de fora.
+    O anexo da justificativa da medição adicional também fica (é de quem a incluiu, não de uma etapa).
+    """
+    achados: dict[uuid.UUID, Anexo] = {}
+
+    def juntar(anexo: Anexo | None) -> None:
+        if anexo is not None and anexo.excluido_em is None:
+            achados[anexo.id] = anexo
+
+    for m in competencia.memorias:
+        juntar(m.anexo), juntar(m.anexo_despesas)
+    a = competencia.avaliacao
+    if a is not None:
+        juntar(a.pdf_gerado_anexo), juntar(a.pdf_assinado_anexo), juntar(a.reconsideracao_anexo)
+    for n in competencia.notas_fiscais:
+        juntar(n.anexo), juntar(n.xml_anexo)
+    for d in competencia.despesas_variaveis:
+        juntar(d.anexo)
+    for r in competencia.recusas:
+        juntar(r.pdf_anexo)
+        for nota in r.notas or []:
+            for chave in ("anexo_id", "xml_anexo_id"):
+                if nota.get(chave):
+                    juntar(sessao.get(Anexo, uuid.UUID(str(nota[chave]))))
+    for c in competencia.consultas_cadin:
+        juntar(c.certidao_anexo), juntar(c.email_anexo)
+    for documento in competencia.documentos:
+        compartilhado = documento.anexo_id is not None and sessao.scalar(
+            select(func.count(DocumentoMensal.id)).where(DocumentoMensal.anexo_id == documento.anexo_id, DocumentoMensal.competencia_id != competencia.id))
+        if not compartilhado:
+            juntar(documento.anexo)
+    juntar(competencia.retencao_pdf_anexo), juntar(competencia.consolidado_anexo), juntar(competencia.ob_anexo)
+    return list(achados.values())
+
+
 def zerar(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
     """Zera a competência: todas as etapas voltam ao início, inclusive a medição (SuperRoot ou gestor).
 
     Estorna a OB se já paga, descarta avaliação, nota fiscal, retenção, CADIN, checklist e consolidado e apaga a medição
-    (itens copiados, quantidades medidas, ciências, memórias, NEs escolhidas e e-mail). Anexos e
-    histórico continuam guardados. Na medição adicional os itens são mantidos (só as quantidades voltam a zero), pois ela não os recopia.
+    (itens copiados, quantidades medidas, ciências, memórias, NEs escolhidas e e-mail). Os **arquivos** dessas etapas (memórias, PDFs da
+    avaliação, notas fiscais e XMLs, notas de débito, retenção, CADIN, checklist, consolidado e OB) são **excluídos** (exclusão lógica: ficam em
+    disco para a auditoria, que registra quantos foram); o histórico e a auditoria continuam. Na medição adicional os itens são mantidos
+    (só as quantidades voltam a zero), pois ela não os recopia.
     """
     contrato = obter_contrato(sessao, contrato_id)
     if not pode_reabrir(sessao, contrato, autor):
         raise SemPermissaoContrato("Somente o SuperRoot ou o gestor do contrato podem zerar a competência.")
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    # Os arquivos precisam ser levantados antes: reabrir solta os objetos das etapas e perde o caminho até eles
+    arquivos = _anexos_para_descartar(sessao, competencia)
     _reabrir_etapa(sessao, contrato, competencia, Reabertura(etapa="medicao", justificativa="Competência zerada"), autor)
+    for anexo in arquivos:
+        servico_anexos.descartar(anexo)
     # Na regular os itens saem junto: a medição recomeça e copia o cadastro de novo no próximo acesso
     if competencia.tipo == "adicional":
         # A adicional não recopia o cadastro sozinha (`garantir_itens` só atende a regular): os itens ficam e só as quantidades voltam a zero
@@ -2116,7 +2189,7 @@ def zerar(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
     competencia.email_medicao_enviado_em = competencia.email_medicao_ok = competencia.email_medicao_erro = None
     competencia.email_medicao_destinatarios = []
     atualizar_executado(contrato)
-    _auditar(sessao, autor, "contrato.execucao.zerar", contrato, competencia)
+    _auditar(sessao, autor, "contrato.execucao.zerar", contrato, competencia, arquivos_descartados=[a.nome_original for a in arquivos])
     sessao.commit()
 
 

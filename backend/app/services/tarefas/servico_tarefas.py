@@ -40,7 +40,7 @@ from app.models.tarefas import (
     DependenciaTarefa, EstagioTarefa, MarcoTarefa, MembroEquipeTarefas, ResponsavelTarefa, SeguidorTarefa, Tarefa, VinculoMarcadorTarefa,
 )
 from app.models.usuario import Usuario
-from app.services import servico_anexos, servico_mensagens
+from app.services import servico_anexos, notificacoes
 from app.services.tarefas import paleta
 from app.services.servico_auditoria import auditar
 
@@ -215,15 +215,13 @@ def seguidores(sessao: Session, tarefa: Tarefa) -> set[int]:
 
 
 def _avisar(sessao: Session, ids: set[int], assunto: str, corpo: str, tarefa: Tarefa, chave: str, autor: Usuario | None = None,
-            prioridade: str = "normal", categoria: str = "atribuicao", janela: bool = False, exceto: set[int] | None = None) -> None:
+            prioridade: str = "normal", categoria: str = "atribuicao", janela: bool = False, exceto: set[int] | None = None, *, evento: str) -> None:
     # Quem segue a tarefa (sem ser responsável) recebe os avisos informativos (comunicados e prazos), não as pendências nem as atribuições
     if categoria in ("comunicado", "prazo") and tarefa.id is not None:
         ids = set(ids) | seguidores(sessao, tarefa)
     ids = set(ids) - (exceto or set())
-    servico_mensagens.notificar(
-        sessao, list(ids), assunto, corpo, chave=chave, categoria=categoria, prioridade=prioridade, link=_link(tarefa),
-        email=True, autor=autor, abrir_em_janela=janela,
-    )
+    notificacoes.notificar(
+        sessao, list(ids), assunto, corpo, chave=chave, categoria=categoria, prioridade=prioridade, link=_link(tarefa), tarefa_id=tarefa.id, autor=autor, abrir_em_janela=janela, evento=evento)
 
 
 def _rotulo(tarefa: Tarefa) -> str:
@@ -319,7 +317,7 @@ def criar(sessao: Session, autor: Usuario, dados: DadosTarefa, arquivos: list[tu
     _avisar(sessao, pessoas, f"Nova tarefa: {_rotulo(tarefa)}",
             f"{quem} a tarefa {_rotulo(tarefa)}, com prazo em {_data_hora(dados.prazo)} "
             f"(prioridade {ROTULOS_PRIORIDADE[dados.prioridade].lower()}).{anexos_txt}", tarefa, f"tarefa-criada:{tarefa.id}",
-            autor=None if dados.automatica else autor)
+            autor=None if dados.automatica else autor, evento="tarefas.atribuida")
     auditar(sessao, autor.login, "tarefas.criar", _rotulo(tarefa), autor_id=autor.id, alvo_tipo="tarefa", alvo_id=tarefa.id)
     sessao.commit()
     return tarefa
@@ -358,7 +356,7 @@ def editar(sessao: Session, autor: Usuario, tarefa: Tarefa, titulo: str, descric
                                      "sairam": sorted(_nome(sessao.get(Usuario, i)) for i in antes - novos)}
         if entrou:
             _avisar(sessao, entrou, f"Você entrou na tarefa {_rotulo(tarefa)}", f"{_nome(autor)} incluiu você como responsável pela tarefa {_rotulo(tarefa)}.",
-                    tarefa, f"tarefa-responsavel:{tarefa.id}:{tarefa.versao}", autor=autor)
+                    tarefa, f"tarefa-responsavel:{tarefa.id}:{tarefa.versao}", autor=autor, evento="tarefas.atribuida")
     marcadores = _marcadores(sessao, tarefa.equipe, marcadores_ids)
     if {m.id for m in marcadores} != {m.id for m in tarefa.marcadores}:
         mudancas["marcadores"] = {"de": sorted(m.nome for m in tarefa.marcadores), "para": sorted(m.nome for m in marcadores)}
@@ -383,7 +381,7 @@ def alterar_prazo(sessao: Session, autor: Usuario, tarefa: Tarefa, novo: datetim
     _evento(sessao, tarefa, "prazo", autor, "Prazo alterado", justificativa.strip(), de=anterior.isoformat(), para=novo.isoformat())
     _avisar(sessao, envolvidos(tarefa), f"Prazo alterado: {_rotulo(tarefa)}",
             f"{_nome(autor)} alterou o prazo de {_data_hora(anterior)} para {_data_hora(novo)}.\n\nJustificativa: {justificativa.strip()}",
-            tarefa, f"tarefa-prazo:{tarefa.id}:{tarefa.versao}", autor=autor)
+            tarefa, f"tarefa-prazo:{tarefa.id}:{tarefa.versao}", autor=autor, evento="tarefas.prazo_alterado")
     sessao.commit()
     return tarefa
 
@@ -437,10 +435,9 @@ def reavaliar_marco(sessao: Session, marco_id: uuid.UUID | None) -> None:
 
 def _avisar_equipe_marco(sessao: Session, equipe: EquipeTarefas, marco: MarcoTarefa) -> None:
     ids = lideranca(sessao, equipe) | membros(equipe)
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, list(ids), f"Marco atingido: {marco.nome}", f"Todas as tarefas do marco \"{marco.nome}\" da equipe {equipe.nome} foram concluídas.",
-        chave=f"tarefa-marco:{marco.id}:{agora_utc():%Y%m%d%H%M%S}", categoria="comunicado", link=f"/tarefas/equipes/{equipe.id}",
-    )
+        chave=f"tarefa-marco:{marco.id}:{agora_utc():%Y%m%d%H%M%S}", categoria="comunicado", link=f"/tarefas/equipes/{equipe.id}", evento="tarefas.marco_atingido")
 
 
 def dias_em_aberto(tarefa: Tarefa, agora: datetime) -> int | None:
@@ -531,26 +528,26 @@ def _avisos_pipeline(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str,
     if acao == "entregar" and para == "em_validacao":
         _avisar(sessao, lideres, f"Aguardando validação: {_rotulo(tarefa)}",
                 f"{_nome(autor)} entregou a tarefa {_rotulo(tarefa)} para validação." + (f"\n\nComentário: {texto}" if texto else ""),
-                tarefa, f"{prefixo_validacao}{tarefa.versao}", autor=autor, categoria="pendencia", prioridade="alta")
+                tarefa, f"{prefixo_validacao}{tarefa.versao}", autor=autor, categoria="pendencia", prioridade="alta", evento="tarefas.aguardando_validacao")
         return
     # Qualquer saída de "em validação" encerra os avisos de validação pendente
-    servico_mensagens.encerrar(sessao, prefixo=prefixo_validacao)
-    servico_mensagens.encerrar(sessao, prefixo=f"tarefa-validacao-parada:{tarefa.id}:")
+    notificacoes.encerrar(sessao, prefixo=prefixo_validacao)
+    notificacoes.encerrar(sessao, prefixo=f"tarefa-validacao-parada:{tarefa.id}:")
     if acao == "validar":
         _avisar(sessao, executores, f"Entrega validada: {_rotulo(tarefa)}", f"{_nome(autor)} validou a entrega. A tarefa {_rotulo(tarefa)} está concluída.",
-                tarefa, f"tarefa-validada:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="comunicado")
+                tarefa, f"tarefa-validada:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="comunicado", evento="tarefas.entrega_validada")
     elif acao == "devolver":
         _avisar(sessao, executores, f"Entrega devolvida: {_rotulo(tarefa)}",
                 f"{_nome(autor)} devolveu a tarefa {_rotulo(tarefa)} para ajustes.\n\nMotivo: {texto}",
-                tarefa, f"tarefa-devolvida:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="pendencia", prioridade="alta")
+                tarefa, f"tarefa-devolvida:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="pendencia", prioridade="alta", evento="tarefas.entrega_devolvida")
     elif acao == "reabrir":
         _avisar(sessao, executores, f"Tarefa reaberta: {_rotulo(tarefa)}", f"{_nome(autor)} reabriu a tarefa {_rotulo(tarefa)}.\n\nMotivo: {texto}",
-                tarefa, f"tarefa-reaberta:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="pendencia")
+                tarefa, f"tarefa-reaberta:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="pendencia", evento="tarefas.reaberta")
     elif acao in ("concluir",) or (acao == "entregar" and para == "concluida"):
         _avisar(sessao, executores | lideres, f"Tarefa concluída: {_rotulo(tarefa)}", f"{_nome(autor)} concluiu a tarefa {_rotulo(tarefa)}.",
-                tarefa, f"tarefa-concluida:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="comunicado")
+                tarefa, f"tarefa-concluida:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="comunicado", evento="tarefas.concluida")
     if para == "concluida":
-        servico_mensagens.encerrar(sessao, prefixo=f"tarefa-prazo-aviso:{tarefa.id}:")
+        notificacoes.encerrar(sessao, prefixo=f"tarefa-prazo-aviso:{tarefa.id}:")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -583,7 +580,7 @@ def transferir(sessao: Session, autor: Usuario, tarefa: Tarefa, para_id: int, ju
             prazo_para=tarefa.prazo.isoformat() if tarefa.prazo != prazo_anterior else None)
     _avisar(sessao, {destino.id}, f"Tarefa transferida para você: {_rotulo(tarefa)}",
             f"{_nome(autor)} transferiu a você a tarefa {_rotulo(tarefa)} (prazo {_data_hora(tarefa.prazo)}).\n\nJustificativa: {justificativa.strip()}",
-            tarefa, f"tarefa-transferida:{tarefa.id}:{tarefa.versao}", autor=autor)
+            tarefa, f"tarefa-transferida:{tarefa.id}:{tarefa.versao}", autor=autor, evento="tarefas.atribuida")
     sessao.commit()
     return tarefa
 
@@ -612,8 +609,9 @@ def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquiv
     citado = None
     if em_resposta_a is not None:
         citado = sessao.get(EventoTarefa, em_resposta_a)
-        if citado is None or citado.tarefa_id != tarefa.id or citado.tipo != "comentario" or citado.removido_em is not None:
-            raise ErroTarefa("O comentário a responder não existe nesta tarefa.", 404, "nao_encontrado")
+        # Qualquer registro com texto da linha do tempo pode ser respondido: comentário, entrega para validação, devolução, validação, prorrogação...
+        if citado is None or citado.tarefa_id != tarefa.id or citado.tipo == "removido" or citado.removido_em is not None or not (citado.texto or "").strip():
+            raise ErroTarefa("O registro a responder não existe nesta tarefa ou não tem texto.", 404, "nao_encontrado")
     evento = _evento(sessao, tarefa, "comentario", autor, titulo, texto,
                      resposta_a=str(citado.id) if citado else None, resposta_autor=citado.autor_nome if citado else None,
                      resposta_texto=(citado.texto[:240] + ("…" if len(citado.texto) > 240 else "")) if citado else None)
@@ -631,10 +629,10 @@ def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquiv
     outros -= mencionados
     if mencionados:
         _avisar(sessao, mencionados, f"{_nome(autor)} mencionou você em {_rotulo(tarefa)}", f"{_nome(autor)} escreveu:\n\n{texto[:300]}",
-                tarefa, f"tarefa-mencao:{evento.id}", autor=autor, categoria="atribuicao", prioridade="alta")
+                tarefa, f"tarefa-mencao:{evento.id}", autor=autor, categoria="atribuicao", prioridade="alta", evento="tarefas.mencao")
     resumo = texto[:300] + ("…" if len(texto) > 300 else "") if texto else f"{len(arquivos)} arquivo(s) anexado(s)."
     _avisar(sessao, outros, f"Novo comentário em {_rotulo(tarefa)}", f"{_nome(autor)} comentou:\n\n{resumo}",
-            tarefa, f"tarefa-comentario:{evento.id}", autor=autor, categoria="comunicado", exceto=mencionados)
+            tarefa, f"tarefa-comentario:{evento.id}", autor=autor, categoria="comunicado", exceto=mencionados, evento="tarefas.comentario")
     sessao.commit()
     return evento
 
@@ -679,7 +677,7 @@ def checklist(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto:
 def excluir(sessao: Session, autor: Usuario, tarefa: Tarefa) -> None:
     _exigir("excluir" in acoes(sessao, autor, tarefa), "Só quem criou a tarefa ou a liderança pode excluí-la.")
     for prefixo in ("tarefa-", ):
-        servico_mensagens.encerrar(sessao, prefixo=f"{prefixo}validacao:{tarefa.id}:")
+        notificacoes.encerrar(sessao, prefixo=f"{prefixo}validacao:{tarefa.id}:")
     auditar(sessao, autor.login, "tarefas.excluir", _rotulo(tarefa), autor_id=autor.id, alvo_tipo="tarefa", alvo_id=tarefa.id)
     sessao.delete(tarefa)
     sessao.commit()
@@ -703,8 +701,19 @@ def faixa(pontos: float) -> str:
     return "Baixa ocupação" if pontos <= 20 else "Ocupação moderada" if pontos <= 40 else "Alta ocupação" if pontos <= 60 else "Sobrecarga crítica"
 
 
-def indicadores(tarefas: list[Tarefa], agora: datetime, usuario_id: int | None = None) -> dict:
-    """Totais para os cartões. Com `usuario_id`, a carga é a dessa pessoa (tarefas em que está envolvida)."""
+def subtarefas_em_validacao(sessao: Session, maes: list[Tarefa]) -> int:
+    """Quantas subtarefas das tarefas-mãe dadas aguardam validação (as subtarefas não entram nos demais contadores)."""
+    ids = [t.id for t in maes if t.tarefa_pai_id is None]
+    if not ids:
+        return 0
+    return sessao.scalar(select(func.count()).select_from(Tarefa).where(Tarefa.tarefa_pai_id.in_(ids), Tarefa.status == "em_validacao")) or 0
+
+
+def indicadores(tarefas: list[Tarefa], agora: datetime, usuario_id: int | None = None, em_subtarefas: int = 0) -> dict:
+    """Totais para os cartões. Com `usuario_id`, a carga é a dessa pessoa (tarefas em que está envolvida).
+
+    `em_subtarefas` (de `subtarefas_em_validacao`) é informado à parte: não altera `em_validacao`, que só conta as tarefas da lista.
+    """
     hoje = agora.astimezone(__import__("zoneinfo").ZoneInfo("America/Sao_Paulo")).date()
     operacionais = [t for t in tarefas if t.status in OPERACIONAIS]
     def local(d):  # noqa: E306
@@ -716,6 +725,7 @@ def indicadores(tarefas: list[Tarefa], agora: datetime, usuario_id: int | None =
         "vencem_hoje": sum(1 for t in operacionais if local(t.prazo) == hoje and _comparavel(t.prazo) >= agora),
         "criticas": sum(1 for t in operacionais if t.prioridade == "critica"),
         "em_validacao": sum(1 for t in tarefas if t.status == "em_validacao"),
+        "subtarefas_em_validacao": em_subtarefas,
         "concluidas": sum(1 for t in tarefas if t.status == "concluida"),
         "carga": round(pontos, 1),
         "faixa": faixa(pontos),
@@ -849,10 +859,9 @@ def _enviar_memoriais(sessao: Session, memorial: dict[int, list[tuple[Tarefa, in
         linhas = ["| Nº | Título | Responsável | Atraso | Em aberto | Link |", "| --- | --- | --- | --- | --- | --- |"]
         linhas += [f"| #{t.numero} | {t.titulo.replace('|', '/')} | {nomes.get(t.responsavel_id, 'sem responsável')} | {d} dia(s) | {dias_em_aberto(t, agora) or 0} dia(s) | {base}/tarefas/{t.numero} |" for t, d in unicas]
         corpo = (f"Você tem **{len(unicas)} tarefa(s) atrasada(s)** nas equipes que lidera. Cobre o andamento ou renegocie os prazos.\n\n" + "\n".join(linhas))
-        aviso = servico_mensagens.notificar(
+        aviso = notificacoes.notificar(
             sessao, [uid], f"Tarefas atrasadas das suas equipes: {len(unicas)}", corpo, chave=f"tarefa-escalonada:{uid}:{dia}",
-            categoria="prazo", prioridade="alta", link="/tarefas", email=True,
-        )
+            categoria="prazo", prioridade="alta", link="/tarefas", evento="tarefas.escalonada")
         enviados += 1 if aviso is not None else 0
     return enviados
 
@@ -866,12 +875,12 @@ def lembrar(sessao: Session, dia: date) -> dict[str, int]:
         prazo = _comparavel(tarefa.prazo).astimezone(__import__("zoneinfo").ZoneInfo("America/Sao_Paulo")).date()
         if prazo == dia + timedelta(days=1):
             _avisar(sessao, envolvidos(tarefa), f"Vence amanhã: {_rotulo(tarefa)}", f"A tarefa {_rotulo(tarefa)} vence amanhã, {_data_hora(tarefa.prazo)}.",
-                    tarefa, f"tarefa-prazo-aviso:{tarefa.id}:amanha:{prazo}", categoria="prazo")
+                    tarefa, f"tarefa-prazo-aviso:{tarefa.id}:amanha:{prazo}", categoria="prazo", evento="tarefas.vence_amanha")
             contagem["vencem_amanha"] += 1
         elif prazo < dia:
             _avisar(sessao, envolvidos(tarefa), f"Tarefa atrasada: {_rotulo(tarefa)}",
                     f"A tarefa {_rotulo(tarefa)} passou do prazo ({_data_hora(tarefa.prazo)}). Atualize o andamento ou peça nova data.",
-                    tarefa, f"tarefa-prazo-aviso:{tarefa.id}:atrasada:{dia}", categoria="prazo", prioridade="alta")
+                    tarefa, f"tarefa-prazo-aviso:{tarefa.id}:atrasada:{dia}", categoria="prazo", prioridade="alta", evento="tarefas.atrasada")
             contagem["atrasadas"] += 1
             contagem["tarefas_escalonadas"] += _registrar_escalonamento(sessao, tarefa, (dia - prazo).days, prazo, memorial)
     contagem["escalonadas"] = _enviar_memoriais(sessao, memorial, dia)
@@ -880,7 +889,7 @@ def lembrar(sessao: Session, dia: date) -> dict[str, int]:
         lideres = lideranca(sessao, tarefa.equipe) if tarefa.equipe else ({tarefa.criado_por_id} - {None})
         _avisar(sessao, lideres, f"Validação pendente há {DIAS_VALIDACAO_PARADA}+ dias: {_rotulo(tarefa)}",
                 f"A entrega da tarefa {_rotulo(tarefa)} aguarda sua validação desde {_data_hora(tarefa.entregue_em)}. Valide ou devolva com o motivo.",
-                tarefa, f"tarefa-validacao-parada:{tarefa.id}:{tarefa.versao}", categoria="pendencia", prioridade="alta", janela=True)
+                tarefa, f"tarefa-validacao-parada:{tarefa.id}:{tarefa.versao}", categoria="pendencia", prioridade="alta", janela=True, evento="tarefas.aguardando_validacao")
         contagem["validacao_parada"] += 1
     sessao.commit()
     return contagem

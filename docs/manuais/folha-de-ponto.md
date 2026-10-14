@@ -23,7 +23,7 @@ Para a folha ser gerada, duas condições precisam estar atendidas:
 1. O servidor **não pode ter alteração de cadastro aguardando validação** da CGP.
 2. Os **dados funcionais** do servidor precisam estar preenchidos pela CGP: jornada de trabalho, horário de trabalho, intervalo de almoço e descanso, RG/CIN nº e RS/PV nº.
 
-Se faltar alguma delas, o sistema mostra o aviso "Folha de ponto indisponível" e **avisa a CGP automaticamente** pela caixa de mensagens e por e-mail (no máximo um aviso por motivo, por servidor e por dia).
+Se faltar alguma delas, o sistema mostra o aviso "Folha de ponto indisponível" e **avisa a CGP automaticamente** pela caixa de notificações e por e-mail (no máximo um aviso por motivo, por servidor e por dia).
 
 ---
 

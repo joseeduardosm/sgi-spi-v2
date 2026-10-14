@@ -105,12 +105,30 @@ class MovimentoNota(BaseModel):
     autor: str | None = None
 
 
+class GravacaoCancelamentoNota(BaseModel):
+    """Dados para cancelar (parcial ou totalmente) o saldo de uma NE."""
+    numero: TextoObrigatorio = Field(..., max_length=30, description="Número da NE de cancelamento; único no contrato (entre NEs e cancelamentos).")
+    valor: Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=2, description="Até o saldo atual da NE, mesmo que parte esteja reservada por medições.")]
+    justificativa: str = Field("", max_length=2000)
+
+
+class CancelamentoNota(BaseModel):
+    """NE de cancelamento aplicada a uma NE original."""
+    id: uuid.UUID
+    numero: str
+    valor: ValorMonetario
+    justificativa: str = ""
+    autor: str | None = None
+    criado_em: datetime
+
+
 class LeituraNotaEmpenho(BaseModel):
     """NE com saldo, faixa de consumo (cor do cartão) e extrato."""
     id: uuid.UUID
     numero: str
     valor_original: ValorMonetario
     consumido: ValorMonetario
+    cancelado: ValorMonetario = Field(..., description="Total abatido por NEs de cancelamento.")
     saldo: ValorMonetario
     comprometido: ValorMonetario = Field(..., description="Reservado por competências com medição concluída e ainda não pagas.")
     saldo_livre: ValorMonetario = Field(..., description="Saldo − comprometido: o que ainda pode ser apontado em novas medições.")
@@ -118,6 +136,7 @@ class LeituraNotaEmpenho(BaseModel):
     faixa: Literal["verde", "amarelo", "vermelho"] = Field(..., description="Até 50%, até 75%, acima de 75% consumido.")
     vinculada: bool = Field(..., description="Selecionada em alguma competência (não pode ser excluída).")
     movimentos: list[MovimentoNota]
+    cancelamentos: list[CancelamentoNota] = Field(default_factory=list, description="NEs de cancelamento aplicadas, da mais antiga para a mais nova.")
     criado_em: datetime
 
 

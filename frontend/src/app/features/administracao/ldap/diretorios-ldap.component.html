@@ -70,7 +70,7 @@
           </tr>
         } @empty {
           <tr>
-            <td class="estado-vazio" colspan="7">{{ carregando() ? 'Carregando…' : 'Nenhum diretório LDAP configurado.' }}</td>
+            <td class="estado-vazio" colspan="7">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="7" [linhas]="4" /> } @else { {{ 'Nenhum diretório LDAP configurado.' }} }</td>
           </tr>
         }
       </tbody>
@@ -79,8 +79,8 @@
 </section>
 
 @if (formularioAberto()) {
-  <div class="fundo-modal" role="presentation" (click)="fecharFormulario()"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-ldap">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fecharFormulario()"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-ldap">
     <header>
       <div>
         <span class="modal-sobretitulo">Autenticação corporativa</span>
@@ -133,9 +133,9 @@
       }
 
       <footer>
-        <button class="acao-secundaria" type="button" (click)="testarFormulario()" [disabled]="salvando()">Testar sem salvar</button>
-        <button class="acao-secundaria" type="button" (click)="fecharFormulario()" [disabled]="salvando()">Cancelar</button>
-        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Salvar diretório' }}</button>
+        <button [class.carregando]="salvando()" class="acao-secundaria" type="button" (click)="testarFormulario()" [disabled]="salvando()">Testar sem salvar</button>
+        <button [class.carregando]="salvando()" class="acao-secundaria" type="button" (click)="fecharFormulario()" [disabled]="salvando()">Cancelar</button>
+        <button [class.carregando]="salvando()" class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Salvar diretório' }}</button>
       </footer>
     </form>
   </section>

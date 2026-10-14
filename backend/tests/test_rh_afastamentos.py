@@ -12,10 +12,13 @@ from app.models.rh import Afastamento
 from app.models.setor import Setor
 from app.models.usuario import Usuario
 from app.services.rh import servico_afastamentos
-from app.tarefas import mensageria
+from app.tarefas import notificacoes as tarefa_notificacoes
 from tests.apoio_rh import criar_cgp, funcionais, simular_smtp
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_smtp import SmtpSimulado, dados_servidor
+from tests.apoio_notificacoes import todos_com_email  # noqa: F401 - fixture usada por `usefixtures`
+
+pytestmark = pytest.mark.usefixtures("todos_com_email")
 
 URL = "/api/rh/afastamentos"
 HOJE = date(2026, 10, 1)  # quinta-feira
@@ -82,7 +85,7 @@ def test_aprovacao_alteracao_cancelamento_e_emails(cliente, equipe, monkeypatch)
     SmtpSimulado.enviadas.clear()
     pedido = _pedir(cliente, h["ana"], "2026-11-03", "2026-11-12").json()
     with FabricaSessao() as sessao:
-        mensageria.enviar_emails_pendentes(sessao)
+        tarefa_notificacoes.despachar_pendentes(sessao)
     assert sorted(para[0] for _, _, para, _ in SmtpSimulado.enviadas) == ["chefe@sp.gov.br", "rh@sp.gov.br"]
     assert SmtpSimulado.enviadas[0][0]["Subject"] == "Ana Souza agendou férias e aguarda aprovação"
     # Bia não decide; a própria Ana não decide; o chefe decide
@@ -105,7 +108,7 @@ def test_aprovacao_alteracao_cancelamento_e_emails(cliente, equipe, monkeypatch)
     # O usuário recebeu e-mail a cada mudança de status
     SmtpSimulado.enviadas.clear()
     with FabricaSessao() as sessao:
-        mensageria.enviar_emails_pendentes(sessao)
+        tarefa_notificacoes.despachar_pendentes(sessao)
     assuntos = [m["Subject"] for m, _, para, _ in SmtpSimulado.enviadas if para == ["ana@sp.gov.br"]]
     assert assuntos.count("Férias aprovada(s)") == 2 and "Afastamento cancelado: férias" in assuntos
 
@@ -217,7 +220,7 @@ def _definir_superior(login_usuario: str, login_superior: str) -> None:
 def _assuntos_enviados() -> list[tuple[str, list[str]]]:
     SmtpSimulado.enviadas.clear()
     with FabricaSessao() as sessao:
-        mensageria.enviar_emails_pendentes(sessao)
+        tarefa_notificacoes.despachar_pendentes(sessao)
     return [(m["Subject"], para) for m, _, para, _ in SmtpSimulado.enviadas]
 
 

@@ -1,0 +1,41 @@
+<p>Você precisa do nível <strong>Modificação</strong> na permissão Patrimônio. Na tela <strong>Bens</strong> há dois botões de cadastro (e o <strong>Ler código</strong>, que abre a câmera):</p>
+[[p01-lista-de-bens]]
+<ul>
+<li><strong>+ Adicionar bem</strong>: cadastro avulso. A sala é escolhida no próprio formulário.</li>
+<li><strong>Cadastro em lote</strong>: pede a sala <strong>uma vez</strong>, e tudo o que for cadastrado em seguida vai para ela, até você trocar de sala ou encerrar o lote.</li>
+</ul>
+<p>A tela foi pensada para o celular: os campos obrigatórios ficam no topo e o restante em <strong>Mais dados</strong>. O passo a passo com as telas do telefone está no capítulo <strong>"Patrimônio no celular"</strong>.</p>
+<h2>Campos obrigatórios</h2>
+<ul>
+<li><strong>Sala</strong>: um único campo. Conforme você digita (parte do código ou do nome), a lista de salas vai sendo filtrada; clique na sala para escolher.</li>
+<li><strong>Chapa</strong>: aceita <strong>qualquer formato</strong> (há muitos bens cedidos ainda não repatrimoniados). Não pode repetir, mesmo que mudem as maiúsculas. Dá para ler o código pela câmera.</li>
+<li><strong>Descrição do material</strong>: ao digitar, o sistema <strong>sugere as descrições já cadastradas</strong> (com 2 ou mais letras), as que começam pelo texto e as mais usadas primeiro, para favorecer a padronização. Clique na sugestão para usá-la.</li>
+<li><strong>Estado de conservação</strong>: de 1 (péssimo) a 5 (ótimo).</li>
+<li><strong>Situação</strong>: no cadastro, só <strong>Ativo</strong> ou <strong>Em manutenção</strong>.</li>
+<li><strong>Origem</strong>: se o bem é <strong>próprio</strong> ou <strong>de terceiros</strong>.</li>
+</ul>
+<h2>Mais dados (opcionais)</h2>
+<ul>
+<li><strong>Grupo de material</strong>, <strong>UGE</strong>, <strong>UA</strong> e <strong>divisão</strong>.</li>
+<li><strong>Valor de aquisição</strong>, <strong>valor atual</strong> e <strong>data de aquisição</strong> (esta pode ser preenchida depois).</li>
+<li><strong>Meses de garantia</strong>: o sistema calcula o <strong>fim da garantia</strong> somando a data de aquisição aos meses. Sem a data de aquisição, a garantia aparece como <strong>indefinida</strong>.</li>
+<li><strong>Marca</strong>, <strong>modelo</strong> e <strong>número de série</strong>; <strong>nota fiscal</strong> e <strong>fornecedor</strong>; <strong>observações</strong>.</li>
+<li><strong>Fotos</strong>: até três por bem, na página do bem, depois do cadastro.</li>
+</ul>
+<p>O <strong>responsável</strong> não é digitado: vem da sala e não se edita no bem.</p>
+<h2>Dados contábeis pendentes e bens não patrimoniáveis</h2>
+<ul>
+<li>O bem que ficar <strong>sem grupo, sem valor ou sem data de aquisição</strong> recebe a marca <strong>Dados contábeis pendentes</strong>: ele entra na contagem, mas fica <strong>fora dos totais de valor</strong> e aparece numa lista própria no painel.</li>
+<li>Se o valor informado ficar abaixo de <strong>45 UFESP</strong> e a vida útil do grupo for menor que dois anos, o sistema avisa que, pela regra estadual, o bem <strong>não é patrimoniável</strong>.</li>
+</ul>
+<h2>Bem que já existe no sistema</h2>
+<p>Ao digitar ou ler uma chapa que já está cadastrada, a tela carrega os dados do bem. Se ele ainda está <strong>sem local</strong> (veio do GLPI e está em "NECESSÁRIO ATUALIZAR"), escolha a sala onde ele está e clique em <strong>Salvar</strong>: o sistema pergunta "Confirmar que ele está na sala X?" e, ao responder <strong>Sim</strong>, o bem passa para a sala na hora, sem pedir movimentação. No cadastro em lote a tela já fica pronta para o próximo bem. Se o bem já tem outra sala, o sistema oferece registrar uma movimentação.</p>
+<h2>Cadastro em lote</h2>
+<ol>
+<li>Clique em <strong>Cadastro em lote</strong> e escolha a <strong>sala</strong>.</li>
+<li>Preencha o primeiro bem e clique em <strong>Cadastrar e próximo</strong>.</li>
+<li>A sala fica escolhida e o formulário volta. A <strong>chapa</strong>, o <strong>número de série</strong> e a <strong>descrição</strong> sempre voltam em branco. Com a opção <strong>Repetir os demais dados do último bem</strong> ligada, o resto (conservação, situação, origem, grupo, marca, modelo...) se mantém; o prefixo escolhido também permanece.</li>
+<li>Para trocar de sala, escolha outra no topo; para terminar, clique em <strong>Encerrar lote</strong>.</li>
+</ol>
+<h2>Sala sem setor e responsável</h2>
+<p>Se a sala escolhida ainda não tem setor e responsável, <strong>dois campos aparecem na própria tela do bem</strong> (setor e responsável) e são salvos junto com ele (veja "Locais e salas"). Se não aparecerem, a sala já tem esses dados.</p>

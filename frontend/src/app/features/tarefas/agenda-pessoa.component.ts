@@ -9,6 +9,7 @@ import { AvataresComponent } from './avatares.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { AgendaPessoa, barraGantt, ItemAgenda, ROTULOS_PRIORIDADE, ROTULOS_STATUS, STATUS } from './tarefas.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 type Aba = 'lista' | 'gantt';
 /** Aba escolhida da última vez (preferência do navegador). */
 const CHAVE_ABA = 'tarefas.agenda.aba';
@@ -23,7 +24,7 @@ const DIAS_JANELA = 28;
  */
 @Component({
   selector: 'app-agenda-pessoa',
-  imports: [DatePipe, DecimalPipe, RouterLink, AvataresComponent],
+  imports: [EsqueletoComponent, DatePipe, DecimalPipe, RouterLink, AvataresComponent],
   template: `
     @if (agenda(); as a) {
       <section class="agenda-pessoa" [attr.aria-label]="'Agenda de ' + a.pessoa.nome">
@@ -81,7 +82,7 @@ const DIAS_JANELA = 28;
         }
       </section>
     } @else if (carregando()) {
-      <p class="dica-formulario">Carregando a agenda…</p>
+      <app-esqueleto tipo="lista" [linhas]="4" />
     }
   `,
 })

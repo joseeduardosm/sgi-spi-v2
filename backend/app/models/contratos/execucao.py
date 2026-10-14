@@ -331,6 +331,8 @@ class ItemMedicao(Base):
     sequencia_vigencia: Mapped[int | None] = mapped_column(Integer)
     # Marcado na medição da competência: o item é despesa variável (subtotal à parte; exige documento de despesa na etapa da nota fiscal)
     despesa_variavel: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Acerto de centavos lançado na medição (ex.: +0,01, -0,02) para absorver dízimas e arredondamentos; soma ao valor do item. Só em item medido
+    acerto: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0), server_default="0")
 
     competencia: Mapped[Competencia] = relationship(back_populates="itens")
 

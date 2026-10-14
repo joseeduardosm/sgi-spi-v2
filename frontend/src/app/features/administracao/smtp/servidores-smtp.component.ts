@@ -10,13 +10,14 @@ import { SmtpApiService } from './smtp-api.service';
 import { GravacaoServidorSmtp, ResultadoSmtp, SegurancaSmtp, ServidorSmtp } from './smtp.models';
 import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Porta usual de cada segurança (sugerida ao trocar a segurança no formulário). */
 const PORTA_PADRAO: Record<SegurancaSmtp, number> = { starttls: 587, ssl: 465, nenhuma: 25 };
 
 /** Administração de servidores SMTP (restrita ao SuperRoot). */
 @Component({
   selector: 'app-servidores-smtp',
-  imports: [ReactiveFormsModule, FormsModule, DatePipe, TrilhaComponent],
+  imports: [EsqueletoComponent, ReactiveFormsModule, FormsModule, DatePipe, TrilhaComponent],
   templateUrl: './servidores-smtp.component.html',
   host: { '(document:keydown.escape)': 'fecharJanelas()' },
 })

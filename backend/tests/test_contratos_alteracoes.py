@@ -216,6 +216,13 @@ def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkey
     assert painel["minhas_pendencias"][0]["tipo"] == "base_execucao"
     riscos = [r["tipo"] for g in painel["alertas"] for r in g["riscos"]]
     assert riscos == ["a_vencer_sem_prorrogacao"] and len(painel["alertas"]) == 1
+    # Quem não é criador nem integrante do contrato (e não é do Financeiro) não vê os alertas dele nem as pendências
+    from tests.conftest import cabecalho, criar_usuario
+
+    terceiro = criar_usuario("terceiro_painel", nome_completo="Terceiro", email="terceiro.painel@sp.gov.br")
+    restringir_contratos_extra(cliente, admin, {terceiro: "MODIFICACAO"})
+    de_fora = cliente.get("/api/contratos/painel", headers=cabecalho(cliente, "terceiro_painel")).json()
+    assert de_fora["alertas"] == [] and de_fora["minhas_pendencias"] == []
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
     # Depois de gerar: pendências de medição e um risco de atraso agregado por contrato

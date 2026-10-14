@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.banco import agora_utc
 from app.core.configuracao import obter_configuracao
 from app.models.contratacoes import DocumentoContratacao, ItemContratacao, RevisaoItem, SecaoContratacao
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.contratacoes import revisoes
 
 
@@ -63,11 +63,10 @@ def lembrar_revisoes_paradas(sessao: Session, dia: date | None = None) -> int:
         documento = r.item.secao.documento
         if not marco or documento.criador_id is None:
             continue
-        if servico_mensagens.notificar(
+        if notificacoes.notificar(
             sessao, [documento.criador_id], f"Revisão parada em «{documento.nome}»",
             f"Há uma {'proposta de alteração' if r.conteudo_proposto else 'revisão'} de {r.autor_nome} sem resposta há {idade} dias em “{documento.nome}”.",
-            chave=f"contratacao-revisao:{r.id}:parada{marco}", categoria="pendencia", prioridade="normal", link=f"/contratacoes/{documento.id}", email=True,
-        ):
+            chave=f"contratacao-revisao:{r.id}:parada{marco}", categoria="pendencia", prioridade="normal", link=f"/contratacoes/{documento.id}", evento="contratacoes.revisao_parada"):
             avisados += 1
     sessao.commit()
     return avisados

@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.sla import SlaItem
+from app.services.tarefas.descricao import sanitizar_descricao
 
 StatusTarefa = Literal["a_fazer", "em_andamento", "em_validacao", "concluida"]
 PrioridadeTarefa = Literal["baixa", "normal", "alta", "critica"]
@@ -70,7 +71,9 @@ class TarefaResumo(BaseModel):
     tarefa_pai_numero: int | None = Field(None, description="Número da tarefa mãe (quando esta é uma subtarefa).")
     subtarefas_total: int = Field(0, description="Quantas subtarefas a tarefa tem.")
     subtarefas_concluidas: int = 0
+    subtarefas_em_validacao: int = Field(0, description="Quantas subtarefas da tarefa aguardam validação (selo no cartão; não muda a situação da tarefa-mãe).")
     bloqueada: bool = Field(False, description="Há tarefa bloqueadora ainda não concluída (a tarefa não pode iniciar).")
+    bloqueada_por_numeros: list[int] = Field(default_factory=list, description="Números das tarefas que bloqueiam esta (inclui as já concluídas); o Gantt desenha as setas de dependência.")
     estagio_id: uuid.UUID | None = Field(None, description="Estágio (coluna) atual na equipe; vazio em tarefa pessoal.")
     marco_id: uuid.UUID | None = Field(None, description="Marco (milestone) da equipe a que a tarefa pertence.")
     origem_tipo: str | None = Field(None, description="Módulo de origem da tarefa (`contrato_competencia` = etapa de uma competência de contrato).")
@@ -84,6 +87,7 @@ class Indicadores(BaseModel):
     vencem_hoje: int
     criticas: int
     em_validacao: int
+    subtarefas_em_validacao: int = Field(0, description="Subtarefas das tarefas listadas que aguardam validação (não entram em `em_validacao`, porque as subtarefas têm quadro próprio).")
     concluidas: int
     carga: float = Field(..., description="Pontos de carga (prioridade × urgência) das tarefas operacionais.")
     faixa: str
@@ -141,10 +145,13 @@ class TarefaLigada(BaseModel):
 
 class NovaSubtarefa(BaseModel):
     titulo: str = Field(..., min_length=1, max_length=200)
-    descricao: str = Field("", max_length=20000)
+    descricao: str = Field("", max_length=100000, description="HTML do editor rico (sanitizado no servidor) ou texto simples.")
+    _descricao = field_validator("descricao")(lambda cls, v: sanitizar_descricao(v))
     prazo: datetime | None = Field(None, description="Padrão: o prazo da tarefa mãe; não pode passar dele.")
     prioridade: PrioridadeTarefa | None = Field(None, description="Padrão: a da mãe.")
     responsaveis_ids: list[int] = Field(default_factory=list, max_length=50, description="Padrão: os responsáveis da mãe.")
+    bloqueada_por_numeros: list[int] = Field(default_factory=list, max_length=30, description="Números das tarefas que bloqueiam a nova subtarefa (da mesma equipe, inclusive outras subtarefas da mesma mãe; não a própria mãe).")
+    depende_da_anterior: bool = Field(False, description="`true`: a nova subtarefa fica bloqueada pela última subtarefa ainda não concluída da mãe (a de maior número). Sem subtarefa anterior aberta, não faz nada.")
 
     _t = field_validator("titulo")(lambda cls, v: _aparar(v))
 
@@ -194,7 +201,8 @@ class RegraRecorrenciaEntrada(BaseModel):
 
 class NovaTarefa(BaseModel):
     titulo: str = Field(..., min_length=1, max_length=200)
-    descricao: str = Field("", max_length=20000)
+    descricao: str = Field("", max_length=100000, description="HTML do editor rico (sanitizado no servidor) ou texto simples.")
+    _descricao = field_validator("descricao")(lambda cls, v: sanitizar_descricao(v))
     prazo: datetime
     prioridade: PrioridadeTarefa = "normal"
     equipe_id: uuid.UUID | None = None
@@ -207,7 +215,8 @@ class NovaTarefa(BaseModel):
 
 class EdicaoTarefa(BaseModel):
     titulo: str = Field(..., min_length=1, max_length=200)
-    descricao: str = Field("", max_length=20000)
+    descricao: str = Field("", max_length=100000, description="HTML do editor rico (sanitizado no servidor) ou texto simples.")
+    _descricao = field_validator("descricao")(lambda cls, v: sanitizar_descricao(v))
     prioridade: PrioridadeTarefa
     responsaveis_ids: list[int] = Field(..., min_length=1, max_length=50, description="Todos os responsáveis da tarefa (ao menos um). O principal continua o mesmo se ele estiver na lista; senão, passa a ser o primeiro.")
     marcadores_ids: list[uuid.UUID] = Field(default_factory=list, max_length=30)
@@ -271,6 +280,52 @@ class LinhaDoTempo(BaseModel):
     total: int
     itens: list[EventoLeitura]
     tem_mais: bool
+
+
+class AtividadeItem(BaseModel):
+    """Um acontecimento de uma tarefa no dia (linha do tempo resumida)."""
+
+    id: uuid.UUID
+    hora: datetime = Field(..., description="Momento do acontecimento (UTC; a tela mostra no horário de Brasília).")
+    tipo: str = Field(..., description="Tipo do evento (comentario, status, entregue, validada, devolvida, prazo, transferida, checklist...).")
+    titulo: str
+    texto: str = Field("", description="Texto do acontecimento (comentário, justificativa), cortado em 240 caracteres.")
+    autor: str
+    autor_id: int | None = None
+    dados: dict = Field(default_factory=dict, description="Só o que conta a história: `de`, `para`, `prazo`, `prazo_para`, `responsavel`, `destino`, `motivo`, `resposta_autor`.")
+    automatico: bool = Field(False, description="Gerado pelo sistema (escalonamento, evento sem autor).")
+    agrupados: int = Field(1, description="Quantos acontecimentos esta linha resume (itens de checklist do mesmo dia numa tarefa).")
+
+
+class AtividadeTarefa(BaseModel):
+    numero: int
+    titulo: str
+    status: StatusTarefa
+    equipe_nome: str | None = None
+    tarefa_pai_numero: int | None = Field(None, description="Número da tarefa-mãe, quando é uma subtarefa.")
+    ultima: datetime = Field(..., description="Hora do último acontecimento do dia (ordena os cartões).")
+    itens: list[AtividadeItem] = Field(..., description="Em ordem cronológica.")
+
+
+class AtividadeResumoDia(BaseModel):
+    tarefas: int = Field(..., description="Tarefas com acontecimento no dia.")
+    entregues: int = Field(..., description="Entregas para validação.")
+    concluidas: int = Field(..., description="Conclusões (validações e mudanças para Concluída).")
+    comentarios: int
+    automaticos_ocultos: int = Field(0, description="Avisos automáticos escondidos (use `automaticos=true` para vê-los).")
+
+
+class AtividadeDia(BaseModel):
+    data: date
+    resumo: AtividadeResumoDia
+    tarefas: list[AtividadeTarefa]
+
+
+class AtividadeEquipe(BaseModel):
+    de: date
+    ate: date
+    equipe_id: uuid.UUID
+    dias: list[AtividadeDia] = Field(..., description="Do dia mais recente para o mais antigo (dias sem acontecimento não aparecem).")
 
 
 class Reordenacao(BaseModel):
@@ -390,7 +445,8 @@ class RecorrenciaLeitura(BaseModel):
 
 class GravacaoRecorrencia(BaseModel):
     titulo: str = Field(..., min_length=1, max_length=200)
-    descricao: str = Field("", max_length=20000)
+    descricao: str = Field("", max_length=100000, description="HTML do editor rico (sanitizado no servidor) ou texto simples.")
+    _descricao = field_validator("descricao")(lambda cls, v: sanitizar_descricao(v))
     prioridade: PrioridadeTarefa = "normal"
     checklist: list[str] = Field(default_factory=list, max_length=50)
     responsaveis_ids: list[int] = Field(..., min_length=1, max_length=50)

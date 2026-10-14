@@ -19,6 +19,7 @@ Resposta `Painel`:
     - `base_execucao`: competências ainda não geradas;
     - processos em elaboração: `prorrogacao`, `reajuste`, `alteracao` e `ciencia_alteracao` (só enquanto a alteração não tem nenhuma ciência).
 - `alertas[]` da carteira, **agrupados por contrato** (`AlertasContrato`: `contrato_id`, `contrato_numero`, `contrato_apelido`, `empresa`, `gravidade` — a maior do contrato, `riscos[]`). Só entram **riscos**; tarefas ficam em `minhas_pendencias`. Cada `Risco`: `tipo`, `gravidade` (`alta`/`media`), `descricao`, `rota`, `data`, `valor`. Contratos com risco alto vêm primeiro. Tipos:
+  - **Quem vê o quê:** `alertas` e `minhas_pendencias` só trazem contratos em que o usuário é **criador ou integrante vigente da equipe** (com todos os riscos e tarefas deles). O **Financeiro (DOF)** que não integra a equipe **não recebe alertas**: vê somente as **tarefas pendentes de conferir a retenção de tributos**, que aparecem em `minhas_pendencias` (e na caixa de notificações) **a partir do momento em que a competência chega à etapa de retenção** (NF juntada) e saem quando a retenção é conferida, mesmo com CADIN e checklist ainda abertos em paralelo. Se o DOF integrar a equipe de um contrato, vê tudo desse contrato. O painel executivo continua usando a carteira inteira.
   - `a_vencer_sem_prorrogacao`: a até 90 dias do fim e sem rascunho de prorrogação;
   - `vigencia_maxima`: a vencer e sem meses disponíveis (planejar nova contratação);
   - `reajuste_pendente`: mês de reajuste passado, com o contrato já com 12 meses, sem reajuste aberto;

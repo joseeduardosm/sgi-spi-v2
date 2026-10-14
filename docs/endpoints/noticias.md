@@ -1,5 +1,7 @@
 # Módulo Notícias e portal (`/api/noticias`, `/api/portal`)
 
+> **Canais dos avisos:** todo aviso deste módulo chega **sempre** na caixa de [notificações](notificacoes.md). O e-mail, o pop-up do navegador e o alerta do desktop só saem para quem ligou o evento correspondente em `/notificacoes` › Preferências (tudo começa desmarcado). Onde este documento fala em "e-mail" dos avisos, leia "para quem ligou o e-mail".
+
 Tag no OpenAPI: **Notícias e portal**. Implementação:
 - rotas: `backend/app/api/routes/noticias.py`;
 - regras: `backend/app/services/noticias/servico_noticias.py`, com `imagens.py` (capa 2:1) e `sanitizacao.py` (HTML);
@@ -33,9 +35,9 @@ Leitura pública: qualquer pessoa, sem login, vê as notícias **publicadas**.
 | Excluir | `DELETE /{id}` | Autor (rascunho/devolvida), aprovador (não publicada) ou SuperRoot |
 
 - **Visibilidade:** a notícia aparece no portal quando está `aprovada` e `publicar_em` ≤ agora. É calculada na leitura, então o agendamento não depende de rotina.
-- **Aviso ao público:** se a notícia tem `usuarios_aviso`/`setores_aviso`, quando ela aparece no portal os escolhidos recebem caixa de mensagens + e-mail oficial com o link (`noticia-aviso:{id}`).
+- **Aviso ao público:** se a notícia tem `usuarios_aviso`/`setores_aviso`, quando ela aparece no portal os escolhidos recebem caixa de notificações + e-mail oficial com o link (`noticia-aviso:{id}`).
   - Os setores incluem os setores abaixo deles (membros ou quem tem o setor como Departamento).
-  - Se já estiver visível na aprovação, o aviso sai na hora. Se for agendada, sai pela rotina `app.tarefas.mensageria emails` (timer de 2 minutos), que chama `processar_publicacoes`.
+  - Se já estiver visível na aprovação, o aviso sai na hora. Se for agendada, sai pela rotina `app.tarefas.notificacoes emails` (timer de 2 minutos), que chama `processar_publicacoes`.
 - **Comunicado com ciência** (`exige_ciencia`): o aviso sai com prioridade alta e abre em janela; `GET /{id}/ciencias` mostra quem registrou ciência.
 - **Histórico:** cada gravação e cada passo do fluxo gravam uma revisão (`GET /{id}/revisoes`). Tudo é auditado (`noticias.*`, `portal.*`).
 - **Concorrência:** `versao` no `PUT` → `409 conflito` se outra pessoa salvou antes.

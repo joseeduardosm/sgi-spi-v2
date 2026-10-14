@@ -1,5 +1,5 @@
 # Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar a tabela simples (`| a | b |`) no corpo dos e-mails da mensageria.
+# Este arquivo serve para testar a tabela simples (`| a | b |`) no corpo dos e-mails das notificações.
 """Corpo de e-mail: linhas com barras viram tabela HTML (cabeçalho, linhas e escape de HTML)."""
 
 from app.services import modelo_email

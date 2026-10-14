@@ -18,7 +18,7 @@ export interface Usuario {
   perfil_restrito?: boolean;
   campos_pendentes?: string[];
   revisao_obrigatoria?: boolean;
-  /** Conta administrativa principal (login root): única com acesso à Mensageria. */
+  /** Conta administrativa principal (login root): única com acesso às Notificações do sistema. */
   conta_root?: boolean;
   /** Tema da interface escolhido pelo usuário (`auto` segue o sistema operacional). */
   tema?: 'claro' | 'escuro' | 'auto';

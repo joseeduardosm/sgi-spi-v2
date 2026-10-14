@@ -1,9 +1,11 @@
 # Reserva de Espaços (`/api/reserva-espacos`)
 
+> **Canais dos avisos:** todo aviso deste módulo chega **sempre** na caixa de [notificações](notificacoes.md). O e-mail, o pop-up do navegador e o alerta do desktop só saem para quem ligou o evento correspondente em `/notificacoes` › Preferências (tudo começa desmarcado). Onde este documento fala em "e-mail" dos avisos, leia "para quem ligou o e-mail".
+
 Tag no OpenAPI: **Reserva de Espaços**. Implementação:
 - rotas: `backend/app/api/routes/reserva_espacos.py`; schemas: `backend/app/schemas/reserva_espacos.py`;
 - regras: `backend/app/services/servico_reserva_espacos.py`; modelos: `backend/app/models/reserva_espacos.py` (`reserva_espacos_espacos`, `_reservas`, `_eventos`, `_fiscais`, `_configuracao`; migração `c7d1e5a9b3f4`);
-- avisos: mensageria (nova solicitação, deferimento, indeferimento, cancelamento, predefinida) e lembrete **um dia antes** na tarefa diária (`app/tarefas/mensageria.py`).
+- avisos: notificações (nova solicitação, deferimento, indeferimento, cancelamento, predefinida) e lembrete **um dia antes** na tarefa diária (`app/tarefas/notificacoes.py`).
 
 Migrado da Reserva de Espaços do 10.23.1.243 (Django). Carga dos dados: `scripts/extrair-reserva-espacos-243.py` (somente leitura; grava o pacote em `dados/`) e `scripts/migrar-reserva-espacos-243.py` (ensaio por padrão; `--gravar`; `--substituir`; idempotente pelo id de origem). Dados migrados: 4 espaços, 91 reservas (54 deferidas, 36 canceladas, 1 aguardando), 218 eventos e 4 fiscais. A reserva de teste com data `0020-06-22` teve o ano corrigido para 2026.
 

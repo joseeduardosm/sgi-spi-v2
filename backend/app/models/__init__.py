@@ -25,14 +25,20 @@ from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
 from app.models.atalho_fixo import AtalhoFixo, CategoriaAtalho
 from app.models.sla import SlaPolitica
 from app.models.favorito_menu import FavoritoMenu
+from app.models.preferencia_colunas import PreferenciaColunas
 from app.models.integracao_bookstack import IntegracaoBookstack
 from app.models.integracao_glpi import ChamadoGlpi, IntegracaoGlpi
 from app.models.diretorio_ldap import DiretorioLdap
 from app.models.envio_changelog import EnvioChangelog
 from app.models.melhorias import AnexoSugestao, EventoSugestao, SugestaoMelhoria
-from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.notificacao import EntregaNotificacao, Notificacao
+from app.models.notificacao_preferencias import ConfigNotificacaoUsuario, InscricaoNavegador, NotificacaoObrigatoria, NotificacaoSilenciada, PreferenciaNotificacao
 from app.models.noticias import AnexoNoticia, AtalhoPortal, CategoriaNoticia, ConfiguracaoPortal, Noticia, RevisaoNoticia
 from app.models.reserva_espacos import ConfiguracaoReservaEspacos, EspacoReservavel, EventoReservaEspaco, FiscalReservaEspacos, ReservaEspaco
+from app.models.patrimonio import (
+    Baixa, Bem, Classificacao, EventoPatrimonio, FotoBem, GrupoMaterial, ItemBaixa, ItemClassificacao, ItemMovimentacao, Localizacao, Movimentacao,
+    ParametroPatrimonio, PrefixoChapa,
+)
 from app.models.protocolo import EventoProtocolo, NumeroProtocolo, SequenciaProtocolo, TipoProtocolo
 from app.models.rh import AlteracaoCadastral, Afastamento, DadosFuncionais, EventoAfastamento, Feriado, ParametrosRh, PeriodoAquisitivo
 from app.models.servidor_smtp import ServidorSmtp
@@ -45,6 +51,8 @@ from app.models.usuario import OrigemUsuario, Papel, Usuario
 
 # Nomes exportados por `from app.models import *`
 __all__ = [
+    "Baixa", "Bem", "Classificacao", "EventoPatrimonio", "FotoBem", "GrupoMaterial", "PrefixoChapa", "ItemBaixa", "ItemClassificacao", "ItemMovimentacao",
+    "Localizacao", "Movimentacao", "ParametroPatrimonio",
     "ConfiguracaoReservaEspacos",
     "EspacoReservavel",
     "EventoReservaEspaco",
@@ -81,9 +89,9 @@ __all__ = [
     "PrepostoEmpresa",
     "DiretorioLdap",
     "EnvioChangelog", "FavoritoDiretorio",
-    "FavoritoMenu", "AtalhoFixo", "CategoriaAtalho", "ChamadoGlpi", "IntegracaoBookstack", "IntegracaoGlpi", "ParabensAniversario",
-    "EntregaMensagem",
-    "Mensagem",
+    "FavoritoMenu", "PreferenciaColunas", "ConfigNotificacaoUsuario", "InscricaoNavegador", "NotificacaoObrigatoria", "NotificacaoSilenciada", "PreferenciaNotificacao", "AtalhoFixo", "CategoriaAtalho", "ChamadoGlpi", "IntegracaoBookstack", "IntegracaoGlpi", "ParabensAniversario",
+    "EntregaNotificacao",
+    "Notificacao",
     "AlteracaoCadastral",
     "Afastamento",
     "DadosFuncionais",

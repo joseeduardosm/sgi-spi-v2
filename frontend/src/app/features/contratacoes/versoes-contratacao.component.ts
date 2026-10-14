@@ -12,6 +12,7 @@ import { ContratacoesApiService } from './contratacoes-api.service';
 import { Alteracoes, DocumentoContratacao, ROTULOS_ITEM, Versao, VersaoDetalhe } from './contratacoes.models';
 import { HtmlConfiavelPipe } from './html-confiavel.pipe';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 type Modo = 'alteracoes' | 'visualizar';
 
 const ROTULOS_MUDANCA = { incluido: 'Incluído', removido: 'Retirado', alterado: 'Alterado', movido: 'Movido' } as const;
@@ -23,7 +24,7 @@ const ROTULOS_MUDANCA = { incluido: 'Incluído', removido: 'Retirado', alterado:
  */
 @Component({
   selector: 'app-versoes-contratacao',
-  imports: [FormsModule, DatePipe, RouterLink, TrilhaComponent, HtmlConfiavelPipe],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, RouterLink, TrilhaComponent, HtmlConfiavelPipe],
   template: `
     <div class="cabecalho-pagina">
       <div>
@@ -36,7 +37,7 @@ const ROTULOS_MUDANCA = { incluido: 'Incluído', removido: 'Retirado', alterado:
 
     <section class="painel-gestao contratacoes versoes">
       @if (!versoes().length) {
-        <p class="estado-vazio">{{ carregado() ? 'Nenhuma versão ainda.' : 'Carregando…' }}</p>
+        <div class="estado-vazio">@if (carregado()) { {{ 'Nenhuma versão ainda.' }} } @else { <app-esqueleto tipo="lista" [linhas]="3" /> }</div>
       } @else {
         <div class="duas-colunas">
           <ol class="linha-do-tempo" aria-label="Versões">

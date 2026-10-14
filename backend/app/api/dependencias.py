@@ -110,7 +110,7 @@ def exigir_papeis(*papeis: str) -> Callable[..., Usuario]:
 
 
 def exigir_conta_root(usuario: Usuario = Depends(obter_usuario_atual)) -> Usuario:
-    """Exige a conta administrativa principal (login `LOGIN_ADMIN`, padrão "root"). Ex.: a tela Mensageria."""
+    """Exige a conta administrativa principal (login `LOGIN_ADMIN`, padrão "root"). Ex.: a tela Notificações do sistema."""
     if not servico_perfil.dispensado(usuario):
         raise ErroApi(status.HTTP_403_FORBIDDEN, "Somente a conta root tem acesso a este recurso.", "acesso_negado")
     return usuario

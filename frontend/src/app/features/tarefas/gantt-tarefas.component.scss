@@ -1,0 +1,68 @@
+:host { display: block; }
+.barra-gantt { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 4px 0 10px; }
+.rotulo-agrupar { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--spi-apagado); select { min-width: 140px; } }
+.legenda-gantt { margin-left: auto; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--spi-apagado); font-size: 0.8rem; }
+.legenda-gantt i { display: inline-block; width: 12px; height: 12px; margin-right: -6px; border-radius: var(--spi-raio-p); background: var(--c, #9aa4af); }
+.legenda-gantt i.atrasada { background: #d64550; }
+
+/* Cores por situação (as mesmas dos selos de situação) */
+[data-status='a_fazer'] { --c: #9aa4af; }
+[data-status='em_andamento'] { --c: #2b6cb0; }
+[data-status='em_validacao'] { --c: #d69e2e; }
+[data-status='concluida'] { --c: #2f855a; }
+
+.gantt { --rot: 250px; position: relative; max-height: 72vh; overflow: auto; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); background: var(--bs-body-bg, #fff); outline-offset: 2px; }
+.gantt-conteudo { position: relative; }
+
+.gantt-cabecalho { position: sticky; top: 0; z-index: 4; display: flex; height: 52px; background: var(--bs-body-bg, #fff); border-bottom: 1px solid var(--spi-borda); }
+.gantt-escala { position: relative; flex: 0 0 auto; height: 100%; }
+.gantt-escala .mes { position: absolute; top: 0; height: 26px; padding: 4px 8px; overflow: hidden; border-left: 1px solid var(--spi-borda); font-size: 0.78rem; font-weight: 700; white-space: nowrap; color: var(--spi-titulo); }
+.gantt-escala .mes::first-letter { text-transform: uppercase; }
+.gantt-escala .marca { position: absolute; top: 28px; padding-left: 3px; border-left: 1px solid var(--spi-borda); font-size: 0.72rem; color: var(--spi-apagado); font-variant-numeric: tabular-nums; }
+
+.gantt-linha { display: flex; height: 38px; border-bottom: 1px solid var(--cor-f1f2f4, #f1f2f4); }
+.gantt-grupo { height: 30px; background: var(--cor-fafbfc, #fafbfc); }
+.gantt-rotulo { position: sticky; left: 0; z-index: 3; flex: 0 0 var(--rot); display: flex; align-items: center; justify-content: space-between; gap: 8px; width: var(--rot); padding: 0 10px; overflow: hidden; background: var(--bs-body-bg, #fff); border: 0; border-right: 1px solid var(--spi-borda); text-align: left; font-size: 0.85rem; }
+.gantt-rotulo a { flex: 1 1 auto; min-width: 0; overflow: hidden; color: inherit; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.gantt-rotulo a:hover { text-decoration: underline; }
+.gantt-canto { height: 100%; z-index: 5; font-weight: 700; color: var(--spi-apagado); }
+.gantt-grupo .gantt-rotulo { justify-content: flex-start; background: var(--cor-fafbfc, #fafbfc); font-weight: 700; cursor: pointer; small { color: var(--spi-apagado); font-weight: 400; } }
+.seta { display: inline-block; width: 12px; transition: transform var(--mov-rapido) var(--ease-move); &.aberta { transform: rotate(90deg); } }
+
+.gantt-trilho { position: relative; flex: 0 0 auto; height: 100%; background-image: linear-gradient(to right, var(--cor-f1f2f4, #eceef1) 1px, transparent 1px); background-repeat: repeat-x; }
+.gantt-marcos { background: var(--cor-fafbfc, #fafbfc); }
+.marco { position: absolute; top: 8px; display: flex; align-items: center; gap: 5px; transform: translateX(-8px); white-space: nowrap; font-size: 0.78rem; z-index: 1; }
+.marco i { width: 14px; height: 14px; background: #7c3aed; transform: rotate(45deg); border-radius: 2px; }
+.marco[data-situacao='atingido'] i { background: #2f855a; }
+.marco[data-situacao='atrasado'] i, .marco[data-situacao='em_risco'] i { background: #d64550; }
+
+.barra { position: absolute; top: 8px; height: 22px; display: block; overflow: hidden; border-radius: var(--spi-raio-p); color: #fff; background: color-mix(in srgb, var(--c) 35%, #fff); outline: 1px solid color-mix(in srgb, var(--c) 70%, #000 0%); text-decoration: none; }
+.barra:focus-visible { outline: 2px solid var(--spi-vermelho); outline-offset: 2px; }
+.barra:hover { filter: brightness(0.95); }
+.barra.atrasada { outline: 2px solid #d64550; }
+.barra .preenchimento { position: absolute; inset: 0 auto 0 0; background: var(--c); border-radius: 6px 0 0 6px; transition: width var(--mov-padrao) var(--ease-entra); }
+.barra .nome-na-barra { position: relative; display: block; padding: 0 8px; overflow: hidden; line-height: 22px; font-size: 0.75rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; color: var(--spi-texto); text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.nome-fora { position: absolute; top: 11px; font-size: 0.75rem; white-space: nowrap; color: var(--spi-apagado); pointer-events: none; }
+.marca-prazo { position: absolute; top: 4px; width: 2px; height: 30px; background: #d64550; opacity: 0.7; }
+
+.gantt-sobreposicao { position: absolute; top: 52px; bottom: 0; pointer-events: none; z-index: 2; }
+.gantt-sobreposicao svg { position: absolute; top: -52px; left: 0; overflow: visible; }
+.linha-hoje { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--spi-vermelho); opacity: 0.8; small { position: absolute; top: 0; left: 4px; padding: 0 4px; border-radius: var(--spi-raio-p); color: #fff; background: var(--spi-vermelho); font-size: 0.65rem; } }
+.linha-marco { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed #a78bfa; opacity: 0.7; }
+
+@media (max-width: 760px) {
+  .gantt { --rot: 150px; }
+  .gantt-rotulo { font-size: 0.78rem; }
+  .legenda-gantt { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .seta, .barra .preenchimento { transition: none; } }
+
+/* Passar o mouse (ou focar) numa tarefa realça a linha inteira: título à esquerda e barra no tempo */
+.gantt-linha:has(.barra) { transition: background-color 120ms ease-out; }
+.gantt-linha:has(.barra):hover, .gantt-linha:has(.barra):focus-within { background: var(--spi-vermelho-suave); }
+.gantt-linha:has(.barra):hover .gantt-rotulo, .gantt-linha:has(.barra):focus-within .gantt-rotulo { background: var(--spi-vermelho-suave); box-shadow: inset 3px 0 0 var(--spi-vermelho); }
+.gantt-linha:has(.barra):hover .gantt-rotulo a, .gantt-linha:has(.barra):focus-within .gantt-rotulo a { color: var(--spi-perigo); font-weight: 600; }
+.gantt-linha:has(.barra):hover .barra, .gantt-linha:has(.barra):focus-within .barra { outline: 2px solid var(--spi-vermelho); outline-offset: 0; filter: none; }
+@media (prefers-reduced-motion: reduce) { .gantt-linha:has(.barra) { transition: none; } }
+/* Na tela cheia do espaço de tarefas o Gantt cresce até o fim da janela */
+:host-context(.tela-cheia) .gantt { max-height: calc(100vh - 230px); }

@@ -14,6 +14,7 @@ import { AnexoOcorrencia, DiarioContrato, OcorrenciaDiario } from '../compartilh
 import { paraDecimalApi, ROTULOS_PAPEL } from '../compartilhado/rotulos';
 import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Máximo de arquivos por ocorrência (mesmo limite da API). */
 const MAXIMO_ANEXOS = 5;
 
@@ -25,7 +26,7 @@ interface LinhaGlosa {
 /** Aba "Diário de bordo": a equipe relata ocorrências; cada uma é enviada por e-mail à equipe e ao preposto. */
 @Component({
   selector: 'app-aba-diario',
-  imports: [LinkificarPipe, FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-diario">
       <header>
@@ -66,7 +67,7 @@ interface LinhaGlosa {
             @if (o.anexos.length) {
               <div class="anexos-balao">
                 @for (a of o.anexos; track a.id) {
-                  <button type="button" class="link-arquivo" [title]="'Baixar ' + a.nome" (click)="baixarAnexo(o, a)">{{ a.nome }} <small>({{ tamanhoLegivel(a.tamanho) }})</small></button>
+                  <button type="button" class="acao-secundaria acao-pequena" [title]="'Baixar ' + a.nome" (click)="baixarAnexo(o, a)">{{ a.nome }} <small>({{ tamanhoLegivel(a.tamanho) }})</small></button>
                 }
               </div>
             }
@@ -84,7 +85,7 @@ interface LinhaGlosa {
             </footer>
           </article>
         } @empty {
-          <p class="estado-vazio">{{ diario() ? 'Nenhuma ocorrência registrada.' : 'Carregando…' }}</p>
+          <div class="estado-vazio">@if (diario()) { {{ 'Nenhuma ocorrência registrada.' }} } @else { <app-esqueleto tipo="lista" [linhas]="3" /> }</div>
         }
       </div>
 
@@ -169,7 +170,7 @@ interface LinhaGlosa {
           <div class="acoes-cartao">
             <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Registro e anexos à equipe e aos prepostos escolhidos" />
             <small class="dica-formulario">Ocorrências não podem ser editadas depois.</small>
-            <button type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Registrar ocorrência' }}</button>
+            <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Registrar ocorrência' }}</button>
           </div>
         </form>
       }

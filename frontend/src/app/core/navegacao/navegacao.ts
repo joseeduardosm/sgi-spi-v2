@@ -42,12 +42,14 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           { id: 'ramais', rotulo: 'Ramais', rota: '/ramais' },
           // Protocolo: numeração institucional (ofícios, portarias, resoluções); aparece para quem tem o recurso ACL `protocolo`
           { id: 'protocolo', rotulo: 'Protocolo', rota: '/protocolo', acl: 'protocolo' },
+          // Patrimônio: bens móveis do prédio SPI (cadastro, movimentação, inservíveis, baixa e painéis); aparece para quem tem o recurso ACL `patrimonio`
+          { id: 'patrimonio', rotulo: 'Patrimônio', rota: '/patrimonio', acl: 'patrimonio' },
           // Contratações: ETP e TR com revisão e versões; aparece para quem tem o recurso ACL `contratacoes`
           { id: 'contratacoes', rotulo: 'Contratações', rota: '/contratacoes', acl: 'contratacoes' },
         ],
         textoVazio: 'Nenhum módulo disponível ainda',
       },
-      { id: 'mensagens', rotulo: 'Mensagens', icone: 'sino', rota: '/mensagens' },
+      { id: 'notificacoes', rotulo: 'Notificações', icone: 'sino', rota: '/notificacoes' },
       // Abrir Chamado: abre o modal que cria o chamado no GLPI (ACL `abrir-chamado`, sem regras: todos os usuários)
       { id: 'abrir-chamado', rotulo: 'Abrir Chamado', icone: 'ajuda', acao: 'abrir-chamado', acl: 'abrir-chamado' },
       { id: 'usuarios', rotulo: 'Usuários', icone: 'usuarios', rota: '/usuarios', acl: 'usuarios' },
@@ -78,8 +80,8 @@ export const NAVEGACAO: SecaoNavegacao[] = [
       { id: 'smtp', rotulo: 'Servidores SMTP', icone: 'envelope', rota: '/admin/smtp' },
       { id: 'glpi', rotulo: 'Integração GLPI', icone: 'ajuda', rota: '/admin/glpi' },
       { id: 'bookstack', rotulo: 'Integração BookStack', icone: 'arquivo', rota: '/admin/bookstack' },
-      // Mensageria (e-mail de changelog): só a conta root
-      { id: 'mensageria', rotulo: 'Mensageria', icone: 'megafone', rota: '/admin/mensageria', somenteRoot: true },
+      // Notificações do sistema (e-mail de changelog): só a conta root
+      { id: 'notificacoes-sistema', rotulo: 'Notificações do sistema', icone: 'megafone', rota: '/admin/notificacoes-sistema', somenteRoot: true },
     ],
   },
 ];

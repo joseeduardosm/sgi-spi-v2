@@ -90,7 +90,7 @@
   @if (p.visao === 'anual' && p.periodos.length) {
     <section class="cartao-dados" aria-labelledby="titulo-grafico-rh">
       <header><div><h2 id="titulo-grafico-rh">Pessoas afastadas por mês</h2><small>Pessoas distintas com férias ou licença-prêmio em cada mês de {{ filtros.ano }}.</small></div></header>
-      <div class="corpo"><app-grafico tipo="bar" titulo="Pessoas afastadas por mês" [rotulos]="meses" [series]="serieAnual()" [empilhado]="true" [altura]="220" /></div>
+      <div class="corpo">@defer (on idle) { <app-grafico tipo="bar" titulo="Pessoas afastadas por mês" [rotulos]="meses" [series]="serieAnual()" [empilhado]="true" [altura]="220" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</div>
     </section>
   }
 
@@ -136,12 +136,12 @@
     </div>
   </section>
 } @else {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="painel" [linhas]="4" />
 }
 
 @if (recusando(); as a) {
-  <div class="fundo-modal" role="presentation" (click)="recusando.set(null)"></div>
-  <section class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="recusando.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa">
     <header>
       <div><span class="modal-sobretitulo">{{ tipos[a.tipo] }} · {{ a.nome }}</span><h2 id="titulo-recusa">Recusar {{ data(a.inicio) }} a {{ data(a.fim) }}</h2></div>
       <button type="button" aria-label="Fechar" (click)="recusando.set(null)">×</button>
@@ -161,8 +161,8 @@
 
 <!-- Detalhe do período clicado no gráfico -->
 @if (detalhe(); as a) {
-  <div class="fundo-modal" role="presentation" (click)="detalhe.set(null)"></div>
-  <section class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-detalhe-afastamento">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="detalhe.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-detalhe-afastamento">
     <header>
       <div><span class="modal-sobretitulo">{{ tipos[a.tipo] }} · {{ status[a.status] }}</span><h2 id="titulo-detalhe-afastamento">{{ a.nome }}</h2></div>
       <button type="button" aria-label="Fechar" (click)="detalhe.set(null)">×</button>

@@ -44,7 +44,7 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
                     <td>{{ doc.obrigatorio ? 'Obrigatório' : 'Opcional' }}@if (doc.com_validade) { <small>Com validade</small> }</td>
                     <td><span class="selo-situacao" [class.pendente]="!doc.arquivo" [class.vermelho]="!doc.arquivo && doc.obrigatorio">{{ doc.arquivo ? 'Anexado' : doc.obrigatorio ? 'Pendente' : 'Não anexado' }}</span></td>
                     <td>
-                      @if (doc.arquivo) { <button type="button" class="link-arquivo" (click)="baixar(doc.arquivo.anexo_id)">Baixar</button> }
+                      @if (doc.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(doc.arquivo.anexo_id)">Baixar</button> }
                       @if (doc.com_validade && doc.arquivo && doc.validade_ate) {
                         <small [style.color]="vencimento(doc.validade_ate) === 'vencido' ? '#b3261e' : vencimento(doc.validade_ate) === 'perto' ? '#8a6d00' : '#6a7786'">
                           Válido até {{ doc.validade_ate | dataBr }}@if (vencimento(doc.validade_ate) === 'perto') { (vence em até 30 dias) }@if (vencimento(doc.validade_ate) === 'vencido') { (vencido) }

@@ -16,12 +16,13 @@ import { MelhoriasApiService } from './melhorias-api.service';
 import { ConversaoTarefa, PrintSugestao, ROTULOS_MODULO, ROTULOS_SITUACAO, SituacaoSugestao, SugestaoTriagem, Tratamento } from './melhorias.models';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
 
 /** Cada sugestão tem a própria tela (`/melhorias/triagem/12`), a mesma dos links de avisos; só quem faz a triagem acessa (a API confere). */
 @Component({
   selector: 'app-detalhe-sugestao',
-  imports: [LinkificarPipe, FormsModule, DatePipe, RouterLink, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, RouterLink, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
   template: `
     <app-cabecalho-melhorias [titulo]="'Sugestão #' + numero" descricao="Analise, responda ao autor e, se fizer sentido, transforme em tarefa." />
     <p><a class="link-arquivo" routerLink="/melhorias/triagem">‹ Voltar à triagem</a></p>
@@ -68,7 +69,7 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
           } @else {
             <button type="button" class="acao-secundaria" (click)="abrirConversao(s)">Converter em tarefa</button>
           }
-          <button type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar tratamento' }}</button>
+          <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar tratamento' }}</button>
         </div>
       </form>
 
@@ -114,7 +115,7 @@ const SITUACOES = Object.keys(ROTULOS_SITUACAO) as SituacaoSugestao[];
     </div>
       </section>
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="formulario" [linhas]="5" />
     }
   `,
 })

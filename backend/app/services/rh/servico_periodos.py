@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.core.banco import agora_utc
 from app.models.rh import Afastamento, DadosFuncionais, ParametrosRh, PeriodoAquisitivo
 from app.models.usuario import Usuario
-from app.services import servico_mensagens
+from app.services import notificacoes
 
 ATIVOS = ("pendente", "aprovado", "gozado")
 DIAS_LEMBRETE = 7
@@ -190,12 +190,11 @@ def processar(sessao: Session, referencia: date) -> dict[str, int]:
         resultado["expiracoes"] += _expirar_anteriores(sessao, usuario.id, referencia)
         # Crédito do novo período (só avisa se ele começou há pouco: evita e-mails em massa na primeira execução)
         if not existia and (referencia - inicio).days <= 7:
-            if servico_mensagens.notificar(
+            if notificacoes.notificar(
                 sessao, [usuario.id], f"Novo período aquisitivo: {periodo.dias_creditados} dias de férias disponíveis",
                 f"Começou o seu período aquisitivo de {_data(periodo.inicio)} a {_data(periodo.fim)}, com {periodo.dias_creditados} dias de férias. "
                 f"O saldo que não for usado até {_data(periodo.fim)} expira no início do período seguinte.",
-                chave=f"ferias-periodo:{usuario.id}:{periodo.inicio:%Y%m%d}:credito", categoria="comunicado", link="/rh/ferias", email=True,
-            ):
+                chave=f"ferias-periodo:{usuario.id}:{periodo.inicio:%Y%m%d}:credito", categoria="comunicado", link="/rh/ferias", evento="rh.periodo_ferias"):
                 resultado["creditos"] += 1
         if not p.aviso_ferias_ativo:
             continue
@@ -213,7 +212,7 @@ def processar(sessao: Session, referencia: date) -> dict[str, int]:
             "lembrete": f"Lembrete: {_nome(usuario)} precisa agendar {s.disponivel} dia(s) de férias",
             "ultimo": f"Último dia para pedir férias sem perder dias: {_nome(usuario)}",
         }
-        if servico_mensagens.notificar(
+        if notificacoes.notificar(
             sessao, _destinatarios(sessao, usuario.id, referencia), titulos[marco],
             f"O período aquisitivo de {_nome(usuario)} vai de {_data(periodo.inicio)} a {_data(periodo.fim)}. "
             f"Ainda há {s.disponivel} dia(s) de férias não agendados, que expiram em {_data(periodo.fim + timedelta(days=1))}, "
@@ -222,8 +221,7 @@ def processar(sessao: Session, referencia: date) -> dict[str, int]:
             f"{p.antecedencia_minima_dias} dias, o pedido deve ser feito até {_data(s.data_limite_pedido)}.\n\n"
             "Agende as férias no SGI SPI (RH → Férias e LP).",
             chave=f"ferias-periodo:{usuario.id}:{periodo.inicio:%Y%m%d}:{marco}", categoria="prazo",
-            prioridade="critica" if marco == "ultimo" else "alta", link="/rh/ferias", email=True,
-        ):
+            prioridade="critica" if marco == "ultimo" else "alta", link="/rh/ferias", evento="rh.prazo_ferias"):
             resultado["avisos"] += 1
     sessao.commit()
     return resultado

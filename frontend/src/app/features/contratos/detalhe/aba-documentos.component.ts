@@ -32,8 +32,9 @@ import { NumeroProtocolo } from '../../protocolo/protocolo.models';
                 <td>{{ d.numero }}</td>
                 <td>
                   @if (d.anexado) {
-                    <button type="button" class="link-arquivo" (click)="baixar(d)">{{ d.titulo }}</button>
+                    <strong>{{ d.titulo }}</strong>
                     <small>{{ d.nome_arquivo }} · {{ d.tamanho | tamanho }}</small>
+                    <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(d)">Baixar PDF</button>
                   } @else {
                     <strong>{{ d.titulo }}</strong><small>Não anexado</small>
                   }

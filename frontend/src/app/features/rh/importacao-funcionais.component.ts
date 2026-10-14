@@ -25,8 +25,8 @@ const ROTULOS: Record<string, string> = {
   host: { '(document:keydown.escape)': 'aberta.set(false)' },
   template: `
     @if (aberta()) {
-      <div class="fundo-modal" role="presentation" (click)="aberta.set(false)"></div>
-      <section class="modal-portal modal-importacao-rh" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-rh">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="aberta.set(false)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-importacao-rh" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-rh">
         <header>
           <div><span class="modal-sobretitulo">Dados funcionais</span><h2 id="titulo-importacao-rh">Importar planilha</h2></div>
           <button type="button" aria-label="Fechar" (click)="aberta.set(false)">×</button>

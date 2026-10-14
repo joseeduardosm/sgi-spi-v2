@@ -68,7 +68,7 @@
           </tr>
         } @empty {
           <tr>
-            <td class="estado-vazio" colspan="7">{{ carregando() ? 'Carregando…' : 'Nenhum servidor SMTP configurado. O sistema não envia e-mails.' }}</td>
+            <td class="estado-vazio" colspan="7">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="7" [linhas]="4" /> } @else { {{ 'Nenhum servidor SMTP configurado. O sistema não envia e-mails.' }} }</td>
           </tr>
         }
       </tbody>
@@ -77,8 +77,8 @@
 </section>
 
 @if (formularioAberto()) {
-  <div class="fundo-modal" role="presentation" (click)="fecharJanelas()"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-smtp">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fecharJanelas()"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-smtp">
     <header>
       <div>
         <span class="modal-sobretitulo">Envio de e-mail</span>
@@ -151,17 +151,17 @@
       }
 
       <footer>
-        <button class="acao-secundaria" type="button" (click)="testarFormulario()" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Testar sem salvar' }}</button>
-        <button class="acao-secundaria" type="button" (click)="fecharJanelas()" [disabled]="salvando()">Cancelar</button>
-        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Salvar servidor' }}</button>
+        <button [class.carregando]="salvando()" class="acao-secundaria" type="button" (click)="testarFormulario()" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Testar sem salvar' }}</button>
+        <button [class.carregando]="salvando()" class="acao-secundaria" type="button" (click)="fecharJanelas()" [disabled]="salvando()">Cancelar</button>
+        <button [class.carregando]="salvando()" class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Aguarde…' : 'Salvar servidor' }}</button>
       </footer>
     </form>
   </section>
 }
 
 @if (envioAberto(); as s) {
-  <div class="fundo-modal" role="presentation" (click)="fecharJanelas()"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-envio-smtp">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fecharJanelas()"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-envio-smtp">
     <header>
       <div>
         <span class="modal-sobretitulo">{{ s.nome }}</span>
@@ -183,8 +183,8 @@
         </p>
       }
       <footer>
-        <button class="acao-secundaria" type="button" (click)="fecharJanelas()" [disabled]="salvando()">Fechar</button>
-        <button class="acao-primaria" type="submit" [disabled]="salvando() || !destinatario.trim()">{{ salvando() ? 'Enviando…' : 'Enviar teste' }}</button>
+        <button [class.carregando]="salvando()" class="acao-secundaria" type="button" (click)="fecharJanelas()" [disabled]="salvando()">Fechar</button>
+        <button [class.carregando]="salvando()" class="acao-primaria" type="submit" [disabled]="salvando() || !destinatario.trim()">{{ salvando() ? 'Enviando…' : 'Enviar teste' }}</button>
       </footer>
     </form>
   </section>

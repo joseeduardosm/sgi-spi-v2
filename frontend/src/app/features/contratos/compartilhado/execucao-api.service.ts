@@ -191,7 +191,7 @@ export class ExecucaoApiService {
   }
 
   /** Etapa 1: grava as quantidades medidas e as NEs escolhidas, em ordem. */
-  salvarMedicao(id: string, c: string, itens: { id: string; quantidade_medida: string; despesa_variavel?: boolean }[], notas: string[]): Observable<DetalheCompetencia> {
+  salvarMedicao(id: string, c: string, itens: { id: string; quantidade_medida: string; acerto?: string; despesa_variavel?: boolean }[], notas: string[]): Observable<DetalheCompetencia> {
     return this.http.put<DetalheCompetencia>(this.competencia(id, c, '/medicao'), { itens, notas_empenho_ids: notas });
   }
 

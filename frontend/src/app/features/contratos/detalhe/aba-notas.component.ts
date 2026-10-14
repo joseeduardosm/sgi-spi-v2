@@ -15,7 +15,7 @@ import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
   selector: 'app-aba-notas',
   imports: [FormsModule, ...PIPES_FORMATACAO],
   // Esc fecha a janela de cadastro
-  host: { '(document:keydown.escape)': 'aberto.set(false)' },
+  host: { '(document:keydown.escape)': 'aberto.set(false); cancelando.set(null)' },
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-notas">
       <header>
@@ -27,7 +27,7 @@ import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
           <article class="indicador" style="margin-bottom: 12px">
             <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
               <strong style="font-size: 15px">{{ n.numero }}</strong>
-              <span>Valor inicial: {{ n.valor_original | moeda }} · Saldo: <b>{{ n.saldo | moeda }}</b>@if (n.comprometido !== '0.00') { · Comprometido: {{ n.comprometido | moeda }} · Saldo livre: <b>{{ n.saldo_livre | moeda }}</b> }</span>
+              <span>Valor inicial: {{ n.valor_original | moeda }}@if (n.cancelado !== '0.00') { · Cancelado: {{ n.cancelado | moeda }} } · Saldo: <b>{{ n.saldo | moeda }}</b>@if (n.comprometido !== '0.00') { · Comprometido: {{ n.comprometido | moeda }} · Saldo livre: <b>{{ n.saldo_livre | moeda }}</b> }</span>
             </div>
             <div class="barra-consumo" [attr.aria-label]="n.percentual_consumido + '% consumido'"><span [class]="n.faixa" [style.width.%]="n.percentual_consumido"></span></div>
             <small>{{ n.percentual_consumido | percentual }} consumido@if (n.comprometido !== '0.00') { · comprometido = competências já medidas e ainda não pagas }</small>
@@ -46,9 +46,22 @@ import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
             } @else {
               <small style="margin-top: 8px">Nenhum débito realizado.</small>
             }
+            @if (n.cancelamentos.length) {
+              <table class="tabela-gestao" style="margin-top: 10px">
+                <thead><tr><th>Data</th><th>NE de cancelamento</th><th class="num">Valor cancelado</th></tr></thead>
+                <tbody>
+                  @for (c of n.cancelamentos; track c.id) {
+                    <tr><td>{{ c.criado_em.slice(0, 10) | dataBr }}</td>
+                      <td>{{ c.numero }}@if (c.autor) { <small>{{ c.autor }}</small> }@if (c.justificativa) { <small>{{ c.justificativa }}</small> }</td>
+                      <td class="num">{{ c.valor | moeda }}</td></tr>
+                  }
+                </tbody>
+              </table>
+            }
             @if (podeEditar()) {
               <div class="acoes-cartao esquerda">
                 <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(n)">Editar</button>
+                @if (n.saldo !== '0.00') { <button type="button" class="acao-secundaria acao-pequena" (click)="abrirCancelamento(n)">Cancelar NE</button> }
                 @if (!n.vinculada) { <button type="button" class="acao-perigo acao-pequena" (click)="excluir(n)">Excluir</button> }
               </div>
             }
@@ -60,8 +73,8 @@ import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
     </section>
 
     @if (aberto()) {
-      <div class="fundo-modal" role="presentation" (click)="aberto.set(false)"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-nota">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="aberto.set(false)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-nota">
         <header>
           <div><span class="modal-sobretitulo">Nota de Empenho</span><h2 id="titulo-nota">{{ emEdicao ? 'Editar NE' : 'Cadastrar NE' }}</h2></div>
           <button type="button" aria-label="Fechar" (click)="aberto.set(false)">×</button>
@@ -79,6 +92,30 @@ import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
         </form>
       </section>
     }
+
+    @if (cancelando(); as nota) {
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="cancelando.set(null)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-cancelamento">
+        <header>
+          <div><span class="modal-sobretitulo">NE {{ nota.numero }}</span><h2 id="titulo-cancelamento">Cancelar NE</h2></div>
+          <button type="button" aria-label="Fechar" (click)="cancelando.set(null)">×</button>
+        </header>
+        <form (ngSubmit)="cancelar(nota)">
+          <div class="grade-formulario">
+            <div><label for="canc-numero">Número da NE de cancelamento *</label><input id="canc-numero" name="numero" required maxlength="30" [(ngModel)]="cancNumero" /></div>
+            <div><label for="canc-valor">Valor cancelado (R$) *</label><input id="canc-valor" name="valor" inputmode="decimal" required [(ngModel)]="cancValor" /></div>
+          </div>
+          <div class="grade-formulario">
+            <div><label for="canc-justificativa">Justificativa</label><textarea id="canc-justificativa" name="justificativa" rows="3" maxlength="2000" [(ngModel)]="cancJustificativa"></textarea></div>
+          </div>
+          <p class="dica-formulario">Pode cancelar até o saldo da NE ({{ nota.saldo | moeda }}), mesmo que parte esteja comprometida por medições. Se todas as NEs ficarem sem saldo, as medições são bloqueadas.</p>
+          <footer>
+            <button type="button" class="acao-secundaria" (click)="cancelando.set(null)">Voltar</button>
+            <button type="submit" class="acao-perigo" [disabled]="!cancNumero.trim() || !cancValor">Cancelar NE</button>
+          </footer>
+        </form>
+      </section>
+    }
   `,
 })
 export class AbaNotasComponent implements OnInit {
@@ -90,6 +127,10 @@ export class AbaNotasComponent implements OnInit {
   // Estado: lista de NEs e a janela de cadastro/edição
   protected readonly notas = signal<NotaEmpenho[]>([]);
   protected readonly aberto = signal(false);
+  protected readonly cancelando = signal<NotaEmpenho | null>(null);
+  protected cancNumero = '';
+  protected cancValor = '';
+  protected cancJustificativa = '';
   protected emEdicao: NotaEmpenho | null = null;
   protected numero = '';
   protected valor = '';
@@ -105,6 +146,26 @@ export class AbaNotasComponent implements OnInit {
     this.numero = nota?.numero ?? '';
     this.valor = nota ? paraDecimalTela(nota.valor_original) : '';
     this.aberto.set(true);
+  }
+
+  /** Abre a janela da NE de cancelamento, sugerindo o saldo todo. */
+  protected abrirCancelamento(nota: NotaEmpenho): void {
+    this.cancNumero = '';
+    this.cancValor = paraDecimalTela(nota.saldo);
+    this.cancJustificativa = '';
+    this.cancelando.set(nota);
+  }
+
+  /** Registra o cancelamento e atualiza a lista. */
+  protected cancelar(nota: NotaEmpenho): void {
+    const dados = { numero: this.cancNumero.trim(), valor: paraDecimalApi(this.cancValor), justificativa: this.cancJustificativa.trim() };
+    this.api.cancelarNota(this.contratoId(), nota.id, dados).subscribe({
+      next: (n) => {
+        this.notas.set(n);
+        this.cancelando.set(null);
+      },
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível cancelar a Nota de Empenho'),
+    });
   }
 
   /** Salva a NE (valor convertido do formato brasileiro para o da API). */

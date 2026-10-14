@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../../environments/ambiente';
 import { baixarArquivo } from '../../../shared/utilitarios/download';
-import { AutoridadePortaria, GravacaoAutoridade, PainelPortarias } from './contratos.models';
+import { AutoridadePortaria, GravacaoAutoridade, PainelPortarias, UsuarioAutoridade } from './contratos.models';
 
 /** Portarias do contrato e autoridades (docs/endpoints/contratos-portarias.md). */
 @Injectable({ providedIn: 'root' })
@@ -53,6 +53,11 @@ export class PortariasApiService {
 
   autoridades(): Observable<AutoridadePortaria[]> {
     return this.http.get<AutoridadePortaria[]>(this.baseAutoridades);
+  }
+
+  /** Usuários ativos para escolher a autoridade (busca por nome ou login). */
+  usuariosParaAutoridade(busca: string): Observable<UsuarioAutoridade[]> {
+    return this.http.get<UsuarioAutoridade[]>(`${this.baseAutoridades}/usuarios`, { params: { busca } });
   }
 
   criarAutoridade(dados: GravacaoAutoridade): Observable<AutoridadePortaria[]> {

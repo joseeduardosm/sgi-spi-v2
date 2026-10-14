@@ -21,12 +21,15 @@ from app.models.contratos import (
     ApontamentoPrevisao,
     Competencia,
     Contrato,
+    CancelamentoNotaEmpenho,
     NotaEmpenho,
     PrevisaoVigencia,
     SelecaoNotaEmpenho,
 )
 from app.models.usuario import Usuario
 from app.schemas.contratos.orcamento import (
+    CancelamentoNota,
+    GravacaoCancelamentoNota,
     GravacaoNotaEmpenho,
     GravacaoPrevisao,
     ItemMesPrevisao,
@@ -263,7 +266,7 @@ def carregar_notas(sessao: Session, contrato_id: uuid.UUID) -> list[NotaEmpenho]
         sessao.scalars(
             select(NotaEmpenho)
             .where(NotaEmpenho.contrato_id == contrato_id)
-            .options(selectinload(NotaEmpenho.movimentos))
+            .options(selectinload(NotaEmpenho.movimentos), selectinload(NotaEmpenho.cancelamentos))
             .order_by(NotaEmpenho.criado_em)
         )
     )
@@ -282,7 +285,7 @@ def leitura_nota(sessao: Session, nota: NotaEmpenho, comprometido: Decimal = ZER
     autores = dict(
         sessao.execute(
             select(Usuario.id, func.coalesce(Usuario.nome_completo, Usuario.login)).where(
-                Usuario.id.in_([m.criado_por_id for m in nota.movimentos if m.criado_por_id])
+                Usuario.id.in_([m.criado_por_id for m in [*nota.movimentos, *nota.cancelamentos] if m.criado_por_id])
             )
         ).all()
     )
@@ -303,12 +306,16 @@ def leitura_nota(sessao: Session, nota: NotaEmpenho, comprometido: Decimal = ZER
             )
         )
     # Percentual consumido (protege contra divisão por zero)
-    percentual = calculos.arredondar(nota.consumido * 100 / nota.valor_original) if nota.valor_original else ZERO
+    percentual = calculos.arredondar((nota.consumido + nota.cancelado) * 100 / nota.valor_original) if nota.valor_original else ZERO
     return LeituraNotaEmpenho(
-        id=nota.id, numero=nota.numero, valor_original=nota.valor_original, consumido=nota.consumido, saldo=nota.saldo,
+        id=nota.id, numero=nota.numero, valor_original=nota.valor_original, consumido=nota.consumido, cancelado=nota.cancelado, saldo=nota.saldo,
         comprometido=comprometido, saldo_livre=nota.saldo - comprometido,
-        percentual_consumido=percentual, faixa=faixa_consumo(percentual), vinculada=bool(vinculada or nota.movimentos),
-        movimentos=movimentos, criado_em=nota.criado_em,
+        percentual_consumido=percentual, faixa=faixa_consumo(percentual), vinculada=bool(vinculada or nota.movimentos or nota.cancelamentos),
+        movimentos=movimentos,
+        cancelamentos=[
+            CancelamentoNota(id=c.id, numero=c.numero, valor=c.valor, justificativa=c.justificativa or "", autor=autores.get(c.criado_por_id), criado_em=c.criado_em)
+            for c in nota.cancelamentos
+        ], criado_em=nota.criado_em,
     )
 
 
@@ -326,7 +333,10 @@ def _numero_em_uso(sessao: Session, contrato_id: uuid.UUID, numero: str, nota_id
     existente = sessao.scalar(
         select(NotaEmpenho.id).where(NotaEmpenho.contrato_id == contrato_id, func.lower(NotaEmpenho.numero) == numero.lower())
     )
-    return existente is not None and existente != nota_id
+    cancelamento = sessao.scalar(
+        select(CancelamentoNotaEmpenho.id).where(CancelamentoNotaEmpenho.contrato_id == contrato_id, func.lower(CancelamentoNotaEmpenho.numero) == numero.lower())
+    )
+    return cancelamento is not None or (existente is not None and existente != nota_id)
 
 
 def criar_nota(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoNotaEmpenho, autor: Usuario) -> None:
@@ -356,13 +366,37 @@ def alterar_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, da
     nota = _obter_nota(sessao, contrato_id, nota_id)
     if _numero_em_uso(sessao, contrato.id, dados.numero, nota.id):
         raise ErroRegraContrato("Já existe uma Nota de Empenho com este número no contrato.", conflito=True)
-    if dados.valor_original < nota.consumido:
-        raise ErroRegraContrato(f"O valor não pode ficar abaixo do já consumido (R$ {nota.consumido:.2f}).")
+    if dados.valor_original < nota.consumido + nota.cancelado:
+        raise ErroRegraContrato(f"O valor não pode ficar abaixo do já consumido e cancelado (R$ {nota.consumido + nota.cancelado:.2f}).")
     antes = {"numero": nota.numero, "valor_original": nota.valor_original}
     nota.numero, nota.valor_original = dados.numero, dados.valor_original
     auditar(sessao, autor.login, "contrato.nota_empenho.alterar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"antes": antes, "depois": dados.model_dump()})
     sessao.commit()
+
+
+def cancelar_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, dados: GravacaoCancelamentoNota, autor: Usuario) -> None:
+    """Registra a NE de cancelamento: abate `valor` do saldo da NE original (até o saldo, mesmo que reservado por medições)."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    nota = _obter_nota(sessao, contrato_id, nota_id)
+    if _numero_em_uso(sessao, contrato.id, dados.numero, None):
+        raise ErroRegraContrato("Já existe uma Nota de Empenho ou de cancelamento com este número no contrato.", conflito=True)
+    if dados.valor > nota.saldo:
+        raise ErroRegraContrato(f"O cancelamento não pode passar do saldo da NE (R$ {nota.saldo:.2f}).")
+    sessao.add(CancelamentoNotaEmpenho(
+        contrato_id=contrato.id, nota_id=nota.id, numero=dados.numero, valor=dados.valor, justificativa=dados.justificativa.strip(), criado_por_id=autor.id,
+    ))
+    auditar(sessao, autor.login, "contrato.nota_empenho.cancelar", f"Contrato {contrato.numero}", autor_id=autor.id,
+            alvo_tipo="contrato", alvo_id=contrato.id, dados={"nota": nota.numero, **dados.model_dump()})
+    sessao.commit()
+
+
+def exigir_saldo_para_medir(sessao: Session, contrato: Contrato) -> None:
+    """Bloqueia medir/concluir medições quando NEs de cancelamento deixaram o contrato sem saldo em todas as NEs."""
+    notas = carregar_notas(sessao, contrato.id)
+    if notas and any(n.cancelamentos for n in notas) and saldo_notas(notas) <= 0:
+        raise ErroRegraContrato("As NEs de cancelamento consumiram todo o saldo de empenho do contrato. Cadastre uma nova NE para continuar as medições.")
 
 
 def excluir_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, autor: Usuario) -> None:
@@ -371,7 +405,7 @@ def excluir_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, au
     exigir_edicao(sessao, contrato, autor)
     nota = _obter_nota(sessao, contrato_id, nota_id)
     ligada = sessao.scalar(select(func.count()).where(SelecaoNotaEmpenho.nota_id == nota.id))
-    if ligada or nota.movimentos:
+    if ligada or nota.movimentos or nota.cancelamentos:
         raise ErroRegraContrato("A Nota de Empenho está ligada a uma competência ou tem débitos e não pode ser excluída.")
     auditar(sessao, autor.login, "contrato.nota_empenho.excluir", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"numero": nota.numero, "valor_original": nota.valor_original})
@@ -456,7 +490,7 @@ def movimentos_em_ordem(notas: list[NotaEmpenho], debito: Decimal) -> list[tuple
 def notas_por_contrato(sessao: Session) -> dict[uuid.UUID, list[NotaEmpenho]]:
     """Todas as NEs agrupadas por contrato: {contrato_id: [notas]} (usado pelo painel)."""
     agrupadas: dict[uuid.UUID, list[NotaEmpenho]] = defaultdict(list)
-    for nota in sessao.scalars(select(NotaEmpenho).options(selectinload(NotaEmpenho.movimentos))):
+    for nota in sessao.scalars(select(NotaEmpenho).options(selectinload(NotaEmpenho.movimentos), selectinload(NotaEmpenho.cancelamentos))):
         agrupadas[nota.contrato_id].append(nota)
     return agrupadas
 

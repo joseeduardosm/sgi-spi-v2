@@ -35,9 +35,9 @@ const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julh
         }
       </div>
     }
-    <p class="contagem-noticias" aria-live="polite">{{ carregando() && !itens().length ? 'Carregando…' : total() + ' notícia' + (total() === 1 ? '' : 's') }}</p>
+    <p class="contagem-noticias" aria-live="polite">@if (carregando() && !itens().length) { <span class="esq" style="display:inline-block;width:90px;height:12px"></span> } @else { {{ total() + ' notícia' + (total() === 1 ? '' : 's') }} }</p>
     <div class="grade-noticias">
-      @for (n of itens(); track n.id) { <app-cartao-noticia [noticia]="n" /> }
+      @for (n of itens(); track n.id) { <app-cartao-noticia [noticia]="n" formato="tweet" /> }
     </div>
     @if (!carregando() && !itens().length) { <p class="estado-vazio">Nenhuma notícia encontrada com esses filtros.</p> }
     @if (itens().length < total()) {

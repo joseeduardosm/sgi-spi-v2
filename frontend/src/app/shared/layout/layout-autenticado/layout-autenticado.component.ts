@@ -9,12 +9,14 @@ import { filter, map, startWith, tap } from 'rxjs';
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { AtalhosService } from '../../../core/navegacao/atalhos.service';
 import { PreferenciaTema, TemaService } from '../../../core/tema/tema.service';
-import { CaixaMensagensService } from '../../../core/mensagens/caixa-mensagens.service';
-import { JanelaMensagemComponent } from '../../../features/mensagens/janela-mensagem.component';
+import { CaixaNotificacoesService } from '../../../core/notificacoes/caixa-notificacoes.service';
+import { JanelaNotificacaoComponent } from '../../../features/notificacoes/janela-notificacao.component';
 import { FolhaPontoDialogoComponent } from '../../../features/rh/folha-ponto-dialogo.component';
 import { DialogosComponent } from '../../componentes/dialogos/dialogos.component';
 import { IconeComponent } from '../../componentes/icone/icone.component';
 import { BotaoMelhoriasComponent } from '../../componentes/botao-melhorias/botao-melhorias.component';
+import { BarraProgressoComponent } from '../../componentes/barra-progresso/barra-progresso.component';
+import { AvisoNotificacoesNavegadorComponent } from '../../componentes/aviso-notificacoes-navegador/aviso-notificacoes-navegador.component';
 import { AbrirChamadoComponent } from '../../componentes/abrir-chamado/abrir-chamado.component';
 import { BuscaGlobalComponent } from '../../componentes/busca-global/busca-global.component';
 import { PaletaComandosComponent } from '../../componentes/paleta-comandos/paleta-comandos.component';
@@ -26,8 +28,8 @@ import { LayoutService } from '../layout.service';
 @Component({
   selector: 'app-layout-autenticado',
   imports: [
-    RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaMensagemComponent, FolhaPontoDialogoComponent,
-    BotaoMelhoriasComponent, BuscaGlobalComponent, AbrirChamadoComponent, PaletaComandosComponent,
+    RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaNotificacaoComponent, FolhaPontoDialogoComponent,
+    BotaoMelhoriasComponent, BuscaGlobalComponent, AbrirChamadoComponent, PaletaComandosComponent, AvisoNotificacoesNavegadorComponent, BarraProgressoComponent,
   ],
   templateUrl: './layout-autenticado.component.html',
   styleUrl: './layout-autenticado.component.scss',
@@ -53,8 +55,8 @@ export class LayoutAutenticadoComponent {
   private readonly busca = viewChild<BuscaGlobalComponent>('busca');
   private readonly paleta = inject(PaletaComandosService);
   private readonly elemento = inject(ElementRef<HTMLElement>);
-  // Sino da mensageria (contador de pendentes) e janela de avisos
-  protected readonly caixa = inject(CaixaMensagensService);
+  // Sino das notificações (contador de pendentes) e janela de avisos
+  protected readonly caixa = inject(CaixaNotificacoesService);
 
   constructor() {
     this.caixa.iniciar(inject(DestroyRef));

@@ -98,10 +98,20 @@ class NotaEmpenho(Base):
         """Total debitado (pagamentos menos estornos)."""
         return sum((m.debito for m in self.movimentos), Decimal(0))
 
+    # NEs de cancelamento que abateram o saldo desta NE
+    cancelamentos: Mapped[list["CancelamentoNotaEmpenho"]] = relationship(
+        back_populates="nota", cascade="all, delete-orphan", order_by="CancelamentoNotaEmpenho.criado_em"
+    )
+
+    @property
+    def cancelado(self) -> Decimal:
+        """Total cancelado por NEs de cancelamento."""
+        return sum((c.valor for c in self.cancelamentos), Decimal(0))
+
     @property
     def saldo(self) -> Decimal:
-        """Quanto ainda pode ser consumido."""
-        return self.valor_original - self.consumido
+        """Quanto ainda pode ser consumido (valor − débitos − cancelamentos)."""
+        return self.valor_original - self.consumido - self.cancelado
 
 
 class MovimentoNotaEmpenho(Base):
@@ -128,3 +138,24 @@ class MovimentoNotaEmpenho(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     nota: Mapped[NotaEmpenho] = relationship(back_populates="movimentos")
+
+
+class CancelamentoNotaEmpenho(Base):
+    """NE de cancelamento: abate `valor` do saldo de uma NE original (parcial ou totalmente).
+
+    Tem número próprio (o da NE de cancelamento emitida), único no contrato junto com as NEs. O registro é imutável.
+    """
+
+    __tablename__ = "contratos_notas_empenho_cancelamentos"
+    __table_args__ = (UniqueConstraint("contrato_id", "numero"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    nota_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_notas_empenho.id", ondelete="CASCADE"), index=True)
+    numero: Mapped[str] = mapped_column(String(30))
+    valor: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    justificativa: Mapped[str] = mapped_column(String(2000), default="", server_default="")
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    nota: Mapped[NotaEmpenho] = relationship(back_populates="cancelamentos")

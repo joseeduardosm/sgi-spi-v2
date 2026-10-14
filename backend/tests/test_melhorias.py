@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from sqlalchemy import select
 
 from app.core.banco import FabricaSessao
-from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.notificacao import EntregaNotificacao, Notificacao
 from tests.apoio_rh import simular_smtp
 from tests.conftest import cabecalho, criar_usuario
 
@@ -51,7 +51,7 @@ def _enviar(cliente, h, texto="O filtro de contratos poderia lembrar a última b
 
 def _avisos(prefixo: str) -> list[tuple[int, str]]:
     with FabricaSessao() as s:
-        return sorted(s.execute(select(EntregaMensagem.destinatario_id, Mensagem.assunto).join(Mensagem).where(Mensagem.chave.startswith(prefixo))))
+        return sorted(s.execute(select(EntregaNotificacao.destinatario_id, Notificacao.assunto).join(Notificacao).where(Notificacao.chave.startswith(prefixo))))
 
 
 def test_envio_com_prints_e_aviso_a_triagem(cliente, admin, pessoas):

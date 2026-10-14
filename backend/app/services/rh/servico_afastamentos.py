@@ -29,7 +29,7 @@ from app.core.banco import agora_utc
 from app.models.rh import Afastamento, EventoAfastamento, ParametrosRh, PeriodoAquisitivo
 from app.models.setor import MembroSetor
 from app.models.usuario import Usuario
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.rh import servico_periodos
 from app.services.rh.papeis import (
     SemPermissaoRh,
@@ -277,12 +277,10 @@ def _avisar_aprovadores(sessao: Session, usuario: Usuario, a: Afastamento) -> No
     """Autorizador (ou substituto) e CGP: pedido aguardando aprovação (encerrado na decisão)."""
     ids = set(aprovadores_de(sessao, usuario.id, hoje())) | {u.id for u in usuarios_cgp(sessao)}
     ids.discard(usuario.id)
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, list(ids), f"{_nome(usuario)} agendou {ROTULOS_TIPO[a.tipo]} e aguarda aprovação",
         f"{_nome(usuario)} ({setor_do_usuario(usuario)}) agendou {_descricao(a)} e aguarda aprovação.",
-        chave=f"afastamento:{a.id}:{a.inicio:%Y%m%d}", categoria="pendencia", prioridade="alta", link="/rh/painel-afastamentos",
-        email=True,
-    )
+        chave=f"afastamento:{a.id}:{a.inicio:%Y%m%d}", categoria="pendencia", prioridade="alta", link="/rh/painel-afastamentos", evento="rh.afastamento_aprovacao")
 
 
 def _superior_da_ciencia(sessao: Session, usuario: Usuario) -> int | None:
@@ -305,12 +303,11 @@ def _superior_da_ciencia(sessao: Session, usuario: Usuario) -> int | None:
 
 def _avisar_superior(sessao: Session, usuario: Usuario, a: Afastamento) -> None:
     """Etapa 1: o superior imediato recebe o pedido para dar o ciente e de acordo (encerrado na ciência ou na recusa)."""
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, [usuario.gestor_id], f"{_nome(usuario)} agendou {ROTULOS_TIPO[a.tipo]}: ciente e de acordo",
         f"{_nome(usuario)} ({setor_do_usuario(usuario)}) agendou {_descricao(a)}. Dê o ciente e de acordo para o pedido seguir à aprovação "
         "(isso não aprova o pedido).",
-        chave=f"afastamento:{a.id}:ciencia", categoria="pendencia", prioridade="alta", link="/rh/painel-afastamentos", email=True,
-    )
+        chave=f"afastamento:{a.id}:ciencia", categoria="pendencia", prioridade="alta", link="/rh/painel-afastamentos", evento="rh.afastamento_ciencia")
 
 
 def _iniciar_fluxo(sessao: Session, usuario: Usuario, a: Afastamento) -> None:
@@ -324,10 +321,9 @@ def _iniciar_fluxo(sessao: Session, usuario: Usuario, a: Afastamento) -> None:
 
 
 def _avisar_usuario(sessao: Session, usuario_id: int, a: Afastamento, titulo: str, texto: str) -> None:
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, [usuario_id], titulo, texto, chave=f"afastamento-status:{a.id}:{a.status}:{agora_utc():%Y%m%d%H%M%S%f}",
-        categoria="comunicado", prioridade="normal", link="/rh/ferias", email=True,
-    )
+        categoria="comunicado", prioridade="normal", link="/rh/ferias", evento="rh.afastamento_situacao")
 
 
 def _avisar_cancelamento(sessao: Session, usuario: Usuario, a: Afastamento, autor: Usuario, estado_anterior: str, aguardava_ciencia: bool,
@@ -341,12 +337,11 @@ def _avisar_cancelamento(sessao: Session, usuario: Usuario, a: Afastamento, auto
     # Quem cancelou e o dono do pedido já têm o próprio aviso
     ids -= {autor.id, a.usuario_id}
     if ids:
-        servico_mensagens.notificar(
+        notificacoes.notificar(
             sessao, list(ids), f"Cancelamento: {_nome(usuario)} cancelou {ROTULOS_TIPO[a.tipo]}",
             f"{texto.replace(_nome(autor) + ' cancelou', 'O pedido foi cancelado por ' + _nome(autor) + ':', 1)}\n\nServidor: {_nome(usuario)} ({setor_do_usuario(usuario)}).",
             chave=f"afastamento-cancelado:{a.id}:{agora_utc():%Y%m%d%H%M%S%f}", categoria="comunicado", prioridade="normal",
-            link="/rh/painel-afastamentos", email=True,
-        )
+            link="/rh/painel-afastamentos", evento="rh.afastamento_cancelado")
 
 
 # --- Ações --------------------------------------------------------------------------------------
@@ -465,7 +460,7 @@ def alterar(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID, tipo: st
     dias = validar_pedido(sessao, usuario, tipo, inicio, fim, ignorar=[a.id], cgp=cgp)
     if a.status == "pendente":
         # O aviso do pedido anterior sai; um novo é enviado com as datas novas
-        servico_mensagens.encerrar(sessao, prefixo=f"afastamento:{a.id}:")
+        notificacoes.encerrar(sessao, prefixo=f"afastamento:{a.id}:")
         a.tipo, a.inicio, a.fim, a.dias, a.exercicio = tipo, inicio, fim, dias, inicio.year
         a.periodo_aquisitivo_id = _vincular_periodo(sessao, a.usuario_id, tipo, inicio)
         _evento(a, "pendente", "pendente", autor, "Pedido alterado")
@@ -492,7 +487,7 @@ def cancelar(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID, justifi
     aguardava_ciencia, usuario = a.aguarda_ciencia, sessao.get(Usuario, a.usuario_id)
     a.aguarda_ciencia = False
     _evento(a, anterior, "cancelado", autor, justificativa)
-    servico_mensagens.encerrar(sessao, prefixo=f"afastamento:{a.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"afastamento:{a.id}:")
     texto = f"{_nome(autor)} cancelou {_descricao(a)}." + (f"\n\nJustificativa: {justificativa}" if justificativa else "")
     _avisar_usuario(sessao, a.usuario_id, a, f"Afastamento cancelado: {ROTULOS_TIPO[a.tipo]}", texto)
     _avisar_cancelamento(sessao, usuario, a, autor, anterior, aguardava_ciencia, texto)
@@ -531,7 +526,7 @@ def dar_ciencia(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID) -> A
     a.aguarda_ciencia = False
     a.ciencia_por_id, a.ciencia_por_nome, a.ciencia_em = autor.id, _nome(autor), agora_utc()
     _evento(a, "pendente", "pendente", autor, "Ciente e de acordo do superior imediato")
-    servico_mensagens.encerrar(sessao, prefixo=f"afastamento:{a.id}:ciencia")
+    notificacoes.encerrar(sessao, prefixo=f"afastamento:{a.id}:ciencia")
     _avisar_usuario(sessao, a.usuario_id, a, f"Ciente e de acordo: {ROTULOS_TIPO[a.tipo]}",
                     f"{_nome(autor)} deu o ciente e de acordo em {_descricao(a)}. O pedido segue para aprovação (ainda não está aprovado).")
     _avisar_aprovadores(sessao, usuario, a)
@@ -561,7 +556,7 @@ def decidir(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID, aprovar:
         if antigo and antigo.status == "aprovado":
             antigo.status = "cancelado"
             _evento(antigo, "aprovado", "cancelado", autor, "Substituído por alteração aprovada")
-    servico_mensagens.encerrar(sessao, prefixo=f"afastamento:{a.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"afastamento:{a.id}:")
     if aprovar:
         _avisar_usuario(sessao, a.usuario_id, a, f"{ROTULOS_TIPO[a.tipo].capitalize()} aprovada(s)", f"{_nome(autor)} aprovou {_descricao(a)}.")
     else:
@@ -624,10 +619,9 @@ def dar_boas_vindas(sessao: Session, dia: date | None = None) -> int:
         usuario = sessao.get(Usuario, a.usuario_id)
         if usuario is None or not usuario.ativo:
             continue
-        if servico_mensagens.notificar(
+        if notificacoes.notificar(
             sessao, [usuario.id], "Que bom ter você de volta!", _boas_vindas(_nome(usuario), a),
-            chave=f"afastamento:{a.id}:retorno", categoria="comunicado", prioridade="normal", link="/mensagens", email=True,
-        ):
+            chave=f"afastamento:{a.id}:retorno", categoria="comunicado", prioridade="normal", link="/notificacoes", evento="rh.boas_vindas"):
             enviados += 1
     sessao.commit()
     return enviados
@@ -648,11 +642,10 @@ def lembrar_pendentes(sessao: Session, dia: date | None = None, dias_espera: int
             ids = set(aprovadores_de(sessao, a.usuario_id, dia)) | {u.id for u in usuarios_cgp(sessao)}
             etapa = "aprovação"
         ids.discard(a.usuario_id)
-        if servico_mensagens.notificar(
+        if notificacoes.notificar(
             sessao, list(ids), f"Lembrete: {_nome(usuario)} aguarda {etapa} de {ROTULOS_TIPO[a.tipo]}",
             f"O pedido de {_descricao(a)} de {_nome(usuario)} aguarda {etapa} há {dias_espera} dias.",
-            chave=f"afastamento:{a.id}:lembrete:{dia:%Y%m%d}", categoria="pendencia", prioridade="alta", link="/rh/painel-afastamentos", email=True,
-        ):
+            chave=f"afastamento:{a.id}:lembrete:{dia:%Y%m%d}", categoria="pendencia", prioridade="alta", link="/rh/painel-afastamentos", evento="rh.afastamento_lembrete"):
             lembrados += 1
     sessao.commit()
     return lembrados

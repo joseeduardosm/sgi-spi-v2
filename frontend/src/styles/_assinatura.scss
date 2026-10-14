@@ -33,13 +33,13 @@
       height: 40px;
       padding: 0 12px;
       border: 1px solid var(--cor-e2e5e8);
-      border-radius: 7px;
+      border-radius: var(--spi-raio-p);
       outline: 0;
       color: var(--cor-3d454e);
       background: var(--cor-fcfcfc);
       font-size: 13px;
 
-      &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; }
+      &:focus { border-color: #bc3843; box-shadow: var(--spi-anel-foco); }
     }
 
     input[inputmode] {
@@ -47,13 +47,13 @@
       height: 40px;
       padding: 0 12px;
       border: 1px solid var(--cor-e2e5e8);
-      border-radius: 7px;
+      border-radius: var(--spi-raio-p);
       outline: 0;
       color: var(--cor-3d454e);
       background: var(--cor-fcfcfc);
       font-size: 13px;
 
-      &:focus { border-color: #bc3843; box-shadow: 0 0 0 3px #af374112; }
+      &:focus { border-color: #bc3843; box-shadow: var(--spi-anel-foco); }
     }
 
     .ajuda { color: #8c97a4; font-size: 11.5px; }
@@ -72,7 +72,7 @@
       margin: 0;
       padding: 11px 14px;
       border: 1px solid var(--cor-e8eaec);
-      border-radius: 9px;
+      border-radius: var(--spi-raio-m);
       background: var(--cor-fcfcfc);
       cursor: pointer;
 
@@ -92,10 +92,10 @@
     padding: 16px;
     overflow-x: auto;
     border: 1px solid var(--cor-e3e5e8);
-    border-radius: 8px;
+    border-radius: var(--spi-raio-m);
     background: var(--cor-f5f7fb);
 
-    img { max-width: none; height: auto; background: var(--cor-ffffff); box-shadow: 0 8px 24px #0f172a1f; }
+    img { max-width: none; height: auto; background: var(--cor-ffffff);  }
     &.vazia { color: var(--cor-667085); text-align: center; border-style: dashed; }
   }
 
@@ -105,17 +105,17 @@
     margin-top: 14px;
 
     summary { color: var(--cor-5a6673); font-size: 12.5px; cursor: pointer; }
-    iframe { width: 100%; height: 220px; margin-top: 10px; border: 1px solid var(--cor-e3e5e8); border-radius: 8px; background: var(--cor-ffffff); }
+    iframe { width: 100%; height: 220px; margin-top: 10px; border: 1px solid var(--cor-e3e5e8); border-radius: var(--spi-raio-m); background: var(--cor-ffffff); }
   }
 
   .instalar-assinatura {
     display: grid;
     gap: 10px;
 
-    details { padding: 10px 14px; border: 1px solid var(--cor-e8eaec); border-radius: 9px; background: var(--cor-fcfcfc); }
+    details { padding: 10px 14px; border: 1px solid var(--cor-e8eaec); border-radius: var(--spi-raio-m); background: var(--cor-fcfcfc); }
     summary { color: var(--cor-361a1c); font-size: 13px; font-weight: 600; cursor: pointer; }
     ol { margin: 10px 0 2px; padding-left: 20px; color: var(--cor-4b5663); font-size: 13px; line-height: 1.6; }
-    kbd { padding: 1px 6px; border: 1px solid var(--cor-d8dce0); border-radius: 4px; background: var(--cor-ffffff); font-size: 11.5px; }
+    kbd { padding: 1px 6px; border: 1px solid var(--cor-d8dce0); border-radius: var(--spi-raio-p); background: var(--cor-ffffff); font-size: 11.5px; }
   }
 }
 

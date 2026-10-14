@@ -1,6 +1,6 @@
 # Criado por José Eduardo Santana Martins
 # Este arquivo serve para montar e enviar o e-mail de changelog (novidades do SGI SPI) a partir do CHANGELOG.md.
-"""E-mail de changelog da mensageria (exclusivo da conta root).
+"""E-mail de changelog das notificações (exclusivo da conta root).
 
 Fluxo:
 1. `rascunho` lê o `CHANGELOG.md` da raiz do projeto e junta as entradas **posteriores à última data já enviada a
@@ -166,9 +166,18 @@ def _emails(usuarios) -> list[str]:
     return list(vistos.values())
 
 
+def _quem_optou(sessao: Session, usuarios) -> list:
+    """Só quem ligou o e-mail do evento "Novidades do SGI SPI" nas Preferências (ou o recebe por obrigatoriedade)."""
+    from app.services.notificacoes import preferencias
+
+    usuarios = list(usuarios)
+    canais = preferencias.canais_por_destinatario(sessao, [u.id for u in usuarios], "sistema.novidades")
+    return [u for u in usuarios if canais[u.id].email]
+
+
 def destinatarios(sessao: Session) -> list[str]:
-    """E-mails de todos os usuários ativos."""
-    return _emails(sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True))))
+    """E-mails dos usuários ativos que ligaram o e-mail de novidades."""
+    return _emails(_quem_optou(sessao, sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True)))))
 
 
 def selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: list[int]) -> tuple[list[str], str]:
@@ -185,7 +194,17 @@ def selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: list[int
         partes.append("usuários: " + ", ".join(sorted((u.nome_completo or u.login) for u in usuarios)))
     if escolhidos:
         partes.append("setores: " + ", ".join(sorted(s.nome for s in escolhidos)))
-    return _emails(pessoas.values()), "; ".join(partes)
+    return _emails(_quem_optou(sessao, pessoas.values())), "; ".join(partes)
+
+
+def total_selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: list[int]) -> int:
+    """Quantas pessoas ativas a seleção reúne, tenham ou não ligado o e-mail (para a tela comparar com quem de fato recebe)."""
+    from app.services.rh.papeis import setor_com_descendentes, usuarios_dos_setores
+
+    pessoas = {u.id for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(usuarios_ids), Usuario.ativo.is_(True)))} if usuarios_ids else set()
+    if setores_ids:
+        pessoas |= {u.id for u in usuarios_dos_setores(sessao, setor_com_descendentes(sessao, list(setores_ids)))}
+    return len(pessoas)
 
 
 def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, destino: str, email_teste: str | None,
@@ -194,10 +213,12 @@ def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, d
     descricao = None
     if destino == "todos":
         lista = destinatarios(sessao)
+        if not lista:
+            raise ErroChangelog("Ninguém ligou o e-mail de \"Novidades do SGI SPI\" nas Preferências: não há para quem enviar.")
     elif destino == "selecionados":
         lista, descricao = selecionados(sessao, list(usuarios_ids), list(setores_ids))
         if not lista:
-            raise ErroChangelog("Nenhum destinatário ativo com e-mail entre os usuários e setores escolhidos.")
+            raise ErroChangelog("Nenhum destinatário ativo, com e-mail, que tenha ligado o e-mail de \"Novidades do SGI SPI\" entre os usuários e setores escolhidos.")
     else:
         lista = [email_teste or ""]
     envio = EnvioChangelog(
@@ -206,7 +227,7 @@ def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, d
     )
     sessao.add(envio)
     sessao.flush()
-    auditar(sessao, autor.login, "mensageria.changelog", assunto, f"destino={destino} total={len(lista)} {descricao or ''}".strip(),
+    auditar(sessao, autor.login, "notificacoes.changelog", assunto, f"destino={destino} total={len(lista)} {descricao or ''}".strip(),
             autor_id=autor.id, alvo_tipo="envio_changelog", alvo_id=envio.id)
     sessao.commit()
     return envio, lista

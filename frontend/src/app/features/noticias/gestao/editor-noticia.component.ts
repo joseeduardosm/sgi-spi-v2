@@ -20,9 +20,10 @@ import { EditorTextoComponent } from './editor-texto.component';
 import { ImagemAutenticadaDirective } from './imagem-autenticada.directive';
 import { Recorte, RecorteCapaComponent } from './recorte-capa.component';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-editor-noticia',
-  imports: [FormsModule, RouterLink, DatePipe, SeletorUsuariosComponent, CabecalhoNoticiasComponent, EditorTextoComponent,
+  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, SeletorUsuariosComponent, CabecalhoNoticiasComponent, EditorTextoComponent,
             ImagemAutenticadaDirective, RecorteCapaComponent],
   templateUrl: './editor-noticia.component.html',
 })

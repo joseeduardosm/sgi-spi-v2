@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para criar e configurar uma equipe de tarefas: nome, equipe pai, liderança, membros e marcadores.
 
+import { SeletorCorComponent } from '../../shared/componentes/seletor-cor/seletor-cor.component';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -20,7 +21,7 @@ function opcao(p: Pessoa): OpcaoUsuario {
 
 @Component({
   selector: 'app-configuracao-equipe',
-  imports: [FormsModule, RouterLink, SeletorUsuariosComponent, CabecalhoTarefasComponent],
+  imports: [SeletorCorComponent, FormsModule, RouterLink, SeletorUsuariosComponent, CabecalhoTarefasComponent],
   template: `
     <app-cabecalho-tarefas [titulo]="nova() ? 'Nova equipe' : 'Configurar ' + nome"
                            [trilha]="[{ rotulo: 'Equipes', rota: '/tarefas/equipes' }, { rotulo: nova() ? 'Nova equipe' : 'Configurar' }]"
@@ -87,12 +88,7 @@ function opcao(p: Pessoa): OpcaoUsuario {
           </div>
           @if (editando(); as e) {
             <div class="edicao-marcador">
-              <div class="cores" role="radiogroup" aria-label="Cor">
-                @for (c of paleta; track $index; let i = $index) {
-                  <button type="button" class="cor" [class.atual]="i === e.cor_indice" [style.background]="c.fundo" [style.border-color]="c.borda"
-                          [attr.aria-label]="'Cor ' + (i + 1)" (click)="trocarCor(e, i)"></button>
-                }
-              </div>
+              <app-seletor-cor [colunas]="6" [cores]="coresSeletor" [valor]="e.cor_indice" rotulo="Cor do marcador" (escolher)="trocarCor(e, $event)" />
               @if (e.equipe_id) {
                 <div class="renomear">
                   <input name="nome-marcador" maxlength="120" aria-label="Nome do marcador" [(ngModel)]="nomeEditado" />
@@ -117,6 +113,7 @@ export class ConfiguracaoEquipeComponent implements OnInit {
   private readonly rota = inject(ActivatedRoute);
   private readonly roteador = inject(Router);
   protected readonly paleta = PALETA_MARCADORES;
+  protected readonly coresSeletor = PALETA_MARCADORES.map((c, i) => ({ cor: c.borda, rotulo: `Cor ${i + 1}` }));
   protected readonly categorias: [string, string][] = [['a_fazer', 'A fazer'], ['em_andamento', 'Em andamento'], ['em_validacao', 'Em validação'], ['concluida', 'Concluída']];
   protected readonly estagiosEdicao = signal<{ id: string | null; nome: string; categoria: string; cor_indice: number }[]>([]);
   protected readonly classeMarcador = classeMarcador;

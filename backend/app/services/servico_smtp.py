@@ -4,7 +4,7 @@
 
 A conversa com o servidor fica em `cliente_smtp`; aqui ficam as decisões: qual servidor está
 ativo, o que é gravado depois de um teste e a função `enviar_email`, usada pelos módulos que
-mandam e-mail (ex.: mensageria) por meio do servidor ativo.
+mandam e-mail (ex.: notificações) por meio do servidor ativo.
 """
 
 import uuid

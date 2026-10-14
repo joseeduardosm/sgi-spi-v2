@@ -15,10 +15,11 @@ import { SeletorRecorrenciaComponent } from './seletor-recorrencia.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { PrioridadeTarefa, Recorrencia, RegraRecorrencia, ROTULOS_PRIORIDADE } from './tarefas.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Séries da equipe (`/tarefas/equipes/:equipeId/recorrencias`) ou as pessoais (`/tarefas/recorrencias`). */
 @Component({
   selector: 'app-recorrencias',
-  imports: [FormsModule, DatePipe, RouterLink, AvataresComponent, CabecalhoTarefasComponent, SeletorUsuariosComponent, SeletorRecorrenciaComponent],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, RouterLink, AvataresComponent, CabecalhoTarefasComponent, SeletorUsuariosComponent, SeletorRecorrenciaComponent],
   template: `
     <app-cabecalho-tarefas titulo="Tarefas recorrentes" [trilha]="equipeId ? [{ rotulo: 'Equipes', rota: '/tarefas/equipes' }, { rotulo: 'Recorrências' }] : [{ rotulo: 'Recorrências' }]"
                            descricao="Rotinas que viram tarefa sozinhas, pelo calendário. Para criar uma, marque “Repetir esta tarefa” em Nova tarefa." />
@@ -48,12 +49,12 @@ import { PrioridadeTarefa, Recorrencia, RegraRecorrencia, ROTULOS_PRIORIDADE } f
             }
           </div>
         </article>
-      } @empty { <p class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Nenhuma tarefa recorrente por aqui.' }}</p> }
+      } @empty { <div class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Nenhuma tarefa recorrente por aqui.' }} }</div> }
     </div>
 
     @if (editando(); as e) {
-      <div class="fundo-modal" role="presentation" (click)="editando.set(null)"></div>
-      <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-editar-rec">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="editando.set(null)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-editar-rec">
         <header><div><h2 id="titulo-editar-rec">Editar tarefa recorrente</h2><small>As mudanças valem para as próximas ocorrências; as já criadas não mudam.</small></div>
           <button type="button" aria-label="Fechar" (click)="editando.set(null)">×</button></header>
         <form class="grade-formulario" (submit)="$event.preventDefault(); salvar()">

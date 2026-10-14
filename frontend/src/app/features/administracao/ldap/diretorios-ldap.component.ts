@@ -10,10 +10,11 @@ import { LdapApiService } from './ldap-api.service';
 import { DiretorioLdap, GravacaoDiretorio, ResultadoTeste } from './ldap.models';
 import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Administração de diretórios LDAP (restrita ao SuperRoot). */
 @Component({
   selector: 'app-diretorios-ldap',
-  imports: [ReactiveFormsModule, DatePipe, TrilhaComponent],
+  imports: [EsqueletoComponent, ReactiveFormsModule, DatePipe, TrilhaComponent],
   templateUrl: './diretorios-ldap.component.html',
   host: { '(document:keydown.escape)': 'fecharFormulario()' },
 })

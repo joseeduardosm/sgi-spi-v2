@@ -28,13 +28,14 @@ import { AbaFormulariosComponent } from './aba-formularios.component';
 import { AbaNotasComponent } from './aba-notas.component';
 import { AbaPrevisaoComponent } from './aba-previsao.component';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Abas da tela de detalhe. */
 type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'correcoes' | 'notas' | 'diario' | 'execucao' | 'portaria';
 
 /** Tela 3: detalhe do contrato com abas. */
 @Component({
   selector: 'app-detalhe-contrato',
-  imports: [
+  imports: [EsqueletoComponent, 
     RouterLink, CabecalhoModuloComponent, HistoricoCampoComponent, LinhaDoTempoComponent, AbaPrevisaoComponent, AbaDocumentosComponent,
     AbaChecklistsComponent, AbaCorrecoesComponent, AbaFormulariosComponent, AbaNotasComponent, AbaDiarioComponent, AbaExecucaoComponent, AbaPortariaComponent, ...PIPES_FORMATACAO,
   ],

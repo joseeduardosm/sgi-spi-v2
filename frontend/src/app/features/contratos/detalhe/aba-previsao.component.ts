@@ -11,10 +11,11 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { Previsao, VigenciaPrevisao } from '../compartilhado/contratos.models';
 import { paraDecimalApi, paraDecimalTela, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Aba "Previsão orçamentária": grade sob demanda por vigência (selada ao salvar) e tabela mensal. */
 @Component({
   selector: 'app-aba-previsao',
-  imports: [FormsModule, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, FormsModule, ...PIPES_FORMATACAO],
   templateUrl: './aba-previsao.component.html',
 })
 export class AbaPrevisaoComponent implements OnInit {

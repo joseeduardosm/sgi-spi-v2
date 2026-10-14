@@ -13,6 +13,7 @@ import { FiltrosPainel, RhApiService } from './rh-api.service';
 import { Afastamento, PainelAfastamentos, ROTULOS_STATUS, ROTULOS_TIPO, SIGLAS_TIPO } from './rh.models';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 const DIA_MS = 86_400_000;
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -31,7 +32,7 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-painel-afastamentos',
-  imports: [LinkificarPipe, FormsModule, DatePipe, GraficoComponent, CabecalhoRhComponent, LancamentoAfastamentoComponent],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, GraficoComponent, CabecalhoRhComponent, LancamentoAfastamentoComponent],
   templateUrl: './painel-afastamentos.component.html',
   // Esc fecha o detalhe do período e a janela de recusa
   host: { '(document:keydown.escape)': 'detalhe.set(null); recusando.set(null)' },

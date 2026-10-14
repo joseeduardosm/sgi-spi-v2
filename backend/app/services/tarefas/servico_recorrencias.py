@@ -28,7 +28,7 @@ from app.core.banco import hoje_sao_paulo
 from app.models.rh import Feriado
 from app.models.tarefas import FREQUENCIAS_RECORRENCIA, MarcadorTarefa, RecorrenciaTarefa, ResponsavelRecorrencia, Tarefa
 from app.models.usuario import Usuario
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.servico_auditoria import auditar
 from app.services.tarefas import servico_tarefas as servico
 from app.services.tarefas.servico_tarefas import DadosTarefa, ErroTarefa
@@ -260,11 +260,10 @@ def gerar_ocorrencias(sessao: Session, dia: date | None = None) -> dict[str, int
             rec = sessao.get(RecorrenciaTarefa, rec_id)
             rec.ativa, rec.ultimo_erro = False, str(erro)
             if rec.criado_por_id:
-                servico_mensagens.notificar(
+                notificacoes.notificar(
                     sessao, [rec.criado_por_id], f"Recorrência pausada: {rec.titulo}",
                     f"Não foi possível gerar a próxima tarefa de \"{rec.titulo}\": {erro} A recorrência foi pausada; ajuste-a e retome.",
-                    chave=f"tarefa-recorrencia-erro:{rec.id}:{dia}", categoria="pendencia", prioridade="alta", link="/tarefas", email=True,
-                )
+                    chave=f"tarefa-recorrencia-erro:{rec.id}:{dia}", categoria="pendencia", prioridade="alta", link="/tarefas", evento="tarefas.recorrencia_pausada")
             sessao.commit()
             resultado["pausadas_por_erro"] += 1
             log.warning("Recorrência %s pausada: %s", rec_id, erro)

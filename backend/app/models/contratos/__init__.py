@@ -58,6 +58,7 @@ from app.models.contratos.portaria import AutoridadePortaria, PortariaContrato
 from app.models.contratos.orcamento import (
     ApontamentoPrevisao,
     LimitePrevisao,
+    CancelamentoNotaEmpenho,
     MovimentoNotaEmpenho,
     NotaEmpenho,
     PrevisaoVigencia,
@@ -102,6 +103,7 @@ __all__ = [
     "MemoriaMedicao",
     "MemoriaReajuste",
     "ModeloGlobal",
+    "CancelamentoNotaEmpenho",
     "MovimentoNotaEmpenho",
     "NotaEmpenho",
     "OcorrenciaDiario",

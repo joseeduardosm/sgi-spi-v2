@@ -17,6 +17,7 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { Alteracao, DetalheContrato, PainelAlteracao } from '../compartilhado/contratos.models';
 import { paraDecimalApi, paraDecimalTela, ROTULOS_PAPEL, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Abas do processo, na ordem do fluxo. */
 type Aba = 'justificativa' | 'quantitativos' | 'memoria' | 'formalizacao';
 /** Documentos que podem ser anexados na alteração. */
@@ -25,7 +26,7 @@ type Documento = 'justificativa' | 'autorizacao' | 'de_acordo' | 'termo';
 /** Tela 7: aditamento ou supressão (justificativa → quantitativos → memória e ciências → formalização). */
 @Component({
   selector: 'app-alteracao',
-  imports: [FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './alteracao.component.html',
 })
 export class AlteracaoComponent implements OnInit {

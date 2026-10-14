@@ -1,0 +1,100 @@
+{
+ "a01-administracao": [
+  {
+   "n": 1,
+   "texto": "Pesquise por nome, exercício ou número"
+  },
+  {
+   "n": 2,
+   "texto": "Cria um tipo de documento, já com a faixa do primeiro exercício"
+  },
+  {
+   "n": 3,
+   "texto": "Um cartão por tipo e exercício, com o nome, o ano e a faixa de números; clique para abrir"
+  }
+ ],
+ "a01b-pesquisa": [
+  {
+   "n": 1,
+   "texto": "A lista filtra enquanto você digita"
+  }
+ ],
+ "a02-novo-tipo": [
+  {
+   "n": 1,
+   "texto": "Nome do tipo de documento"
+  },
+  {
+   "n": 2,
+   "texto": "Faixa de números do exercício: início e fim"
+  },
+  {
+   "n": 3,
+   "texto": "Liberar a partir de: do início até o número anterior fica Reservado SAA"
+  },
+  {
+   "n": 4,
+   "texto": "Prévia: quantos números ficam com o SAA e quantos ficam livres para todos"
+  }
+ ],
+ "a03-cartao-criado": [
+  {
+   "n": 1,
+   "texto": "O tipo criado aparece como cartão"
+  }
+ ],
+ "a04-detalhe-do-tipo": [
+  {
+   "n": 1,
+   "texto": "Diminuir o início ou aumentar o fim amplia a faixa"
+  },
+  {
+   "n": 2,
+   "texto": "Liberar a partir de: aumentar reserva mais números ao SAA; esvaziar libera tudo"
+  },
+  {
+   "n": 3,
+   "texto": "Salvar faixa"
+  },
+  {
+   "n": 4,
+   "texto": "Exclui só este exercício (só se nenhum número foi usado)"
+  },
+  {
+   "n": 5,
+   "texto": "Voltar, excluir o tipo, renomear e criar novo exercício"
+  }
+ ],
+ "a05-novo-exercicio": [
+  {
+   "n": 1,
+   "texto": "Ano do novo exercício; a faixa e a reserva ao SAA seguem as mesmas regras"
+  }
+ ],
+ "r02-grade": [
+  {
+   "n": 1,
+   "texto": "Resumo: números livres, reservados ao SAA e a faixa"
+  },
+  {
+   "n": 2,
+   "texto": "Reserva o menor número livre"
+  },
+  {
+   "n": 3,
+   "texto": "Reservado SAA (roxo, tracejado): só o Serviço de Apoio Administrativo dá andamento"
+  }
+ ],
+ "r06-numero-reservado-comum": [
+  {
+   "n": 1,
+   "texto": "Quem não é do SAA recebe o primeiro número livre depois da faixa reservada"
+  }
+ ],
+ "r07-numero-reservado-saa": [
+  {
+   "n": 1,
+   "texto": "Quem é do SAA começa pela faixa reservada"
+  }
+ ]
+}

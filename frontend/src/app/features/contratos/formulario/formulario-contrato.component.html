@@ -1,14 +1,14 @@
 <app-cabecalho-modulo [titulo]="original() ? 'Editar contrato ' + original()!.numero : 'Novo contrato'" [trilha]="original() ? [{ rotulo: original()!.numero, rota: ['/contratos', original()!.id] }, 'Editar'] : ['Novo']" />
 
 @if (carregando()) {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="formulario" [linhas]="5" />
 } @else {
   <form (ngSubmit)="salvar()" #formulario="ngForm">
     <div class="barra-fixa">
       <span class="dica-formulario" style="margin: 0">Campos com * são obrigatórios.</span>
       <div class="acoes-formulario">
         <a class="acao-secundaria" [routerLink]="original() ? ['/contratos', original()!.id] : ['/contratos']">Cancelar</a>
-        <button type="submit" class="acao-primaria" [disabled]="salvando() || formulario.invalid">
+        <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="salvando() || formulario.invalid">
           {{ salvando() ? 'Salvando…' : original() ? 'Salvar alterações' : 'Salvar contrato' }}
         </button>
       </div>
@@ -225,8 +225,8 @@
 }
 
 @if (itemAberto(); as aberto) {
-  <div class="fundo-modal" role="presentation" (click)="fecharItem()"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-item">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fecharItem()"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-item">
     <header>
       <div>
         <span class="modal-sobretitulo">Passo {{ aberto.passo }} de 2</span>

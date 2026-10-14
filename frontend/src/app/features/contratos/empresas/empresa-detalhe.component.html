@@ -6,7 +6,7 @@
 </div>
 
 @if (carregando()) {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="formulario" [linhas]="5" />
 } @else {
   <section class="cartao-dados" aria-labelledby="titulo-empresa">
     <header><h2 id="titulo-empresa">Dados da empresa</h2></header>

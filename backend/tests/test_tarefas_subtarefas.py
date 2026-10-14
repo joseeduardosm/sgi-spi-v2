@@ -143,3 +143,73 @@ def test_memorial_da_tarefa_pdf_e_xlsx_com_todos_os_acontecimentos(cliente, equi
     assert "dia(s) em aberto" in resumo
     # Quem não vê a tarefa não emite o memorial
     assert cliente.get(f"{URL}/{mae['numero']}/memorial", headers=h["caio"]).status_code == 404
+
+
+def test_subtarefa_em_validacao_aparece_na_mae_e_nos_indicadores_sem_mudar_a_mae(cliente, equipe):
+    ids, h, equipe_id = equipe
+    mae = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    sub = cliente.post(f"{URL}/{mae['numero']}/subtarefas", json={"titulo": "Conferir"}, headers=h["lia"]).json()
+    assert _mover(cliente, h["ana"], sub["numero"], "iniciar").status_code == 200
+    assert _mover(cliente, h["ana"], sub["numero"], "entregar").json()["status"] == "em_validacao"
+
+    lista = cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id}, headers=h["lia"]).json()
+    # Os contadores da lista seguem sem subtarefas; o campo novo traz as que aguardam validação
+    assert lista["indicadores"]["em_validacao"] == 0 and lista["indicadores"]["subtarefas_em_validacao"] == 1
+    item = next(i for i in lista["itens"] if i["numero"] == mae["numero"])
+    assert item["status"] == "a_fazer" and item["subtarefas_em_validacao"] == 1
+    equipes = cliente.get(f"{URL}/equipes", headers=h["lia"]).json()
+    assert next(e for e in equipes if e["id"] == equipe_id)["indicadores"]["subtarefas_em_validacao"] == 1
+    # Validada, o selo some
+    assert _mover(cliente, h["lia"], sub["numero"], "validar").status_code == 200
+    lista = cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id}, headers=h["lia"]).json()
+    assert lista["indicadores"]["subtarefas_em_validacao"] == 0
+
+
+def test_resumo_traz_os_numeros_das_tarefas_que_bloqueiam(cliente, equipe):
+    ids, h, equipe_id = equipe
+    a = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], titulo="A")
+    b = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], titulo="B")
+    c = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], titulo="C")
+    r = cliente.put(f"{URL}/{c['numero']}/dependencias", json={"numeros": [a["numero"], b["numero"]]}, headers=h["lia"])
+    assert r.status_code == 200, r.text
+    lista = cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id}, headers=h["lia"]).json()["itens"]
+    por_numero = {i["numero"]: i for i in lista}
+    assert por_numero[c["numero"]]["bloqueada_por_numeros"] == sorted([a["numero"], b["numero"]]) and por_numero[a["numero"]]["bloqueada_por_numeros"] == []
+    # Concluir uma bloqueadora tira o cadeado, mas a dependência continua desenhada
+    assert _mover(cliente, h["lia"], a["numero"], "concluir").status_code == 200
+    assert _mover(cliente, h["lia"], b["numero"], "concluir").status_code == 200
+    depois = {i["numero"]: i for i in cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id}, headers=h["lia"]).json()["itens"]}
+    assert depois[c["numero"]]["bloqueada"] is False and depois[c["numero"]]["bloqueada_por_numeros"] == sorted([a["numero"], b["numero"]])
+
+
+def test_subtarefa_pode_depender_da_anterior_aberta(cliente, equipe):
+    """`depende_da_anterior`: a nova subtarefa nasce bloqueada pela última subtarefa ainda não concluída (e não inicia antes dela)."""
+    ids, h, equipe_id = equipe
+    mae = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"]])
+    url = f"{URL}/{mae['numero']}/subtarefas"
+    a = cliente.post(url, json={"titulo": "A", "depende_da_anterior": True}, headers=h["lia"]).json()
+    assert a["bloqueada_por"] == []  # a primeira não tem anterior
+    b = cliente.post(url, json={"titulo": "B", "depende_da_anterior": True}, headers=h["lia"]).json()
+    assert [x["numero"] for x in b["bloqueada_por"]] == [a["numero"]]
+    c = cliente.post(url, json={"titulo": "C"}, headers=h["lia"]).json()
+    assert c["bloqueada_por"] == []  # sem a opção, nada muda
+    d = cliente.post(url, json={"titulo": "D", "depende_da_anterior": True}, headers=h["lia"]).json()
+    assert [x["numero"] for x in d["bloqueada_por"]] == [c["numero"]]
+    # B não inicia enquanto A não estiver concluída
+    assert _mover(cliente, h["ana"], b["numero"], "iniciar").status_code == 400
+
+
+def test_subtarefa_nasce_com_varias_dependencias_e_valida_antes_de_criar(cliente, equipe):
+    ids, h, equipe_id = equipe
+    mae = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"]])
+    outra = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"]])
+    url = f"{URL}/{mae['numero']}/subtarefas"
+    a = cliente.post(url, json={"titulo": "A"}, headers=h["lia"]).json()
+    b = cliente.post(url, json={"titulo": "B", "bloqueada_por_numeros": [a["numero"], outra["numero"]]}, headers=h["lia"])
+    assert b.status_code == 201, b.text
+    assert sorted(x["numero"] for x in b.json()["bloqueada_por"]) == sorted([a["numero"], outra["numero"]])
+    antes = len(cliente.get(f"{URL}/{mae['numero']}", headers=h["lia"]).json()["subtarefas"])
+    # Não pode depender da própria mãe nem de tarefa inexistente, e nada é criado nesses casos
+    assert cliente.post(url, json={"titulo": "C", "bloqueada_por_numeros": [mae["numero"]]}, headers=h["lia"]).status_code == 400
+    assert cliente.post(url, json={"titulo": "D", "bloqueada_por_numeros": [999999]}, headers=h["lia"]).status_code == 400
+    assert len(cliente.get(f"{URL}/{mae['numero']}", headers=h["lia"]).json()["subtarefas"]) == antes

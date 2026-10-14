@@ -28,8 +28,8 @@
 </div>
 
 @if (janela() === 'previsao') {
-  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-exportar-previsao">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-exportar-previsao">
     <header>
       <div><span class="modal-sobretitulo">Relatório gerencial</span><h2 id="titulo-exportar-previsao">Exportar Previsão Orçamentária</h2></div>
       <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button>
@@ -66,8 +66,8 @@
 }
 
 @if (janela() === 'notas') {
-  <div class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-relatorio-notas">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="janela.set(null)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-relatorio-notas">
     <header>
       <div><span class="modal-sobretitulo">Relatório gerencial</span><h2 id="titulo-relatorio-notas">Relatório Executivo de Notas de Empenho</h2></div>
       <button type="button" aria-label="Fechar" (click)="janela.set(null)">×</button>

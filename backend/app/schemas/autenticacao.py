@@ -31,7 +31,7 @@ class UsuarioSessao(BaseModel):
     )
     campos_pendentes: list[str] = Field(default_factory=list, description="Campos obrigatórios do perfil não preenchidos.")
     revisao_obrigatoria: bool = Field(False, description="Revalidação do perfil vencida (mais de 30 dias) ou nunca feita.")
-    conta_root: bool = Field(False, description="Conta administrativa principal (login `LOGIN_ADMIN`): libera a tela Mensageria.")
+    conta_root: bool = Field(False, description="Conta administrativa principal (login `LOGIN_ADMIN`): libera a tela Notificações do sistema.")
     tema: Literal["claro", "escuro", "auto"] = Field("auto", description="Tema da interface escolhido pelo usuário (`auto` segue o sistema operacional).")
 
 

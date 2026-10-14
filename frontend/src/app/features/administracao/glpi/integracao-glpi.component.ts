@@ -10,6 +10,7 @@ import { ambiente } from '../../../../environments/ambiente';
 import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 import { erroExibivel } from '../../../shared/utilitarios/erros-api';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Configuração da integração, como a API devolve (os tokens nunca vêm, só se existem). */
 interface ConfiguracaoGlpi {
   ativo: boolean;
@@ -35,7 +36,7 @@ interface ResultadoTeste {
 /** Integração com o GLPI (restrita ao SuperRoot): é por ela que o item "Abrir Chamado" cria o chamado no helpdesk. */
 @Component({
   selector: 'app-integracao-glpi',
-  imports: [FormsModule, DatePipe, TrilhaComponent],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, TrilhaComponent],
   template: `
     <div class="cabecalho-pagina">
       <div>
@@ -94,7 +95,7 @@ interface ResultadoTeste {
         }
         <p class="dica-formulario">Atualizado por {{ c.atualizado_por || '—' }} em {{ c.atualizado_em | date: 'dd/MM/yyyy HH:mm' }}.</p>
       } @else {
-        <p class="estado-vazio">Carregando…</p>
+        <app-esqueleto tipo="formulario" [linhas]="5" />
       }
     </section>
   `,

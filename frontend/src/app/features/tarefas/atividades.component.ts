@@ -11,9 +11,10 @@ import { CabecalhoTarefasComponent } from './cabecalho-tarefas.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { Atividade, ICONES_TIPO_ATIVIDADE, ROTULOS_TIPO_ATIVIDADE } from './tarefas.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-atividades',
-  imports: [FormsModule, DatePipe, RouterLink, CabecalhoTarefasComponent],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, RouterLink, CabecalhoTarefasComponent],
   template: `
     <app-cabecalho-tarefas titulo="Minhas atividades" [trilha]="[{ rotulo: 'Atividades' }]" descricao="O que foi agendado para você nas tarefas, por data. Quem agenda e o dia chegam por aviso." />
     <div class="barra-acoes-tarefa">
@@ -49,7 +50,7 @@ import { Atividade, ICONES_TIPO_ATIVIDADE, ROTULOS_TIPO_ATIVIDADE } from './tare
           </ul>
         </div>
       </section>
-    } @empty { <p class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Nenhuma atividade por aqui.' }}</p> }
+    } @empty { <div class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Nenhuma atividade por aqui.' }} }</div> }
   `,
 })
 export class AtividadesComponent implements OnInit {

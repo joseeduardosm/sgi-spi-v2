@@ -23,7 +23,7 @@ describe('paleta-comandos.registro', () => {
 
   it('o rótulo que começa com o texto vem primeiro', () => {
     const ids = filtrarComandos(COMANDOS, 'nova', todos).map((c) => c.id);
-    expect(ids.slice(0, 3).every((id) => ['nova-tarefa', 'nova-empresa', 'nova-mensagem'].includes(id))).toBe(true);
+    expect(ids.slice(0, 3).every((id) => ['nova-tarefa', 'nova-empresa', 'nova-notificacao'].includes(id))).toBe(true);
   });
 
   it('pede o nível certo de ACL ao verificar a permissão', () => {

@@ -8,12 +8,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-EstadoNumero = Literal["livre", "reservado", "utilizado", "anulado"]
+EstadoNumero = Literal["livre", "reservado_saa", "reservado", "utilizado", "anulado"]
 TipoEvento = Literal["reservou", "lancou", "anexou", "liberou", "anulou", "sigilo", "vinculou", "ampliou"]
 
 
 class GravacaoTipo(BaseModel):
     nome: str = Field(..., min_length=1, max_length=200, description="Nome do documento (Ofício, Portaria…); único sem diferenciar maiúsculas.")
+    sequencia: "GravacaoSequencia | None" = Field(None, description="Opcional: cria, na mesma transação, a faixa do primeiro exercício (tela de novo tipo).")
 
 
 class SequenciaLeitura(BaseModel):
@@ -21,6 +22,7 @@ class SequenciaLeitura(BaseModel):
     exercicio: int
     inicio: int
     fim: int
+    liberar_a_partir_de: int | None = Field(None, description="Números do início até este (exclusive) ficam \"Reservado SAA\"; nulo = nada reservado.")
 
 
 class TipoLeitura(BaseModel):
@@ -38,11 +40,13 @@ class GravacaoSequencia(BaseModel):
     exercicio: int = Field(..., ge=2000, le=2200)
     inicio: int = Field(..., ge=0)
     fim: int = Field(..., ge=0)
+    liberar_a_partir_de: int | None = Field(None, ge=0, description="Opcional, entre `inicio` e `fim + 1`: do início da faixa até este número (exclusive) fica \"Reservado SAA\".")
 
 
 class GravacaoFaixa(BaseModel):
     inicio: int = Field(..., ge=0, description="Menor que o atual amplia para trás; maior só se os números removidos estiverem livres e sem histórico.")
     fim: int = Field(..., ge=0, description="Maior que o atual amplia para frente.")
+    liberar_a_partir_de: int | None = Field(None, ge=0, description="Novo ponto de liberação (nulo remove a reserva). Elevá-lo só vale se os números que passam a ser do SAA não estiverem reservados (`409`).")
 
 
 class ReservaProximo(BaseModel):
@@ -103,6 +107,7 @@ class NumeroLeitura(BaseModel):
     pode_anexar: bool
     pode_liberar: bool
     pode_alterar_sigilo: bool
+    pode_reservar: bool = Field(False, description="Livre e o usuário pode escolher este número (administração; o SAA, nos \"Reservado SAA\").")
     eventos: list[EventoLeitura] = Field(default_factory=list, description="Linha do tempo (só no detalhe de um número).")
 
 
@@ -113,6 +118,8 @@ class ListaNumeros(BaseModel):
     pode_administrar: bool
     usuario_id: int
     livres: int
+    reservados_saa: int = Field(0, description="Números ainda \"Reservado SAA\" (livres dentro da faixa do Serviço de Apoio Administrativo).")
+    pode_usar_reserva_saa: bool = Field(False, description="O usuário é do SAA (ou administra o Protocolo) e pode dar andamento na faixa reservada.")
     itens: list[NumeroLeitura]
 
 
@@ -144,3 +151,6 @@ class PainelProtocolo(BaseModel):
     mais_reservaram: list[PessoaPainel]
     mais_utilizaram: list[PessoaPainel]
     sem_documento: list[PendentePainel]
+
+
+GravacaoTipo.model_rebuild()

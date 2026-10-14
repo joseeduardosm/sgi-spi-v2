@@ -16,13 +16,14 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { DetalheContrato, ItemReajuste, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
 import { MESES, paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Percentual aceito pela API: maior que −100 (o preço não pode zerar) e até 1000. */
 const INDICE = /^-?\d+(\.\d{1,8})?$/;
 
 /** Tela 6: reajuste (evidência do índice, memória, apostilamento e conclusão). Percentual por item: positivo reajusta, negativo dá desconto. */
 @Component({
   selector: 'app-reajuste',
-  imports: [FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './reajuste.component.html',
 })
 export class ReajusteComponent implements OnInit {

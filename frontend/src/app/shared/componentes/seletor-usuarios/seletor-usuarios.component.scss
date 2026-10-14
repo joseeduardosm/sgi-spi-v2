@@ -24,7 +24,7 @@
   align-items: center;
   gap: 6px;
   padding: 5px 6px 5px 10px;
-  border-radius: 14px;
+  border-radius: var(--spi-raio-g);
   color: var(--cor-3d454e);
   background: var(--cor-f1f3f5);
   font-size: 12px;
@@ -59,7 +59,7 @@ input {
   height: 42px;
   padding: 0 12px;
   border: 1px solid var(--cor-e2e5e8);
-  border-radius: 7px;
+  border-radius: var(--spi-raio-p);
   outline: 0;
   color: var(--cor-3d454e);
   background: var(--cor-fcfcfc);
@@ -67,7 +67,7 @@ input {
 
   &:focus {
     border-color: #bc3843;
-    box-shadow: 0 0 0 3px #af374112;
+    box-shadow: var(--spi-anel-foco);
   }
 }
 
@@ -83,15 +83,15 @@ input {
   padding: 5px;
   list-style: none;
   border: 1px solid var(--cor-e7e9eb);
-  border-radius: 9px;
+  border-radius: var(--spi-raio-m);
   background: var(--cor-ffffff);
-  box-shadow: 0 14px 30px #25292e1f;
+  box-shadow: var(--spi-sombra-flutuante);
 
   li {
     display: flex;
     flex-direction: column;
     padding: 8px 10px;
-    border-radius: 6px;
+    border-radius: var(--spi-raio-p);
     cursor: pointer;
 
     strong {

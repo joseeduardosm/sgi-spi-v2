@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para controlar a etapa 4 (consulta ao CADIN), com o histórico de consultas.
 
+import { BotaoCopiarComponent } from '../../../shared/componentes/botao-copiar/botao-copiar.component';
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -13,7 +14,7 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 /** Etapa 4: consulta ao CADIN. Com pendência, a etapa continua aberta; "Não" conclui. */
 @Component({
   selector: 'app-etapa-cadin',
-  imports: [FormsModule, DatePipe, EnvioPdfComponent],
+  imports: [BotaoCopiarComponent, FormsModule, DatePipe, EnvioPdfComponent],
   template: `
     @let d = detalhe();
     <section class="cartao-dados" aria-labelledby="titulo-cadin">
@@ -31,7 +32,7 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
               <label for="cadin-cnpj">CNPJ da contratada (só números)</label>
               <div class="acoes-cartao esquerda" style="margin: 0">
                 <input id="cadin-cnpj" readonly [value]="d.empresa_cnpj" (focus)="$any($event.target).select()" />
-                <button type="button" class="acao-secundaria acao-pequena" (click)="copiarCnpj()">{{ cnpjCopiado() ? 'Copiado' : 'Copiar' }}</button>
+                <app-botao-copiar [valor]="detalhe().empresa_cnpj" rotulo="Copiar" tamanho="pequeno" />
               </div>
             </div>
             }
@@ -66,8 +67,8 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
                   <td>{{ c.pendencia || '—' }}@if (c.texto_notificacao) { <small>{{ c.texto_notificacao }}</small> }</td>
                   <td>{{ c.criado_por_nome }}</td>
                   <td>
-                    <button type="button" class="link-arquivo" (click)="baixar(c.certidao.anexo_id)">Certidão</button>
-                    @if (c.email) { · <button type="button" class="link-arquivo" (click)="baixar(c.email.anexo_id)">E-mail</button> }
+                    <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(c.certidao.anexo_id)">Baixar certidão</button>
+                    @if (c.email) { · <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(c.email.anexo_id)">Baixar e-mail</button> }
                   </td>
                 </tr>
               } @empty {
@@ -92,17 +93,9 @@ export class EtapaCadinComponent {
   protected pendencia = '';
   protected textoNotificacao = '';
   protected readonly urlCadin = 'https://www.fazenda.sp.gov.br/cadin_estadual/pages/publ/cadin.aspx';
-  protected readonly cnpjCopiado = signal(false);
   protected certidao: File | null = null;
   protected email: File | null = null;
 
-  /** Copia o CNPJ da contratada (só dígitos) para colar na consulta do CADIN. */
-  protected copiarCnpj(): void {
-    void navigator.clipboard?.writeText(this.detalhe().empresa_cnpj).then(() => {
-      this.cnpjCopiado.set(true);
-      setTimeout(() => this.cnpjCopiado.set(false), 2000);
-    });
-  }
 
   /** Envia a consulta; em seguida, limpa o formulário para uma nova consulta. */
   protected registrar(): void {

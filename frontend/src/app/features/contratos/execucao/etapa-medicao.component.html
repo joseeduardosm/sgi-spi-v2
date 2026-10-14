@@ -12,7 +12,7 @@
           <th class="num" title="Contínuo: previsto da competência. Sob demanda: saldo do item na vigência.">Saldo</th>
           <th class="num" title="Glosas do diário de bordo com data no período da competência.">Glosas</th>
           <th class="num" title="Saldo − glosas: o máximo que pode ser medido.">Saldo líquido</th>
-          <th class="num">Medição</th><th class="centro" title="Marque os itens que são despesas variáveis: ficam com subtotal à parte e exigem nota de débito, recibo ou outro documento na etapa da nota fiscal.">Despesas Variáveis</th><th class="num">Subtotal</th>
+          <th class="num">Medição</th><th class="num" title="Acerto de centavos por item (ex.: +0,01 ou -0,02) para absorver dízimas e arredondamentos das multiplicações. Máximo de R$ 1,00 para mais ou para menos; só em item medido.">Acerto (R$)</th><th class="centro" title="Marque os itens que são despesas variáveis: ficam com subtotal à parte e exigem nota de débito, recibo ou outro documento na etapa da nota fiscal.">Despesas Variáveis</th><th class="num">Subtotal</th>
         </tr>
       </thead>
       <tbody>
@@ -30,6 +30,12 @@
                        [attr.aria-invalid]="acimaDoSaldo(i.id, i.saldo_liquido)" [(ngModel)]="medidas[i.id]" (ngModelChange)="alterado.set(true)" />
               } @else { {{ i.quantidade_medida | quantidade }} }
             </td>
+            <td class="num" style="width: 110px">
+              @if (editavel() && medivel() && detalhe().tipo !== 'diferenca_reajuste') {
+                <input class="campo-tabela" inputmode="decimal" placeholder="+0,00" [class.invalido]="acertoInvalido(i.id)" [attr.aria-invalid]="acertoInvalido(i.id)"
+                       [attr.aria-label]="'Acerto de centavos de ' + i.descricao" title="Ex.: 0,01 ou -0,02 (até R$ 1,00)" [(ngModel)]="acertos[i.id]" (ngModelChange)="alterado.set(true)" />
+              } @else { {{ acertoTexto(i.acerto) }} }
+            </td>
             <td class="centro">
               <input type="checkbox" [attr.aria-label]="'Despesa variável: ' + i.descricao" [checked]="marcadas[i.id]" [disabled]="!(editavel() && medivel())"
                      (change)="marcadas[i.id] = $any($event.target).checked; alterado.set(true)" />
@@ -40,21 +46,21 @@
       </tbody>
       <tfoot>
         @if (temDespesasVariaveis()) {
-          <tr><td colspan="8">Subtotal - Medição</td><td class="num">{{ subtotalMedicao() | moeda }}</td></tr>
-          <tr><td colspan="8">Subtotal - Despesas Variáveis</td><td class="num">{{ subtotalDespesas() | moeda }}</td></tr>
-          <tr><td colspan="8"><strong>Total</strong> <small>(Subtotal - Medição + Subtotal - Despesas Variáveis)</small></td><td class="num"><strong>{{ total() | moeda }}</strong></td></tr>
+          <tr><td colspan="9">Subtotal - Medição</td><td class="num">{{ subtotalMedicao() | moeda }}</td></tr>
+          <tr><td colspan="9">Subtotal - Despesas Variáveis</td><td class="num">{{ subtotalDespesas() | moeda }}</td></tr>
+          <tr><td colspan="9"><strong>Total</strong> <small>(Subtotal - Medição + Subtotal - Despesas Variáveis)</small></td><td class="num"><strong>{{ total() | moeda }}</strong></td></tr>
         } @else {
-          <tr><td colspan="8">Total medido</td><td class="num">{{ total() | moeda }}</td></tr>
+          <tr><td colspan="9">Total medido</td><td class="num">{{ total() | moeda }}</td></tr>
         }
         @if (+d.desconto_reajuste > 0) {
           <!-- Crédito de um reajuste com desconto retroativo: abatido do valor autorizado desta competência -->
           <tr class="linha-desconto-reajuste">
-            <td colspan="8">Desconto de reajuste
+            <td colspan="9">Desconto de reajuste
               @for (x of d.descontos_reajuste; track x.reajuste_id) { <small>(crédito do reajuste com referência {{ x.mes_referencia | competencia }})</small> }
             </td>
             <td class="num">− {{ d.desconto_reajuste | moeda }}</td>
           </tr>
-          <tr><td colspan="8">Valor após o desconto</td><td class="num"><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></td></tr>
+          <tr><td colspan="9">Valor após o desconto</td><td class="num"><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></td></tr>
         }
       </tfoot>
     </table>
@@ -106,6 +112,10 @@
       <div class="acoes-cartao">
         <button type="button" class="acao-primaria" [disabled]="!notas().length" (click)="salvar()">Salvar medição</button>
       </div>
+      <!-- A ciência só surge depois de salvar (sem alteração pendente) e fica logo abaixo do Salvar -->
+      @if (d.integra_equipe && !jaRegistrei() && !alterado() && (d.medicao_concluida_em || d.itens.length)) {
+        <div class="acoes-cartao"><button type="button" class="acao-secundaria" (click)="ciencia()">Registrar minha ciência</button></div>
+      }
     }
 
     <p class="secao-formulario">Ciências</p>
@@ -118,9 +128,6 @@
     @if (editavel()) {
       @if (alterado()) { <p class="dica-formulario" style="margin: 8px 0">Salve a medição antes de registrar ciência ou concluir.</p> }
       <div class="acoes-cartao">
-        @if (d.integra_equipe && !jaRegistrei()) {
-          <button type="button" class="acao-secundaria" [disabled]="alterado() || !d.medicao_concluida_em && !d.itens.length" (click)="ciencia()">Registrar minha ciência</button>
-        }
         <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Memória e diário de bordo à equipe e aos prepostos escolhidos, pedindo a NF em 48 h" />
         <button type="button" class="acao-primaria" [disabled]="alterado() || d.ciencias.length < d.ciencias_minimas" (click)="concluir()">Concluir medição e gerar relatório</button>
       </div>
@@ -144,7 +151,7 @@
       <p class="secao-formulario">Memórias emitidas</p>
       <ul class="lista-ciencias">
         @for (m of d.memorias; track m.versao) {
-          <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span><button type="button" class="link-arquivo" (click)="baixar(m.arquivo.anexo_id)">Baixar PDF</button>@if (m.arquivo_despesas) { <button type="button" class="link-arquivo" (click)="baixar(m.arquivo_despesas.anexo_id)">Baixar PDF das despesas variáveis</button> }</li>
+          <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(m.arquivo.anexo_id)">Baixar PDF</button>@if (m.arquivo_despesas) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(m.arquivo_despesas.anexo_id)">Baixar PDF das despesas variáveis</button> }</li>
         }
       </ul>
     }

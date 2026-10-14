@@ -7,6 +7,7 @@ import { RouterLink } from '@angular/router';
 import { GraficoComponent, SerieGrafico } from '../../shared/componentes/grafico/grafico.component';
 import { dataCurta, emMil, MESES_CURTOS, moedaCurta, SlideContratos, SlideRh, SlideTarefas } from './painel-executivo.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Cartão de indicador: número grande e legenda. `alerta` pinta de vermelho. */
 @Component({
   selector: 'app-indicador',
@@ -21,7 +22,7 @@ export class IndicadorComponent {
 
 @Component({
   selector: 'app-slide-contratos',
-  imports: [GraficoComponent, IndicadorComponent, RouterLink],
+  imports: [EsqueletoComponent, GraficoComponent, IndicadorComponent, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let d = dados();
@@ -35,11 +36,11 @@ export class IndicadorComponent {
     </div>
     <div class="grade-slide">
       <section><h3>Execução mensal em {{ d.exercicio }}</h3>
-        <app-grafico tipo="bar" titulo="Execução mensal: previsto, medido e pago" formato="moedaMil" [rotulos]="meses" [series]="mensal()" [altura]="alturaGrafico()" /></section>
+        @defer (on idle) { <app-grafico tipo="bar" titulo="Execução mensal: previsto, medido e pago" formato="moedaMil" [rotulos]="meses" [series]="mensal()" [altura]="alturaGrafico()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</section>
       <section><h3>Acumulado no exercício</h3>
-        <app-grafico tipo="line" titulo="Execução acumulada" formato="moedaMil" [rotulos]="meses" [series]="acumulado()" [altura]="alturaGrafico()" /></section>
+        @defer (on idle) { <app-grafico tipo="line" titulo="Execução acumulada" formato="moedaMil" [rotulos]="meses" [series]="acumulado()" [altura]="alturaGrafico()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</section>
       <section><h3>Vencimentos</h3>
-        <app-grafico tipo="bar" titulo="Contratos vencendo em 30, 60 e 90 dias" [rotulos]="faixas()" [series]="vencimentos()" [altura]="alturaGrafico()" [semLegenda]="true" /></section>
+        @defer (on idle) { <app-grafico tipo="bar" titulo="Contratos vencendo em 30, 60 e 90 dias" [rotulos]="faixas()" [series]="vencimentos()" [altura]="alturaGrafico()" [semLegenda]="true" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</section>
       <section class="lista-slide"><h3>Maiores riscos</h3>
         <ul>
           @for (r of d.maiores_riscos; track r.contrato_numero) {
@@ -73,7 +74,7 @@ export class SlideContratosComponent {
 
 @Component({
   selector: 'app-slide-rh',
-  imports: [GraficoComponent, IndicadorComponent],
+  imports: [EsqueletoComponent, GraficoComponent, IndicadorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let d = dados();
@@ -84,9 +85,9 @@ export class SlideContratosComponent {
     </div>
     <div class="grade-slide">
       <section><h3>Pessoas afastadas por mês em {{ d.ano }}</h3>
-        <app-grafico tipo="bar" titulo="Pessoas afastadas por mês" [rotulos]="meses" [series]="porMes()" [empilhado]="true" [altura]="alturaGrafico()" /></section>
+        @defer (on idle) { <app-grafico tipo="bar" titulo="Pessoas afastadas por mês" [rotulos]="meses" [series]="porMes()" [empilhado]="true" [altura]="alturaGrafico()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</section>
       <section><h3>Dias de afastamento por setor</h3>
-        <app-grafico tipo="bar" titulo="Dias de afastamento por setor" [rotulos]="setores()" [series]="porSetor()" [horizontal]="true" [semLegenda]="true" [altura]="alturaGrafico()" /></section>
+        @defer (on idle) { <app-grafico tipo="bar" titulo="Dias de afastamento por setor" [rotulos]="setores()" [series]="porSetor()" [horizontal]="true" [semLegenda]="true" [altura]="alturaGrafico()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</section>
       <section class="lista-slide"><h3>Fora hoje</h3>
         <ul>
           @for (a of d.afastados_hoje; track a.nome) {
@@ -118,7 +119,7 @@ export class SlideRhComponent {
 
 @Component({
   selector: 'app-slide-tarefas',
-  imports: [GraficoComponent, IndicadorComponent],
+  imports: [EsqueletoComponent, GraficoComponent, IndicadorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let d = dados();
@@ -132,9 +133,9 @@ export class SlideRhComponent {
     </div>
     <div class="grade-slide">
       <section><h3>Criadas × concluídas por semana</h3>
-        <app-grafico tipo="line" titulo="Tarefas criadas e concluídas por semana" [rotulos]="semanas()" [series]="evolucao()" [altura]="alturaGrafico()" /></section>
+        @defer (on idle) { <app-grafico tipo="line" titulo="Tarefas criadas e concluídas por semana" [rotulos]="semanas()" [series]="evolucao()" [altura]="alturaGrafico()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</section>
       <section><h3>Situação por equipe</h3>
-        <app-grafico tipo="bar" titulo="Tarefas em dia e atrasadas por equipe" [rotulos]="equipes()" [series]="porEquipe()" [empilhado]="true" [horizontal]="true" [altura]="alturaGrafico()" /></section>
+        @defer (on idle) { <app-grafico tipo="bar" titulo="Tarefas em dia e atrasadas por equipe" [rotulos]="equipes()" [series]="porEquipe()" [empilhado]="true" [horizontal]="true" [altura]="alturaGrafico()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</section>
       <section class="lista-slide largura-total"><h3>Carga das equipes</h3>
         <ul>
           @for (e of d.equipes; track e.equipe) {

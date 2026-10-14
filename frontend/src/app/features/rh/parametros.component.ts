@@ -10,10 +10,11 @@ import { CabecalhoRhComponent } from './cabecalho-rh.component';
 import { RhApiService } from './rh-api.service';
 import { DIAS_SEMANA, ParametrosRh } from './rh.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Parâmetros do RH (só a CGP grava): nenhuma regra fica fixa no código. */
 @Component({
   selector: 'app-parametros-rh',
-  imports: [FormsModule, DatePipe, CabecalhoRhComponent],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, CabecalhoRhComponent],
   template: `
     <app-cabecalho-rh titulo="Parâmetros do RH" [trilha]="['Parâmetros']" descricao="Regras de agendamento de férias e licença-prêmio. Valem para os próximos pedidos." />
     @if (p(); as x) {
@@ -91,7 +92,7 @@ import { DIAS_SEMANA, ParametrosRh } from './rh.models';
           <button type="submit" class="acao-primaria">Salvar parâmetros</button>
         </footer>
       </form>
-    } @else { <p class="estado-vazio">Carregando…</p> }
+    } @else { <app-esqueleto tipo="formulario" [linhas]="5" /> }
   `,
 })
 export class ParametrosComponent implements OnInit {

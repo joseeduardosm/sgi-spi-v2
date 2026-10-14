@@ -22,6 +22,29 @@ export const ROTAS_PROTOCOLO: Routes = [
     loadComponent: () => import('./painel-protocolo.component').then((m) => m.PainelProtocoloComponent),
   },
   {
+    // Página dedicada: novo tipo (com a faixa do primeiro exercício) ou novo exercício de um tipo existente
+    path: 'administracao/tipos/novo',
+    title: 'Novo tipo de documento | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'protocolo', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./tipo-protocolo.component').then((m) => m.TipoProtocoloComponent),
+  },
+  {
+    path: 'administracao/tipos/:tipoId/exercicio',
+    title: 'Novo exercício | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'protocolo', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./tipo-protocolo.component').then((m) => m.TipoProtocoloComponent),
+  },
+  {
+    // Detalhe do tipo (clique no cartão da administração); `?sequencia=<id>` escolhe o exercício
+    path: 'administracao/tipos/:tipoId',
+    title: 'Tipo de documento | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'protocolo', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./detalhe-tipo-protocolo.component').then((m) => m.DetalheTipoProtocoloComponent),
+  },
+  {
     path: 'administracao',
     title: 'Administração do Protocolo | SGI SPI',
     canActivate: [guardaAcl],

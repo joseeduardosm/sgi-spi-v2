@@ -15,13 +15,14 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ResumoEmpresa } from '../compartilhado/contratos.models';
 import { formatarCnpj } from '../compartilhado/rotulos';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Colunas pelas quais a lista pode ser ordenada. */
 type Coluna = 'cnpj' | 'razao_social' | 'nome_fantasia' | 'endereco';
 
 /** Tela 8: empresas contratadas, com busca em qualquer dado e ordenação no servidor. */
 @Component({
   selector: 'app-empresas',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, PaginacaoComponent],
   host: { '(document:click)': 'menuAberto.set(null)' },
   template: `
     <app-cabecalho-modulo titulo="Empresas contratadas" [trilha]="['Empresas']" descricao="Cadastro das contratadas e de seus prepostos (contatos da empresa, não usuários do portal)." />
@@ -67,7 +68,7 @@ type Coluna = 'cnpj' | 'razao_social' | 'nome_fantasia' | 'endereco';
                 </td>
               </tr>
             } @empty {
-              <tr><td class="estado-vazio" colspan="7">{{ carregando() ? 'Carregando…' : 'Nenhuma empresa encontrada.' }}</td></tr>
+              <tr><td class="estado-vazio" colspan="7">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="7" [linhas]="4" /> } @else { {{ 'Nenhuma empresa encontrada.' }} }</td></tr>
             }
           </tbody>
         </table>

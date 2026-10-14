@@ -19,6 +19,7 @@ from app.models.anexo import Anexo
 from app.models.tarefas import AnexoEventoTarefa, AtividadeTarefa, AtualizacaoStatusEquipe, MarcoTarefa, DependenciaTarefa, EquipeTarefas, EstagioTarefa, EventoTarefa, MarcadorTarefa, RecorrenciaTarefa, Tarefa
 from app.models.usuario import Usuario
 from app.schemas.tarefas import (
+    AtividadeEquipe,
     AnexoLeitura, Contexto, EdicaoTarefa, EquipeLeitura, EquipeResumo, Etapa, EventoLeitura, GravacaoEquipe, GravacaoMarcador,
     Indicadores, ItemChecklist, LinhaDoTempo, ListaTarefas, MarcadorLeitura, Movimento, MudancaPrazo, NovaTarefa, OperacaoChecklist,
     AgendaPessoa, AtividadeLeitura, AtualizacaoStatusLeitura, ConclusaoAtividade, GravacaoMarco, GravacaoStatusEquipe, MarcoDaTarefa, MarcoLeitura, ContagemEquipe, DesempenhoEquipe, Dependencias, GravacaoAtividade, EstagioLeitura, GravacaoEstagios, MudancaEstagio, GravacaoRecorrencia, NovaSubtarefa, TarefaLigada, ItemAgenda, Pessoa, PessoaCarga, PreviaRecorrencia, RecorrenciaLeitura, RecorrenciaResumo,
@@ -26,7 +27,8 @@ from app.schemas.tarefas import (
 )
 from app.services import servico_anexos
 from app.services.sla import servico_sla
-from app.services.tarefas import desempenho_tarefas, memorial_tarefa, paleta, relatorio_tarefas, servico_atividades, servico_estagios, servico_marcos, servico_recorrencias, servico_subtarefas
+from app.services.tarefas.descricao import texto_da_descricao
+from app.services.tarefas import desempenho_tarefas, memorial_tarefa, servico_atividade_diaria, paleta, relatorio_tarefas, servico_atividades, servico_estagios, servico_marcos, servico_recorrencias, servico_subtarefas
 from app.services.tarefas import servico_tarefas as servico
 from app.services.tarefas.servico_tarefas import ROTULOS_STATUS, ErroTarefa
 
@@ -69,7 +71,7 @@ def _contagens(sessao: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[st
     Eventos removidos pelo SuperRoot não contam nos comentários nem nos anexos.
     """
     resultado: dict[uuid.UUID, dict[str, int]] = {
-        i: {"prorrogacoes": 0, "comentarios": 0, "anexos": 0, "subtarefas_total": 0, "subtarefas_concluidas": 0, "bloqueada": 0} for i in ids}
+        i: {"prorrogacoes": 0, "comentarios": 0, "anexos": 0, "subtarefas_total": 0, "subtarefas_concluidas": 0, "subtarefas_em_validacao": 0, "bloqueada": 0, "bloqueada_por_numeros": []} for i in ids}
     if not ids:
         return resultado
     for tarefa_id, total in _prorrogacoes(sessao, ids).items():
@@ -92,10 +94,16 @@ def _contagens(sessao: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[st
         resultado[mae_id]["subtarefas_total"] += total
         if status_sub == "concluida":
             resultado[mae_id]["subtarefas_concluidas"] += total
+        elif status_sub == "em_validacao":
+            resultado[mae_id]["subtarefas_em_validacao"] += total
     bloqueadora = aliased(Tarefa)
     for tarefa_id in sessao.scalars(select(DependenciaTarefa.tarefa_id).join(bloqueadora, bloqueadora.id == DependenciaTarefa.bloqueada_por_id)
                                     .where(DependenciaTarefa.tarefa_id.in_(ids), bloqueadora.status != "concluida").distinct()):
         resultado[tarefa_id]["bloqueada"] = 1
+    # Números de todas as tarefas que bloqueiam cada uma (inclui as já concluídas: o Gantt desenha as setas de dependência)
+    for tarefa_id, numero in sessao.execute(select(DependenciaTarefa.tarefa_id, bloqueadora.numero).join(bloqueadora, bloqueadora.id == DependenciaTarefa.bloqueada_por_id)
+                                            .where(DependenciaTarefa.tarefa_id.in_(ids)).order_by(bloqueadora.numero)):
+        resultado[tarefa_id]["bloqueada_por_numeros"].append(numero)
     return resultado
 
 
@@ -143,7 +151,8 @@ def _resumo(sessao: Session, t: Tarefa, contagens: dict, agora: datetime, pais: 
         "carga": round(servico.carga(t, agora), 1), "ordem": t.ordem, "criado_em": _utc(t.criado_em), "iniciada_em": _utc(t.iniciada_em),
         "concluida_em": _utc(t.concluida_em), "atualizado_em": _utc(t.atualizado_em),
         "tarefa_pai_numero": (pais or {}).get(t.tarefa_pai_id), "subtarefas_total": numeros.get("subtarefas_total", 0),
-        "subtarefas_concluidas": numeros.get("subtarefas_concluidas", 0), "bloqueada": bool(numeros.get("bloqueada", 0)),
+        "subtarefas_concluidas": numeros.get("subtarefas_concluidas", 0),
+        "subtarefas_em_validacao": numeros.get("subtarefas_em_validacao", 0), "bloqueada": bool(numeros.get("bloqueada", 0)), "bloqueada_por_numeros": numeros.get("bloqueada_por_numeros", []),
         "estagio_id": t.estagio_id or (padroes or {}).get((t.equipe_id, t.status)), "marco_id": t.marco_id,
         "origem_tipo": t.origem_tipo, "controlada_externamente": bool(t.controlada_externamente), "sla": servico_sla.da_tarefa(sessao, t),
     }
@@ -244,7 +253,7 @@ def _filtrar(tarefas: list[Tarefa], status_: list[str], prioridade: str | None, 
             continue
         if responsavel_id and responsavel_id not in servico.envolvidos(t):
             continue
-        if termo and not (termo.lstrip("#").isdigit() and int(termo.lstrip("#")) == t.numero) and termo not in f"{t.titulo} {t.descricao}".lower():
+        if termo and not (termo.lstrip("#").isdigit() and int(termo.lstrip("#")) == t.numero) and termo not in f"{t.titulo} {texto_da_descricao(t.descricao)}".lower():
             continue
         resultado.append(t)
     # Ordem manual (arrastar) e, no empate, prazo
@@ -270,7 +279,7 @@ def _escopo(sessao: Session, usuario: Usuario, escopo: str, equipe_id: uuid.UUID
             equipe, tarefas = servico.da_equipe(sessao, usuario, equipe_id)
             lider = usuario.superusuario or usuario.id in servico.lideranca(sessao, equipe)
             contexto = Contexto(tipo="equipe", titulo=equipe.nome if equipe.nome.lower().startswith("equipe") else f"Equipe {equipe.nome}", equipe_id=equipe.id, lider=lider)
-            ind = servico.indicadores(tarefas, agora)
+            ind = servico.indicadores(tarefas, agora, em_subtarefas=servico.subtarefas_em_validacao(sessao, tarefas))
         elif escopo == "pessoa":
             pessoa = sessao.scalar(select(Usuario).where(func.lower(Usuario.login) == (login or "").lower()))
             if pessoa is None:
@@ -278,11 +287,11 @@ def _escopo(sessao: Session, usuario: Usuario, escopo: str, equipe_id: uuid.UUID
             tarefas = servico.da_pessoa(sessao, usuario, pessoa)
             contexto = Contexto(tipo="pessoa", titulo=f"Tarefas de {pessoa.nome_completo or pessoa.login}", login=pessoa.login,
                                 pessoa_id=pessoa.id, lider=usuario.id != pessoa.id)
-            ind = servico.indicadores(tarefas, agora, pessoa.id)
+            ind = servico.indicadores(tarefas, agora, pessoa.id, servico.subtarefas_em_validacao(sessao, tarefas))
         else:
             tarefas = servico.minhas(sessao, usuario)
             contexto = Contexto(tipo="minhas", titulo="Minhas tarefas", pessoa_id=usuario.id, lider=bool(servico.equipes_lideradas(sessao, usuario)))
-            ind = servico.indicadores(tarefas, agora, usuario.id)
+            ind = servico.indicadores(tarefas, agora, usuario.id, servico.subtarefas_em_validacao(sessao, tarefas))
     return tarefas, contexto, ind
 
 
@@ -415,7 +424,7 @@ def _equipe_leitura(sessao: Session, usuario: Usuario, e: EquipeTarefas) -> Equi
     return EquipeLeitura(
         id=e.id, nome=e.nome, equipe_pai_id=e.equipe_pai_id, equipe_pai_nome=pai.nome if pai else None, dono=_pessoa(sessao, e.dono_id),
         lideres=[p for p in (_pessoa(sessao, l.usuario_id) for l in e.lideres) if p], membros=[p for p in (_pessoa(sessao, m.usuario_id) for m in e.membros) if p],
-        indicadores=Indicadores(**servico.indicadores(tarefas, agora_utc())), lider=usuario.superusuario or usuario.id in servico.lideranca(sessao, e),
+        indicadores=Indicadores(**servico.indicadores(tarefas, agora_utc(), em_subtarefas=servico.subtarefas_em_validacao(sessao, tarefas))), lider=usuario.superusuario or usuario.id in servico.lideranca(sessao, e),
         pode_configurar=servico.pode_configurar(usuario, e),
     )
 
@@ -487,6 +496,24 @@ def desempenho_equipe(equipe_id: uuid.UUID, de: date | None = None, ate: date | 
         ultimas = servico_marcos.historico(sessao, usuario, equipe_id, 1)
         return DesempenhoEquipe(**resultado, marcos=[_leitura_marco(m, p) for m, p in servico_marcos.listar(sessao, usuario, equipe_id)],
                                 status_atual=_leitura_status(ultimas[0]) if ultimas else None)
+
+
+@roteador.get("/equipes/{equipe_id}/atividade", response_model=AtividadeEquipe, summary="O que aconteceu (atividade diária da equipe)",
+              description="Para a liderança (dono, líderes, inclusive de equipes acima, e SuperRoot): por dia (fuso de São Paulo), em cada tarefa da equipe, das subequipes e as "
+                          "subtarefas, o que aconteceu (entregas, validações, comentários, mudanças de situação e de prazo, transferências...). Padrão: hoje e ontem. "
+                          "Filtros: `pessoa_id` (autor), `tipos` (separados por vírgula: `entregas`, `comentarios`, `prazos`, `situacao`, `atribuicoes`, `outros`) e `busca` "
+                          "(título ou número). Os itens de checklist do mesmo dia numa tarefa viram uma linha; avisos automáticos ficam de fora, a menos que `automaticos=true`. "
+                          "`404` se a equipe não existe ou não é da pessoa; `403` fora da liderança; `400` se `de` > `ate` ou período > 31 dias.",
+              responses={**SEM_PERMISSAO, **INVALIDO, **resposta_nao_encontrado("Equipe")})
+def atividade_equipe(equipe_id: uuid.UUID, de: date | None = None, ate: date | None = None, pessoa_id: int | None = None, tipos: str = Query("", max_length=200),
+                     busca: str = Query("", max_length=100), automaticos: bool = False, sessao: Session = Depends(obter_sessao),
+                     usuario: Usuario = Depends(obter_usuario_atual)) -> AtividadeEquipe:
+    fim = ate or hoje_sao_paulo()
+    inicio = de or fim - timedelta(days=1)
+    with _traduzir():
+        resultado = servico_atividade_diaria.atividade_da_equipe(
+            sessao, usuario, equipe_id, inicio, fim, pessoa_id=pessoa_id, grupos=[g.strip() for g in tipos.split(",") if g.strip()], incluir_automaticos=automaticos, busca=busca)
+    return AtividadeEquipe(**resultado)
 
 
 @roteador.get("/pessoas/{usuario_id}/desempenho", response_model=DesempenhoEquipe, summary="Desempenho de uma pessoa (burndown e vazão)",
@@ -853,13 +880,14 @@ def editar(numero: int, dados: EdicaoTarefa, sessao: Session = Depends(obter_ses
 
 @roteador.post("/{numero}/subtarefas", response_model=TarefaDetalhe, status_code=status.HTTP_201_CREATED, summary="Criar subtarefa",
                description="Cria uma subtarefa da tarefa (um só nível). Herda equipe e marcadores; sem prazo, usa o da mãe (que não pode ser ultrapassado); sem responsáveis, "
-                           "usa os da mãe. A subtarefa tem andamento próprio (a mãe se move sem depender dela; ao mover a mãe, cada subtarefa só ganha um registro na linha do tempo). Devolve a subtarefa criada.",
+                           "usa os da mãe. Com `bloqueada_por_numeros` (1 ou N tarefas da mesma equipe, inclusive outras subtarefas da mãe) e/ou `depende_da_anterior`, ela já nasce bloqueada pela última subtarefa aberta da mãe (execução em sequência). A subtarefa tem andamento próprio (a mãe se move sem depender dela; ao mover a mãe, cada subtarefa só ganha um registro na linha do tempo). Devolve a subtarefa criada.",
                responses={**SEM_PERMISSAO, **INVALIDO, **NAO_ENCONTRADA})
 def criar_subtarefa(numero: int, dados: NovaSubtarefa, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> TarefaDetalhe:
     with _traduzir():
         mae = servico.obter(sessao, usuario, numero)
         sub = servico_subtarefas.criar_subtarefa(sessao, usuario, mae, servico_subtarefas.DadosSubtarefa(
-            titulo=dados.titulo, descricao=dados.descricao, prazo=dados.prazo, prioridade=dados.prioridade, responsaveis_ids=tuple(dados.responsaveis_ids)))
+            titulo=dados.titulo, descricao=dados.descricao, prazo=dados.prazo, prioridade=dados.prioridade, responsaveis_ids=tuple(dados.responsaveis_ids),
+            depende_da_anterior=dados.depende_da_anterior, bloqueada_por=tuple(dados.bloqueada_por_numeros)))
     return _detalhe(sessao, usuario, sub)
 
 
@@ -954,9 +982,9 @@ def transferir(numero: int, dados: Transferencia, sessao: Session = Depends(obte
 
 @roteador.post("/{numero}/comentarios", response_model=EventoLeitura, status_code=status.HTTP_201_CREATED, summary="Comentar e anexar",
                description="`multipart/form-data`: `texto` e/ou até 5 `arquivos` (PDF, Office/LibreOffice, TXT, CSV, PNG, JPG) e, opcionalmente, "
-                           "`em_resposta_a` (id de um comentário desta tarefa): a resposta guarda em `dados` quem e o que foi respondido (`resposta_a`, "
-                           "`resposta_autor`, `resposta_texto`) e aparece no topo da lista como qualquer comentário novo; `404` se o comentário não existir "
-                           "nesta tarefa ou já foi removido. Os envolvidos recebem aviso. Vale também para tarefa concluída.", responses={**SEM_PERMISSAO, **INVALIDO, **NAO_ENCONTRADA})
+                           "`em_resposta_a` (id de qualquer registro **com texto** da linha do tempo desta tarefa: comentário, entrega para validação, devolução, validação...): a resposta guarda em `dados` quem e o que foi respondido (`resposta_a`, "
+                           "`resposta_autor`, `resposta_texto`) e aparece no topo da lista como qualquer comentário novo; `404` se o registro não existir "
+                           "nesta tarefa, não tiver texto ou já foi removido. Os envolvidos recebem aviso. Vale também para tarefa concluída.", responses={**SEM_PERMISSAO, **INVALIDO, **NAO_ENCONTRADA})
 async def comentar(numero: int, texto: str = Form(""), em_resposta_a: uuid.UUID | None = Form(None), arquivos: list[UploadFile] = File(default_factory=list),
                    sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> EventoLeitura:
     with _traduzir():

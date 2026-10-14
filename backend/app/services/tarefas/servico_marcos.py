@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.banco import agora_utc, hoje_sao_paulo
 from app.models.tarefas import SITUACOES_STATUS_EQUIPE, AtualizacaoStatusEquipe, EquipeTarefas, MarcoTarefa, Tarefa
 from app.models.usuario import Usuario
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.servico_auditoria import auditar
 from app.services.tarefas import servico_tarefas as servico
 from app.services.tarefas.servico_tarefas import ErroTarefa
@@ -143,11 +143,11 @@ def publicar(sessao: Session, autor: Usuario, equipe_id: uuid.UUID, situacao: st
     sessao.add(atualizacao)
     sessao.flush()
     destinatarios = (servico.lideranca(sessao, equipe) | servico.membros(equipe))
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, list(destinatarios), f"Status da equipe {equipe.nome}: {ROTULOS_SITUACAO[situacao]}",
         f"{servico._nome(autor)} atualizou a situação da equipe para \"{ROTULOS_SITUACAO[situacao]}\"." + (f"\n\n{atualizacao.texto}" if atualizacao.texto else ""),
         chave=f"tarefa-status-equipe:{atualizacao.id}", categoria="comunicado", prioridade="alta" if situacao in ("em_risco", "atrasado") else "normal",
-        link=f"/tarefas/equipes/{equipe.id}", email=situacao in ("em_risco", "atrasado"), autor=autor,
+        link=f"/tarefas/equipes/{equipe.id}", autor=autor, evento="tarefas.status_equipe",
     )
     auditar(sessao, autor.login, "tarefas.status_equipe", equipe.nome, ROTULOS_SITUACAO[situacao], autor_id=autor.id, alvo_tipo="tarefa-equipe", alvo_id=equipe.id)
     sessao.commit()
@@ -166,11 +166,10 @@ def lembrar(sessao: Session, dia: date | None = None) -> int:
         ultima = sessao.scalar(select(func.max(AtualizacaoStatusEquipe.criado_em)).where(AtualizacaoStatusEquipe.equipe_id == equipe.id))
         if not abertas or (ultima is not None and servico._comparavel(ultima) > limite):
             continue
-        if servico_mensagens.notificar(
+        if notificacoes.notificar(
             sessao, list(servico.lideranca(sessao, equipe)), f"Atualize o status da equipe {equipe.nome}",
             f"A equipe {equipe.nome} tem {abertas} tarefa(s) aberta(s) e nenhuma atualização de status na última semana. Publique a situação (no prazo, em risco…).",
-            chave=f"tarefa-status-lembrete:{equipe.id}:{dia}", categoria="pendencia", link=f"/tarefas/equipes/{equipe.id}", email=True,
-        ):
+            chave=f"tarefa-status-lembrete:{equipe.id}:{dia}", categoria="pendencia", link=f"/tarefas/equipes/{equipe.id}", evento="tarefas.lembrete_status"):
             lembradas += 1
     sessao.commit()
     return lembradas

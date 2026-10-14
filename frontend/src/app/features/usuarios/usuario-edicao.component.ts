@@ -18,6 +18,7 @@ import { criarFormularioPerfil, dadosDoFormularioPerfil, gestorComoOpcao, preenc
 import { UsuariosApiService } from './usuarios-api.service';
 import { DetalheUsuario } from './usuarios.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /**
  * Página do usuário (`/usuarios/novo` e `/usuarios/:id`): conta, perfil institucional e, na edição, os dados
  * funcionais do RH (só CGP e SuperRoot). Grava quem é SuperRoot ou tem CONTROLE_TOTAL na ACL `usuarios`; quem não é
@@ -25,7 +26,7 @@ import { DetalheUsuario } from './usuarios.models';
  */
 @Component({
   selector: 'app-usuario-edicao',
-  imports: [ReactiveFormsModule, CamposPerfilComponent, DadosFuncionaisComponent, TrilhaComponent],
+  imports: [EsqueletoComponent, ReactiveFormsModule, CamposPerfilComponent, DadosFuncionaisComponent, TrilhaComponent],
   templateUrl: './usuario-edicao.component.html',
 })
 export class UsuarioEdicaoComponent implements OnInit {

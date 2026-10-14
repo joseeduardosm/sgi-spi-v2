@@ -4,6 +4,7 @@
 import { DatePipe } from '@angular/common';
 import { classeMarcador } from './marcadores.paleta';
 import { Component, computed, input, output, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { AvataresComponent } from './avatares.component';
 import { PrioridadeTarefa, ROTULOS_PRIORIDADE, situacaoPrazo, STATUS, StatusTarefa, TarefaResumo } from './tarefas.models';
@@ -20,7 +21,7 @@ const PESO_PRIORIDADE: Record<PrioridadeTarefa, number> = { critica: 0, alta: 1,
  */
 @Component({
   selector: 'app-lista-tarefas',
-  imports: [DatePipe, AvataresComponent],
+  imports: [DatePipe, RouterLink, AvataresComponent],
   template: `
     <div class="lista-asana" role="table" aria-label="Tarefas">
       <div class="cabecalho-lista" role="row">
@@ -47,7 +48,7 @@ const PESO_PRIORIDADE: Record<PrioridadeTarefa, number> = { critica: 0, alta: 1,
                 <span class="celula-titulo" role="cell">
                   @if (ordem() === 'manual') { <span class="alca" aria-hidden="true" title="Arraste para reordenar">⋮⋮</span> }
                   <span class="ponto-status" [attr.data-status]="t.status" aria-hidden="true"></span>
-                  <span class="texto-titulo">@if (t.bloqueada) { <span class="cadeado-tarefa" title="Bloqueada" aria-label="Tarefa bloqueada">🔒</span> }{{ t.titulo }}</span>@if (t.subtarefas_total) { <small class="numero-lista">▤ {{ t.subtarefas_concluidas }}/{{ t.subtarefas_total }}</small> }@if (t.tarefa_pai_numero) { <small class="numero-lista">↳ #{{ t.tarefa_pai_numero }}</small> }
+                  <span class="texto-titulo">@if (t.bloqueada) { <span class="cadeado-tarefa" title="Bloqueada" aria-label="Tarefa bloqueada">🔒</span> }<a class="link-tarefa" [routerLink]="['/tarefas', t.numero]" (click)="$event.stopPropagation()" title="Ctrl+clique abre em outra aba">{{ t.titulo }}</a></span><a class="abrir-nova-aba" [href]="'/tarefas/' + t.numero" target="_blank" rel="noopener" (click)="$event.stopPropagation()" [attr.aria-label]="'Abrir a tarefa ' + t.numero + ' em nova aba'" title="Abrir em nova aba">↗</a>@if (t.subtarefas_total) { <small class="numero-lista">▤ {{ t.subtarefas_concluidas }}/{{ t.subtarefas_total }}</small> }@if (t.tarefa_pai_numero) { <small class="numero-lista">↳ #{{ t.tarefa_pai_numero }}</small> }
                   @for (m of t.marcadores; track m.id) { <span [class]="classeMarcador(m.cor_indice)">{{ m.nome }}</span> }
                   <small class="numero-lista">#{{ t.numero }}@if (t.equipe) { · {{ t.equipe.nome }} }</small>
                 </span>

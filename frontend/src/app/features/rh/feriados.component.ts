@@ -70,8 +70,8 @@ interface Edicao {
     </section>
 
     @if (edicao(); as e) {
-      <div class="fundo-modal" role="presentation" (click)="edicao.set(null)"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-feriado">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="edicao.set(null)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-feriado">
         <header>
           <div><span class="modal-sobretitulo">Feriados</span><h2 id="titulo-janela-feriado">{{ e.id ? 'Editar' : 'Novo' }} feriado ou ponto facultativo</h2></div>
           <button type="button" aria-label="Fechar" (click)="edicao.set(null)">×</button>

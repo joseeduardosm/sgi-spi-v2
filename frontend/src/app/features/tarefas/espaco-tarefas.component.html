@@ -14,6 +14,8 @@
   <div class="acoes-espaco">
     @if (escopo().tipo === 'subtarefas') {
       <a class="acao-secundaria" [routerLink]="['/tarefas', escopo().tarefa]">← Tarefa #{{ escopo().tarefa }}</a>
+      <button type="button" class="acao-secundaria botao-tela-cheia" [class.ativo]="telaCheia()" [attr.aria-pressed]="telaCheia()" (click)="alternarTelaCheia()"
+            [title]="telaCheia() ? 'Sair da tela cheia (Esc)' : 'Usar o máximo da tela (F)'">{{ telaCheia() ? '⤢ Sair da tela cheia' : '⛶ Tela cheia' }}</button>
     } @else {
     @if (equipe()?.pode_configurar) {
       <a class="acao-secundaria" [routerLink]="['/tarefas/equipes', equipe()!.id, 'configurar']" title="Nome, liderança, membros e marcadores">⚙ Configurar</a>
@@ -35,11 +37,13 @@
   <div class="alternar-visao" role="group" aria-label="Visão">
     <button type="button" [class.ativo]="visao() === 'quadro'" [attr.aria-pressed]="visao() === 'quadro'" (click)="trocarVisao('quadro')">▦ Quadro</button>
     <button type="button" [class.ativo]="visao() === 'lista'" [attr.aria-pressed]="visao() === 'lista'" (click)="trocarVisao('lista')">☰ Lista</button>
+    <button type="button" [class.ativo]="visao() === 'gantt'" [attr.aria-pressed]="visao() === 'gantt'" (click)="trocarVisao('gantt')" title="Barras no tempo, do início ao prazo, com dependências e marcos">▤ Gantt</button>
     @if (escopo().tipo !== 'subtarefas') {
       <button type="button" [class.ativo]="visao() === 'calendario'" [attr.aria-pressed]="visao() === 'calendario'" (click)="trocarVisao('calendario')">▤ Calendário</button>
     }
     @if (escopo().tipo === 'equipe' && lider()) {
       <button type="button" [class.ativo]="visao() === 'pessoas'" [attr.aria-pressed]="visao() === 'pessoas'" (click)="trocarVisao('pessoas')">◔ Pessoas</button>
+      <button type="button" [class.ativo]="visao() === 'atividade'" [attr.aria-pressed]="visao() === 'atividade'" (click)="trocarVisao('atividade')" title="O que aconteceu hoje, ontem e nos dias anteriores, tarefa por tarefa">◷ Atividade</button>
     }
     <!-- Desempenho: da equipe (liderança) e individual (em Minhas tarefas e na tela de uma pessoa), com as tarefas pessoais -->
     @if ((escopo().tipo === 'equipe' && lider()) || (escopo().tipo !== 'equipe' && escopo().tipo !== 'subtarefas' && pessoaDoEscopo())) {
@@ -47,7 +51,7 @@
     }
   </div>
 
-  @if (visao() !== 'pessoas' && visao() !== 'desempenho') {
+  @if (visao() !== 'pessoas' && visao() !== 'desempenho' && visao() !== 'atividade') {
     <!-- Avatares: clique filtra pela pessoa; Shift+clique soma pessoas ao filtro -->
     @if (pessoasDoEscopo().length > 1) {
       <div class="filtro-avatares" role="group" aria-label="Filtrar por pessoa (Shift+clique para escolher várias)">
@@ -67,7 +71,7 @@
       <button type="button" class="acao-secundaria" [class.ativo]="!!(prioridade() || marcador() || recorte())" [attr.aria-expanded]="filtrosAbertos()"
               (click)="filtrosAbertos.set(!filtrosAbertos())">Filtros ▾</button>
       @if (filtrosAbertos()) {
-        <div class="painel-filtros" role="dialog" aria-label="Filtros">
+        <div class="painel-filtros" role="dialog" aria-label="Filtros" animate.leave="mov-sai">
           <label for="filtro-prazo">Prazo e situação</label>
           <select id="filtro-prazo" [ngModel]="recorte()" (ngModelChange)="navegar({ recorte: $event || null })">
             <option value="">Todas</option>
@@ -97,6 +101,8 @@
     @if (visao() === 'quadro') {
       <label class="alternar-raias" title="Agrupar o quadro em linhas por responsável">
         <input type="checkbox" [checked]="raias()" (change)="navegar({ raias: raias() ? null : 'pessoa' })" /> Raias por pessoa</label>
+      <label class="alternar-raias" title="Mostra os cartões no tamanho normal em todas as colunas (a coluna rola), em vez de reduzi-los para caberem na tela">
+        <input type="checkbox" [checked]="cartoesGrandes()" (change)="alternarCartoesGrandes()" /> Cartões grandes</label>
     }
     @if (visao() === 'lista') {
       <select class="ordem-lista" aria-label="Ordenar" [ngModel]="ordem()" (ngModelChange)="navegar({ ordem: $event === 'manual' ? null : $event, sentido: null })">
@@ -113,13 +119,16 @@
 
 @if (dados(); as d) {
   <!-- Resumo em uma linha: cada número aplica o recorte correspondente -->
-  @if (visao() !== 'pessoas' && visao() !== 'desempenho') {
+  @if (visao() !== 'pessoas' && visao() !== 'desempenho' && visao() !== 'atividade') {
     <div class="resumo-espaco" role="group" aria-label="Resumo">
       <button type="button" [class.ativo]="!recorte()" (click)="aplicarRecorte('')"><b>{{ d.indicadores.operacionais }}</b> em aberto</button>
       <button type="button" class="alerta" [class.ativo]="recorte() === 'atrasadas'" [disabled]="!d.indicadores.atrasadas" (click)="aplicarRecorte('atrasadas')"><b>{{ d.indicadores.atrasadas }}</b> atrasadas</button>
       <button type="button" [class.ativo]="recorte() === 'hoje'" [disabled]="!d.indicadores.vencem_hoje" (click)="aplicarRecorte('hoje')"><b>{{ d.indicadores.vencem_hoje }}</b> vencem hoje</button>
       <button type="button" class="validacao" [class.ativo]="recorte() === 'validacao'" [disabled]="!d.indicadores.em_validacao" (click)="aplicarRecorte('validacao')">
-        <b>{{ d.indicadores.em_validacao }}</b> em validação{{ lider() && d.indicadores.em_validacao ? ' (sua vez)' : '' }}</button>
+        <b>{{ d.indicadores.em_validacao }}</b> em validação{{ d.indicadores.em_validacao ? (lider() ? ' (sua vez)' : ' (aguardando a liderança)') : '' }}</button>
+      @if (d.indicadores.subtarefas_em_validacao) {
+        <span class="validacao-subtarefas" title="Subtarefas aguardando validação: abra a tarefa-mãe (selo no cartão) para ver o quadro de subtarefas"><b>{{ d.indicadores.subtarefas_em_validacao }}</b> em subtarefas</span>
+      }
       <button type="button" [class.ativo]="recorte() === 'criticas'" [disabled]="!d.indicadores.criticas" (click)="aplicarRecorte('criticas')"><b>{{ d.indicadores.criticas }}</b> críticas</button>
       <span class="carga-resumo" [attr.data-faixa]="d.indicadores.faixa" title="Carga: prioridade × urgência do prazo">carga {{ d.indicadores.carga | number: '1.0-1' }} pts · {{ d.indicadores.faixa }}</span>
     </div>
@@ -127,7 +136,7 @@
     @if (chips().length) {
       <div class="chips-filtro">
         @for (c of chips(); track c.rotulo) {
-          <button type="button" (click)="navegar(c.limpar)" [attr.aria-label]="'Remover filtro ' + c.rotulo">{{ c.rotulo }} <span aria-hidden="true">×</span></button>
+          <button type="button" class="ativo" (click)="navegar(c.limpar)" [attr.aria-label]="'Remover filtro ' + c.rotulo">{{ c.rotulo }} <span aria-hidden="true">×</span></button>
         }
         <button type="button" class="limpar" (click)="limparFiltros()">Limpar filtros</button>
       </div>
@@ -138,6 +147,9 @@
     @case ('lista') {
       <app-lista-tarefas [itens]="filtradas()" [ordem]="ordem()" [sentido]="sentido()" (ordenarPor)="ordenarPor($event)" (abrir)="abrirTarefa($event)" (reordenar)="reordenar($event)" />
     }
+    @case ('gantt') {
+      <app-gantt-tarefas [tarefas]="filtradas()" [marcos]="marcosGantt()" />
+    }
     @case ('calendario') {
       <app-calendario-tarefas [itens]="filtradas()" (abrir)="abrirTarefa($event)" (reprogramar)="reprogramar($event)" />
     }
@@ -147,6 +159,9 @@
       } @else if (pessoaDoEscopo(); as pid) {
         <app-desempenho-tarefas [pessoaId]="pid" />
       }
+    }
+    @case ('atividade') {
+      @if (escopo().tipo === 'equipe' && equipe(); as e) { <app-atividade-equipe [equipeId]="e.id" [pessoas]="pessoasDaEquipe()" /> }
     }
     @case ('pessoas') {
       <!-- Visão da liderança: pessoas da equipe, da maior para a menor carga -->
@@ -177,28 +192,28 @@
               </div>
             </a>
           }
-        } @empty { <p class="estado-vazio">Carregando as pessoas da equipe…</p> }
+        } @empty { <app-esqueleto tipo="lista" [linhas]="4" /> }
       </div>
     }
     @default {
       @if (!d.itens.length && !podeCriar()) {
         <p class="estado-vazio">Nenhuma tarefa por aqui.</p>
       } @else {
-        <app-quadro-tarefas [itens]="filtradas()" [estagios]="estagios()" [comRaias]="raias()" [cargas]="pessoasCarga()" [lider]="lider()" [podeCriar]="podeCriar()"
+        <app-quadro-tarefas [cartoesGrandes]="cartoesGrandes()" [itens]="filtradas()" [estagios]="estagios()" [comRaias]="raias()" [cargas]="pessoasCarga()" [lider]="lider()" [podeCriar]="podeCriar()"
                             [destacado]="destacado()" (abrir)="abrirTarefa($event)" (mover)="mover($event)" (criar)="criarRapida($event)" />
       }
     }
   }
 } @else if (carregando()) {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="quadro" [linhas]="3" [colunas]="4" />
 }
 
 <!-- Motivo de devolução/reabertura (arraste no quadro) e novo prazo (arraste no calendário) -->
 <app-janela-tarefa [(modo)]="modoJanela" [tarefa]="tarefaJanela()" [prazoSugerido]="prazoSugerido()" (concluido)="carregar(true)" />
 
 @if (relatorioAberto()) {
-  <div class="fundo-modal" role="presentation" (click)="relatorioAberto.set(false)"></div>
-  <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-relatorio" (keydown.escape)="relatorioAberto.set(false)">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="relatorioAberto.set(false)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-relatorio" (keydown.escape)="relatorioAberto.set(false)">
     <header>
       <div><span class="modal-sobretitulo">{{ titulo() }}</span><h2 id="titulo-relatorio">Relatório de tarefas</h2></div>
       <button type="button" aria-label="Fechar" (click)="relatorioAberto.set(false)">×</button>

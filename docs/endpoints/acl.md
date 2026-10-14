@@ -25,7 +25,8 @@ Define quem acessa cada módulo do portal. A política e o cálculo do nível ef
   - `documentacao-api`: Swagger, ReDoc e OpenAPI; nasce fechado (migração `c6e0a4b8d2f1`; ver [documentacao-api.md](documentacao-api.md));
   - `manuais`: módulo Manuais (BookStack); nasce **sem regras**, aberto a todo usuário autenticado (migração `d7a1c5e9b3f2`; ver [manuais.md](manuais.md));
   - `importacao-modelos`: botão "Importar XLSX" de checklists e formulários de avaliação (migração `e5a8c3d7f2b1`; ver [contratos-importacao-modelos-xlsx.md](contratos-importacao-modelos-xlsx.md));
-  - `mensageria-setores`: envio de mensagens para setores inteiros, que exige CONTROLE_TOTAL (migração `0c11fdac4f46`; ver [mensagens.md](mensagens.md)).
+  - `notificacoes-setores`: envio de notificações para setores inteiros, que exige CONTROLE_TOTAL (migração `0c11fdac4f46`, renomeado de `mensageria-setores` pela `d4e8a1c6b2f7`; ver [notificacoes.md](notificacoes.md));
+  - `notificacoes-obrigatorias`: define os eventos e canais de notificação obrigatórios para um setor ou usuário, que exige CONTROLE_TOTAL (migração `e5f9b2d7a3c1`, criado **fechado**: só a conta root, até a administração liberar mais alguém).
 
 ---
 

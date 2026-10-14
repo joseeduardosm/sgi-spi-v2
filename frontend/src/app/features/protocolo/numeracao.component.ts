@@ -16,6 +16,7 @@ import { CabecalhoProtocoloComponent } from './cabecalho-protocolo.component';
 import { ProtocoloApiService } from './protocolo-api.service';
 import { ListaNumeros, NumeroProtocolo, ROTULOS_ESTADO, ROTULOS_EVENTO, SequenciaProtocolo, TipoProtocolo } from './protocolo.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 type Janela = null | 'reservar' | 'detalhe';
 type AcaoMotivo = 'liberar' | 'anular';
 
@@ -26,12 +27,12 @@ type AcaoMotivo = 'liberar' | 'anular';
  */
 @Component({
   selector: 'app-numeracao',
-  imports: [LinkificarPipe, FormsModule, DatePipe, CabecalhoProtocoloComponent],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, CabecalhoProtocoloComponent],
   template: `
     <app-cabecalho-protocolo titulo="Protocolo" descricao="Reserve o próximo número de ofícios, portarias e resoluções e anexe o documento." />
     <section class="painel-gestao protocolo">
       @if (!carregado()) {
-        <p class="estado-vazio">Carregando…</p>
+        <app-esqueleto tipo="formulario" [linhas]="5" />
       } @else if (!tipos().length) {
         <p class="estado-vazio">Nenhum tipo de documento cadastrado. @if (administra()) { Cadastre em <b>Administração</b>. }</p>
       } @else {
@@ -46,32 +47,32 @@ type AcaoMotivo = 'liberar' | 'anular';
               @empty { <option value="">sem sequência</option> }
             </select></div>
           @if (lista(); as l) {
-            <div class="resumo-protocolo"><strong>{{ l.livres }}</strong> livre(s) · faixa {{ l.sequencia.inicio }} a {{ l.sequencia.fim }}</div>
-            <button type="button" class="acao-primaria" [disabled]="l.livres === 0" (click)="abrirReserva(null)">Reservar próximo número</button>
+            <div class="resumo-protocolo"><strong>{{ l.livres }}</strong> livre(s)@if (l.reservados_saa) { · <strong>{{ l.reservados_saa }}</strong> reservado(s) SAA }  · faixa {{ l.sequencia.inicio }} a {{ l.sequencia.fim }}</div>
+            <button type="button" class="acao-primaria" [disabled]="l.livres === 0 && !(l.pode_usar_reserva_saa && l.reservados_saa > 0)" (click)="abrirReserva(null)">Reservar próximo número</button>
           }
         </div>
 
         @if (lista(); as l) {
           <div class="legenda-protocolo" aria-label="Legenda">
-            <span class="livre">Livre</span><span class="reservado">Reservado, sem documento</span><span class="utilizado">Utilizado, com documento</span><span class="anulado">Anulado</span>
+            <span class="livre">Livre</span><span class="reservado_saa">Reservado SAA</span><span class="reservado">Reservado, sem documento</span><span class="utilizado">Utilizado, com documento</span><span class="anulado">Anulado</span>
           </div>
           <div class="grade-numeros">
             @for (n of l.itens; track n.id) {
-              <button type="button" [class]="'numero ' + n.estado" [title]="n.estado === 'livre' ? 'Número livre' : n.finalidade" (click)="clicarNumero(n)">
+              <button type="button" [class]="'numero ' + n.estado" [title]="n.estado === 'livre' ? 'Número livre' : n.estado === 'reservado_saa' ? 'Reservado ao Serviço de Apoio Administrativo' : n.finalidade" (click)="clicarNumero(n)">
                 <strong>{{ n.numero }}</strong>
                 <small>{{ rotulos[n.estado] }}@if (n.sigiloso) { <span aria-label="Documento sigiloso" title="Documento sigiloso"> 🔒</span> }</small>
               </button>
             }
           </div>
         } @else {
-          <p class="estado-vazio">{{ sequenciaId() ? 'Carregando os números…' : 'Este tipo ainda não tem sequência. Peça à administração para criar a do exercício.' }}</p>
+          <div class="estado-vazio">@if (sequenciaId()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Este tipo ainda não tem sequência. Peça à administração para criar a do exercício.' }} }</div>
         }
       }
     </section>
 
     @if (janela() === 'reservar') {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-reserva">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-reserva">
         <header>
           <div><span class="modal-sobretitulo">Reserva</span>
             <h2 id="titulo-reserva">@if (alvo()) { Lançar o número {{ alvo()!.numero_formatado }} } @else { Reservar o próximo número }</h2></div>
@@ -100,8 +101,8 @@ type AcaoMotivo = 'liberar' | 'anular';
     }
 
     @if (janela() === 'detalhe' && detalhe(); as n) {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-numero">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-numero">
         <header>
           <div><span class="modal-sobretitulo">{{ n.tipo_nome }} · {{ rotulos[n.estado] }}</span><h2 id="titulo-numero">Nº {{ n.numero_formatado }}</h2></div>
           <button type="button" aria-label="Fechar" (click)="fechar()">×</button>
@@ -230,9 +231,10 @@ export class NumeracaoComponent implements OnInit {
   }
 
   protected clicarNumero(n: NumeroProtocolo): void {
-    // Livre: só a administração escolhe o número (os demais usam "Reservar próximo número")
-    if (n.estado === 'livre') {
-      if (this.administra()) this.abrirReserva(n);
+    // Livre: só a administração escolhe o número (os demais usam "Reservar próximo número"); nos "Reservado SAA", o SAA também escolhe
+    if (n.estado === 'livre' || n.estado === 'reservado_saa') {
+      if (n.pode_reservar) this.abrirReserva(n);
+      else if (n.estado === 'reservado_saa') this.dialogos.avisar('Reservado ao SAA', `Este número está reservado ao Serviço de Apoio Administrativo até o número ${(this.lista()?.sequencia.liberar_a_partir_de ?? 1) - 1}; os demais usuários passam a reservar a partir de ${this.lista()?.sequencia.liberar_a_partir_de}.`);
       else this.dialogos.avisar('Reserva sequencial', 'Para manter a sequência, use "Reservar próximo número": o sistema entrega o menor número livre.');
       return;
     }

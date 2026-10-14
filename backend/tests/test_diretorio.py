@@ -10,7 +10,7 @@ from PIL import Image
 from sqlalchemy import select
 
 from app.core.banco import FabricaSessao
-from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.notificacao import EntregaNotificacao, Notificacao
 from app.models.rh import Afastamento
 from app.services import servico_diretorio
 from tests.conftest import cabecalho, criar_usuario
@@ -174,7 +174,7 @@ def test_mural_de_parabens(cliente, equipe):
     assert cliente.post(url, json={"texto": "Eu mesma"}, headers=h["bia"]).status_code == 400
     # A aniversariante recebe o aviso interno e vê o recado no mural
     with FabricaSessao() as s:
-        avisos = list(s.scalars(select(Mensagem.assunto).join(EntregaMensagem).where(EntregaMensagem.destinatario_id == ids["bia"])))
+        avisos = list(s.scalars(select(Notificacao.assunto).join(EntregaNotificacao).where(EntregaNotificacao.destinatario_id == ids["bia"])))
     assert avisos == ["Davi Lima deixou um recado de aniversário para você"]
     mural = cliente.get(url, headers=h["celia"]).json()
     assert [(m["autor_nome"], m["meu"]) for m in mural] == [("Davi Lima", False)]
@@ -228,7 +228,7 @@ def test_parabens_automatico_do_dia_sem_repetir(cliente, equipe):
         assert len(criadas) == 1
         assert servico_diretorio.enviar_parabens_do_dia(s) == []  # segunda execução no mesmo dia não repete
     with FabricaSessao() as s:
-        r = s.execute(select(EntregaMensagem.destinatario_id, Mensagem.assunto).join(Mensagem).where(Mensagem.assunto == "Feliz aniversário!")).all()
+        r = s.execute(select(EntregaNotificacao.destinatario_id, Notificacao.assunto).join(Notificacao).where(Notificacao.assunto == "Feliz aniversário!")).all()
     assert r == [(ids["bia"], "Feliz aniversário!")]
 
 

@@ -86,8 +86,8 @@ interface LinhaEdicao {
     </section>
 
     @if (aberto()) {
-      <div class="fundo-modal" role="presentation" (click)="aberto.set(false)"></div>
-      <section class="modal-portal modal-largo modal-checklist" role="dialog" aria-modal="true" aria-labelledby="titulo-corrigir">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="aberto.set(false)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo modal-checklist" role="dialog" aria-modal="true" aria-labelledby="titulo-corrigir">
         <header>
           <div><span class="modal-sobretitulo">Contrato</span><h2 id="titulo-corrigir">Corrigir itens</h2></div>
           <button type="button" aria-label="Fechar" (click)="aberto.set(false)">×</button>

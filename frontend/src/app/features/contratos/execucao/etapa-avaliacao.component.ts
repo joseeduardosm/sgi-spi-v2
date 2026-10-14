@@ -24,6 +24,16 @@ type Resposta = { nota: string; justificativa: string };
   selector: 'app-etapa-avaliacao',
   imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-avaliacao.component.html',
+  // Colunas fixas: Peso, Nota e Justificativa ficam alinhadas em todos os grupos, qualquer que seja o tamanho dos textos
+  styles: `
+    .tabela-avaliacao { width: 100%; table-layout: fixed; }
+    .tabela-avaliacao .col-peso { width: 92px; }
+    .tabela-avaliacao .col-nota { width: 210px; }
+    .tabela-avaliacao .col-justificativa { width: 34%; }
+    .tabela-avaliacao td, .tabela-avaliacao th { vertical-align: top; overflow-wrap: anywhere; }
+    .tabela-avaliacao td:not(:first-child) { vertical-align: middle; }
+    .tabela-avaliacao .campo-tabela { width: 100%; }
+  `,
 })
 export class EtapaAvaliacaoComponent implements OnChanges {
   readonly detalhe = input.required<DetalheCompetencia>();
@@ -67,9 +77,16 @@ export class EtapaAvaliacaoComponent implements OnChanges {
     return !!a.avaliacao_inicial_em && (!a.precisa_avaliacao_gestor || !!a.avaliacao_gestor_em);
   });
 
-  /** Sempre que a competência muda, recarrega as respostas a partir dela. */
+  // Retrato das respostas gravadas já carregadas na tela: a atualização periódica da competência (ex.: acompanhamento do envio do e-mail)
+  // traz um objeto novo, mas não pode apagar as notas escolhidas e ainda não salvas
+  private assinatura = '';
+
+  /** Quando a competência muda de verdade (respostas gravadas ou outra avaliação), recarrega as respostas a partir dela. */
   ngOnChanges(): void {
     const a = this.avaliacao();
+    const assinatura = JSON.stringify([this.detalhe().id, a.definicao, a.respostas_iniciais, a.respostas_gestor, a.complemento_gestor, a.concluida_em]);
+    if (assinatura === this.assinatura) return;
+    this.assinatura = assinatura;
     // Converte as respostas da API em {item: {nota, justificativa}}
     const mapa = (respostas: RespostaAvaliacao[]) => Object.fromEntries(respostas.map((r) => [r.item_id, { nota: String(Number(r.nota)), justificativa: r.justificativa }]));
     const itens = a.definicao.grupos.flatMap((g) => g.itens.map((i) => i.id));

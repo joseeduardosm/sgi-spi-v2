@@ -1,5 +1,7 @@
 # Módulo RH: férias e licença-prêmio (`/api/rh/afastamentos`, `/api/rh/parametros`)
 
+> **Canais dos avisos:** todo aviso deste módulo chega **sempre** na caixa de [notificações](notificacoes.md). O e-mail, o pop-up do navegador e o alerta do desktop só saem para quem ligou o evento correspondente em `/notificacoes` › Preferências (tudo começa desmarcado). Onde este documento fala em "e-mail" dos avisos, leia "para quem ligou o e-mail".
+
 Tag no OpenAPI: **Módulo RH**. Implementação:
 - rotas: `backend/app/api/routes/rh.py`;
 - regras: `backend/app/services/rh/servico_afastamentos.py` e `servico_periodos.py` (períodos aquisitivos);
@@ -103,7 +105,7 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
   - a CGP.
   - Ninguém decide o próprio pedido, exceto a CGP. A recusa exige justificativa.
 - **Histórico:** cada mudança fica em `rh_afastamentos_eventos` (de → para, quem, quando, justificativa).
-- **E-mails** (caixa de mensagens + fila de e-mail):
+- **E-mails** (caixa de notificações + fila de e-mail):
   - **ao agendar ou alterar:** autorizador (ou substituto) e CGP recebem "[Nome] agendou [férias/licença-prêmio] e aguarda aprovação". O aviso se encerra na decisão;
   - **a cada mudança de status** (aprovado, recusado com a justificativa, cancelado, gozado): o usuário recebe e-mail;
   - **ao cancelar** (`POST /afastamentos/{id}/cancelar`): além do dono do pedido, a **CGP** e o **superior imediato** recebem "Cancelamento: [Nome] cancelou [férias/licença-prêmio]" (mensagem e e-mail, com quem cancelou, o período e a justificativa); o **autorizador (ou substituto)** também, mas só se o pedido estava na etapa de aprovação (não na do ciente do superior nem já aprovado). Quem cancelou não recebe o aviso duplicado; os avisos de pedido pendente continuam sendo encerrados;

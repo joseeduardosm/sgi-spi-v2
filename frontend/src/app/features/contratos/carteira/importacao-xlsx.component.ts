@@ -26,8 +26,8 @@ const TAMANHO_MAXIMO_MB = 5;
     <button type="button" class="acao-secundaria" (click)="abrir()">Importar XLSX</button>
 
     @if (aberta()) {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-xlsx">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-xlsx">
         <header>
           <div><span class="modal-sobretitulo">Carteira de contratos</span><h2 id="titulo-importacao-xlsx">Importar contrato por planilha</h2></div>
           <button type="button" aria-label="Fechar" [disabled]="ocupado()" (click)="fechar()">×</button>
@@ -37,7 +37,7 @@ const TAMANHO_MAXIMO_MB = 5;
           <p class="dica-formulario" style="margin-top: 0">
             Preencha a planilha "Checklist de Alimentação do Sistema de Contratos" e envie para conferir a prévia.
             A equipe de gestão e fiscalização não é importada: cadastre-a editando o contrato depois.
-            <button type="button" class="link-arquivo" (click)="baixarModelo()">Baixar modelo</button>
+            <button type="button" class="acao-secundaria acao-pequena" (click)="baixarModelo()">Baixar modelo</button>
           </p>
           <div class="acoes-cartao esquerda" style="margin: 0 0 14px">
             <input #campo type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden (change)="aoEscolher(campo)" />

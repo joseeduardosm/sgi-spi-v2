@@ -30,7 +30,7 @@
           }
           <p class="secao-formulario" style="margin-top: 0">1. Evidência do índice</p>
           <div class="acoes-cartao esquerda">
-            @if (r.evidencia) { <button type="button" class="link-arquivo" (click)="baixar(r, r.evidencia.anexo_id)">{{ r.evidencia.nome }}</button> }
+            @if (r.evidencia) { <button type="button" class="acao-secundaria acao-pequena" [title]="r.evidencia.nome" (click)="baixar(r, r.evidencia.anexo_id)">Baixar evidência</button> }
             @if (p.pode_editar) {
               <app-envio-pdf rotulo="Selecionar PDF" (selecionado)="evidencia = $event" />
               <button type="button" class="acao-secundaria" [disabled]="!evidencia" (click)="anexarEvidencia(r)">{{ r.evidencia ? 'Substituir evidência' : 'Anexar' }}</button>
@@ -91,7 +91,7 @@
             <ul class="lista-ciencias">
               @for (m of r.memorias; track m.versao) {
                 <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span>
-                  <span><button type="button" class="link-arquivo" (click)="baixar(r, m.pdf.anexo_id)">PDF</button> · <button type="button" class="link-arquivo" (click)="baixar(r, m.xlsx.anexo_id)">XLSX</button></span></li>
+                  <span><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.pdf.anexo_id)">Baixar PDF</button> · <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.xlsx.anexo_id)">Baixar XLSX</button></span></li>
               }
             </ul>
           }
@@ -147,8 +147,8 @@
                     } @else { — }
                   </td>
                   <td>
-                    @if (r.memorias.at(-1); as m) { <button type="button" class="link-arquivo" (click)="baixar(r, m.pdf.anexo_id)">Memória</button> }
-                    @if (r.apostilamento) { · <button type="button" class="link-arquivo" (click)="baixar(r, r.apostilamento.anexo_id)">Apostilamento</button> }
+                    @if (r.memorias.at(-1); as m) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.pdf.anexo_id)">Baixar memória</button> }
+                    @if (r.apostilamento) { · <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, r.apostilamento.anexo_id)">Baixar apostilamento</button> }
                     @if (r.competencia_diferenca) { · <a class="link-arquivo" [routerLink]="['/contratos', id(), 'execucao', r.competencia_diferenca]">Competência de diferença</a> }
                   </td>
                 </tr>
@@ -160,5 +160,5 @@
     }
   }
 } @else {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="formulario" [linhas]="5" />
 }

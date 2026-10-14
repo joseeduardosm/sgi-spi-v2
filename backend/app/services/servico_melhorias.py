@@ -27,7 +27,7 @@ from app.models.acl import NivelAcl
 from app.models.melhorias import AnexoSugestao, EventoSugestao, SugestaoMelhoria
 from app.models.tarefas import Tarefa
 from app.models.usuario import Usuario
-from app.services import servico_acl, servico_anexos, servico_mensagens
+from app.services import servico_acl, servico_anexos, notificacoes
 from app.services.documentos.pdf import FUSO_SAO_PAULO, DocumentoPdf
 from app.services.documentos.planilha import Aba, Coluna, gerar_planilha
 from app.services.noticias import imagens
@@ -43,7 +43,7 @@ MODULOS_POR_ROTA = {
     "melhorias": "melhorias", "usuarios": "administracao", "setores": "administracao", "admin": "administracao", "perfil": "perfil",
 }
 ROTULOS_MODULO = {
-    "contratos": "Contratos", "rh": "RH", "tarefas": "Tarefas", "noticias": "Notícias", "mensagens": "Mensagens",
+    "contratos": "Contratos", "rh": "RH", "tarefas": "Tarefas", "noticias": "Notícias", "mensagens": "Notificações",
     "melhorias": "Melhorias", "administracao": "Administração", "perfil": "Meu perfil", "portal": "Portal", "geral": "Geral",
 }
 
@@ -141,11 +141,10 @@ def registrar(sessao: Session, autor: Usuario, texto: str, tela: str, arquivos: 
     auditar(sessao, autor.login, "melhorias.enviar", f"Sugestão #{numero}", autor_id=autor.id, alvo_tipo="melhoria",
             alvo_id=sugestao.id, dados={"tela": sugestao.tela, "prints": len(arquivos)})
     resumo = texto if len(texto) <= 400 else texto[:400] + "…"
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, [u.id for u in triadores(sessao)], f"Nova sugestão de melhoria #{numero} ({ROTULOS_MODULO[sugestao.modulo]})",
         f"{sugestao.autor_nome} enviou uma sugestão de melhoria.\n\nTela: {sugestao.tela or '—'}\n\n{resumo}",
-        chave=f"melhoria-nova:{sugestao.id}", categoria="pendencia", link=f"/melhorias/triagem?sugestao={numero}", email=True, autor=autor,
-    )
+        chave=f"melhoria-nova:{sugestao.id}", categoria="pendencia", link=f"/melhorias/triagem?sugestao={numero}", autor=autor, evento="melhorias.nova_sugestao")
     return sugestao
 
 
@@ -256,10 +255,9 @@ def tratar(sessao: Session, numero: int, situacao: str, resposta: str, observaca
             corpo += f"\n\nResposta da equipe:\n{resposta}"
         corpo += f"\n\nSua sugestão:\n{sugestao.texto if len(sugestao.texto) <= 400 else sugestao.texto[:400] + '…'}"
         sessao.flush()
-        servico_mensagens.notificar(
+        notificacoes.notificar(
             sessao, [sugestao.autor_id], f"Sugestão de melhoria #{numero}: {ROTULOS_SITUACAO[situacao]}", corpo,
-            chave=f"melhoria-tratada:{sugestao.id}:{len(sugestao.eventos)}", link=f"/melhorias?sugestao={numero}", email=True, autor=usuario,
-        )
+            chave=f"melhoria-tratada:{sugestao.id}:{len(sugestao.eventos)}", link=f"/melhorias?sugestao={numero}", autor=usuario, evento="melhorias.andamento")
     return sugestao
 
 
@@ -287,11 +285,10 @@ def converter_em_tarefa(sessao: Session, numero: int, titulo: str, prazo: dateti
             dados={"tarefa": tarefa.numero})
     if sugestao.situacao != anterior and sugestao.autor_id:
         sessao.flush()
-        servico_mensagens.notificar(
+        notificacoes.notificar(
             sessao, [sugestao.autor_id], f"Sugestão de melhoria #{numero}: Aceita",
             f"Sua sugestão de melhoria #{numero} foi aceita e entrou na fila de trabalho da equipe.", chave=f"melhoria-tratada:{sugestao.id}:{len(sugestao.eventos)}",
-            link=f"/melhorias?sugestao={numero}", email=True, autor=usuario,
-        )
+            link=f"/melhorias?sugestao={numero}", autor=usuario, evento="melhorias.andamento")
     return sugestao, tarefa
 
 

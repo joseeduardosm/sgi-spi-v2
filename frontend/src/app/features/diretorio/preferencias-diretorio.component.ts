@@ -9,8 +9,8 @@ import { FotoPerfilComponent } from './foto-perfil.component';
   selector: 'app-preferencias-diretorio',
   imports: [FotoPerfilComponent],
   template: `
-    <div class="fundo-modal" (click)="fechar.emit()"></div>
-    <section class="modal-portal" role="dialog" aria-modal="true" aria-label="Minha foto e privacidade">
+    <div animate.leave="mov-fundo-sai" class="fundo-modal" (click)="fechar.emit()"></div>
+    <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-label="Minha foto e privacidade">
       <header><h2>Minha foto e privacidade</h2><button type="button" class="fechar" aria-label="Fechar" (click)="fechar.emit()">×</button></header>
       <app-foto-perfil (alterou)="alterou.emit()" />
       <footer><button type="button" class="acao-primaria" (click)="fechar.emit()">Fechar</button></footer>

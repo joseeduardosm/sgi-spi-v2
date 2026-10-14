@@ -75,6 +75,17 @@ class Configuracao(BaseSettings):
     # Tamanho máximo de cada PDF enviado; o Nginx precisa aceitar um pouco mais que isso
     anexos_tamanho_maximo_mb: int = Field(25, gt=0, le=200)
 
+    # Notificações do navegador (Web Push, chaves VAPID geradas por `scripts/gerar-chaves-vapid.py`). Sem as três, o canal fica indisponível.
+    chave_publica_vapid: str = ""
+    chave_privada_vapid: SecretStr = SecretStr("")
+    # Contato do servidor para os serviços de push, no formato `mailto:alguem@sp.gov.br`
+    contato_vapid: str = ""
+    # Como as notificações saem depois do commit: `thread` (padrão, em segundo plano), `sincrono` (na hora, usado nos testes) ou
+    # `desligado` (só o timer `despachar` envia)
+    notificacoes_despacho: str = Field("thread", pattern="^(thread|sincrono|desligado)$")
+    # Notificações cientes ou encerradas há mais de N meses saem da caixa e da busca (continuam no banco, para auditoria)
+    notificacoes_meses_na_caixa: int = Field(6, ge=1, le=120)
+
     # Endereço do sistema usado nos links dos e-mails (ex.: link direto para a etapa da competência)
     url_publica: str = "https://portal.spi.sp.gov.br"
     # Tomador que deve constar nas notas fiscais (SPI) e setor do Financeiro, que confere as retenções
@@ -82,6 +93,8 @@ class Configuracao(BaseSettings):
     setor_financeiro: str = "Diretoria de Orçamento e Finanças"
     # Setor da CGP (Coordenadoria de Gestão de Pessoas): administra o Módulo RH (inclui os setores filhos)
     setor_cgp: str = "Coordenadoria de Gestão de Pessoas"
+    # Setor do Serviço de Apoio Administrativo (SAA): dá andamento nos números "Reservado SAA" do Protocolo (inclui os setores filhos)
+    setor_apoio_administrativo: str = "Serviço de Apoio Administrativo"
 
     # Contratações (ETP e TR): versões guardadas por documento, minutos sem edição que abrem uma "sessão" nova (a versão automática
     # guarda o estado de antes da primeira edição) e dias de revisão parada até o aviso ao criador

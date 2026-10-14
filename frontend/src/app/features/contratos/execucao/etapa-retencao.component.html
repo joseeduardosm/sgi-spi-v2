@@ -106,7 +106,7 @@
 
     @if (d.retencao; as r) {
       <p class="aviso-bloco informativo">Conferida por <b>{{ r.por_nome }}</b> em {{ r.concluida_em | date: 'dd/MM/yyyy HH:mm' }}.
-        @if (r.pdf) { <button type="button" class="link-arquivo" (click)="baixar(r.pdf.anexo_id)">Baixar PDF da conferência</button> }
+        @if (r.pdf) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r.pdf.anexo_id)">Baixar PDF da conferência</button> }
       </p>
       <p class="secao-formulario">E-mail à equipe</p>
       @if (d.email_retencao.enviado_em === null) {
@@ -124,8 +124,8 @@
 </section>
 
 @if (recusando()) {
-  <div class="fundo-modal" role="presentation" (click)="recusando.set(false)"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="recusando.set(false)"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa">
     <header><div><span class="modal-sobretitulo">Retenção de tributos</span><h2 id="titulo-recusa">Recusar a nota fiscal</h2></div>
       <button type="button" aria-label="Fechar" (click)="recusando.set(false)">×</button></header>
     <form (submit)="$event.preventDefault(); recusar()">

@@ -33,9 +33,25 @@
                 "glob": "favicon.ico",
                 "input": "src/assets",
                 "output": "/"
+              },
+              {
+                "glob": "manifest.webmanifest",
+                "input": "src",
+                "output": "/"
+              },
+              {
+                "glob": "sw-notificacoes.js",
+                "input": "src",
+                "output": "/"
               }
             ],
             "styles": [
+              "node_modules/@fontsource/inter/latin-400.css",
+              "node_modules/@fontsource/inter/latin-600.css",
+              "node_modules/@fontsource/inter/latin-700.css",
+              "node_modules/@fontsource/inter/latin-800.css",
+              "node_modules/@fontsource/geist-mono/latin-400.css",
+              "node_modules/@fontsource/geist-mono/latin-600.css",
               "src/styles.scss"
             ]
           },
@@ -44,7 +60,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "800kB",
+                  "maximumWarning": "850kB",
                   "maximumError": "1.5MB"
                 },
                 {
@@ -53,7 +69,8 @@
                   "maximumError": "16kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "serviceWorker": "ngsw-config.json"
             },
             "development": {
               "optimization": false,

@@ -7,9 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
-import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
-import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { AutoridadePortaria, GravacaoAutoridade, PainelPortarias, Portaria } from '../compartilhado/contratos.models';
+import { AutoridadePortaria, GravacaoAutoridade, PainelPortarias, Portaria, UsuarioAutoridade } from '../compartilhado/contratos.models';
 import { PortariasApiService } from '../compartilhado/portarias-api.service';
 
 const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', setor: '', usuario_id: null, ativa: true };
@@ -89,14 +87,14 @@ const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', s
     @if (podeAdministrar()) {
       <section class="cartao-dados" aria-labelledby="titulo-autoridades">
         <header><div><h2 id="titulo-autoridades">Autoridades signatárias</h2>
-          <small>Cargo, setor e nome vêm daqui. O usuário vinculado é quem dá o aceite pela autoridade.</small></div></header>
+          <small>A autoridade é um usuário do sistema: ele mesmo dá o aceite. Nome, cargo e setor vêm do cadastro dele (cargo e setor podem ser ajustados).</small></div></header>
         @if (autoridades().length) {
           <div class="tabela-gestao-envoltorio">
             <table class="tabela-gestao">
-              <thead><tr><th>Sigla</th><th>Nome</th><th>Cargo</th><th>Setor</th><th>Aceite por</th><th>Situação</th><th></th></tr></thead>
+              <thead><tr><th>Sigla</th><th>Nome</th><th>Cargo</th><th>Setor</th><th>Situação</th><th></th></tr></thead>
               <tbody>
                 @for (a of autoridades(); track a.id) {
-                  <tr><td>{{ a.sigla }}</td><td>{{ a.nome }}</td><td>{{ a.cargo }}</td><td>{{ a.setor }}</td><td>{{ a.usuario_nome || '—' }}</td><td>{{ a.ativa ? 'Ativa' : 'Desativada' }}</td>
+                  <tr><td>{{ a.sigla }}</td><td>{{ a.nome }}</td><td>{{ a.cargo }}</td><td>{{ a.setor }}</td><td><span class="selo-situacao" [class.inativo]="!a.ativa">{{ a.ativa ? 'Ativa' : 'Desativada' }}</span></td>
                     <td><div class="acoes-linha"><button type="button" (click)="editar(a)">Editar</button><button type="button" (click)="excluir(a)">Excluir</button></div></td></tr>
                 }
               </tbody>
@@ -108,20 +106,16 @@ const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', s
         <form class="bloco-form grade-formulario" (ngSubmit)="salvarAutoridade()">
           <h3 class="titulo-form ocupa-duas">{{ editando() ? 'Editar autoridade' : 'Nova autoridade' }}</h3>
           <div><label for="aut-sigla">Sigla *</label><input id="aut-sigla" name="sigla" maxlength="60" placeholder="SPI SSGC" [(ngModel)]="formulario.sigla" required /></div>
-          <div><label for="aut-nome">Nome *</label><input id="aut-nome" name="nome" maxlength="200" [(ngModel)]="formulario.nome" required /></div>
+          <div><label for="aut-usuario">Autoridade (usuário do sistema) *</label>
+            <input id="aut-usuario" name="usuario" list="aut-usuarios" autocomplete="off" placeholder="Digite o nome para buscar…" [(ngModel)]="textoUsuario"
+                   (ngModelChange)="aoDigitarUsuario($event)" required />
+            <datalist id="aut-usuarios">@for (u of usuarios(); track u.id) { <option [value]="rotuloUsuario(u)"></option> }</datalist></div>
           <div><label for="aut-cargo">Cargo *</label><input id="aut-cargo" name="cargo" maxlength="200" [(ngModel)]="formulario.cargo" required /></div>
           <div><label for="aut-setor">Setor *</label><input id="aut-setor" name="setor" maxlength="200" [(ngModel)]="formulario.setor" required /></div>
-          <div><label for="aut-busca">Buscar usuário que dá o aceite</label>
-            <input id="aut-busca" name="busca" placeholder="Digite ao menos 2 letras do nome" [(ngModel)]="busca" (ngModelChange)="buscarUsuarios()" /></div>
-          <div><label for="aut-usuario">Usuário que dá o aceite</label>
-            <select id="aut-usuario" name="usuario" [(ngModel)]="formulario.usuario_id">
-              <option [ngValue]="null">Nenhum</option>
-              @for (u of usuarios(); track u.id) { <option [ngValue]="u.id">{{ u.nome_completo }}</option> }
-            </select></div>
           <div class="linha-caixas ocupa-duas"><label><input type="checkbox" name="ativa" [(ngModel)]="formulario.ativa" /> Autoridade ativa (aparece na solicitação de portarias)</label></div>
           <div class="acoes-formulario ocupa-duas">
             @if (editando()) { <button type="button" class="acao-secundaria" (click)="limpar()">Cancelar edição</button> }
-            <button type="submit" class="acao-primaria">{{ editando() ? 'Salvar autoridade' : 'Cadastrar autoridade' }}</button>
+            <button type="submit" class="acao-primaria" [disabled]="!formulario.usuario_id || !formulario.sigla.trim()">{{ editando() ? 'Salvar autoridade' : 'Cadastrar autoridade' }}</button>
           </div>
         </form>
       </section>
@@ -132,12 +126,12 @@ const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', s
     .bloco-form { padding: 18px 20px; }
     .linha-solicitar { display: flex; align-items: flex-end; gap: 16px; border-top: 1px solid var(--cor-e2e5e8); }
     .campo-autoridade { flex: 1; min-width: 0; }
-    .campo-autoridade label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 700; }
+    .campo-autoridade label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 600; }
     .campo-autoridade select { width: 100%; }
     .dica, .vazio { color: var(--spi-apagado); font-size: 12px; }
     .dica { display: block; margin-top: 6px; }
     .vazio { margin: 0; padding: 16px 20px; }
-    .portaria-cartao { display: grid; gap: 10px; margin: 0 20px 18px; padding: 16px 18px; border: 1px solid var(--cor-e2e5e8); border-radius: 8px; }
+    .portaria-cartao { display: grid; gap: 10px; margin: 0 20px 18px; padding: 16px 18px; border: 1px solid var(--cor-e2e5e8); border-radius: var(--spi-raio-m); }
     .portaria-cartao h3 { margin: 0 0 2px; font-size: 15px; }
     .portaria-cartao p, .portaria-cartao ul { margin: 0; }
     .portaria-cartao ul { padding-left: 20px; line-height: 1.7; }
@@ -152,19 +146,18 @@ const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', s
 export class AbaPortariaComponent implements OnInit {
   readonly contratoId = input.required<string>();
   readonly podeEditar = input(false);
-  /** Controle total em Contratos: cadastra as autoridades. */
+  /** Pode cadastrar as autoridades: SuperRoot, controle total ou gestor/suplente do contrato. */
   readonly podeAdministrar = input(false);
 
   private readonly api = inject(PortariasApiService);
-  private readonly contratos = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
 
   protected readonly painel = signal<PainelPortarias | null>(null);
   protected readonly autoridades = signal<AutoridadePortaria[]>([]);
-  protected readonly usuarios = signal<OpcaoUsuario[]>([]);
+  protected readonly usuarios = signal<UsuarioAutoridade[]>([]);
   protected readonly editando = signal<string | null>(null);
   protected autoridadeId = '';
-  protected busca = '';
+  protected textoUsuario = '';
   protected formulario: GravacaoAutoridade = { ...AUTORIDADE_VAZIA };
 
   ngOnInit(): void {
@@ -217,21 +210,35 @@ export class AbaPortariaComponent implements OnInit {
 
   // --- Autoridades ---
 
-  protected buscarUsuarios(): void {
-    if (this.busca.trim().length < 2) return;
-    this.contratos.opcoesUsuarios(this.busca.trim()).subscribe({ next: (u) => this.usuarios.set(u), error: () => this.usuarios.set([]) });
+  protected rotuloUsuario(u: UsuarioAutoridade): string {
+    return `${u.nome_completo} (${u.login})`;
+  }
+
+  /** Busca usuários enquanto digita; ao escolher uma opção da lista, preenche nome, cargo e setor com o cadastro dele. */
+  protected aoDigitarUsuario(texto: string): void {
+    const escolhido = this.usuarios().find((u) => this.rotuloUsuario(u) === texto);
+    if (escolhido) {
+      this.formulario.usuario_id = escolhido.id;
+      this.formulario.nome = escolhido.nome_completo;
+      this.formulario.cargo = escolhido.cargo;
+      this.formulario.setor = escolhido.departamento;
+      return;
+    }
+    this.formulario.usuario_id = null;
+    if (texto.trim().length >= 2) this.api.usuariosParaAutoridade(texto.trim()).subscribe({ next: (u) => this.usuarios.set(u), error: () => this.usuarios.set([]) });
   }
 
   protected editar(a: AutoridadePortaria): void {
     this.editando.set(a.id);
     this.formulario = { sigla: a.sigla, nome: a.nome, cargo: a.cargo, setor: a.setor, usuario_id: a.usuario_id, ativa: a.ativa };
-    this.usuarios.set(a.usuario_id ? [{ id: a.usuario_id, login: '', nome_completo: a.usuario_nome ?? '', cargo: '', ativo: true }] : []);
+    this.textoUsuario = a.usuario_nome ? `${a.usuario_nome}` : a.nome;
+    this.usuarios.set([]);
   }
 
   protected limpar(): void {
     this.editando.set(null);
     this.formulario = { ...AUTORIDADE_VAZIA };
-    this.busca = '';
+    this.textoUsuario = '';
     this.usuarios.set([]);
   }
 

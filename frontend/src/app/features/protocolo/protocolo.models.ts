@@ -1,11 +1,11 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para definir os tipos de dados do Módulo Protocolo (numeração institucional).
 
-export interface SequenciaProtocolo { id: string; exercicio: number; inicio: number; fim: number }
+export interface SequenciaProtocolo { id: string; exercicio: number; inicio: number; fim: number; /** Do início até este número (exclusive): "Reservado SAA". */ liberar_a_partir_de: number | null }
 export interface TipoProtocolo { id: string; nome: string; sequencias: SequenciaProtocolo[] }
 export interface ListaTipos { pode_administrar: boolean; itens: TipoProtocolo[] }
 
-export type EstadoNumero = 'livre' | 'reservado' | 'utilizado' | 'anulado';
+export type EstadoNumero = 'livre' | 'reservado_saa' | 'reservado' | 'utilizado' | 'anulado';
 export type TipoEventoProtocolo = 'reservou' | 'lancou' | 'anexou' | 'liberou' | 'anulou' | 'sigilo' | 'vinculou' | 'ampliou';
 
 export interface EventoProtocolo { tipo: TipoEventoProtocolo; autor_nome: string; texto: string; ocorrido_em: string }
@@ -35,6 +35,8 @@ export interface NumeroProtocolo {
   pode_anexar: boolean;
   pode_liberar: boolean;
   pode_alterar_sigilo: boolean;
+  /** Livre e o usuário pode escolher este número (administração; o SAA, nos "Reservado SAA"). */
+  pode_reservar: boolean;
   /** Linha do tempo (só no detalhe). */
   eventos: EventoProtocolo[];
 }
@@ -46,6 +48,10 @@ export interface ListaNumeros {
   pode_administrar: boolean;
   usuario_id: number;
   livres: number;
+  /** Números ainda "Reservado SAA". */
+  reservados_saa: number;
+  /** O usuário é do Serviço de Apoio Administrativo (ou administra) e dá andamento na faixa reservada. */
+  pode_usar_reserva_saa: boolean;
   itens: NumeroProtocolo[];
 }
 
@@ -62,7 +68,7 @@ export interface PainelProtocolo {
   sem_documento: PendentePainel[];
 }
 
-export const ROTULOS_ESTADO: Record<EstadoNumero, string> = { livre: 'Livre', reservado: 'Reservado', utilizado: 'Utilizado', anulado: 'Anulado' };
+export const ROTULOS_ESTADO: Record<EstadoNumero, string> = { livre: 'Livre', reservado_saa: 'Reservado SAA', reservado: 'Reservado', utilizado: 'Utilizado', anulado: 'Anulado' };
 export const ROTULOS_EVENTO: Record<TipoEventoProtocolo, string> = {
   reservou: 'Reservou', lancou: 'Lançou', anexou: 'Anexou o documento', liberou: 'Liberou a reserva', anulou: 'Anulou',
   sigilo: 'Sigilo', vinculou: 'Vínculo com contrato', ampliou: 'Ampliou a faixa',

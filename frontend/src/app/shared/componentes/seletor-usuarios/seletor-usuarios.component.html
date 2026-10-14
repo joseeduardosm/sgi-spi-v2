@@ -21,7 +21,7 @@
           <small>&#64;{{ u.login }}{{ u.cargo ? ' · ' + u.cargo : '' }}{{ u.ativo ? '' : ' · inativo' }}</small>
         </li>
       } @empty {
-        <li class="vazio">{{ carregando() ? 'Pesquisando…' : 'Nenhum usuário encontrado.' }}</li>
+        <li class="vazio">@if (carregando()) { <app-esqueleto tipo="texto" [linhas]="2" /> } @else { {{ 'Nenhum usuário encontrado.' }} }</li>
       }
     </ul>
   }

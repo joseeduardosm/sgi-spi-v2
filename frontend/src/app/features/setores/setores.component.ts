@@ -13,10 +13,11 @@ import { UsuariosApiService } from '../usuarios/usuarios-api.service';
 import { Setor, SetoresApiService } from './setores-api.service';
 import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Setores institucionais e grupos sistêmicos, usados como grupos de acesso na ACL. */
 @Component({
   selector: 'app-setores',
-  imports: [FormsModule, ReactiveFormsModule, SeletorUsuariosComponent, TrilhaComponent],
+  imports: [EsqueletoComponent, FormsModule, ReactiveFormsModule, SeletorUsuariosComponent, TrilhaComponent],
   templateUrl: './setores.component.html',
   host: { '(document:keydown.escape)': 'fecharFormulario()' },
 })

@@ -6,6 +6,29 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-13
+
+Migrações novas desde 2026-10-09 (aplicar com `alembic upgrade head`; cabeça `d5f1b3a9c8e2`): `f8b3c5d7e9a1`, `a1c4e7b9d2f6`, `b7d2e9a4c1f3`, `a2c8e4f6b1d9`, `b3d9f5a7c2e1`, `554e409aefd2`, `c3badbe90657`, `d4e8a1c6b2f7`, `e5f9b2d7a3c1`, `f1a7c3e9b4d6`, `c4e8a2f6d1b7`, `d5f1b3a9c8e2`.
+
+### Adicionado
+- **Contratos: NE de cancelamento.** Cada NE pode ser cancelada total ou parcialmente por uma **NE de cancelamento** com número próprio (único no contrato, entre NEs e cancelamentos), valor até o saldo da NE (mesmo que parte esteja reservada por medições) e justificativa. Se todas as NEs ficarem sem saldo, **salvar e concluir a medição** são recusados. NE com cancelamento não pode ser excluída. Botão **Cancelar NE** na aba de NEs. Migração `d5f1b3a9c8e2`; `POST /api/contratos/{id}/notas-empenho/{nota_id}/cancelamentos`; `LeituraNotaEmpenho` ganha `cancelado` e `cancelamentos[]`.
+- **Contratos: acerto de centavos na medição.** Coluna **Acerto (R$)** por item (de −1,00 a +1,00, 2 casas) que soma ao valor do item e aos totais; entra na memória de cálculo e nos PDFs. Migração `c4e8a2f6d1b7`.
+- **Contratos: alertas por contrato e DOF.** Pendências e alertas só dos contratos de quem recebe; o DOF vê apenas as tarefas pendentes da retenção de tributos.
+- **Patrimônio (módulo novo):** bens com chapa (prefixo + 6 dígitos; prefixos SLT, DERSA, SPI, ARTESP e ARSESP, criáveis em Parâmetros), cadastro avulso e em lote, leitor de código de barras e QR (câmera), número de série equivalente à chapa em todas as telas, busca com sugestões, salas e halls com código/QR por porta, movimentações, classificação (inservível e extraviado, listas e baixa), histórico imutável, importação do GLPI, relatórios em PDF e Excel e fila offline. Migrações `a1c4e7b9d2f6`, `b7d2e9a4c1f3`, `a2c8e4f6b1d9`, `b3d9f5a7c2e1`; `docs/endpoints/patrimonio.md` e manuais em `docs/manuais/patrimonio/`.
+- **Notificações:** a mensageria virou **Notificações** (canais, preferências por tipo, aviso no navegador com Web Push/VAPID para todos os usuários e atalho para baixar o SGI Alertas). Migrações `d4e8a1c6b2f7`, `e5f9b2d7a3c1`, `f1a7c3e9b4d6`.
+- **Preferências de colunas das listagens** (por usuário e visão global). Migrações `554e409aefd2`, `c3badbe90657`.
+- **Protocolo:** liberar números a partir de uma data (`f8b3c5d7e9a1`) e manual de uso atualizado.
+- **Tarefas:** descrição com **editor rico** (colar com formatação); **subtarefas** com quadro próprio, tela dedicada **+ Nova subtarefa** (`/tarefas/{numero}/subtarefas/nova`) com dependências de uma ou várias tarefas (`bloqueada_por_numeros`) e opção `depende_da_anterior`; visão **Gantt** (dependências em curvas, início previsto pela bloqueadora, zoom − / + e Ctrl+roda, realce da linha ao passar o mouse, tela cheia também no quadro de subtarefas); visão **Atividade** (o que aconteceu por dia, só liderança, `GET /api/tarefas/equipes/{id}/atividade`); anexos com **Ctrl+V** nos comentários; resposta a qualquer evento da linha do tempo; aviso visível de subtarefas aguardando validação; **cartões grandes** no quadro.
+- **Notícias:** formato **Tweet Card** (autor, texto e mídia) na lista de /noticias; **Border Beam** no cartão de login.
+- **Interface:** `DESIGN.md` adotado (tokens `--spi-*` de superfícies, status, raios, sombras e tipografia nos dois temas; selos e chips unificados; borda no lugar de sombra; raios e pesos em vocabulário fechado; menu lateral com filete vermelho; **Inter** e **Geist Mono** hospedadas no build); sistema de movimento (esqueletos, barra de progresso, transições, carga preguiçosa, `docs/movimento.md`); botão **copiar** padrão, seletor de cor em bolinhas, cartão de ramais com inclinação 3D e gráficos com cursor, degradê e cores por tema.
+
+### Alterado
+- **Tarefas:** na criação rápida do quadro de subtarefas, a nova subtarefa já depende da anterior aberta; o Gantt começa a barra da tarefa bloqueada onde a bloqueadora termina.
+- `CLAUDE.md` e `AGENTS.md`: regras de interface (tokens, raios, pesos, borda em vez de sombra, `.texto-codigo`).
+
+### Corrigido
+- Testes do Gantt no jsdom (`scrollTo` ausente) e janela de cor dos marcadores (bolinhas em uma fileira, botões Excluir e Fechar no padrão).
+
 ## 2026-10-09
 
 ### Adicionado

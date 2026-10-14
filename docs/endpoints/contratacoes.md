@@ -1,11 +1,13 @@
 # Contratações: ETP e TR com versionamento (`/api/contratacoes`)
 
+> **Canais dos avisos:** todo aviso deste módulo chega **sempre** na caixa de [notificações](notificacoes.md). O e-mail, o pop-up do navegador e o alerta do desktop só saem para quem ligou o evento correspondente em `/notificacoes` › Preferências (tudo começa desmarcado). Onde este documento fala em "e-mail" dos avisos, leia "para quem ligou o e-mail".
+
 Tag no OpenAPI: **Contratações**. Implementação:
 - rotas: `backend/app/api/routes/contratacoes.py`; schemas: `backend/app/schemas/contratacoes.py`;
 - regras: `backend/app/services/contratacoes/` (`acesso`, `arvore`, `conteudo`, `versoes`, `diferencas`, `revisoes`, `conferencia`, `docx_exportacao`, `docx_importacao`, `html_blocos`);
 - modelos: `backend/app/models/contratacoes.py` (`contratacoes_documentos`, `_secoes`, `_itens`, `_tabela_tr`, `_revisoes`, `_comentarios_importados`, `_membros`, `_versoes`, `_historico_itens`; migração `e5b8c3d7a921`);
 - modelos de exportação: `backend/app/recursos/contratacoes/etp.docx` e `tr.docx` (os mesmos do SGI SPI antigo, 10.23.1.220);
-- avisos: `app/tarefas/mensageria.py` (revisão parada há `CONTRATACOES_DIAS_AVISO` dias, no timer diário).
+- avisos: `app/tarefas/notificacoes.py` (revisão parada há `CONTRATACOES_DIAS_AVISO` dias, no timer diário).
 
 Migrado do módulo Contratações do SGI SPI antigo, com as melhorias abaixo. A carga dos dados está em [migracao-sgi.md](../migracao-sgi.md).
 

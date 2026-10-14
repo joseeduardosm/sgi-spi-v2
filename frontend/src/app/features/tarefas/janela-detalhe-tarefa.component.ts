@@ -6,6 +6,8 @@ import { Component, computed, effect, ElementRef, inject, input, output, signal,
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
+import { EditorRicoComponent } from '../contratacoes/editor-rico.component';
+import { DescricaoTarefaPipe, descricaoEhHtml, descricaoParaEditor } from './descricao-tarefa.pipe';
 import { AutenticacaoService } from '../../core/autenticacao/autenticacao.service';
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { SeletorMarcadoresComponent } from './seletor-marcadores.component';
@@ -22,6 +24,9 @@ import {
 } from './tarefas.models';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
+import { prepararArquivosColados } from './anexos-colados';
+import { ICONES_EVENTO } from './eventos-tarefa';
 /** Filtros da linha do tempo (chips). */
 const FILTROS = [
   { valor: '', rotulo: 'Tudo' },
@@ -33,22 +38,6 @@ const FILTROS = [
 ];
 
 /** Traço SVG (24x24) do ícone de cada tipo de evento; a cor vem do CSS por `data-tipo`. */
-const ICONES: Record<string, string> = {
-  // Escalonamento por atraso: aviso à liderança (triângulo de alerta)
-  escalonada: 'M12 3 2 20h20L12 3Zm0 6v5m0 3h.01',
-  criada: 'M12 5v14M5 12h14',
-  editada: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
-  status: 'M5 12h14M13 6l6 6-6 6',
-  entregue: 'M12 19V5M5 12l7-7 7 7',
-  validada: 'M5 13l4 4L19 7',
-  devolvida: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-2',
-  reaberta: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5',
-  prazo: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
-  transferida: 'M4 7h14l-4-4M20 17H6l4 4',
-  comentario: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z',
-  checklist: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
-  removido: 'M18 6 6 18M6 6l12 12',
-};
 /** Clipe de anexo (SVG). */
 export const CLIPE = 'M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5';
 
@@ -67,7 +56,7 @@ interface CamposEdicao { titulo: string; descricao: string; prioridade: Priorida
  */
 @Component({
   selector: 'app-janela-detalhe-tarefa',
-  imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, SeletorMarcadoresComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
+  imports: [EsqueletoComponent, LinkificarPipe, DescricaoTarefaPipe, EditorRicoComponent, FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, SeletorMarcadoresComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
   templateUrl: './janela-detalhe-tarefa.component.html',
   // Esc fecha a janela, a menos que uma janela interna (prazo, motivo, remoção) esteja aberta: ela fecha primeiro
   host: { '(document:keydown.escape)': 'aoEsc()', '(window:focus)': 'recarregarAoVoltar()' },
@@ -131,6 +120,7 @@ export class JanelaDetalheTarefaComponent {
   protected novoItem = '';
 
   // Edição no lugar: qual propriedade está aberta e os valores em edição
+  protected readonly descricaoEhHtml = descricaoEhHtml;
   protected readonly editandoCampo = signal<'titulo' | 'descricao' | 'responsaveis' | null>(null);
   protected edicaoTitulo = '';
   private readonly campoTitulo = viewChild<ElementRef<HTMLInputElement>>('campoTitulo');
@@ -147,7 +137,6 @@ export class JanelaDetalheTarefaComponent {
   protected novaAtividade: { tipo: string; resumo: string; prazo: string; responsavel_id: number | null } = { tipo: 'fazer', resumo: '', prazo: '', responsavel_id: null };
   protected readonly marcosEquipe = signal<Marco[]>([]);
   // Subtarefas e dependências
-  protected novaSubtarefa = '';
   protected buscaDependencia = '';
   private readonly equipeTarefas = signal<TarefaResumo[]>([]);
   /** Pessoa cuja agenda aparece ao escolher responsáveis (a última incluída). */
@@ -270,7 +259,7 @@ export class JanelaDetalheTarefaComponent {
   }
 
   protected editarDescricao(): void {
-    this.edicaoDescricao = this.tarefa()!.descricao;
+    this.edicaoDescricao = descricaoParaEditor(this.tarefa()!.descricao);
     this.editandoCampo.set('descricao');
   }
 
@@ -319,6 +308,20 @@ export class JanelaDetalheTarefaComponent {
   }
 
   // --- Comentários e anexos -------------------------------------------------------------------------
+
+  /**
+   * Ctrl+V no campo do comentário: arquivos e prints da área de transferência entram como anexos (o texto colado segue normal).
+   * Print sem nome vira "captura-AAAAMMDD-HHMMSS.png"; formatos não aceitos e o excesso de 5 arquivos geram aviso.
+   */
+  protected colarArquivos(evento: ClipboardEvent): void {
+    const colados = Array.from(evento.clipboardData?.files ?? []);
+    if (!colados.length) return;
+    evento.preventDefault();
+    const r = prepararArquivosColados(colados, this.arquivos());
+    if (r.recusados) this.dialogos.avisar('Formato não aceito', 'Anexe PDF, Office/LibreOffice, TXT, CSV, PNG ou JPG.');
+    else if (r.excedeu) this.dialogos.avisar('Muitos arquivos', 'Envie no máximo 5 arquivos por comentário.');
+    this.arquivos.set(r.arquivos);
+  }
 
   protected escolherArquivos(evento: Event): void {
     const campo = evento.target as HTMLInputElement;
@@ -420,7 +423,7 @@ export class JanelaDetalheTarefaComponent {
   }
 
   protected icone(tipo: string): string {
-    return ICONES[tipo] ?? 'M12 12h.01';
+    return ICONES_EVENTO[tipo] ?? 'M12 12h.01';
   }
 
   protected rotuloStatus(valor: unknown): string {
@@ -469,16 +472,6 @@ export class JanelaDetalheTarefaComponent {
 
   protected concluidasSub(t: TarefaDetalhe): number {
     return t.subtarefas.filter((x) => x.status === 'concluida').length;
-  }
-
-  protected criarSubtarefa(): void {
-    const t = this.tarefa();
-    const titulo = this.novaSubtarefa.trim();
-    if (!t || !titulo) return;
-    this.dialogos.executar(this.api.criarSubtarefa(t.numero, { titulo })).subscribe({
-      next: () => { this.novaSubtarefa = ''; this.recarregar(); },
-      error: (e) => this.falha(e),
-    });
   }
 
   /** Tarefas da equipe que ainda podem bloquear esta (abertas, fora ela mesma, a mãe, as subtarefas e as já escolhidas). */

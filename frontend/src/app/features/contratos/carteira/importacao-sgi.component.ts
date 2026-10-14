@@ -20,8 +20,8 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
     <button type="button" class="acao-secundaria" (click)="abrir()">Importar do SGI</button>
 
     @if (aberta()) {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-sgi">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-importacao-sgi">
         <header>
           <div><span class="modal-sobretitulo">Conta root</span><h2 id="titulo-importacao-sgi">Importar contrato do SGI</h2></div>
           <button type="button" aria-label="Fechar" [disabled]="lendo()" (click)="fechar()">×</button>

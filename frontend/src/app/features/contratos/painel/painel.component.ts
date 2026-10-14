@@ -12,6 +12,7 @@ import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.comp
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { PainelContratos } from '../compartilhado/contratos.models';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 /**
@@ -20,7 +21,7 @@ const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'O
  */
 @Component({
   selector: 'app-painel',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, GraficoComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, GraficoComponent, ...PIPES_FORMATACAO],
   templateUrl: './painel.component.html',
 })
 export class PainelComponent implements OnInit {

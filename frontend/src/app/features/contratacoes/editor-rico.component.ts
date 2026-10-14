@@ -24,7 +24,8 @@ const CORES_REALCE = [
 
 /**
  * Editor de um item. Emite só o HTML interno do item (o tipo, o pai e a ordem ficam fora do documento). A API sanitiza de novo.
- * A colagem usa só texto puro, para não trazer estilos de outras aplicações.
+ * A colagem usa só texto puro, para não trazer estilos de outras aplicações; com `colarFormatado` mantém a formatação copiada (o que o editor
+ * não suporta é descartado, e a API sanitiza de novo).
  */
 @Component({
   selector: 'app-editor-rico',
@@ -67,6 +68,8 @@ export class EditorRicoComponent implements AfterViewInit, OnDestroy {
   readonly html = model('');
   readonly somenteLeitura = input(false);
   readonly rotulo = input('Editor de conteúdo formatado');
+  /** Mantém a formatação ao colar (negrito, listas, tabelas e links do que foi copiado); padrão: só texto puro. */
+  readonly colarFormatado = input(false);
   protected readonly coresTexto = CORES_TEXTO;
   protected readonly coresRealce = CORES_REALCE;
 
@@ -99,6 +102,7 @@ export class EditorRicoComponent implements AfterViewInit, OnDestroy {
       editorProps: {
         attributes: { class: 'superficie-editor', role: 'textbox', 'aria-multiline': 'true', 'aria-label': this.rotulo() },
         handlePaste: (_vista, evento) => {
+          if (this.colarFormatado() && evento.clipboardData?.types.includes('text/html')) return false;
           const texto = evento.clipboardData?.getData('text/plain');
           if (texto == null) return false;
           evento.preventDefault();

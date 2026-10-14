@@ -94,7 +94,7 @@
               </td>
           </tr>
         } @empty {
-          <tr><td class="estado-vazio" [attr.colspan]="7">{{ carregando() ? 'Carregando…' : 'Nenhum usuário encontrado.' }}</td></tr>
+          <tr><td class="estado-vazio" [attr.colspan]="7">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="6" [linhas]="4" /> } @else { {{ 'Nenhum usuário encontrado.' }} }</td></tr>
         }
       </tbody>
     </table>

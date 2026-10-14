@@ -11,7 +11,7 @@
 </div>
 
 @if (carregando()) {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="formulario" [linhas]="5" />
 } @else {
   @if (somenteLeitura() && usuario()) {
     <p class="aviso-bloco informativo">
@@ -74,9 +74,9 @@
         <button type="button" class="acao-recusar" (click)="excluir()">Excluir usuário</button>
       }
       <span class="espaco"></span>
-      <button type="button" class="acao-secundaria" (click)="voltar()" [disabled]="salvando()">Voltar para a lista</button>
+      <button [class.carregando]="salvando()" type="button" class="acao-secundaria" (click)="voltar()" [disabled]="salvando()">Voltar para a lista</button>
       @if (!somenteLeitura()) {
-        <button type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : (novo ? 'Criar conta' : 'Salvar usuário') }}</button>
+        <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : (novo ? 'Criar conta' : 'Salvar usuário') }}</button>
       }
     </div>
   </form>

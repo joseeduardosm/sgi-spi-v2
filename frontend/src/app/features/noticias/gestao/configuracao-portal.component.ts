@@ -80,7 +80,7 @@ import { CabecalhoNoticiasComponent } from './cabecalho-noticias.component';
         <div class="grade-atalhos-gestao">
           @for (a of atalhos(); track a.id; let i = $index) {
             <div class="atalho-gestao" [class.inativo]="!a.ativo">
-              @if (a.imagem) { <img [src]="a.imagem" alt="" /> } @else { <span class="sem-capa">sem imagem</span> }
+              @if (a.imagem) { <img loading="lazy" decoding="async" [src]="a.imagem" alt="" /> } @else { <span class="sem-capa">sem imagem</span> }
               <strong>{{ a.titulo }}</strong><small>{{ a.url }}</small>
               <span class="acoes-linha">
                 <button type="button" [disabled]="i === 0" aria-label="Mover para a esquerda" (click)="moverAtalho(i, -1)">←</button>
@@ -116,8 +116,8 @@ import { CabecalhoNoticiasComponent } from './cabecalho-noticias.component';
     </section>
 
     @if (atalhoAberto(); as a) {
-      <div class="fundo-modal" role="presentation" (click)="atalhoAberto.set(null)"></div>
-      <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-atalho">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="atalhoAberto.set(null)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-atalho">
         <header><div><span class="modal-sobretitulo">Atalho</span><h2 id="titulo-atalho">{{ a.id ? 'Editar atalho' : 'Novo atalho' }}</h2></div>
           <button type="button" aria-label="Fechar" (click)="atalhoAberto.set(null)">×</button></header>
         <form (submit)="$event.preventDefault(); salvarAtalho()">

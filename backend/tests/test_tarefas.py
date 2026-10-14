@@ -11,10 +11,13 @@ import pytest
 from sqlalchemy import select
 
 from app.core.banco import FabricaSessao
-from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.notificacao import EntregaNotificacao, Notificacao
 from app.services.tarefas import servico_tarefas
 from tests.apoio_rh import simular_smtp
 from tests.conftest import cabecalho, criar_usuario
+from tests.apoio_notificacoes import todos_com_email  # noqa: F401 - fixture usada por `usefixtures`
+
+pytestmark = pytest.mark.usefixtures("todos_com_email")
 
 URL = "/api/tarefas"
 
@@ -52,7 +55,7 @@ def _nova(cliente, h, equipe_id, **extra):
 def _avisos(chave_prefixo: str) -> list[tuple[int, bool]]:
     with FabricaSessao() as s:
         return [(e.destinatario_id, e.encerrada_em is not None) for e in s.scalars(
-            select(EntregaMensagem).join(Mensagem).where(Mensagem.chave.startswith(chave_prefixo)))]
+            select(EntregaNotificacao).join(Notificacao).where(Notificacao.chave.startswith(chave_prefixo)))]
 
 
 def _mover(cliente, h, numero, acao, texto=""):
@@ -200,7 +203,7 @@ def test_carga_indicadores_e_lembretes(cliente, equipe):
         contagem = servico_tarefas.lembrar(s, date.today())
     assert contagem["atrasadas"] == 1 and contagem["validacao_parada"] == 1
     with FabricaSessao() as s:
-        janela = s.scalar(select(Mensagem).where(Mensagem.chave.startswith(f"tarefa-validacao-parada:{t['id']}:")))
+        janela = s.scalar(select(Notificacao).where(Notificacao.chave.startswith(f"tarefa-validacao-parada:{t['id']}:")))
         assert janela.abrir_em_janela
 
 
@@ -352,8 +355,8 @@ def test_escalonamento_gera_um_memorial_por_lider_por_dia(cliente, admin, equipe
     contagem = _rodar_lembretes()
     assert contagem["tarefas_escalonadas"] == 2 and contagem["escalonadas"] >= 1
     with FabricaSessao() as s:
-        memorial = s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{ids['lia']}:%"))).all()
-        assert len(memorial) == 1 and memorial[0].enviar_email and memorial[0].assunto == "Tarefas atrasadas das suas equipes: 2"
+        memorial = s.scalars(select(Notificacao).where(Notificacao.chave.like(f"tarefa-escalonada:{ids['lia']}:%"))).all()
+        assert len(memorial) == 1 and memorial[0].evento == "tarefas.escalonada" and memorial[0].assunto == "Tarefas atrasadas das suas equipes: 2"
         corpo = memorial[0].corpo
     # Tabela: número, título (sem quebrar a tabela), responsável, atraso e link
     assert "| Nº | Título | Responsável | Atraso | Em aberto | Link |" in corpo and "Enviar / relatório" in corpo
@@ -361,12 +364,12 @@ def test_escalonamento_gera_um_memorial_por_lider_por_dia(cliente, admin, equipe
     # Rodar de novo no mesmo dia não repete o aviso
     _rodar_lembretes()
     with FabricaSessao() as s:
-        assert len(s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{ids['lia']}:%"))).all()) == 1
+        assert len(s.scalars(select(Notificacao).where(Notificacao.chave.like(f"tarefa-escalonada:{ids['lia']}:%"))).all()) == 1
     # Atrasada há 3+ dias: o chefe (equipe acima) também recebe o seu memorial; Lia continua recebendo o dela
     _atrasar(a["numero"], 5)
     _rodar_lembretes()
     with FabricaSessao() as s:
-        do_chefe = s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{chefe}:%"))).all()
+        do_chefe = s.scalars(select(Notificacao).where(Notificacao.chave.like(f"tarefa-escalonada:{chefe}:%"))).all()
         assert len(do_chefe) == 1 and "Revisar edital" in do_chefe[0].corpo and "Enviar" not in do_chefe[0].corpo
     # Linha do tempo: um evento por nível e prazo, sem repetir a cada dia
     eventos = [e for e in cliente.get(f"{URL}/{a['numero']}/linha-do-tempo", headers=h["lia"]).json()["itens"] if e["tipo"] == "escalonada"]
@@ -380,7 +383,7 @@ def test_escalonamento_de_tarefa_pessoal_vai_ao_criador_e_ignora_o_que_nao_esta_
     _atrasar(pessoal["numero"], 1)
     assert _rodar_lembretes()["tarefas_escalonadas"] == 1
     with FabricaSessao() as s:
-        do_criador = s.scalars(select(Mensagem).where(Mensagem.chave.like(f"tarefa-escalonada:{ids['ana']}:%"))).all()
+        do_criador = s.scalars(select(Notificacao).where(Notificacao.chave.like(f"tarefa-escalonada:{ids['ana']}:%"))).all()
         assert len(do_criador) == 1 and "Minha tarefa" in do_criador[0].corpo and "No prazo" not in do_criador[0].corpo
 
 
@@ -465,7 +468,31 @@ def test_responder_a_um_comentario_cita_o_original_e_vai_para_o_topo(cliente, eq
     # A resposta é o item mais novo: vem no topo da linha do tempo
     topo = cliente.get(f"{URL}/{n}/linha-do-tempo", params={"filtro": "comentarios"}, headers=h["lia"]).json()["itens"][0]
     assert topo["texto"] == "Já pedi ao jurídico." and topo["dados"]["resposta_a"] == original["id"]
+    # Também se responde a um registro de entrega para validação (ex.: o link do Forms enviado ao entregar)
+    assert _mover(cliente, h["ana"], n, "iniciar").status_code == 200
+    assert _mover(cliente, h["ana"], n, "entregar", "Segue o link do Forms para validação: https://forms.cloud.microsoft/r/abc").status_code == 200
+    entrega = next(i for i in cliente.get(f"{URL}/{n}/linha-do-tempo", headers=h["lia"]).json()["itens"] if i["tipo"] == "entregue")
+    r = cliente.post(f"{URL}/{n}/comentarios", data={"texto": "Respondi o formulário.", "em_resposta_a": entrega["id"]}, headers=h["lia"])
+    assert r.status_code == 201, r.text
+    assert r.json()["dados"]["resposta_a"] == entrega["id"] and r.json()["dados"]["resposta_texto"].startswith("Segue o link do Forms")
     # Só se responde a comentário desta tarefa: id inexistente ou de outra tarefa dá 404
     assert cliente.post(f"{URL}/{n}/comentarios", data={"texto": "x", "em_resposta_a": str(uuid.uuid4())}, headers=h["lia"]).status_code == 404
     outra = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
     assert cliente.post(f"{URL}/{outra['numero']}/comentarios", data={"texto": "x", "em_resposta_a": original["id"]}, headers=h["lia"]).status_code == 404
+
+
+def test_descricao_rica_e_sanitizada_e_texto_antigo_fica_como_esta(cliente, equipe):
+    ids, h, equipe_id = equipe
+    rica = '<p>Ver <strong>urgente</strong> <script>alert(1)</script><a href="javascript:x" onclick="x()">link</a></p><table><tr><td>a</td></tr></table>'
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], descricao=rica)
+    descricao = cliente.get(f"{URL}/{t['numero']}", headers=h["lia"]).json()["descricao"]
+    assert "<strong>urgente</strong>" in descricao and "<table" in descricao
+    assert "script" not in descricao and "onclick" not in descricao and "javascript:" not in descricao
+    # Texto simples (descrições antigas ou de API) não é alterado; editor vazio vira vazio
+    simples = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], descricao="Linha 1\nLinha 2 a < b")
+    assert cliente.get(f"{URL}/{simples['numero']}", headers=h["lia"]).json()["descricao"] == "Linha 1\nLinha 2 a < b"
+    vazia = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], descricao="<p></p>")
+    assert cliente.get(f"{URL}/{vazia['numero']}", headers=h["lia"]).json()["descricao"] == ""
+    # A busca enxerga o texto do HTML
+    achou = cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id, "busca": "urgente"}, headers=h["lia"]).json()["itens"]
+    assert [i["numero"] for i in achou] == [t["numero"]]

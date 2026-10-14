@@ -12,10 +12,11 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { Pendencia } from '../compartilhado/contratos.models';
 import { ROTULOS_PENDENCIA } from '../compartilhado/rotulos';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Tela dedicada "Minhas pendências": um cartão por ocorrência, que leva direto à ação. */
 @Component({
   selector: 'app-minhas-pendencias',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, ...PIPES_FORMATACAO],
   template: `
     <app-cabecalho-modulo titulo="Minhas pendências" [trilha]="['Painel', 'Minhas pendências']"
                           descricao="O que precisa da sua ação nos contratos em que você é criador ou integra a equipe." />
@@ -26,7 +27,7 @@ import { ROTULOS_PENDENCIA } from '../compartilhado/rotulos';
     </div>
 
     @if (carregando()) {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="lista" [linhas]="4" />
     } @else if (!pendencias().length) {
       <p class="estado-vazio">Nada pendente com você. 🎉</p>
     } @else {

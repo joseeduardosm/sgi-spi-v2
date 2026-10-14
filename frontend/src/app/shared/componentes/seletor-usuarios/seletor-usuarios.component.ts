@@ -7,11 +7,13 @@ import { debounceTime, Observable, Subject, switchMap } from 'rxjs';
 
 import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
 
+import { EsqueletoComponent } from '../esqueleto/esqueleto.component';
 /**
  * Seletor de usuários com pesquisa no servidor.
  * `multiplo=false` mantém no máximo um selecionado (gestor, líder).
  */
 @Component({
+  imports: [EsqueletoComponent],
   selector: 'app-seletor-usuarios',
   templateUrl: './seletor-usuarios.component.html',
   styleUrl: './seletor-usuarios.component.scss',

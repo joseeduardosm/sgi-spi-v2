@@ -15,7 +15,7 @@
   overflow: hidden;
   color: #e6e8eb;
   background: #18222e;
-  box-shadow: 4px 0 20px #24282d14;
+  border-right: 1px solid #ffffff14;
 }
 
 .barra-lateral-marca {
@@ -43,7 +43,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  border-radius: 7px;
+  border-radius: var(--spi-raio-p);
   background: var(--cor-ffffff);
   flex: none;
 }
@@ -97,9 +97,9 @@
   height: 21px;
   margin: 0 10px 8px;
   color: #8793a0;
-  font-size: 9px;
+  font-size: var(--spi-texto-micro);
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
   opacity: 0;
@@ -119,7 +119,7 @@
   margin-bottom: 4px;
   padding: 0 17px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--spi-raio-m);
   color: #c3c9d0;
   background: transparent;
   font-size: 13px;
@@ -136,10 +136,11 @@
     outline: none;
   }
 
+  // Item ativo: fundo vermelho translúcido e filete vermelho à esquerda (DESIGN.md 2.5)
   &.ativo {
     color: #fff;
-    background: var(--spi-vermelho);
-    box-shadow: 0 6px 16px #1d202450;
+    background: #c823312e;
+    box-shadow: inset 3px 0 0 var(--spi-vermelho-filete);
   }
 
   app-icone {
@@ -191,7 +192,7 @@
   }
 
   a.ativo {
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .nav-vazio {
@@ -271,7 +272,7 @@
     position: absolute;
     right: 12px;
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--spi-raio-p);
     color: #b7bec6;
     background: #ffffff0d;
     cursor: pointer;
@@ -348,10 +349,11 @@
     left: 0;
     z-index: 100;
     transform: translateX(-105%);
-    transition: transform 0.25s;
+    transition: transform var(--mov-lento) var(--ease-move);
   }
 
-  :host-context(.barra-lateral-expandida) {
+  // A gaveta só abre pelo botão do menu (`menu-celular-aberto`): passar o dedo ou ficar com foco na barra não pode deixá-la aberta sobre a tela
+  :host-context(.menu-celular-aberto) {
     transform: translateX(0);
   }
 

@@ -41,5 +41,7 @@ export class LayoutService {
   fecharSobreposicoes(): void {
     this.menuCelularAberto.set(false);
     this.menuUsuarioAberto.set(false);
+    // No toque não há "mouse saiu": sem isto a barra continuaria expandida depois de escolher um item do menu
+    this.barraSobMouse.set(false);
   }
 }

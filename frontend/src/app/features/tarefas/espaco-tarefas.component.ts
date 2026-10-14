@@ -14,15 +14,25 @@ import { EstadoTarefasService } from './estado-tarefas.service';
 import { DesempenhoTarefasComponent } from './desempenho-tarefas.component';
 import { FaixaEquipeComponent } from './faixa-equipe.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
+import { GanttTarefasComponent } from './gantt-tarefas.component';
+import { AtividadeEquipeComponent } from './atividade-equipe.component';
 import { ListaTarefasComponent, OrdemLista, SentidoOrdem } from './lista-tarefas.component';
 import { MovimentoQuadro, QuadroTarefasComponent } from './quadro-tarefas.component';
 import { Escopo, TarefasApiService } from './tarefas-api.service';
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 import {
   acaoEntre, corAvatar, Estagio, iniciais, ListaTarefas, Marcador, Pessoa, PessoaCarga, prazoPadrao, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS, StatusTarefa,
   TarefaResumo,
+  Marco,
 } from './tarefas.models';
 
-type Visao = 'quadro' | 'lista' | 'calendario' | 'pessoas' | 'desempenho';
+const CHAVE_CARTOES_GRANDES = 'sgi-spi.tarefas.cartoes-grandes';
+
+function lerCartoesGrandes(): boolean {
+  try { return localStorage.getItem(CHAVE_CARTOES_GRANDES) === '1'; } catch { return false; }
+}
+
+type Visao = 'quadro' | 'lista' | 'gantt' | 'calendario' | 'pessoas' | 'desempenho' | 'atividade';
 /** Recortes rápidos (linha de resumo e filtros): cada um vira um filtro na URL (`recorte`). */
 type Recorte = '' | 'atrasadas' | 'hoje' | 'semana' | 'criticas' | 'validacao';
 
@@ -42,8 +52,8 @@ const CHAVE_TELA_CHEIA = 'tarefas.espaco.tela-cheia';
  */
 @Component({
   selector: 'app-espaco-tarefas',
-  imports: [
-    FormsModule, RouterLink, DecimalPipe, QuadroTarefasComponent, ListaTarefasComponent, CalendarioTarefasComponent,
+  imports: [EsqueletoComponent, 
+    FormsModule, RouterLink, DecimalPipe, QuadroTarefasComponent, ListaTarefasComponent, CalendarioTarefasComponent, AtividadeEquipeComponent, GanttTarefasComponent,
     JanelaTarefaComponent, DesempenhoTarefasComponent, FaixaEquipeComponent,
   ],
   templateUrl: './espaco-tarefas.component.html',
@@ -85,6 +95,8 @@ export class EspacoTarefasComponent implements OnInit {
   protected readonly pessoasFiltro = signal<number[]>([]);
   protected readonly recorte = signal<Recorte>('');
   protected readonly raias = signal(false);
+  /** Cartões do quadro no tamanho normal (sem a redução automática). `?cartoes=grandes|auto`; sem o parâmetro vale a última escolha da pessoa. */
+  protected readonly cartoesGrandes = signal(false);
   protected readonly ordem = signal<OrdemLista>('manual');
   protected readonly sentido = signal<SentidoOrdem>('asc');
   /** Número da tarefa aberta na janela. */
@@ -118,6 +130,13 @@ export class EspacoTarefasComponent implements OnInit {
     }
     return [...contagem.values()].sort((a, b) => b.total - a.total || a.pessoa.nome.localeCompare(b.pessoa.nome)).map((c) => c.pessoa);
   });
+
+  /** Marcos da equipe, para os losangos do Gantt (carregados quando a visão é aberta). */
+  protected readonly marcosGantt = signal<Marco[]>([]);
+  private marcosGanttDe = '';
+
+  /** Pessoas da equipe para o filtro da visão "O que aconteceu". */
+  protected readonly pessoasDaEquipe = computed<Pessoa[]>(() => this.pessoasCarga().map((p) => ({ id: p.id, nome: p.nome, login: p.login })));
 
   /** Marcadores presentes nas tarefas (opções do filtro). */
   protected readonly marcadoresDisponiveis = computed(() => {
@@ -213,7 +232,7 @@ export class EspacoTarefasComponent implements OnInit {
       const visao = q.get('visao');
       // O quadro de subtarefas só tem as visões quadro e lista
       const soBasicas = this.escopo().tipo === 'subtarefas';
-      this.visao.set(visao === 'lista' || (!soBasicas && (visao === 'calendario' || visao === 'pessoas' || visao === 'desempenho')) ? visao : 'quadro');
+      this.visao.set(visao === 'lista' || visao === 'gantt' || (!soBasicas && (visao === 'calendario' || visao === 'pessoas' || visao === 'desempenho' || visao === 'atividade')) ? visao : 'quadro');
       this.busca.set(q.get('busca') ?? '');
       this.prioridade.set((q.get('prioridade') ?? '') as PrioridadeTarefa | '');
       this.marcador.set(q.get('marcador') ?? '');
@@ -221,11 +240,15 @@ export class EspacoTarefasComponent implements OnInit {
       this.pessoasFiltro.set((q.get('pessoas') ?? '').split(',').filter(Boolean).map(Number));
       this.recorte.set((q.get('recorte') ?? '') as Recorte);
       this.raias.set(q.get('raias') === 'pessoa');
+      // Link antigo da visão "cartoes" (lista empilhada) vira o quadro com cartões grandes
+      const cartoes = q.get('cartoes');
+      this.cartoesGrandes.set(visao === 'cartoes' || cartoes === 'grandes' || (cartoes === null && lerCartoesGrandes()));
       this.ordem.set((q.get('ordem') ?? 'manual') as OrdemLista);
       this.sentido.set(q.get('sentido') === 'desc' ? 'desc' : 'asc');
       // Links antigos (?tarefa=123) seguem para a tela própria da tarefa
       if (Number(q.get('tarefa')) > 0) void this.roteador.navigate(['/tarefas', Number(q.get('tarefa'))], { replaceUrl: true });
-      if (this.visao() === 'pessoas' || this.raias()) this.carregarPessoas();
+      if (this.visao() === 'pessoas' || this.visao() === 'atividade' || this.raias()) this.carregarPessoas();
+      if (this.visao() === 'gantt') this.carregarMarcosGantt();
     });
     this.iniciarAtualizacaoAutomatica();
     // Busca com atraso: a URL muda 300 ms depois da última tecla
@@ -320,6 +343,21 @@ export class EspacoTarefasComponent implements OnInit {
     this.digitacao.next(valor);
   }
 
+  private carregarMarcosGantt(): void {
+    const equipeId = this.escopo().equipeId;
+    if (!equipeId || this.escopo().tipo !== 'equipe') { this.marcosGantt.set([]); this.marcosGanttDe = ''; return; }
+    if (this.marcosGanttDe === equipeId) return;
+    this.marcosGanttDe = equipeId;
+    this.api.marcos(equipeId).subscribe({ next: (m) => this.marcosGantt.set(m), error: () => this.marcosGantt.set([]) });
+  }
+
+  /** Liga ou desliga os cartões no tamanho normal; a escolha fica guardada neste navegador e vai no endereço (compartilhável). */
+  protected alternarCartoesGrandes(): void {
+    const novo = !this.cartoesGrandes();
+    try { localStorage.setItem(CHAVE_CARTOES_GRANDES, novo ? '1' : '0'); } catch { /* sem armazenamento: vale só nesta tela */ }
+    this.navegar({ cartoes: novo ? 'grandes' : 'auto' });
+  }
+
   protected trocarVisao(visao: Visao): void {
     this.navegar({ visao: visao === 'quadro' ? null : visao });
   }
@@ -400,7 +438,7 @@ export class EspacoTarefasComponent implements OnInit {
     const escopo = this.escopo();
     // No quadro de subtarefas, a criação rápida cria uma subtarefa da tarefa-mãe
     if (escopo.tipo === 'subtarefas' && escopo.tarefa) {
-      this.api.criarSubtarefa(escopo.tarefa, { titulo }).subscribe({
+      this.api.criarSubtarefa(escopo.tarefa, { titulo, depende_da_anterior: true }).subscribe({
         next: (t) => {
           this.destacado.set(t.numero);
           setTimeout(() => { if (this.destacado() === t.numero) this.destacado.set(null); }, SEGUNDOS_DESTAQUE * 1000);

@@ -11,10 +11,11 @@ import { CabecalhoTarefasComponent } from './cabecalho-tarefas.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { Equipe } from './tarefas.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Cartões das equipes visíveis (membro, liderança ou SuperRoot), com as subequipes logo abaixo da equipe pai. */
 @Component({
   selector: 'app-equipes',
-  imports: [RouterLink, DecimalPipe, GraficoComponent, CabecalhoTarefasComponent],
+  imports: [EsqueletoComponent, RouterLink, DecimalPipe, GraficoComponent, CabecalhoTarefasComponent],
   template: `
     <app-cabecalho-tarefas titulo="Equipes" [trilha]="[{ rotulo: 'Equipes' }]"
                            descricao="Acompanhe as equipes de que você participa ou lidera. A liderança vê também as equipes abaixo." />
@@ -26,8 +27,8 @@ import { Equipe } from './tarefas.models';
     @if (comTarefas().length) {
       <section class="cartao-dados" aria-labelledby="titulo-situacao-equipes" style="margin-bottom: 16px">
         <header><div><h2 id="titulo-situacao-equipes">Situação por equipe</h2><small>Tarefas em aberto, separando as atrasadas.</small></div></header>
-        <div class="corpo"><app-grafico tipo="bar" titulo="Tarefas em dia e atrasadas por equipe" [rotulos]="nomesEquipes()" [series]="serieEquipes()"
-                                        [empilhado]="true" [horizontal]="true" [altura]="alturaGrafico()" /></div>
+        <div class="corpo">@defer (on idle) { <app-grafico tipo="bar" titulo="Tarefas em dia e atrasadas por equipe" [rotulos]="nomesEquipes()" [series]="serieEquipes()"
+                                        [empilhado]="true" [horizontal]="true" [altura]="alturaGrafico()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</div>
       </section>
     }
 
@@ -61,7 +62,7 @@ import { Equipe } from './tarefas.models';
           </div>
         </article>
       } @empty {
-        <p class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Você ainda não participa de nenhuma equipe. Crie uma em "Nova equipe".' }}</p>
+        <div class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Você ainda não participa de nenhuma equipe. Crie uma em "Nova equipe".' }} }</div>
       }
     </div>
   `,

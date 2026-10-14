@@ -128,7 +128,7 @@ def test_cadastro_calcula_data_final_e_valor_global(cliente, admin):
     assert contrato["itens"][0]["unidade_fornecimento"] == "posto"
     assert contrato["itens"][0]["quantidade_total"] == "24.0000" and contrato["itens"][1]["quantidade_total"] == "100.0000"
     assert contrato["equipe"] == [{**contrato["equipe"][0], "papel": "gestor", "usuario_id": usuario_id, "login": "gestora"}]
-    assert contrato["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": True}
+    assert contrato["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": True, "pode_gerir_autoridades": True}
     assert contrato["data_limite_maxima"] == "2030-12-31"
     assert cliente.get("/api/contratos/proximo-numero", params={"ano": 2026}, headers=admin).json()["numero"] == "002/2026"
 
@@ -332,7 +332,7 @@ def test_exclusao_do_proprio_contrato_com_modificacao_e_qualquer_um_com_controle
     h_ana, h_bia, h_chefe = cabecalho(cliente, "ana-c"), cabecalho(cliente, "bia-c"), cabecalho(cliente, "chefe-c")
     dela = criar_contrato(cliente, h_ana, numero="010/2026")
     da_bia = criar_contrato(cliente, h_bia, numero="011/2026", empresa_id=dela["empresa"]["id"])
-    assert cliente.get(f"/api/contratos/{dela['id']}", headers=h_ana).json()["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": False}
+    assert cliente.get(f"/api/contratos/{dela['id']}", headers=h_ana).json()["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": False, "pode_gerir_autoridades": False}
     assert cliente.delete(f"/api/contratos/{da_bia['id']}", headers=h_ana).status_code == 403
     assert cliente.delete(f"/api/contratos/{dela['id']}", headers=h_ana).status_code == 204
     assert cliente.get(f"/api/contratos/{da_bia['id']}", headers=h_chefe).json()["permissoes"]["pode_administrar"] is True

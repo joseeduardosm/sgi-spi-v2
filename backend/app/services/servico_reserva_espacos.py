@@ -7,7 +7,7 @@
   valem para a série inteira; cancelar pode ser uma ocorrência, a série ou um período.
 - **Papéis:** fiscal (tabela `reserva_espacos_fiscais`) ou SuperRoot analisa, cadastra espaços e cria reserva predefinida; o solicitante
   vê e altera só o que criou, enquanto aguarda aprovação.
-- **Avisos:** pela mensageria (`servico_mensagens.notificar`, com e-mail), sempre sem commit (gravam junto da operação).
+- **Avisos:** pelas notificações (`notificacoes.notificar`, com e-mail), sempre sem commit (gravam junto da operação).
 """
 
 import calendar
@@ -25,7 +25,7 @@ from app.models.reserva_espacos import (
     EventoReservaEspaco, FiscalReservaEspacos, ReservaEspaco,
 )
 from app.models.usuario import Usuario
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.servico_auditoria import auditar
 
 RECORRENCIAS = ("nenhuma", "diaria", "semanal", "quinzenal", "mensal")
@@ -310,17 +310,15 @@ def _avisar_nova(sessao: Session, usuario: Usuario, reservas: list[ReservaEspaco
     primeira = reservas[0]
     if predefinida:
         if primeira.responsavel_id and primeira.responsavel_id != usuario.id:
-            servico_mensagens.notificar(
+            notificacoes.notificar(
                 sessao, [primeira.responsavel_id], f"Reserva de {espaco.nome} registrada em seu nome",
                 f"{_nome(usuario)} registrou a reserva \"{primeira.titulo}\" em {espaco.nome}: {_periodo(reservas)}.",
-                chave=f"reserva-espacos:{primeira.id}:predefinida", link=f"/reserva-espacos/reservas/{primeira.id}", email=True, autor=usuario,
-            )
+                chave=f"reserva-espacos:{primeira.id}:predefinida", link=f"/reserva-espacos/reservas/{primeira.id}", autor=usuario, evento="reserva_espacos.registrada_em_seu_nome")
         return
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, _destinatarios_fiscais(sessao), f"Nova solicitação de reserva: {espaco.nome}",
         f"{_nome(usuario)} solicitou \"{primeira.titulo}\" em {espaco.nome}: {_periodo(reservas)}. Analise a solicitação na fila do fiscal.",
-        chave=f"reserva-espacos:{primeira.id}:nova", categoria="pendencia", prioridade="alta", link="/reserva-espacos/fila", email=True, autor=usuario,
-    )
+        chave=f"reserva-espacos:{primeira.id}:nova", categoria="pendencia", prioridade="alta", link="/reserva-espacos/fila", autor=usuario, evento="reserva_espacos.nova_solicitacao")
 
 
 # --- Consulta -----------------------------------------------------------------------------------------------------------------------
@@ -445,13 +443,12 @@ def analisar(sessao: Session, fiscal: Usuario, reserva: ReservaEspaco, deferir: 
             f"{len(alvo)} reserva(s)", autor_id=fiscal.id, alvo_tipo="reserva_espaco", alvo_id=str(reserva.id))
     primeira = alvo[0]
     destinatarios = [i for i in {primeira.solicitante_id, primeira.responsavel_id} if i]
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, destinatarios, f"Reserva {'deferida' if deferir else 'indeferida'}: {reserva.espaco.nome}",
         f"Sua solicitação \"{primeira.titulo}\" ({_periodo(alvo)}) foi {'deferida' if deferir else 'indeferida'} por {_nome(fiscal)}."
         + (f" Justificativa: {justificativa}" if not deferir else ""),
-        chave=f"reserva-espacos:{primeira.id}:{'deferida' if deferir else 'indeferida'}", link=f"/reserva-espacos/reservas/{primeira.id}", email=True, autor=fiscal,
-    )
-    servico_mensagens.encerrar(sessao, chave=f"reserva-espacos:{primeira.id}:nova")
+        chave=f"reserva-espacos:{primeira.id}:{'deferida' if deferir else 'indeferida'}", link=f"/reserva-espacos/reservas/{primeira.id}", autor=fiscal, evento="reserva_espacos.resposta")
+    notificacoes.encerrar(sessao, chave=f"reserva-espacos:{primeira.id}:nova")
     return alvo
 
 
@@ -488,14 +485,12 @@ def cancelar(sessao: Session, usuario: Usuario, reserva: ReservaEspaco, escopo: 
     if usuario.id in destinatarios:
         destinatarios = []
         if fiscal_ids := _destinatarios_fiscais(sessao):
-            servico_mensagens.notificar(
+            notificacoes.notificar(
                 sessao, fiscal_ids, f"Reserva cancelada: {reserva.espaco.nome}", f"{_nome(usuario)} cancelou \"{reserva.titulo}\" ({_periodo(alvo)}). Motivo: {motivo}",
-                chave=f"reserva-espacos:{reserva.id}:cancelada:{len(alvo)}", link=f"/reserva-espacos/reservas/{reserva.id}", autor=usuario,
-            )
-    servico_mensagens.notificar(
+                chave=f"reserva-espacos:{reserva.id}:cancelada:{len(alvo)}", link=f"/reserva-espacos/reservas/{reserva.id}", autor=usuario, evento="reserva_espacos.cancelada")
+    notificacoes.notificar(
         sessao, destinatarios, f"Reserva cancelada: {reserva.espaco.nome}", f"A reserva \"{reserva.titulo}\" ({_periodo(alvo)}) foi cancelada por {_nome(usuario)}. Motivo: {motivo}",
-        chave=f"reserva-espacos:{reserva.id}:cancelada:{len(alvo)}", link=f"/reserva-espacos/reservas/{reserva.id}", email=True, autor=usuario,
-    )
+        chave=f"reserva-espacos:{reserva.id}:cancelada:{len(alvo)}", link=f"/reserva-espacos/reservas/{reserva.id}", autor=usuario, evento="reserva_espacos.cancelada")
     return alvo
 
 
@@ -564,12 +559,11 @@ def lembrar(sessao: Session, dia: date | None = None) -> int:
     for r in sessao.scalars(select(ReservaEspaco).where(ReservaEspaco.data == amanha, ReservaEspaco.status == STATUS_DEFERIDA, ReservaEspaco.lembrete_enviado.is_(False))
                             .options(selectinload(ReservaEspaco.espaco))):
         r.lembrete_enviado = True
-        if servico_mensagens.notificar(
+        if notificacoes.notificar(
             sessao, [i for i in {r.solicitante_id, r.responsavel_id} if i], f"Lembrete: {r.espaco.nome} amanhã",
             f"Você tem a reserva \"{r.titulo}\" em {r.espaco.nome} amanhã, {formatar_data(r.data)}, das {formatar_hora(r.hora_inicio)} às {formatar_hora(r.hora_fim)}. "
             "Se não for usar o espaço, cancele a reserva para liberá-lo.",
-            chave=f"reserva-espacos:{r.id}:lembrete", categoria="prazo", link=f"/reserva-espacos/reservas/{r.id}", email=True,
-        ):
+            chave=f"reserva-espacos:{r.id}:lembrete", categoria="prazo", link=f"/reserva-espacos/reservas/{r.id}", evento="reserva_espacos.lembrete_vespera"):
             avisadas += 1
     sessao.commit()
     return avisadas

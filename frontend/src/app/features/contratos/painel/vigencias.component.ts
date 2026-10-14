@@ -11,6 +11,7 @@ import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.comp
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { PainelVigencias, VigenciaContratoPainel } from '../compartilhado/contratos.models';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Até quantos dias o vencimento fica vermelho (mesmo critério de "a vencer") e âmbar. */
 const DIAS_CRITICO = 90;
 const DIAS_ATENCAO = 180;
@@ -33,7 +34,7 @@ interface LinhaPrazo {
  */
 @Component({
   selector: 'app-vigencias',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-cabecalho-modulo titulo="Vigências" [trilha]="['Vigências']"
@@ -88,7 +89,7 @@ interface LinhaPrazo {
         </ol>
       </section>
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="painel" [linhas]="4" />
     }
   `,
 })

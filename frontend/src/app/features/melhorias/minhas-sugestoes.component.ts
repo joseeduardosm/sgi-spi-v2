@@ -12,9 +12,10 @@ import { MelhoriasApiService } from './melhorias-api.service';
 import { PrintSugestao, ROTULOS_MODULO, ROTULOS_SITUACAO, SugestaoAutor } from './melhorias.models';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-minhas-sugestoes',
-  imports: [LinkificarPipe, DatePipe, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
+  imports: [EsqueletoComponent, LinkificarPipe, DatePipe, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
   template: `
     <app-cabecalho-melhorias titulo="Minhas sugestões"
       descricao="Sugestões que você enviou pelo botão &quot;Sugerir melhoria&quot;, com a situação e a resposta da equipe." />
@@ -41,7 +42,7 @@ import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
           }
         </article>
       } @empty {
-        <p class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Você ainda não enviou sugestões. Use o botão "Sugerir melhoria", no canto da tela.' }}</p>
+        <div class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Você ainda não enviou sugestões. Use o botão "Sugerir melhoria", no canto da tela.' }} }</div>
       }
       @if (total() > itens().length) {
         <div class="acoes-cartao"><button type="button" class="acao-secundaria" (click)="carregar(pagina() + 1)">Carregar mais</button></div>

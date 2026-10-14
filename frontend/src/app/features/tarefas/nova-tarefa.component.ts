@@ -2,6 +2,7 @@
 // Este arquivo serve para cadastrar uma tarefa completa: formulário à esquerda e, à direita, a agenda de quem vai recebê-la.
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { EditorRicoComponent } from '../contratacoes/editor-rico.component';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
@@ -16,6 +17,7 @@ import { CabecalhoTarefasComponent } from './cabecalho-tarefas.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { Equipe, Marcador, PessoaCarga, PrioridadeTarefa, RegraRecorrencia, ROTULOS_PRIORIDADE } from './tarefas.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Valor inicial do prazo: daqui a 7 dias, 18:00 (formato do campo datetime-local). */
 function prazoPadrao(): string {
   const d = new Date();
@@ -32,7 +34,7 @@ export function paraCampo(d: Date): string {
 
 @Component({
   selector: 'app-nova-tarefa',
-  imports: [FormsModule, RouterLink, SeletorUsuariosComponent, SeletorMarcadoresComponent, SeletorRecorrenciaComponent, CabecalhoTarefasComponent, AgendaPessoaComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, EditorRicoComponent, SeletorUsuariosComponent, SeletorMarcadoresComponent, SeletorRecorrenciaComponent, CabecalhoTarefasComponent, AgendaPessoaComponent],
   template: `
     <app-cabecalho-tarefas titulo="Nova tarefa" [trilha]="[{ rotulo: 'Nova tarefa' }]"
                            descricao="Quem recebe a tarefa é avisado na caixa de mensagens e por e-mail." />
@@ -47,8 +49,7 @@ export function paraCampo(d: Date): string {
             <div class="ocupa-duas"><label for="nt-titulo">Título *</label>
               <input id="nt-titulo" name="titulo" maxlength="200" required [(ngModel)]="titulo" placeholder="Ex.: Atualizar a política de senhas" /></div>
             <div class="ocupa-duas"><label for="nt-descricao">Descrição</label>
-              <textarea id="nt-descricao" name="descricao" maxlength="20000" rows="4" [(ngModel)]="descricao"
-                        placeholder="Contexto, entregáveis esperados, links"></textarea></div>
+              @defer (on idle) { <app-editor-rico [(html)]="descricao" [colarFormatado]="true" rotulo="Descrição da tarefa" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="3" /> }</div>
           </div>
         </section>
 
@@ -124,7 +125,7 @@ export function paraCampo(d: Date): string {
 
         <div class="acoes-formulario acoes-fixas">
           <a class="acao-secundaria" routerLink="/tarefas">Cancelar</a>
-          <button type="submit" class="acao-primaria" [disabled]="!titulo.trim() || !prazo || salvando()">Criar tarefa</button>
+          <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="!titulo.trim() || !prazo || salvando()">Criar tarefa</button>
         </div>
       </div>
     </form>

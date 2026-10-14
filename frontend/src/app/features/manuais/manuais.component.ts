@@ -9,10 +9,11 @@ import { ListaManuais, ManuaisService, ResultadoBuscaManual } from '../../core/m
 import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 import { erroExibivel } from '../../shared/utilitarios/erros-api';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Manuais do BookStack: estantes e livros; a busca pesquisa o conteúdo de todas as páginas. */
 @Component({
   selector: 'app-manuais',
-  imports: [FormsModule, RouterLink, TrilhaComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, TrilhaComponent],
   template: `
     <div class="cabecalho-pagina">
       <div>
@@ -64,7 +65,7 @@ import { erroExibivel } from '../../shared/utilitarios/erros-api';
       }
       @if (!l.estantes.length && !l.livros_avulsos.length) { <p class="estado-vazio">Nenhum manual disponível ainda.</p> }
     } @else if (!erro()) {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="lista" [linhas]="4" />
     }
   `,
 })

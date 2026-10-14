@@ -10,7 +10,7 @@
   top: -60px;
   z-index: 1000;
   padding: 12px 18px;
-  border-radius: 8px;
+  border-radius: var(--spi-raio-m);
   background: var(--cor-ffffff);
   color: #4a1e22;
   font-weight: 700;
@@ -29,7 +29,7 @@
   grid-template-columns: var(--largura-barra) minmax(0, 1fr);
   background: var(--cor-f7f8f9);
   color: var(--spi-titulo);
-  transition: grid-template-columns 0.25s ease;
+  transition: grid-template-columns var(--mov-lento) var(--ease-move);
 
   &.barra-lateral-expandida {
     --largura-barra: 250px;
@@ -53,7 +53,7 @@
   padding: 0 clamp(18px, 2.4vw, 38px);
   border-bottom: 1px solid var(--cor-ebecee);
   background: color-mix(in srgb, var(--cor-ffffff) 96%, transparent);
-  box-shadow: 0 2px 10px #30373e08;
+  
   backdrop-filter: blur(12px);
 }
 
@@ -139,9 +139,9 @@
   top: 59px;
   padding: 9px;
   border: 1px solid var(--cor-e7e9eb);
-  border-radius: 11px;
+  border-radius: var(--spi-raio-g);
   background: var(--cor-ffffff);
-  box-shadow: 0 18px 45px #25292e20;
+  box-shadow: var(--spi-sombra-flutuante);
 
   > div {
     display: flex;
@@ -169,7 +169,7 @@
     margin-top: 6px;
     padding: 10px 9px;
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--spi-raio-p);
     color: var(--cor-4c5560);
     background: transparent;
     font-size: 11px;
@@ -209,7 +209,7 @@
       padding: 5px 8px;
       border: 1px solid var(--spi-borda);
       font-size: 10px;
-      font-weight: 700;
+      font-weight: 600;
 
       &.ativo {
         border-color: var(--spi-vermelho);
@@ -261,7 +261,7 @@
     justify-content: center;
     gap: 4px;
     border: 1px solid var(--cor-e7e9eb);
-    border-radius: 8px;
+    border-radius: var(--spi-raio-m);
     background: var(--cor-ffffff);
 
     span {
@@ -279,21 +279,21 @@
   }
 }
 
-/* Sino da mensageria, ao lado do menu do usuário */
+/* Sino das notificações, ao lado do menu do usuário */
 .barra-topo-acoes {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.sino-mensagens {
+.sino-notificacoes {
   position: relative;
   width: 42px;
   height: 42px;
   display: grid;
   place-items: center;
   border: 1px solid var(--spi-borda);
-  border-radius: 10px;
+  border-radius: var(--spi-raio-g);
   color: var(--spi-texto);
   background: var(--cor-ffffff);
 
@@ -306,7 +306,7 @@
     min-width: 19px;
     height: 19px;
     padding: 0 5px;
-    border-radius: 10px;
+    border-radius: var(--spi-raio-g);
     color: #fff;
     background: var(--spi-vermelho);
     font-size: 11px;

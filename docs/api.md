@@ -34,7 +34,7 @@ Navegador
 
 | Pasta | Responsabilidade |
 |---|---|
-| `api/routes/` | Rotas HTTP, uma por recurso (`autenticacao.py`, `usuarios.py`, `setores.py`, `acl.py`, `ldap.py`, `smtp.py`, `mensagens.py`, `mensageria.py`, `rh.py`, `saude.py`); o módulo de contratos fica em `api/routes/contratos/` |
+| `api/routes/` | Rotas HTTP, uma por recurso (`autenticacao.py`, `usuarios.py`, `setores.py`, `acl.py`, `ldap.py`, `smtp.py`, `notificacoes.py`, `notificacoes_changelog.py`, `rh.py`, `saude.py`); o módulo de contratos fica em `api/routes/contratos/` |
 | `api/dependencias.py` | Autenticação (`obter_usuario_autenticado`, `obter_usuario_atual`) e autorização (`exigir_papeis`, `exigir_acl`) |
 | `api/respostas.py` | Respostas de erro padronizadas para as rotas e o OpenAPI |
 | `core/` | Configuração (`configuracao.py`), banco (`banco.py`), senhas e JWT (`seguranca.py`), cifra de segredos (`criptografia.py`), formato de erros (`erros.py`) |
@@ -57,13 +57,15 @@ Navegador
 | `rh_periodos_aquisitivos` | Módulo RH: períodos aquisitivos de férias (12 meses), dias creditados, ajuste da CGP e expiração |
 | `rh_feriados` | Módulo RH: feriados e pontos facultativos (um por data), usados no calendário, no painel, na regra de início e na folha de ponto |
 | `rh_afastamentos`, `rh_afastamentos_eventos`, `rh_parametros` | Módulo RH: férias e licença-prêmio, histórico de status e regras de agendamento |
-| `mensagens`, `mensagens_entregas` | Mensageria: mensagens (avulsas e automáticas) e a entrega a cada destinatário (lida, ciência, encerrada, e-mail) |
+| `notificacoes`, `notificacoes_entregas` | Notificações: mensagens (avulsas e automáticas, com o `evento` do catálogo) e a entrega a cada destinatário (lida, ciência, encerrada, canais e resultado do e-mail e do navegador) |
+| `notificacoes_preferencias`, `notificacoes_config_usuario`, `notificacoes_inscricoes_navegador`, `notificacoes_silenciados`, `notificacoes_obrigatorias` | Preferências de notificação: canais ligados por evento, frequência do e-mail e não perturbe, navegadores inscritos (Web Push), contratos e tarefas silenciados e eventos obrigatórios por setor ou usuário |
 | `noticias`, `noticias_revisoes`, `noticias_anexos`, `noticias_categorias`, `portal_atalhos`, `portal_configuracao` | Módulo Notícias: notícias com fluxo de aprovação, histórico, anexos, categorias, atalhos e parâmetros do slider do portal |
 | `sla_politicas` | Política de SLA de prazos (dias úteis de resposta e de resolução por módulo e prioridade) |
 | `tarefas`, `tarefas_equipes` (+ `_membros`, `_lideres`), `tarefas_participantes`, `tarefas_eventos` (+ `_anexos`), `tarefas_marcadores` (+ `_vinculos`), `tarefas_checklist` | Módulo Tarefas: tarefas com pipeline de validação, equipes, envolvidos, linha do tempo, marcadores e checklist |
 | `melhorias_sugestoes`, `melhorias_anexos`, `melhorias_eventos` | Módulo Melhorias: sugestões dos usuários (com a tela de origem), prints anexados e histórico da triagem |
+| `usuarios_preferencias_colunas` | Colunas que cada usuário escolheu mostrar nas listagens, por tela (lista ordenada de ids) |
 | `diretorio_favoritos`, `diretorio_parabens` | Módulo Diretório: contatos favoritos por usuário e mural de parabéns (foto e opt-out de aniversário ficam em colunas de `usuarios`) |
-| `mensageria_envios_changelog` | Mensageria: e-mails de changelog enviados pela conta root (texto, destino, até que data do CHANGELOG e resultado) |
+| `notificacoes_envios_changelog` | Notificações: e-mails de changelog enviados pela conta root (texto, destino, até que data do CHANGELOG e resultado) |
 | `setores`, `membros_setor` | Setores e seus membros |
 | `acl_recursos`, `acl_regras`, `acl_regras_usuarios`, `acl_regras_setores` | Controle de acesso |
 | `auditoria` | Registro das operações. `alvo_tipo`/`alvo_id` identificam o registro alterado e `dados` (JSONB) guarda o conteúdo do ato; nas alterações, `{"campos": {"campo": {"de", "para"}}}` alimenta o histórico por campo |
@@ -126,6 +128,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` `PUT` `POST` | `/api/integracao-glpi[/testar]` | SuperRoot | Configuração da integração com o GLPI (tokens cifrados) e teste de conexão | [chamados.md](endpoints/chamados.md#getput-apiintegracao-glpi-e-post-apiintegracao-glpitestar-superroot) |
 | `GET` | `/api/busca` | Bearer (1), com ACL por módulo | Busca global em contratos, contratações, tarefas, pessoas e setores | [navegacao.md](endpoints/navegacao.md#get-apibusca) |
 | `GET` `PUT` | `/api/favoritos` | Bearer (1) | Favoritos do menu (telas fixadas pelo usuário) | [navegacao.md](endpoints/navegacao.md#get-apifavoritos) |
+| `GET` `PUT` `DELETE` | `/api/preferencias/colunas/{tela}` | Bearer (1) | Colunas que o usuário escolheu mostrar em cada listagem (por usuário e tela, na ordem) | [navegacao.md](endpoints/navegacao.md#get-apipreferenciascolunastela) |
 | `GET` | `/api/openapi.json` | Bearer + ACL `documentacao-api` ≥ LEITURA | Especificação OpenAPI da API (não aparece nela mesma) | [documentacao-api.md](endpoints/documentacao-api.md) |
 | `GET` | `/api/documentacao`, `/api/redoc` | Páginas HTML sem dados; carregam o OpenAPI com o token da sessão do SGI | Swagger UI e ReDoc | [documentacao-api.md](endpoints/documentacao-api.md) |
 | `GET` | `/api/manuais[/…]` | Bearer; ACL `manuais` ≥ LEITURA (sem regras: todos) | Manuais do BookStack lidos pelo portal: estantes, livros, páginas, busca e imagens | [manuais.md](endpoints/manuais.md) |
@@ -183,20 +186,30 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/rh/folha-ponto[/competencias]` | Autenticado (só a própria) | Folha de ponto em PDF / competências disponíveis | [rh-folha-ponto.md](endpoints/rh-folha-ponto.md) |
 | `GET`, `POST` | `/api/assinatura-email/{dados,previa,png,html}` | Autenticado | Assinatura de e-mail institucional: dados do perfil, prévia, PNG e HTML | [assinatura-email.md](endpoints/assinatura-email.md) |
 | `GET`, `POST`, `PUT`, `DELETE` | `/api/protocolo/...` | ACL `protocolo` (LEITURA / MODIFICACAO / CONTROLE_TOTAL) | Numeração institucional: tipos, sequências por exercício, números, anexo, sigilo, painel e exportação | [protocolo.md](endpoints/protocolo.md) |
+| `GET`, `POST`, `PUT`, `DELETE` | `/api/patrimonio/...` | ACL `patrimonio` (LEITURA / MODIFICACAO / CONTROLE_TOTAL) | Patrimônio mobiliário: localizações, bens, histórico, movimentações, inservíveis/extraviados, baixas, painel e exportação | [patrimonio.md](endpoints/patrimonio.md) |
 | `GET`, `POST`, `PUT`, `DELETE` | `/api/reserva-espacos/...` | Autenticado (recurso ACL `reserva-espacos`; papel de fiscal; SuperRoot na configuração) | Reserva de espaços: agenda, solicitação com recorrência, análise dos fiscais, cancelamento, espaços, painel e exportação | [reserva-espacos.md](endpoints/reserva-espacos.md) |
 | `GET`, `POST`, `PUT`, `DELETE` | `/api/contratacoes/...` | ACL `contratacoes` (LEITURA / MODIFICACAO / CONTROLE_TOTAL) e papel no documento (criador, editor, revisor) | ETP e TR: árvore de itens, revisões, versões e histórico, conferência, vínculo com contrato, exportação Word/PDF e importação de Word | [contratacoes.md](endpoints/contratacoes.md) |
 | `GET`, `POST` | `/api/contratos/{id}/itens/correcoes`, `…/previa`, `…/{correcao_id}/confirmar\|recusar\|cancelar`, `…/itens/historico` | ACL `contratos` (LEITURA para ler; gestor titular ou SuperRoot propõe; outra pessoa confirma) | Correção de itens com competências geradas: prévia, dois olhos, sincronização das competências abertas e histórico | [contratos-correcao-itens.md](endpoints/contratos-correcao-itens.md) |
 | `GET` `PUT` | `/api/rh/parametros` | Leitura: autenticado; gravação: CGP | Regras de agendamento | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
-| `GET` | `/api/mensagens/resumo` | Autenticado | Contador do sino e janela a abrir | [mensagens.md](endpoints/mensagens.md) |
-| `GET` `POST` | `/api/mensagens` | Autenticado (setores: ACL `mensageria-setores`) | Caixa de entrada / envia mensagem avulsa | [mensagens.md](endpoints/mensagens.md) |
-| `GET` | `/api/mensagens/{entrega_id}` | Autenticado (só a própria) | Abre a mensagem (marca lida) | [mensagens.md](endpoints/mensagens.md) |
-| `POST` | `/api/mensagens/{entrega_id}/ciencia` | Autenticado (só a própria) | Registra ciência | [mensagens.md](endpoints/mensagens.md) |
-| `GET` | `/api/mensagens/destinatarios` | Autenticado | Usuários e setores para o envio | [mensagens.md](endpoints/mensagens.md) |
-| `GET` | `/api/mensagens/enviadas[/{mensagem_id}]` | Autor ou SuperRoot | Acompanhamento das enviadas | [mensagens.md](endpoints/mensagens.md) |
-| `POST` | `/api/mensagens/enviadas/{mensagem_id}/lembrar` | Autor ou SuperRoot | E-mail de lembrete a quem não deu ciência | [mensagens.md](endpoints/mensagens.md) |
-| `GET` | `/api/mensageria/changelog/rascunho` | Conta root | Rascunho do e-mail de changelog a partir do CHANGELOG.md | [mensageria.md](endpoints/mensageria.md) |
-| `POST` | `/api/mensageria/changelog/previa` | Conta root | Prévia do e-mail no layout oficial | [mensageria.md](endpoints/mensageria.md) |
-| `GET` `POST` | `/api/mensageria/changelog/envios` | Conta root | Histórico / envia (todos ou teste) | [mensageria.md](endpoints/mensageria.md) |
+| `GET` | `/api/notificacoes/resumo` | Autenticado | Contador do sino e janela a abrir | [notificacoes.md](endpoints/notificacoes.md) |
+| `GET` `POST` | `/api/notificacoes` | Autenticado (setores: ACL `notificacoes-setores`) | Caixa de entrada / envia mensagem avulsa | [notificacoes.md](endpoints/notificacoes.md) |
+| `GET` | `/api/notificacoes/{entrega_id}` | Autenticado (só a própria) | Abre a mensagem (marca lida) | [notificacoes.md](endpoints/notificacoes.md) |
+| `POST` | `/api/notificacoes/{entrega_id}/ciencia` | Autenticado (só a própria) | Registra ciência | [notificacoes.md](endpoints/notificacoes.md) |
+| `GET` | `/api/notificacoes/destinatarios` | Autenticado | Usuários e setores para o envio | [notificacoes.md](endpoints/notificacoes.md) |
+| `GET` | `/api/notificacoes/enviadas[/{notificacao_id}]` | Autor ou SuperRoot | Acompanhamento das enviadas | [notificacoes.md](endpoints/notificacoes.md) |
+| `POST` | `/api/notificacoes/enviadas/{notificacao_id}/lembrar` | Autor ou SuperRoot | E-mail de lembrete a quem não deu ciência | [notificacoes.md](endpoints/notificacoes.md) |
+| `GET` `PUT` | `/api/notificacoes/preferencias` | Autenticado (só a própria) | Canais (e-mail, navegador, desktop) por evento, frequência do e-mail, não perturbe, situação do navegador e silenciados | [notificacoes.md](endpoints/notificacoes.md) |
+| `POST` | `/api/notificacoes/navegador/inscricoes[/remover]` | Autenticado | Inscreve ou remove este navegador (Web Push) | [notificacoes.md](endpoints/notificacoes.md) |
+| `POST` | `/api/notificacoes/testar` | Autenticado | Testa um canal (e-mail, navegador ou desktop) | [notificacoes.md](endpoints/notificacoes.md) |
+| `POST` `DELETE` | `/api/notificacoes/silenciar`, `/api/notificacoes/silenciados/{silenciado_id}` | Autenticado | Silencia um contrato ou tarefa pelos canais externos / volta a avisar | [notificacoes.md](endpoints/notificacoes.md) |
+| `POST` | `/api/notificacoes/ciencia-por-token` | Token do pop-up | Ciência pelo botão "Ciente" do pop-up do navegador | [notificacoes.md](endpoints/notificacoes.md) |
+| `GET` `POST` `DELETE` | `/api/notificacoes/obrigatorias[/{obrigatoria_id}]` | SuperRoot ou ACL `notificacoes-obrigatorias` (CONTROLE_TOTAL) | Eventos e canais obrigatórios por setor ou usuário | [notificacoes.md](endpoints/notificacoes.md) |
+| `GET` | `/api/notificacoes/painel-entregas` | Conta root | Entregas por e-mail e navegador, falhas e inscrições com problema | [notificacoes.md](endpoints/notificacoes.md) |
+| `GET` | `/api/mensagens`, `/api/mensagens/resumo` | Autenticado | Compatibilidade permanente com o SGI Alertas (Windows): formato antigo, só entregas com o canal Desktop | [notificacoes.md](endpoints/notificacoes.md) |
+| `POST` | `/api/notificacoes/changelog/contagem` | Conta root | Quantos da seleção receberão o e-mail de changelog | [notificacoes-changelog.md](endpoints/notificacoes-changelog.md) |
+| `GET` | `/api/notificacoes/changelog/rascunho` | Conta root | Rascunho do e-mail de changelog a partir do CHANGELOG.md | [notificacoes-changelog.md](endpoints/notificacoes-changelog.md) |
+| `POST` | `/api/notificacoes/changelog/previa` | Conta root | Prévia do e-mail no layout oficial | [notificacoes-changelog.md](endpoints/notificacoes-changelog.md) |
+| `GET` `POST` | `/api/notificacoes/changelog/envios` | Conta root | Histórico / envia (todos ou teste) | [notificacoes-changelog.md](endpoints/notificacoes-changelog.md) |
 
 | `GET` `POST` | `/api/contratos/empresas` | ACL `contratos` ≥ LEITURA / ≥ MODIFICACAO | Lista / cadastra empresas | [contratos-empresas.md](endpoints/contratos-empresas.md) |
 | `GET` | `/api/contratos/empresas/opcoes` | ACL `contratos` ≥ LEITURA | Empresas para o cadastro de contrato | [contratos-empresas.md](endpoints/contratos-empresas.md#get-apicontratosempresasopcoes) |

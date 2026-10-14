@@ -160,6 +160,11 @@ export class ContratosApiService {
       : this.http.post<NotaEmpenho[]>(`${this.base}/${id}/notas-empenho`, dados);
   }
 
+  /** Registra a NE de cancelamento (abate o saldo da NE original). */
+  cancelarNota(id: string, notaId: string, dados: { numero: string; valor: string; justificativa: string }): Observable<NotaEmpenho[]> {
+    return this.http.post<NotaEmpenho[]>(`${this.base}/${id}/notas-empenho/${notaId}/cancelamentos`, dados);
+  }
+
   /** Exclui uma NE nunca usada. */
   excluirNota(id: string, notaId: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/${id}/notas-empenho/${notaId}`);

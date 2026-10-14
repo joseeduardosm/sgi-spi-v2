@@ -77,7 +77,7 @@
                   <small>Assinatura em {{ p.assinada_em | dataBr }}</small>
                   <small>Vigência anterior: até {{ p.fim_anterior | dataBr }} · nova: {{ p.data_inicio | dataBr }} a {{ p.data_fim | dataBr }}</small>
                   <div class="acoes-cartao esquerda">
-                    <button type="button" class="link-arquivo" (click)="baixarTermo(p)">Ver termo assinado</button>
+                    <button type="button" class="acao-secundaria acao-pequena" (click)="baixarTermo(p)">Baixar termo assinado</button>
                     @if (ultimo && p.pode_desfazer) { <button type="button" class="link-arquivo" (click)="desfazer(p)">Desfazer</button> }
                   </div>
                 </div>
@@ -176,8 +176,8 @@
     @case ('notas') { <app-aba-notas [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
     @case ('diario') { <app-aba-diario [contratoId]="c.id" [usuarioId]="usuarioId()" /> }
     @case ('execucao') { <app-aba-execucao [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" (alterado)="carregar()" /> }
-    @case ('portaria') { <app-aba-portaria [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" [podeAdministrar]="c.permissoes.pode_administrar" /> }
+    @case ('portaria') { <app-aba-portaria [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" [podeAdministrar]="c.permissoes.pode_gerir_autoridades" /> }
   }
 } @else {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="formulario" [linhas]="5" />
 }

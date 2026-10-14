@@ -53,7 +53,7 @@
             </td>
             <td>{{ c.data_inicio | dataBr }}</td>
             <td>{{ c.data_fim | dataBr }}</td>
-            <td><span class="selo-situacao" [class]="'selo-situacao ' + c.situacao">{{ rotulos[c.situacao] }}</span></td>
+            <td><span [class]="classeMarcador(coresSituacao[c.situacao])">{{ rotulos[c.situacao] }}</span></td>
             <td class="num">{{ c.base_mensal | moeda }}</td>
             <td class="num">{{ c.valor_global | moeda }}</td>
             <td class="celula-acoes">
@@ -72,7 +72,7 @@
             </td>
           </tr>
         } @empty {
-          <tr><td class="estado-vazio" colspan="9">{{ carregando() ? 'Carregando…' : 'Nenhum contrato encontrado.' }}</td></tr>
+          <tr><td class="estado-vazio" colspan="9">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="7" [linhas]="4" /> } @else { {{ 'Nenhum contrato encontrado.' }} }</td></tr>
         }
       </tbody>
     </table>

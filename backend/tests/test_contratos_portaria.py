@@ -37,7 +37,7 @@ def cenario(cliente, admin):
         sessao.add(DadosFuncionais(usuario_id=gestor, rs_pv="12345"))
         sessao.commit()
     contrato = criar_contrato(cliente, admin, equipe={"gestor": gestor, "fiscal_tecnico": fiscal})
-    tipo = cliente.post(f"{PROTOCOLO}/tipos", json={"nome": "Portaria"}, headers=admin).json()
+    tipo = cliente.post(f"{PROTOCOLO}/tipos", json={"nome": "Portaria SPI SSGC"}, headers=admin).json()
     assert cliente.post(f"{PROTOCOLO}/tipos/{tipo['id']}/sequencias", json={"exercicio": 2026, "inicio": 1, "fim": 9}, headers=admin).status_code == 201
     assert _modelo(cliente, admin, "sem_anterior", MASCARA + ASSINATURA).status_code == 201
     assert _modelo(cliente, admin, "com_anterior", MASCARA + REVOGACAO + ASSINATURA).status_code == 201
@@ -141,7 +141,7 @@ def test_cancelar_libera_o_numero(cliente, admin, cenario):
 
 def test_sem_faixa_do_ano_ou_sem_gestor(cliente, admin):
     contrato = criar_contrato(cliente, admin)
-    autoridade = cliente.post("/api/portarias/autoridades", json={"sigla": "X", "nome": "A", "cargo": "C", "setor": "S"}, headers=admin).json()[0]
+    autoridade = cliente.post("/api/portarias/autoridades", json={"sigla": "X", "usuario_id": criar_usuario("aut-x", nome_completo="Autoridade X", cargo="Chefe", departamento="Setor X")}, headers=admin).json()[0]
     r = cliente.post(f"/api/contratos/{contrato['id']}/portarias", json={"autoridade_id": autoridade["id"]}, headers=admin)
     assert r.status_code == 400 and "faixa" in r.json()["detalhe"]
 
@@ -149,7 +149,7 @@ def test_sem_faixa_do_ano_ou_sem_gestor(cliente, admin):
 def test_autoridades_so_com_controle_total(cliente, admin):
     restringir_contratos(cliente, admin, {criar_usuario("leitor", nome_completo="Leitor"): "MODIFICACAO"})
     h = cabecalho(cliente, "leitor")
-    assert cliente.post("/api/portarias/autoridades", json={"sigla": "X", "nome": "A", "cargo": "C", "setor": "S"}, headers=h).status_code == 403
+    assert cliente.post("/api/portarias/autoridades", json={"sigla": "X", "usuario_id": 1}, headers=h).status_code == 403
 
 
 def test_mascara_rejeita_placeholder_fora_da_lista(cliente, admin):
@@ -176,9 +176,9 @@ def test_mascara_permissao_controle_total_so_para_portaria(cliente, admin):
 
 def test_solicitar_sem_mascara_ativa(cliente, admin):
     contrato = criar_contrato(cliente, admin, equipe={"gestor": criar_usuario("g2", nome_completo="G Dois")})
-    tipo = cliente.post(f"{PROTOCOLO}/tipos", json={"nome": "Portaria"}, headers=admin).json()
+    tipo = cliente.post(f"{PROTOCOLO}/tipos", json={"nome": "Portaria SPI SSGC"}, headers=admin).json()
     cliente.post(f"{PROTOCOLO}/tipos/{tipo['id']}/sequencias", json={"exercicio": 2026, "inicio": 1, "fim": 9}, headers=admin)
-    aut = cliente.post("/api/portarias/autoridades", json={"sigla": "X", "nome": "A", "cargo": "C", "setor": "S"}, headers=admin).json()[0]
+    aut = cliente.post("/api/portarias/autoridades", json={"sigla": "X", "usuario_id": criar_usuario("aut-x", nome_completo="Autoridade X", cargo="Chefe", departamento="Setor X")}, headers=admin).json()[0]
     r = cliente.post(f"/api/contratos/{contrato['id']}/portarias", json={"autoridade_id": aut["id"]}, headers=admin)
     assert r.status_code == 400 and "máscara" in r.json()["detalhe"]
 
@@ -188,3 +188,31 @@ def test_linha_de_pessoa_vazia_some_e_incisos_sao_renumerados():
     html = "<p>I – #nomegestor – RS: #rsgestor</p><p>II – #nomegestorsuplente – RS: #rsgestorsuplente</p><p>III – #nomefiscal – RS: #rsfiscal</p>"
     saida = m.preencher(html, {"nomegestor": "Ana", "rsgestor": "1", "nomegestorsuplente": "", "rsgestorsuplente": "", "nomefiscal": "Beto & Cia", "rsfiscal": "3"})
     assert "Suplente" not in saida and "II – Beto &amp; Cia" in saida and "III" not in saida
+
+
+def test_autoridade_e_um_usuario_e_preenche_os_dados_do_cadastro(cliente, admin):
+    usuario = criar_usuario("chefe-a", nome_completo="Carlos Autoridade", cargo="Subsecretário", departamento="Subsecretaria de Gestão")
+    achados = cliente.get("/api/portarias/autoridades/usuarios", params={"busca": "carlos"}, headers=admin).json()
+    assert [u["id"] for u in achados] == [usuario] and achados[0]["cargo"] == "Subsecretário" and achados[0]["departamento"] == "Subsecretaria de Gestão"
+    r = cliente.post("/api/portarias/autoridades", json={"sigla": "SPI SSGC", "usuario_id": usuario}, headers=admin)
+    assert r.status_code == 201, r.text
+    a = r.json()[0]
+    assert (a["nome"], a["cargo"], a["setor"], a["usuario_id"]) == ("Carlos Autoridade", "Subsecretário", "Subsecretaria de Gestão", usuario)
+    # Sem usuário, não cadastra
+    assert cliente.post("/api/portarias/autoridades", json={"sigla": "X"}, headers=admin).status_code == 422
+    assert cliente.post("/api/portarias/autoridades", json={"sigla": "X", "usuario_id": 99999}, headers=admin).status_code == 400
+
+
+def test_gestor_e_suplente_gerem_autoridades_e_mensagem_diz_o_que_falta(cliente, admin):
+    gestor, suplente, fiscal = criar_usuario("gest-a"), criar_usuario("supl-a"), criar_usuario("fisc-a")
+    laercio = criar_usuario("laercio", nome_completo="Laércio Simões", cargo="Subsecretário", departamento="Subsecretaria de Gestão Corporativa")
+    restringir_contratos(cliente, admin, {gestor: "MODIFICACAO", suplente: "MODIFICACAO", fiscal: "MODIFICACAO"})
+    contrato = criar_contrato(cliente, admin, equipe={"gestor": gestor, "gestor_suplente": suplente, "fiscal_tecnico": fiscal})
+    for login, esperado in (("gest-a", True), ("supl-a", True), ("fisc-a", False)):
+        h = cabecalho(cliente, login)
+        assert cliente.get(f"/api/contratos/{contrato['id']}", headers=h).json()["permissoes"]["pode_gerir_autoridades"] is esperado
+        r = cliente.post("/api/portarias/autoridades", json={"sigla": f"S-{login}", "usuario_id": laercio}, headers=h)
+        assert r.status_code == (201 if esperado else 403), (login, r.text)
+    # Sem a sigla, a mensagem diz exatamente o que falta (o cargo e o setor vêm do cadastro)
+    r = cliente.post("/api/portarias/autoridades", json={"sigla": "", "usuario_id": laercio}, headers=cabecalho(cliente, "gest-a"))
+    assert r.status_code == 400 and "a sigla" in r.json()["detalhe"] and "cargo" not in r.json()["detalhe"]

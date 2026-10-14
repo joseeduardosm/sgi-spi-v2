@@ -54,8 +54,8 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
     </div>
 
     @if (checklistAberto()) {
-      <div class="fundo-modal" role="presentation" (click)="checklistAberto.set(false)"></div>
-      <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-modelo-checklist">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="checklistAberto.set(false)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-modelo-checklist">
         <header><div><span class="modal-sobretitulo">Modelo global</span><h2 id="titulo-modelo-checklist">Checklist</h2></div>
           <button type="button" aria-label="Fechar" (click)="checklistAberto.set(false)">×</button></header>
         <form (ngSubmit)="salvarChecklist()">

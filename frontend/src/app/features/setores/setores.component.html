@@ -62,7 +62,7 @@
             }
           </tr>
         } @empty {
-          <tr><td class="estado-vazio" [attr.colspan]="ehAdministrador() ? 7 : 6">{{ carregando() ? 'Carregando…' : 'Nenhum setor cadastrado.' }}</td></tr>
+          <tr><td class="estado-vazio" [attr.colspan]="ehAdministrador() ? 7 : 6">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="6" [linhas]="4" /> } @else { {{ 'Nenhum setor cadastrado.' }} }</td></tr>
         }
       </tbody>
     </table>
@@ -70,8 +70,8 @@
 </section>
 
 @if (formularioAberto()) {
-  <div class="fundo-modal" role="presentation" (click)="fecharFormulario()"></div>
-  <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-setor">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fecharFormulario()"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-formulario-setor">
     <header>
       <div>
         <span class="modal-sobretitulo">Estrutura institucional</span>
@@ -109,8 +109,8 @@
         <p class="aviso-formulario erro" role="alert">{{ erroFormulario() }}</p>
       }
       <footer>
-        <button class="acao-secundaria" type="button" (click)="fecharFormulario()" [disabled]="salvando()">Cancelar</button>
-        <button class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar setor' }}</button>
+        <button [class.carregando]="salvando()" class="acao-secundaria" type="button" (click)="fecharFormulario()" [disabled]="salvando()">Cancelar</button>
+        <button [class.carregando]="salvando()" class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar setor' }}</button>
       </footer>
     </form>
   </section>

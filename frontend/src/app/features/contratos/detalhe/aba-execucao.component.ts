@@ -10,10 +10,11 @@ import { PainelExecucao, ResumoCompetencia } from '../compartilhado/contratos.mo
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { ROTULOS_ETAPA, ROTULOS_SITUACAO_COMPETENCIA } from '../compartilhado/rotulos';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Aba "Execução": pré-requisitos, geração das competências e lista por vigência. */
 @Component({
   selector: 'app-aba-execucao',
-  imports: [...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, ...PIPES_FORMATACAO],
   template: `
     @if (painel(); as p) {
       <section class="cartao-dados" aria-labelledby="titulo-execucao">
@@ -53,7 +54,7 @@ import { ROTULOS_ETAPA, ROTULOS_SITUACAO_COMPETENCIA } from '../compartilhado/ro
         @if (!p.geradas) { <p class="estado-vazio">As competências ainda não foram geradas.</p> }
       </section>
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="lista" [linhas]="4" />
     }
   `,
 })

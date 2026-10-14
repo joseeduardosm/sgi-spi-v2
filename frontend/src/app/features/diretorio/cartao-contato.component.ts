@@ -1,18 +1,20 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para desenhar o cartão de visita de um contato do diretório de ramais, com as ações rápidas.
 
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
+import { BotaoCopiarComponent } from '../../shared/componentes/botao-copiar/botao-copiar.component';
+import { InclinarDirective } from '../../shared/diretivas/inclinar.directive';
 import { AvatarComponent } from './avatar.component';
 import { Contato, seloFerias } from './diretorio.models';
 
 /** Cartão no formato de cartão de visita (proporção 85 × 55): foto, nome, cargo, setor e ramal em destaque. */
 @Component({
   selector: 'app-cartao-contato',
-  imports: [AvatarComponent],
+  imports: [AvatarComponent, BotaoCopiarComponent, InclinarDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <article class="cartao-visita" [class.em-ferias]="!!selo()">
+    <article class="cartao-visita" appInclinar [class.em-ferias]="!!selo()">
       <button type="button" class="favorito" [class.ativo]="contato().favorito" [attr.aria-pressed]="contato().favorito"
               [attr.aria-label]="(contato().favorito ? 'Remover dos favoritos: ' : 'Fixar nos favoritos: ') + contato().nome"
               (click)="favoritar.emit(contato())">{{ contato().favorito ? '★' : '☆' }}</button>
@@ -28,7 +30,7 @@ import { Contato, seloFerias } from './diretorio.models';
       </button>
       @if (selo()) { <span class="selo-ferias" role="status">🌴 {{ selo() }}</span> }
       <footer class="acoes-cartao-visita">
-        <button type="button" (click)="copiar()" [title]="copiado() ? 'Copiado!' : 'Copiar ramal'">{{ copiado() ? '✓' : '⧉' }}<span>Ramal</span></button>
+        <span class="acao-copiar"><app-botao-copiar [valor]="contato().ramal" titulo="Copiar ramal" tamanho="pequeno" /><span>Ramal</span></span>
         <a [href]="'tel:' + contato().ramal" title="Ligar para o ramal">☎<span>Ligar</span></a>
         @if (contato().email) { <a [href]="'mailto:' + contato().email" title="Enviar e-mail">✉<span>E-mail</span></a> }
         @if (contato().email) {
@@ -44,14 +46,7 @@ export class CartaoContatoComponent {
   readonly contato = input.required<Contato>();
   readonly abrir = output<Contato>();
   readonly favoritar = output<Contato>();
-  protected readonly copiado = signal(false);
   protected readonly selo = computed(() => seloFerias(this.contato()));
   protected readonly teams = computed(() => `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(this.contato().email)}`);
 
-  protected copiar(): void {
-    navigator.clipboard?.writeText(this.contato().ramal).then(() => {
-      this.copiado.set(true);
-      setTimeout(() => this.copiado.set(false), 1500);
-    }, () => undefined);
-  }
 }

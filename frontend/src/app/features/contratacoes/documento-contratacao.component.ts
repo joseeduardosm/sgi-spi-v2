@@ -23,6 +23,7 @@ import { EditorRicoComponent } from './editor-rico.component';
 import { HtmlConfiavelPipe } from './html-confiavel.pipe';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 type Janela = null | 'edicao' | 'revisoes' | 'historico' | 'lote' | 'compartilhar' | 'contrato' | 'conferencia' | 'dados' | 'tabela';
 
 interface Linha {
@@ -45,7 +46,7 @@ interface Edicao {
 /** Tela do documento. Todas as ações chamam a API, que devolve o documento inteiro atualizado. */
 @Component({
   selector: 'app-documento-contratacao',
-  imports: [LinkificarPipe, FormsModule, DatePipe, RouterLink, TrilhaComponent, EditorRicoComponent, HtmlConfiavelPipe, SeletorUsuariosComponent],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, RouterLink, TrilhaComponent, EditorRicoComponent, HtmlConfiavelPipe, SeletorUsuariosComponent],
   template: `
     @if (doc(); as d) {
       <div class="cabecalho-pagina">
@@ -144,11 +145,11 @@ interface Edicao {
       </section>
 
       @if (janela()) {
-        <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
+        <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
       }
 
       @if (janela() === 'edicao' && edicao(); as e) {
-        <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-ed">
+        <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-ed">
           <header><div><span class="modal-sobretitulo">{{ e.id ? 'Editar' : 'Novo' }}</span><h2 id="t-ed">{{ rotuloItem[e.tipo] }}</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             <div class="grade-formulario">
@@ -158,7 +159,7 @@ interface Edicao {
                 </select></div>
               <div class="marca"><label><input type="checkbox" [ngModel]="e.precisa" (ngModelChange)="atualizarEdicao({ precisa: $event })" /> Marcar como "precisa de revisão"</label></div>
             </div>
-            <app-editor-rico [html]="e.html" (htmlChange)="atualizarEdicao({ html: $event })" rotulo="Conteúdo do item" />
+            @defer (on idle) { <app-editor-rico [html]="e.html" (htmlChange)="atualizarEdicao({ html: $event })" rotulo="Conteúdo do item" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="3" /> }
             <footer><button type="button" class="acao-secundaria" (click)="fechar()">Cancelar</button>
               <button type="button" class="acao-positiva" [disabled]="ocupado()" (click)="salvarItem()">Salvar</button></footer>
           </div>
@@ -166,7 +167,7 @@ interface Edicao {
       }
 
       @if (janela() === 'revisoes' && itemAtual(); as it) {
-        <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-rev">
+        <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-rev">
           <header><div><span class="modal-sobretitulo">Revisões de {{ it.marcador }}</span><h2 id="t-rev">Comentários e propostas</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             @for (r of it.revisoes; track r.id) {
@@ -190,7 +191,7 @@ interface Edicao {
             <label for="rv-com">Comentário *</label>
             <textarea id="rv-com" rows="3" maxlength="4000" [(ngModel)]="revisaoComentario"></textarea>
             <label><input type="checkbox" [(ngModel)]="revisaoComProposta" (ngModelChange)="iniciarProposta(it)" /> Propor novo texto para este item</label>
-            @if (revisaoComProposta) { <app-editor-rico [html]="revisaoHtml" (htmlChange)="revisaoHtml = $event" rotulo="Texto proposto" /> }
+            @if (revisaoComProposta) { @defer (on idle) { <app-editor-rico [html]="revisaoHtml" (htmlChange)="revisaoHtml = $event" rotulo="Texto proposto" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="3" /> } }
             <footer><button type="button" class="acao-secundaria" (click)="fechar()">Fechar</button>
               <button type="button" class="acao-positiva" [disabled]="!revisaoComentario.trim() || ocupado()" (click)="enviarRevisao(it)">Enviar</button></footer>
           </div>
@@ -198,7 +199,7 @@ interface Edicao {
       }
 
       @if (janela() === 'historico' && itemAtual(); as it) {
-        <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-his">
+        <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-his">
           <header><div><span class="modal-sobretitulo">Histórico de {{ it.marcador }}</span><h2 id="t-his">O que mudou neste item</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             @for (h of historico(); track h.id) {
@@ -219,7 +220,7 @@ interface Edicao {
       }
 
       @if (janela() === 'lote') {
-        <section class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-lote">
+        <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-lote">
           <header><div><span class="modal-sobretitulo">Entrada em lote</span><h2 id="t-lote">Criar vários itens de uma vez</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             <p class="ajuda">Uma linha por item. <code>#</code> item, <code>##</code> subitem (até <code>######</code>), <code>&#64;</code> subseção, <code>**</code> inciso, <code>$$</code> alínea. Linha sem marcador continua a anterior.</p>
@@ -235,7 +236,7 @@ interface Edicao {
       }
 
       @if (janela() === 'compartilhar') {
-        <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-comp">
+        <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-comp">
           <header><div><span class="modal-sobretitulo">Acesso</span><h2 id="t-comp">Compartilhar o documento</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             <p class="ajuda"><b>Editor</b> edita e aplica propostas. <b>Revisor</b> só comenta e propõe. O criador e a administração sempre têm acesso total.</p>
@@ -257,7 +258,7 @@ interface Edicao {
       }
 
       @if (janela() === 'contrato') {
-        <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-con">
+        <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-con">
           <header><div><span class="modal-sobretitulo">Vínculo</span><h2 id="t-con">Contrato do documento</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             <label for="vc-busca">Buscar contrato</label>
@@ -271,7 +272,7 @@ interface Edicao {
       }
 
       @if (janela() === 'conferencia' && conferencia(); as c) {
-        <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-conf">
+        <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-conf">
           <header><div><span class="modal-sobretitulo">Antes de concluir</span><h2 id="t-conf">Conferência do documento</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             @if (!c.bloqueios.length && !c.alertas.length) { <p>Nenhuma pendência encontrada.</p> }
@@ -284,7 +285,7 @@ interface Edicao {
       }
 
       @if (janela() === 'dados') {
-        <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-dad">
+        <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-dad">
           <header><div><span class="modal-sobretitulo">Documento</span><h2 id="t-dad">Dados do documento</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <form class="form-contratacoes" (ngSubmit)="salvarDados()">
             <div class="grade-formulario uma-coluna">
@@ -298,7 +299,7 @@ interface Edicao {
       }
 
       @if (janela() === 'tabela') {
-        <section class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-tab">
+        <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-tab">
           <header><div><span class="modal-sobretitulo">Item 1.1 do TR</span><h2 id="t-tab">Linha da tabela</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <form class="form-contratacoes" (ngSubmit)="salvarLinhaTr()">
             <div class="grade-formulario">
@@ -314,7 +315,7 @@ interface Edicao {
         </section>
       }
     } @else {
-      <p class="estado-vazio">{{ erro() || 'Carregando…' }}</p>
+      @if (erro()) { <p class="estado-vazio">{{ erro() }}</p> } @else { <app-esqueleto tipo="formulario" [linhas]="5" /> }
     }
   `,
 })

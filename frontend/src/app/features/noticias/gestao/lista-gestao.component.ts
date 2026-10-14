@@ -14,6 +14,7 @@ import { NoticiaGestaoResumo, PapelNoticias, ROTULOS_SITUACAO, SituacaoNoticia }
 import { CabecalhoNoticiasComponent } from './cabecalho-noticias.component';
 import { ImagemAutenticadaDirective } from './imagem-autenticada.directive';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 type ColunaOrdem = 'titulo' | 'situacao' | 'publicar_em' | 'autor_nome' | 'atualizado_em';
 
 const ABAS: { valor: '' | SituacaoNoticia; rotulo: string }[] = [
@@ -23,7 +24,7 @@ const ABAS: { valor: '' | SituacaoNoticia; rotulo: string }[] = [
 
 @Component({
   selector: 'app-lista-gestao',
-  imports: [FormsModule, RouterLink, DatePipe, CabecalhoNoticiasComponent, ImagemAutenticadaDirective],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoNoticiasComponent, ImagemAutenticadaDirective],
   template: `
     <app-cabecalho-noticias titulo="Notícias" descricao="Escreva, envie para aprovação e acompanhe as notícias do portal." />
     @if (semAcesso()) {
@@ -58,7 +59,7 @@ const ABAS: { valor: '' | SituacaoNoticia; rotulo: string }[] = [
                   <td>{{ n.atualizado_em | date: 'dd/MM/yyyy HH:mm' }}</td>
                 </tr>
               } @empty {
-                <tr><td class="estado-vazio" colspan="6">{{ carregando() ? 'Carregando…' : 'Nenhuma notícia aqui.' }}</td></tr>
+                <tr><td class="estado-vazio" colspan="6">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="6" [linhas]="4" /> } @else { {{ 'Nenhuma notícia aqui.' }} }</td></tr>
               }
             </tbody>
           </table>

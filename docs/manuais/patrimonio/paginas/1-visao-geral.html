@@ -1,0 +1,45 @@
+<p>O módulo <strong>Patrimônio</strong> do SGI SPI controla os <strong>bens móveis do prédio SPI</strong> (cadeiras, mesas, computadores, nobreaks, aparelhos de ar-condicionado e tudo o mais que tem chapa). Ele mostra <strong>onde cada bem está</strong>, <strong>por onde já passou</strong>, quem o cadastrou e alterou, quanto vale hoje e se ainda está em garantia.</p>
+<p>O levantamento é feito <strong>em campo, pelo celular</strong>: leitura do QR code ou código de barras pela câmera, cadastro rápido e funcionamento mesmo com sinal fraco. No computador ficam os painéis gerenciais (quantidade e valor por andar, sala, setor e grupo, bens fora de garantia) e os relatórios. As telas são as mesmas nos dois aparelhos; o capítulo <strong>"Patrimônio no celular"</strong> deste livro mostra o passo a passo no telefone.</p>
+[[p01-lista-de-bens]]
+<p class="callout info">Todos os exemplos deste manual usam <strong>dados fictícios</strong> (pessoas, chapas e salas inventadas) e foram feitos numa cópia do sistema, nunca em produção.</p>
+<h2>O que o módulo cobre</h2>
+<ul>
+<li><strong>Cadastro</strong> dos bens (avulso ou em lote), com fotos, valores, garantia e histórico.</li>
+<li><strong>Movimentação</strong> dos bens entre salas, com autorização e confirmação do recebimento.</li>
+<li><strong>Inservíveis e extraviados</strong>, com justificativa e aprovação.</li>
+<li><strong>Baixa</strong>, com o termo em PDF para instruir o processo.</li>
+<li><strong>Painéis</strong> e relatórios em Excel e PDF, e a <strong>depreciação</strong> dos bens.</li>
+</ul>
+<p>Ficam de fora desta versão os bens imóveis, os bens de consumo do almoxarifado e a integração com o SAM. A baixa feita no módulo <strong>não baixa o bem no SAM</strong>: o termo em PDF serve para fazer isso lá.</p>
+<h2>Onde fica e como se navega</h2>
+<p>O acesso fica na barra lateral, em <strong>Módulos › Patrimônio</strong>. No topo de todas as telas estão os atalhos: <strong>Bens</strong>, <strong>Movimentações</strong>, <strong>Inservíveis</strong>, <strong>Baixa</strong>, <strong>Painel</strong>, <strong>Locais</strong> e, para quem administra, <strong>Parâmetros</strong>.</p>
+<h2>Quem pode fazer o quê</h2>
+<p>O acesso é controlado pela permissão <strong>Patrimônio</strong> (em Administração › Controle de acesso). Existem três níveis:</p>
+<table>
+<thead><tr><th>Nível</th><th>O que pode</th></tr></thead>
+<tbody>
+<tr><td><strong>Leitura</strong> (consulta)</td><td>Ver bens, locais, histórico, trajeto, movimentações e painéis, e exportar para Excel e PDF.</td></tr>
+<tr><td><strong>Modificação</strong></td><td>Tudo o de leitura, mais: <strong>cadastrar e editar bens</strong> e <strong>solicitar</strong> movimentações, classificações como inservível ou extraviado e baixas. Não aprova nenhuma delas e não muda o local de um bem diretamente.</td></tr>
+<tr><td><strong>Controle total</strong> (e o SuperRoot)</td><td>Tudo o de modificação, mais: <strong>autorizar, recusar e confirmar o recebimento</strong> das movimentações; <strong>aprovar ou recusar</strong> classificações e baixas; cadastrar salas e grupos; ajustar a UFESP e os parâmetros da depreciação; e <strong>mudar o local de um bem sem movimentação</strong> (com motivo obrigatório).</td></tr>
+</tbody>
+</table>
+<p class="callout warn"><strong>Quem solicita nunca aprova a própria solicitação</strong>, mesmo tendo controle total. Outra pessoa com controle total precisa autorizar, receber ou aprovar.</p>
+<h2>Regras que valem em todo o módulo</h2>
+<ul>
+<li><strong>O histórico não se apaga.</strong> Toda gravação registra o campo alterado, o valor anterior e o novo, quem fez, quando e de onde (computador, celular ou fila sem sinal).</li>
+<li><strong>O local de um bem só muda por movimentação</strong> (exceto o ajuste direto de quem tem controle total, que exige motivo).</li>
+<li><strong>Nenhum bem é excluído.</strong> O bem baixado sai dos painéis, mas o histórico, o trajeto, as justificativas e os anexos continuam; ele só não pode mais ser editado nem movimentado.</li>
+<li><strong>Cada bem está em uma sala</strong>, e a sala tem um setor e um responsável. O responsável da sala vale para todos os bens que estão nela.</li>
+</ul>
+<h2>Os estados de um bem</h2>
+<table>
+<thead><tr><th>Situação</th><th>O que significa</th></tr></thead>
+<tbody>
+<tr><td><strong>Ativo</strong></td><td>Em uso normal. É a situação de todo bem recém-cadastrado.</td></tr>
+<tr><td><strong>Em manutenção</strong></td><td>Em conserto; continua no cadastro e na sala. Dá para alternar entre Ativo e Em manutenção na edição.</td></tr>
+<tr><td><strong>Inservível</strong></td><td>Não serve mais para o uso. Só vai para uma sala do setor "Depósito inservível". Passa a esse estado por uma lista aprovada.</td></tr>
+<tr><td><strong>Extraviado</strong></td><td>Não foi localizado. Não tem lugar físico (o histórico guarda a última sala) e não pode ser movimentado.</td></tr>
+<tr><td><strong>Baixado</strong></td><td>Saiu do patrimônio. Não é editado nem movimentado e não entra nos painéis.</td></tr>
+</tbody>
+</table>
+<p>O caminho é sempre o mesmo: de <strong>Ativo</strong> ou <strong>Em manutenção</strong> para <strong>Inservível</strong> ou <strong>Extraviado</strong>, e depois para <strong>Baixado</strong>. Cada passo é pedido por quem tem Modificação e só vale depois da aprovação de quem tem Controle total.</p>

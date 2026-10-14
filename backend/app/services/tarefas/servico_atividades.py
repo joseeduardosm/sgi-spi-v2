@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.banco import agora_utc, hoje_sao_paulo
 from app.models.tarefas import TIPOS_ATIVIDADE, AtividadeTarefa, SeguidorTarefa, Tarefa
 from app.models.usuario import Usuario
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.servico_auditoria import auditar
 from app.services.tarefas import servico_tarefas as servico
 from app.services.tarefas.servico_tarefas import ErroTarefa
@@ -74,7 +74,7 @@ def criar(sessao: Session, autor: Usuario, tarefa: Tarefa, dados: DadosAtividade
     if responsavel != autor.id:
         servico._avisar(sessao, {responsavel}, f"Atividade agendada para você: {atividade.resumo}",
                         f"{servico._nome(autor)} agendou para você ({ROTULOS_TIPO[atividade.tipo]}), até {atividade.prazo:%d/%m/%Y}, na tarefa {servico._rotulo(tarefa)}.",
-                        tarefa, f"tarefa-atividade:{atividade.id}", autor=autor)
+                        tarefa, f"tarefa-atividade:{atividade.id}", autor=autor, evento="tarefas.atividade_agendada")
     auditar(sessao, autor.login, "tarefas.atividade.criar", servico._rotulo(tarefa), atividade.resumo, autor_id=autor.id, alvo_tipo="tarefa", alvo_id=tarefa.id)
     sessao.commit()
     return atividade
@@ -103,7 +103,7 @@ def atualizar(sessao: Session, autor: Usuario, atividade: AtividadeTarefa, taref
     if dados.responsavel_id and dados.responsavel_id != atividade.responsavel_id:
         servico._usuario_ativo(sessao, dados.responsavel_id)
         atividade.responsavel_id = dados.responsavel_id
-    servico_mensagens.encerrar(sessao, prefixo=f"tarefa-atividade-lembrete:{atividade.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"tarefa-atividade-lembrete:{atividade.id}:")
     sessao.commit()
     return atividade
 
@@ -114,18 +114,18 @@ def concluir(sessao: Session, autor: Usuario, atividade: AtividadeTarefa, tarefa
         raise ErroTarefa("A atividade já foi concluída.", 409, "conflito")
     atividade.concluida_em, atividade.concluida_por_id, atividade.feedback = agora_utc(), autor.id, feedback.strip()
     servico._evento(sessao, tarefa, "atividade", autor, f"Atividade concluída: {ROTULOS_TIPO[atividade.tipo]} · {atividade.resumo}", atividade.feedback)
-    servico_mensagens.encerrar(sessao, prefixo=f"tarefa-atividade-lembrete:{atividade.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"tarefa-atividade-lembrete:{atividade.id}:")
     if atividade.criada_por_id and atividade.criada_por_id != autor.id:
         servico._avisar(sessao, {atividade.criada_por_id}, f"Atividade concluída: {atividade.resumo}",
                         f"{servico._nome(autor)} concluiu a atividade \"{atividade.resumo}\" da tarefa {servico._rotulo(tarefa)}."
-                        + (f"\n\nFeedback: {atividade.feedback}" if atividade.feedback else ""), tarefa, f"tarefa-atividade-feita:{atividade.id}", autor=autor, categoria="comunicado")
+                        + (f"\n\nFeedback: {atividade.feedback}" if atividade.feedback else ""), tarefa, f"tarefa-atividade-feita:{atividade.id}", autor=autor, categoria="comunicado", evento="tarefas.atividade_concluida")
     sessao.commit()
     return atividade
 
 
 def excluir(sessao: Session, autor: Usuario, atividade: AtividadeTarefa, tarefa: Tarefa) -> None:
     servico._exigir(_pode_mexer(sessao, autor, atividade, tarefa), "Você não pode excluir esta atividade.")
-    servico_mensagens.encerrar(sessao, prefixo=f"tarefa-atividade-lembrete:{atividade.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"tarefa-atividade-lembrete:{atividade.id}:")
     sessao.delete(atividade)
     sessao.commit()
 
@@ -153,8 +153,7 @@ def lembrar(sessao: Session, dia: date | None = None) -> dict[str, int]:
         servico._avisar(
             sessao, quem, f"{'Atividade atrasada' if atrasada else 'Atividade para hoje'}: {atividade.resumo}",
             f"{ROTULOS_TIPO[atividade.tipo]} da tarefa {servico._rotulo(tarefa)}, prazo {atividade.prazo:%d/%m/%Y}.", tarefa,
-            f"tarefa-atividade-lembrete:{atividade.id}:{dia}", categoria="prazo", prioridade="alta" if atrasada else "normal",
-        )
+            f"tarefa-atividade-lembrete:{atividade.id}:{dia}", categoria="prazo", prioridade="alta" if atrasada else "normal", evento="tarefas.atividade_lembrete")
         contagem["atrasadas" if atrasada else "hoje"] += 1
     sessao.commit()
     return contagem

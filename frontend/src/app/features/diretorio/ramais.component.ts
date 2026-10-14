@@ -14,13 +14,14 @@ import { DiretorioApiService } from './diretorio-api.service';
 import { PreferenciasDiretorioComponent } from './preferencias-diretorio.component';
 import { AvatarComponent } from './avatar.component';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 // Página maior para preencher telas largas (a API aceita até 200)
 const TAMANHO_PAGINA = 60;
 const CHAVE_MODO = 'diretorio.modo';
 
 @Component({
   selector: 'app-ramais',
-  imports: [PaginacaoComponent, TrilhaComponent, CartaoContatoComponent, DetalheContatoComponent, PreferenciasDiretorioComponent, AvatarComponent],
+  imports: [EsqueletoComponent, PaginacaoComponent, TrilhaComponent, CartaoContatoComponent, DetalheContatoComponent, PreferenciasDiretorioComponent, AvatarComponent],
   template: `
     <div class="cabecalho-pagina sem-impressao">
       <div>
@@ -62,7 +63,7 @@ const CHAVE_MODO = 'diretorio.modo';
         <div class="grade-cartoes-visita">
           @for (c of itens(); track c.id) {
             <app-cartao-contato [contato]="c" (abrir)="aberto.set($event.id)" (favoritar)="favoritar($event)" />
-          } @empty { <p class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Nenhum contato encontrado.' }}</p> }
+          } @empty { <div class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Nenhum contato encontrado.' }} }</div> }
         </div>
       } @else {
         <div class="tabela-gestao-envoltorio">
@@ -75,7 +76,7 @@ const CHAVE_MODO = 'diretorio.modo';
                   <td><strong>{{ c.nome }}</strong>@if (selo(c)) { <small class="selo-ferias">🌴 {{ selo(c) }}</small> }</td>
                   <td>{{ c.setor }}</td><td>{{ c.cargo }}</td><td><strong>{{ c.ramal }}</strong></td><td>{{ c.email }}</td><td>{{ c.local }}</td>
                 </tr>
-              } @empty { <tr><td colspan="7" class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Nenhum contato encontrado.' }}</td></tr> }
+              } @empty { <tr><td colspan="7" class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="tabela" [colunas]="7" [linhas]="4" /> } @else { {{ 'Nenhum contato encontrado.' }} }</td></tr> }
             </tbody>
           </table>
         </div>

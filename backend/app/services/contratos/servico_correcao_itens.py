@@ -18,7 +18,7 @@ from app.core.banco import agora_utc
 from app.models.contratos import Contrato, CorrecaoItens, HistoricoItemContrato, ItemContrato
 from app.models.usuario import Usuario
 from app.schemas.contratos.correcoes import GravacaoCorrecao
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.contratos import calculos, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_competencias import _periodos_por_inicio, competencias_abertas, sincronizar_abertas, sincronizar_competencia
@@ -147,9 +147,9 @@ def _equipe_ids(contrato: Contrato) -> set[int]:
 
 
 def _avisar(sessao: Session, contrato: Contrato, correcao: CorrecaoItens, assunto: str, corpo: str, evento: str, autor: Usuario, extra_ids: set[int] | None = None) -> None:
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, sorted(_equipe_ids(contrato) | (extra_ids or set())), assunto, corpo, chave=f"correcao-itens:{correcao.id}:{evento}",
-        link=f"/contratos/{contrato.id}?aba=correcoes", contrato_id=contrato.id, email=True, autor=autor)
+        link=f"/contratos/{contrato.id}?aba=correcoes", contrato_id=contrato.id, autor=autor, evento="contratos.correcao_itens")
 
 
 def listar(sessao: Session, contrato_id: uuid.UUID) -> list[CorrecaoItens]:

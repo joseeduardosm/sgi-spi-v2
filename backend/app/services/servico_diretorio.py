@@ -25,7 +25,7 @@ from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
 from app.models.rh import Afastamento
 from app.models.usuario import Usuario
 from app.schemas.diretorio import Aniversariante, Contato, ContatoDetalhe, ContatoResumo, OpcoesFiltro, PaginaContatos, Parabens
-from app.services import servico_anexos, servico_mensagens
+from app.services import servico_anexos, notificacoes
 
 CATEGORIA_FOTO = "usuario-foto"
 LADO_FOTO = 400
@@ -317,10 +317,9 @@ def parabenizar(sessao: Session, usuario: Usuario, alvo_id: int, texto: str, hoj
         raise ErroDiretorio("Você já deixou um recado para esta pessoa. Exclua o anterior para escrever outro.", 409, "conflito")
     recado = ParabensAniversario(aniversariante_id=alvo.id, autor_id=usuario.id, autor_nome=_nome(usuario), ano=ano, texto=texto)
     sessao.add(recado)
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, [alvo.id], f"{_nome(usuario)} deixou um recado de aniversário para você", f"{texto}\n\n— {_nome(usuario)}",
-        chave=f"parabens:{alvo.id}:{usuario.id}:{ano}", link="/", autor=None,
-    )
+        chave=f"parabens:{alvo.id}:{usuario.id}:{ano}", link="/", autor=None, evento="diretorio.recado_aniversario")
     sessao.commit()
     return Parabens(id=recado.id, autor_id=usuario.id, autor_nome=recado.autor_nome, texto=texto, criado_em=recado.criado_em, meu=True)
 
@@ -354,9 +353,8 @@ def enviar_parabens_do_dia(sessao: Session, hoje: date | None = None) -> list:
     for p in pessoas:
         if data_no_ano(p.data_nascimento, hoje.year) != hoje:
             continue
-        m = servico_mensagens.notificar(
-            sessao, [p.id], "Feliz aniversário!", corpo_parabens_automatico(_nome(p)), chave=f"aniversario:{p.id}:{hoje.isoformat()}", link="/", email=True,
-        )
+        m = notificacoes.notificar(
+            sessao, [p.id], "Feliz aniversário!", corpo_parabens_automatico(_nome(p)), chave=f"aniversario:{p.id}:{hoje.isoformat()}", link="/", evento="diretorio.feliz_aniversario")
         if m is not None:
             criadas.append(m)
     sessao.commit()

@@ -1,5 +1,5 @@
 @if (numeroTarefa()) {
-  @if (!pagina()) { <div class="fundo-modal" role="presentation" (click)="fechar.emit()"></div> }
+  @if (!pagina()) { <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar.emit()"></div> }
   <section class="janela-tarefa-trello" [class.pagina-tarefa]="pagina()" [attr.role]="pagina() ? null : 'dialog'" [attr.aria-modal]="pagina() ? null : 'true'" aria-labelledby="titulo-janela-detalhe">
     @if (tarefa(); as t) {
       <!-- Cabeçalho: número, equipe, título editável no lugar e a etapa atual -->
@@ -47,14 +47,14 @@
               @if (pode('editar') && editandoCampo() !== 'descricao') { <button type="button" class="acao-secundaria pequena" (click)="editarDescricao()">Editar</button> }
             </div>
             @if (editandoCampo() === 'descricao') {
-              <textarea name="descricao" rows="7" maxlength="20000" aria-label="Descrição" [(ngModel)]="edicaoDescricao"></textarea>
+              @defer (on idle) { <app-editor-rico [(html)]="edicaoDescricao" [colarFormatado]="true" rotulo="Descrição da tarefa" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="3" /> }
               <div class="acoes-formulario">
                 <button type="button" class="acao-secundaria" (click)="editandoCampo.set(null)">Cancelar</button>
                 <button type="button" class="acao-primaria" (click)="salvarDescricao()">Salvar</button>
               </div>
             } @else {
-              <div class="descricao-tarefa" [class.vazia]="!t.descricao" (dblclick)="pode('editar') && editarDescricao()">
-                @if (t.descricao) { <span [innerHTML]="t.descricao | linkificar"></span> } @else { Sem descrição.@if (pode('editar')) { Clique em Editar para detalhar o que precisa ser feito. } }
+              <div class="descricao-tarefa" [class.descricao-rica]="descricaoEhHtml(t.descricao)" [class.vazia]="!t.descricao" (dblclick)="pode('editar') && editarDescricao()">
+                @if (t.descricao) { <span [innerHTML]="t.descricao | descricaoTarefa"></span> } @else { Sem descrição.@if (pode('editar')) { Clique em Editar para detalhar o que precisa ser feito. } }
               </div>
             }
           </section>
@@ -71,7 +71,7 @@
           <!-- Checklist -->
           @if (!t.tarefa_pai && (t.subtarefas.length || t.pode_criar_subtarefa)) {
             <section class="bloco-janela">
-              <div class="titulo-bloco"><h3>Subtarefas</h3>@if (t.subtarefas.length) { <small>{{ concluidasSub(t) }} de {{ t.subtarefas.length }}</small> }
+              <div class="titulo-bloco"><h3>Subtarefas</h3>@if (t.pode_criar_subtarefa) { <a class="acao-primaria acao-pequena" [routerLink]="['/tarefas', t.numero, 'subtarefas', 'nova']">+ Nova subtarefa</a> }@if (t.subtarefas.length) { <small>{{ concluidasSub(t) }} de {{ t.subtarefas.length }}</small> }
                 @if (t.subtarefas.length) { <a class="acao-secundaria acao-pequena" [routerLink]="['/tarefas', t.numero, 'subtarefas']" title="Quadro só das subtarefas, com andamento independente">Abrir quadro de subtarefas</a> }</div>
               @if (t.subtarefas.length) {
                 <div class="barra-progresso" role="progressbar" [attr.aria-valuenow]="concluidasSub(t)" aria-valuemin="0" [attr.aria-valuemax]="t.subtarefas.length"><i [style.width.%]="100 * concluidasSub(t) / t.subtarefas.length"></i></div>
@@ -82,12 +82,6 @@
                       <small>{{ rotulosStatus[s.status] }}@if (s.responsavel) { · {{ s.responsavel.nome }} } · {{ s.prazo | date: 'dd/MM' }}</small></li>
                   }
                 </ul>
-              }
-              @if (t.pode_criar_subtarefa) {
-                <form class="nova-subtarefa" (submit)="$event.preventDefault(); criarSubtarefa()">
-                  <input name="subtarefa" maxlength="200" placeholder="Nova subtarefa (herda equipe, marcadores, responsáveis e prazo)" aria-label="Título da subtarefa" [(ngModel)]="novaSubtarefa" />
-                  <button type="submit" class="acao-secundaria" [disabled]="!novaSubtarefa.trim()">Adicionar</button>
-                </form>
               }
             </section>
           } @else if (t.tarefa_pai) {
@@ -180,8 +174,8 @@
                     <button type="button" class="link-simples" aria-label="Cancelar a resposta" (click)="cancelarResposta()">×</button>
                   </div>
                 }
-                <textarea #campoComentario name="comentario" rows="2" maxlength="4000" placeholder="Escreva um comentário… (os envolvidos são avisados; use @login para avisar alguém)" aria-label="Comentário"
-                          [(ngModel)]="textoComentario"></textarea>
+                <textarea #campoComentario name="comentario" rows="2" maxlength="4000" placeholder="Escreva um comentário… (os envolvidos são avisados; use @login para avisar alguém; Ctrl+V cola prints e arquivos)" aria-label="Comentário"
+                          (paste)="colarArquivos($event)" [(ngModel)]="textoComentario"></textarea>
                 @if (pessoasMencao().length) {
                   <select class="mencionar" name="mencionar" aria-label="Mencionar alguém" [ngModel]="''" (ngModelChange)="mencionar($event)">
                     <option value="">@ Mencionar alguém…</option>
@@ -215,8 +209,8 @@
                       <div class="topo-evento">
                         <strong>{{ e.titulo }}</strong>
                         <small>{{ e.autor }} · {{ e.criado_em | date: 'HH:mm' }}</small>
-                        @if (pode('comentar') && e.tipo === 'comentario' && !e.removido && e.texto) {
-                          <button type="button" class="link-simples responder-evento" title="Responder a este comentário" (click)="responder(e)">Responder</button>
+                        @if (pode('comentar') && e.tipo !== 'removido' && !e.removido && e.texto) {
+                          <button type="button" class="link-simples responder-evento" title="Responder a este registro" (click)="responder(e)">Responder</button>
                         }
                         @if (superRoot() && !e.removido && e.tipo !== 'removido') {
                           <button type="button" class="link-simples remover-evento" (click)="pedirRemocao(e)" title="Remover (SuperRoot)">Remover</button>
@@ -269,7 +263,7 @@
                 }
               </ol>
             } @empty {
-              <p class="dica-formulario">{{ carregandoEventos() ? 'Carregando…' : 'Nada com este filtro.' }}</p>
+              <div class="dica-formulario">@if (carregandoEventos()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Nada com este filtro.' }} }</div>
             }
             @if (temMais()) {
               <button type="button" class="acao-secundaria carregar-mais" [disabled]="carregandoEventos()" (click)="carregarEventos(false)">Carregar mais</button>
@@ -394,8 +388,8 @@
       <app-janela-tarefa [(modo)]="modoJanela" [tarefa]="t" (concluido)="atualizar($event)" (falhou)="recarregar()" />
 
       @if (eventoRemover(); as ev) {
-        <div class="fundo-modal sobre-janela" role="presentation" (click)="eventoRemover.set(null)"></div>
-        <section class="modal-portal sobre-janela" role="dialog" aria-modal="true" aria-labelledby="titulo-remocao">
+        <div animate.leave="mov-fundo-sai" class="fundo-modal sobre-janela" role="presentation" (click)="eventoRemover.set(null)"></div>
+        <section animate.leave="mov-modal-sai" class="modal-portal sobre-janela" role="dialog" aria-modal="true" aria-labelledby="titulo-remocao">
           <header>
             <div><span class="modal-sobretitulo">SuperRoot</span><h2 id="titulo-remocao">Remover da linha do tempo</h2></div>
             <button type="button" aria-label="Fechar" (click)="eventoRemover.set(null)">×</button>
@@ -418,7 +412,7 @@
         <button type="button" class="fechar-janela" aria-label="Fechar" (click)="fechar.emit()">×</button></header>
       <p class="estado-vazio">A tarefa não existe ou você não tem acesso a ela.</p>
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="formulario" [linhas]="5" />
     }
   </section>
 }

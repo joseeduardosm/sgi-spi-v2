@@ -187,6 +187,8 @@ def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, ce
     # Pendência no painel do Financeiro (membro do setor filho)
     pendencias = cliente.get("/api/contratos/painel", headers=cabecalho(cliente, "financeiro1")).json()["minhas_pendencias"]
     assert [p["tipo"] for p in pendencias] == ["retencao"] and "conferir a retenção" in pendencias[0]["descricao"]
+    # O Financeiro fora da equipe não recebe alertas de risco: só a tarefa pendente da retenção
+    assert cliente.get("/api/contratos/painel", headers=cabecalho(cliente, "financeiro1")).json()["alertas"] == []
 
     # Financeiro pelo Departamento salva: PDF gerado, etapa avança e e-mail à equipe com o link da próxima etapa
     SmtpSimulado.enviadas.clear()

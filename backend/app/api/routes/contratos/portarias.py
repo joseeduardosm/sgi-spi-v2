@@ -4,7 +4,7 @@
 
 - `/contratos/{contrato_id}/portarias`: painel, solicitação (reserva o número no Protocolo), reenvio, aceite, devolução, cancelamento,
   exportação da minuta (Word/PDF com marca d'água "MINUTA") e envio do PDF publicado.
-- `/portarias/autoridades`: cadastro das autoridades signatárias (escrita só com controle total em Contratos).
+- `/portarias/autoridades`: cadastro das autoridades signatárias (escrita: SuperRoot, controle total em Contratos ou gestor/suplente de um contrato).
 """
 
 import uuid
@@ -14,10 +14,10 @@ from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, statu
 from sqlalchemy.orm import Session
 
 from app.api.respostas import RESPOSTAS_AUTENTICADAS, resposta_nao_encontrado
-from app.api.routes.contratos.comum import ARQUIVO_RECUSADO, SEM_VINCULO, controle_total, pode_ler, pode_modificar, traduzir_erros
+from app.api.routes.contratos.comum import ARQUIVO_RECUSADO, SEM_VINCULO, pode_ler, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.models.usuario import Usuario
-from app.schemas.contratos.portaria import GravacaoAutoridade, LeituraAutoridade, MotivoPortaria, PainelPortarias, SolicitacaoPortaria
+from app.schemas.contratos.portaria import GravacaoAutoridade, LeituraAutoridade, MotivoPortaria, PainelPortarias, SolicitacaoPortaria, UsuarioAutoridade
 from app.services.contratos import servico_portaria
 
 TAGS = ["Contratos: portaria"]
@@ -102,25 +102,37 @@ def listar_autoridades(sessao: Session = Depends(obter_sessao), _: Usuario = Dep
     return servico_portaria.autoridades_com_nomes(sessao)
 
 
+@roteador.get("/portarias/autoridades/usuarios", response_model=list[UsuarioAutoridade], tags=TAGS, summary="Usuários para escolher como autoridade",
+              description="Usuários ativos (busca por nome ou login, até 20) com cargo e departamento do cadastro, que preenchem o formulário da autoridade. SuperRoot, controle total em Contratos ou gestor (ou suplente) de um contrato.")
+def usuarios_para_autoridade(busca: str = Query("", max_length=100), sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    with traduzir_erros():
+        servico_portaria.exigir_gestao_autoridades(sessao, autor)
+    return [UsuarioAutoridade(id=u.id, login=u.login, nome_completo=u.nome_completo or u.login, cargo=u.cargo or "", departamento=u.departamento or "")
+            for u in servico_portaria.buscar_usuarios(sessao, busca)]
+
+
 @roteador.post("/portarias/autoridades", response_model=list[LeituraAutoridade], status_code=status.HTTP_201_CREATED, tags=TAGS, summary="Cadastrar autoridade",
-               description="Só controle total em Contratos. Devolve a lista atualizada.")
-def criar_autoridade(dados: GravacaoAutoridade, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(controle_total)):
+               description="SuperRoot, controle total em Contratos ou gestor (ou suplente) de um contrato. Devolve a lista atualizada.")
+def criar_autoridade(dados: GravacaoAutoridade, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     with traduzir_erros(sessao):
+        servico_portaria.exigir_gestao_autoridades(sessao, autor)
         servico_portaria.criar_autoridade(sessao, dados, autor)
         return servico_portaria.autoridades_com_nomes(sessao)
 
 
 @roteador.put("/portarias/autoridades/{autoridade_id}", response_model=list[LeituraAutoridade], tags=TAGS, summary="Alterar autoridade",
-              description="Só controle total em Contratos. Portarias já criadas mantêm o retrato da autoridade. Devolve a lista atualizada.", responses=resposta_nao_encontrado("Autoridade"))
-def alterar_autoridade(autoridade_id: uuid.UUID, dados: GravacaoAutoridade, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(controle_total)):
+              description="SuperRoot, controle total em Contratos ou gestor (ou suplente) de um contrato. Portarias já criadas mantêm o retrato da autoridade. Devolve a lista atualizada.", responses=resposta_nao_encontrado("Autoridade"))
+def alterar_autoridade(autoridade_id: uuid.UUID, dados: GravacaoAutoridade, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     with traduzir_erros(sessao):
+        servico_portaria.exigir_gestao_autoridades(sessao, autor)
         servico_portaria.alterar_autoridade(sessao, autoridade_id, dados, autor)
         return servico_portaria.autoridades_com_nomes(sessao)
 
 
 @roteador.delete("/portarias/autoridades/{autoridade_id}", response_model=list[LeituraAutoridade], tags=TAGS, summary="Excluir autoridade",
-                 description="Só controle total em Contratos; autoridades que já assinaram portarias devem ser desativadas (409).", responses=resposta_nao_encontrado("Autoridade"))
-def excluir_autoridade(autoridade_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(controle_total)):
+                 description="SuperRoot, controle total ou gestor/suplente de contrato; autoridades que já assinaram portarias devem ser desativadas (409).", responses=resposta_nao_encontrado("Autoridade"))
+def excluir_autoridade(autoridade_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     with traduzir_erros(sessao):
+        servico_portaria.exigir_gestao_autoridades(sessao, autor)
         servico_portaria.excluir_autoridade(sessao, autoridade_id, autor)
         return servico_portaria.autoridades_com_nomes(sessao)

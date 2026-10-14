@@ -1,7 +1,9 @@
 # SGI SPI Alertas (cliente para Windows)
 
-Aplicativo de bandeja que mostra as mensagens do SGI (mensageria) como **alertas no canto inferior direito da tela**, perto do relógio.
-Código em `client/`; o instalador pronto é `client/SgiSpiAlertas-<versão>.msi`. Não há endpoint novo: o aplicativo usa a API existente.
+Aplicativo de bandeja que mostra as notificações do SGI como **alertas no canto inferior direito da tela**, perto do relógio.
+Código em `client/`; o instalador pronto é `client/SgiSpiAlertas-<versão>.msi`.
+
+> **Notificações (desktop):** o aplicativo instalado **não mudou** e não precisa de MSI novo. Ele continua chamando `GET /api/mensagens/resumo` e `GET /api/mensagens?estado=pendentes…`, rotas de **compatibilidade permanente** mantidas pelo servidor no mesmo formato de sempre (ver [notificacoes.md](endpoints/notificacoes.md)). A diferença: essas rotas devolvem **só as notificações em que a pessoa ligou o canal Desktop** nas Preferências (`/notificacoes` › Preferências). Como todos os canais começam desmarcados, cada pessoa precisa marcar "Desktop" nos eventos que quer ver como alerta; o botão **Testar** do canal Desktop cria um alerta de teste que expira em 3 minutos. O "não perturbe" também vale para o desktop. O aviso único de primeira execução ("Você tem N mensagem(ns) pendente(s)") conta só as entregas de desktop.
 
 ## Como funciona
 - **Instalação:** MSI por máquina (precisa de administrador) em `C:\Program Files\SGI SPI Alertas`. Não exige .NET no PC (o programa leva o próprio). Windows 10 e 11, 64 bits. Atalho "SGI SPI Alertas" no menu Iniciar.
@@ -18,6 +20,9 @@ Os padrões estão no programa. Para trocar servidor, IP alternativo ou interval
 { "Servidor": "portal.spi.sp.gov.br", "IpAlternativo": "10.23.0.254", "IntervaloSegundos": 60, "SegundosAlerta": 15 }
 ```
 O MSI não inclui esse arquivo, então atualizações não o sobrescrevem.
+
+## Como o usuário baixa
+A tela **Notificações** (`/notificacoes`) tem o botão **⬇ Baixar o SGI Alertas**, que chama `GET /api/notificacoes/cliente-windows` e entrega o `client/SgiSpiAlertas-<versão>.msi` de maior versão. Depois de instalar, a pessoa liga o canal **Desktop** em Notificações › Preferências.
 
 ## Como gerar o instalador
 `client/construir.sh` publica o aplicativo (C#/.NET 8, `win-x64`, um único .exe) e monta o MSI com `wixl`. Neste servidor: .NET 8 SDK da Microsoft em `~/.dotnet` e os pacotes `wixl` e `msitools`. A versão vem de `<Version>` em `client/SgiAlertas/SgiAlertas.csproj`.

@@ -6,13 +6,15 @@ import { Component, inject, input, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
+import { FeixeBordaComponent } from '../../../shared/componentes/feixe-borda/feixe-borda.component';
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 
 /** Tela de login: valida o preenchimento, chama a API e leva o usuário ao destino pedido. */
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, FeixeBordaComponent],
   templateUrl: './login.component.html',
+  styles: `.cartao-login { position: relative; overflow: hidden; }`,
 })
 export class LoginComponent {
   private readonly autenticacao = inject(AutenticacaoService);

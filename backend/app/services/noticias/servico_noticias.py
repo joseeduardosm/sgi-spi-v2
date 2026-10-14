@@ -21,11 +21,11 @@ from sqlalchemy.orm import Session
 from app.core.banco import agora_utc
 from app.models.acl import NivelAcl
 from app.models.anexo import Anexo
-from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.notificacao import EntregaNotificacao, Notificacao
 from app.models.noticias import AnexoNoticia, AtalhoPortal, CategoriaNoticia, ConfiguracaoPortal, Noticia, RevisaoNoticia
 from app.models.setor import Setor
 from app.models.usuario import Usuario
-from app.services import servico_acl, servico_anexos, servico_mensagens
+from app.services import servico_acl, servico_anexos, notificacoes
 from app.services.noticias import imagens
 from app.services.noticias.sanitizacao import limpar_html, slug_de, texto_puro
 from app.services.servico_auditoria import auditar
@@ -327,11 +327,10 @@ def enviar_revisao(sessao: Session, autor: Usuario, noticia: Noticia) -> Noticia
     noticia.versao += 1
     _revisao(sessao, noticia, autor, "Enviada para aprovação")
     quando = f"agendada para {_data_hora(noticia.publicar_em)}" if noticia.publicar_em else "publicação imediata após a aprovação"
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, [u.id for u in aprovadores(sessao)], f"Notícia aguardando aprovação: {noticia.titulo}",
         f"{_nome(autor)} enviou a notícia \"{noticia.titulo}\" para aprovação ({quando}).",
-        chave=f"noticia-aprovacao:{noticia.id}:{noticia.versao}", categoria="pendencia", link=_link_gestao(noticia), email=True, autor=autor,
-    )
+        chave=f"noticia-aprovacao:{noticia.id}:{noticia.versao}", categoria="pendencia", link=_link_gestao(noticia), autor=autor, evento="noticias.aguardando_aprovacao")
     auditar(sessao, autor.login, "noticias.enviar_revisao", noticia.titulo, autor_id=autor.id, alvo_tipo="noticia", alvo_id=noticia.id)
     sessao.commit()
     return noticia
@@ -346,11 +345,11 @@ def aprovar(sessao: Session, aprovador: Usuario, noticia: Noticia, publicar_em: 
     noticia.situacao, noticia.aprovado_por_id, noticia.aprovado_por_nome, noticia.aprovado_em = "aprovada", aprovador.id, _nome(aprovador), agora
     noticia.versao += 1
     _revisao(sessao, noticia, aprovador, "Aprovada")
-    servico_mensagens.encerrar(sessao, prefixo=f"noticia-aprovacao:{noticia.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"noticia-aprovacao:{noticia.id}:")
     texto = "já está no portal" if visivel(noticia, agora) else f"será publicada em {_data_hora(noticia.publicar_em)}"
-    servico_mensagens.notificar(sessao, [noticia.autor_id], f"Notícia aprovada: {noticia.titulo}",
+    notificacoes.notificar(sessao, [noticia.autor_id], f"Notícia aprovada: {noticia.titulo}",
                                 f"{_nome(aprovador)} aprovou a notícia \"{noticia.titulo}\", que {texto}.",
-                                chave=f"noticia-aprovada:{noticia.id}:{noticia.versao}", link=_link_gestao(noticia), email=True, autor=aprovador)
+                                chave=f"noticia-aprovada:{noticia.id}:{noticia.versao}", link=_link_gestao(noticia), autor=aprovador, evento="noticias.aprovada")
     auditar(sessao, aprovador.login, "noticias.aprovar", noticia.titulo, autor_id=aprovador.id, alvo_tipo="noticia", alvo_id=noticia.id,
             dados={"publicar_em": noticia.publicar_em.isoformat()})
     if visivel(noticia, agora):
@@ -367,11 +366,10 @@ def devolver(sessao: Session, aprovador: Usuario, noticia: Noticia, motivo: str)
     noticia.situacao, noticia.motivo_devolucao = "devolvida", motivo
     noticia.versao += 1
     _revisao(sessao, noticia, aprovador, "Devolvida para ajustes")
-    servico_mensagens.encerrar(sessao, prefixo=f"noticia-aprovacao:{noticia.id}:")
-    servico_mensagens.notificar(sessao, [noticia.autor_id], f"Notícia devolvida para ajustes: {noticia.titulo}",
+    notificacoes.encerrar(sessao, prefixo=f"noticia-aprovacao:{noticia.id}:")
+    notificacoes.notificar(sessao, [noticia.autor_id], f"Notícia devolvida para ajustes: {noticia.titulo}",
                                 f"{_nome(aprovador)} devolveu a notícia \"{noticia.titulo}\".\n\nO que ajustar: {motivo}",
-                                chave=f"noticia-devolvida:{noticia.id}:{noticia.versao}", categoria="pendencia", link=_link_gestao(noticia),
-                                email=True, autor=aprovador)
+                                chave=f"noticia-devolvida:{noticia.id}:{noticia.versao}", categoria="pendencia", link=_link_gestao(noticia), autor=aprovador, evento="noticias.devolvida")
     auditar(sessao, aprovador.login, "noticias.devolver", noticia.titulo, autor_id=aprovador.id, alvo_tipo="noticia", alvo_id=noticia.id,
             dados={"motivo": motivo})
     sessao.commit()
@@ -391,7 +389,7 @@ def arquivar(sessao: Session, aprovador: Usuario, noticia: Noticia, arquivar_: b
 
 def excluir(sessao: Session, usuario: Usuario, noticia: Noticia) -> None:
     _exigir("excluir" in acoes(sessao, usuario, noticia), "Você não pode excluir esta notícia.")
-    servico_mensagens.encerrar(sessao, prefixo=f"noticia-aprovacao:{noticia.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"noticia-aprovacao:{noticia.id}:")
     auditar(sessao, usuario.login, "noticias.excluir", noticia.titulo, autor_id=usuario.id, alvo_tipo="noticia", alvo_id=noticia.id)
     sessao.delete(noticia)
     sessao.commit()
@@ -423,11 +421,10 @@ def _avisar_publicacao(sessao: Session, noticia: Noticia) -> int:
     corpo = (noticia.linha_fina or texto_puro(noticia.corpo_html)[:280])
     if noticia.exige_ciencia:
         corpo += "\n\nEste comunicado pede a sua ciência: abra a mensagem e registre que leu."
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, ids, ("Comunicado: " if noticia.exige_ciencia else "Notícia: ") + noticia.titulo, corpo,
         chave=f"noticia-aviso:{noticia.id}", categoria="comunicado", prioridade="alta" if noticia.exige_ciencia else "normal",
-        link=f"/noticias/{noticia.slug}", email=True, abrir_em_janela=noticia.exige_ciencia,
-    )
+        link=f"/noticias/{noticia.slug}", abrir_em_janela=noticia.exige_ciencia, evento="noticias.publicada")
     noticia.aviso_enviado_em = agora_utc()
     return len(ids)
 
@@ -445,8 +442,8 @@ def processar_publicacoes(sessao: Session, agora: datetime | None = None) -> int
 def ciencias(sessao: Session, noticia: Noticia) -> tuple[int, int, list[tuple[str, datetime | None]]]:
     """Destinatários do aviso, quantos deram ciência e a lista (nome, ciente_em)."""
     entregas = list(sessao.execute(
-        select(Usuario, EntregaMensagem.ciente_em).join(EntregaMensagem, EntregaMensagem.destinatario_id == Usuario.id)
-        .join(Mensagem).where(Mensagem.chave == f"noticia-aviso:{noticia.id}").order_by(Usuario.nome_completo)
+        select(Usuario, EntregaNotificacao.ciente_em).join(EntregaNotificacao, EntregaNotificacao.destinatario_id == Usuario.id)
+        .join(Notificacao).where(Notificacao.chave == f"noticia-aviso:{noticia.id}").order_by(Usuario.nome_completo)
     ))
     lista = [(_nome(u), _comparavel(ciente)) for u, ciente in entregas]
     return len(lista), sum(1 for _, c in lista if c), lista

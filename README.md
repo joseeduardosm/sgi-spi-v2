@@ -1,6 +1,6 @@
 # SGI SPI – Sistema de Gestão Integrada
 
-Sistema de Gestão Integrada da **Secretaria de Parcerias em Investimentos (SPI)**, Governo do Estado de São Paulo (antes chamado contratos-spi): contratos, RH, mensageria e administração.
+Sistema de Gestão Integrada da **Secretaria de Parcerias em Investimentos (SPI)**, Governo do Estado de São Paulo (antes chamado contratos-spi): contratos, RH, notificações e administração.
 
 - **Backend:** Python 3.12 + FastAPI (`backend/`)
 - **Frontend:** Angular 22 + Bootstrap 5.3 (`frontend/`)
@@ -141,6 +141,9 @@ npx ng build              # produção → dist/sgi-spi/browser (servido pelo Ng
 | `ORIGENS_CORS` | Lista JSON. Só é necessária se o frontend for servido por outra origem |
 | `ANEXOS_DIRETORIO` | Onde os PDFs são gravados. Padrão `/home/administrador/projeto/dados/anexos`. O usuário do serviço precisa de permissão de escrita |
 | `URL_PUBLICA` | Endereço usado nos links dos e-mails (ex.: link direto para a etapa da competência). Produção: `https://portal.spi.sp.gov.br` |
+| `CHAVE_PUBLICA_VAPID`, `CHAVE_PRIVADA_VAPID`, `CONTATO_VAPID` | Notificações do navegador (Web Push). Gere o par com `backend/.venv/bin/python scripts/gerar-chaves-vapid.py` e cole as três linhas; a chave privada é segredo. Sem elas, o canal Navegador fica indisponível na tela de Preferências |
+| `NOTIFICACOES_MESES_NA_CAIXA` | Notificações cientes ou encerradas há mais de N meses (padrão 6) saem da caixa e da busca; continuam no banco |
+| `NOTIFICACOES_DESPACHO` | `thread` (padrão), `sincrono` ou `desligado`: como as notificações saem depois do commit (os testes usam `desligado`) |
 | `ANEXOS_TAMANHO_MAXIMO_MB` | Tamanho máximo de cada PDF. Padrão 20. Mantenha o `client_max_body_size` do Nginx um pouco acima deste valor |
 
 ## Manutenção

@@ -9,6 +9,7 @@ import { Aniversariante, diaMes, PeriodoAniversario, quando, ROTULOS_PERIODO } f
 import { DiretorioApiService } from './diretorio-api.service';
 import { MuralParabensComponent } from './mural-parabens.component';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 const CHAVE_FECHADO = 'diretorio.aniversariantes.fechado_ate';
 const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -22,7 +23,7 @@ function fechadoAte(): number {
 
 @Component({
   selector: 'app-aniversariantes',
-  imports: [AvatarComponent, MuralParabensComponent],
+  imports: [EsqueletoComponent, AvatarComponent, MuralParabensComponent],
   template: `
     @if (visivel()) {
     <section class="cartao-dados aniversariantes" aria-label="Aniversariantes">
@@ -46,7 +47,7 @@ function fechadoAte(): number {
                 {{ a.ja_parabenizei ? 'Ver mural' : (a.pode_parabenizar ? 'Parabenizar' : 'Mural') }}@if (a.total_parabens) { ({{ a.total_parabens }}) }</button>
             }
           </li>
-        } @empty { <li class="estado-vazio">{{ carregando() ? 'Carregando…' : semAniversario() }}</li> }
+        } @empty { <li class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ semAniversario() }} }</li> }
       </ul>
     </section>
     }

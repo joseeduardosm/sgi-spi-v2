@@ -1,0 +1,115 @@
+@if (dados(); as d) {
+  <div class="pref-corpo">
+    <p class="dica-formulario">
+      As notificações chegam <strong>sempre</strong> na caixa (o sino). Os canais abaixo são opcionais e começam desmarcados: marque, por evento, onde quer ser avisado também.
+    </p>
+
+    <!-- Situação do navegador -->
+    <section class="pref-bloco" aria-labelledby="pref-titulo-navegador">
+      <h3 id="pref-titulo-navegador">Notificações do navegador</h3>
+      @if (!d.navegador.disponivel) {
+        <p class="pref-aviso" role="status">{{ d.navegador.explicacao || 'Indisponível neste servidor.' }}</p>
+      } @else {
+        @switch (push.estado()) {
+          @case ('ativo') { <p>Ativado <strong>neste navegador</strong>. {{ d.navegador.inscricoes }} navegador(es) inscrito(s) na sua conta.</p> }
+          @case ('bloqueado') { <p class="pref-aviso" role="status">O navegador bloqueou as notificações deste site. Para liberar: clique no cadeado ao lado do endereço, abra "Configurações do site" e mude "Notificações" para "Permitir"; depois recarregue a página.</p> }
+          @case ('nao_suportado') { <p class="pref-aviso" role="status">Este navegador não suporta notificações. Use o Chrome, o Edge ou o Firefox.</p> }
+          @case ('ios_sem_instalar') { <p class="pref-aviso" role="status">No iPhone e no iPad (iOS 16.4 ou mais), as notificações só funcionam com o SGI instalado: abra no Safari, toque em Compartilhar › "Adicionar à Tela de Início" e abra o SGI pelo ícone novo.</p> }
+          @default { <p>Ainda não ativado neste navegador. Ao marcar uma caixa de "Navegador", o navegador pede a sua permissão.</p> }
+        }
+        <div class="pref-acoes">
+          @if (push.estado() === 'inativo') { <button type="button" class="acao-secundaria" (click)="ativarNavegador()">Ativar neste navegador</button> }
+          @if (push.estado() === 'ativo') { <button type="button" class="acao-secundaria" (click)="desativarNavegador()">Desativar neste navegador</button> }
+        </div>
+      }
+    </section>
+
+    <!-- Matriz evento × canal -->
+    <div class="tabela-gestao-envoltorio">
+      <table class="tabela-gestao pref-matriz">
+        <thead>
+          <tr>
+            <th>Evento</th>
+            @for (c of canais; track c) {
+              <th class="pref-canal">
+                <label class="pref-marca"><input type="checkbox" [name]="'coluna-' + c" [checked]="tudoMarcado(undefined, c)" (change)="alternarGrupo(undefined, c)" [attr.aria-label]="'Marcar a coluna ' + rotulos[c]" /> {{ rotulos[c] }}</label>
+                <button type="button" class="acao-secundaria acao-pequena" [disabled]="testando() !== null" (click)="testar(c)">{{ testando() === c ? 'Testando…' : 'Testar' }}</button>
+              </th>
+            }
+          </tr>
+        </thead>
+        @for (m of d.modulos; track m.chave) {
+          <tbody>
+            <tr class="pref-modulo">
+              <th scope="colgroup"><label class="pref-marca"><input type="checkbox" [name]="'modulo-' + m.chave" [checked]="tudoMarcado(m)" (change)="alternarGrupo(m)" [attr.aria-label]="'Marcar o módulo ' + m.rotulo + ' inteiro'" /> {{ m.rotulo }}</label></th>
+              <td colspan="3"></td>
+            </tr>
+            @for (e of m.eventos; track e.chave) {
+              <tr>
+                <td><strong>{{ e.rotulo }}</strong><small class="pref-descricao">{{ e.descricao }}</small></td>
+                @for (c of canais; track c) {
+                  <td class="pref-celula">
+                    @if (e.canais[c].disponivel) {
+                      <input type="checkbox" [name]="e.chave + c" [checked]="marcada(e.chave, c)" [disabled]="e.canais[c].obrigatorio" (change)="alternar(e.chave, c)"
+                             [attr.aria-label]="e.rotulo + ' por ' + rotulos[c]" />
+                      @if (e.canais[c].obrigatorio) { <small class="pref-obrigatoria">definida pela administração</small> }
+                    } @else { <span class="pref-indisponivel" aria-label="Indisponível">—</span> }
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        }
+      </table>
+    </div>
+
+    <!-- Frequência do e-mail e não perturbe -->
+    <section class="pref-bloco" aria-labelledby="pref-titulo-email">
+      <h3 id="pref-titulo-email">E-mail e "não perturbe"</h3>
+      <div class="pref-grade">
+        <div class="campo">
+          <label for="pref-frequencia">Quando enviar os e-mails</label>
+          <select id="pref-frequencia" name="frequencia" [(ngModel)]="configuracao.frequencia_email" (ngModelChange)="alterado.set(true)">
+            <option value="imediato">Imediato, um e-mail por notificação</option>
+            <option value="diario">Resumo diário (às 7h)</option>
+            <option value="semanal">Resumo semanal (segunda-feira, às 7h)</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label class="pref-marca"><input type="checkbox" name="nao-perturbe" [(ngModel)]="naoPerturbe" (ngModelChange)="alterado.set(true)" /> Não perturbe (sem pop-ups de navegador e desktop)</label>
+          @if (naoPerturbe) {
+            <div class="pref-horas">
+              <label for="pref-inicio">Das</label>
+              <input id="pref-inicio" type="time" name="inicio" [(ngModel)]="configuracao.silencio_inicio" (ngModelChange)="alterado.set(true)" />
+              <label for="pref-fim">às</label>
+              <input id="pref-fim" type="time" name="fim" [(ngModel)]="configuracao.silencio_fim" (ngModelChange)="alterado.set(true)" />
+            </div>
+          }
+          <label class="pref-marca"><input type="checkbox" name="fins-de-semana" [(ngModel)]="configuracao.silencio_fins_de_semana" (ngModelChange)="alterado.set(true)" /> Também aos sábados e domingos</label>
+          <small class="dica-formulario">O que chegar nesse período fica só na caixa. O e-mail não é afetado.</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- Silenciados -->
+    <section class="pref-bloco" aria-labelledby="pref-titulo-silenciados">
+      <h3 id="pref-titulo-silenciados">Silenciados</h3>
+      @if (d.silenciados.length) {
+        <ul class="pref-lista">
+          @for (s of d.silenciados; track s.id) {
+            <li><span>{{ s.rotulo }} <small>({{ s.tipo === 'contrato' ? 'contrato' : 'tarefa' }})</small></span>
+              <button type="button" class="acao-secundaria acao-pequena" (click)="voltarAAvisar(s.id)">Voltar a avisar</button></li>
+          }
+        </ul>
+      } @else {
+        <p class="dica-formulario">Nenhum item silenciado. Em uma notificação ligada a um contrato ou tarefa, use "Silenciar" para parar de receber os avisos dele por e-mail, navegador e desktop.</p>
+      }
+    </section>
+
+    <footer class="pref-rodape">
+      <button [class.carregando]="salvando()" type="button" class="acao-primaria" [disabled]="salvando() || !alterado()" (click)="salvar()">{{ salvando() ? 'Salvando…' : 'Salvar preferências' }}</button>
+    </footer>
+  </div>
+} @else {
+  <app-esqueleto tipo="lista" [linhas]="4" />
+}

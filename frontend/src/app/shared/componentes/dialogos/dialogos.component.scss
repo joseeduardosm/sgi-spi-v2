@@ -28,7 +28,7 @@
 
   code {
     padding: 2px 6px;
-    border-radius: 5px;
+    border-radius: var(--spi-raio-p);
     color: var(--spi-texto);
     background: var(--cor-f1f3f5);
     font-size: 12px;

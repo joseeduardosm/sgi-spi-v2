@@ -32,7 +32,7 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
             <ul class="notas-recusadas">
               @for (n of r.notas; track $index) {
                 <li>{{ n.rotulo }}@if (n.valor_bruto) { · {{ n.valor_bruto | moeda }} }
-                  @if (n.arquivo) { <button type="button" class="link-arquivo" (click)="baixar(n.arquivo.anexo_id)">PDF da nota</button> }
+                  @if (n.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(n.arquivo.anexo_id)">Baixar PDF da nota</button> }
                 </li>
               }
             </ul>

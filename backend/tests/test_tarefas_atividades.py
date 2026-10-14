@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.banco import FabricaSessao
-from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.notificacao import EntregaNotificacao, Notificacao
 from app.services.tarefas import servico_atividades
 from tests.apoio_rh import simular_smtp
 from tests.test_tarefas import URL, _nova, equipe  # noqa: F401  (fixture da equipe)
@@ -21,7 +21,7 @@ def _smtp(monkeypatch):
 
 def _avisos(prefixo: str) -> list[int]:
     with FabricaSessao() as s:
-        return [e.destinatario_id for e in s.scalars(select(EntregaMensagem).join(Mensagem).where(Mensagem.chave.startswith(prefixo)))]
+        return [e.destinatario_id for e in s.scalars(select(EntregaNotificacao).join(Notificacao).where(Notificacao.chave.startswith(prefixo)))]
 
 
 def test_agendar_concluir_e_historico(cliente, equipe):

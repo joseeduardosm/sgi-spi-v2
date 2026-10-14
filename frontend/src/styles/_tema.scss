@@ -11,6 +11,26 @@
 // - Cores novas: use var(--spi-*) ou uma "--cor-*" existente em vez de hex fixo, para valerem nos dois temas.
 
 :root {
+  --botao-copiar-cor: #0a0a0a;
+  // Tokens do DESIGN.md: superfícies, status, tipografia, espaçamento, raios e sombras
+  --spi-superficie: var(--cor-ffffff);
+  --spi-superficie-alt: #fafbfc;
+  --spi-superficie-ativa: var(--spi-vermelho-suave);
+  --spi-sucesso: #1d6b43; --spi-sucesso-suave: #d4f0de;
+  --spi-alerta: #9a6400; --spi-alerta-suave: #fdf1d8;
+  --spi-perigo: #a91c28; --spi-perigo-suave: #fcecee;
+  --spi-info: #1a56a0; --spi-info-suave: #dbeafe;
+  --spi-fonte: 'Inter', Arial, Helvetica, sans-serif;
+  --spi-fonte-mono: 'Geist Mono', ui-monospace, Consolas, 'Liberation Mono', monospace;
+  --spi-texto-micro: 11px; --spi-texto-legenda: 12px; --spi-texto-compacto: 13px; --spi-texto-corpo: 14px; --spi-texto-destaque: 16px;
+  --spi-titulo-secao: 20px; --spi-titulo-pagina: 28px;
+  --spi-espaco-4: 4px; --spi-espaco-8: 8px; --spi-espaco-12: 12px; --spi-espaco-16: 16px; --spi-espaco-20: 20px;
+  --spi-espaco-24: 24px; --spi-espaco-32: 32px; --spi-espaco-48: 48px; --spi-espaco-64: 64px;
+  --spi-raio-p: 6px; --spi-raio-m: 8px; --spi-raio-g: 12px; --spi-raio-gg: 16px; --spi-raio-pilula: 999px;
+  --spi-sombra-sutil: 0 1px 2px #18222d0d;
+  --spi-sombra-flutuante: 0 12px 30px #18222d1f;
+  --spi-sombra-modal: 0 18px 45px #18222d26;
+  --spi-anel-foco: 0 0 0 3px #c8233126;
   --cor-000000: #000000;
   --cor-171c23: #171c23;
   --cor-17202a: #17202a;
@@ -142,6 +162,15 @@
 
 :root[data-tema='escuro'] {
   color-scheme: dark;
+  // Traços dos componentes estilo Spell (copiar, seletor de cor): brancos no escuro, pretos no claro
+  --botao-copiar-cor: #fafafa;
+  --spi-superficie-alt: #171c23;
+  --spi-sucesso: #6fd3a0; --spi-sucesso-suave: #173327;
+  --spi-alerta: #f0c062; --spi-alerta-suave: #3a2e14;
+  --spi-perigo: #f1959c; --spi-perigo-suave: #3a2226;
+  --spi-info: #7fb0ee; --spi-info-suave: #1a2a40;
+  --spi-sombra-flutuante: 0 12px 30px #0000004d;
+  --spi-sombra-modal: 0 18px 45px #00000066;
 
   // Identidade visual
   --spi-fundo: #12171c;
@@ -290,6 +319,11 @@
 @media print {
   :root[data-tema='escuro'] {
     color-scheme: light;
+    --spi-superficie-alt: #fafbfc;
+    --spi-sucesso: #1d6b43; --spi-sucesso-suave: #d4f0de;
+    --spi-alerta: #9a6400; --spi-alerta-suave: #fdf1d8;
+    --spi-perigo: #a91c28; --spi-perigo-suave: #fcecee;
+    --spi-info: #1a56a0; --spi-info-suave: #dbeafe;
     --spi-fundo: #f6f7f8;
     --spi-texto: #18222e;
     --spi-titulo: #17202a;

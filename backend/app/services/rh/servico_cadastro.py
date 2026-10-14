@@ -22,7 +22,7 @@ from app.core.banco import agora_utc
 from app.models.rh import AlteracaoCadastral, DadosFuncionais
 from app.models.usuario import Usuario
 from app.schemas.usuarios import DadosPerfil
-from app.services import servico_mensagens
+from app.services import notificacoes
 from app.services.rh.papeis import SemPermissaoRh, dados_funcionais, eh_cgp, exigir_cgp, usuarios_cgp
 from app.services.servico_auditoria import auditar
 
@@ -187,12 +187,11 @@ def revisar_perfil(sessao: Session, usuario: Usuario, dados: DadosPerfil) -> Usu
             dados={"alteracoes": [a.campo for a in novas], "pendentes": not direto and bool(novas)})
     if novas and not direto:
         campos = ", ".join(ROTULOS[a.campo] for a in novas)
-        servico_mensagens.notificar(
+        notificacoes.notificar(
             sessao, [u.id for u in usuarios_cgp(sessao)], f"{_nome(usuario)} alterou seu cadastro e aguarda validação da CGP",
             f"{_nome(usuario)} alterou os campos: {campos}. As alterações aguardam validação da CGP.",
             chave=f"cadastro:{usuario.id}:{agora_utc():%Y%m%d%H%M%S%f}", categoria="revisao", prioridade="normal",
-            link=f"/rh/validacoes?usuario={usuario.id}", email=True,
-        )
+            link=f"/rh/validacoes?usuario={usuario.id}", evento="rh.cadastro_validacao")
     sessao.commit()
     return usuario
 
@@ -243,9 +242,9 @@ def _alteracao_pendente(sessao: Session, alteracao_id: uuid.UUID) -> AlteracaoCa
 def _encerrar_aviso_se_concluido(sessao: Session, usuario_id: int) -> None:
     sessao.flush()
     if not pendentes_do_usuario(sessao, usuario_id):
-        servico_mensagens.encerrar(sessao, prefixo=f"cadastro:{usuario_id}:")
+        notificacoes.encerrar(sessao, prefixo=f"cadastro:{usuario_id}:")
         # Também os avisos "quer baixar a folha de ponto, mas tem alterações aguardando validação"
-        servico_mensagens.encerrar(sessao, prefixo=f"folha-ponto:validacao:{usuario_id}:")
+        notificacoes.encerrar(sessao, prefixo=f"folha-ponto:validacao:{usuario_id}:")
 
 
 def validar(sessao: Session, alteracao_id: uuid.UUID, autor: Usuario) -> AlteracaoCadastral:
@@ -316,12 +315,11 @@ def recusar(sessao: Session, alteracao_id: uuid.UUID, justificativa: str, valor_
     alteracao.status, alteracao.justificativa, alteracao.valor_corrigido = "recusada", justificativa.strip(), texto
     alteracao.analisada_por_id, alteracao.analisada_por_nome, alteracao.analisada_em = autor.id, _nome(autor), agora_utc()
     rotulo = ROTULOS[alteracao.campo]
-    servico_mensagens.notificar(
+    notificacoes.notificar(
         sessao, [usuario.id], f"Alteração do seu cadastro recusada: {rotulo}",
         f"A CGP recusou a alteração do campo {rotulo} ({rotulo_valor(sessao, alteracao.campo, alteracao.valor_proposto)}).\n\n"
         f"Justificativa: {alteracao.justificativa}\n\nCorreção feita: {rotulo_valor(sessao, alteracao.campo, texto)}",
-        chave=f"cadastro-recusa:{alteracao.id}", categoria="revisao", prioridade="alta", link="/perfil", email=True,
-    )
+        chave=f"cadastro-recusa:{alteracao.id}", categoria="revisao", prioridade="alta", link="/perfil", evento="rh.cadastro_recusado")
     auditar(sessao, autor.login, "rh.cadastro.recusar", usuario.login, autor_id=autor.id, alvo_tipo="usuario", alvo_id=str(usuario.id),
             dados={"campo": alteracao.campo, "proposto": alteracao.valor_proposto, "corrigido": texto, "justificativa": alteracao.justificativa})
     _encerrar_aviso_se_concluido(sessao, usuario.id)

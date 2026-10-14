@@ -1,0 +1,13 @@
+[Unit]
+Description=sgi-spi: despacha as notificações pendentes (e-mail, navegador) e gera os resumos
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=__USUARIO__
+Group=__USUARIO__
+WorkingDirectory=__PROJETO__/backend
+ExecStart=__PROJETO__/backend/.venv/bin/python -m app.tarefas.notificacoes despachar
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

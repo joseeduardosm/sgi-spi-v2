@@ -1,9 +1,11 @@
 # Protocolo: numeração institucional (`/api/protocolo`)
 
+> **Canais dos avisos:** todo aviso deste módulo chega **sempre** na caixa de [notificações](notificacoes.md). O e-mail, o pop-up do navegador e o alerta do desktop só saem para quem ligou o evento correspondente em `/notificacoes` › Preferências (tudo começa desmarcado). Onde este documento fala em "e-mail" dos avisos, leia "para quem ligou o e-mail".
+
 Tag no OpenAPI: **Protocolo**. Implementação:
 - rotas: `backend/app/api/routes/protocolo.py`; schemas: `backend/app/schemas/protocolo.py`;
 - regras: `backend/app/services/servico_protocolo.py`; modelos: `backend/app/models/protocolo.py` (`protocolo_tipos`, `protocolo_sequencias`, `protocolo_numeros`, `protocolo_eventos`; migração `d4a7b2c6e815`);
-- avisos: `app/tarefas/mensageria.py lembretes` (tarefa diária das 07:00).
+- avisos: `app/tarefas/notificacoes.py lembretes` (tarefa diária das 07:00).
 
 Migrado do Protocolo do SGI SPI antigo (10.23.1.220) com melhorias. A carga dos dados está em [migracao-sgi.md](../migracao-sgi.md) (`scripts/extrair-protocolo-sgi.py` e `scripts/migrar-protocolo-sgi.py`).
 
@@ -21,15 +23,27 @@ Atenção: um recurso ACL **sem nenhuma regra fica aberto a todos**; por isso o 
 | `MODIFICACAO` | Reservar o **próximo** número, anexar o documento do que reservou, liberar a própria reserva, marcar sigilo e vincular a um contrato |
 | `CONTROLE_TOTAL` (ou SuperRoot) | Cadastrar tipos, criar sequências, **ampliar a faixa** para trás e para frente, **lançar um número específico**, anular e atuar em qualquer reserva |
 
+## Faixa reservada ao SAA ("Liberar a partir de")
+
+Cada sequência pode ter `liberar_a_partir_de` (entre `inicio` e `fim + 1`; nulo ou igual a `inicio` = nada reservado; migração `f8b3c5d7e9a1`). Os números do início da faixa até o anterior a esse ponto, **enquanto livres**, têm o estado derivado **`reservado_saa`** ("Reservado SAA"): só quem é do **Serviço de Apoio Administrativo** dá andamento neles (reservar e subir o documento). O SuperRoot e quem administra o Protocolo (CONTROLE_TOTAL) também usam a faixa. Os demais usuários reservam a partir do ponto de liberação.
+- **SAA** = membro do setor (ou com ele como Departamento) cujo nome está em `setor_apoio_administrativo` (padrão "Serviço de Apoio Administrativo", inclui os setores filhos). Se o setor não existir, só SuperRoot e administração usam a faixa.
+- `POST /sequencias/{id}/proximo`: só o SAA começa pela faixa reservada; os demais, **inclusive a administração**, recebem a partir do ponto de liberação (a administração ainda escolhe à mão qualquer número, inclusive os `reservado_saa`). `POST /numeros/{id}/reservar` agora aceita o SAA **só nos `reservado_saa`** (`403 sem_permissao` nos outros casos); a administração continua escolhendo qualquer número.
+- Reservado e depois **liberado**, o número volta a `reservado_saa` (o estado é derivado).
+- Elevar `liberar_a_partir_de` (`PUT /sequencias/{id}/faixa`) só vale se nenhum número que passa a ser do SAA estiver reservado (`409`).
+- `ListaNumeros` traz `reservados_saa` e `pode_usar_reserva_saa`; cada número traz `pode_reservar`; `SequenciaLeitura` traz `liberar_a_partir_de`.
+- **Tela dedicada** de novo tipo (`/protocolo/administracao/tipos/novo`) e de novo exercício (`/protocolo/administracao/tipos/{tipoId}/exercicio`): nome, exercício, início, fim e "Liberar a partir de", com prévia da faixa. `POST /tipos` aceita `sequencia` opcional e cria tipo e faixa **na mesma transação**.
+- O módulo **Contratos** usa o tipo **"Portaria SPI SSGC"** e reserva sempre **fora da faixa do SAA** (`proximo(..., fora_da_reserva=True)`).
+
 ## Estados do número
 
-`livre` → `reservado` (finalidade, responsável, data) → `utilizado` (tem documento). `anulado` prevalece sobre os demais. **Liberar** uma reserva sem documento devolve o número a `livre`; a **linha do tempo** (reservou, lançou, anexou, liberou, anulou, sigilo, vinculou) permanece.
+`livre` (ou `reservado_saa`, dentro da faixa do SAA) → `reservado` (finalidade, responsável, data) → `utilizado` (tem documento). `anulado` prevalece sobre os demais. **Liberar** uma reserva sem documento devolve o número a `livre`; a **linha do tempo** (reservou, lançou, anexou, liberou, anulou, sigilo, vinculou) permanece.
 
 ## Endpoints
 
 | Método e caminho | Quem | Descrição |
 |---|---|---|
 | `GET /tipos` | LEITURA | `ListaTipos`: tipos com as sequências de cada exercício e `pode_administrar` |
+| `DELETE /sequencias/{id}` | CONTROLE_TOTAL | Exclui o exercício (faixa e números) de um tipo; só se nenhum número foi reservado, utilizado ou anulado (`409`); `204` sem corpo; `404` se não existir |
 | `POST /tipos`, `PUT /tipos/{id}`, `DELETE /tipos/{id}` | CONTROLE_TOTAL | Cria, renomeia (nome único sem diferenciar maiúsculas: `409`) e exclui (só sem números reservados, utilizados ou anulados: `409`) |
 | `POST /tipos/{id}/sequencias` | CONTROLE_TOTAL | `{ exercicio, inicio, fim }`: cria a sequência do exercício (até 10.000 números; uma por tipo e exercício: `409`) |
 | `PUT /sequencias/{id}/faixa` | CONTROLE_TOTAL | `{ inicio, fim }`: `inicio` menor amplia **para trás** e `fim` maior amplia **para frente**, criando só os números novos. Encolher só vale para pontas livres e sem histórico (`409`) |

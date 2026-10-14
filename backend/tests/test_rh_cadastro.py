@@ -10,10 +10,13 @@ import pytest
 from app.core.banco import FabricaSessao, agora_utc
 from app.models.usuario import Usuario
 from app.services import servico_perfil
-from app.tarefas import mensageria
+from app.tarefas import notificacoes as tarefa_notificacoes
 from tests.apoio_rh import criar_cgp, funcionais, simular_smtp
 from tests.conftest import PERFIL_COMPLETO, cabecalho, criar_usuario
 from tests.test_smtp import SmtpSimulado, dados_servidor
+from tests.apoio_notificacoes import todos_com_email  # noqa: F401 - fixture usada por `usefixtures`
+
+pytestmark = pytest.mark.usefixtures("todos_com_email")
 
 PERFIL = "/api/autenticacao/perfil"
 
@@ -83,7 +86,7 @@ def test_alteracao_fica_pendente_ate_a_validacao(cliente, pessoas):
     # A CGP recebe o aviso por e-mail (fila dos avisos automáticos)
     SmtpSimulado.enviadas.clear()
     with FabricaSessao() as sessao:
-        assert mensageria.enviar_emails_pendentes(sessao) == 1
+        assert tarefa_notificacoes.despachar_pendentes(sessao) == 1
     mensagem, _, para, _ = SmtpSimulado.enviadas[0]
     assert para == ["rh@sp.gov.br"] and mensagem["Subject"] == "Ana Souza alterou seu cadastro e aguarda validação da CGP"
     # Mandar de novo o mesmo valor não duplica; voltar ao valor em vigor descarta a pendência
@@ -115,7 +118,7 @@ def test_validar_e_recusar_com_correcao(cliente, pessoas):
     assert perfil["situacao_campos"]["gestor_id"]["validado_por"] == "Rita RH"
     SmtpSimulado.enviadas.clear()
     with FabricaSessao() as sessao:
-        mensageria.enviar_emails_pendentes(sessao)
+        tarefa_notificacoes.despachar_pendentes(sessao)
     recusa = next(m for m, _, para, _ in SmtpSimulado.enviadas if para == ["ana@sp.gov.br"])
     assert recusa["Subject"] == "Alteração do seu cadastro recusada: Ramal"
     assert "Ramal inexistente na central." in recusa.get_body(("plain",)).get_content()

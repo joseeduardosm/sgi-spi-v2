@@ -13,10 +13,11 @@ import { PainelContratos } from '../compartilhado/contratos.models';
 import { ROTULOS_RISCO } from '../compartilhado/rotulos';
 import { listaExercicios } from './painel.component';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Tela dedicada "Alertas de risco": os riscos agrupados por contrato, cada um num cartão que leva à ação. */
 @Component({
   selector: 'app-alertas-de-risco',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, ...PIPES_FORMATACAO],
   template: `
     <app-cabecalho-modulo titulo="Alertas de risco" [trilha]="['Painel', 'Alertas de risco']"
                           descricao="Contratos com risco de vencimento, reajuste, empenho, pagamento ou execução atrasada." />
@@ -76,7 +77,7 @@ import { listaExercicios } from './painel.component';
         <p class="estado-vazio">Nenhum contrato em risco com esses filtros.</p>
       }
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="painel" [linhas]="4" />
     }
   `,
 })

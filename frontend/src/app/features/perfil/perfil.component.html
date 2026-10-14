@@ -42,7 +42,7 @@
 
   <form class="formulario-perfil" [formGroup]="formulario" (ngSubmit)="salvar()" novalidate>
     @if (carregando()) {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="formulario" [linhas]="5" />
     } @else {
       @if (haPendencias()) {
         <p class="aviso-bloco informativo">Há alterações aguardando validação da CGP. Até lá, continuam valendo os dados anteriores.</p>
@@ -50,7 +50,7 @@
       <app-campos-perfil [formulario]="formulario" [(gestor)]="gestor" [fonteGestor]="api.opcoesGestor"
                          [situacao]="perfil()?.situacao_campos ?? {}" [superiorObrigatorio]="perfil()?.superior_obrigatorio ?? true" />
       <div class="acoes-formulario">
-        <button class="acao-primaria" type="submit" [disabled]="salvando()">
+        <button [class.carregando]="salvando()" class="acao-primaria" type="submit" [disabled]="salvando()">
           {{ salvando() ? 'Salvando…' : 'Confirmar cadastro' }}
         </button>
       </div>
@@ -60,8 +60,8 @@
 
 <!-- Confirmação mensal do cadastro: bloqueia o sistema até o usuário confirmar ou atualizar os dados -->
 @if (modalMensal()) {
-  <div class="fundo-modal" role="presentation"></div>
-  <section class="modal-portal janela-mensagem" role="alertdialog" aria-modal="true" aria-labelledby="titulo-confirmacao-mensal">
+  <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation"></div>
+  <section animate.leave="mov-modal-sai" class="modal-portal janela-mensagem" role="alertdialog" aria-modal="true" aria-labelledby="titulo-confirmacao-mensal">
     <header>
       <div><span class="modal-sobretitulo">Atualização cadastral · {{ mesAtual }}</span>
         <h2 id="titulo-confirmacao-mensal">Confirme ou atualize seus dados</h2></div>
@@ -71,7 +71,7 @@ Se algo mudou (cargo, ramal, setor, superior imediato…), atualize: a alteraç�
     @if (aviso()?.erro) { <p class="aviso-bloco erro" style="margin: 8px 24px 0">{{ aviso()!.texto }}</p> }
     <footer>
       <button type="button" class="acao-secundaria" (click)="modalMensal.set(false)">Revisar e atualizar</button>
-      <button type="button" class="acao-primaria" [disabled]="salvando() || carregando()" (click)="salvar()">
+      <button [class.carregando]="salvando()" type="button" class="acao-primaria" [disabled]="salvando() || carregando()" (click)="salvar()">
         {{ salvando() ? 'Confirmando…' : 'Meus dados estão corretos' }}</button>
     </footer>
   </section>

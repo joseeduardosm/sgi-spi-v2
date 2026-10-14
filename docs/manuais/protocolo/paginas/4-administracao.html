@@ -1,26 +1,37 @@
-<p>A <strong>Administração</strong> do Protocolo é para quem tem o nível <strong>Controle total</strong> (ou é SuperRoot). Ela define quais tipos de documento existem, qual a faixa de números de cada ano e permite corrigir situações do dia a dia, como lançar ou anular um número.</p>
-<h2>Tipos de documento e sequências</h2>
-<p>Abra <strong>Protocolo › Administração</strong>. A tela lista cada tipo com as suas sequências por exercício:</p>
+<p>A <strong>Administração</strong> do Protocolo é para quem tem o nível <strong>Controle total</strong> (ou é SuperRoot). Ela define quais tipos de documento existem, qual a faixa de números de cada ano, quanto dessa faixa fica reservado ao Serviço de Apoio Administrativo (SAA) e permite corrigir situações do dia a dia, como lançar ou anular um número.</p>
+<h2>Os cartões de tipos e exercícios</h2>
+<p>Abra <strong>Protocolo › Administração</strong>. Cada <strong>tipo de documento em cada exercício</strong> aparece como um <strong>cartão</strong>, com o nome, o ano e a faixa de números. Clicar no cartão abre a <strong>página do tipo</strong>, onde se altera a faixa.</p>
 [[a01-administracao]]
-<h3>Criar um tipo de documento</h3>
+<p>A <strong>barra de pesquisa</strong> filtra os cartões enquanto você digita: pelo nome do tipo, pelo ano ou por um número (por exemplo, "150" mostra os tipos cuja faixa contém o 150).</p>
+[[a01b-pesquisa]]
+<h2>Criar um tipo de documento, com a faixa reservada ao SAA</h2>
 <ol>
-<li>Em <strong>Novo tipo de documento</strong>, digite o nome (por exemplo, <strong>Memorando</strong>). Não pode haver dois tipos com o mesmo nome, mesmo que mudem as maiúsculas.</li>
-<li>Clique em <strong>Adicionar tipo</strong>.</li>
+<li>Clique em <strong>+ Novo tipo de documento</strong>.</li>
+<li>Digite o <strong>nome</strong> (por exemplo, <strong>Portaria GSE</strong>). Não pode haver dois tipos com o mesmo nome, mesmo que mudem as maiúsculas.</li>
+<li>Informe o <strong>exercício</strong> (o ano) e a <strong>faixa</strong>: <strong>início</strong> e <strong>fim</strong>. Cabem até 10.000 números por exercício.</li>
+<li>Se parte da faixa deve ficar com o SAA, preencha <strong>Liberar a partir de</strong>: do início da faixa até o número <em>anterior</em> a este, os números ficam <strong>Reservado SAA</strong>. A partir dele, todos os usuários reservam. Deixe em branco se nada deve ser reservado.</li>
+<li>Confira a <strong>prévia</strong> logo abaixo do campo (quantos números ficam com o SAA e quantos ficam livres para todos) e clique em <strong>Criar tipo</strong>.</li>
 </ol>
 [[a02-novo-tipo]]
-<p>O tipo aparece como um cartão, ainda sem sequência. <strong>Renomear</strong> muda o nome; <strong>Excluir</strong> só funciona se nenhum número desse tipo foi reservado, utilizado ou anulado.</p>
-[[a03-tipo-criado]]
-<h3>Criar a sequência de um exercício</h3>
-<p>Cada tipo precisa de uma sequência por ano. No bloco <strong>Novo exercício</strong>, informe o <strong>ano</strong>, o <strong>primeiro</strong> e o <strong>último</strong> número e clique em <strong>Criar sequência</strong>. Cabem até 10.000 números por sequência, e só pode existir uma sequência por tipo e ano.</p>
-[[a04-nova-sequencia]]
-[[a05-sequencia-criada]]
-<h3>Ampliar a faixa</h3>
-<p>Se os números estão acabando, <strong>amplie a faixa</strong>: aumente o campo <strong>até</strong> para crescer para a frente, ou diminua o campo <strong>de</strong> para crescer para trás, e clique em <strong>Salvar faixa</strong>. Só os números novos são criados; os que já existem não mudam.</p>
-[[a06-ampliar-faixa]]
-[[a07-faixa-ampliada]]
-<p class="callout info">Encolher a faixa só é possível quando os números das pontas estão <strong>livres e sem histórico</strong>. Se algum já foi usado, o sistema recusa.</p>
+<p>O sistema recusa valores fora da faixa (o "liberar a partir de" precisa ficar entre o início e o fim + 1) e mostra o motivo na própria prévia. Criado o tipo, ele aparece como um cartão:</p>
+[[a03-cartao-criado]]
+<h2>Alterar a faixa e o ponto de liberação</h2>
+<p>Clique no cartão para abrir a <strong>página do tipo</strong>. Ali dá para:</p>
+<ul>
+<li><strong>Ampliar a faixa</strong>: diminua o <strong>início</strong> para crescer para trás, ou aumente o <strong>fim</strong> para crescer para a frente, e clique em <strong>Salvar faixa</strong>. Só os números novos são criados; os que já existem não mudam. Encolher só é possível quando os números das pontas estão <strong>livres e sem histórico</strong>.</li>
+<li><strong>Mudar o "Liberar a partir de"</strong>. Aumentá-lo reserva mais números ao SAA, mas só vale se esses números ainda <strong>não foram reservados por ninguém</strong> (senão o sistema recusa e pede que as reservas sejam liberadas antes). Esvaziar o campo libera todos os números para todos os usuários.</li>
+<li><strong>Renomear</strong> o tipo, <strong>Excluir tipo</strong> (só se nenhum número foi reservado, utilizado ou anulado) e criar um <strong>novo exercício</strong>.</li>
+</ul>
+[[a04-detalhe-do-tipo]]
+<p class="callout info">Se o tipo tem mais de um exercício, a página mostra um botão para cada ano, para você alternar entre eles.</p>
+<h2>Novo exercício</h2>
+<p>Cada tipo precisa de uma sequência por ano, e a numeração recomeça a cada exercício. Na página do tipo, clique em <strong>+ Novo exercício</strong>, informe o <strong>ano</strong>, a <strong>faixa</strong> e, se for o caso, o <strong>Liberar a partir de</strong>. Só pode existir um exercício por tipo e ano.</p>
+[[a05-novo-exercicio]]
+<h2>Excluir um exercício</h2>
+<p>Criou o exercício errado? Na página do tipo, escolha o ano e clique em <strong>Excluir exercício</strong>. O sistema pede confirmação e apaga a faixa e os números <strong>desse exercício apenas</strong>; os outros anos do tipo continuam como estão. Só é possível se <strong>nenhum número foi reservado, utilizado ou anulado</strong>; se algum foi, o sistema recusa e o exercício permanece.</p>
+[[a06-excluir-exercicio]]
 <h2>Lançar um número específico</h2>
-<p>Quem tem Controle total pode clicar em qualquer número <strong>livre</strong> da grade e lançá-lo, sem seguir a ordem. É útil para registrar um documento que já foi emitido fora do sistema, ou para guardar um número para um ofício que será assinado depois.</p>
+<p>Quem tem Controle total pode clicar em qualquer número <strong>livre</strong> da grade e lançá-lo, sem seguir a ordem. É útil para registrar um documento que já foi emitido fora do sistema, para guardar um número para um ofício que será assinado depois e para dar andamento em um número <strong>Reservado SAA</strong> (roxo).</p>
 <ol>
 <li>Na tela <strong>Numeração</strong>, clique no número livre desejado.</li>
 <li>Escreva a <strong>Finalidade</strong> (e o contrato, se houver) e clique em <strong>Reservar</strong>. O título da janela mostra qual número está sendo lançado.</li>

@@ -18,7 +18,7 @@ from app.api.respostas import CONFLITO, INVALIDO, RESPOSTAS_AUTENTICADAS, respos
 from app.api.routes.contratos.comum import SEM_VINCULO, pode_ler, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.models.usuario import Usuario
-from app.schemas.contratos.orcamento import GravacaoNotaEmpenho, GravacaoPrevisao, LeituraNotaEmpenho, Previsao
+from app.schemas.contratos.orcamento import GravacaoCancelamentoNota, GravacaoNotaEmpenho, GravacaoPrevisao, LeituraNotaEmpenho, Previsao
 from app.services.contratos import servico_orcamento as servico
 
 roteador = APIRouter(prefix="/contratos/{contrato_id}", tags=["Contratos: orçamento"], responses=RESPOSTAS_AUTENTICADAS)
@@ -122,6 +122,31 @@ def alterar_nota(
     """Altera a NE; o valor não pode ser menor do que o já debitado."""
     with traduzir_erros(sessao):
         servico.alterar_nota(sessao, contrato_id, nota_id, dados, autor)
+        return servico.listar_notas(sessao, contrato_id)
+
+
+@roteador.post(
+    "/notas-empenho/{nota_id}/cancelamentos",
+    response_model=list[LeituraNotaEmpenho],
+    status_code=status.HTTP_201_CREATED,
+    summary="Cancelar Nota de Empenho (NE de cancelamento)",
+    description=(
+        "Registra o número da NE de cancelamento e o valor cancelado (parcial ou total), que abate o saldo da NE original até o limite do "
+        "saldo, mesmo que parte esteja reservada por medições. Se todas as NEs do contrato ficarem sem saldo, medir e concluir medições é "
+        "bloqueado. Exige poder editar o contrato. Devolve a lista de NEs."
+    ),
+    responses={**resposta_nao_encontrado("Contrato ou NE"), **INVALIDO, **CONFLITO, **SEM_VINCULO},
+)
+def cancelar_nota(
+    contrato_id: uuid.UUID,
+    nota_id: uuid.UUID,
+    dados: GravacaoCancelamentoNota,
+    sessao: Session = Depends(obter_sessao),
+    autor: Usuario = Depends(pode_modificar),
+) -> list[LeituraNotaEmpenho]:
+    """Cancela, total ou parcialmente, o saldo da NE."""
+    with traduzir_erros(sessao):
+        servico.cancelar_nota(sessao, contrato_id, nota_id, dados, autor)
         return servico.listar_notas(sessao, contrato_id)
 
 

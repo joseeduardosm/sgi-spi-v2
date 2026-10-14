@@ -16,10 +16,11 @@ import { UsuariosApiService } from '../usuarios/usuarios-api.service';
 import { PerfilLeitura, ROTULOS_PERFIL } from '../usuarios/usuarios.models';
 import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Atualização e revalidação do próprio perfil institucional. */
 @Component({
   selector: 'app-perfil',
-  imports: [ReactiveFormsModule, CamposPerfilComponent, FotoPerfilComponent, DatePipe, TrilhaComponent],
+  imports: [EsqueletoComponent, ReactiveFormsModule, CamposPerfilComponent, FotoPerfilComponent, DatePipe, TrilhaComponent],
   templateUrl: './perfil.component.html',
 })
 export class PerfilComponent implements OnInit {

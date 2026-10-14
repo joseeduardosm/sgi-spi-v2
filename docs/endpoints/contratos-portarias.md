@@ -7,7 +7,7 @@ Tag no OpenAPI: **Contratos: portaria**. Implementação:
 
 ## Finalidade
 
-Gera a portaria que designa gestor e fiscais do contrato a partir da equipe vigente e dos dados do contrato. O número é **reservado no Protocolo** (tipo "Portaria", faixa do ano corrente) e vinculado ao contrato. Na tela, é a aba **Portarias**, depois de "Execução".
+Gera a portaria que designa gestor e fiscais do contrato a partir da equipe vigente e dos dados do contrato. O número é **reservado no Protocolo** (tipo **"Portaria SPI SSGC"**, faixa do ano corrente; reserva sempre depois da faixa "Reservado SAA", se houver) e vinculado ao contrato. Na tela, é a aba **Portarias**, depois de "Execução".
 
 ## Fluxo
 
@@ -36,7 +36,7 @@ Placeholders: `#numeroportaria`, `#anoportaria`, `#numerodocontrato`, `#contrata
 | `GET /portarias`, minuta | LEITURA |
 | Solicitar, reenviar, cancelar, publicar | pode editar o contrato (ACL ≥ MODIFICACAO e ser SuperRoot, criador ou da equipe); `403 acesso_negado` sem vínculo |
 | Aceitar, devolver | Usuário vinculado à autoridade da portaria ou SuperRoot (`403 acesso_negado` para os demais) |
-| Autoridades: criar, alterar, excluir | CONTROLE_TOTAL |
+| Autoridades: criar, alterar, excluir e buscar usuários | SuperRoot, CONTROLE_TOTAL ou **gestor/gestor suplente vigente** de algum contrato (`403 acesso_negado` para os demais). `permissoes.pode_gerir_autoridades` do contrato diz se a seção aparece na aba |
 | Máscaras (Modelos) | SuperRoot ou CONTROLE_TOTAL |
 
 ## Endpoints
@@ -52,6 +52,7 @@ Placeholders: `#numeroportaria`, `#anoportaria`, `#numerodocontrato`, `#contrata
 | `GET …/{portaria_id}/minuta?formato=docx\|pdf` | Arquivo com marca d'água "MINUTA" |
 | `POST …/{portaria_id}/publicacao` | `multipart` com `arquivo` (PDF publicado); só com a portaria aceita (`409`); `400` se não for PDF |
 | `GET /portarias/autoridades` | Todas as autoridades (ativas e desativadas) |
-| `POST /portarias/autoridades`, `PUT /portarias/autoridades/{id}`, `DELETE /portarias/autoridades/{id}` | `{ sigla, nome, cargo, setor, usuario_id?, ativa }`; devolvem a lista atualizada. Excluir autoridade que já assinou: `409` (desative-a) |
+| `GET /portarias/autoridades/usuarios?busca=` | Usuários ativos (até 20, por nome ou login) com `cargo` e `departamento` do cadastro, para o combobox do formulário. SuperRoot, controle total ou gestor/suplente de contrato |
+| `POST /portarias/autoridades`, `PUT /portarias/autoridades/{id}`, `DELETE /portarias/autoridades/{id}` | `{ sigla, usuario_id, ativa, nome?, cargo?, setor? }`: a **autoridade é um usuário do sistema** (`usuario_id` obrigatório; `422` sem ele, `400` se não existe) e é ele mesmo quem dá o aceite. `nome`, `cargo` e `setor` em branco vêm do cadastro do usuário (cargo e departamento); devolvem a lista atualizada. Excluir autoridade que já assinou: `409` (desative-a) |
 
 Todas as escritas devolvem o painel atualizado.

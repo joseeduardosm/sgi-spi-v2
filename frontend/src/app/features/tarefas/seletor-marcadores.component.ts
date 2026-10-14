@@ -2,6 +2,7 @@
 // Este arquivo serve para escolher os marcadores de uma tarefa como no Odoo: pílulas com ×, lista dos mais usados, busca ao digitar,
 // criação na hora e janelinha de cores (com renomear e excluir para a liderança).
 
+import { SeletorCorComponent } from '../../shared/componentes/seletor-cor/seletor-cor.component';
 import { Component, ElementRef, HostListener, inject, input, OnDestroy, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { debounceTime, Subject, Subscription } from 'rxjs';
@@ -11,9 +12,10 @@ import { PALETA_MARCADORES, classeMarcador, semAcento } from './marcadores.palet
 import { TarefasApiService } from './tarefas-api.service';
 import { Marcador } from './tarefas.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-seletor-marcadores',
-  imports: [FormsModule],
+  imports: [SeletorCorComponent, EsqueletoComponent, FormsModule],
   template: `
     <div class="campo-marcadores" [class.desabilitado]="desabilitado()" (click)="focar()">
       @for (m of valor(); track m.id) {
@@ -41,26 +43,25 @@ import { Marcador } from './tarefas.models';
           <li role="option" class="criar" [class.ativa]="indice() === opcoes().length" (mousedown)="$event.preventDefault()" (click)="criar()"
               (mouseenter)="indice.set(opcoes().length)">Criar "<b>{{ busca.trim() }}</b>"</li>
         }
-        @if (!opcoes().length && !podeCriarNovo()) { <li class="vazia">{{ carregando() ? 'Buscando…' : 'Nenhum marcador encontrado.' }}</li> }
+        @if (!opcoes().length && !podeCriarNovo()) { <li class="vazia">@if (carregando()) { <app-esqueleto tipo="texto" [linhas]="2" /> } @else { {{ 'Nenhum marcador encontrado.' }} }</li> }
       </ul>
     }
 
     @if (editando(); as e) {
       <div class="janela-cor-marcador" role="dialog" aria-label="Cor do marcador" (click)="$event.stopPropagation()">
         @if (podeGerir()) {
-          <div class="cores">
-            @for (c of paleta; track $index; let i = $index) {
-              <button type="button" class="cor" [class.atual]="i === e.cor_indice" [style.background]="c.fundo" [style.border-color]="c.borda"
-                      [attr.aria-label]="'Cor ' + (i + 1)" (click)="trocarCor(e, i)"></button>
-            }
-          </div>
+          <app-seletor-cor tamanho="pequeno" [cores]="coresSeletor" [valor]="e.cor_indice" rotulo="Cor do marcador" (escolher)="trocarCor(e, $event)" />
           <div class="renomear">
             <input type="text" maxlength="120" [(ngModel)]="novoNome" name="nome-marcador" aria-label="Nome do marcador" (keydown.enter)="renomear(e)" />
             <button type="button" class="acao-secundaria acao-pequena" [disabled]="!novoNome.trim() || novoNome.trim() === e.nome" (click)="renomear(e)">Renomear</button>
           </div>
-          <button type="button" class="link-simples perigo" (click)="excluir(e)">Excluir marcador</button>
+          <div class="acoes-janela-cor">
+            <button type="button" class="acao-recusar acao-pequena" (click)="excluir(e)">Excluir marcador</button>
+            <button type="button" class="acao-secundaria acao-pequena" (click)="editando.set(null)">Fechar</button>
+          </div>
+        } @else {
+          <button type="button" class="acao-secundaria acao-pequena" (click)="editando.set(null)">Fechar</button>
         }
-        <button type="button" class="link-simples" (click)="editando.set(null)">Fechar</button>
       </div>
     }
   `,
@@ -82,6 +83,7 @@ export class SeletorMarcadoresComponent implements OnDestroy {
   private readonly dialogos = inject(DialogosService);
   private readonly eu = inject<ElementRef<HTMLElement>>(ElementRef);
 
+  protected readonly coresSeletor = PALETA_MARCADORES.map((c, i) => ({ cor: c.borda, rotulo: `Cor ${i + 1}` }));
   protected readonly paleta = PALETA_MARCADORES;
   protected readonly aberta = signal(false);
   protected readonly carregando = signal(false);

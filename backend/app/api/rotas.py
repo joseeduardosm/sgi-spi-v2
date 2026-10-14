@@ -8,7 +8,7 @@ caminhos podem coincidir (ver comentário abaixo).
 
 from fastapi import APIRouter
 
-from app.api.routes import acl, assinatura_email, autenticacao, atalhos, busca, chamados, contratacoes, documentacao, diretorio, favoritos, integracao_bookstack, integracao_glpi, ldap, manuais, melhorias, sla, painel_executivo, mensageria, mensagens, noticias, protocolo, reserva_espacos, rh, tarefas, saude, setores, smtp, usuarios
+from app.api.routes import acl, assinatura_email, autenticacao, atalhos, busca, chamados, contratacoes, documentacao, diretorio, favoritos, integracao_bookstack, integracao_glpi, ldap, manuais, melhorias, sla, painel_executivo, notificacoes, notificacoes_changelog, notificacoes_cliente_windows, notificacoes_preferencias, noticias, patrimonio, preferencias, protocolo, reserva_espacos, rh, tarefas, saude, setores, smtp, usuarios
 from app.api.routes.contratos import alteracoes, portarias, contratos, correcoes, diario, empresas, execucao, exportacao, importacao, importacao_modelos, migracao, modelos, orcamento, relatorios
 
 roteador_api = APIRouter()
@@ -21,8 +21,10 @@ roteador_api.include_router(setores.roteador)
 roteador_api.include_router(acl.roteador)
 roteador_api.include_router(ldap.roteador)
 roteador_api.include_router(smtp.roteador)
-roteador_api.include_router(mensagens.roteador)
-roteador_api.include_router(mensageria.roteador)
+roteador_api.include_router(notificacoes_changelog.roteador)
+roteador_api.include_router(notificacoes_preferencias.roteador)
+roteador_api.include_router(notificacoes.roteador)
+roteador_api.include_router(notificacoes_cliente_windows.roteador)
 roteador_api.include_router(rh.roteador)
 roteador_api.include_router(tarefas.roteador)
 roteador_api.include_router(noticias.roteador)
@@ -32,6 +34,8 @@ roteador_api.include_router(diretorio.roteador)
 roteador_api.include_router(painel_executivo.roteador)
 roteador_api.include_router(assinatura_email.roteador)
 roteador_api.include_router(protocolo.roteador)
+roteador_api.include_router(patrimonio.roteador)
+roteador_api.include_router(preferencias.roteador)
 roteador_api.include_router(reserva_espacos.roteador)
 roteador_api.include_router(contratacoes.roteador)
 # Módulo de contratos

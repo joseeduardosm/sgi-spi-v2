@@ -11,6 +11,7 @@ import { RhApiService } from './rh-api.service';
 import { Afastamento, DIAS_SEMANA, Feriado, MeusAfastamentos, ROTULOS_STATUS, ROTULOS_TIPO, SIGLAS_TIPO, TipoAfastamento } from './rh.models';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Um dia do calendário (null = casa vazia antes do dia 1º). */
 interface Dia {
   data: string;
@@ -33,7 +34,7 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-ferias',
-  imports: [LinkificarPipe, FormsModule, DatePipe, CabecalhoRhComponent],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, CabecalhoRhComponent],
   templateUrl: './ferias.component.html',
   host: { '(document:keydown.escape)': 'limparSelecao()' },
 })

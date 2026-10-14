@@ -28,6 +28,8 @@ os.environ["MINUTOS_EXPIRACAO_TOKEN"] = "60"
 os.environ["CHAVE_CIFRA_LDAP"] = Fernet.generate_key().decode()
 os.environ["INTERVALO_SINCRONIZACAO_LDAP_MINUTOS"] = "0"
 os.environ["ANEXOS_DIRETORIO"] = f"{_diretorio_temporario}/anexos"
+# Notificações: nenhum despacho automático nos testes (cada teste liga o modo ou chama `despachar_pendentes` quando quer enviar)
+os.environ["NOTIFICACOES_DESPACHO"] = "desligado"
 
 # Os imports abaixo precisam vir depois das variáveis de ambiente (por isso o `noqa: E402`)
 from fastapi.testclient import TestClient  # noqa: E402

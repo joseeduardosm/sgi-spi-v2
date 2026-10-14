@@ -47,7 +47,7 @@ Valida login e senha e emite um token JWT de acesso. Com um diretório LDAP ativ
 | `perfil_restrito` | boolean | Perfil incompleto ou revalidação vencida: acesso restrito ao próprio perfil |
 | `campos_pendentes` | string[] | Campos obrigatórios não preenchidos (ex.: `["ramal", "andar"]`) |
 | `revisao_obrigatoria` | boolean | Perfil ainda não confirmado no mês civil atual (ou nunca confirmado) |
-| `conta_root` | boolean | Conta administrativa principal (login `LOGIN_ADMIN`): dispensada da confirmação do perfil e única com acesso à Mensageria |
+| `conta_root` | boolean | Conta administrativa principal (login `LOGIN_ADMIN`): dispensada da confirmação do perfil e única com acesso à Notificações |
 | `tema` | string | Tema da interface escolhido pelo usuário: `claro`, `escuro` ou `auto` (segue o sistema operacional; padrão) |
 
 ```json
@@ -70,7 +70,7 @@ Valida login e senha e emite um token JWT de acesso. Com um diretório LDAP ativ
 }
 ```
 
-Só a conta root (login `LOGIN_ADMIN`, padrão `root`) pode ter campos pendentes sem ficar restrita; os SuperRoot também confirmam o perfil todo mês. `conta_root = true` identifica essa conta: o Angular mostra a Mensageria (ver [mensageria.md](mensageria.md)).
+Só a conta root (login `LOGIN_ADMIN`, padrão `root`) pode ter campos pendentes sem ficar restrita; os SuperRoot também confirmam o perfil todo mês. `conta_root = true` identifica essa conta: o Angular mostra as Notificações (ver [notificações.md](notificacoes-changelog.md)).
 
 ### Erros
 

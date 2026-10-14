@@ -43,6 +43,16 @@ LEGENDAS = {"r": "Tela do SGI SPI", "a": "Tela do SGI SPI", "l": "Tela do SGI SP
             "e": "Relatório em PDF gerado pelo SGI SPI", "v": "Tela do SGI SPI"}
 
 
+def legendas_numeradas(nome: str) -> str:
+    """Lista numerada que explica as marcações (setas e números) desenhadas na imagem, lida de `legendas.json`."""
+    arquivo = AQUI / "legendas.json"
+    itens = json.loads(arquivo.read_text(encoding="utf-8")).get(nome, []) if arquivo.is_file() else []
+    itens = [i for i in itens if i.get("texto")]
+    if not itens:
+        return ""
+    return "<ol>" + "".join(f'<li value="{i["n"]}">{html.escape(i["texto"])}</li>' for i in itens) + "</ol>"
+
+
 def token() -> str:
     caminho = Path(os.environ.get("BOOKSTACK_TOKEN_ARQUIVO", Path.home() / ".bookstack-token"))
     if not caminho.is_file():
@@ -122,7 +132,7 @@ def main() -> None:
             img = imagens[m.group(1)]
             alt = html.escape(LEGENDAS.get(m.group(1)[0], "Imagem") + " – " + m.group(1))
             exibicao = (img.get("thumbs") or {}).get("display") or img["url"]
-            return f'<p><a href="{img["url"]}" target="_blank" rel="noopener"><img src="{exibicao}" alt="{alt}"></a></p>'
+            return f'<p><a href="{img["url"]}" target="_blank" rel="noopener"><img src="{exibicao}" alt="{alt}"></a></p>' + legendas_numeradas(m.group(1))
 
         chamar("PUT", f"/pages/{pagina['id']}", {"html": re.sub(r"\[\[([\w-]+)\]\]", trocar, fonte)})
         print("página", pagina["id"], nome, "-", len(imagens), "imagens")

@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para a tela de geração da assinatura de e-mail: formulário, prévia ao vivo, download e cópia.
 
+import { BotaoCopiarComponent } from '../../shared/componentes/botao-copiar/botao-copiar.component';
 import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -10,6 +11,7 @@ import { RouterLink } from '@angular/router';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { AssinaturaApiService, DadosAssinatura } from './assinatura-api.service';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 const VAZIO: DadosAssinatura = {
   nome_completo: '', cargo: '', departamento: '', email: '', ramal: '', celular: '', andar: '', lado: '',
   incluir_celular: false, incluir_andar_lado: false,
@@ -24,7 +26,7 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  */
 @Component({
   selector: 'app-assinatura-email',
-  imports: [FormsModule, RouterLink, TrilhaComponent],
+  imports: [BotaoCopiarComponent, EsqueletoComponent, FormsModule, RouterLink, TrilhaComponent],
   template: `
     <section class="painel-gestao assinatura-email">
       <app-trilha [itens]="[{ rotulo: 'Assinatura de e-mail', rota: '/assinatura-email' }]" />
@@ -36,7 +38,7 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
       </div>
 
       @if (!carregado()) {
-        <p class="estado-vazio">Carregando…</p>
+        <app-esqueleto tipo="formulario" [linhas]="5" />
       } @else {
         @if (faltando().length) {
           <p class="aviso-bloco">Faltam no seu perfil: <b>{{ faltando().join(', ') }}</b>. Preencha abaixo para gerar a assinatura e, depois,
@@ -66,7 +68,7 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
             <header><div><h2>Prévia</h2><small>Imagem em alta resolução, exibida no tamanho de e-mail (564 px).</small></div></header>
             <div class="corpo">
               @if (pngSrc(); as src) {
-                <div class="moldura-previa"><img [src]="src" alt="Prévia da assinatura de e-mail" width="564" /></div>
+                <div class="moldura-previa"><img loading="lazy" decoding="async" [src]="src" alt="Prévia da assinatura de e-mail" width="564" /></div>
               } @else {
                 <div class="moldura-previa vazia">{{ motivoSemPrevia() }}</div>
               }
@@ -74,7 +76,7 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
               <div class="acoes-assinatura">
                 <button type="button" class="acao-primaria" [disabled]="!pngSrc() || ocupado()" (click)="baixarPng()">Baixar PNG</button>
-                <button type="button" class="acao-secundaria" [disabled]="!htmlBruto() || ocupado()" (click)="copiar()">Copiar assinatura</button>
+                <app-botao-copiar rotulo="Copiar assinatura" [desabilitado]="!htmlBruto() || ocupado()" (acionar)="copiar()" />
                 <button type="button" class="acao-secundaria" [disabled]="!htmlBruto() || ocupado()" (click)="baixarHtml()">Baixar HTML</button>
               </div>
 

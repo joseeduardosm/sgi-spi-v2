@@ -118,7 +118,7 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
         membro = any(d.usuario_id == usuario.id for d in designacoes_vigentes(contrato))
         if not (membro or contrato.criador_id == usuario.id):
             if financeiro:
-                for competencia in (c for c in contrato.competencias if c.etapa_atual == "retencao" and not _anterior_ao_corte(c)):
+                for competencia in (c for c in contrato.competencias if "retencao" in etapas_abertas(c) and not _anterior_ao_corte(c)):
                     lista.append(_pendencia(
                         contrato, "retencao", f"{_nome(competencia)}: conferir a retenção de tributos da NF {', '.join(n.numero or str(n.ordem) for n in competencia.notas_fiscais)}",
                         f"/contratos/{contrato.id}/execucao/{competencia.identificador}", competencia.nf_recebida_em or competencia.periodo_fim,
@@ -176,8 +176,13 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
     return sorted(lista, key=lambda p: (p.desde or date.max, p.contrato_numero))
 
 
-def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[AlertasContrato]:
-    """Riscos da carteira, agrupados por contrato: vigência, reajuste, empenho, pagamentos e atrasos."""
+def alertas_da_carteira(sessao: Session, contratos: list[Contrato], usuario: Usuario | None = None) -> list[AlertasContrato]:
+    """Riscos dos contratos do usuário, agrupados por contrato: vigência, reajuste, empenho, pagamentos e atrasos.
+
+    Só entram os contratos em que ele é criador ou integrante vigente da equipe (todos os riscos). O Financeiro (DOF) que não integra a equipe não vê
+    alertas: o que lhe cabe é a tarefa de conferir a retenção de tributos, que chega em "Minhas pendências" e nas notificações quando a competência
+    chega a essa etapa. Sem `usuario` (painel executivo) vale a carteira inteira.
+    """
     rascunhos_prorrogacao = set(sessao.scalars(select(ProcessoProrrogacao.contrato_id).where(ProcessoProrrogacao.situacao == "rascunho")))
     referencia = hoje()
     grupos: list[AlertasContrato] = []
@@ -185,6 +190,10 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato]) -> list[Aler
         # Contratos encerrados ou suspensos não geram alertas
         estado = situacao(contrato)
         if estado in ("encerrado", "suspenso"):
+            continue
+        integrante = usuario is None or contrato.criador_id == usuario.id or any(d.usuario_id == usuario.id for d in designacoes_vigentes(contrato))
+        # Quem não faz parte do contrato não vê os alertas dele (inclusive o Financeiro: a tarefa dele é a retenção, em "Minhas pendências")
+        if not integrante:
             continue
         riscos: list[Risco] = []
 
@@ -324,7 +333,7 @@ def montar_painel(sessao: Session, usuario: Usuario, exercicio: int | None, empr
     return Painel(
         hoje=hoje(),
         minhas_pendencias=pendencias_do_usuario(sessao, todos, usuario),
-        alertas=alertas_da_carteira(sessao, filtrados),
+        alertas=alertas_da_carteira(sessao, filtrados, usuario),
         execucao=execucao_orcamentaria(filtrados, exercicio or hoje().year),
         numeros=numeros(filtrados),
         empresas=[OpcaoFiltro(id=i, rotulo=n) for i, n in sorted(empresas.items(), key=lambda e: e[1].lower())],

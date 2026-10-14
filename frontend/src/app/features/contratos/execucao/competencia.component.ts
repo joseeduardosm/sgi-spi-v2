@@ -18,13 +18,14 @@ import { EtapaMedicaoComponent } from './etapa-medicao.component';
 import { EtapaNotaFiscalComponent } from './etapa-nota-fiscal.component';
 import { EtapaRetencaoComponent } from './etapa-retencao.component';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Tela 5: execução de uma competência (etapas 1 a 7). */
 /** Quantas vezes (a cada 2,5 s) a tela consulta o resultado do e-mail antes de parar. */
 const LIMITE_CONSULTAS_EMAIL = 8;
 
 @Component({
   selector: 'app-competencia',
-  imports: [
+  imports: [EsqueletoComponent, 
     FormsModule, RouterLink, CabecalhoModuloComponent, EtapaMedicaoComponent, EtapaAvaliacaoComponent, EtapaNotaFiscalComponent,
     EtapaCadinComponent, EtapaFinaisComponent, EtapaRetencaoComponent, ...PIPES_FORMATACAO,
   ],

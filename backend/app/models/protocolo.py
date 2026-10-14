@@ -36,7 +36,7 @@ class TipoProtocolo(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
-    sequencias: Mapped[list["SequenciaProtocolo"]] = relationship(back_populates="tipo", order_by="SequenciaProtocolo.exercicio.desc()")
+    sequencias: Mapped[list["SequenciaProtocolo"]] = relationship(back_populates="tipo", cascade="all, delete-orphan", order_by="SequenciaProtocolo.exercicio.desc()")
 
 
 class SequenciaProtocolo(Base):
@@ -49,6 +49,8 @@ class SequenciaProtocolo(Base):
     exercicio: Mapped[int] = mapped_column(Integer)
     inicio: Mapped[int] = mapped_column(Integer)
     fim: Mapped[int] = mapped_column(Integer)
+    # Números de `inicio` até `liberar_a_partir_de - 1` ficam "Reservado SAA" (só o Serviço de Apoio Administrativo dá andamento); nulo = nada reservado
+    liberar_a_partir_de: Mapped[int | None] = mapped_column(Integer)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     tipo: Mapped[TipoProtocolo] = relationship(back_populates="sequencias")
@@ -56,7 +58,7 @@ class SequenciaProtocolo(Base):
 
 
 class NumeroProtocolo(Base):
-    """Um número da sequência: livre, reservado, utilizado (com documento) ou anulado."""
+    """Um número da sequência: livre, reservado SAA (livre dentro da faixa do SAA), reservado, utilizado (com documento) ou anulado."""
     __tablename__ = "protocolo_numeros"
     __table_args__ = (
         UniqueConstraint("sequencia_id", "numero", name="uq_protocolo_numeros_sequencia_numero"),
@@ -92,7 +94,15 @@ class NumeroProtocolo(Base):
             return "anulado"
         if self.anexo_id is not None:
             return "utilizado"
-        return "reservado" if self.reservado_em is not None else "livre"
+        if self.reservado_em is not None:
+            return "reservado"
+        return "reservado_saa" if self.na_reserva_saa else "livre"
+
+    @property
+    def na_reserva_saa(self) -> bool:
+        """O número está dentro da faixa reservada ao SAA (do início da faixa até `liberar_a_partir_de`, exclusive)."""
+        liberar = self.sequencia.liberar_a_partir_de if self.sequencia is not None else None
+        return liberar is not None and self.numero < liberar
 
 
 class EventoProtocolo(Base):

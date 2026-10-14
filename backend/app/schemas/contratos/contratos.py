@@ -164,6 +164,7 @@ class PermissoesContrato(BaseModel):
     pode_editar: bool = Field(..., description="SuperRoot, controle total em Contratos, criador ou integrante vigente da equipe, com ACL ≥ MODIFICACAO.")
     pode_excluir: bool = Field(..., description="Controle total em Contratos (qualquer contrato) ou criador do contrato com ACL ≥ MODIFICACAO.")
     pode_administrar: bool = Field(False, description="SuperRoot ou controle total em Contratos: faz tudo sobre qualquer contrato.")
+    pode_gerir_autoridades: bool = Field(False, description="Pode cadastrar as autoridades das portarias: SuperRoot, controle total ou gestor/gestor suplente deste contrato.")
 
 
 class CompetenciaAtualCarteira(BaseModel):

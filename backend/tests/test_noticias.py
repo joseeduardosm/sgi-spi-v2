@@ -11,7 +11,7 @@ from PIL import Image
 from sqlalchemy import select
 
 from app.core.banco import FabricaSessao
-from app.models.mensagem import EntregaMensagem, Mensagem
+from app.models.notificacao import EntregaNotificacao, Notificacao
 from app.services.noticias import servico_noticias
 from app.services.noticias.sanitizacao import limpar_html
 from tests.apoio_rh import simular_smtp
@@ -61,7 +61,7 @@ def _com_capa(cliente, h, noticia_id, modo="recortar", recorte=None) -> dict:
 
 def _avisos(prefixo: str) -> list[tuple[int, str]]:
     with FabricaSessao() as s:
-        linhas = s.execute(select(EntregaMensagem.destinatario_id, Mensagem.assunto).join(Mensagem).where(Mensagem.chave.startswith(prefixo)))
+        linhas = s.execute(select(EntregaNotificacao.destinatario_id, Notificacao.assunto).join(Notificacao).where(Notificacao.chave.startswith(prefixo)))
         return sorted((a, b) for a, b in linhas)
 
 
@@ -120,8 +120,8 @@ def test_fluxo_de_aprovacao_com_avisos(cliente, redacao):
     assert r.status_code == 200 and r.json()["situacao"] == "aprovada" and r.json()["visivel"] is True
     assert _avisos(f"noticia-aprovada:{n['id']}")[0][0] == ids["rita"]
     with FabricaSessao() as s:
-        pendentes = s.scalars(select(EntregaMensagem).join(Mensagem).where(Mensagem.chave.startswith(f"noticia-aprovacao:{n['id']}"),
-                                                                              EntregaMensagem.encerrada_em.is_(None))).all()
+        pendentes = s.scalars(select(EntregaNotificacao).join(Notificacao).where(Notificacao.chave.startswith(f"noticia-aprovacao:{n['id']}"),
+                                                                              EntregaNotificacao.encerrada_em.is_(None))).all()
         assert pendentes == []
     historico = cliente.get(f"{URL}/{n['id']}/revisoes", headers=h["ari"]).json()
     assert [x["descricao"] for x in historico][:2] == ["Aprovada", "Enviada para aprovação"]

@@ -12,13 +12,14 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { DetalheEmpresa, GravacaoEmpresa, GravacaoPreposto, Preposto } from '../compartilhado/contratos.models';
 import { formatarCnpj, formatarCpf } from '../compartilhado/rotulos';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 // Preposto em branco, usado para limpar o formulário
 const PREPOSTO_VAZIO: GravacaoPreposto = { cpf: '', nome: '', telefone: '', email: '', cargo: '', ativo: true };
 
 /** Tela 9: cadastro/detalhe da empresa e seus prepostos. */
 @Component({
   selector: 'app-empresa-detalhe',
-  imports: [FormsModule, RouterLink, CabecalhoModuloComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent],
   // Qualquer clique fora fecha o menu de ações aberto
   host: { '(document:click)': 'menuAberto.set(null)' },
   templateUrl: './empresa-detalhe.component.html',

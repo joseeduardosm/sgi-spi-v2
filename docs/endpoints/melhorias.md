@@ -1,5 +1,7 @@
 # Módulo Melhorias (`/api/melhorias`)
 
+> **Canais dos avisos:** todo aviso deste módulo chega **sempre** na caixa de [notificações](notificacoes.md). O e-mail, o pop-up do navegador e o alerta do desktop só saem para quem ligou o evento correspondente em `/notificacoes` › Preferências (tudo começa desmarcado). Onde este documento fala em "e-mail" dos avisos, leia "para quem ligou o e-mail".
+
 Tag no OpenAPI: **Melhorias**. Implementação:
 - rotas: `backend/app/api/routes/melhorias.py`;
 - regras: `backend/app/services/servico_melhorias.py`;

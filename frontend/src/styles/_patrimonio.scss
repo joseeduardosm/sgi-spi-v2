@@ -1,0 +1,435 @@
+/* ==========================================================================
+ * Módulo Patrimônio (bens móveis do prédio SPI). Identidade de styles.scss, mobile-first:
+ * campos e botões grandes no celular, ações principais ao alcance do polegar (barra inferior fixa).
+ * Todas as classes próprias começam com `pat-` (ou ficam dentro de `.patrimonio`) para não colidir com outros módulos.
+ * ========================================================================== */
+
+.patrimonio {
+  padding: 18px 20px 12px;
+
+  /* Barra de busca/filtros/ações no topo das listas */
+  .pat-barra {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px 14px;
+    margin-bottom: 16px;
+
+    .espacador { flex: 1; }
+  }
+
+  .pat-filtros { padding: 12px 14px; border: 1px solid var(--cor-e8eaec); border-radius: var(--spi-raio-g); background: var(--cor-fafbfc); }
+
+  /* Mesmo padrão de campo das barras do Protocolo: rótulo acima, campo de 42 px */
+  .campo {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 160px;
+
+    label { color: var(--cor-464f5a); font-size: 12px; font-weight: 700; }
+
+    input:not([type='checkbox']):not([type='file']),
+    select { width: 100%; height: 42px; }
+  }
+
+  .pat-busca { flex: 1 1 280px; }
+  .pat-campo-sala { flex: 1 1 260px; }
+
+  /* Alternância Cartões | Lista */
+  .pat-visoes {
+    display: inline-flex;
+    height: 42px;
+    border: 1px solid var(--cor-e2e5e8);
+    border-radius: var(--spi-raio-m);
+    overflow: hidden;
+
+    button { padding: 0 16px; border: 0; color: var(--cor-464f5a); background: var(--cor-ffffff); font-size: 12px; font-weight: 600; cursor: pointer; }
+    button + button { border-left: 1px solid var(--cor-e2e5e8); }
+    button.ativa { color: #fff; background: var(--spi-vermelho); }
+  }
+
+  .pat-colunas-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 18px; margin: 4px 0 8px; }
+  // Colunas escolhidas, na ordem de exibição (cada linha: nome à esquerda, subir, descer e tirar à direita)
+  .pat-colunas-ordem { list-style: none; margin: 8px 0 14px; padding: 0; display: grid; gap: 6px;
+    li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; border: 1px solid var(--cor-e2e5e8); border-radius: var(--spi-raio-p); } }
+  .pat-tabela-bens { th, td { white-space: nowrap; } .pat-indefinida { color: var(--spi-apagado); } }
+
+  .pat-botao-grande { display: inline-flex; align-items: center; justify-content: center; height: 42px; padding: 0 16px; white-space: nowrap; }
+
+  .pat-marca { display: flex; align-items: center; gap: 8px; color: var(--cor-464f5a); font-size: 13px; }
+
+  .pat-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+  .dica, .pat-dica { display: block; margin-top: 4px; color: var(--spi-apagado); font-size: 12px; }
+
+  .pat-subtitulo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 22px 0 10px; font-size: 15px; font-weight: 700; }
+
+  .pat-aviso { margin: 0 0 12px; padding: 10px 12px; border-radius: var(--spi-raio-m); color: var(--cor-9a6400); background: var(--cor-fff4dc); font-size: 13px; }
+  .pat-aviso a { margin-left: 8px; }
+  .pat-sucesso { margin: 0 0 14px; padding: 10px 12px; border-radius: var(--spi-raio-m); color: var(--cor-218365); background: var(--cor-e9f7f2); font-size: 13px; font-weight: 600; }
+  .pat-resumo-lote { margin: 0 0 12px; color: var(--spi-apagado); font-size: 13px; }
+
+  /* Lista de bens, movimentações e listas: cartões que ocupam a largura toda no celular */
+  .pat-lista-bens { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 14px; }
+
+  .pat-cartao-bem {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 14px 16px;
+    border: 1px solid var(--cor-e2e5e8);
+    border-left: 4px solid var(--spi-vermelho);
+    border-radius: var(--spi-raio-g);
+    color: inherit;
+    background: var(--cor-ffffff);
+    text-decoration: none;
+    transition: box-shadow 0.15s;
+
+    &:hover, &:focus-visible { border-color: var(--spi-borda-campo); }
+
+    .pat-chapa { font-size: 16px; font-weight: 700; }
+    .pat-descricao { color: var(--cor-3d454e); font-size: 13px; }
+    .pat-sala { color: var(--spi-apagado); font-size: 12px; }
+  }
+
+  .pat-marcadores { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+
+  /* Linhas de itens (bens de uma movimentação, de uma lista, grupos...) */
+  .pat-lista-itens {
+    display: grid;
+    margin: 0 0 14px;
+    padding: 0;
+    list-style: none;
+
+    > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--cor-f1f2f4); }
+    > li > div { display: grid; gap: 2px; min-width: 0; flex: 1; }
+    small { display: block; color: var(--spi-apagado); font-size: 12px; }
+    .pat-justificativa { font-style: italic; }
+    .pat-selecao { flex: none; width: 22px; height: 22px; accent-color: #af3741; }
+  }
+
+  /* Prefixos das chapas: uma linha por prefixo, com o código e o selo à esquerda e as ações pequenas à direita */
+  .pat-prefixos { margin: 0 0 14px; padding: 0; list-style: none;
+    li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--cor-f1f2f4); &.inativo strong { opacity: .5; } }
+    strong { min-width: 90px; font-size: 14px; letter-spacing: .03em; }
+    .pat-acoes-prefixo { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+    .acao-pequena { flex: 0 0 auto; width: auto; min-width: 0; padding: 4px 12px; } }
+  .pat-selo-prefixo { padding: 2px 8px; border-radius: var(--spi-raio-g); color: #fff; background: var(--spi-vermelho); font-size: 11px; font-weight: 700; &.inativo { color: var(--spi-apagado); background: var(--cor-eef0f3); } }
+  .pat-linha-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--cor-f1f2f4); }
+
+  /* Campo com botão ao lado (chapa + "Ler código") */
+  .pat-prefixo { flex: 0 0 auto; width: auto; min-width: 96px; }
+  .pat-linha-campo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+    margin-bottom: 14px;
+
+    input { flex: 1 1 200px; margin: 0; }
+    label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--cor-464f5a); }
+  }
+
+  /* Identificação do bem: chapa e número de série lado a lado (basta um deles), cada um com a leitura do código de barras */
+  .pat-identificacao {
+    margin: 0 0 14px;
+    padding: 12px 14px 0;
+    border: 1px solid var(--cor-e2e5e8);
+    border-radius: var(--spi-raio-m);
+
+    legend { padding: 0 6px; font-size: 12px; font-weight: 700; color: var(--cor-464f5a); small { font-weight: 400; color: var(--spi-apagado); } }
+    .pat-identificacao-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    .pat-linha-campo { margin-bottom: 12px; }
+    @media (max-width: 767px) { .pat-identificacao-campos { grid-template-columns: 1fr; } }
+  }
+
+  .pat-formulario { padding-bottom: 0; }
+
+  /* Formulário compacto (Adicionar bem e cadastro em lote): campos menores, tudo clicável com folga e mais informação por tela */
+  &.pat-compacto {
+    .grade-formulario { gap: 8px 12px; }
+    label { margin-bottom: 2px; font-size: 12px; }
+    .pat-identificacao { padding: 8px 10px 2px; margin-bottom: 10px; }
+    .pat-identificacao-campos { gap: 0 12px; }
+    .pat-entrada-com-acao { display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+      input { flex: 1 1 auto; min-width: 0; margin: 0; } .pat-prefixo { margin: 0; min-width: 84px; } }
+    .pat-leitor { flex: 0 0 auto; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 1px solid var(--spi-borda-campo); border-radius: var(--spi-raio-m); color: var(--spi-vermelho); background: var(--cor-ffffff); cursor: pointer;
+      svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } &:active { background: var(--cor-eef0f3); } }
+    /* Escolhas curtas viram botões lado a lado (um toque, sem abrir lista) */
+    .pat-segmentado { display: flex; gap: 6px; margin-bottom: 4px;
+      button { flex: 1 1 0; min-width: 0; min-height: 42px; padding: 4px 6px; border: 1px solid var(--spi-borda-campo); border-radius: var(--spi-raio-m); color: var(--cor-3d454e); background: var(--cor-ffffff); font-size: 13px; font-weight: 600; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        b { font-size: 15px; } small { font-size: 10px; font-weight: 600; opacity: .85; }
+        &.ativo { color: #fff; border-color: var(--spi-vermelho); background: var(--spi-vermelho); } &:focus-visible { outline: 2px solid var(--spi-vermelho-foco); outline-offset: 2px; } } }
+    .pat-barra-inferior { margin-top: 10px; }
+  }
+
+  .pat-formulario textarea, .pat-painel-acao textarea, .pat-painel-acao input, .pat-painel-acao select { width: 100%; margin: 4px 0 10px; }
+
+  .pat-mais-dados {
+    margin: 4px 0 16px;
+    border: 1px solid var(--cor-e8eaec);
+    border-radius: var(--spi-raio-g);
+    padding: 0 14px;
+
+    summary { padding: 12px 0; font-size: 13px; font-weight: 700; cursor: pointer; }
+    &[open] summary { margin-bottom: 8px; }
+  }
+
+  .pat-painel-sala, .pat-painel-acao {
+    display: grid;
+    gap: 6px;
+    margin: 14px 0;
+    padding: 14px 16px;
+    border: 1px solid var(--cor-e2e5e8);
+    border-radius: var(--spi-raio-g);
+    background: var(--cor-fafbfc);
+  }
+
+  .pat-painel-acao > button, .pat-painel-sala > button, .pat-painel-acao > .pat-acoes { justify-self: start; }
+  /* Aviso de dados que faltam (não é erro): tom de atenção */
+  .pat-painel-sala { border-color: #f0d79a; background: var(--cor-fff4dc); }
+
+  /* Combobox de sala: um só campo e a lista de opções logo abaixo, sobre o conteúdo */
+  .pat-seletor-sala {
+    position: relative;
+    margin-bottom: 14px;
+
+    input { width: 100%; margin: 0; padding-right: 36px; }
+    /* Botão da câmera dentro do campo da sala (lê o código ou QR da porta); com ele, o "×" de limpar passa para a esquerda dele */
+    .pat-leitor-sala { position: absolute; top: 4px; right: 6px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: var(--spi-raio-p); color: var(--spi-vermelho); background: transparent; cursor: pointer;
+      svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } &:active { background: var(--cor-eef0f3); } }
+    &:has(.pat-leitor-sala) input { padding-right: 76px; }
+    &:has(.pat-leitor-sala) .pat-limpar-sala { right: 42px; }
+    .pat-limpar-sala { position: absolute; top: 4px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: var(--spi-raio-p); color: var(--spi-apagado); background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+  }
+
+  /* Campo "chapa ou número de série" com sugestões (movimentação, inservíveis, extraviados e baixa) */
+  app-busca-bem { display: block; flex: 1 1 200px; min-width: 0; .pat-seletor-sala { margin-bottom: 0; input { padding-right: 12px; } } }
+  .pat-opcoes-bem { top: 100%; margin-top: 4px;
+    li { display: block; padding: 8px 12px; line-height: 1.3; cursor: pointer; strong { margin-right: 6px; } span { font-size: 13px; }
+      small { display: block; margin-top: 1px; color: var(--spi-apagado); font-size: 11px; } &.destacada { background: var(--cor-eef0f3); } } }
+
+  .pat-opcoes-sala {
+    position: absolute;
+    top: calc(100% - 6px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    max-height: 300px;
+    margin: 0;
+    padding: 4px 0;
+    overflow-y: auto;
+    border: 1px solid var(--cor-e2e5e8);
+    border-radius: var(--spi-raio-m);
+    background: var(--cor-ffffff);
+    box-shadow: var(--spi-sombra-flutuante);
+    list-style: none;
+
+    li { padding: 9px 12px; font-size: 13px; cursor: pointer; }
+    .pat-grupo-sala { position: sticky; top: 0; padding: 6px 12px; color: var(--spi-apagado); background: var(--cor-fafbfc); font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: default; }
+    li.destacada { background: var(--spi-vermelho-suave); }
+    li.escolhida { font-weight: 700; }
+    .pat-sem-sala { color: var(--spi-apagado); cursor: default; }
+  }
+
+  /* Topo do detalhe: marcadores e ações */
+  .pat-topo-bem { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+
+  .pat-abas {
+    display: flex;
+    gap: 4px;
+    margin: 14px 0 16px;
+    border-bottom: 1px solid var(--cor-e2e5e8);
+    overflow-x: auto;
+
+    button { padding: 11px 16px; border: 0; border-bottom: 3px solid transparent; color: var(--spi-apagado); background: transparent; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+    button.ativa { border-bottom-color: var(--spi-vermelho); color: var(--spi-vermelho); }
+  }
+
+  .pat-dados {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px 22px;
+    margin: 0 0 8px;
+
+    dt { display: flex; align-items: center; gap: 6px; color: var(--spi-apagado); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    dd { margin: 3px 0 0; color: var(--cor-3d454e); font-size: 14px; overflow-wrap: anywhere; }
+  }
+
+  .pat-historico-campo { border: 0; color: var(--spi-vermelho); background: transparent; font-size: 14px; line-height: 1; cursor: pointer; }
+  .pat-evento-curto { display: block; margin: 4px 0; color: var(--cor-3d454e); font-size: 12.5px; text-decoration: none; }
+
+  .pat-linha-tempo {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0 0 0 18px;
+    border-left: 2px solid var(--cor-e2e5e8);
+    list-style: none;
+
+    li { position: relative; padding: 0 0 16px 16px; }
+    li::before { content: ''; position: absolute; left: -26px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--spi-vermelho); }
+    li span { display: block; color: var(--spi-apagado); font-size: 12px; }
+    li p { margin: 4px 0 0; font-size: 13px; }
+  }
+
+  .pat-fotos { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+  .pat-fotos figure { display: grid; gap: 6px; margin: 0; width: 140px; }
+  .pat-fotos img, .pat-foto-vazia { width: 140px; height: 140px; border-radius: var(--spi-raio-g); object-fit: cover; background: var(--cor-f1f2f4); display: grid; place-items: center; font-size: 12px; }
+  .pat-adicionar-foto { display: grid; place-items: center; width: 140px; height: 140px; border: 2px dashed var(--cor-e2e5e8); border-radius: var(--spi-raio-g); color: var(--spi-vermelho); font-weight: 700; cursor: pointer; }
+
+  /* Painel */
+  .pat-indicadores {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+
+    > div { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--cor-e8eaec); border-radius: var(--spi-raio-g); background: var(--cor-ffffff); }
+    b { font-size: 22px; line-height: 1.1; }
+    span { color: var(--spi-apagado); font-size: 12px; }
+    .alerta { border-color: var(--cor-f0c9cd); background: var(--spi-vermelho-suave); }
+  }
+
+  .pat-linha-clicavel { cursor: pointer; }
+  .pat-linha-clicavel.ativa td { background: var(--spi-vermelho-suave); }
+
+  /* Árvore de locais */
+  .pat-arvore {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    > li { padding-top: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--cor-f1f2f4); }
+    > li.inativa { opacity: 0.6; }
+    .pat-no { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pat-no-texto { display: grid; gap: 2px; flex: 1; min-width: 160px; }
+    .pat-no-texto small { color: var(--spi-apagado); font-size: 12px; }
+    .pat-alternar { flex: none; width: 28px; height: 28px; border: 0; color: var(--spi-vermelho); background: transparent; font-size: 16px; cursor: pointer; }
+  }
+
+  /* Cadastro: ações fixas ao alcance do polegar */
+  .pat-barra-inferior {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin: 16px -20px 0;
+    padding: 12px 20px;
+    border-top: 1px solid var(--cor-e2e5e8);
+    background: var(--cor-ffffff);
+  }
+
+  .pat-anexar { cursor: pointer; }
+}
+
+/* Aviso de conexão e itens aguardando envio (fora de `.patrimonio`: fica entre o cabeçalho e a tela) */
+.pat-aviso-conexao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: var(--spi-raio-m);
+  color: var(--cor-9a6400);
+  background: var(--cor-fff4dc);
+  font-size: 13px;
+}
+
+.pat-atalhos { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.pat-pagina { padding: 18px 20px 12px; }
+.pat-pagina .pat-linha-item { padding: 12px 20px; }
+.pat-pagina .pat-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Leitor de código pela câmera: tela cheia, com mira e barra de baixo ao alcance do polegar */
+.leitor-codigo {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  background: #000;
+
+  video { width: 100%; height: 100%; object-fit: cover; }
+  .mira { position: absolute; inset: 22% 12%; border: 3px solid #ffffffcc; border-radius: var(--spi-raio-gg); box-shadow: 0 0 0 100vmax #00000066; pointer-events: none; }
+  .erro-leitor { position: absolute; top: 24px; left: 16px; right: 16px; margin: 0; padding: 12px; border-radius: var(--spi-raio-m); color: #fff; background: #b3262fe6; font-size: 14px; }
+  .barra-leitor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    color: #fff;
+    background: #000000b3;
+    font-size: 14px;
+
+    button { height: 46px; padding: 0 22px; }
+  }
+}
+
+/* Celular: campos e botões maiores (16 px evita o zoom automático do iOS), listas em coluna única e rolagem horizontal das abas */
+@media (max-width: 760px) {
+  .patrimonio {
+    padding: 14px 14px 10px;
+
+    .campo input:not([type='checkbox']):not([type='file']), .campo select,
+    .grade-formulario input, .grade-formulario select, .pat-linha-campo input, .pat-seletor-sala input, .pat-painel-acao input, .pat-painel-acao select {
+      height: 48px;
+      font-size: 16px;
+    }
+
+    textarea { font-size: 16px; }
+    .acao-primaria, .acao-secundaria, .acao-recusar { min-height: 46px; }
+    .pat-botao-grande { flex: 1 1 140px; height: 48px; }
+    .pat-lista-bens { grid-template-columns: 1fr; }
+    /* Formulário compacto: duas colunas só para o que é curto, campos de 42px (mantém 16px de fonte para o celular não ampliar a tela) */
+    &.pat-compacto {
+      padding: 10px 12px 0;
+      .grade-formulario { grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+      .grade-formulario > .ocupa-duas { grid-column: 1 / -1; }
+      .grade-formulario input, .grade-formulario select, .pat-seletor-sala input { height: 42px; padding-top: 0; padding-bottom: 0; }
+      .pat-identificacao-campos { grid-template-columns: 1fr; }
+      .pat-segmentado button { min-height: 42px; }
+      .pat-barra-inferior { margin: 10px -12px 0; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
+      .pat-barra-inferior > * { flex: 1 1 110px; }
+    }
+    .pat-barra-inferior { margin: 14px -14px 0; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
+    .pat-barra-inferior > * { flex: 1 1 130px; justify-content: center; }
+    .pat-busca, .pat-campo-sala { flex-basis: 100%; }
+    .pat-lista-itens > li { flex-wrap: wrap; }
+  }
+
+  .cabecalho-modulo .pat-atalhos { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 4px; }
+  .cabecalho-modulo .pat-atalhos a { flex: none; }
+}
+
+// Janela "Selecione os itens padrões a serem mostrados" (colunas da lista de bens), no modelo do GLPI
+.modal-portal.modal-colunas {
+  width: min(560px, calc(100% - 28px));
+
+  .corpo-colunas { padding: 18px 25px 6px; }
+  .corpo-colunas > select { width: 100%; margin-bottom: 12px; }
+  .aviso-colunas { margin: 0 0 16px; padding: 10px 14px; border: 1px solid var(--cor-e8eaec); border-radius: var(--spi-raio-m); background: var(--cor-fafbfc); color: var(--cor-464f5a); font-size: 13px; font-style: italic; }
+  .adicionar-coluna { display: flex; gap: 10px; align-items: stretch; margin-bottom: 14px; select { flex: 1; min-width: 0; } }
+  .lista-colunas { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid var(--cor-e2e5e8); border-radius: var(--spi-raio-m); overflow: hidden;
+    li { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--cor-e2e5e8); background: var(--cor-ffffff); }
+    li:first-child { border-top: 0; }
+    li.fixa { background: var(--cor-fafbfc); color: var(--spi-apagado); padding-left: 38px; }
+    li[draggable='true'] { cursor: grab; }
+    li.arrastando { opacity: 0.45; }
+    .alca { color: var(--spi-apagado); font-size: 16px; line-height: 1; }
+    .nome { flex: 1; }
+    .tirar { border: 0; background: transparent; color: var(--spi-vermelho-destaque); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; } }
+  > footer { padding: 14px 25px 22px; }
+}

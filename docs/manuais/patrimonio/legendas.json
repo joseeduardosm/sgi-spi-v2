@@ -1,0 +1,364 @@
+{
+ "b03-aprovar-baixa": [
+  {
+   "n": 1,
+   "texto": "Aprovados viram Baixado e geram o termo em PDF"
+  }
+ ],
+ "b04-baixa-aprovada": [
+  {
+   "n": 1,
+   "texto": "Termo de baixa em PDF, para instruir o processo"
+  }
+ ],
+ "d01-detalhe-do-bem": [
+  {
+   "n": 1,
+   "texto": "Situação e alertas do bem"
+  },
+  {
+   "n": 2,
+   "texto": "Editar, movimentar, ajustar o local (controle total)"
+  },
+  {
+   "n": 3,
+   "texto": "Dados, linha do tempo e trajeto"
+  },
+  {
+   "n": 4,
+   "texto": "O ícone ⟲ abre o histórico só deste campo"
+  }
+ ],
+ "d02-historico-do-campo": [
+  {
+   "n": 1,
+   "texto": "De → para, quem alterou e quando"
+  }
+ ],
+ "d05-ajustar-local": [
+  {
+   "n": 1,
+   "texto": "Sem movimentação: o motivo é obrigatório e fica no histórico"
+  }
+ ],
+ "i01-listas": [
+  {
+   "n": 1,
+   "texto": "Comece uma lista de inservíveis ou de extraviados"
+  }
+ ],
+ "i04-aprovar-lista": [
+  {
+   "n": 1,
+   "texto": "Justificativa dada por quem montou a lista"
+  },
+  {
+   "n": 2,
+   "texto": "Desmarque o que não aprova; a recusa exige motivo"
+  }
+ ],
+ "l01-arvore-de-locais": [
+  {
+   "n": 1,
+   "texto": "Abra o andar e o lado (A ou B) para ver as salas"
+  },
+  {
+   "n": 2,
+   "texto": "O código da sala junta andar, lado e número"
+  }
+ ],
+ "l02-setor-e-responsavel": [
+  {
+   "n": 1,
+   "texto": "Setor e responsável valem para todos os bens da sala; trocar o responsável atualiza todos de uma vez"
+  }
+ ],
+ "mb01-lista-de-bens": [
+  {
+   "n": 1,
+   "texto": "Pesquise por chapa, descrição, marca, modelo ou série"
+  },
+  {
+   "n": 2,
+   "texto": "Ler código: abre a câmera"
+  },
+  {
+   "n": 3,
+   "texto": "Adicionar bem (cadastro avulso)"
+  },
+  {
+   "n": 4,
+   "texto": "Cadastro em lote"
+  }
+ ],
+ "mb03-cadastro-avulso": [
+  {
+   "n": 1,
+   "texto": "Digite o código ou o nome: a lista vai filtrando as salas"
+  },
+  {
+   "n": 2,
+   "texto": "Digite a chapa ou use Ler código"
+  }
+ ],
+ "mb03b-sala-filtrando": [
+  {
+   "n": 1,
+   "texto": "A lista vai filtrando conforme você digita; toque na sala para escolher"
+  }
+ ],
+ "mb04-sala-sem-responsavel": [
+  {
+   "n": 1,
+   "texto": "Sala sem setor e responsável: os dois campos aparecem aqui mesmo, e são salvos junto com o bem"
+  }
+ ],
+ "mb05-mais-dados": [
+  {
+   "n": 1,
+   "texto": "Com a data de aquisição, o sistema calcula o fim da garantia"
+  },
+  {
+   "n": 2,
+   "texto": "Grupo de material"
+  }
+ ],
+ "mb06-lote": [
+  {
+   "n": 1,
+   "texto": "Cadastrado: a sala e os dados ficam para o próximo bem"
+  },
+  {
+   "n": 2,
+   "texto": "Quantos bens já entraram neste lote"
+  }
+ ],
+ "mb06b-lote-repetir": [
+  {
+   "n": 1,
+   "texto": "Repetir os demais dados do último bem (chapa, série e descrição voltam em branco)"
+  },
+  {
+   "n": 2,
+   "texto": "Cadastrar e passar ao próximo"
+  }
+ ],
+ "mb07-leitor-de-codigo": [
+  {
+   "n": 1,
+   "texto": "Aponte para o QR code ou código de barras"
+  },
+  {
+   "n": 2,
+   "texto": "Fechar a câmera"
+  }
+ ],
+ "mb08-detalhe-do-bem": [
+  {
+   "n": 1,
+   "texto": "Editar ou movimentar"
+  },
+  {
+   "n": 2,
+   "texto": "Dados, linha do tempo e trajeto"
+  }
+ ],
+ "mb09-fotos": [
+  {
+   "n": 1,
+   "texto": "Até três fotos por bem (reduzidas no aparelho antes do envio)"
+  }
+ ],
+ "mb10-solicitar-movimentacao": [
+  {
+   "n": 1,
+   "texto": "Bens escolhidos (de salas diferentes, se for o caso)"
+  },
+  {
+   "n": 2,
+   "texto": "Sala de destino"
+  }
+ ],
+ "mb11-lista-de-inserviveis": [
+  {
+   "n": 1,
+   "texto": "Leia ou digite a chapa"
+  },
+  {
+   "n": 2,
+   "texto": "Marque os bens a justificar"
+  }
+ ],
+ "mb12-justificativa": [
+  {
+   "n": 1,
+   "texto": "Uma justificativa vale para todos os bens marcados (mínimo de 10 caracteres)"
+  }
+ ],
+ "mc01-receber-no-celular": [
+  {
+   "n": 1,
+   "texto": "Receber lendo o código de cada bem; Encerrar recebimento quando acabar"
+  }
+ ],
+ "mc02-leitor-no-recebimento": [
+  {
+   "n": 1,
+   "texto": "Cada código lido confirma o bem; Concluir fecha a câmera"
+  }
+ ],
+ "mc03-autorizar-no-celular": [
+  {
+   "n": 1,
+   "texto": "Autorizar ou recusar a solicitação"
+  }
+ ],
+ "mc04-aprovar-lista-no-celular": [
+  {
+   "n": 1,
+   "texto": "Marque o que aprova"
+  },
+  {
+   "n": 2,
+   "texto": "Concluir a decisão"
+  }
+ ],
+ "n01-painel": [
+  {
+   "n": 1,
+   "texto": "Agrupe por andar, sala, setor ou grupo; filtre; exporte"
+  },
+  {
+   "n": 2,
+   "texto": "Totais do topo: bens, valores, fora de garantia, pendências"
+  }
+ ],
+ "n02-bens-do-grupo": [
+  {
+   "n": 1,
+   "texto": "Clique numa linha para listar os bens do grupo"
+  }
+ ],
+ "n03-fora-de-garantia": [
+  {
+   "n": 1,
+   "texto": "Garantias que vencem nos próximos 90 dias"
+  }
+ ],
+ "n04-parametros": [
+  {
+   "n": 1,
+   "texto": "Valor da UFESP (regra de não patrimoniável)"
+  },
+  {
+   "n": 2,
+   "texto": "Vida útil e residual de cada grupo (depreciação)"
+  }
+ ],
+ "of01-sem-conexao": [
+  {
+   "n": 1,
+   "texto": "Sem conexão: o que for feito fica guardado no aparelho"
+  }
+ ],
+ "of02-guardado-no-aparelho": [
+  {
+   "n": 1,
+   "texto": "Guardado no aparelho; será enviado quando o sinal voltar"
+  },
+  {
+   "n": 2,
+   "texto": "Itens aguardando envio"
+  }
+ ],
+ "of03-itens-aguardando-envio": [
+  {
+   "n": 1,
+   "texto": "Cada item guardado, com a data e a situação"
+  }
+ ],
+ "p01-lista-de-bens": [
+  {
+   "n": 1,
+   "texto": "Pesquise por chapa, descrição, marca, modelo ou série"
+  },
+  {
+   "n": 2,
+   "texto": "Lê o QR code ou código de barras pela câmera"
+  },
+  {
+   "n": 3,
+   "texto": "Cadastro avulso de um bem"
+  },
+  {
+   "n": 4,
+   "texto": "Cadastro em lote: a sala é pedida uma vez"
+  }
+ ],
+ "p02-filtros": [
+  {
+   "n": 1,
+   "texto": "Filtre por situação, conservação, garantia, grupo, sala ou dados contábeis pendentes"
+  }
+ ],
+ "p03-cartao-do-bem": [
+  {
+   "n": 1,
+   "texto": "Situação, conservação e alertas (fora de garantia, pendências)"
+  }
+ ],
+ "p04-lista-colunas": [
+  {
+   "n": 1,
+   "texto": "Alterna entre cartões e lista"
+  },
+  {
+   "n": 2,
+   "texto": "Escolha as colunas mostradas"
+  }
+ ],
+ "p05-lista-ordenada": [
+  {
+   "n": 1,
+   "texto": "Clique no título para ordenar; clique de novo para inverter"
+  }
+ ],
+ "v01-lista-de-movimentacoes": [
+  {
+   "n": 1,
+   "texto": "Filtre por status e período"
+  },
+  {
+   "n": 2,
+   "texto": "Pedir a mudança de sala de um ou mais bens"
+  }
+ ],
+ "v03-autorizar-ou-recusar": [
+  {
+   "n": 1,
+   "texto": "Quem tem controle total (e não pediu) autoriza ou recusa"
+  }
+ ],
+ "v04-recusar-com-motivo": [
+  {
+   "n": 1,
+   "texto": "A recusa exige motivo"
+  }
+ ],
+ "v05-receber-os-bens": [
+  {
+   "n": 1,
+   "texto": "Receba lendo o código de cada bem; encerre quando acabar"
+  },
+  {
+   "n": 2,
+   "texto": "Ou confirme o bem na lista"
+  }
+ ],
+ "mb05b-sugestoes-descricao": [
+  {
+   "n": 1,
+   "texto": "Descrições já cadastradas aparecem enquanto você digita: toque para usar e manter o padrão"
+  }
+ ]
+}

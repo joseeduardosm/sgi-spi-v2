@@ -13,10 +13,11 @@ import { AniversariantesComponent } from '../../diretorio/aniversariantes.compon
 import { CartaoNoticiaComponent } from './cartao-noticia.component';
 import { SliderNoticiasComponent } from './slider-noticias.component';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Página inicial (pública). Tudo o que aparece aqui é configurado em Notícias › Configurar portal. */
 @Component({
   selector: 'app-portal',
-  imports: [RouterLink, SliderNoticiasComponent, CartaoNoticiaComponent, AniversariantesComponent, PainelExecutivoComponent],
+  imports: [EsqueletoComponent, RouterLink, SliderNoticiasComponent, CartaoNoticiaComponent, AniversariantesComponent, PainelExecutivoComponent],
   template: `
     @if (acesso() === 'negado') {
       <div class="alert alert-warning" role="status">Você não possui acesso ao módulo solicitado. Solicite a revisão da ACL a um administrador do sistema.</div>
@@ -65,7 +66,7 @@ import { SliderNoticiasComponent } from './slider-noticias.component';
     } @else if (erro()) {
       <p class="estado-vazio">Não foi possível carregar as notícias agora. Tente novamente em instantes.</p>
     } @else {
-      <p class="estado-vazio">Carregando…</p>
+      <app-esqueleto tipo="lista" [linhas]="4" />
     }
   `,
 })

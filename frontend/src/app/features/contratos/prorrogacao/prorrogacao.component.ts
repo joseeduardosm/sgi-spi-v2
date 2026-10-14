@@ -18,6 +18,7 @@ import { CamposParecer, DetalheContrato, ProcessoProrrogacao, RegraSobDemanda } 
 import { paraDecimalApi, paraDecimalTela, ROTULOS_PAPEL } from '../compartilhado/rotulos';
 import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 // Campos do parecer, na ordem de exibição
 const CAMPOS: { campo: keyof CamposParecer; rotulo: string }[] = [
   { campo: 'avaliacao_geral', rotulo: 'Avaliação geral da execução contratual' },
@@ -31,7 +32,7 @@ const CAMPOS: { campo: keyof CamposParecer; rotulo: string }[] = [
 /** Tela 4: prorrogação com prazo, itens sob demanda, parecer opcional, ciências opcionais e termo aditivo. */
 @Component({
   selector: 'app-prorrogacao',
-  imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './prorrogacao.component.html',
 })
 export class ProrrogacaoComponent implements OnInit {

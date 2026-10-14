@@ -50,6 +50,7 @@ export class EtapaMedicaoComponent implements OnChanges {
   ngOnChanges(): void {
     const d = this.detalhe();
     this.medidas = Object.fromEntries(d.itens.map((i) => [i.id, paraDecimalTela(i.quantidade_medida)]));
+    this.acertos = Object.fromEntries(d.itens.map((i) => [i.id, Number(i.acerto) ? paraDecimalTela(i.acerto) : '']));
     this.marcadas = Object.fromEntries(d.itens.map((i) => [i.id, !!i.despesa_variavel]));
     this.notas.set(d.notas_selecionadas);
     this.alterado.set(false);
@@ -63,9 +64,34 @@ export class EtapaMedicaoComponent implements OnChanges {
   // Soma do saldo livre das NEs escolhidas, comparada ao total medido
   protected readonly saldoNotas = computed(() => this.notas().reduce((t, n) => t + Number(n.saldo_livre), 0));
 
-  /** Subtotal do item com a quantidade digitada. */
+  /** Acertos de centavos digitados por item (ex.: "0,01", "-0,02"); vazio = sem acerto. */
+  protected acertos: Record<string, string> = {};
+
+  /** Acerto do item como número (aceita "+0,01", "-0,02"; texto inválido vale zero). */
+  protected acertoDe(itemId: string): number {
+    const n = Number(paraDecimalApi((this.acertos[itemId] ?? '').replace(/^\+/, '')));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** Acerto fora dos limites (mais de R$ 1,00, mais de duas casas) ou sem quantidade medida. */
+  protected acertoInvalido(itemId: string): boolean {
+    const a = this.acertoDe(itemId);
+    if (!a) return false;
+    const semMedicao = !(Number(paraDecimalApi(this.medidas[itemId])) > 0);
+    return Math.abs(a) > 1 || Math.abs(Math.round(a * 100) - a * 100) > 1e-6 || semMedicao;
+  }
+
+  /** Acerto com sinal para leitura ("+R$ 0,01", "-R$ 0,02"); sem acerto, um traço. */
+  protected acertoTexto(valor: string | number): string {
+    const n = Number(valor);
+    if (!n) return '—';
+    return `${n > 0 ? '+' : '−'}R$ ${Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  /** Subtotal do item: quantidade digitada × preço, arredondado em centavos, mais o acerto. */
   protected subtotal(itemId: string, preco: string): number {
-    return (Number(paraDecimalApi(this.medidas[itemId])) || 0) * Number(preco);
+    const bruto = (Number(paraDecimalApi(this.medidas[itemId])) || 0) * Number(preco);
+    return Math.round(bruto * 100) / 100 + this.acertoDe(itemId);
   }
 
   /** Há item marcado como despesa variável (mostra os subtotais separados). */
@@ -159,6 +185,11 @@ export class EtapaMedicaoComponent implements OnChanges {
       this.dialogos.avisar('Medição acima do saldo líquido', `Ajuste: ${this.excedentes().join(', ')}. Nenhum item pode ser medido acima do saldo líquido (saldo − glosas).`);
       return;
     }
+    const invalidos = d.itens.filter((i) => this.acertoInvalido(i.id)).map((i) => i.descricao);
+    if (invalidos.length) {
+      this.dialogos.avisar('Acerto inválido', `Confira o acerto de: ${invalidos.join(', ')}. O acerto é em centavos (até R$ 1,00 para mais ou para menos) e só vale em item medido.`);
+      return;
+    }
     if (d.ciencias.length) {
       const ok = await this.dialogos.confirmar({
         titulo: 'Salvar a medição?',
@@ -167,7 +198,7 @@ export class EtapaMedicaoComponent implements OnChanges {
       });
       if (!ok) return;
     }
-    const itens = d.itens.map((i) => ({ id: i.id, quantidade_medida: paraDecimalApi(this.medidas[i.id]), despesa_variavel: !!this.marcadas[i.id] }));
+    const itens = d.itens.map((i) => ({ id: i.id, quantidade_medida: paraDecimalApi(this.medidas[i.id]), acerto: this.acertoDe(i.id).toFixed(2), despesa_variavel: !!this.marcadas[i.id] }));
     this.api.salvarMedicao(d.contrato_id, d.id, itens, this.notas().map((n) => n.id)).subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível salvar a medição'),

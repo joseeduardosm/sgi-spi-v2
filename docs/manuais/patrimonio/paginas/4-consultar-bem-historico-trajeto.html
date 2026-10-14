@@ -1,0 +1,30 @@
+<h2>Procurar um bem</h2>
+<p>Na tela <strong>Bens</strong>, cada bem é um cartão com a <strong>chapa</strong>, a descrição, a sala e os marcadores de <strong>situação</strong>, <strong>conservação</strong> e alertas (fora de garantia, garantia vencendo, dados contábeis pendentes, classificação pendente, em movimentação).</p>
+[[p03-cartao-do-bem]]
+<p>Digite na barra de pesquisa a chapa, a descrição, a marca, o modelo ou o número de série. O botão <strong>Filtros</strong> abre os filtros por <strong>situação</strong>, <strong>conservação</strong>, <strong>garantia</strong>, <strong>grupo de material</strong>, <strong>sala</strong> e <strong>dados contábeis pendentes</strong>; ali também estão os botões <strong>Excel</strong> e <strong>PDF</strong>, que exportam a lista filtrada. Os bens baixados só aparecem quando se filtra pela situação <strong>Baixado</strong>.</p>
+[[p02-filtros]]
+<h2>Cartões ou lista</h2>
+<p>A tela <strong>Bens</strong> tem duas formas de exibição, que você alterna em <strong>Cartões | Lista</strong> (a escolha fica guardada neste aparelho). Os <strong>cartões</strong> são ideais no celular. A <strong>lista</strong> é uma tabela, parecida com a do GLPI, boa para comparar muitos bens no computador:</p>
+<ul>
+<li><strong>Colunas ordenáveis:</strong> clique no título da coluna para ordenar; clique de novo para inverter. A ordem vale para <strong>todas as páginas</strong> (é feita no servidor), e os campos vazios ficam sempre no fim.</li>
+<li><strong>Colunas à sua escolha:</strong> o botão <strong>Colunas</strong> abre a lista de colunas (chapa, descrição, sala, situação, conservação, grupo, valor de aquisição, valor atual, data de aquisição, fim da garantia, responsável, marca, modelo, número de série, UGE, UA, divisão, nota fiscal, fornecedor e data de cadastro). Marque as que quiser ver; <strong>Restaurar o padrão</strong> volta à seleção inicial. A chapa sempre aparece, porque é o link para a página do bem.</li>
+</ul>
+[[p04-lista-colunas]]
+[[p05-lista-ordenada]]
+<h2>A página do bem</h2>
+<p>Clique no cartão para abrir a <strong>página do bem</strong>. Ela tem três abas: <strong>Dados</strong>, <strong>Linha do tempo</strong> e <strong>Trajeto</strong>. No topo ficam os marcadores e as ações (<strong>Editar</strong>, <strong>Movimentar</strong> e, para quem tem Controle total, <strong>Ajustar local</strong>).</p>
+[[d01-detalhe-do-bem]]
+<p>Na aba <strong>Dados</strong>, o ícone <strong>⟲</strong> ao lado de cada campo abre o <strong>histórico só daquele campo</strong>: o que mudou (de → para), quem mudou e quando.</p>
+[[d02-historico-do-campo]]
+<h2>Editar o bem</h2>
+<p>Clique em <strong>Editar</strong>, altere o que for preciso e salve. Cada campo alterado vira um registro no histórico. Não se edita o local, o responsável nem a situação por aqui (só entre Ativo e Em manutenção): isso tem fluxo próprio. O bem <strong>baixado</strong> não pode mais ser editado.</p>
+<h2>Fotos</h2>
+<p>Cada bem aceita <strong>até três fotos</strong>. Na aba Dados, use <strong>+ Foto</strong> (no celular, a câmera abre direto). A foto é reduzida no aparelho antes do envio, para economizar sinal.</p>
+<h2>Linha do tempo e trajeto</h2>
+<p>A aba <strong>Linha do tempo</strong> mostra <strong>todos os eventos</strong> do bem em ordem: cadastro, alterações (campo, valor anterior e novo), movimentações, mudanças de responsável, classificações, baixa. Cada evento traz quem fez, quando e <strong>de onde veio</strong> (endereço e canal: web, celular ou fila sem sinal).</p>
+[[d03-linha-do-tempo]]
+<p>A aba <strong>Trajeto</strong> mostra <strong>todos os locais por onde o bem passou</strong>, com quem pediu e quem autorizou cada mudança.</p>
+[[d04-trajeto]]
+<h2>Ajustar o local sem movimentação (Controle total)</h2>
+<p>Quem tem Controle total pode mudar o local de um bem diretamente: clique em <strong>Ajustar local</strong>, escolha a sala e escreva o <strong>motivo</strong> (obrigatório). O ajuste fica registrado no histórico e no trajeto. Não vale para bem extraviado, baixado, com classificação pendente ou em outra movimentação.</p>
+[[d05-ajustar-local]]

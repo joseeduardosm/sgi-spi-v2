@@ -24,7 +24,7 @@
             @case ('justificativa') {
               <p class="dica-formulario" style="margin: 0 0 12px">Justificativa Técnica em PDF, assinada por gestor, fiscais e Ordenador de Despesa.</p>
               <div class="acoes-cartao esquerda">
-                @if (a.justificativa) { <button type="button" class="link-arquivo" (click)="baixar(a, a.justificativa.anexo_id)">{{ a.justificativa.nome }}</button> }
+                @if (a.justificativa) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.justificativa.nome" (click)="baixar(a, a.justificativa.anexo_id)">Baixar justificativa</button> }
                 @if (p.pode_editar) {
                   <app-envio-pdf rotulo="Selecionar justificativa" (selecionado)="arquivos.justificativa = $event" />
                   <button type="button" class="acao-primaria" [disabled]="!arquivos.justificativa" (click)="enviar(a, 'justificativa')">Anexar</button>
@@ -54,7 +54,7 @@
                 <div class="aviso-bloco" style="margin-top: 14px">
                   <strong>Autorização obrigatória:</strong> o acumulado passa de 25%. Anexe a autorização do Ordenador de Despesa.
                   <div class="acoes-cartao esquerda">
-                    @if (a.autorizacao) { <button type="button" class="link-arquivo" (click)="baixar(a, a.autorizacao.anexo_id)">{{ a.autorizacao.nome }}</button> }
+                    @if (a.autorizacao) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.autorizacao.nome" (click)="baixar(a, a.autorizacao.anexo_id)">Baixar autorização</button> }
                     @if (p.pode_editar) {
                       <app-envio-pdf rotulo="Selecionar autorização" (selecionado)="arquivos.autorizacao = $event" />
                       <button type="button" class="acao-secundaria" [disabled]="!arquivos.autorizacao" (click)="enviar(a, 'autorizacao')">Anexar</button>
@@ -78,14 +78,14 @@
                 }
               </div>
               @if (a.memoria_pdf) {
-                <p class="dica-formulario">Memória: <button type="button" class="link-arquivo" (click)="baixar(a, a.memoria_pdf.anexo_id)">Exportar memória PDF</button>
-                  @if (a.memoria_xlsx) { · <button type="button" class="link-arquivo" (click)="baixar(a, a.memoria_xlsx.anexo_id)">Exportar XLSX</button> }</p>
+                <p class="dica-formulario">Memória: <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(a, a.memoria_pdf.anexo_id)">Exportar memória PDF</button>
+                  @if (a.memoria_xlsx) { · <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(a, a.memoria_xlsx.anexo_id)">Exportar XLSX</button> }</p>
               }
             }
             @case ('formalizacao') {
               <p class="secao-formulario" style="margin-top: 0">Ciência e De Acordo da Contratada</p>
               <div class="acoes-cartao esquerda">
-                @if (a.de_acordo) { <button type="button" class="link-arquivo" (click)="baixar(a, a.de_acordo.anexo_id)">{{ a.de_acordo.nome }}</button> }
+                @if (a.de_acordo) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.de_acordo.nome" (click)="baixar(a, a.de_acordo.anexo_id)">Baixar "de acordo"</button> }
                 @if (p.pode_editar) {
                   <app-envio-pdf rotulo="Selecionar De Acordo (PDF)" (selecionado)="arquivos.de_acordo = $event" />
                   <button type="button" class="acao-secundaria" [disabled]="!arquivos.de_acordo" (click)="enviar(a, 'de_acordo')">Anexar</button>
@@ -93,11 +93,11 @@
                 @if (a.de_acordo && a.memoria_pdf && p.pode_editar) {
                   <button type="button" class="acao-secundaria" (click)="acao(a, 'consolidado', 'Gerando o documento consolidado…')">Gerar documento consolidado</button>
                 }
-                @if (a.consolidado) { <button type="button" class="link-arquivo" (click)="baixar(a, a.consolidado.anexo_id)">Baixar consolidado</button> }
+                @if (a.consolidado) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(a, a.consolidado.anexo_id)">Baixar consolidado</button> }
               </div>
               <p class="secao-formulario">Termo Aditivo assinado</p>
               <div class="acoes-cartao esquerda">
-                @if (a.termo) { <button type="button" class="link-arquivo" (click)="baixar(a, a.termo.anexo_id)">{{ a.termo.nome }}</button> }
+                @if (a.termo) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.termo.nome" (click)="baixar(a, a.termo.anexo_id)">Baixar termo</button> }
                 @if (p.pode_editar) {
                   <app-envio-pdf rotulo="Selecionar Termo Aditivo (PDF)" (selecionado)="arquivos.termo = $event" />
                   <button type="button" class="acao-secundaria" [disabled]="!arquivos.termo" (click)="enviar(a, 'termo')">Anexar</button>
@@ -145,5 +145,5 @@
     }
   }
 } @else {
-  <p class="estado-vazio">Carregando…</p>
+  <app-esqueleto tipo="formulario" [linhas]="5" />
 }

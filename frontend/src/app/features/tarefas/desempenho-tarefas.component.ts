@@ -12,6 +12,7 @@ import { AjudaGrafico, AjudaGraficoComponent } from './ajuda-grafico.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { DesempenhoEquipe, Marcador } from './tarefas.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 const PERIODOS = [{ dias: 30, rotulo: 'Últimos 30 dias' }, { dias: 60, rotulo: 'Últimos 60 dias' }, { dias: 90, rotulo: 'Últimos 90 dias' }, { dias: 180, rotulo: 'Últimos 180 dias' }];
 
 function iso(d: Date): string {
@@ -54,7 +55,7 @@ const AJUDAS: Record<'burndown' | 'vazao' | 'ciclo' | 'fluxo', AjudaGrafico> = {
 
 @Component({
   selector: 'app-desempenho-tarefas',
-  imports: [FormsModule, DecimalPipe, GraficoComponent, AjudaGraficoComponent],
+  imports: [EsqueletoComponent, FormsModule, DecimalPipe, GraficoComponent, AjudaGraficoComponent],
   template: `
     <section class="desempenho" aria-label="Desempenho da equipe">
       <div class="filtros-desempenho">
@@ -101,22 +102,22 @@ const AJUDAS: Record<'burndown' | 'vazao' | 'ciclo' | 'fluxo', AjudaGrafico> = {
         <div class="grade-graficos-desempenho">
           <article class="cartao-dados">
             <header><div><h2>Burndown</h2><small>Tarefas abertas por dia, contra a linha ideal até zerar no fim do período. A linha de escopo mostra o que entrou no meio.</small></div></header>
-            <div class="corpo"><app-grafico tipo="line" titulo="Burndown de tarefas" [rotulos]="rotulosBurndown()" [series]="seriesBurndown()" [altura]="280" /></div>
+            <div class="corpo">@defer (on idle) { <app-grafico tipo="line" titulo="Burndown de tarefas" [rotulos]="rotulosBurndown()" [series]="seriesBurndown()" [altura]="280" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</div>
             <app-ajuda-grafico [ajuda]="ajudas.burndown" />
           </article>
           <article class="cartao-dados">
             <header><div><h2>Vazão semanal</h2><small>Tarefas criadas e concluídas por semana (barras) e média móvel de 4 semanas das concluídas (linha).</small></div></header>
-            <div class="corpo"><app-grafico tipo="bar" titulo="Vazão semanal" [rotulos]="rotulosSemanas()" [series]="seriesVazao()" [altura]="280" /></div>
+            <div class="corpo">@defer (on idle) { <app-grafico tipo="bar" titulo="Vazão semanal" [rotulos]="rotulosSemanas()" [series]="seriesVazao()" [altura]="280" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</div>
             <app-ajuda-grafico [ajuda]="ajudas.vazao" />
           </article>
           <article class="cartao-dados">
             <header><div><h2>Tempo de ciclo e lead time</h2><small>Mediana e percentil 85, em dias, das tarefas concluídas em cada semana. Ciclo: da 1ª vez em andamento até concluir. Lead time: da criação até concluir.</small></div></header>
-            <div class="corpo"><app-grafico tipo="line" titulo="Tempo de ciclo e lead time em dias" [rotulos]="rotulosSemanas()" [series]="seriesCiclo()" [altura]="280" /></div>
+            <div class="corpo">@defer (on idle) { <app-grafico tipo="line" titulo="Tempo de ciclo e lead time em dias" [rotulos]="rotulosSemanas()" [series]="seriesCiclo()" [altura]="280" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</div>
             <app-ajuda-grafico [ajuda]="ajudas.ciclo" />
           </article>
           <article class="cartao-dados">
             <header><div><h2>Fluxo acumulado</h2><small>Quantas tarefas estão em cada situação a cada dia. Faixas que engordam indicam gargalo.</small></div></header>
-            <div class="corpo"><app-grafico tipo="line" titulo="Fluxo acumulado por situação" [rotulos]="rotulosFluxo()" [series]="seriesFluxo()" [empilhado]="true" [altura]="280" /></div>
+            <div class="corpo">@defer (on idle) { <app-grafico tipo="line" titulo="Fluxo acumulado por situação" [rotulos]="rotulosFluxo()" [series]="seriesFluxo()" [empilhado]="true" [altura]="280" /> } @placeholder { <app-esqueleto tipo="cartao" /> }</div>
             <app-ajuda-grafico [ajuda]="ajudas.fluxo" />
           </article>
         </div>
@@ -139,7 +140,7 @@ const AJUDAS: Record<'burndown' | 'vazao' | 'ciclo' | 'fluxo', AjudaGrafico> = {
         </article>
         }
       } @else {
-        <p class="estado-vazio">{{ carregando() ? 'Carregando…' : 'Sem dados.' }}</p>
+        <div class="estado-vazio">@if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ 'Sem dados.' }} }</div>
       }
     </section>
   `,

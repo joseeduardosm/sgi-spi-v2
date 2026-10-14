@@ -11,6 +11,7 @@ import { paraCampo } from './nova-tarefa.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { AcaoPipeline, PessoaCarga, TarefaDetalhe, TarefaResumo } from './tarefas.models';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 export type ModoJanela = 'prazo' | 'transferir' | AcaoPipeline;
 
 /** Tarefa mínima que a janela precisa (serve o resumo da lista ou o detalhe). */
@@ -27,13 +28,13 @@ const TEXTOS: Partial<Record<ModoJanela, { titulo: string; rotulo: string; botao
 /** Janela modal de uma ação da tarefa; emite a tarefa atualizada. */
 @Component({
   selector: 'app-janela-tarefa',
-  imports: [FormsModule, AgendaPessoaComponent],
+  imports: [EsqueletoComponent, FormsModule, AgendaPessoaComponent],
   host: { '(document:keydown.escape)': 'fechar()' },
   template: `
     @if (modo(); as m) {
       <!-- "sobre-janela": fica acima da janela da tarefa quando aberta a partir dela -->
-      <div class="fundo-modal sobre-janela" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal sobre-janela" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-tarefa">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal sobre-janela" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal sobre-janela" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-tarefa">
         <header>
           <div><span class="modal-sobretitulo">Tarefa #{{ tarefa()?.numero }}</span><h2 id="titulo-janela-tarefa">{{ textos()?.titulo }}</h2></div>
           <button type="button" aria-label="Fechar" (click)="fechar()">×</button>
@@ -57,7 +58,7 @@ const TEXTOS: Partial<Record<ModoJanela, { titulo: string; rotulo: string; botao
                         <small>{{ p.a_fazer }} a fazer · {{ p.em_andamento }} em andamento{{ p.atrasadas ? ' · ' + p.atrasadas + ' atrasada(s)' : '' }}</small>
                       </label>
                     }
-                  } @empty { <p class="dica-formulario">Carregando a equipe…</p> }
+                  } @empty { <app-esqueleto tipo="lista" [linhas]="4" /> }
                 </div>
                 @if (!tarefa()?.equipe) {
                   <input name="busca" placeholder="Pesquisar pessoa (nome ou login)" [ngModel]="busca()" (ngModelChange)="pesquisar($event)" />

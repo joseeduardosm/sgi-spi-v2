@@ -1,8 +1,9 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para a administração do Protocolo: tipos de documento, sequências por exercício e ampliação de faixa.
+// Este arquivo serve para a administração do Protocolo: cartões dos tipos de documento por exercício (o clique abre a página de detalhe).
 
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CabecalhoProtocoloComponent } from './cabecalho-protocolo.component';
@@ -12,45 +13,38 @@ import { SequenciaProtocolo, TipoProtocolo } from './protocolo.models';
 /** Só CONTROLE_TOTAL (a API confere em cada chamada). */
 @Component({
   selector: 'app-administracao-protocolo',
-  imports: [FormsModule, CabecalhoProtocoloComponent],
+  imports: [FormsModule, RouterLink, CabecalhoProtocoloComponent],
   template: `
-    <app-cabecalho-protocolo titulo="Administração do Protocolo" descricao="Tipos de documento, sequências por exercício e ampliação das faixas." />
+    <app-cabecalho-protocolo titulo="Administração do Protocolo" descricao="Tipos de documento, sequências por exercício, faixa reservada ao SAA e ampliação das faixas." />
     <section class="painel-gestao protocolo">
-      <form class="barra-protocolo" (ngSubmit)="criarTipo()">
-        <div class="campo"><label for="ad-nome">Novo tipo de documento</label><input id="ad-nome" name="nome" maxlength="200" placeholder="Ex.: Ofício" [(ngModel)]="novoTipo" /></div>
-        <button type="submit" class="acao-primaria" [disabled]="!novoTipo.trim()">Adicionar tipo</button>
-      </form>
+      <div class="barra-protocolo">
+        <div class="campo busca"><label for="busca-tipo">Pesquisar</label>
+          <input id="busca-tipo" type="search" name="busca" autocomplete="off" placeholder="Nome, exercício ou número (ex.: Portaria, 2026, 150)" aria-label="Pesquisar tipos de documento" [ngModel]="busca()" (ngModelChange)="busca.set($event)" /></div>
+        <span class="espacador"></span>
+        <a class="acao-primaria" routerLink="/protocolo/administracao/tipos/novo">+ Novo tipo de documento</a>
+      </div>
 
-      @for (t of tipos(); track t.id) {
-        <article class="cartao-dados tipo-protocolo">
-          <header>
-            <div><h2>{{ t.nome }}</h2><small>{{ t.sequencias.length }} exercício(s) cadastrado(s)</small></div>
-            <div class="acoes-formulario">
-              <button type="button" class="acao-secundaria acao-pequena" (click)="renomear(t)">Renomear</button>
-              <button type="button" class="acao-recusar acao-pequena" (click)="excluir(t)">Excluir</button>
-            </div>
-          </header>
-          <div class="corpo">
-            @for (s of t.sequencias; track s.id) {
-              <div class="linha-sequencia">
-                <strong>{{ s.exercicio }}</strong>
-                <span class="faixa">de <input type="number" min="0" [(ngModel)]="faixas[s.id].inicio" [name]="'i' + s.id" aria-label="Início da faixa" />
-                  até <input type="number" min="0" [(ngModel)]="faixas[s.id].fim" [name]="'f' + s.id" aria-label="Fim da faixa" /></span>
-                <small>Atual: {{ s.inicio }} a {{ s.fim }}. Diminuir o início ou aumentar o fim <b>amplia</b> a faixa.</small>
-                <button type="button" class="acao-secundaria acao-pequena" [disabled]="!mudou(s)" (click)="alterarFaixa(s)">Salvar faixa</button>
-              </div>
-            } @empty { <p class="estado-vazio">Nenhuma sequência ainda.</p> }
-            <form class="linha-sequencia nova" (ngSubmit)="criarSequencia(t)">
-              <strong>Novo exercício</strong>
-              <span class="faixa"><input type="number" min="2000" max="2200" [(ngModel)]="novas[t.id].exercicio" [name]="'e' + t.id" aria-label="Exercício" />
-                de <input type="number" min="0" [(ngModel)]="novas[t.id].inicio" [name]="'a' + t.id" aria-label="Primeiro número" />
-                até <input type="number" min="0" [(ngModel)]="novas[t.id].fim" [name]="'b' + t.id" aria-label="Último número" /></span>
-              <button type="submit" class="acao-secundaria acao-pequena">Criar sequência</button>
-            </form>
-          </div>
-        </article>
-      } @empty { <p class="estado-vazio">Nenhum tipo cadastrado.</p> }
+      <!-- Um cartão (proporção de cartão de visita) por tipo e exercício; o clique abre o detalhe com a edição -->
+      <div class="grade-cartoes-protocolo">
+        @for (c of cartoes(); track c.chave) {
+          <a class="cartao-tipo-protocolo" [routerLink]="['/protocolo/administracao/tipos', c.tipo.id]" [queryParams]="c.seq ? { sequencia: c.seq.id } : null">
+            <span class="cv-nome">{{ c.tipo.nome }}</span>
+            <span class="cv-exercicio">{{ c.seq ? c.seq.exercicio : 'Sem exercício' }}</span>
+            <span class="cv-faixa">@if (c.seq) { Números {{ c.seq.inicio }} a {{ c.seq.fim }} } @else { Nenhuma sequência ainda }</span>
+          </a>
+        } @empty { <p class="estado-vazio">{{ busca().trim() ? 'Nenhum tipo encontrado para a pesquisa.' : 'Nenhum tipo cadastrado.' }}</p> }
+      </div>
     </section>
+  `,
+  styles: `
+    .campo.busca { flex: 1 1 320px; max-width: 460px; }
+    .grade-cartoes-protocolo { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; padding-bottom: 18px; }
+    /* Proporção de cartão de visita (89 x 51 mm) */
+    .cartao-tipo-protocolo { display: flex; flex-direction: column; justify-content: space-between; aspect-ratio: 89 / 51; padding: 18px 20px; border: 1px solid var(--cor-e2e5e8); border-left: 5px solid #af3741; border-radius: var(--spi-raio-g); background: var(--cor-ffffff); text-decoration: none; color: inherit; cursor: pointer;  transition: box-shadow .15s, transform .15s;
+      &:hover, &:focus-visible { border-color: var(--spi-borda-campo); transform: translateY(-2px); } }
+    .cv-nome { font-size: 17px; font-weight: 700; color: var(--cor-1a1e22, #1a1e22); }
+    .cv-exercicio { font-size: 28px; font-weight: 700; color: #af3741; line-height: 1; }
+    .cv-faixa { color: var(--cor-5a6673); font-size: 13px; }
   `,
 })
 export class AdministracaoProtocoloComponent implements OnInit {
@@ -58,9 +52,17 @@ export class AdministracaoProtocoloComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
 
   protected readonly tipos = signal<TipoProtocolo[]>([]);
-  protected novoTipo = '';
-  protected faixas: Record<string, { inicio: number; fim: number }> = {};
-  protected novas: Record<string, { exercicio: number; inicio: number; fim: number }> = {};
+  /** Um cartão por tipo e exercício; o tipo sem sequência ganha um cartão só dele. */
+  protected readonly busca = signal('');
+  protected readonly cartoes = computed(() => {
+    const todos = this.tipos().flatMap((tipo) =>
+      tipo.sequencias.length ? tipo.sequencias.map((seq) => ({ chave: seq.id, tipo, seq })) : [{ chave: tipo.id, tipo, seq: null as SequenciaProtocolo | null }]);
+    const termo = this.busca().trim().toLowerCase();
+    if (!termo) return todos;
+    // Casa o nome, o exercício ou qualquer número dentro da faixa (quando o termo é numérico)
+    const numero = /^\d+$/.test(termo) ? Number(termo) : null;
+    return todos.filter((c) => c.tipo.nome.toLowerCase().includes(termo) || (!!c.seq && (String(c.seq.exercicio).includes(termo) || (numero !== null && numero >= c.seq.inicio && numero <= c.seq.fim))));
+  });
 
   ngOnInit(): void {
     this.carregar();
@@ -70,47 +72,8 @@ export class AdministracaoProtocoloComponent implements OnInit {
     this.api.tipos().subscribe({
       next: (r) => {
         this.tipos.set(r.itens);
-        for (const t of r.itens) {
-          this.novas[t.id] ??= { exercicio: new Date().getFullYear() + 1, inicio: 1, fim: 100 };
-          for (const s of t.sequencias) this.faixas[s.id] = { inicio: s.inicio, fim: s.fim };
-        }
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar a administração'),
     });
-  }
-
-  private erro(titulo: string) {
-    return (e: unknown) => this.dialogos.mostrarErro(e, titulo);
-  }
-
-  protected criarTipo(): void {
-    this.api.criarTipo(this.novoTipo.trim()).subscribe({ next: () => { this.novoTipo = ''; this.carregar(); }, error: this.erro('Não foi possível criar o tipo') });
-  }
-
-  protected renomear(t: TipoProtocolo): void {
-    const nome = window.prompt('Novo nome do tipo de documento:', t.nome)?.trim();
-    if (!nome || nome === t.nome) return;
-    this.api.renomearTipo(t.id, nome).subscribe({ next: () => this.carregar(), error: this.erro('Não foi possível renomear') });
-  }
-
-  protected async excluir(t: TipoProtocolo): Promise<void> {
-    const ok = await this.dialogos.confirmar({
-      titulo: 'Excluir este tipo?', mensagem: `"${t.nome}" e as suas sequências serão apagados. Só é possível se nenhum número foi reservado, utilizado ou anulado.`,
-      rotuloConfirmar: 'Excluir', segundos: 3,
-    });
-    if (ok) this.api.excluirTipo(t.id).subscribe({ next: () => this.carregar(), error: this.erro('Não foi possível excluir') });
-  }
-
-  protected mudou(s: SequenciaProtocolo): boolean {
-    const f = this.faixas[s.id];
-    return !!f && (f.inicio !== s.inicio || f.fim !== s.fim);
-  }
-
-  protected alterarFaixa(s: SequenciaProtocolo): void {
-    this.api.alterarFaixa(s.id, this.faixas[s.id]).subscribe({ next: () => this.carregar(), error: this.erro('Não foi possível alterar a faixa') });
-  }
-
-  protected criarSequencia(t: TipoProtocolo): void {
-    this.api.criarSequencia(t.id, this.novas[t.id]).subscribe({ next: () => this.carregar(), error: this.erro('Não foi possível criar a sequência') });
   }
 }

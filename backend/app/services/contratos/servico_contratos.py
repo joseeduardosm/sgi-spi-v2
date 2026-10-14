@@ -190,6 +190,7 @@ def permissoes(sessao: Session, contrato: Contrato, usuario: Usuario) -> Permiss
         pode_editar=pode_editar(sessao, contrato, usuario),
         pode_excluir=pode_excluir(sessao, contrato, usuario),
         pode_administrar=eh_administrador(sessao, usuario),
+        pode_gerir_autoridades=eh_administrador(sessao, usuario) or any(d.usuario_id == usuario.id and d.papel in ("gestor", "gestor_suplente") for d in designacoes_vigentes(contrato)),
     )
 
 
@@ -660,7 +661,7 @@ def _aplicar_equipe(sessao: Session, contrato: Contrato, dados: GravacaoContrato
 
 def _avisar_designados(sessao: Session, contrato: Contrato, dados: GravacaoContrato, mudancas: dict, autor: Usuario) -> None:
     """Mensagem em janela para cada pessoa que passou a integrar a equipe (quem designou a si mesmo não recebe)."""
-    from app.services import servico_mensagens
+    from app.services import notificacoes
     from app.services.contratos.documentos_execucao import PAPEIS
 
     identificacao = contrato.apelido or contrato.empresa.razao_social if contrato.empresa else contrato.apelido
@@ -669,13 +670,12 @@ def _avisar_designados(sessao: Session, contrato: Contrato, dados: GravacaoContr
         if f"equipe.{papel}" not in mudancas or usuario_id is None or usuario_id == autor.id:
             continue
         rotulo = PAPEIS.get(papel, papel)
-        servico_mensagens.notificar(
+        notificacoes.notificar(
             sessao, [usuario_id], f"Você foi cadastrado como {rotulo} no contrato {contrato.numero}",
             f"{autor.nome_completo or autor.login} cadastrou você como {rotulo} no contrato {contrato.numero}"
             + (f" – {identificacao}" if identificacao else "") + f".\n\nObjeto: {contrato.objeto}",
             chave=f"equipe:{contrato.id}:{papel}:{usuario_id}:{agora_utc():%Y%m%d%H%M%S%f}", categoria="atribuicao", prioridade="alta",
-            link=f"/contratos/{contrato.id}", contrato_id=contrato.id, abrir_em_janela=True, email=True,
-        )
+            link=f"/contratos/{contrato.id}", contrato_id=contrato.id, abrir_em_janela=True, evento="contratos.equipe_incluido")
 
 
 def criar_contrato(sessao: Session, dados: GravacaoContrato, autor: Usuario, commit: bool = True) -> Contrato:

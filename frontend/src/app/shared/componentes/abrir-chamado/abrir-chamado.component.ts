@@ -7,6 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { ChamadoAberto, ChamadoService, DadosSolicitante } from '../../../core/chamados/chamado.service';
 import { erroExibivel } from '../../utilitarios/erros-api';
 
+import { EsqueletoComponent } from '../esqueleto/esqueleto.component';
 /** Anexo escolhido ou colado; imagens ganham miniatura. */
 interface AnexoEscolhido {
   arquivo: File;
@@ -25,12 +26,12 @@ const EXTENSOES = ['.png', '.jpg', '.jpeg', '.pdf', '.docx', '.xlsx', '.csv'];
  */
 @Component({
   selector: 'app-abrir-chamado',
-  imports: [FormsModule],
+  imports: [EsqueletoComponent, FormsModule],
   host: { '(document:keydown.escape)': 'fechar()' },
   template: `
     @if (servico.modalAberto()) {
-      <div class="fundo-modal" role="presentation" (click)="fechar()"></div>
-      <section class="modal-portal modal-chamado" role="dialog" aria-modal="true" aria-labelledby="titulo-abrir-chamado" (paste)="aoColar($event)">
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="fechar()"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal modal-chamado" role="dialog" aria-modal="true" aria-labelledby="titulo-abrir-chamado" (paste)="aoColar($event)">
         <header>
           <div><span class="modal-sobretitulo">Chamados</span><h2 id="titulo-abrir-chamado">Abrir chamado</h2></div>
           <button type="button" aria-label="Fechar" [disabled]="enviando()" (click)="fechar()">×</button>
@@ -63,7 +64,7 @@ const EXTENSOES = ['.png', '.jpg', '.jpeg', '.pdf', '.docx', '.xlsx', '.csv'];
               <div class="anexos-chamado">
                 @for (a of anexos(); track a.arquivo) {
                   <figure>
-                    @if (a.previa) { <img [src]="a.previa" [alt]="a.arquivo.name" /> } @else { <span class="arquivo-anexo" aria-hidden="true">{{ a.arquivo.name.split('.').pop() }}</span> }
+                    @if (a.previa) { <img loading="lazy" decoding="async" [src]="a.previa" [alt]="a.arquivo.name" /> } @else { <span class="arquivo-anexo" aria-hidden="true">{{ a.arquivo.name.split('.').pop() }}</span> }
                     <figcaption>{{ a.arquivo.name }}</figcaption>
                     <button type="button" class="link-arquivo" [attr.aria-label]="'Remover ' + a.arquivo.name" [disabled]="enviando()" (click)="remover($index)">remover</button>
                   </figure>
@@ -90,7 +91,7 @@ const EXTENSOES = ['.png', '.jpg', '.jpeg', '.pdf', '.docx', '.xlsx', '.csv'];
                   <p class="dica-formulario">Os dados marcados como <em>temporário</em> são os que você informou e ainda aguardam validação da CGP; seguem no chamado assim mesmo.</p>
                 }
               } @else {
-                <p class="dica-formulario">Carregando seus dados…</p>
+                <app-esqueleto tipo="lista" [linhas]="4" />
               }
 
               @if (erro()) { <p class="aviso-bloco erro" role="alert">{{ erro() }}</p> }

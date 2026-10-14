@@ -29,8 +29,8 @@ Esta pasta é parte do código-fonte. Ela é a referência para o desenvolviment
 | [endpoints/protocolo.md](endpoints/protocolo.md) | `/api/protocolo`: numeração institucional por tipo e exercício (reserva do próximo número, sigilo, painel, exportação) |
 | [endpoints/contratacoes.md](endpoints/contratacoes.md) | `/api/contratacoes`: ETP e TR (árvore de itens, revisões, versões com diferença, conferência, Word/PDF) |
 | [endpoints/contratos-correcao-itens.md](endpoints/contratos-correcao-itens.md) | `/api/contratos/{id}/itens/correcoes`: correção de preço e quantidade dos itens com dois olhos; competências abertas seguem o cadastro e as concluídas congelam |
-| [endpoints/mensagens.md](endpoints/mensagens.md) | `/api/mensagens/*`: mensageria (caixa de mensagens, avisos automáticos, e-mail e lembretes) |
-| [endpoints/mensageria.md](endpoints/mensageria.md) | `/api/mensageria/*`: tela Mensageria da conta root (e-mail de changelog) |
+| [endpoints/notificacoes.md](endpoints/notificacoes.md) | `/api/notificacoes/*`: notificações (caixa de notificações, avisos automáticos, e-mail e lembretes) |
+| [endpoints/notificacoes-changelog.md](endpoints/notificacoes-changelog.md) | `/api/notificacoes/changelog/*`: telas Notificações da conta root (e-mail de changelog) |
 | [endpoints/sistema.md](endpoints/sistema.md) | `/api/saude` |
 | [endpoints/contratos-empresas.md](endpoints/contratos-empresas.md) | `/api/contratos/empresas/*`: empresas contratadas e prepostos |
 | [endpoints/contratos-cadastro.md](endpoints/contratos-cadastro.md) | `/api/contratos/*`: carteira, cadastro, detalhe, documentos importantes e histórico |

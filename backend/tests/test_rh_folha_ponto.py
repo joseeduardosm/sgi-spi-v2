@@ -71,7 +71,7 @@ def test_bloqueios_avisam_a_cgp(cliente, equipe, monkeypatch):  # noqa: F811
     from datetime import time
 
     from app.core.banco import FabricaSessao
-    from app.models.mensagem import EntregaMensagem, Mensagem
+    from app.models.notificacao import EntregaNotificacao, Notificacao
     from app.models.rh import AlteracaoCadastral
     from sqlalchemy import select
 
@@ -80,7 +80,7 @@ def test_bloqueios_avisam_a_cgp(cliente, equipe, monkeypatch):  # noqa: F811
     def avisos(prefixo):
         with FabricaSessao() as sessao:
             return [(e.destinatario_id, e.encerrada_em is not None) for e in sessao.scalars(
-                select(EntregaMensagem).join(Mensagem).where(Mensagem.chave.startswith(prefixo)))]
+                select(EntregaNotificacao).join(Notificacao).where(Notificacao.chave.startswith(prefixo)))]
 
     # 1) Dados funcionais incompletos (Bia só tem autorizador e período): 409 e aviso com e-mail à CGP (Rita)
     r = cliente.get(URL, params={"competencia": "2026-10"}, headers=h["bia"])

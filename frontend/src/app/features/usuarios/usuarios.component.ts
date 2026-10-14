@@ -16,10 +16,11 @@ import { FiltroUsuarios, UsuariosApiService } from './usuarios-api.service';
 import { DetalheUsuario } from './usuarios.models';
 import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 
+import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Lista de usuários: consulta para quem tem ACL; criação, edição e exclusão para o SuperRoot ou CONTROLE_TOTAL em `usuarios`. */
 @Component({
   selector: 'app-usuarios',
-  imports: [FormsModule, DatePipe, RouterLink, TrilhaComponent],
+  imports: [EsqueletoComponent, FormsModule, DatePipe, RouterLink, TrilhaComponent],
   templateUrl: './usuarios.component.html',
 })
 export class UsuariosComponent implements OnInit {

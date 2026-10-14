@@ -50,14 +50,14 @@ def _traduzir(sessao: Session | None = None):
 
 
 def _sequencia(s) -> SequenciaLeitura:
-    return SequenciaLeitura(id=s.id, exercicio=s.exercicio, inicio=s.inicio, fim=s.fim)
+    return SequenciaLeitura(id=s.id, exercicio=s.exercicio, inicio=s.inicio, fim=s.fim, liberar_a_partir_de=s.liberar_a_partir_de)
 
 
 def _tipo(t: TipoProtocolo) -> TipoLeitura:
     return TipoLeitura(id=t.id, nome=t.nome, sequencias=[_sequencia(s) for s in t.sequencias])
 
 
-def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, eventos: bool = False, contratos: dict | None = None) -> NumeroLeitura:
+def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, eventos: bool = False, contratos: dict | None = None, saa: bool = False) -> NumeroLeitura:
     arquivo = None
     if n.anexo is not None and n.anexo.excluido_em is None:
         arquivo = ArquivoLeitura(id=n.anexo.id, nome=n.anexo.nome_original, tamanho=n.anexo.tamanho, pode_baixar=servico.pode_ver_documento(n, usuario))
@@ -75,6 +75,7 @@ def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, 
         pode_anexar=ativo and n.reservado_em is not None and n.anexo_id is None and (dono or admin),
         pode_liberar=n.estado == "reservado" and (dono or admin),
         pode_alterar_sigilo=ativo and n.reservado_em is not None and (dono or usuario.superusuario),
+        pode_reservar=n.estado in ("livre", "reservado_saa") and (admin or (n.estado == "reservado_saa" and saa)),
         eventos=[EventoLeitura(tipo=e.tipo, autor_nome=e.autor_nome, texto=e.texto, ocorrido_em=e.ocorrido_em) for e in n.eventos] if eventos else [],
     )
 
@@ -88,10 +89,11 @@ def listar_tipos(sessao: Session = Depends(obter_sessao), usuario: Usuario = Dep
 
 
 @roteador.post("/tipos", response_model=TipoLeitura, status_code=status.HTTP_201_CREATED, summary="Criar tipo de documento",
-               description="Só CONTROLE_TOTAL. Nome único (sem diferenciar maiúsculas): `409` se já existir.", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO})
+               description="Só CONTROLE_TOTAL. Nome único (sem diferenciar maiúsculas): `409` se já existir. Com `sequencia`, cria também a faixa do primeiro exercício (com \"liberar a partir de\") na mesma transação.", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO})
 def criar_tipo(dados: GravacaoTipo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> TipoLeitura:
     with _traduzir(sessao):
-        return _tipo(servico.criar_tipo(sessao, dados.nome, usuario))
+        sequencia = dados.sequencia.model_dump() if dados.sequencia else None
+        return _tipo(servico.criar_tipo(sessao, dados.nome, usuario, sequencia))
 
 
 @roteador.put("/tipos/{tipo_id}", response_model=TipoLeitura, summary="Renomear tipo de documento", responses={**SEM_ADMIN, **CONFLITO, **resposta_nao_encontrado("Tipo")})
@@ -109,11 +111,11 @@ def excluir_tipo(tipo_id: uuid.UUID, sessao: Session = Depends(obter_sessao), us
 
 
 @roteador.post("/tipos/{tipo_id}/sequencias", response_model=SequenciaLeitura, status_code=status.HTTP_201_CREATED, summary="Criar a sequência de um exercício",
-               description="Só CONTROLE_TOTAL. Cria os números da faixa (até 10.000). Uma sequência por tipo e exercício (`409`).",
+               description="Só CONTROLE_TOTAL. Cria os números da faixa (até 10.000); `liberar_a_partir_de` opcional reserva ao SAA o início da faixa. Uma sequência por tipo e exercício (`409`).",
                responses={**SEM_ADMIN, **CONFLITO, **INVALIDO, **resposta_nao_encontrado("Tipo")})
 def criar_sequencia(tipo_id: uuid.UUID, dados: GravacaoSequencia, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> SequenciaLeitura:
     with _traduzir(sessao):
-        return _sequencia(servico.criar_sequencia(sessao, tipo_id, dados.exercicio, dados.inicio, dados.fim, usuario))
+        return _sequencia(servico.criar_sequencia(sessao, tipo_id, dados.exercicio, dados.inicio, dados.fim, usuario, dados.liberar_a_partir_de))
 
 
 @roteador.put("/sequencias/{sequencia_id}/faixa", response_model=SequenciaLeitura, summary="Ampliar (ou encolher) a faixa",
@@ -121,7 +123,16 @@ def criar_sequencia(tipo_id: uuid.UUID, dados: GravacaoSequencia, sessao: Sessio
               "Encolher só vale para pontas livres e sem histórico (`409`).", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO, **resposta_nao_encontrado("Sequência")})
 def alterar_faixa(sequencia_id: uuid.UUID, dados: GravacaoFaixa, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> SequenciaLeitura:
     with _traduzir(sessao):
-        return _sequencia(servico.alterar_faixa(sessao, sequencia_id, dados.inicio, dados.fim, usuario))
+        return _sequencia(servico.alterar_faixa(sessao, sequencia_id, dados.inicio, dados.fim, usuario, dados.liberar_a_partir_de))
+
+
+@roteador.delete("/sequencias/{sequencia_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Excluir o exercício de um tipo",
+                 description="Só CONTROLE_TOTAL. Apaga a faixa e os números do exercício, mas só se nenhum número foi reservado, utilizado ou anulado (`409`). Os demais exercícios do tipo não mudam.",
+                 responses={**SEM_ADMIN, **CONFLITO, **resposta_nao_encontrado("Sequência")})
+def excluir_sequencia(sequencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> Response:
+    with _traduzir(sessao):
+        servico.excluir_sequencia(sessao, sequencia_id, usuario)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --- Números ------------------------------------------------------------------------------
@@ -132,20 +143,23 @@ def numeros(sequencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), us
     with _traduzir():
         sequencia, itens = servico.numeros_da_sequencia(sessao, sequencia_id)
     admin = servico.controle_total(sessao, usuario)
+    saa = servico.pode_usar_reserva_saa(sessao, usuario)
     contratos = {c.id: c.numero for c in sessao.query(Contrato).filter(Contrato.id.in_({n.contrato_id for n in itens if n.contrato_id}))} if any(n.contrato_id for n in itens) else {}
     for n in itens:
         n.sequencia = sequencia
     return ListaNumeros(sequencia=_sequencia(sequencia), tipo_id=sequencia.tipo_id, tipo_nome=sequencia.tipo.nome, pode_administrar=admin, usuario_id=usuario.id,
-                        livres=sum(1 for n in itens if n.estado == "livre"), itens=[_numero(sessao, n, usuario, admin, contratos=contratos) for n in itens])
+                        livres=sum(1 for n in itens if n.estado == "livre"), reservados_saa=sum(1 for n in itens if n.estado == "reservado_saa"), pode_usar_reserva_saa=saa,
+                        itens=[_numero(sessao, n, usuario, admin, contratos=contratos, saa=saa) for n in itens])
 
 
 @roteador.post("/sequencias/{sequencia_id}/proximo", response_model=NumeroLeitura, status_code=status.HTTP_201_CREATED, summary="Reservar o próximo número",
                description="Reserva o **menor número livre** da sequência, com a finalidade (e o contrato, se houver). Atômico: duas pessoas nunca recebem o mesmo. "
+               "A faixa \"Reservado SAA\" só entra para quem é do Serviço de Apoio Administrativo, que começa por ela; os demais (inclusive a administração) recebem a partir do ponto de liberação. "
                "`409 sequencia_esgotada` quando não há mais livres.", responses={**CONFLITO, **INVALIDO, **resposta_nao_encontrado("Sequência")})
 def reservar_proximo(sequencia_id: uuid.UUID, dados: ReservaProximo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> NumeroLeitura:
     with _traduzir(sessao):
         n = servico.proximo(sessao, sequencia_id, dados.finalidade, dados.contrato_id, usuario)
-    return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True)
+    return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True, saa=servico.pode_usar_reserva_saa(sessao, usuario))
 
 
 @roteador.get("/numeros/{numero_id}", response_model=NumeroLeitura, summary="Detalhe de um número, com a linha do tempo",
@@ -157,11 +171,12 @@ def detalhe(numero_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuar
 
 
 @roteador.post("/numeros/{numero_id}/reservar", response_model=NumeroLeitura, summary="Lançar um número específico",
-               description="Só CONTROLE_TOTAL: reserva o número escolhido (livre). `409` se já foi reservado ou anulado.", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO, **NUMERO_NAO_ENCONTRADO})
-def lancar(numero_id: uuid.UUID, dados: ReservaNumero, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> NumeroLeitura:
+               description="CONTROLE_TOTAL escolhe qualquer número livre; o Serviço de Apoio Administrativo escolhe só entre os \"Reservado SAA\" (`403` nos demais casos). `409` se já foi reservado ou anulado.",
+               responses={**CONFLITO, **INVALIDO, **NUMERO_NAO_ENCONTRADO, status.HTTP_403_FORBIDDEN: {"description": "Sem permissão para escolher este número (`sem_permissao`)."}})
+def lancar(numero_id: uuid.UUID, dados: ReservaNumero, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> NumeroLeitura:
     with _traduzir(sessao):
         n = servico.lancar(sessao, numero_id, dados.finalidade, dados.contrato_id, usuario)
-    return _numero(sessao, n, usuario, True, eventos=True)
+    return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True, saa=True)
 
 
 @roteador.post("/numeros/{numero_id}/liberar", response_model=NumeroLeitura, summary="Liberar uma reserva sem documento",

@@ -18,7 +18,8 @@
 
     <p class="secao-formulario">1. Avaliação inicial @if (a.avaliacao_inicial_em) { <small class="dica-formulario" style="display: inline">— salva em {{ a.avaliacao_inicial_em | date: 'dd/MM/yyyy HH:mm' }}</small> }</p>
     @for (g of a.definicao.grupos; track g.id) {
-      <table class="tabela-gestao" style="margin-bottom: 12px">
+      <table class="tabela-gestao tabela-avaliacao" style="margin-bottom: 12px">
+        <colgroup><col /><col class="col-peso" /><col class="col-nota" /><col class="col-justificativa" /></colgroup>
         <thead><tr><th>{{ g.nome }}</th><th class="num">Peso</th><th>Nota</th><th>Justificativa</th></tr></thead>
         <tbody>
           @for (i of g.itens; track i.id) {
@@ -29,7 +30,7 @@
                 }
               </td>
               <td class="num">{{ i.peso }}%</td>
-              <td style="width: 150px">
+              <td>
                 <select class="campo-tabela" [attr.aria-label]="'Nota inicial de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="iniciais[i.id].nota">
                   <option value="">—</option>
                   @for (n of a.definicao.escala; track $index) { <option [value]="'' + +n.valor">{{ n.valor }} · {{ n.legenda }}</option> }
@@ -56,14 +57,15 @@
     @if (a.avaliacao_inicial_em && a.precisa_avaliacao_gestor) {
       <p class="secao-formulario">2. Avaliação do gestor @if (a.avaliacao_gestor_em) { <small class="dica-formulario" style="display: inline">— salva em {{ a.avaliacao_gestor_em | date: 'dd/MM/yyyy HH:mm' }}</small> }</p>
       @for (g of a.definicao.grupos; track g.id) {
-        <table class="tabela-gestao" style="margin-bottom: 12px">
-          <thead><tr><th>{{ g.nome }}</th><th>Nota inicial</th><th>Nota do gestor</th><th>Complemento</th></tr></thead>
+        <table class="tabela-gestao tabela-avaliacao" style="margin-bottom: 12px">
+          <colgroup><col /><col class="col-peso" /><col class="col-nota" /><col class="col-justificativa" /></colgroup>
+          <thead><tr><th>{{ g.nome }}</th><th class="num">Nota inicial</th><th>Nota do gestor</th><th>Complemento</th></tr></thead>
           <tbody>
             @for (i of g.itens; track i.id) {
               <tr>
                 <td><strong>{{ i.nome }}</strong>@if (ocorrenciasPorItem()[i.id]?.length) { <small class="ocorrencia-item">{{ ocorrenciasPorItem()[i.id].length }} ocorrência(s) no diário</small> }</td>
-                <td>{{ iniciais[i.id].nota || '—' }}@if (iniciais[i.id].justificativa) { <small [innerHTML]="iniciais[i.id].justificativa | linkificar"></small> }</td>
-                <td style="width: 150px">
+                <td class="num">{{ iniciais[i.id].nota || '—' }}@if (iniciais[i.id].justificativa) { <small [innerHTML]="iniciais[i.id].justificativa | linkificar"></small> }</td>
+                <td>
                   <select class="campo-tabela" [attr.aria-label]="'Nota do gestor de ' + i.nome" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="gestor[i.id].nota">
                     @for (n of a.definicao.escala; track $index) { <option [value]="'' + +n.valor">{{ n.valor }} · {{ n.legenda }}</option> }
                   </select>
@@ -86,6 +88,11 @@
       }
     }
 
+    <!-- A ciência do ateste fica logo abaixo do Salvar (inicial ou do gestor) e só surge depois de as notas serem salvas -->
+    @if (notasFechadas() && d.integra_equipe && !jaRegistrei() && !a.concluida_em && d.etapa_atual === 'avaliacao') {
+      <div class="acoes-cartao"><button type="button" class="acao-secundaria" (click)="cienciaAteste()">Registrar minha ciência</button></div>
+    }
+
     <!-- Ateste: ciências da equipe, como na medição (qualquer integrante; uma já libera o PDF) -->
     @if (notasFechadas()) {
       <p class="secao-formulario">{{ a.precisa_avaliacao_gestor ? '3.' : '2.' }} Ciências no ateste</p>
@@ -95,16 +102,13 @@
           <li><span>{{ c.nome }} · {{ papeis[c.papel] }}</span><small>ciência em {{ c.registrada_em | date: 'dd/MM/yyyy HH:mm' }}</small></li>
         }
       </ul>
-      @if (d.integra_equipe && !jaRegistrei() && !a.concluida_em && d.etapa_atual === 'avaliacao') {
-        <div class="acoes-cartao"><button type="button" class="acao-secundaria" (click)="cienciaAteste()">Registrar minha ciência</button></div>
-      }
     }
 
     @if (a.ciencias.length || a.pdf_gerado) {
       <p class="secao-formulario">{{ a.precisa_avaliacao_gestor ? '4.' : '3.' }} Documento</p>
       <div class="acoes-cartao esquerda">
-        @if (a.pdf_gerado) { <button type="button" class="link-arquivo" (click)="baixar(a.pdf_gerado.anexo_id)">Baixar PDF gerado</button> }
-        @if (a.pdf_assinado) { <button type="button" class="link-arquivo" (click)="baixar(a.pdf_assinado.anexo_id)">Baixar via assinada</button> }
+        @if (a.pdf_gerado) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(a.pdf_gerado.anexo_id)">Baixar PDF gerado</button> }
+        @if (a.pdf_assinado) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(a.pdf_assinado.anexo_id)">Baixar via assinada</button> }
       </div>
       @if (a.pdf_gerado && editavel() && !a.concluida_em) {
         <ol class="passos-assinatura">
@@ -144,7 +148,7 @@
       <p class="aviso-bloco informativo">Avaliação concluída em {{ a.concluida_em | date: 'dd/MM/yyyy HH:mm' }}.</p>
     }
     @if (a.reconsideracao) {
-      <p class="dica-formulario">Reconsideração registrada: <button type="button" class="link-arquivo" (click)="baixar(a.reconsideracao.anexo_id)">justificativa da contratada</button></p>
+      <p class="dica-formulario">Reconsideração registrada: <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(a.reconsideracao.anexo_id)">Baixar justificativa da contratada</button></p>
     }
     @if (a.concluida_em && a.reconsideracoes === 0 && d.etapa_atual === 'nota_fiscal' && d.pode_editar) {
       <p class="secao-formulario">5. Reconsideração (uma vez)</p>

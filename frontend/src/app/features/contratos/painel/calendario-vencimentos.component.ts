@@ -11,6 +11,7 @@ import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.comp
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { EventoVencimento, TipoEventoCalendario } from '../compartilhado/contratos.models';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Tipos de evento e o texto de cada um (a legenda e o filtro usam esta lista). */
 export const TIPOS_VENCIMENTO: { tipo: TipoEventoCalendario; rotulo: string }[] = [
   { tipo: 'vigencia_fim', rotulo: 'Fim da vigência' },
@@ -27,7 +28,7 @@ export const TIPOS_VENCIMENTO: { tipo: TipoEventoCalendario; rotulo: string }[] 
 /** Calendário de vencimentos dos contratos: o período vem do calendário (mês ou semana) e os dados são buscados só para ele. */
 @Component({
   selector: 'app-calendario-vencimentos',
-  imports: [FormsModule, CabecalhoModuloComponent, CalendarioEventosComponent],
+  imports: [EsqueletoComponent, FormsModule, CabecalhoModuloComponent, CalendarioEventosComponent],
   template: `
     <app-cabecalho-modulo titulo="Calendário de vencimentos" [trilha]="['Calendário de vencimentos']"
                           descricao="Vigência, reajuste, pagamento e prazo da nota fiscal, validade de documentos, empenho e tarefas dos contratos." />
@@ -47,7 +48,7 @@ export const TIPOS_VENCIMENTO: { tipo: TipoEventoCalendario; rotulo: string }[] 
       <span class="legenda-evento" data-severidade="alta"></span> vencido ou em até 30 dias ·
       <span class="legenda-evento" data-severidade="media"></span> 31 a 60 dias ou perto ·
       <span class="legenda-evento" data-severidade="info"></span> informativo.
-      {{ carregando() ? 'Carregando…' : eventos().length + ' evento(s) no período.' }}
+      @if (carregando()) { <app-esqueleto tipo="lista" [linhas]="3" /> } @else { {{ eventos().length + ' evento(s) no período.' }} }
     </p>
   `,
 })

@@ -20,22 +20,22 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.banco import agora_utc, hoje_sao_paulo
-from app.models.contratos import PAPEIS_EQUIPE, Contrato, DocumentoContrato
+from app.models.contratos import PAPEIS_EQUIPE, Contrato, DesignacaoEquipe, DocumentoContrato
 from app.models.contratos.execucao import ModeloGlobal
 from app.models.contratos.portaria import AutoridadePortaria, PortariaContrato
 from app.models.protocolo import NumeroProtocolo, SequenciaProtocolo, TipoProtocolo
 from app.models.rh import DadosFuncionais
 from app.models.usuario import Usuario
-from app.services import servico_anexos, servico_mensagens, servico_protocolo
+from app.services import servico_anexos, notificacoes, servico_protocolo
 from app.services.contratos import portaria_documento, portaria_mascara
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.schemas.contratos.portaria import LeituraAutoridade, LeituraPessoaPortaria, LeituraPortaria, PainelPortarias
-from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, obter_contrato, pode_editar
+from app.services.contratos.servico_contratos import designacoes_vigentes, eh_administrador, exigir_edicao, obter_contrato, pode_editar
 from app.services.documentos.pdf import FUSO_SAO_PAULO
 from app.services.servico_auditoria import auditar
 
 CODIGO_DOCUMENTO = 16
-NOME_TIPO_PROTOCOLO = "portaria"
+NOME_TIPO_PROTOCOLO = "portaria spi ssgc"
 EM_ANDAMENTO = ("aguardando_aceite", "devolvida", "aceita")
 ROTULOS_STATUS = {"aguardando_aceite": "Aguardando aceite", "devolvida": "Devolvida", "aceita": "Aceita", "publicada": "Publicada", "cancelada": "Cancelada"}
 
@@ -55,6 +55,21 @@ def _cnpj(valor: str) -> str:
 
 # --- Autoridades --------------------------------------------------------------------------------
 
+def pode_gerir_autoridades(sessao: Session, usuario: Usuario) -> bool:
+    """SuperRoot, controle total em Contratos, ou gestor/gestor suplente vigente de algum contrato."""
+    if eh_administrador(sessao, usuario):
+        return True
+    agora = agora_utc()
+    return sessao.scalar(select(func.count(DesignacaoEquipe.id)).where(
+        DesignacaoEquipe.usuario_id == usuario.id, DesignacaoEquipe.papel.in_(("gestor", "gestor_suplente")),
+        (DesignacaoEquipe.valido_ate.is_(None)) | (DesignacaoEquipe.valido_ate > agora))) > 0
+
+
+def exigir_gestao_autoridades(sessao: Session, usuario: Usuario) -> None:
+    if not pode_gerir_autoridades(sessao, usuario):
+        raise SemPermissaoContrato("Somente o SuperRoot, quem tem controle total em Contratos ou o gestor (ou suplente) de um contrato cadastra as autoridades.")
+
+
 def listar_autoridades(sessao: Session, somente_ativas: bool = False) -> list[AutoridadePortaria]:
     consulta = select(AutoridadePortaria).order_by(func.lower(AutoridadePortaria.sigla), func.lower(AutoridadePortaria.nome))
     if somente_ativas:
@@ -70,12 +85,28 @@ def _autoridade(sessao: Session, autoridade_id: uuid.UUID) -> AutoridadePortaria
 
 
 def _validar_autoridade(sessao: Session, dados) -> dict:
-    campos = {c: (getattr(dados, c) or "").strip() for c in ("sigla", "nome", "cargo", "setor")}
-    if not all(campos.values()):
-        raise ErroRegraContrato("Informe sigla, nome, cargo e setor da autoridade.")
-    if dados.usuario_id is not None and sessao.get(Usuario, dados.usuario_id) is None:
-        raise ErroRegraContrato("O usuário que dará o aceite não foi encontrado.")
-    return {**campos, "usuario_id": dados.usuario_id, "ativa": dados.ativa}
+    """A autoridade é um usuário do sistema (que dá o aceite); nome, cargo e setor em branco vêm do cadastro dele."""
+    usuario = sessao.get(Usuario, dados.usuario_id)
+    if usuario is None:
+        raise ErroRegraContrato("Escolha o usuário que é a autoridade signatária.")
+    padroes = {"nome": usuario.nome_completo or usuario.login, "cargo": usuario.cargo or "", "setor": usuario.departamento or ""}
+    campos = {"sigla": (dados.sigla or "").strip()}
+    for campo, padrao in padroes.items():
+        campos[campo] = (getattr(dados, campo) or "").strip() or padrao.strip()
+    rotulos = {"sigla": "a sigla (ex.: SPI SSGC)", "nome": "o nome", "cargo": "o cargo", "setor": "o setor"}
+    faltam = [rotulos[c] for c, v in campos.items() if not v]
+    if faltam:
+        raise ErroRegraContrato("Informe " + ", ".join(faltam) + " da autoridade.")
+    return {**campos, "usuario_id": usuario.id, "ativa": dados.ativa}
+
+
+def buscar_usuarios(sessao: Session, busca: str, limite: int = 20) -> list[Usuario]:
+    """Usuários ativos para escolher a autoridade (por nome ou login)."""
+    consulta = select(Usuario).where(Usuario.ativo.is_(True)).order_by(func.lower(Usuario.nome_completo)).limit(limite)
+    termo = (busca or "").strip().lower()
+    if termo:
+        consulta = consulta.where(func.lower(Usuario.nome_completo).like(f"%{termo}%") | func.lower(Usuario.login).like(f"%{termo}%"))
+    return list(sessao.scalars(consulta))
 
 
 def criar_autoridade(sessao: Session, dados, autor: Usuario) -> AutoridadePortaria:
@@ -131,7 +162,7 @@ def _anterior(sessao: Session, contrato: Contrato, excluir_id: uuid.UUID | None,
     numero = sessao.scalars(
         select(NumeroProtocolo).join(SequenciaProtocolo).join(TipoProtocolo).where(
             NumeroProtocolo.contrato_id == contrato.id, NumeroProtocolo.anulado_em.is_(None), NumeroProtocolo.reservado_em.is_not(None),
-            TipoProtocolo.nome_chave == NOME_TIPO_PROTOCOLO, NumeroProtocolo.id.not_in(ja_usados), NumeroProtocolo.id != excluir_numero_id,
+            TipoProtocolo.nome_chave.like("portaria%"), NumeroProtocolo.id.not_in(ja_usados), NumeroProtocolo.id != excluir_numero_id,
         ).order_by(NumeroProtocolo.reservado_em.desc())
     ).first()
     if numero is None:
@@ -234,13 +265,13 @@ def _sequencia_do_ano(sessao: Session) -> SequenciaProtocolo:
     exercicio = hoje_sao_paulo().year
     sequencia = sessao.scalar(select(SequenciaProtocolo).join(TipoProtocolo).where(TipoProtocolo.nome_chave == NOME_TIPO_PROTOCOLO, SequenciaProtocolo.exercicio == exercicio))
     if sequencia is None:
-        raise ErroRegraContrato(f"O Protocolo não tem a faixa de numeração de Portaria para {exercicio}: peça à administração do Protocolo para cadastrá-la.")
+        raise ErroRegraContrato(f"O Protocolo não tem a faixa de numeração de \"Portaria SPI SSGC\" para {exercicio}: peça à administração do Protocolo para cadastrá-la.")
     return sequencia
 
 
 def _avisar(sessao: Session, portaria: PortariaContrato, destinatarios: list[int | None], assunto: str, corpo: str, autor: Usuario, categoria: str = "comunicado") -> None:
-    servico_mensagens.notificar(sessao, [d for d in destinatarios if d], assunto, corpo, chave=f"portaria:{portaria.id}:{portaria.status}:{agora_utc().timestamp()}",
-                                categoria=categoria, link=f"/contratos/{portaria.contrato_id}?aba=portaria", contrato_id=portaria.contrato_id, autor=autor)
+    notificacoes.notificar(sessao, [d for d in destinatarios if d], assunto, corpo, chave=f"portaria:{portaria.id}:{portaria.status}:{agora_utc().timestamp()}",
+                                categoria=categoria, link=f"/contratos/{portaria.contrato_id}?aba=portaria", contrato_id=portaria.contrato_id, autor=autor, evento="contratos.portaria")
 
 
 def _rotulo(portaria: PortariaContrato) -> str:
@@ -259,7 +290,8 @@ def solicitar(sessao: Session, contrato_id: uuid.UUID, autoridade_id: uuid.UUID,
     sequencia = _sequencia_do_ano(sessao)
     montar_dados(sessao, contrato, autoridade, 0, sequencia.exercicio)  # valida a equipe antes de gastar um número
     try:
-        numero = servico_protocolo.proximo(sessao, sequencia.id, f"Portaria de designação de gestão e fiscalização do Contrato {contrato.numero}", contrato.id, autor)
+        numero = servico_protocolo.proximo(sessao, sequencia.id, f"Portaria de designação de gestão e fiscalização do Contrato {contrato.numero}", contrato.id, autor,
+                                           fora_da_reserva=True)
     except servico_protocolo.ErroProtocolo as erro:
         raise ErroRegraContrato(str(erro), conflito=erro.status == 409) from erro
     portaria = PortariaContrato(
@@ -314,7 +346,7 @@ def aceitar(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, aut
     if faltas:
         raise ErroRegraContrato("Não é possível aceitar: falta " + "; ".join(faltas) + ".")
     portaria.status, portaria.aceita_por_nome, portaria.aceita_em = "aceita", _nome(autor), agora_utc()
-    servico_mensagens.encerrar(sessao, prefixo=f"portaria:{portaria.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"portaria:{portaria.id}:")
     auditar(sessao, autor.login, "portaria.aceitar", _rotulo(portaria), autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato_id, dados={"portaria_id": str(portaria.id)})
     _avisar(sessao, portaria, [portaria.solicitada_por_id], f"Portaria aceita — {_rotulo(portaria)}",
             "A autoridade aceitou a portaria. Exporte a minuta, publique no SEI e no DOE e anexe o PDF publicado na aba Portarias.", autor)
@@ -332,7 +364,7 @@ def devolver(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, mo
     if not motivo:
         raise ErroRegraContrato("Informe o motivo da devolução.")
     portaria.status, portaria.motivo = "devolvida", motivo
-    servico_mensagens.encerrar(sessao, prefixo=f"portaria:{portaria.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"portaria:{portaria.id}:")
     auditar(sessao, autor.login, "portaria.devolver", _rotulo(portaria), autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato_id, dados={"motivo": motivo})
     _avisar(sessao, portaria, [portaria.solicitada_por_id], f"Portaria devolvida — {_rotulo(portaria)}", f"Motivo: {motivo}", autor)
     sessao.commit()
@@ -354,7 +386,7 @@ def cancelar(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, mo
         except servico_protocolo.ErroProtocolo as erro:
             raise ErroRegraContrato(str(erro)) from erro
     portaria.status, portaria.motivo = "cancelada", motivo
-    servico_mensagens.encerrar(sessao, prefixo=f"portaria:{portaria.id}:")
+    notificacoes.encerrar(sessao, prefixo=f"portaria:{portaria.id}:")
     auditar(sessao, autor.login, "portaria.cancelar", _rotulo(portaria), autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato_id, dados={"motivo": motivo})
     sessao.commit()
     return portaria

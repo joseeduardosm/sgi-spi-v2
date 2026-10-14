@@ -28,6 +28,13 @@ Qualquer criação, alteração ou remoção de endpoint, parâmetro, schema, re
 - Quando o usuário mandar atualizar o changelog, a entrada fica na seção da data (a mais recente no topo), em pt-BR, dividida em Adicionado / Alterado / Corrigido / Removido, descrevendo o que mudou para o usuário e citando as migrações do banco e os endpoints criados ou alterados.
 - Quando o commit for pedido, ele leva junto as entradas do changelog correspondentes (se o usuário pediu o changelog).
 
+## Layout, margens e paddings (obrigatório)
+
+- Antes de montar uma tela, ache uma equivalente no projeto e **reaproveite a estrutura e as classes dela** (ex.: `.barra-protocolo` + `.campo` com `label` acima do campo; `footer.acoes-formulario` com padding; `.painel-gestao`). Não invente classe de campo ou barra quando já existe uma.
+- **Verifique colisão de nomes de classe CSS** (`grep -rn "nome" frontend/src`): estilos globais de outros módulos vazam para o seu componente (ex.: `.cartao-visita` do diretório sobrepôs os cartões do Protocolo).
+- Nada fica colado na borda ou em outro elemento: botões, campos, cartões e rodapés precisam de padding interno e espaçamento entre vizinhos. Campos usam o estilo base global de `frontend/src/styles.scss`.
+- Rotas de detalhe são páginas (`/rota/:id`), não modais, salvo pedido em contrário.
+
 ## Escopo
 
 - Implemente o que foi pedido. Funcionalidades, telas, endpoints ou regras que não constam na solicitação devem ser **propostas e confirmadas antes** de entrar no código, mesmo quando existem no sistema de referência (SGI SPI, 10.23.1.220).

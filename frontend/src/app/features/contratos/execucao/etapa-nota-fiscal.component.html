@@ -24,8 +24,8 @@
         </p>
       }
       <div class="acoes-cartao esquerda arquivos-nf">
-        @if (l.existente?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">PDF: {{ a.nome }}</button> }
-        @if (l.existente?.xml; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">XML: {{ a.nome }}</button> }
+        @if (l.existente?.arquivo; as a) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.nome" (click)="baixar(a.anexo_id)">Baixar PDF da nota</button> }
+        @if (l.existente?.xml; as a) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.nome" (click)="baixar(a.anexo_id)">Baixar XML da nota</button> }
         @if (editavel()) {
           <app-envio-pdf [rotulo]="l.existente?.arquivo ? 'Substituir PDF da nota' : 'Selecionar PDF da nota'" (selecionado)="l.arquivo = $event" />
           <label class="acao-secundaria acao-pequena seletor-xml">
@@ -63,7 +63,7 @@
           <div><label [for]="'dv-numero-' + k">Número</label><input [id]="'dv-numero-' + k" maxlength="100" [disabled]="!editavel()" [(ngModel)]="x.numero" /></div>
           <div><label [for]="'dv-valor-' + k">Valor (R$) *</label><input [id]="'dv-valor-' + k" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="x.valor" /></div>
           <div class="acoes-cartao esquerda arquivos-nf" style="align-self: end">
-            @if (x.existente?.arquivo; as a) { <button type="button" class="link-arquivo" (click)="baixar(a.anexo_id)">PDF: {{ a.nome }}</button> }
+            @if (x.existente?.arquivo; as a) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.nome" (click)="baixar(a.anexo_id)">Baixar PDF da nota</button> }
             @if (editavel()) {
               <app-envio-pdf [rotulo]="x.existente?.arquivo ? 'Substituir PDF' : 'Selecionar PDF'" (selecionado)="x.arquivo = $event" />
               @if (despesas.length > 1) { <button type="button" class="acao-secundaria acao-pequena" (click)="removerDespesa(x)">Remover</button> }

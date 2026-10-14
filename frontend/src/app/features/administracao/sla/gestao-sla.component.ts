@@ -11,6 +11,7 @@ import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.compo
 import { erroExibivel } from '../../../shared/utilitarios/erros-api';
 import { PoliticaSla } from '../../sla/sla.models';
 
+import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 const ROTULOS_PRIORIDADE: Record<string, string> = { critica: 'Crítica', alta: 'Alta', normal: 'Normal', baixa: 'Baixa', '': 'Todas (regra única)' };
 const ROTULOS_MODULO: Record<string, string> = { tarefas: 'Tarefas', melhorias: 'Melhorias' };
 
@@ -20,7 +21,7 @@ const ROTULOS_MODULO: Record<string, string> = { tarefas: 'Tarefas', melhorias: 
  */
 @Component({
   selector: 'app-gestao-sla',
-  imports: [FormsModule, TrilhaComponent],
+  imports: [EsqueletoComponent, FormsModule, TrilhaComponent],
   template: `
     <div class="cabecalho-pagina">
       <div>
@@ -46,12 +47,12 @@ const ROTULOS_MODULO: Record<string, string> = { tarefas: 'Tarefas', melhorias: 
                 <td class="num"><input type="number" min="0" max="365" class="campo-tabela" [name]="'s' + l.modulo + l.prioridade" [attr.aria-label]="'Resolução: ' + modulo[l.modulo] + ' ' + prioridade[l.prioridade]" [disabled]="!podeGravar()" [(ngModel)]="l.dias_uteis_resolucao" /></td>
                 <td><input type="checkbox" [name]="'a' + l.modulo + l.prioridade" [attr.aria-label]="'Usar esta linha'" [disabled]="!podeGravar()" [(ngModel)]="l.ativo" /></td>
               </tr>
-            } @empty { <tr><td colspan="5" class="estado-vazio">Carregando…</td></tr> }
+            } @empty { <tr><td colspan="5"><app-esqueleto tipo="tabela" [colunas]="5" [linhas]="4" /></td></tr> }
           </tbody>
         </table>
       </div>
       @if (podeGravar()) {
-        <div class="acoes-formulario" style="margin-top: 12px"><button type="button" class="acao-primaria" [disabled]="salvando() || !valida()" (click)="salvar()">{{ salvando() ? 'Salvando…' : 'Salvar política' }}</button></div>
+        <div class="acoes-formulario" style="margin-top: 12px"><button [class.carregando]="salvando()" type="button" class="acao-primaria" [disabled]="salvando() || !valida()" (click)="salvar()">{{ salvando() ? 'Salvando…' : 'Salvar política' }}</button></div>
         @if (!valida()) { <p class="aviso-bloco erro">Em cada linha, o prazo de resolução não pode ser menor que o de resposta.</p> }
       } @else {
         <p class="dica-formulario">Você só pode consultar a política (gravar exige permissão de modificação no recurso SLA).</p>

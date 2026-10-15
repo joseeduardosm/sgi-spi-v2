@@ -433,3 +433,12 @@
     .tirar { border: 0; background: transparent; color: var(--spi-vermelho-destaque); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; } }
   > footer { padding: 14px 25px 22px; }
 }
+
+// Confirmação de "relacionar todos os bens da sala" (listas de inservíveis, extraviados e baixa)
+.modal-portal.modal-relacionar {
+  width: min(720px, calc(100% - 28px));
+
+  .corpo-relacionar { padding: 18px 25px 6px; max-height: 60vh; overflow: auto; }
+  .corpo-relacionar p { margin: 0 0 14px; }
+  > footer { padding: 14px 25px 22px; }
+}

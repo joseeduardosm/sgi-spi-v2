@@ -35,9 +35,9 @@ from app.models.auditoria import TipoJson
 from app.models.contratos.contrato import Contrato, _lista_sql
 
 # Etapas da competência, em ordem. `avaliacao` só existe quando a competência tem formulário.
-ETAPAS = ("medicao", "avaliacao", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida")
-# Etapas feitas em paralelo depois da nota fiscal (qualquer ordem); o consolidado só depois de todas
-ETAPAS_PARALELAS = ("retencao", "cadin", "checklist")
+ETAPAS = ("medicao", "avaliacao", "nota_fiscal", "retencao", "checklist", "cadin", "consolidado", "ordem_bancaria", "concluida")
+# Retenção e checklist são feitos em paralelo depois da nota fiscal (qualquer ordem); o CADIN só abre com todas as anteriores e o consolidado vem depois dele
+ETAPAS_PARALELAS = ("retencao", "checklist")
 # Competência regular (período de execução), complementar (paga a diferença de um reajuste retroativo) ou adicional
 # (outra medição e outro pagamento no mesmo mês de uma competência, com justificativa)
 TIPOS_COMPETENCIA = ("regular", "diferenca_reajuste", "adicional")
@@ -126,8 +126,8 @@ class ModeloGlobal(Base):
     """
 
     __tablename__ = "contratos_modelos"
-    # Tipos aceitos; `portaria` guarda a máscara do texto da portaria de designação ({"html", "variante"})
-    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria')", name="ck_contratos_modelos_tipo"),)
+    # Tipos aceitos; `portaria` guarda a máscara do texto da portaria de designação ({"html", "variante"}); `despacho`, a do despacho de pagamento do consolidado ({"html"})
+    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria', 'despacho')", name="ck_contratos_modelos_tipo"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     tipo: Mapped[str] = mapped_column(String(20), index=True)
@@ -196,7 +196,7 @@ class Competencia(Base):
     retencao_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
     retencao_discriminacao_conferida: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     retencao_pdf_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
-    # Etapas 5 e 6 — CADIN e checklist correm em paralelo com a retenção; o consolidado exige as três concluídas
+    # Checklist corre em paralelo com a retenção; o CADIN é a última etapa antes do consolidado
     cadin_concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     checklist_concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

@@ -75,13 +75,32 @@
                 @if (t.subtarefas.length) { <a class="acao-secundaria acao-pequena" [routerLink]="['/tarefas', t.numero, 'subtarefas']" title="Quadro só das subtarefas, com andamento independente">Abrir quadro de subtarefas</a> }</div>
               @if (t.subtarefas.length) {
                 <div class="barra-progresso" role="progressbar" [attr.aria-valuenow]="concluidasSub(t)" aria-valuemin="0" [attr.aria-valuemax]="t.subtarefas.length"><i [style.width.%]="100 * concluidasSub(t) / t.subtarefas.length"></i></div>
-                <ul class="lista-subtarefas">
-                  @for (s of t.subtarefas; track s.numero) {
-                    <li><a [routerLink]="['/tarefas', s.numero]"><span class="ponto-status" [attr.data-status]="s.status" aria-hidden="true"></span>
-                      <span class="titulo-sub">#{{ s.numero }} {{ s.titulo }}</span></a>
-                      <small>{{ rotulosStatus[s.status] }}@if (s.responsavel) { · {{ s.responsavel.nome }} } · {{ s.prazo | date: 'dd/MM' }}</small></li>
-                  }
-                </ul>
+                <div class="tabela-subtarefas-envoltorio">
+                  <table class="tabela-subtarefas">
+                    <thead>
+                      <tr>
+                        @for (c of colunasSub; track c.chave) {
+                          <th [class.num]="c.chave === 'numero'" scope="col" [attr.aria-sort]="ordemSub().coluna === c.chave ? (ordemSub().sentido === 'asc' ? 'ascending' : 'descending') : 'none'">
+                            <button type="button" class="ordenar-sub" [class.ativa]="ordemSub().coluna === c.chave" [title]="'Ordenar por ' + c.rotulo.toLowerCase()" (click)="ordenarSub(c.chave)">
+                              {{ c.rotulo }}<i aria-hidden="true">{{ ordemSub().coluna === c.chave ? (ordemSub().sentido === 'asc' ? '▲' : '▼') : '↕' }}</i>
+                            </button>
+                          </th>
+                        }
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (s of subtarefasOrdenadas(t); track s.numero) {
+                        <tr>
+                          <td class="num"><a [routerLink]="['/tarefas', s.numero]">#{{ s.numero }}</a></td>
+                          <td class="descricao-sub"><a [routerLink]="['/tarefas', s.numero]" [title]="s.titulo">{{ s.titulo }}</a></td>
+                          <td><span class="selo-status" [attr.data-status]="s.status">{{ rotulosStatus[s.status] }}</span></td>
+                          <td>{{ s.responsavel?.nome ?? '—' }}</td>
+                          <td class="data-sub">{{ s.prazo | date: 'dd/MM/yyyy' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
               }
             </section>
           } @else if (t.tarefa_pai) {
@@ -294,6 +313,7 @@
             @if (editandoCampo() === 'responsaveis') {
               <app-seletor-usuarios idCampo="jd-responsaveis" [selecionados]="responsaveis" (selecionadosChange)="aoMudarResponsaveis($event)"
                                     [fonte]="api.opcoesPessoas" textoAjuda="Ao incluir alguém, a agenda da pessoa aparece abaixo" />
+              @if (tarefa()?.tarefa_pai) { <small class="dica-formulario">Os responsáveis da tarefa mãe valem também aqui e não podem ser retirados; você pode acrescentar outros.</small> }
               <app-agenda-pessoa [pessoaId]="pessoaAgenda()" />
               <div class="acoes-formulario">
                 <button type="button" class="acao-secundaria" (click)="editandoCampo.set(null)">Cancelar</button>

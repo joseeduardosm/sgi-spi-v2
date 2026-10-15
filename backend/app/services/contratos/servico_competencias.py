@@ -23,9 +23,11 @@ from typing import BinaryIO
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.services.tarefas.descricao import texto_da_descricao
 from app.core.banco import agora_utc
 from app.models.anexo import Anexo
 from app.models.contratos import (
+    ModeloGlobal,
     DespesaVariavel,
     NotaFiscalCompetencia,
     ETAPAS,
@@ -75,7 +77,7 @@ from app.schemas.contratos.execucao import (
     ResumoCompetencia,
 )
 from app.services import servico_anexos
-from app.services.contratos import avisos, calculos, documentos_execucao, leitor_nota_xml, servico_autenticacao, servico_diario, servico_retencao, valores
+from app.services.contratos import avisos, calculos, despacho_documento, documentos_execucao, leitor_nota_xml, servico_autenticacao, servico_diario, servico_retencao, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_configuracao_execucao import (
     _nome_chave,
@@ -381,14 +383,14 @@ CONCLUSAO_PARALELA = {"retencao": "retencao_concluida_em", "cadin": "cadin_concl
 
 
 def etapas_abertas(competencia: Competencia) -> list[str]:
-    """Etapas que aceitam gravação agora. Depois da NF, retenção, CADIN e checklist ficam abertos ao mesmo tempo."""
+    """Etapas que aceitam gravação agora. Depois da NF, retenção e checklist ficam abertos juntos; o CADIN só abre com todas as anteriores prontas."""
     if competencia.etapa_atual in ETAPAS_PARALELAS:
         return [e for e in ETAPAS_PARALELAS if getattr(competencia, CONCLUSAO_PARALELA[e]) is None]
     return [] if competencia.etapa_atual == "concluida" else [competencia.etapa_atual]
 
 
 def etapas_concluidas(competencia: Competencia) -> list[str]:
-    """Etapas já concluídas (as paralelas pela data de conclusão; as demais pela posição)."""
+    """Etapas já concluídas (retenção e checklist pela data de conclusão enquanto estão abertos; as demais pela posição)."""
     etapas = etapas_da_competencia(competencia)
     atual = etapas.index(competencia.etapa_atual)
     concluidas = []
@@ -405,10 +407,13 @@ def etapas_concluidas(competencia: Competencia) -> list[str]:
 
 
 def concluir_etapa_paralela(competencia: Competencia, etapa: str) -> None:
-    """Marca a etapa paralela como concluída; com as três concluídas, libera o documento consolidado."""
+    """Marca retenção ou checklist como concluído; com os dois prontos libera o CADIN (a última etapa antes do documento consolidado)."""
     setattr(competencia, CONCLUSAO_PARALELA[etapa], agora_utc())
     pendentes = [e for e in ETAPAS_PARALELAS if getattr(competencia, CONCLUSAO_PARALELA[e]) is None]
-    competencia.etapa_atual = pendentes[0] if pendentes else "consolidado"
+    if pendentes:
+        competencia.etapa_atual = pendentes[0]
+    else:
+        competencia.etapa_atual = "cadin" if competencia.cadin_concluido_em is None else "consolidado"
 
 
 def _exigir_etapa(competencia: Competencia, etapa: str, descricao: str) -> None:
@@ -783,7 +788,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
     saldos = saldos_da_medicao(contrato, competencia)
     glosas_periodo = (
         [
-            GlosaDoPeriodo(ocorrencia_id=o.id, data_ocorrencia=o.data_ocorrencia, descricao_ocorrencia=o.descricao,
+            GlosaDoPeriodo(ocorrencia_id=o.id, data_ocorrencia=o.data_ocorrencia, descricao_ocorrencia=texto_da_descricao(o.descricao),
                            registrada_por_nome=o.registrada_por_nome, item_id=g.item_id, descricao_item=g.descricao_item, quantidade=g.quantidade)
             for o in servico_diario.ocorrencias_do_periodo(contrato, competencia.periodo_inicio, competencia.periodo_fim)
             for g in o.glosas
@@ -1297,7 +1302,7 @@ def ocorrencias_da_avaliacao(contrato: Contrato, competencia: Competencia) -> li
         for o in lista:
             ocorrencias[o.id] = o
             itens_da.setdefault(o.id, []).append(item_id)
-    return [OcorrenciaAvaliacao(id=o.id, data_ocorrencia=o.data_ocorrencia, descricao=o.descricao, registrada_por_nome=o.registrada_por_nome,
+    return [OcorrenciaAvaliacao(id=o.id, data_ocorrencia=o.data_ocorrencia, descricao=texto_da_descricao(o.descricao), registrada_por_nome=o.registrada_por_nome,
                                 itens=itens_da[o.id]) for o in sorted(ocorrencias.values(), key=lambda x: (x.data_ocorrencia, x.criado_em))]
 
 
@@ -1825,7 +1830,8 @@ def registrar_cadin(
     competencia.consultas_cadin.append(consulta)
     # Com pendência, a etapa continua aberta até uma nova consulta sem pendência
     if not possui_pendencia:
-        concluir_etapa_paralela(competencia, "cadin")
+        competencia.cadin_concluido_em = agora_utc()
+        competencia.etapa_atual = proxima_etapa(competencia, "cadin")
     _auditar(sessao, autor, "contrato.execucao.cadin", contrato, competencia, possui_pendencia=possui_pendencia)
     sessao.commit()
 
@@ -1999,6 +2005,24 @@ def pode_gerar_consolidado_novamente(contrato: Contrato, usuario: Usuario) -> bo
     return True
 
 
+def montar_despacho(sessao: Session, contrato_id, competencia_id) -> dict:
+    """Texto do despacho de pagamento da competência, a partir da máscara ativa (Contratos → Modelos), para mostrar na tela e copiar.
+
+    `html` vem nulo quando não há máscara ativa. Os dados são os atuais do contrato e da competência (nada é gravado).
+    """
+    contrato = obter_contrato(sessao, contrato_id)
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    modelo = sessao.scalar(select(ModeloGlobal).where(ModeloGlobal.tipo == "despacho", ModeloGlobal.ativo.is_(True)))
+    if modelo is None:
+        return {"html": None, "titulo": ""}
+    designados = {d.papel: d.usuario_id for d in designacoes_vigentes(contrato)}
+    usuarios = {u.id: u for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(list(designados.values()))))} if designados else {}
+    equipe = {papel: usuarios[uid] for papel, uid in designados.items() if uid in usuarios}
+    dados = despacho_documento.valores(contrato, competencia, vencimento_pagamento(competencia), equipe)
+    return {"html": despacho_documento.texto_html(modelo.conteudo.get("html", ""), dados),
+            "titulo": f"Despacho de pagamento · Contrato {contrato.numero} · {dados['mescompetencia']}"}
+
+
 def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
     """Etapa 6: gera o PDF consolidado (todos os documentos da competência, na ordem de execução).
 
@@ -2095,10 +2119,8 @@ def _descartar_avaliacao(sessao: Session, competencia: Competencia) -> None:
 
 
 def pode_reabrir(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
-    """SuperRoot, controle total em Contratos, ou o gestor vigente do contrato (papel `gestor`) com permissão de edição."""
-    if eh_administrador(sessao, usuario):
-        return True
-    return _papel_do_usuario(contrato, usuario) == "gestor" and pode_editar(sessao, contrato, usuario)
+    """Quem edita o contrato (equipe vigente, criador, controle total ou SuperRoot) reabre etapas, estorna pagamentos e zera competências."""
+    return eh_administrador(sessao, usuario) or pode_editar(sessao, contrato, usuario)
 
 
 def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, autor: Usuario) -> None:
@@ -2110,7 +2132,7 @@ def reabrir(sessao: Session, contrato_id, competencia_id, dados: Reabertura, aut
     """
     contrato = obter_contrato(sessao, contrato_id)
     if not pode_reabrir(sessao, contrato, autor):
-        raise SemPermissaoContrato("Somente o SuperRoot ou o gestor do contrato podem reabrir etapas e estornar pagamentos.")
+        raise SemPermissaoContrato("Somente a equipe do contrato, o criador ou o SuperRoot podem reabrir etapas e estornar pagamentos.")
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     # Só é possível voltar para uma etapa anterior à atual
     etapas = etapas_da_competencia(competencia)
@@ -2169,7 +2191,7 @@ def zerar(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
     """
     contrato = obter_contrato(sessao, contrato_id)
     if not pode_reabrir(sessao, contrato, autor):
-        raise SemPermissaoContrato("Somente o SuperRoot ou o gestor do contrato podem zerar a competência.")
+        raise SemPermissaoContrato("Somente a equipe do contrato, o criador ou o SuperRoot podem zerar a competência.")
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     # Os arquivos precisam ser levantados antes: reabrir solta os objetos das etapas e perde o caminho até eles
     arquivos = _anexos_para_descartar(sessao, competencia)
@@ -2199,7 +2221,7 @@ def _reabrir_etapa(sessao: Session, contrato: Contrato, competencia: Competencia
     alvo = etapas.index(dados.etapa)
 
     def posterior(etapa: str) -> bool:
-        """Etapa depois da escolhida. Retenção, CADIN e checklist são paralelos: reabrir um não descarta os outros."""
+        """Etapa depois da escolhida. Retenção e checklist são paralelos: reabrir um não descarta os outros."""
         if etapa not in etapas or etapas.index(etapa) <= alvo:
             return False
         return not (etapa in ETAPAS_PARALELAS and dados.etapa in ETAPAS_PARALELAS)

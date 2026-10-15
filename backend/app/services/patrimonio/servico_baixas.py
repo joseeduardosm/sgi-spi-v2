@@ -18,6 +18,7 @@ from app.core.banco import agora_utc, hoje_sao_paulo
 from app.models.patrimonio import Baixa, Bem, EventoPatrimonio, ItemBaixa
 from app.models.usuario import Usuario
 from app.services import servico_anexos
+from app.services.patrimonio.numeracao import proximo_numero_relacao
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.patrimonio import servico_bens
 from app.services.patrimonio.base import ErroPatrimonio, avisar, exigir_outra_pessoa, ids_controle_total, nome_do_autor, registrar_evento
@@ -48,7 +49,7 @@ def criar(sessao: Session, autor: Usuario, *, id_cliente: str | None = None) -> 
         existente = sessao.scalar(select(Baixa.id).where(Baixa.id_cliente == id_cliente))
         if existente is not None:
             return obter(sessao, existente), False
-    baixa = Baixa(id=uuid.uuid4(), id_cliente=id_cliente, status="rascunho", solicitante_id=autor.id)
+    baixa = Baixa(id=uuid.uuid4(), id_cliente=id_cliente, numero=proximo_numero_relacao(sessao), status="rascunho", solicitante_id=autor.id)
     sessao.add(baixa)
     sessao.commit()
     return obter(sessao, baixa.id), True

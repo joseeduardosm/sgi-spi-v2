@@ -11,8 +11,9 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 - **Autorização:**
   - **Leitura:** ACL `contratos` ≥ `LEITURA`.
   - **Cadastro:** ACL `contratos` ≥ `MODIFICACAO`. Quem cadastra vira o **criador**.
-  - **Alteração e anexos (pode editar):** ACL ≥ `MODIFICACAO` **e** ser SuperRoot, ter **controle total** em Contratos (qualquer contrato; faz tudo sobre o contrato, como um SuperRoot do módulo: itens com execução gerada, previsão selada, desfazer prorrogação, reabrir competência, propor/cancelar correção de itens e **registrar ciência** em qualquer etapa, com o papel `administrador` mesmo sem ser da equipe), o criador ou integrante **vigente** da equipe. Sem esse vínculo: `403 acesso_negado`. Os seis papéis da equipe têm os mesmos poderes.
-  - **Exclusão:** controle total em Contratos (qualquer contrato) ou ACL ≥ `MODIFICACAO` para os contratos que o próprio usuário **criou** (`403 acesso_negado` nos demais). `permissoes.pode_excluir` diz se o botão aparece; `permissoes.pode_administrar` é SuperRoot/controle total.
+  - **Alteração e anexos (pode editar):** ser SuperRoot, ter **controle total** em Contratos (qualquer contrato; faz tudo sobre o contrato, como um SuperRoot do módulo: itens com execução gerada, previsão selada, desfazer prorrogação, reabrir competência, propor/cancelar correção de itens e **registrar ciência** em qualquer etapa, com o papel `administrador` mesmo sem ser da equipe), o criador ou integrante **vigente** da equipe. Sem esse vínculo: `403 acesso_negado`. Os seis papéis da equipe têm os mesmos poderes.
+  - **Mesmos poderes:** equipe vigente, criador, controle total e SuperRoot têm os **mesmos poderes sobre o contrato**, sem exigir nível de ACL além do acesso ao módulo (ACL `contratos` ≥ `LEITURA`; quem está na equipe não precisa de `MODIFICACAO`), em tudo: itens com execução gerada, previsão selada, desfazer prorrogação, reabrir etapa, zerar competência, correção de itens (propor, confirmar, recusar e cancelar; a confirmação continua exigindo outra pessoa que não o autor) e ciência (`administrador` para quem não tem papel na equipe). `permissoes.pode_administrar` é verdadeiro para todos eles.
+  - **Exclusão:** controle total em Contratos (qualquer contrato) ou o **criador** e o **integrante da equipe vigente** do contrato, sem exigir `MODIFICACAO` (qualquer um dos seis papéis; `403 acesso_negado` nos demais). `permissoes.pode_excluir` diz se o botão aparece; `permissoes.pode_administrar` é SuperRoot/controle total.
 - **Número:** formato livre (ex.: `012/2026`, `CT-45/2025`, `20214514`), até 60 caracteres, sem espaços nas pontas.
   - É **único** sem diferenciar maiúsculas. No padrão `NNN/AAAA`, `1/2026` e `001/2026` também contam como o mesmo número (`409`).
   - `sequencial` e `ano` são preenchidos só quando o número segue `NNN/AAAA` (nulos nos demais). Servem para a ordenação da carteira e para `GET /proximo-numero`, que sugere o maior sequencial do ano + 1.
@@ -30,7 +31,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
   - um item salvo **não muda** `descricao`, `tipo` nem `calcula_pro_rata` (exclua e crie outro);
   - item com quantidade executada não pode ser excluído;
   - a ordem da lista enviada é a ordem dos itens;
-  - depois de geradas as competências de execução, só o SuperRoot altera itens e ordem.
+  - depois de geradas as competências de execução, itens e ordem são alterados por quem edita o contrato (equipe vigente, criador, controle total ou SuperRoot, todos com os mesmos poderes).
 - **Equipe:** um usuário ativo por papel (`gestor`, `gestor_suplente`, `fiscal_administrativo`, `fiscal_administrativo_suplente`, `fiscal_tecnico`, `fiscal_tecnico_suplente`). Trocar o designado encerra a designação anterior, que fica no histórico.
 - **Concorrência:** o `PUT` exige a `versao` lida no detalhe. Se outra pessoa salvou antes: `409 conflito`.
 - **Valores decimais** são enviados e recebidos como **texto** (`"1234.50"`): dinheiro com 2 casas, **preço unitário dos itens com até 4** (sai com 4, ex.: `"0.0750"`) e quantidades com 4.
@@ -45,6 +46,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 | `numero` | string | sim | Formato livre, 1 a 60 caracteres; único (ver regras acima) |
 | `empresa_id` | uuid | sim | Empresa ativa (um contrato existente pode manter uma empresa já inativada) |
 | `apelido` | string | não | Até 200 |
+| `autoridade_despacho_id` | inteiro | não | Usuário ativo que autoriza o pagamento no despacho do consolidado (`400` se inexistente ou inativo); sai em `DetalheContrato.autoridade_despacho` (`{id, nome, cargo, departamento}`) |
 | `objeto` | string | sim | 1 a 4000 |
 | `data_inicio` | date | sim | |
 | `vigencia_inicial_meses` | integer | sim | 1 a 600 |

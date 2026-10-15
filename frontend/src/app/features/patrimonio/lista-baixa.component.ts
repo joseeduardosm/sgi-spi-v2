@@ -2,6 +2,7 @@
 // Este arquivo serve para montar, enviar e aprovar uma baixa de bens (motivo e processo por grupo, termo em PDF na aprovação).
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { Router, RouterLink } from '@angular/router';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
@@ -12,19 +13,20 @@ import { LeitorCodigoComponent } from './leitor-codigo.component';
 import { PatrimonioApiService } from './patrimonio-api.service';
 import { PatrimonioEstadoService } from './patrimonio-estado.service';
 import { BuscaBemComponent } from './busca-bem.component';
+import { RelacionarSalaComponent } from './relacionar-sala.component';
 import { Baixa, Bem, COR_STATUS, MotivoBaixa, ROTULOS_MOTIVO_BAIXA, ROTULOS_STATUS } from './patrimonio.models';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** `/patrimonio/baixas/:baixaId`. */
 @Component({
   selector: 'app-lista-baixa',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoPatrimonioComponent, LeitorCodigoComponent, BuscaBemComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoPatrimonioComponent, LeitorCodigoComponent, BuscaBemComponent, RelacionarSalaComponent],
   template: `
     <app-cabecalho-patrimonio titulo="Baixa de bens" descricao="Leia os códigos (ou digite a chapa ou o número de série), informe motivo e processo e envie para aprovação." />
     @if (baixa(); as b) {
       <section class="painel-gestao patrimonio">
         <div class="pat-topo-bem">
-          <span class="pat-marcadores"><span [class]="marcador(cores[b.status])">{{ rotulos[b.status] }}</span><span [class]="marcador(0)">{{ b.solicitante_nome }}</span></span>
+          <span class="pat-marcadores"><b class="texto-codigo">#{{ b.numero }}</b><span [class]="marcador(cores[b.status])">{{ rotulos[b.status] }}</span><span [class]="marcador(0)">{{ b.solicitante_nome }}</span></span>
           <div class="pat-acoes">
             <button type="button" class="acao-secundaria" (click)="relatorio(b, 'pdf')" title="PDF consolidado: índice, relatório, fotos e anexos">Relatório PDF</button>
             <button type="button" class="acao-secundaria" (click)="relatorio(b, 'xlsx')">Relatório Excel</button>
@@ -39,6 +41,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
             <button type="button" class="acao-secundaria" (click)="incluir(chapa)">Adicionar</button>
             <button type="button" class="acao-primaria" (click)="lendo.set(true)">Ler códigos</button>
           </div>
+          <app-relacionar-sala modo="baixa" (confirmado)="incluirVarios($event)" />
           @for (l of locais(); track l) { <p class="pat-aviso">Chapa {{ l }}: aguardando envio (sem conexão).</p> }
           @if (aviso()) { <p class="pat-aviso" role="alert">{{ aviso() }}</p> }
         }
@@ -154,6 +157,15 @@ export class ListaBaixaComponent implements OnInit {
   /** Bem escolhido na lista de sugestões: entra pelo id (vale também para bem sem chapa ou com número de série repetido). */
   protected incluirBem(b: Bem): void {
     this.api.incluirNaBaixa(this.baixaId(), { bem_id: b.id }).subscribe({ next: (x) => this.definir(x), error: (e) => this.aviso.set(e?.error?.detalhe ?? `Não foi possível incluir ${b.rotulo}.`) });
+  }
+
+  /** Inclui os bens de uma sala, um a um; os que a API recusar (já em outra baixa etc.) viram um aviso único. */
+  protected async incluirVarios(bens: Bem[]): Promise<void> {
+    let recusados = 0;
+    for (const b of bens) {
+      try { this.definir(await firstValueFrom(this.api.incluirNaBaixa(this.baixaId(), { bem_id: b.id }))); } catch { recusados++; }
+    }
+    this.aviso.set(recusados ? `${bens.length - recusados} de ${bens.length} bem(ns) incluídos; ${recusados} não puderam entrar (já em outra baixa ou situação inválida).` : '');
   }
 
   protected tirar(id: string, itemId: string): void {

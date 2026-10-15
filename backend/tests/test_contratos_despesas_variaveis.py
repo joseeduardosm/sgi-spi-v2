@@ -93,9 +93,9 @@ def test_consolidado_traz_a_medicao_das_despesas_variaveis_e_os_documentos_depoi
     base, detalhe, g = medido
     assert juntar_nf(cliente, base, g, "2105.00", "123", despesas=(("recibo", detalhe["subtotal_despesas_variaveis"]),)).status_code == 200
     assert conferir_retencao(cliente, base, g).status_code == 200
-    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=g).status_code == 200
     for doc in cliente.get(base, headers=g).json()["documentos"]:
         assert cliente.post(f"{base}/checklist/{doc['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=g).status_code == 200
+    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=g).status_code == 200
     r = cliente.post(f"{base}/consolidado", headers=g)
     assert r.status_code == 200, r.text
     consolidado = r.json()["consolidado"]

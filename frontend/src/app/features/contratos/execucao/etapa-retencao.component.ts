@@ -94,6 +94,25 @@ export class EtapaRetencaoComponent implements OnChanges {
     return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d || 'não informado';
   }
 
+  /** O valor digitado é diferente do que o XML trouxe para este tributo. */
+  protected diverge(n: NotaEmConferencia, chave: Tributo): boolean {
+    const xml = n.nota.dados_xml?.retencoes[chave];
+    return xml !== undefined && Math.abs(this.numero(n.retencoes[chave]) - Number(xml)) > 0.005;
+  }
+
+  /** O que ainda impede de salvar a retenção (aparece na barra de ações). */
+  protected pendencias(): string[] {
+    const falta: string[] = [];
+    if (this.notas.some((n) => this.totalRetido(n) > Number(n.nota.valor_bruto ?? 0) + 0.005)) falta.push('A soma das retenções passa do valor bruto de uma nota');
+    if (!this.discriminacaoConferida) falta.push('Marque a conferência das retenções');
+    return falta;
+  }
+
+  /** Conferências com alerta de uma nota (aparece no título dobrado). */
+  protected alertasDaNota(n: NotaEmConferencia): number {
+    return n.nota.conferencias.filter((c) => c.situacao === 'alerta').length;
+  }
+
   protected alertas(): number {
     return this.notas.reduce((t, n) => t + n.nota.conferencias.filter((c) => c.situacao === 'alerta').length, 0);
   }

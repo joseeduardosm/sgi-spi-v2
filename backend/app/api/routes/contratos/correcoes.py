@@ -29,7 +29,7 @@ def _leitura(sessao: Session, contrato_id: uuid.UUID, c, usuario: Usuario) -> Le
     return LeituraCorrecao(
         id=c.id, autor_id=c.autor_id, autor_nome=c.autor_nome, justificativa=c.justificativa, mudancas=[MudancaItem(**m) for m in c.mudancas], previa=c.previa,
         situacao=c.situacao, decidido_por_nome=c.decidido_por_nome, decidido_em=c.decidido_em, motivo_decisao=c.motivo_decisao, criado_em=c.criado_em,
-        pode_decidir=servico.pode_decidir(sessao, contrato, c, usuario), pode_cancelar=c.situacao == "pendente" and (c.autor_id == usuario.id or servico.eh_administrador(sessao, usuario)))
+        pode_decidir=servico.pode_decidir(sessao, contrato, c, usuario), pode_cancelar=c.situacao == "pendente" and (c.autor_id == usuario.id or servico.pode_editar(sessao, contrato, usuario)))
 
 
 @roteador.get("/correcoes", response_model=ListaCorrecoes, summary="Correções de itens",

@@ -13,6 +13,7 @@ import { PatrimonioApiService } from './patrimonio-api.service';
 import { Agrupamento, Bem, PainelPatrimonio, ROTULOS_CONSERVACAO, ROTULOS_GARANTIA, ROTULOS_SITUACAO } from './patrimonio.models';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
+type ColunaBem = 'chapa' | 'serie' | 'descricao' | 'sala' | 'situacao' | 'conservacao' | 'valor';
 const ROTULOS_AGRUPAMENTO: Record<Agrupamento, string> = { andar: 'Andar', sala: 'Sala', setor: 'Setor', grupo: 'Grupo de material' };
 
 @Component({
@@ -52,16 +53,25 @@ const ROTULOS_AGRUPAMENTO: Record<Agrupamento, string> = { andar: 'Andar', sala:
         <h3 class="pat-subtitulo">{{ metrica() === 'valor' ? 'Valor atual' : 'Quantidade de bens' }} por {{ rotulosAgrupamento[p.agrupar_por].toLowerCase() }}</h3>
         @if (p.grupos.length) {
           @defer (on idle) { <app-grafico tipo="bar" [horizontal]="true" [rotulos]="rotulos()" [series]="series()" [formato]="metrica() === 'valor' ? 'moeda' : 'numero'" [semLegenda]="true"
-                       [altura]="alturaGrafico()" [titulo]="'Bens por ' + rotulosAgrupamento[p.agrupar_por].toLowerCase()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }
-          <p class="pat-dica">Toque numa linha da tabela para listar os bens do grupo.</p>
+                       [altura]="alturaGrafico()" [clicavel]="true" (itemClicado)="abrirGrupoPorIndice($event)" [titulo]="'Bens por ' + rotulosAgrupamento[p.agrupar_por].toLowerCase()" /> } @placeholder { <app-esqueleto tipo="cartao" /> }
+          <p class="pat-dica">Toque numa barra do gráfico ou numa linha da tabela para listar os bens do grupo.</p>
           <div class="tabela-gestao-envoltorio"><table class="tabela-gestao">
             <thead><tr><th>{{ rotulosAgrupamento[p.agrupar_por] }}</th><th class="num">Bens</th><th class="num">Valor atual</th></tr></thead>
             <tbody>@for (g of p.grupos; track g.chave) {
               <tr class="pat-linha-clicavel" (click)="abrirGrupo(g.chave, g.rotulo)" [class.ativa]="grupoAberto()?.chave === g.chave"><td>{{ g.rotulo }}</td><td class="num">{{ g.quantidade }}</td><td class="num">{{ g.valor | moeda }}</td></tr>
             }</tbody></table></div>
           @if (grupoAberto(); as ga) {
-            <div class="pat-painel-acao"><strong>{{ ga.rotulo }}: {{ bensGrupo().length }} bem(ns)</strong>
-              @for (b of bensGrupo(); track b.id) { <a class="pat-evento-curto" [routerLink]="['/patrimonio/bens', b.id]">{{ b.rotulo }} · {{ b.descricao }} · {{ b.sala_rotulo }}</a> }</div>
+            <div class="pat-painel-acao" id="pat-bens-grupo"><strong>{{ ga.rotulo }}: {{ bensGrupo().length }} bem(ns)</strong>
+              <div class="tabela-gestao-envoltorio"><table class="tabela-gestao">
+                <thead><tr>
+                  @for (c of colunasBens; track c.id) {
+                    <th [class.num]="c.direita" [attr.aria-sort]="sentido(c.id)"><button type="button" class="ordenar-coluna" [class.ativa]="ordem().coluna === c.id" [title]="'Ordenar por ' + c.rotulo.toLowerCase()" (click)="ordenar(c.id)">{{ c.rotulo }}<span aria-hidden="true">{{ ordem().coluna === c.id ? (ordem().direcao === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+                  }
+                </tr></thead>
+                <tbody>@for (b of bensOrdenados(); track b.id) {
+                  <tr><td class="texto-codigo"><a [routerLink]="['/patrimonio/bens', b.id]">{{ b.rotulo }}</a></td><td class="texto-codigo">{{ b.numero_serie ?? '—' }}</td><td>{{ b.descricao }}</td><td>{{ b.sala_rotulo }}</td>
+                    <td>{{ situacoesRotulo[b.situacao] }}</td><td class="num">{{ b.conservacao }}</td><td class="num">{{ b.valor_atual === null ? '—' : (b.valor_atual | moeda) }}</td></tr>
+                } @empty { <tr><td colspan="7" class="estado-vazio">Nenhum bem neste grupo.</td></tr> }</tbody></table></div></div>
           }
         } @else { <p class="estado-vazio">Sem bens para os filtros escolhidos.</p> }
 
@@ -94,6 +104,27 @@ export class PainelPatrimonioComponent implements OnInit {
   protected readonly metrica = signal<'quantidade' | 'valor'>('quantidade');
   protected readonly grupoAberto = signal<{ chave: string; rotulo: string } | null>(null);
   protected readonly bensGrupo = signal<Bem[]>([]);
+  protected readonly colunasBens: { id: ColunaBem; rotulo: string; direita?: boolean }[] = [
+    { id: 'chapa', rotulo: 'Chapa' }, { id: 'serie', rotulo: 'Série' }, { id: 'descricao', rotulo: 'Descrição' }, { id: 'sala', rotulo: 'Sala' },
+    { id: 'situacao', rotulo: 'Situação' }, { id: 'conservacao', rotulo: 'Conservação', direita: true }, { id: 'valor', rotulo: 'Valor atual', direita: true },
+  ];
+  protected readonly ordem = signal<{ coluna: ColunaBem; direcao: 'asc' | 'desc' }>({ coluna: 'chapa', direcao: 'asc' });
+  protected readonly situacoesRotulo = ROTULOS_SITUACAO;
+  /** Bens do grupo clicado, ordenados pela coluna escolhida (números como número, textos sem diferenciar acento/maiúscula). */
+  protected readonly bensOrdenados = computed(() => {
+    const { coluna, direcao } = this.ordem();
+    const chave = (b: Bem): string | number => {
+      switch (coluna) {
+        case 'chapa': return b.rotulo; case 'serie': return b.numero_serie ?? ''; case 'descricao': return b.descricao; case 'sala': return b.sala_rotulo;
+        case 'situacao': return ROTULOS_SITUACAO[b.situacao]; case 'conservacao': return b.conservacao; case 'valor': return Number(b.valor_atual ?? -1);
+      }
+    };
+    const fator = direcao === 'asc' ? 1 : -1;
+    return [...this.bensGrupo()].sort((x, y) => {
+      const a = chave(x), b = chave(y);
+      return fator * (typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b), 'pt-BR', { numeric: true, sensitivity: 'base' }));
+    });
+  });
   protected agrupar: Agrupamento = 'andar';
   protected situacao = '';
   protected conservacao: number | '' = '';
@@ -120,9 +151,22 @@ export class PainelPatrimonioComponent implements OnInit {
     });
   }
 
+  protected ordenar(coluna: ColunaBem): void {
+    this.ordem.update((o) => ({ coluna, direcao: o.coluna === coluna && o.direcao === 'asc' ? 'desc' : 'asc' }));
+  }
+
+  protected sentido(coluna: ColunaBem): 'ascending' | 'descending' | 'none' {
+    return this.ordem().coluna === coluna ? (this.ordem().direcao === 'asc' ? 'ascending' : 'descending') : 'none';
+  }
+
+  protected abrirGrupoPorIndice(indice: number): void {
+    const g = this.painel()?.grupos[indice];
+    if (g) this.abrirGrupo(g.chave, g.rotulo);
+  }
+
   protected abrirGrupo(chave: string, rotulo: string): void {
     this.grupoAberto.set({ chave, rotulo });
-    this.api.bensDoGrupo({ agrupar_por: this.agrupar, chave, situacao: this.situacao, conservacao: this.conservacao, garantia: this.garantia }).subscribe((b) => this.bensGrupo.set(b));
+    this.api.bensDoGrupo({ agrupar_por: this.agrupar, chave, situacao: this.situacao, conservacao: this.conservacao, garantia: this.garantia }).subscribe((b) => { this.bensGrupo.set(b); setTimeout(() => document.getElementById('pat-bens-grupo')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })); });
   }
 
   protected exportar(relatorio: 'painel' | 'fora-garantia', formato: 'xlsx' | 'pdf'): void {

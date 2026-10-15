@@ -195,14 +195,14 @@ def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, ce
     r = conferir_retencao(cliente, base, cabecalho(cliente, "financeiro2"), {"ir": "31.58", "csll": "10"})
     assert r.status_code == 200, r.text
     detalhe = r.json()
-    assert detalhe["etapa_atual"] == "cadin" and detalhe["retencao"]["por_nome"] == "Fin Departamento"
+    assert detalhe["etapa_atual"] == "checklist" and detalhe["retencao"]["por_nome"] == "Fin Departamento"
     assert detalhe["notas_fiscais"][0]["retencao_csll"] == "10.00" and detalhe["notas_fiscais"][0]["valor_liquido"] == "2063.42"
     pdf = cliente.get(f"{base}/arquivos/{detalhe['retencao']['pdf']['anexo_id']}", headers=gestora)
     assert pdf.content[:5] == b"%PDF-"
     mensagem, _, destinatarios, _ = SmtpSimulado.enviadas[0]
     assert mensagem["Subject"] == "Contrato 001/2026 - 01/2026 - Retenções tributárias conferidas"
     assert sorted(destinatarios) == ["fiscal@sp.gov.br", "gestora@sp.gov.br"]
-    assert "?etapa=cadin" in mensagem.get_body(("plain",)).get_content()
+    assert "?etapa=checklist" in mensagem.get_body(("plain",)).get_content()
 
 
 def test_sem_financeiro_cadastrado_o_erro_fica_registrado(cliente, admin, cenario):
@@ -225,24 +225,65 @@ def test_reabrir_a_nota_fiscal_desfaz_a_conferencia(cliente, admin, cenario):
     assert juntar_nf(cliente, base, gestora, "2105.00", "124").json()["etapa_atual"] == "retencao"
 
 
-def test_cadin_e_checklist_em_paralelo_com_a_retencao_e_consolidado_so_no_fim(cliente, cenario):
-    """Depois da NF, CADIN e checklist já podem ser feitos; o consolidado exige também a retenção conferida."""
+def test_checklist_em_paralelo_com_a_retencao_e_cadin_so_depois_das_anteriores(cliente, cenario):
+    """Depois da NF, retenção e checklist correm juntos; o CADIN só abre com todas as anteriores prontas e o consolidado exige o CADIN."""
     contrato, base, gestora = cenario
     detalhe = juntar_nf(cliente, base, gestora, "2105.00", "123").json()
-    assert detalhe["etapas_abertas"] == ["retencao", "cadin", "checklist"]
+    assert detalhe["etapas_abertas"] == ["retencao", "checklist"]
 
     r = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
-    assert r.status_code == 200 and r.json()["etapas_abertas"] == ["retencao", "checklist"] and "cadin" in r.json()["etapas_concluidas"]
-    for documento in r.json()["documentos"]:
+    assert r.status_code == 400 and "não está aberta" in r.json()["detalhe"]
+    for documento in detalhe["documentos"]:
         r = cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
     detalhe = r.json()
     assert detalhe["etapas_abertas"] == ["retencao"] and detalhe["etapa_atual"] == "retencao"
 
     r = cliente.post(f"{base}/consolidado", headers=gestora)
     assert r.status_code == 400 and "Falta concluir: retenção de tributos" in r.json()["detalhe"]
-    r = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
-    assert r.status_code == 400 and "já foi concluída" in r.json()["detalhe"]
 
     detalhe = conferir_retencao(cliente, base, gestora, {"ir": "31.58"}).json()
-    assert detalhe["etapa_atual"] == "consolidado" and detalhe["etapas_abertas"] == ["consolidado"]
+    assert detalhe["etapa_atual"] == "cadin" and detalhe["etapas_abertas"] == ["cadin"]
+    r = cliente.post(f"{base}/consolidado", headers=gestora)
+    assert r.status_code == 400 and "Falta concluir: CADIN" in r.json()["detalhe"]
+    r = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
+    assert r.status_code == 200 and r.json()["etapa_atual"] == "consolidado" and r.json()["etapas_abertas"] == ["consolidado"]
     assert cliente.post(f"{base}/consolidado", headers=gestora).json()["etapa_atual"] == "ordem_bancaria"
+
+
+def test_despacho_de_pagamento_vai_para_a_tela_e_nao_para_o_consolidado(cliente, admin, cenario):
+    """A máscara do despacho (Contratos → Modelos) é validada, uma só fica ativa e o texto preenchido sai em GET …/despacho (fora do consolidado)."""
+    contrato, base, gestora = cenario
+    html = ("<p>Trata-se do pagamento do Contrato nº ##nrocontrato##, com #razaosocialempresa#, processo ##processogestao##, "
+            "de ##iniciocompetencia## a ##fimcompetencia## (#mescompetencia#).</p>"
+            "<p style=\"text-align:center\"><strong>##nomegestor##</strong></p><p style=\"text-align:center\">##funcaogestor##</p>"
+            "<p style=\"text-align:center\">Suplente: ##nomegestorsuplente##</p>"
+            "<p style=\"text-align:center\"><strong>##nomeautoridade##</strong></p><p style=\"text-align:center\">##cargoautoridade##</p>")
+    assert cliente.post("/api/contratos/modelos", json={"tipo": "despacho", "nome": "Ruim", "html": "<p>#naoexiste</p>"}, headers=admin).status_code == 400
+    r = cliente.post("/api/contratos/modelos", json={"tipo": "despacho", "nome": "Despacho padrão", "html": html}, headers=admin)
+    assert r.status_code == 201, r.text
+    assert cliente.post("/api/contratos/modelos", json={"tipo": "despacho", "nome": "Outro", "html": html}, headers=admin).status_code == 409
+    nomes = [p["nome"] for p in cliente.get("/api/contratos/modelos/despacho/placeholders", headers=admin).json()]
+    assert {"nrocontrato", "nomegestor", "cargofiscaltecnico", "setorgestorsuplente", "nomeautoridade"} <= set(nomes)
+
+    detalhe = juntar_nf(cliente, base, gestora, "2105.00", "123").json()
+    for documento in detalhe["documentos"]:
+        cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
+    assert conferir_retencao(cliente, base, gestora, {"ir": "31.58"}).status_code == 200
+    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).status_code == 200
+    # O despacho não vai no consolidado: a tela busca o texto formatado em GET …/despacho
+    r = cliente.get(f"{base}/despacho", headers=gestora)
+    assert r.status_code == 200, r.text
+    despacho = r.json()["html"]
+    assert "##" not in despacho and "#razao" not in despacho and "Janeiro/2026" in despacho
+    assert "Trata-se do pagamento do Contrato nº 001/2026" in despacho and "<strong>" in despacho and "text-align" in despacho
+    # Bloco do gestor aparece; o do suplente (sem designado) e o da autoridade (não cadastrada) somem inteiros
+    assert "Gestora Silva" in despacho and "Gestor do Contrato" in despacho
+    assert "Suplente" not in despacho and "nomeautoridade" not in despacho
+    c = cliente.post(f"{base}/consolidado", headers=gestora)
+    assert c.status_code == 200, c.text
+    from io import BytesIO as _B
+
+    from pypdf import PdfReader as _R
+    paginas = _R(_B(cliente.get(f"{base}/arquivos/{c.json()['consolidado']['anexo_id']}", headers=gestora).content)).pages
+    assert not any("Trata-se do pagamento" in p.extract_text() for p in paginas)
+

@@ -2,6 +2,7 @@
 // Este arquivo serve para montar, justificar, enviar e aprovar uma lista de inservíveis ou extraviados.
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
@@ -13,19 +14,19 @@ import { PatrimonioApiService } from './patrimonio-api.service';
 import { PatrimonioEstadoService } from './patrimonio-estado.service';
 import { BuscaBemComponent } from './busca-bem.component';
 import { Bem, Classificacao, COR_STATUS, ROTULOS_STATUS } from './patrimonio.models';
-import { SeletorSalaComponent } from './seletor-sala.component';
+import { RelacionarSalaComponent } from './relacionar-sala.component';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** `/patrimonio/inserviveis/:classificacaoId` ou `/patrimonio/extraviados/:classificacaoId` (conforme o tipo da lista). */
 @Component({
   selector: 'app-lista-classificacao',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoPatrimonioComponent, LeitorCodigoComponent, SeletorSalaComponent, BuscaBemComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoPatrimonioComponent, LeitorCodigoComponent, RelacionarSalaComponent, BuscaBemComponent],
   template: `
     <app-cabecalho-patrimonio [titulo]="lista() ? (lista()!.tipo === 'inservivel' ? 'Lista de inservíveis' : 'Lista de extraviados') : 'Lista'" descricao="Só entram bens cadastrados e Ativos ou Em manutenção." />
     @if (lista(); as c) {
       <section class="painel-gestao patrimonio">
         <div class="pat-topo-bem">
-          <span class="pat-marcadores"><span [class]="marcador(cores[c.status])">{{ rotulos[c.status] }}</span><span [class]="marcador(0)">{{ c.solicitante_nome }}</span></span>
+          <span class="pat-marcadores"><b class="texto-codigo">#{{ c.numero }}</b><span [class]="marcador(cores[c.status])">{{ rotulos[c.status] }}</span><span [class]="marcador(0)">{{ c.solicitante_nome }}</span></span>
           <div class="pat-acoes">
             <button type="button" class="acao-secundaria" (click)="relatorio(c, 'pdf')" title="PDF consolidado: índice, relatório, fotos e anexos">Relatório PDF</button>
             <button type="button" class="acao-secundaria" (click)="relatorio(c, 'xlsx')">Relatório Excel</button>
@@ -39,12 +40,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
             <button type="button" class="acao-secundaria" (click)="incluir(chapa)">Adicionar</button>
             <button type="button" class="acao-primaria" (click)="lendo.set(true)">Ler códigos</button>
           </div>
-          @if (c.tipo === 'extraviado') {
-            <details class="pat-mais-dados"><summary>Escolher na lista de uma sala</summary>
-              <app-seletor-sala nome="sala-lista" [leitor]="true" [valor]="salaLista" (valorChange)="carregarSala($event)" [soAtivas]="false" />
-              @for (b of bensDaSala(); track b.id) { <label class="pat-marca"><input type="checkbox" [name]="'sb' + b.id" (change)="incluirBem(b)" /> {{ b.rotulo }} · {{ b.descricao }}</label> }
-            </details>
-          }
+          <app-relacionar-sala modo="classificacao" (confirmado)="incluirVarios($event)" />
           @for (l of locais(); track l) { <p class="pat-aviso">Chapa {{ l }}: aguardando envio (sem conexão).</p> }
           @if (aviso()) { <p class="pat-aviso" role="alert">{{ aviso() }}</p> }
         }
@@ -120,13 +116,11 @@ export class ListaClassificacaoComponent implements OnInit {
   protected readonly marcados = signal<Set<string>>(new Set());
   protected readonly aprovados = signal<Set<string>>(new Set());
   protected readonly locais = signal<string[]>([]);
-  protected readonly bensDaSala = signal<Bem[]>([]);
   protected readonly rascunho = computed(() => this.lista()?.status === 'rascunho' && this.lista()?.solicitante_id === this.estado.acesso()?.usuario_id);
   protected readonly decidindo = computed(() => this.lista()?.status === 'pendente' && this.estado.podeAdministrar() && !this.souSolicitante(this.lista()!));
   protected chapa = '';
   protected justificativa = '';
   protected motivoRecusa = '';
-  protected salaLista = '';
   protected readonly marcador = classeMarcador;
   protected readonly cores = COR_STATUS;
   protected readonly rotulos = ROTULOS_STATUS;
@@ -180,10 +174,13 @@ export class ListaClassificacaoComponent implements OnInit {
     this.api.incluirNaClassificacao(this.classificacaoId(), { bem_id: b.id }).subscribe({ next: (x) => this.definir(x), error: (e) => this.aviso.set(e?.error?.detalhe ?? `Não foi possível incluir ${b.chapa}.`) });
   }
 
-  protected carregarSala(id: string): void {
-    this.salaLista = id;
-    if (id) this.api.bens({ localizacao_id: id, tamanho: 200 }).subscribe((r) => this.bensDaSala.set(r.itens.filter((b) => ['ativo', 'em_manutencao'].includes(b.situacao) && !b.classificacao_pendente)));
-    else this.bensDaSala.set([]);
+  /** Inclui os bens de uma sala, um a um; os que a API recusar (já em outra lista etc.) viram um aviso único. */
+  protected async incluirVarios(bens: Bem[]): Promise<void> {
+    let recusados = 0;
+    for (const b of bens) {
+      try { this.definir(await firstValueFrom(this.api.incluirNaClassificacao(this.classificacaoId(), { bem_id: b.id }))); } catch { recusados++; }
+    }
+    this.aviso.set(recusados ? `${bens.length - recusados} de ${bens.length} bem(ns) incluídos; ${recusados} não puderam entrar (já em outra lista ou situação inválida).` : '');
   }
 
   protected tirar(id: string, itemId: string): void {

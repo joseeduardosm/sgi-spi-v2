@@ -213,3 +213,30 @@ def test_subtarefa_nasce_com_varias_dependencias_e_valida_antes_de_criar(cliente
     assert cliente.post(url, json={"titulo": "C", "bloqueada_por_numeros": [mae["numero"]]}, headers=h["lia"]).status_code == 400
     assert cliente.post(url, json={"titulo": "D", "bloqueada_por_numeros": [999999]}, headers=h["lia"]).status_code == 400
     assert len(cliente.get(f"{URL}/{mae['numero']}", headers=h["lia"]).json()["subtarefas"]) == antes
+
+
+def test_subtarefa_herda_responsaveis_da_mae_e_acompanha_as_mudancas(cliente, equipe):
+    ids, h, equipe_id = equipe
+    mae = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"]])
+    # Na criação, os da mãe vêm sempre; o informado entra além deles
+    sub = cliente.post(f"{URL}/{mae['numero']}/subtarefas", json={"titulo": "Levantar dados", "responsaveis_ids": [ids["lia"]]}, headers=h["lia"]).json()
+    assert [p["id"] for p in sub["responsaveis"]] == [ids["ana"], ids["lia"]] and sub["responsavel"]["id"] == ids["ana"]
+
+    def ler(n):
+        return cliente.get(f"{URL}/{n}", headers=h["lia"]).json()
+
+    def editar_mae(responsaveis):
+        corpo = {"titulo": mae["titulo"], "prioridade": "normal", "responsaveis_ids": responsaveis, "versao": ler(mae["numero"])["versao"]}
+        return cliente.put(f"{URL}/{mae['numero']}", json=corpo, headers=h["lia"])
+
+    # Quem entra na mãe entra na subtarefa (que mantém os seus extras)
+    assert editar_mae([ids["ana"], ids["beto"]]).status_code == 200
+    assert {p["id"] for p in ler(sub["numero"])["responsaveis"]} == {ids["ana"], ids["beto"], ids["lia"]}
+    # A subtarefa não perde os da mãe, mas pode ganhar outros
+    corpo = {"titulo": sub["titulo"], "prioridade": "normal", "versao": ler(sub["numero"])["versao"]}
+    assert cliente.put(f"{URL}/{sub['numero']}", json={**corpo, "responsaveis_ids": [ids["lia"]]}, headers=h["lia"]).status_code == 400
+    assert cliente.put(f"{URL}/{sub['numero']}", json={**corpo, "responsaveis_ids": [ids["ana"], ids["beto"]]}, headers=h["lia"]).status_code == 200
+    # Quem sai da mãe sai da subtarefa; o principal passa para quem ficou
+    assert editar_mae([ids["beto"]]).status_code == 200
+    depois = ler(sub["numero"])
+    assert [p["id"] for p in depois["responsaveis"]] == [ids["beto"]] and depois["responsavel"]["id"] == ids["beto"]

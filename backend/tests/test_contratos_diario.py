@@ -118,6 +118,24 @@ def test_sem_servidor_smtp_ativo_grava_o_erro_e_permite_reenviar(cliente, admin,
     assert r.status_code == 200 and r.json()["email"]["ok"] is True
 
 
+def test_ocorrencia_em_rich_text_e_sanitizada_e_vira_texto_nos_pdfs(cliente, admin, cenario):
+    """O relato vem do editor rico: scripts saem, a formatação fica e o PDF do diário e o e-mail usam o texto puro."""
+    from pypdf import PdfReader
+    from io import BytesIO
+
+    contrato, gestora, _ = cenario
+    html = '<p>Posto <strong>descoberto</strong> das 8h às 12h.</p><ul><li>Sem reposição</li></ul><script>alert(1)</script>'
+    r = _ocorrencia(cliente, contrato, gestora, descricao=html)
+    assert r.status_code == 201, r.text
+    salva = r.json()["descricao"]
+    assert "<strong>descoberto</strong>" in salva and "<ul>" in salva and "script" not in salva
+    # Editor vazio (só <p></p>) é recusado como relato em branco
+    assert _ocorrencia(cliente, contrato, gestora, descricao="<p></p>").status_code == 422
+    pdf = cliente.get(_url(contrato, "/diario/pdf"), params={"inicio": "2026-01-01", "fim": "2026-01-31"}, headers=gestora).content
+    texto = " ".join(p.extract_text() for p in PdfReader(BytesIO(pdf)).pages)
+    assert "descoberto" in texto and "<strong>" not in texto and "<ul>" not in texto
+
+
 def test_pdf_do_diario(cliente, admin, cenario):
     """O diário em PDF sai com o nome padronizado."""
     contrato, gestora, _ = cenario

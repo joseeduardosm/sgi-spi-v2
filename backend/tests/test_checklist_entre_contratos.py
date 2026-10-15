@@ -50,8 +50,7 @@ def _ate_o_checklist(cliente, contrato, gestora, fiscal, itens=ITENS) -> str:
     r = juntar_nf(cliente, base, gestora, "2105.00", numero=str(int(contrato["numero"][:3])))  # a chave da NF é única por empresa
     assert r.status_code == 200, r.text
     assert conferir_retencao(cliente, base, gestora).status_code == 200
-    detalhe = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).json()
-    assert detalhe["etapa_atual"] == "checklist"
+    assert cliente.get(base, headers=gestora).json()["etapa_atual"] == "checklist"
     return base
 
 
@@ -112,7 +111,8 @@ def test_trazer_todos_conclui_a_etapa_e_o_consolidado_nao_mostra_o_reaproveitame
     _anexar_certidao(cliente, base_a, hg)
     r = cliente.post(f"{base_b}/checklist/reaproveitar-todos", headers=hg)
     assert r.status_code == 200, r.text
-    assert r.json()["etapa_atual"] == "consolidado"  # todos anexados: a etapa concluiu sozinha
+    assert r.json()["etapa_atual"] == "cadin"  # todos anexados: a etapa concluiu sozinha e libera o CADIN
+    assert cliente.post(f"{base_b}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=hg).json()["etapa_atual"] == "consolidado"
     consolidado = cliente.post(f"{base_b}/consolidado", headers=hg).json()["consolidado"]
     pdf = cliente.get(f"{base_b}/arquivos/{consolidado['anexo_id']}", headers=hg).content
     texto = " ".join(p.extract_text() for p in PdfReader(BytesIO(pdf)).pages)

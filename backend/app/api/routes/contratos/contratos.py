@@ -143,7 +143,7 @@ def alterar_contrato(
     "/{contrato_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Excluir contrato",
-    description="Remove o contrato e tudo o que depende dele. Controle total em Contratos exclui qualquer contrato; quem tem ACL ≥ MODIFICACAO exclui só os que criou (`403` nos demais casos).",
+    description="Remove o contrato e tudo o que depende dele. Controle total em Contratos exclui qualquer contrato; quem tem ACL ≥ MODIFICACAO exclui os que criou e aqueles em que integra a equipe vigente (`403` nos demais casos).",
     responses=NAO_ENCONTRADO,
 )
 def excluir_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)) -> Response:

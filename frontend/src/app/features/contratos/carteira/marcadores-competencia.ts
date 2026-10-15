@@ -21,7 +21,7 @@ const COR_ROXO = 5;
 const COR_TEAL = 7;
 const COR_VERDE = 10;
 
-/** Cor de cada etapa em andamento (as três paralelas depois da nota fiscal ficam em teal). */
+/** Cor de cada etapa em andamento (as etapas depois da nota fiscal ficam em teal). */
 const COR_ETAPA: Record<string, number> = {
   medicao: COR_AZUL, avaliacao: COR_ROXO, nota_fiscal: COR_AZUL, retencao: COR_TEAL, cadin: COR_TEAL, checklist: COR_TEAL, consolidado: COR_ROXO, ordem_bancaria: COR_VERDE,
 };

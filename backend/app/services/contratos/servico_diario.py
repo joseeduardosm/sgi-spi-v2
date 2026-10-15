@@ -20,6 +20,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.services.tarefas.descricao import texto_da_descricao
 from app.core.banco import agora_utc
 from app.models.contratos import AnexoOcorrencia, Competencia, Contrato, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
 from app.models.usuario import Usuario
@@ -215,6 +216,16 @@ def itens_impactados(contrato: Contrato, competencia: Competencia, definicao: di
     return dict(resultado)
 
 
+
+def _relato_com_marcas(o) -> str:
+    """Relato em texto puro; "Haverá glosa" e "Impacta a avaliação da qualidade" só aparecem quando a resposta é Sim."""
+    linhas = [texto_da_descricao(o.descricao)]
+    if o.possui_glosa:
+        linhas.append("Haverá glosa: " + "; ".join(f"{g.descricao_item}: {quantidade(g.quantidade)}" for g in o.glosas))
+    if o.impacta_avaliacao:
+        linhas.append("Impacta a avaliação da qualidade: " + "; ".join(i.item_nome for i in o.itens_avaliacao))
+    return "\n".join(linhas)
+
 def gerar_pdf(contrato: Contrato, inicio: date | None = None, fim: date | None = None, autor: str = "") -> bytes:
     """Diário de bordo em PDF (A4 paisagem, mesmo padrão da memória de cálculo)."""
     periodo = (
@@ -237,17 +248,14 @@ def gerar_pdf(contrato: Contrato, inicio: date | None = None, fim: date | None =
             f"{o.data_ocorrencia:%d/%m/%Y}",
             f"{o.registrada_por_nome}" + (f" ({PAPEIS.get(o.registrada_por_papel, o.registrada_por_papel)})" if o.registrada_por_papel else "")
             + f"\n{data_hora(o.criado_em)}",
-            o.descricao,
-            "; ".join(f"{g.descricao_item}: {quantidade(g.quantidade)}" for g in o.glosas) if o.possui_glosa else "Não",
-            "; ".join(i.item_nome for i in o.itens_avaliacao) if o.impacta_avaliacao else "Não",
+            _relato_com_marcas(o),
             "\n".join(a.anexo.nome_original for a in o.anexos) or "—",
         ]
         for o in ocorrencias
     ]
     documento.secao(f"Ocorrências ({len(ocorrencias)})")
     if linhas:
-        documento.tabela(["Data", "Registrada por / em", "Ocorrência", "Glosa", "Impacta a avaliação", "Anexos"], linhas,
-                         larguras=[1.1, 2.3, 5, 2.3, 2, 2])
+        documento.tabela(["Data", "Registrada por / em", "Ocorrência", "Anexos"], linhas, larguras=[1.1, 2.3, 9, 2.3])
     else:
         documento.paragrafo("Nenhuma ocorrência registrada no período.")
     # Totais por item, para conferência com a medição

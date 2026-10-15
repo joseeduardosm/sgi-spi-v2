@@ -72,10 +72,11 @@ export class FormularioContratoComponent implements OnInit {
   protected readonly salvando = signal(false);
   protected readonly empresas = signal<OpcaoEmpresa[]>([]);
   protected readonly original = signal<DetalheContrato | null>(null);
-  // Com competências geradas, só o SuperRoot mexe nos itens; com prorrogação, as datas iniciais ficam travadas
+  // Com prorrogação, as datas iniciais ficam travadas
   protected readonly execucaoGerada = signal(false);
   protected readonly superRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
-  protected readonly itensBloqueados = computed(() => this.execucaoGerada() && !this.superRoot());
+  // Equipe, criador e SuperRoot têm os mesmos poderes: com a execução gerada, quem edita o contrato também altera os itens
+  protected readonly itensBloqueados = computed(() => false);
   protected readonly datasBloqueadas = computed(() => (this.original()?.vigencias.length ?? 1) > 1);
   // Contrato lido no SGI pelo botão "Importar do SGI" (conta root): preenche o cadastro, nada foi gravado
   protected readonly rascunhoSgi = signal<RascunhoContratoSgi | null>(null);
@@ -105,6 +106,8 @@ export class FormularioContratoComponent implements OnInit {
   protected readonly equipe: Record<Papel, ReturnType<typeof signal<OpcaoUsuario[]>>> = Object.fromEntries(
     PAPEIS.map((p) => [p.papel, signal<OpcaoUsuario[]>([])]),
   ) as Record<Papel, ReturnType<typeof signal<OpcaoUsuario[]>>>;
+  /** Autoridade do despacho de pagamento (no máximo uma pessoa). */
+  protected readonly autoridade = signal<OpcaoUsuario[]>([]);
   protected readonly itens = signal<ItemEdicao[]>([]);
 
   // Janela do item (2 passos)
@@ -155,6 +158,8 @@ export class FormularioContratoComponent implements OnInit {
     for (const membro of c.equipe) {
       this.equipe[membro.papel].set([{ id: membro.usuario_id, login: membro.login, nome_completo: membro.nome, cargo: '', ativo: true }]);
     }
+    const a = c.autoridade_despacho;
+    this.autoridade.set(a ? [{ id: a.id, login: '', nome_completo: a.nome, cargo: a.cargo, ativo: true }] : []);
     this.itens.set(
       c.itens.map((i) => ({
         id: i.id, descricao: i.descricao, tipo: i.tipo, calcula_pro_rata: i.calcula_pro_rata, unidade_fornecimento: i.unidade_fornecimento ?? '',
@@ -371,6 +376,7 @@ export class FormularioContratoComponent implements OnInit {
     const original = this.original();
     const corpo: GravacaoContrato = {
       ...this.dados,
+      autoridade_despacho_id: this.autoridade()[0]?.id ?? null,
       vigencia_inicial_meses: Number(this.dados.vigencia_inicial_meses),
       vigencia_maxima_meses: Number(this.dados.vigencia_maxima_meses),
       periodicidade_meses: Number(this.dados.periodicidade_meses),

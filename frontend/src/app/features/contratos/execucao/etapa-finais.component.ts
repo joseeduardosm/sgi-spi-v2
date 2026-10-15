@@ -2,12 +2,15 @@
 // Este arquivo serve para controlar as etapas 5 (checklist mensal), 6 (documento consolidado) e 7 (Ordem Bancária).
 
 import { DatePipe } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { Component, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { BotaoCopiarComponent } from '../../../shared/componentes/botao-copiar/botao-copiar.component';
+import { CampoArquivoComponent } from '../../../shared/componentes/campo-arquivo/campo-arquivo.component';
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
+import { HtmlConfiavelPipe } from '../../contratacoes/html-confiavel.pipe';
 import { DetalheCompetencia, DocumentoMensal, Etapa } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
@@ -16,71 +19,101 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 /** Etapas 5 (checklist mensal), 6 (documento consolidado) e 7 (Ordem Bancária). */
 @Component({
   selector: 'app-etapa-finais',
-  imports: [LinkificarPipe, DatePipe, FormsModule, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [HtmlConfiavelPipe, LinkificarPipe, DatePipe, FormsModule, BotaoCopiarComponent, CampoArquivoComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   template: `
     @let d = detalhe();
     @switch (etapa()) {
       @case ('checklist') {
         <section class="cartao-dados" aria-labelledby="titulo-checklist-mensal">
           <header>
-            <div><h2 id="titulo-checklist-mensal">6. Documentos mensais do checklist</h2>
+            <div><h2 id="titulo-checklist-mensal">Documentos mensais do checklist
+                @if (d.empresa_cnpj) { <app-botao-copiar class="copiar-cnpj" [valor]="soNumeros(d.empresa_cnpj)" rotulo="Copiar CNPJ" titulo="Copiar o CNPJ da contratada (só números)" tamanho="pequeno" /> }</h2>
               <small>Os obrigatórios precisam ser anexados; os opcionais podem ficar sem anexo. Com todos anexados, a etapa conclui sozinha.</small></div>
-            @if (editavel() && sugestoes(d) > 0) {
-              <button type="button" class="acao-secundaria" (click)="trazerTodos()">Trazer os documentos válidos de outros contratos ({{ sugestoes(d) }})</button>
-            }
-            @if (editavel()) {
-              <button type="button" class="acao-primaria" [disabled]="obrigatoriosPendentes(d) > 0" (click)="concluirChecklist()"
-                      [title]="obrigatoriosPendentes(d) ? 'Anexe os documentos obrigatórios' : ''">Concluir checklist</button>
-            }
+            @if (obrigatoriosPendentes(d) === 0) { <span class="selo-situacao">Obrigatórios completos</span> } @else { <span class="selo-situacao alerta">{{ obrigatoriosPendentes(d) }} obrigatório(s) pendente(s)</span> }
           </header>
+          <div class="resumo-medicao" aria-label="Resumo do checklist">
+            <div [class.ok]="obrigatoriosPendentes(d) === 0" [class.alerta]="obrigatoriosPendentes(d) > 0"><span>Obrigatórios anexados</span><strong>{{ obrigatoriosAnexados(d) }} de {{ obrigatoriosTotal(d) }}</strong></div>
+            <div><span>Opcionais anexados</span><strong>{{ opcionaisAnexados(d) }} de {{ opcionaisTotal(d) }}</strong></div>
+            <div [class.alerta]="vencendo(d) > 0"><span>Validade a vencer ou vencida</span><strong>{{ vencendo(d) }}</strong><small>{{ vencendo(d) ? 'confira os documentos com validade' : 'nenhum documento com validade em risco' }}</small></div>
+          </div>
           <div class="tabela-gestao-envoltorio">
             <table class="tabela-gestao">
               <thead><tr><th>Nº</th><th>Documento</th><th>Tipo</th><th>Situação</th><th>Arquivo</th></tr></thead>
               <tbody>
                 @for (doc of d.documentos; track doc.id) {
-                  <tr>
+                  <tr class="linha-checklist" [class.doc-anexado]="!!doc.arquivo" [class.doc-pendente]="!doc.arquivo">
                     <td>{{ $index + 1 }}</td>
                     <td><strong>{{ doc.nome }}</strong>@if (doc.observacao) { <small [innerHTML]="doc.observacao | linkificar"></small> }</td>
                     <td>{{ doc.obrigatorio ? 'Obrigatório' : 'Opcional' }}@if (doc.com_validade) { <small>Com validade</small> }</td>
-                    <td><span class="selo-situacao" [class.pendente]="!doc.arquivo" [class.vermelho]="!doc.arquivo && doc.obrigatorio">{{ doc.arquivo ? 'Anexado' : doc.obrigatorio ? 'Pendente' : 'Não anexado' }}</span></td>
+                    <td><span class="selo-situacao" [class.perigo]="!doc.arquivo">{{ doc.arquivo ? 'Anexado' : doc.obrigatorio ? 'Pendente' : 'Não anexado' }}</span></td>
                     <td>
-                      @if (doc.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(doc.arquivo.anexo_id)">Baixar</button> }
+                      <div class="acoes-arquivo-doc">
+                        @if (doc.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(doc.arquivo.anexo_id)">Baixar</button> }
+                        @if (editavel() && doc.com_validade) {
+                          <label class="campo-validade">Válido até *
+                            <input type="date" [name]="'validade-' + doc.id" [ngModel]="validades[doc.id] ?? doc.validade_ate ?? ''" (ngModelChange)="validades[doc.id] = $event" /></label>
+                        }
+                        @if (editavel()) { <app-envio-pdf [pequeno]="true" [mostrarNome]="false" [rotulo]="doc.arquivo ? 'Substituir' : 'Selecionar documento PDF'" (selecionado)="enviarDocumento(doc, $event)" /> }
+                      </div>
                       @if (doc.com_validade && doc.arquivo && doc.validade_ate) {
-                        <small [style.color]="vencimento(doc.validade_ate) === 'vencido' ? '#b3261e' : vencimento(doc.validade_ate) === 'perto' ? '#8a6d00' : '#6a7786'">
+                        <small class="validade-doc" [attr.data-situacao]="vencimento(doc.validade_ate)">
                           Válido até {{ doc.validade_ate | dataBr }}@if (vencimento(doc.validade_ate) === 'perto') { (vence em até 30 dias) }@if (vencimento(doc.validade_ate) === 'vencido') { (vencido) }
                         </small>
                       }
                       @if (doc.reaproveitado_contrato) {
                         <small class="reaproveitado-contrato">Reaproveitado do contrato {{ doc.reaproveitado_contrato }} (competência {{ doc.reaproveitado_de | date: 'MM/yyyy' }})@if (doc.validade_ate) { · válido até {{ doc.validade_ate | dataBr }} }: confira e conclua</small>
-                      } @else if (doc.reaproveitado_de) { <small style="color: #2f6f9f">Reaproveitado da competência de {{ doc.reaproveitado_de | date: 'MM/yyyy' }}: confira e conclua</small> }
+                      } @else if (doc.reaproveitado_de) { <small class="reaproveitado-contrato">Reaproveitado da competência de {{ doc.reaproveitado_de | date: 'MM/yyyy' }}: confira e conclua</small> }
                       @if (editavel() && doc.sugestao_outro_contrato; as s) {
                         <div class="sugestao-outro-contrato">
                           <small>Disponível do contrato {{ s.contrato_numero }} (competência {{ s.competencia | date: 'MM/yyyy' }})@if (s.validade_ate) { · válido até {{ s.validade_ate | dataBr }} }</small>
                           <button type="button" class="acao-secundaria acao-pequena" (click)="usarDeOutroContrato(doc, s.origem_id)">Usar este documento</button>
                         </div>
                       }
-                      @if (editavel() && doc.com_validade) {
-                        <label class="campo-validade">Válido até *
-                          <input type="date" [name]="'validade-' + doc.id" [ngModel]="validades[doc.id] ?? doc.validade_ate ?? ''" (ngModelChange)="validades[doc.id] = $event" /></label>
-                      }
-                      @if (editavel()) { <app-envio-pdf [rotulo]="doc.arquivo ? 'Substituir' : 'Selecionar documento PDF'" (selecionado)="enviarDocumento(doc, $event)" /> }
                     </td>
                   </tr>
                 }
               </tbody>
             </table>
           </div>
+          @if (editavel()) {
+            <div class="barra-envio-nf barra-medicao">
+              <div class="texto-envio">
+                @if (obrigatoriosPendentes(d) > 0) { <span class="pendencias-nf">Anexe os {{ obrigatoriosPendentes(d) }} documento(s) obrigatório(s) pendente(s).</span> }
+                @else { <span class="dica-formulario">Obrigatórios completos. Conclua o checklist para liberar o documento consolidado.</span> }
+              </div>
+              <div class="botoes-barra">
+                @if (sugestoes(d) > 0) { <button type="button" class="acao-secundaria" (click)="trazerTodos()">Trazer os documentos válidos de outros contratos ({{ sugestoes(d) }})</button> }
+                <button type="button" class="acao-primaria" [disabled]="obrigatoriosPendentes(d) > 0" (click)="concluirChecklist()" [title]="obrigatoriosPendentes(d) ? 'Anexe os documentos obrigatórios' : ''">Concluir checklist</button>
+              </div>
+            </div>
+          }
         </section>
       }
       @case ('consolidado') {
         <section class="cartao-dados" aria-labelledby="titulo-consolidado">
-          <header><h2 id="titulo-consolidado">7. Documento consolidado</h2></header>
+          <header>
+            <div><h2 id="titulo-consolidado">Documento consolidado</h2>
+              <small>Um único PDF na ordem de execução, com folha de autenticação (código e hash) e resumo executivo.</small></div>
+            @if (d.consolidado) { <span class="selo-situacao">Gerado</span> }
+            @else if (d.etapa_atual === 'consolidado' || d.etapa_atual === 'ordem_bancaria' || d.etapa_atual === 'concluida') { <span class="selo-situacao alerta">Pronto para gerar</span> }
+            @else { <span class="selo-situacao inativo">Aguardando etapas</span> }
+          </header>
           <div class="corpo">
-            <p class="dica-formulario" style="margin: 0 0 12px">Um único PDF na ordem de execução: medição, avaliação (quando houver), nota fiscal, retenção de tributos, CADIN, checklist, folha de autenticação (código e hash) e resumo executivo. Cada documento enviado vem precedido de uma contracapa, e as páginas são numeradas em sequência.</p>
+            <details class="como-funciona-nf" style="margin-bottom: 12px">
+              <summary>O que entra no documento</summary>
+              <p>Medição, avaliação (quando houver), nota fiscal, retenção de tributos, CADIN, checklist, folha de autenticação e resumo executivo. Cada documento enviado vem precedido de uma contracapa, e as páginas são numeradas em sequência.</p>
+            </details>
             @if (d.etapa_atual !== 'consolidado' && d.etapa_atual !== 'ordem_bancaria' && d.etapa_atual !== 'concluida') {
               <p class="aviso-bloco">Liberado quando todas as etapas anteriores estiverem concluídas.
                 @if (d.etapas_abertas.length) { Falta concluir: <b>{{ faltando(d) }}</b>. }
               </p>
+            }
+            @if (d.consolidado) {
+              <article class="cartao-arquivo-final">
+                <span class="icone-arquivo" aria-hidden="true">PDF</span>
+                <div class="dados-arquivo"><strong>Documento consolidado</strong><small>Gerado em {{ d.consolidado.enviado_em | date: 'dd/MM/yyyy HH:mm' }} · {{ d.consolidado.tamanho | tamanho }}</small></div>
+                <button type="button" class="acao-primaria" (click)="baixar(d.consolidado.anexo_id)">Baixar</button>
+              </article>
             }
             <div class="acoes-cartao esquerda">
               <!-- 1ª geração: quem pode editar. Gerar novamente (substitui o atual): mesmo direito de quem edita, inclusive após a OB -->
@@ -88,29 +121,59 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
                 <button type="button" class="acao-primaria" (click)="gerarConsolidado()">Gerar e baixar documento unificado</button>
               }
               @if (d.consolidado && d.pode_gerar_consolidado_novamente) {
-                <button type="button" class="acao-primaria" (click)="gerarConsolidado(true)">Gerar novamente</button>
+                <button type="button" class="acao-secundaria" (click)="gerarConsolidado(true)">Gerar novamente</button>
               }
-              @if (d.consolidado) { <button type="button" class="acao-secundaria" (click)="baixar(d.consolidado.anexo_id)">Baixar documento consolidado</button> }
             </div>
-            @if (d.consolidado) { <p class="dica-formulario">Gerado em {{ d.consolidado.enviado_em | date: 'dd/MM/yyyy HH:mm' }} · {{ d.consolidado.tamanho | tamanho }}</p> }
           </div>
         </section>
+        @if (despacho(); as desp) {
+          <section class="cartao-dados cartao-dobravel" aria-labelledby="titulo-despacho">
+            <header>
+              <h2 id="titulo-despacho" style="flex: 1; min-width: 0">
+                <button type="button" class="cabecalho-dobravel" [attr.aria-expanded]="despachoAberto()" aria-controls="corpo-despacho" (click)="despachoAberto.set(!despachoAberto())">
+                  <span class="seta" [class.aberta]="despachoAberto()" aria-hidden="true">▸</span>
+                  <span>Despacho de pagamento</span>
+                  <small>Texto padrão com os dados do contrato e da competência. Copie e cole no SEI (a formatação é mantida).</small>
+                </button>
+              </h2>
+              <app-botao-copiar rotulo="Copiar despacho" titulo="Copiar o despacho formatado" (acionar)="copiarDespacho()" />
+            </header>
+            @if (despachoAberto()) {
+              <div class="corpo" id="corpo-despacho">
+                <div class="texto-despacho" [innerHTML]="desp.html | htmlConfiavel"></div>
+              </div>
+            }
+          </section>
+        }
       }
       @case ('ordem_bancaria') {
         <section class="cartao-dados" aria-labelledby="titulo-ob">
-          <header><h2 id="titulo-ob">8. Ordem Bancária</h2></header>
+          <header>
+            <div><h2 id="titulo-ob">Ordem Bancária</h2><small>Ao anexar a OB, o valor é debitado nas NEs e a competência é concluída.</small></div>
+            @if (d.ordem_bancaria) { <span class="selo-situacao">Concluída</span> } @else { <span class="selo-situacao alerta">Aguardando a OB</span> }
+          </header>
+          <div class="resumo-medicao" aria-label="Resumo do pagamento">
+            <div><span>Valor a pagar (soma das notas, brutos)</span><strong>{{ d.valor_a_pagar | moeda }}</strong></div>
+            <div><span>NEs debitadas, em ordem</span><strong class="texto-codigo">{{ d.notas_selecionadas.map(n => n.numero).join(' → ') || '—' }}</strong></div>
+            @if (d.concluida_em) { <div class="ok"><span>Concluída em</span><strong>{{ d.concluida_em | date: 'dd/MM/yyyy HH:mm' }}</strong></div> }
+          </div>
           <div class="corpo">
             @if (d.ordem_bancaria) {
-              <p class="aviso-bloco informativo">Competência concluída em {{ d.concluida_em | date: 'dd/MM/yyyy HH:mm' }}. O valor de {{ d.valor_a_pagar | moeda }} (soma das NFs) foi debitado nas NEs.</p>
-              <button type="button" class="acao-secundaria" (click)="baixar(d.ordem_bancaria.anexo_id)">Baixar Ordem Bancária</button>
-            } @else {
-              <p class="dica-formulario" style="margin: 0 0 12px">Ao anexar a OB, {{ d.valor_a_pagar | moeda }} (soma das NFs, brutos) será debitado nas NEs {{ d.notas_selecionadas.map(n => n.numero).join(', ') }}, nessa ordem, e a competência será concluída.</p>
-              @if (editavel()) {
-                <div class="acoes-cartao esquerda">
-                  <app-envio-pdf rotulo="Selecionar OB em PDF" (selecionado)="ob = $event" />
-                  <button type="button" class="acao-primaria" [disabled]="!ob" (click)="enviarOb()">Anexar OB e concluir</button>
+              <article class="cartao-arquivo-final">
+                <span class="icone-arquivo" aria-hidden="true">PDF</span>
+                <div class="dados-arquivo"><strong>Ordem Bancária</strong><small>O valor de {{ d.valor_a_pagar | moeda }} foi debitado nas NEs.</small></div>
+                <button type="button" class="acao-secundaria" (click)="baixar(d.ordem_bancaria.anexo_id)">Baixar Ordem Bancária</button>
+              </article>
+              <div class="espaco-fim-etapa"></div>
+            } @else if (editavel()) {
+              <app-campo-arquivo tipo="pdf" rotulo="Ordem Bancária (PDF)" [obrigatorio]="true" (selecionado)="ob = $event" />
+              <div class="barra-envio-nf barra-medicao">
+                <div class="texto-envio">
+                  @if (!ob) { <span class="pendencias-nf">Falta: PDF da Ordem Bancária.</span> }
+                  @else { <span class="dica-formulario">Ao anexar, {{ d.valor_a_pagar | moeda }} será debitado nas NEs {{ d.notas_selecionadas.map(n => n.numero).join(', ') }}, nessa ordem.</span> }
                 </div>
-              }
+                <button type="button" class="acao-primaria" [disabled]="!ob" (click)="enviarOb()">Anexar OB e concluir</button>
+              </div>
             }
           </div>
         </section>
@@ -127,6 +190,39 @@ export class EtapaFinaisComponent {
 
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
+  /** Despacho de pagamento da competência (nulo enquanto não há máscara ativa ou fora da etapa Download). */
+  protected readonly despacho = signal<{ html: string; titulo: string } | null>(null);
+  /** O cartão do despacho é dobrável e nasce dobrado (quem vai analisar abre). */
+  protected readonly despachoAberto = signal(false);
+
+  constructor() {
+    // Ao abrir a etapa Download (ou trocar de competência), busca o despacho preenchido
+    effect(() => {
+      const d = this.detalhe();
+      if (this.etapa() !== 'consolidado') return;
+      untracked(() => this.api.despacho(d.contrato_id, d.id).subscribe({
+        next: (r) => this.despacho.set(r.html ? { html: r.html, titulo: r.titulo } : null),
+        error: () => this.despacho.set(null),
+      }));
+    });
+  }
+
+  /** Copia o despacho com a formatação (HTML) e, por garantia, em texto puro: no SEI ou no Word, o negrito e o centralizado vêm junto. */
+  protected copiarDespacho(): void {
+    const html = this.despacho()?.html;
+    if (!html) return;
+    const caixa = document.createElement('div');
+    caixa.innerHTML = html;
+    document.body.appendChild(caixa);
+    const texto = caixa.innerText;
+    caixa.remove();
+    const item = typeof ClipboardItem !== 'undefined'
+      ? new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([texto], { type: 'text/plain' }) })
+      : null;
+    const gravar = item ? navigator.clipboard.write([item]) : navigator.clipboard.writeText(texto);
+    void gravar.catch(() => navigator.clipboard?.writeText(texto).catch(() => undefined));
+  }
+
   // Validade digitada para cada documento com validade (por id), antes de escolher o arquivo
   protected validades: Record<string, string> = {};
   // PDF da OB escolhido
@@ -151,6 +247,20 @@ export class EtapaFinaisComponent {
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível anexar o documento'),
     });
+  }
+
+  /** Só os dígitos (CNPJ sem pontos, barra nem traço), para colar nas consultas. */
+  protected soNumeros(valor: string | null | undefined): string {
+    return (valor ?? '').replace(/\D/g, '');
+  }
+
+  protected obrigatoriosTotal(d: DetalheCompetencia): number { return d.documentos.filter((x) => x.obrigatorio).length; }
+  protected obrigatoriosAnexados(d: DetalheCompetencia): number { return d.documentos.filter((x) => x.obrigatorio && x.arquivo).length; }
+  protected opcionaisTotal(d: DetalheCompetencia): number { return d.documentos.filter((x) => !x.obrigatorio).length; }
+  protected opcionaisAnexados(d: DetalheCompetencia): number { return d.documentos.filter((x) => !x.obrigatorio && x.arquivo).length; }
+  /** Documentos com validade vencida ou a vencer em até 30 dias. */
+  protected vencendo(d: DetalheCompetencia): number {
+    return d.documentos.filter((x) => x.com_validade && x.arquivo && x.validade_ate && this.vencimento(x.validade_ate) !== 'ok').length;
   }
 
   /** Quantos documentos têm um igual, ainda válido, em outro contrato da mesma empresa. */
@@ -231,7 +341,7 @@ export class EtapaFinaisComponent {
     const d = this.detalhe();
     const ok = await this.dialogos.confirmar({
       titulo: 'Anexar a OB e concluir a competência?',
-      mensagem: `O valor será debitado nas Notas de Empenho e a competência ficará concluída. Só o SuperRoot ou o gestor do contrato podem reabrir (com estorno).`,
+      mensagem: `O valor será debitado nas Notas de Empenho e a competência ficará concluída. A equipe do contrato, o criador e o SuperRoot podem reabrir (com estorno).`,
       rotuloConfirmar: 'Anexar OB e concluir',
       segundos: 5,
     });

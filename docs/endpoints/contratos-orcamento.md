@@ -18,7 +18,7 @@ Previsão orçamentária mensal por vigência e controle das Notas de Empenho (N
   - o preço e a quantidade de cada mês consideram os reajustes e os aditamentos/supressões **concluídos**.
 - **Apontamentos sob demanda:** a grade de cada vigência não pode deixar saldo negativo (saldo = limite da vigência − soma dos apontamentos).
   - O limite da vigência 1 é a quantidade total do item. Nas prorrogações, é o limite definido na tela de prorrogação.
-  - Salvar **sela** a previsão da vigência: depois disso, só o SuperRoot altera (a gravação fica auditada como `contrato.previsao.editar_selada`).
+  - Salvar **sela** a previsão da vigência: depois disso, quem edita o contrato (equipe, criador, controle total ou SuperRoot) pode alterar (a gravação fica auditada como `contrato.previsao.editar_selada`).
 - **Nota de Empenho:**
   - número único no contrato, sem diferenciar maiúsculas;
   - valor original > 0;

@@ -76,16 +76,19 @@
           </select>
         </div>
         <div class="campo">
-          <label class="pref-marca"><input type="checkbox" name="nao-perturbe" [(ngModel)]="naoPerturbe" (ngModelChange)="alterado.set(true)" /> Não perturbe (sem pop-ups de navegador e desktop)</label>
-          @if (naoPerturbe) {
-            <div class="pref-horas">
-              <label for="pref-inicio">Das</label>
-              <input id="pref-inicio" type="time" name="inicio" [(ngModel)]="configuracao.silencio_inicio" (ngModelChange)="alterado.set(true)" />
-              <label for="pref-fim">às</label>
-              <input id="pref-fim" type="time" name="fim" [(ngModel)]="configuracao.silencio_fim" (ngModelChange)="alterado.set(true)" />
-            </div>
-          }
-          <label class="pref-marca"><input type="checkbox" name="fins-de-semana" [(ngModel)]="configuracao.silencio_fins_de_semana" (ngModelChange)="alterado.set(true)" /> Também aos sábados e domingos</label>
+          <span class="pref-rotulo" id="pref-rotulo-silencio">Não perturbe</span>
+          <div class="pref-opcoes" role="group" aria-labelledby="pref-rotulo-silencio">
+            <label class="pref-marca"><input type="checkbox" name="nao-perturbe" [(ngModel)]="naoPerturbe" (ngModelChange)="alterado.set(true)" /> Sem pop-ups de navegador e desktop</label>
+            @if (naoPerturbe) {
+              <div class="pref-horas">
+                <label for="pref-inicio">Das</label>
+                <input id="pref-inicio" type="time" name="inicio" [(ngModel)]="configuracao.silencio_inicio" (ngModelChange)="alterado.set(true)" />
+                <label for="pref-fim">às</label>
+                <input id="pref-fim" type="time" name="fim" [(ngModel)]="configuracao.silencio_fim" (ngModelChange)="alterado.set(true)" />
+              </div>
+            }
+            <label class="pref-marca"><input type="checkbox" name="fins-de-semana" [(ngModel)]="configuracao.silencio_fins_de_semana" (ngModelChange)="alterado.set(true)" /> Também aos sábados e domingos</label>
+          </div>
           <small class="dica-formulario">O que chegar nesse período fica só na caixa. O e-mail não é afetado.</small>
         </div>
       </div>

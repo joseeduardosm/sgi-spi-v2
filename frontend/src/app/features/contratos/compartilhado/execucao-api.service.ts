@@ -291,6 +291,11 @@ export class ExecucaoApiService {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/checklist/${documentoId}`), this.formulario({ arquivo, validade }));
   }
 
+  /** Texto do despacho de pagamento (máscara ativa), para mostrar na tela e copiar; `html` nulo = sem máscara ativa. */
+  despacho(id: string, c: string): Observable<{ html: string | null; titulo: string }> {
+    return this.http.get<{ html: string | null; titulo: string }>(this.competencia(id, c, '/despacho'));
+  }
+
   /** Etapa 6: gera o documento consolidado. */
   consolidado(id: string, c: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/consolidado'), {});

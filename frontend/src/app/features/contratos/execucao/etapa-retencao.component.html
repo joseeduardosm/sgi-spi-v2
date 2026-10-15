@@ -2,24 +2,38 @@
 <section class="cartao-dados" aria-labelledby="titulo-retencao">
   <header>
     <div>
-      <h2 id="titulo-retencao">4. Retenção de tributos</h2>
-      <small>Conferência da nota fiscal (dados lidos do XML) e das retenções, feita pelo Financeiro. Líquido = bruto − retenções.</small>
+      <h2 id="titulo-retencao">Retenção de tributos</h2>
+      <small>O Financeiro confere a nota (dados lidos do XML) e as retenções. Líquido = bruto − retenções.</small>
     </div>
-    @if (d.retencao) { <span class="selo-situacao">Conferida</span> }
+    @if (d.retencao) { <span class="selo-situacao">Conferida</span> } @else { <span class="selo-situacao alerta">Aguardando conferência</span> }
   </header>
+  <!-- Resumo de todas as notas, acompanhando o que está digitado -->
+  <div class="resumo-medicao" aria-label="Resumo da retenção">
+    <div><span>Valor bruto{{ notas.length > 1 ? ' (' + notas.length + ' notas)' : '' }}</span><strong>{{ totalGeral('bruto') | moeda }}</strong></div>
+    <div [class.alerta]="totalGeral('retido') > 0"><span>Retenções</span><strong>{{ totalGeral('retido') | moeda }}</strong></div>
+    <div class="ok"><span>Líquido a pagar</span><strong>{{ totalGeral('liquido') | moeda }}</strong><small>é o que a Ordem Bancária paga</small></div>
+  </div>
   <div class="corpo">
-    <app-historico-recusas [detalhe]="d" (atualizado)="atualizado.emit($event)" />
+    @if (d.retencao; as r) {
+      <p class="aviso-bloco informativo">Conferida por <b>{{ r.por_nome }}</b> em {{ r.concluida_em | date: 'dd/MM/yyyy HH:mm' }}.
+        @if (r.pdf) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r.pdf.anexo_id)">Baixar PDF da conferência</button> }
+      </p>
+    }
+    <app-historico-recusas [detalhe]="d" [recolhido]="true" (atualizado)="atualizado.emit($event)" />
     @for (n of notas; track n.titulo) {
       @let x = n.nota.dados_xml;
-      <article class="nota-xml">
-        <header>
-          <div>
-            <span class="modal-sobretitulo">{{ n.titulo }} · {{ x?.modelo_rotulo ?? 'sem XML' }}</span>
-            <h3>Nº {{ x?.numero ?? n.nota.numero }}@if (x?.serie) { · série {{ x?.serie }} }</h3>
-          </div>
-          <div class="valor-nota"><small>Valor da nota</small><strong>{{ n.nota.valor_bruto | moeda }}</strong></div>
-          @if (n.nota.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="verNota(n)">Ver nota</button> }
-        </header>
+      <details class="nota-xml">
+        <summary class="resumo-nota-xml">
+          <span class="seta-dobra" aria-hidden="true">▸</span>
+          <span class="titulo-nota-xml">
+            <b>{{ n.titulo }} - nº <span class="texto-codigo">{{ x?.numero ?? n.nota.numero ?? 's/nº' }}</span></b>
+            <small>{{ x?.modelo_rotulo ?? 'sem XML' }}@if (x?.serie) { · série {{ x?.serie }} }@if (x?.emitente?.razao_social) { · {{ x?.emitente?.razao_social }} }</small>
+          </span>
+          @if (alertasDaNota(n); as qtd) { <span class="selo-situacao alerta">{{ qtd }} alerta(s)</span> }
+          <span class="valores-nota-xml"><small>Valor da nota</small><strong>{{ n.nota.valor_bruto | moeda }}</strong></span>
+          <span class="valores-nota-xml"><small>Líquido</small><strong>{{ liquido(n) | moeda }}</strong></span>
+          @if (n.nota.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="$event.preventDefault(); $event.stopPropagation(); verNota(n)">Ver nota</button> }
+        </summary>
         @if (x) {
           <div class="partes-nota">
             <div><small>Emitente (prestador)</small><strong>{{ x.emitente.razao_social ?? 'não informado' }}</strong><span>CNPJ {{ cnpj(x.emitente.cnpj) }}@if (x.emitente.inscricao_municipal) { · IM {{ x.emitente.inscricao_municipal }} }</span></div>
@@ -33,6 +47,8 @@
             <div class="ocupa-tudo"><dt>Chave</dt><dd><code>{{ x.chave ?? '—' }}</code></dd></div>
           </dl>
           @if (x.itens.length) {
+            <details class="itens-nota-xml">
+              <summary>Discriminação dos serviços ({{ x.itens.length }} {{ x.itens.length === 1 ? 'item' : 'itens' }})</summary>
             <div class="tabela-gestao-envoltorio">
               <table class="tabela-gestao">
                 <thead><tr><th>Discriminação (itens)</th><th class="num">Qtd.</th><th class="num">Valor unitário</th><th class="num">Valor</th></tr></thead>
@@ -43,6 +59,7 @@
                 </tbody>
               </table>
             </div>
+            </details>
           } @else if (x.discriminacao) {
             <p class="discriminacao-nota"><b>Discriminação dos serviços:</b> {{ x.discriminacao }}</p>
           }
@@ -62,7 +79,7 @@
             <div>
               <label [for]="n.titulo + t.chave">{{ t.rotulo }}</label>
               <input [id]="n.titulo + t.chave" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="n.retencoes[t.chave]" />
-              @if (x && x.retencoes[t.chave] !== '0.00') { <small class="dica-formulario">XML: {{ x.retencoes[t.chave] | moeda }}</small> }
+              @if (x && (x.retencoes[t.chave] !== '0.00' || diverge(n, t.chave))) { <small class="dica-formulario" [class.diverge-xml]="diverge(n, t.chave)">XML: {{ x.retencoes[t.chave] | moeda }}@if (diverge(n, t.chave)) { · ajustado }</small> }
             </div>
           }
         </div>
@@ -72,26 +89,7 @@
           <div class="indicador"><span>Retenções</span><strong>{{ totalRetido(n) | moeda }}</strong></div>
           <div class="indicador destaque"><span>Líquido a pagar</span><strong>{{ liquido(n) | moeda }}</strong></div>
         </div>
-      </article>
-    }
-
-    <!-- Total das notas: só com mais de uma; os valores acompanham o que está digitado -->
-    @if (notas.length > 1) {
-      <p class="secao-formulario">Total das notas</p>
-      <div class="tabela-gestao-envoltorio">
-        <table class="tabela-gestao">
-          <thead><tr><th>Nota</th><th class="num">Bruto</th><th class="num">Retenções</th><th class="num">Líquido a pagar</th><th></th></tr></thead>
-          <tbody>
-            @for (n of notas; track n.titulo) {
-              <tr>
-                <td>NF {{ n.nota.numero || n.nota.ordem }}</td><td class="num">{{ n.nota.valor_bruto | moeda }}</td><td class="num">{{ totalRetido(n) | moeda }}</td><td class="num">{{ liquido(n) | moeda }}</td>
-                <td>@if (n.nota.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="verNota(n)">Ver nota</button> }</td>
-              </tr>
-            }
-            <tr class="linha-total"><td><strong>Total</strong></td><td class="num"><strong>{{ totalGeral('bruto') | moeda }}</strong></td><td class="num"><strong>{{ totalGeral('retido') | moeda }}</strong></td><td class="num"><strong>{{ totalGeral('liquido') | moeda }}</strong></td><td></td></tr>
-          </tbody>
-        </table>
-      </div>
+      </details>
     }
 
     @if (editavel()) {
@@ -99,26 +97,35 @@
         <input type="checkbox" [(ngModel)]="discriminacaoConferida" />
         Conferi que as <b>retenções de tributos</b> estão de acordo com o valor da nota fiscal apresentada.
       </label>
-      <div class="acoes-cartao"><app-opcao-email [(marcado)]="enviarEmail" descricao="PDF da conferência à equipe" />
-        @if (d.pode_recusar) { <button type="button" class="acao-perigo" (click)="recusando.set(true)">Recusar nota</button> }
-        <button type="button" class="acao-primaria" [disabled]="!valido()" (click)="salvar()">Salvar retenção</button></div>
+      <app-opcao-email [(marcado)]="enviarEmail" descricao="PDF da conferência à equipe" />
+      <div class="barra-envio-nf barra-medicao">
+        <div class="texto-envio">
+          @if (pendencias().length) { <span class="pendencias-nf">{{ pendencias().join(' · ') }}</span> }
+          @else { <span class="dica-formulario">Tudo certo. Ao salvar, o PDF da conferência é gerado e o CADIN é liberado.</span> }
+        </div>
+        <div class="botoes-barra">
+          @if (d.pode_recusar) { <button type="button" class="acao-perigo" (click)="recusando.set(true)">Recusar nota</button> }
+          <button type="button" class="acao-primaria" [disabled]="!valido()" [title]="pendencias().join(', ')" (click)="salvar()">Salvar retenção</button>
+        </div>
+      </div>
     }
 
-    @if (d.retencao; as r) {
-      <p class="aviso-bloco informativo">Conferida por <b>{{ r.por_nome }}</b> em {{ r.concluida_em | date: 'dd/MM/yyyy HH:mm' }}.
-        @if (r.pdf) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r.pdf.anexo_id)">Baixar PDF da conferência</button> }
-      </p>
+    @if (d.retencao) {
       <p class="secao-formulario">E-mail à equipe</p>
       @if (d.email_retencao.enviado_em === null) {
         <p class="dica-formulario">Enviando o aviso à equipe…</p>
       } @else if (d.email_retencao.ok) {
-        <p class="aviso-bloco informativo">Enviado em {{ d.email_retencao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_retencao.destinatarios.join(', ') }}.</p>
+        <details class="email-recusa">
+          <summary>Enviado em {{ d.email_retencao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_retencao.destinatarios.length }} destinatário(s)</summary>
+          <p>{{ d.email_retencao.destinatarios.join(', ') }}</p>
+        </details>
       } @else {
         <p class="aviso-bloco erro">O e-mail não foi enviado: {{ d.email_retencao.erro }}</p>
       }
       @if (d.pode_conferir_retencao && d.email_retencao.enviado_em !== null) {
         <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Reenviando…' : 'Reenviar e-mail' }}</button>
       }
+      <div class="espaco-fim-etapa"></div>
     }
   </div>
 </section>

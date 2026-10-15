@@ -30,6 +30,7 @@ from app.core.erros import ErroApi
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
     AlteracaoPedirEnvio,
+    DespachoCompetencia,
     GrupoFinanceiro,
     PrepostoDoEmail,
     ItemDespesaVariavel,
@@ -237,6 +238,15 @@ def detalhar_competencia(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sess
     """Detalhe completo da competência pelo id."""
     with traduzir_erros():
         return competencias.detalhar(sessao, contrato_id, competencia_id, usuario)
+
+
+@roteador.get("/competencias/{competencia_id}/despacho", response_model=DespachoCompetencia, summary="Despacho de pagamento da competência",
+              description="Texto do despacho (máscara ativa em Contratos → Modelos, preenchida com os dados do contrato e da competência) para mostrar formatado e copiar; "
+              "não faz parte do consolidado. `html` nulo se não há máscara ativa. Exige ACL `contratos` ≥ LEITURA.", responses=NAO_ENCONTRADA)
+def despacho_competencia(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    """Despacho de pagamento pronto para copiar."""
+    with traduzir_erros():
+        return competencias.montar_despacho(sessao, contrato_id, competencia_id)
 
 
 @roteador.get("/competencias/{competencia_id}/arquivos/{anexo_id}", response_class=FileResponse, summary="Baixar arquivo da competência",

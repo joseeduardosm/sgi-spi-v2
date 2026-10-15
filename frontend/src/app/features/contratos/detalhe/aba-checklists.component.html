@@ -13,31 +13,54 @@
       <div class="barra-dobrar"><button type="button" class="link-arquivo" (click)="expandirTodos(true)">Expandir todos</button><button type="button" class="link-arquivo" (click)="expandirTodos(false)">Recolher todos</button></div>
     }
     @for (c of checklists(); track c.id) {
-      <article class="indicador cartao-dobravel" style="margin-bottom: 12px">
+      <article class="cartao-checklist cartao-dobravel" [class.ativo]="c.ativo">
         <button type="button" class="cabecalho-dobravel" [attr.aria-expanded]="aberta(c)" [attr.aria-controls]="'checklist-' + c.id" (click)="alternar(c)">
           <span class="seta" [class.aberta]="aberta(c)" aria-hidden="true">▸</span>
-          <strong style="font-size: 14px">v{{ c.versao }} · {{ c.nome }}</strong>
-          <small>{{ c.itens.length }} documento(s)</small>
+          <strong>v{{ c.versao }} · {{ c.nome }}</strong>
+          <small>{{ c.itens.length }} documento(s) · {{ obrigatoriosDe(c) }} obrigatório(s)</small>
           <span class="selo-situacao" [class.inativo]="!c.ativo">{{ c.ativo ? 'Ativo' : 'Inativo' }}</span>
         </button>
         @if (aberta(c)) {
-        <div [id]="'checklist-' + c.id">
-        <ol style="margin: 10px 0; padding-left: 20px; font-size: 12px; color: var(--cor-3d454e)">
-          @for (i of c.itens; track i.id) { <li>{{ i.nome }} <span class="etiqueta">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span>@if (i.com_validade) { <span class="etiqueta">Com validade</span> }@if (i.vale_outros_contratos) { <span class="etiqueta">Documento da empresa</span> }@if (i.pedir_envio) { <span class="etiqueta">Para enviar</span> }@if (i.observacao) { <small style="display: inline; color: #8e99a6"> — <span [innerHTML]="i.observacao | linkificar"></span></small> }
-            @if (podeEditar()) { <label class="opcao-empresa" title="Pede este documento à empresa, com a observação, no e-mail da medição concluída. Pode ser mudado mesmo com o checklist ativo."><input type="checkbox" [checked]="!!i.pedir_envio" (change)="alternarPedirEnvio(c, i, $any($event.target))" /> Pedir para enviar</label> }</li> }
-        </ol>
-        <small>Criado por {{ c.criado_por_nome }} em {{ c.criado_em | date: 'dd/MM/yyyy HH:mm' }}{{ c.ativado_em ? ' · ativado em ' + (c.ativado_em | date: 'dd/MM/yyyy HH:mm') : '' }}</small>
-        <div class="acoes-cartao esquerda">
-          @if (podeEditar()) {
-            @if (!c.ativo) {
-              <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(c)">Editar</button>
-              <button type="button" class="acao-primaria acao-pequena" (click)="ativar(c)">Ativar</button>
-              <button type="button" class="acao-perigo acao-pequena" (click)="excluir(c)">Excluir</button>
+        <div [id]="'checklist-' + c.id" class="corpo-checklist">
+          <div class="tabela-gestao-envoltorio">
+            <table class="tabela-gestao tabela-parametros">
+              <thead><tr><th class="num">Nº</th><th>Documento</th><th>Na execução</th><th>Parâmetros</th>@if (podeEditar()) { <th title="Pede este documento à empresa, com a observação, no e-mail da medição concluída. Pode ser mudado mesmo com o checklist ativo.">Pedir para enviar</th> }</tr></thead>
+              <tbody>
+                @for (i of c.itens; track i.id; let n = $index) {
+                  <tr>
+                    <td class="num">{{ n + 1 }}</td>
+                    <td><strong>{{ i.nome }}</strong>@if (i.observacao) { <small class="observacao-doc" [innerHTML]="i.observacao | linkificar"></small> }</td>
+                    <td><span class="selo-situacao" [class.info]="i.obrigatorio" [class.inativo]="!i.obrigatorio">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</span></td>
+                    <td>
+                      <span class="parametros-doc">
+                        @if (i.com_validade) { <span class="parametro-doc" title="Informa-se até quando vale; se ainda valer na competência seguinte, ela já vem preenchida.">Com validade</span> }
+                        @if (i.vale_outros_contratos) { <span class="parametro-doc" title="Pode ser reaproveitado de outro contrato da mesma empresa.">Documento da empresa</span> }
+                        @if (!i.com_validade && !i.vale_outros_contratos) { <span class="parametro-vazio">—</span> }
+                      </span>
+                    </td>
+                    @if (podeEditar()) {
+                      <td>
+                        <button type="button" class="parametro-chip" [class.ativo]="!!i.pedir_envio" [attr.aria-pressed]="!!i.pedir_envio" (click)="alternarPedirEnvio(c, i)"
+                                [title]="'Pedir este documento à empresa no e-mail da medição concluída'">{{ i.pedir_envio ? 'Pede à empresa' : 'Não pede' }}</button>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <small class="rodape-checklist">Criado por {{ c.criado_por_nome }} em {{ c.criado_em | date: 'dd/MM/yyyy HH:mm' }}{{ c.ativado_em ? ' · ativado em ' + (c.ativado_em | date: 'dd/MM/yyyy HH:mm') : '' }}</small>
+          <div class="acoes-cartao esquerda">
+            @if (podeEditar()) {
+              @if (!c.ativo) {
+                <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(c)">Editar</button>
+                <button type="button" class="acao-primaria acao-pequena" (click)="ativar(c)">Ativar</button>
+                <button type="button" class="acao-perigo acao-pequena" (click)="excluir(c)">Excluir</button>
+              }
+              <button type="button" class="acao-secundaria acao-pequena" (click)="duplicar(c)">Duplicar</button>
             }
-            <button type="button" class="acao-secundaria acao-pequena" (click)="duplicar(c)">Duplicar</button>
-          }
-          <button type="button" class="acao-secundaria acao-pequena" (click)="baixarXlsx(c)">Baixar XLSX</button>
-        </div>
+            <button type="button" class="acao-secundaria acao-pequena" (click)="baixarXlsx(c)">Baixar XLSX</button>
+          </div>
         </div>
         }
       </article>
@@ -75,28 +98,24 @@
       <!-- 2. Documentos já incluídos, na ordem em que aparecerão na competência -->
       <p class="secao-formulario">Documentos ({{ itens.length }})</p>
       <div class="tabela-gestao-envoltorio lista-documentos-checklist">
-        <table class="tabela-gestao">
-          <thead><tr><th>Nº</th><th>Documento</th><th>Na execução</th><th>Validade</th><th class="coluna-acoes">Ações</th></tr></thead>
+        <table class="tabela-gestao tabela-parametros">
+          <thead><tr><th class="num">Nº</th><th>Documento</th><th>Parâmetros (clique para ligar ou desligar)</th><th class="coluna-acoes">Ações</th></tr></thead>
           <tbody>
             @for (i of itens; track $index) {
               <tr>
-                <td>{{ $index + 1 }}</td>
-                <td><strong>{{ i.nome }}</strong>@if (i.observacao) { <small [innerHTML]="i.observacao | linkificar"></small> }</td>
+                <td class="num">{{ $index + 1 }}</td>
+                <td><strong>{{ i.nome }}</strong>@if (i.observacao) { <small class="observacao-doc" [innerHTML]="i.observacao | linkificar"></small> }</td>
                 <td>
-                  <div class="seletor-segmentado pequeno" role="radiogroup" [attr.aria-label]="'Tipo do documento ' + i.nome">
-                    <button type="button" role="radio" [attr.aria-checked]="i.obrigatorio" [class.ativo]="i.obrigatorio" (click)="i.obrigatorio = true">Obrigatório</button>
-                    <button type="button" role="radio" [attr.aria-checked]="!i.obrigatorio" [class.ativo]="!i.obrigatorio" (click)="i.obrigatorio = false">Opcional</button>
+                  <div class="parametros-doc" role="group" [attr.aria-label]="'Parâmetros de ' + i.nome">
+                    <button type="button" class="parametro-chip" [class.ativo]="i.obrigatorio" [attr.aria-pressed]="i.obrigatorio" (click)="i.obrigatorio = !i.obrigatorio"
+                            title="Obrigatório: precisa ser anexado para concluir o checklist. Opcional: pode ficar sem anexo.">{{ i.obrigatorio ? 'Obrigatório' : 'Opcional' }}</button>
+                    <button type="button" class="parametro-chip" [class.ativo]="i.com_validade" [attr.aria-pressed]="i.com_validade" (click)="i.com_validade = !i.com_validade"
+                            title="Informa-se até quando vale; se ainda valer na competência seguinte, ela já vem preenchida.">Com validade</button>
+                    <button type="button" class="parametro-chip" [class.ativo]="i.vale_outros_contratos" [attr.aria-pressed]="i.vale_outros_contratos" (click)="i.vale_outros_contratos = !i.vale_outros_contratos"
+                            title="Se já foi juntado em outro contrato da mesma empresa (e ainda vale, quando tem validade), a execução oferece reaproveitá-lo.">Documento da empresa</button>
+                    <button type="button" class="parametro-chip" [class.ativo]="i.pedir_envio" [attr.aria-pressed]="i.pedir_envio" (click)="i.pedir_envio = !i.pedir_envio"
+                            title="Pede este documento à empresa, com a observação, no e-mail da medição concluída.">Pedir para enviar</button>
                   </div>
-                </td>
-                <td>
-                  <div class="seletor-segmentado pequeno" role="radiogroup" [attr.aria-label]="'Validade do documento ' + i.nome">
-                    <button type="button" role="radio" [attr.aria-checked]="!i.com_validade" [class.ativo]="!i.com_validade" (click)="i.com_validade = false">Sem validade</button>
-                    <button type="button" role="radio" [attr.aria-checked]="i.com_validade" [class.ativo]="i.com_validade" (click)="i.com_validade = true">Com validade</button>
-                  </div>
-                  <label class="opcao-empresa" title="Se este documento já foi juntado em outro contrato da mesma empresa (e ainda vale, quando tem validade; ou na mesma competência, quando não tem), a execução oferece reaproveitá-lo.">
-                    <input type="checkbox" [name]="'empresa-' + $index" [(ngModel)]="i.vale_outros_contratos" /> Documento da empresa</label>
-                  <label class="opcao-empresa" title="Pede este documento à empresa, com a observação, no e-mail da medição concluída.">
-                    <input type="checkbox" [name]="'envio-' + $index" [(ngModel)]="i.pedir_envio" /> Pedir para enviar</label>
                 </td>
                 <td>
                   <div class="acoes-linha">
@@ -107,45 +126,35 @@
                 </td>
               </tr>
             } @empty {
-              <tr><td class="estado-vazio" colspan="5">Nenhum documento ainda. Adicione abaixo{{ modelos().length && !emEdicao ? ' ou parta de um modelo global' : '' }}.</td></tr>
+              <tr><td class="estado-vazio" colspan="4">Nenhum documento ainda. Adicione abaixo{{ modelos().length && !emEdicao ? ' ou parta de um modelo global' : '' }}.</td></tr>
             }
           </tbody>
         </table>
       </div>
 
-      <!-- 3. Inclusão de um documento: tudo numa faixa só; Enter também adiciona -->
-      <div class="adicionar-documento">
-        <div>
-          <label for="checklist-documento">Documento</label>
-          <input id="checklist-documento" name="novo" maxlength="500" placeholder="Ex.: Folha de pagamento" [(ngModel)]="novoDocumento" (keydown.enter)="$event.preventDefault(); adicionar()" />
+      <!-- Inclusão de um documento: nome, observação e os mesmos parâmetros; Enter também adiciona -->
+      <fieldset class="adicionar-documento-novo">
+        <legend>Adicionar documento</legend>
+        <div class="grade-formulario">
+          <div><label for="checklist-documento">Documento</label>
+            <input id="checklist-documento" name="novo" maxlength="500" placeholder="Ex.: Folha de pagamento" [(ngModel)]="novoDocumento" (keydown.enter)="$event.preventDefault(); adicionar()" /></div>
+          <div><label for="checklist-observacao">Observação (opcional)</label>
+            <input id="checklist-observacao" name="observacao" maxlength="1000" placeholder="Ex.: do mês de referência" [(ngModel)]="novaObservacao" (keydown.enter)="$event.preventDefault(); adicionar()" /></div>
         </div>
-        <div>
-          <label for="checklist-observacao">Observação (opcional)</label>
-          <input id="checklist-observacao" name="observacao" maxlength="1000" placeholder="Ex.: do mês de referência" [(ngModel)]="novaObservacao" (keydown.enter)="$event.preventDefault(); adicionar()" />
-        </div>
-        <div>
-          <span class="rotulo-campo" id="rotulo-novo-obrigatorio">Na execução</span>
-          <div class="seletor-segmentado" role="radiogroup" aria-labelledby="rotulo-novo-obrigatorio">
-            <button type="button" role="radio" [attr.aria-checked]="novoObrigatorio" [class.ativo]="novoObrigatorio" (click)="novoObrigatorio = true">Obrigatório</button>
-            <button type="button" role="radio" [attr.aria-checked]="!novoObrigatorio" [class.ativo]="!novoObrigatorio" (click)="novoObrigatorio = false">Opcional</button>
+        <div class="linha-adicionar">
+          <div class="parametros-doc" role="group" aria-label="Parâmetros do novo documento">
+            <button type="button" class="parametro-chip" [class.ativo]="novoObrigatorio" [attr.aria-pressed]="novoObrigatorio" (click)="novoObrigatorio = !novoObrigatorio">{{ novoObrigatorio ? 'Obrigatório' : 'Opcional' }}</button>
+            <button type="button" class="parametro-chip" [class.ativo]="novoComValidade" [attr.aria-pressed]="novoComValidade" (click)="novoComValidade = !novoComValidade">Com validade</button>
+            <button type="button" class="parametro-chip" [class.ativo]="novoValeOutros" [attr.aria-pressed]="novoValeOutros" (click)="novoValeOutros = !novoValeOutros">Documento da empresa</button>
+            <button type="button" class="parametro-chip" [class.ativo]="novoPedirEnvio" [attr.aria-pressed]="novoPedirEnvio" (click)="novoPedirEnvio = !novoPedirEnvio">Pedir para enviar</button>
           </div>
+          <button type="button" class="acao-secundaria" [disabled]="!novoDocumento.trim()" (click)="adicionar()"><span>+</span> Adicionar</button>
         </div>
-        <div>
-          <span class="rotulo-campo" id="rotulo-novo-validade">Validade</span>
-          <div class="seletor-segmentado" role="radiogroup" aria-labelledby="rotulo-novo-validade">
-            <button type="button" role="radio" [attr.aria-checked]="!novoComValidade" [class.ativo]="!novoComValidade" (click)="novoComValidade = false">Sem validade</button>
-            <button type="button" role="radio" [attr.aria-checked]="novoComValidade" [class.ativo]="novoComValidade" (click)="novoComValidade = true">Com validade</button>
-          </div>
-          @if (novoComValidade) {
-            <label class="opcao-empresa" title="Se este documento já foi juntado e ainda vale em outro contrato da mesma empresa, a execução oferece reaproveitá-lo.">
-              <input type="checkbox" name="novo-vale-outros" [(ngModel)]="novoValeOutros" /> Documento da empresa</label>
-          }
-          <label class="opcao-empresa" title="Pede este documento à empresa, com a observação, no e-mail da medição concluída.">
-            <input type="checkbox" name="novo-pedir-envio" [(ngModel)]="novoPedirEnvio" /> Pedir para enviar</label>
-        </div>
-        <button type="button" class="acao-secundaria" [disabled]="!novoDocumento.trim()" (click)="adicionar()"><span>+</span> Adicionar</button>
-      </div>
-      <p class="dica-formulario">Obrigatório: precisa ser anexado para concluir o checklist da competência. Opcional: pode ficar sem anexo. Documento com validade: informa-se até quando vale e, se ainda valer no fim do período da competência seguinte, ele é preenchido automaticamente nela.</p>
+      </fieldset>
+      <details class="como-funciona-nf">
+        <summary>O que significa cada parâmetro</summary>
+        <p><b>Obrigatório</b>: precisa ser anexado para concluir o checklist da competência; <b>Opcional</b> pode ficar sem anexo. <b>Com validade</b>: informa-se até quando vale e, se ainda valer no fim do período da competência seguinte, ele é preenchido automaticamente nela. <b>Documento da empresa</b>: se já foi juntado em outro contrato da mesma empresa, a execução oferece reaproveitá-lo. <b>Pedir para enviar</b>: o e-mail da medição concluída pede o documento à empresa.</p>
+      </details>
 
       <footer>
         <small class="dica-formulario resumo-checklist">{{ itens.length }} documento(s) · {{ obrigatorios() }} obrigatório(s)</small>

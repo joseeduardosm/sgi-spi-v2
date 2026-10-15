@@ -313,9 +313,9 @@ def test_aditamento_apos_reajuste_soma_ao_valor_global_e_contrato_completo_pode_
     cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
     assert juntar_nf(cliente, base, gestora, "2105.00", recebida_em="2026-02-01").status_code == 200
     assert conferir_retencao(cliente, base, gestora).status_code == 200
-    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).status_code == 200
     for documento in cliente.get(base, headers=gestora).json()["documentos"]:
         cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
+    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).status_code == 200
     cliente.post(f"{base}/consolidado", headers=gestora)
     assert cliente.post(f"{base}/ordem-bancaria", files={"arquivo": ("ob.pdf", PDF)}, headers=gestora).json()["situacao"] == "concluida"
 

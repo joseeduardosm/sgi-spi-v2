@@ -44,8 +44,8 @@ def eh_gestor(contrato: Contrato, usuario: Usuario) -> bool:
 
 
 def pode_propor(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
-    """Gestor titular vigente, controle total em Contratos ou SuperRoot."""
-    return eh_administrador(sessao, usuario) or eh_gestor(contrato, usuario)
+    """Equipe vigente, criador, controle total em Contratos ou SuperRoot (todos com os mesmos poderes sobre o contrato)."""
+    return pode_editar(sessao, contrato, usuario)
 
 
 def pode_decidir(sessao: Session, contrato: Contrato, correcao: CorrecaoItens, usuario: Usuario) -> bool:
@@ -250,8 +250,8 @@ def recusar(sessao: Session, contrato_id: uuid.UUID, correcao_id: uuid.UUID, usu
 
 def cancelar(sessao: Session, contrato_id: uuid.UUID, correcao_id: uuid.UUID, usuario: Usuario) -> CorrecaoItens:
     contrato, correcao = _pendente(sessao, contrato_id, correcao_id)
-    if correcao.autor_id != usuario.id and not eh_administrador(sessao, usuario):
-        raise SemPermissaoContrato("Só quem propôs, o SuperRoot ou quem tem controle total em Contratos cancela a proposta.")
+    if correcao.autor_id != usuario.id and not pode_editar(sessao, contrato, usuario):
+        raise SemPermissaoContrato("Só quem propôs, a equipe do contrato, o criador ou o SuperRoot cancela a proposta.")
     correcao.situacao, correcao.decidido_por_id, correcao.decidido_por_nome, correcao.decidido_em = "cancelada", usuario.id, _nome(usuario), agora_utc()
     auditar(sessao, usuario.login, "contrato.itens.correcao.cancelar", f"Contrato {contrato.numero}", autor_id=usuario.id, alvo_tipo="contrato", alvo_id=contrato.id,
             dados={"correcao": str(correcao.id)})

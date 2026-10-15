@@ -60,14 +60,14 @@ interface Candidata { numero: number; titulo: string; status: TarefaResumo['stat
             <div class="lista-carga" role="group" aria-label="Responsáveis">
               @for (p of pessoas(); track p.id) {
                 <label class="opcao-carga" [class.selecionada]="responsaveisIds().includes(p.id)">
-                  <input type="checkbox" [name]="'responsavel-' + p.id" [checked]="responsaveisIds().includes(p.id)" (change)="alternarResponsavel(p.id)" />
-                  <span class="nome">{{ p.nome }}</span>
+                  <input type="checkbox" [name]="'responsavel-' + p.id" [checked]="responsaveisIds().includes(p.id)" [disabled]="herdado(p.id)" (change)="alternarResponsavel(p.id)" />
+                  <span class="nome">{{ p.nome }}@if (herdado(p.id)) { <small> · herdado da mãe</small> }</span>
                   <span class="faixa-carga" [attr.data-faixa]="p.faixa">{{ p.faixa }}</span>
                   <small>{{ p.a_fazer }} a fazer · {{ p.em_andamento }} em andamento{{ p.atrasadas ? ' · ' + p.atrasadas + ' atrasada(s)' : '' }}</small>
                 </label>
               }
             </div>
-            <small class="dica-formulario">Sem ninguém marcado, a subtarefa fica com os responsáveis da tarefa mãe.</small>
+            <small class="dica-formulario">A subtarefa sempre tem os responsáveis da tarefa mãe (mudando lá, muda aqui). Marque outras pessoas para acrescentar.</small>
           </section>
 
           <section class="secao-tarefa">
@@ -224,7 +224,13 @@ export class NovaSubtarefaComponent implements OnInit {
     this.escolhidas.update((l) => l.filter((n) => n !== numero));
   }
 
+  /** Os responsáveis da mãe valem sempre na subtarefa: ficam marcados e não podem ser desmarcados. */
+  protected herdado(id: number): boolean {
+    return !!this.mae()?.responsaveis.some((r) => r.id === id);
+  }
+
   protected alternarResponsavel(id: number): void {
+    if (this.herdado(id)) return;
     this.responsaveisIds.update((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
   }
 

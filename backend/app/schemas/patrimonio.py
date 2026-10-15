@@ -314,6 +314,7 @@ class ItemClassificacaoLeitura(BaseModel):
 
 class ClassificacaoLeitura(BaseModel):
     id: uuid.UUID
+    numero: int = Field(..., description="Número de exibição (#12), único entre listas e baixas.")
     tipo: Literal["inservivel", "extraviado"]
     status: Literal["rascunho", "pendente", "aprovada", "parcial", "recusada"]
     solicitante_id: int | None
@@ -364,6 +365,7 @@ class ItemBaixaLeitura(BaseModel):
 
 class BaixaLeitura(BaseModel):
     id: uuid.UUID
+    numero: int = Field(..., description="Número de exibição (#12), único entre listas e baixas.")
     status: Literal["rascunho", "pendente", "aprovada", "parcial", "recusada"]
     solicitante_id: int | None
     solicitante_nome: str

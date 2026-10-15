@@ -37,7 +37,7 @@ Implementação:
 - Com competências já geradas, prorrogar exige checklist ativo.
 - **Desfazer:**
   - só a última prorrogação;
-  - depois de gerada a execução da nova vigência, só o SuperRoot pode desfazer, e somente sem medição registrada e sem reajuste ou aditamento na vigência.
+  - depois de gerada a execução da nova vigência, quem edita o contrato (equipe, criador, controle total ou SuperRoot) pode desfazer, e somente sem medição registrada e sem reajuste ou aditamento na vigência.
 
 | Método e caminho | Descrição |
 |---|---|

@@ -6,6 +6,32 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-15
+
+Migrações novas desde 2026-10-13 (aplicar com `alembic upgrade head`; cabeça `a8c4e6f1b3d5`): `e6a2c4d8b1f3` (número das relações do Patrimônio), `f7b3d5e9c2a4` (devolve à etapa pendente as competências paradas em CADIN) e `a8c4e6f1b3d5` (autoridade do despacho no contrato e tipo de modelo `despacho`).
+
+### Adicionado
+- **Contratos: despacho de pagamento.** Nova máscara em **Contratos → Modelos → Despacho de pagamento** (editor rico; placeholders `#nome`, `#nome#` ou `##nome##` do contrato, da competência, de cada função da equipe — nome, cargo, função e setor — e da autoridade; só uma máscara ativa). O texto preenchido aparece na etapa **6. Download**, logo abaixo do documento consolidado, em cartão **dobrável que nasce dobrado**, com botão **Copiar despacho** (copia com formatação). Parágrafo com pessoa vazia (função sem designado, autoridade não cadastrada) é omitido. **O documento consolidado não muda.** Endpoint `GET /api/contratos/{id}/competencias/{id}/despacho` e `GET /api/contratos/modelos/despacho/placeholders`.
+- **Contratos: autoridade do despacho.** Campo no contrato (`autoridade_despacho_id`, usuário ativo; nome, cargo e setor vêm do cadastro), na edição ("Gestão e fiscalização") e na aba Principal. Migração `a8c4e6f1b3d5`.
+- **Contratos: card de empenho na aba Principal.** Card fixo "Empenho do exercício" com **Empenhado | Comprometido | Utilizado** e o saldo livre; clicar abre a aba Notas de Empenho.
+- **Contratos: diário de bordo com rich text.** A ocorrência usa o mesmo editor rico das tarefas (HTML sanitizado pela API; limite de 20 000 caracteres); PDFs, XLSX, avisos e resumos da medição usam o texto puro.
+- **Patrimônio: número `#n` nas relações.** Listas de inservíveis, de extraviados e baixas ganham número único (mesma sequência entre elas), mostrado nos cartões e no topo. Migração `e6a2c4d8b1f3`.
+- **Patrimônio: relacionar todos os bens de uma sala.** Nas telas de inservíveis, extraviados e baixa, escolher a sala abre a confirmação "Você deseja relacionar os X ativos da sala Y?" com a lista chapa | série | descrição.
+- **Patrimônio: painel.** As barras do gráfico são clicáveis e abrem os bens do grupo numa **tabela com colunas ordenáveis**.
+- **Tarefas: subtarefas herdam os responsáveis da mãe.** Quem entra ou sai da mãe (edição ou transferência) entra ou sai das subtarefas abertas; a subtarefa pode ter responsáveis além dos da mãe, mas não retirar os dela. Na tela "Nova subtarefa" os herdados aparecem marcados e travados.
+
+### Alterado
+- **Contratos: ordem das etapas da execução.** Depois da nota fiscal, **retenção e checklist** correm juntos e o **CADIN** passa a ser a última etapa antes do Download; só abre com todas as anteriores concluídas. Vale para todas as competências (migração `f7b3d5e9c2a4` ajusta as que estavam paradas em CADIN). Reabrir a retenção descarta o CADIN. O conteúdo e a ordem dos documentos do consolidado seguem como antes.
+- **Contratos: diário de bordo.** "Haverá glosa:" e "Impacta a avaliação da qualidade:" só aparecem quando a resposta é Sim (tela, PDF, no relato; e e-mail).
+- **Contratos: poderes da equipe.** Estar na equipe do contrato (ou ser o criador) já dá os poderes de modificação sobre ele, sem exigir nível de ACL; previsões seladas e execução de nova vigência seguem a mesma regra.
+- **Contratos: telas de execução, formulário e abas** (medição, nota fiscal, retenção, CADIN, checklists, histórico de recusas) revisadas no padrão do DESIGN.md.
+- **Gráficos:** o componente aceita clique (`clicavel`/`itemClicado`).
+- **Notificações:** tela de preferências com o bloco "E-mail e não perturbe" reorganizado (rótulos acima dos campos, opções empilhadas).
+
+### Corrigido
+- **Consolidado:** PDF enviado com senha de proprietário quebrava a geração com erro 500; agora é lido (e o que exige senha para abrir fica de fora, com aviso na contracapa).
+- **Gráficos de barras horizontais:** o tooltip mostrava o índice da barra em vez do valor.
+
 ## 2026-10-13
 
 Migrações novas desde 2026-10-09 (aplicar com `alembic upgrade head`; cabeça `d5f1b3a9c8e2`): `f8b3c5d7e9a1`, `a1c4e7b9d2f6`, `b7d2e9a4c1f3`, `a2c8e4f6b1d9`, `b3d9f5a7c2e1`, `554e409aefd2`, `c3badbe90657`, `d4e8a1c6b2f7`, `e5f9b2d7a3c1`, `f1a7c3e9b4d6`, `c4e8a2f6d1b7`, `d5f1b3a9c8e2`.

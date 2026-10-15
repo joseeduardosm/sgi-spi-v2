@@ -68,7 +68,7 @@ export interface ItemClassificacao {
   resultado: 'aprovado' | 'recusado' | null;
 }
 export interface Classificacao {
-  id: string; tipo: 'inservivel' | 'extraviado'; status: string; solicitante_id: number | null; solicitante_nome: string; criada_em: string; enviada_em: string | null;
+  id: string; numero: number; tipo: 'inservivel' | 'extraviado'; status: string; solicitante_id: number | null; solicitante_nome: string; criada_em: string; enviada_em: string | null;
   decidido_por_nome: string | null; decidido_em: string | null; motivo_recusa: string | null; itens: ItemClassificacao[];
 }
 
@@ -77,7 +77,7 @@ export interface ItemBaixa {
   resultado: 'aprovado' | 'recusado' | null;
 }
 export interface Baixa {
-  id: string; status: string; solicitante_id: number | null; solicitante_nome: string; criada_em: string; enviada_em: string | null; decidido_por_nome: string | null;
+  id: string; numero: number; status: string; solicitante_id: number | null; solicitante_nome: string; criada_em: string; enviada_em: string | null; decidido_por_nome: string | null;
   decidido_em: string | null; motivo_recusa: string | null; tem_termo: boolean; itens: ItemBaixa[];
 }
 

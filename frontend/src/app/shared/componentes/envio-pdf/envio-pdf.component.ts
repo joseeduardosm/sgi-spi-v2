@@ -18,8 +18,8 @@ export const TAMANHO_MAXIMO_PDF_MB = 25;
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <input #campo type="file" accept="application/pdf,.pdf" hidden (change)="aoEscolher(campo)" />
-    <button type="button" class="acao-secundaria" [disabled]="desabilitado()" (click)="campo.click()">{{ rotulo() }}</button>
-    @if (arquivo(); as escolhido) {
+    <button type="button" class="acao-secundaria" [class.acao-pequena]="pequeno()" [disabled]="desabilitado()" (click)="campo.click()">{{ rotulo() }}</button>
+    @if (mostrarNome() && arquivo(); as escolhido) {
       <span class="arquivo-escolhido">{{ escolhido.name }} · {{ tamanho(escolhido.size) }}</span>
     }
     @if (erro()) { <span class="erro-arquivo" role="alert">{{ erro() }}</span> }
@@ -34,6 +34,10 @@ export class EnvioPdfComponent {
   // Entradas (`input`) configuráveis por quem usa o componente e a saída (`output`) com o arquivo escolhido
   readonly rotulo = input('Selecionar documento');
   readonly desabilitado = input(false);
+  /** Botão no tamanho pequeno (para ficar na mesma linha de outros botões pequenos). */
+  readonly pequeno = input(false);
+  /** Mostra o nome e o tamanho do arquivo escolhido ao lado do botão (desligue onde o espaço é curto). */
+  readonly mostrarNome = input(true);
   readonly selecionado = output<File | null>();
 
   // Estado interno: arquivo aceito, mensagem de erro e referência ao <input type="file"> escondido

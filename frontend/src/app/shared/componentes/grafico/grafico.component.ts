@@ -2,7 +2,7 @@
 // Este arquivo serve para desenhar gráficos (barras, linhas e rosca) com o Chart.js, no padrão visual do portal.
 
 import {
-  ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, signal, untracked, viewChild,
+  ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, output, signal, untracked, viewChild,
 } from '@angular/core';
 import {
   ArcElement, BarController, BarElement, CategoryScale, Chart, ChartConfiguration, DoughnutController, Filler, Legend, LinearScale, LineController,
@@ -73,6 +73,13 @@ const cursorVertical: Plugin = {
  * Gráfico acessível: o canvas tem `aria-label` e há uma descrição em texto para leitores de tela.
  * Redimensiona com o contêiner e é destruído ao sair da tela.
  */
+/** Valor numérico de um ponto: no gráfico horizontal ele está em `x` (o `y` é o índice da categoria); na rosca é o próprio número. */
+function valorDoPonto(parsed: unknown, horizontal: boolean): number {
+  if (typeof parsed === 'number') return parsed;
+  const p = parsed as { x: number; y: number };
+  return horizontal ? p.x : p.y;
+}
+
 @Component({
   selector: 'app-grafico',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -98,6 +105,9 @@ export class GraficoComponent {
   readonly horizontal = input(false);
   /** Esconde a legenda (útil quando há uma única série). */
   readonly semLegenda = input(false);
+  /** Com `clicavel`, o ponteiro vira "mãozinha" sobre as barras/fatias e o clique emite o índice. */
+  readonly clicavel = input(false);
+  readonly itemClicado = output<number>();
 
   private readonly tela = viewChild.required<ElementRef<HTMLCanvasElement>>('tela');
   private grafico: Chart | null = null;
@@ -169,12 +179,14 @@ export class GraficoComponent {
         indexAxis: this.horizontal() ? 'y' : 'x',
         interaction: { mode: tipo === 'line' ? 'index' : 'nearest', intersect: false, axis: this.horizontal() ? 'y' : 'x' },
         color: tema.apagado,
+        onClick: (_e, elementos) => { if (elementos.length) this.itemClicado.emit(elementos[0].index); },
+        onHover: (evento, elementos) => { const c = evento.native?.target as HTMLElement | undefined; if (c && this.clicavel()) c.style.cursor = elementos.length ? 'pointer' : 'default'; },
         plugins: {
           legend: { display: !this.semLegenda() && (series.length > 1 || tipo === 'doughnut'), position: tipo === 'doughnut' ? 'right' : 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, color: tema.apagado } },
           tooltip: {
             backgroundColor: tema.fundo, titleColor: tema.texto, bodyColor: tema.texto, borderColor: tema.linha, borderWidth: 1, padding: 12, cornerRadius: 12,
             boxPadding: 4, usePointStyle: true, caretSize: 0, titleFont: { weight: 'bold' },
-            callbacks: { label: (c) => `${c.dataset.label ?? c.label}: ${formatarValor(Number(c.parsed.y ?? c.parsed.x ?? c.parsed), formato)}` },
+            callbacks: { label: (c) => `${c.dataset.label ?? c.label}: ${formatarValor(Number(valorDoPonto(c.parsed, this.horizontal())), formato)}` },
           },
         },
         // Eixo das categorias (rótulos) e eixo dos valores; na barra horizontal eles trocam de lado

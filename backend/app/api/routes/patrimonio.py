@@ -108,7 +108,7 @@ def _movimentacao(m) -> esquema.MovimentacaoLeitura:
 
 def _classificacao(c) -> esquema.ClassificacaoLeitura:
     return esquema.ClassificacaoLeitura(
-        id=c.id, tipo=c.tipo, status=c.status, solicitante_id=c.solicitante_id, solicitante_nome=nome_do_autor(c.solicitante), criada_em=c.criada_em, enviada_em=c.enviada_em,
+        id=c.id, numero=c.numero, tipo=c.tipo, status=c.status, solicitante_id=c.solicitante_id, solicitante_nome=nome_do_autor(c.solicitante), criada_em=c.criada_em, enviada_em=c.enviada_em,
         decidido_por_nome=nome_do_autor(c.decidido_por) if c.decidido_por else None, decidido_em=c.decidido_em, motivo_recusa=c.motivo_recusa,
         itens=[esquema.ItemClassificacaoLeitura(id=i.id, bem_id=i.bem_id, chapa=i.bem.chapa, numero_serie=i.bem.numero_serie, rotulo=i.bem.rotulo, descricao=i.bem.descricao, sala_rotulo=rotulo_curto(i.bem.localizacao),
                                                 situacao_anterior=i.situacao_anterior, justificativa=i.justificativa, anexo_nome=i.anexo.nome_original if i.anexo else None,
@@ -117,7 +117,7 @@ def _classificacao(c) -> esquema.ClassificacaoLeitura:
 
 def _baixa(b) -> esquema.BaixaLeitura:
     return esquema.BaixaLeitura(
-        id=b.id, status=b.status, solicitante_id=b.solicitante_id, solicitante_nome=nome_do_autor(b.solicitante), criada_em=b.criada_em, enviada_em=b.enviada_em,
+        id=b.id, numero=b.numero, status=b.status, solicitante_id=b.solicitante_id, solicitante_nome=nome_do_autor(b.solicitante), criada_em=b.criada_em, enviada_em=b.enviada_em,
         decidido_por_nome=nome_do_autor(b.decidido_por) if b.decidido_por else None, decidido_em=b.decidido_em, motivo_recusa=b.motivo_recusa, tem_termo=b.termo_anexo_id is not None,
         itens=[esquema.ItemBaixaLeitura(id=i.id, bem_id=i.bem_id, chapa=i.bem.chapa, numero_serie=i.bem.numero_serie, rotulo=i.bem.rotulo, descricao=i.bem.descricao, situacao_anterior=i.situacao_anterior,
                                         valor_aquisicao=i.bem.valor_aquisicao, motivo=i.motivo, processo=i.processo, resultado=i.resultado) for i in b.itens])

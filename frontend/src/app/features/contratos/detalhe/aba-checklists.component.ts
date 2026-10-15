@@ -52,12 +52,16 @@ export class AbaChecklistsComponent implements OnInit {
   }
 
   /** Liga ou desliga "Pedir para enviar" de um documento da lista; vale também com a versão ativa. */
-  protected alternarPedirEnvio(checklist: Checklist, item: DocumentoChecklist, caixa: HTMLInputElement): void {
-    const pedir = caixa.checked;
-    this.api.definirPedirEnvio(this.contratoId(), checklist.id, item.id, pedir).subscribe({
+  protected alternarPedirEnvio(checklist: Checklist, item: DocumentoChecklist): void {
+    this.api.definirPedirEnvio(this.contratoId(), checklist.id, item.id, !item.pedir_envio).subscribe({
       next: (c) => this.checklists.set(c),
-      error: (e) => { caixa.checked = !pedir; this.dialogos.mostrarErro(e, 'Não foi possível alterar o documento'); },
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível alterar o documento'),
     });
+  }
+
+  /** Quantos documentos obrigatórios a versão tem. */
+  protected obrigatoriosDe(c: Checklist): number {
+    return c.itens.filter((i) => i.obrigatorio).length;
   }
 
   /** Recarrega as versões (depois de importar uma planilha). */
@@ -67,7 +71,7 @@ export class AbaChecklistsComponent implements OnInit {
 
   /** A versão está aberta? Sem escolha do usuário, só a ativa aparece aberta. */
   protected aberta(c: Checklist): boolean {
-    return this.abertas()[c.id] ?? false;
+    return this.abertas()[c.id] ?? c.ativo;
   }
 
   protected alternar(c: Checklist): void {

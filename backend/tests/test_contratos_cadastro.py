@@ -243,8 +243,14 @@ def test_poderes_iguais_da_equipe_e_bloqueio_de_estranhos(cliente, admin):
     assert cliente.get(f"/api/contratos/{contrato['id']}", headers=cabecalho(cliente, "chefe")).json()["permissoes"]["pode_editar"] is True
     dados["versao"] = 2
     assert cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=cabecalho(cliente, "chefe")).status_code == 200
-    # Exclusão só com CONTROLE_TOTAL
-    assert cliente.delete(f"/api/contratos/{contrato['id']}", headers=cabecalho(cliente, "suplente")).status_code == 403
+    # Exclusão: CONTROLE_TOTAL, criador ou integrante da equipe (com MODIFICACAO); estranho e leitor não
+    # (o contrato acima já teve a equipe trocada pela edição, então usa-se outro com o "suplente" na equipe)
+    outro = criar_contrato(cliente, admin, numero="014/2024", empresa_id=contrato["empresa"]["id"], equipe={"fiscal_tecnico_suplente": membro})
+    assert cliente.get(f"/api/contratos/{outro['id']}", headers=cabecalho(cliente, "suplente")).json()["permissoes"]["pode_excluir"] is True
+    assert cliente.get(f"/api/contratos/{outro['id']}", headers=cabecalho(cliente, "estranho")).json()["permissoes"]["pode_excluir"] is False
+    assert cliente.delete(f"/api/contratos/{outro['id']}", headers=cabecalho(cliente, "estranho")).status_code == 403
+    assert cliente.delete(f"/api/contratos/{outro['id']}", headers=cabecalho(cliente, "leitor")).status_code == 403
+    assert cliente.delete(f"/api/contratos/{outro['id']}", headers=cabecalho(cliente, "suplente")).status_code == 204
     assert cliente.delete(f"/api/contratos/{contrato['id']}", headers=admin).status_code == 204
 
 
@@ -326,14 +332,43 @@ def test_carteira_meus_contratos_so_da_equipe_vigente(cliente, admin):
 
 
 def test_exclusao_do_proprio_contrato_com_modificacao_e_qualquer_um_com_controle_total(cliente, admin):
-    """ACL Modificação exclui só o que criou; controle total exclui qualquer contrato."""
+    """ACL Modificação exclui o que criou (ou em que está na equipe); controle total exclui qualquer contrato."""
     ana, bia, chefe = criar_usuario("ana-c"), criar_usuario("bia-c"), criar_usuario("chefe-c")
     restringir_contratos(cliente, admin, {ana: "MODIFICACAO", bia: "MODIFICACAO", chefe: "CONTROLE_TOTAL"})
     h_ana, h_bia, h_chefe = cabecalho(cliente, "ana-c"), cabecalho(cliente, "bia-c"), cabecalho(cliente, "chefe-c")
     dela = criar_contrato(cliente, h_ana, numero="010/2026")
     da_bia = criar_contrato(cliente, h_bia, numero="011/2026", empresa_id=dela["empresa"]["id"])
-    assert cliente.get(f"/api/contratos/{dela['id']}", headers=h_ana).json()["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": False, "pode_gerir_autoridades": False}
+    assert cliente.get(f"/api/contratos/{dela['id']}", headers=h_ana).json()["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": True, "pode_gerir_autoridades": False}
     assert cliente.delete(f"/api/contratos/{da_bia['id']}", headers=h_ana).status_code == 403
     assert cliente.delete(f"/api/contratos/{dela['id']}", headers=h_ana).status_code == 204
     assert cliente.get(f"/api/contratos/{da_bia['id']}", headers=h_chefe).json()["permissoes"]["pode_administrar"] is True
     assert cliente.delete(f"/api/contratos/{da_bia['id']}", headers=h_chefe).status_code == 204
+
+
+def test_integrante_da_equipe_tem_os_poderes_mesmo_so_com_leitura(cliente, admin):
+    """Estar na equipe (ou criar o contrato) basta: o nível da ACL não precisa ser Modificação. Quem não é da equipe e só lê continua sem poder."""
+    membro, leitor = criar_usuario("membro-leitura"), criar_usuario("so-leitor")
+    restringir_contratos(cliente, admin, {membro: "LEITURA", leitor: "LEITURA"})
+    h_membro, h_leitor = cabecalho(cliente, "membro-leitura"), cabecalho(cliente, "so-leitor")
+    contrato = criar_contrato(cliente, admin, equipe={"fiscal_tecnico_suplente": membro})
+    permissoes = cliente.get(f"/api/contratos/{contrato['id']}", headers=h_membro).json()["permissoes"]
+    assert permissoes["pode_editar"] is True and permissoes["pode_excluir"] is True and permissoes["pode_administrar"] is True
+    assert cliente.get(f"/api/contratos/{contrato['id']}", headers=h_leitor).json()["permissoes"]["pode_editar"] is False
+    assert cliente.delete(f"/api/contratos/{contrato['id']}", headers=h_leitor).status_code == 403
+    assert cliente.delete(f"/api/contratos/{contrato['id']}", headers=h_membro).status_code == 204
+
+
+def test_autoridade_do_despacho_e_um_usuario_ativo_escolhido_no_contrato(cliente, admin):
+    """O contrato guarda a autoridade do despacho: usuário ativo (nome, cargo e setor vêm do cadastro); inexistente é recusado."""
+    from tests.conftest import criar_usuario
+
+    contrato = criar_contrato(cliente, admin)
+    assert contrato["autoridade_despacho"] is None
+    autoridade = criar_usuario("autoridade", nome_completo="Ana Autoridade", email="aut@sp.gov.br", cargo="Subsecretária de Gestão Corporativa")
+    dados = dados_contrato(contrato["empresa"]["id"], versao=contrato["versao"], autoridade_despacho_id=999999)
+    r = cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=admin)
+    assert r.status_code == 400 and "autoridade" in r.json()["detalhe"], r.text
+    dados["autoridade_despacho_id"] = autoridade
+    r = cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=admin)
+    assert r.status_code == 200, r.text
+    assert r.json()["autoridade_despacho"] == {"id": autoridade, "nome": "Ana Autoridade", "cargo": "Subsecretária de Gestão Corporativa", "departamento": "Contratos"}

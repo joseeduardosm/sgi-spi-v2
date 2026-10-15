@@ -328,6 +328,28 @@ def _versao(tarefa: Tarefa, versao: int | None) -> None:
         raise ErroTarefa("A tarefa foi alterada por outra pessoa. Recarregue a página e tente de novo.", 409, "conflito")
 
 
+def propagar_responsaveis(sessao: Session, mae: Tarefa, entraram: set[int], sairam: set[int]) -> None:
+    """Reflete nas subtarefas abertas a mudança de responsáveis da mãe: quem entra na mãe entra nas subs; quem sai da mãe sai das subs.
+
+    Cada sub pode ter responsáveis a mais (os que a mãe não tem ficam como estão). Sub concluída não muda (histórico).
+    """
+    if not entraram and not sairam:
+        return
+    principal_mae = mae.responsavel_id
+    for sub in sessao.scalars(select(Tarefa).where(Tarefa.tarefa_pai_id == mae.id, Tarefa.status != "concluida")):
+        atuais = envolvidos(sub)
+        ficam = (atuais - sairam) | entraram
+        if not ficam:
+            continue  # nunca deixa a sub sem responsável
+        sub.responsaveis = [p for p in sub.responsaveis if p.usuario_id in ficam] + [ResponsavelTarefa(usuario_id=i) for i in sorted(ficam - atuais)]
+        if sub.responsavel_id not in ficam:
+            sub.responsavel_id = principal_mae if principal_mae in ficam else sorted(ficam)[0]
+        if atuais != ficam:
+            sub.versao += 1
+            _evento(sessao, sub, "editada", None, "Responsáveis atualizados a partir da tarefa mãe",
+                    campos={"responsaveis": {"entraram": sorted(_nome(sessao.get(Usuario, i)) for i in ficam - atuais), "sairam": sorted(_nome(sessao.get(Usuario, i)) for i in atuais - ficam)}})
+
+
 def editar(sessao: Session, autor: Usuario, tarefa: Tarefa, titulo: str, descricao: str, prioridade: str,
            responsaveis_ids: tuple[int, ...], marcadores_ids: tuple[uuid.UUID, ...], versao: int | None) -> Tarefa:
     _exigir_nao_concluida(tarefa, "editá-la")
@@ -338,6 +360,12 @@ def editar(sessao: Session, autor: Usuario, tarefa: Tarefa, titulo: str, descric
     if not responsaveis_ids:
         raise ErroTarefa("A tarefa precisa de ao menos um responsável.")
     novos = set(responsaveis_ids)
+    if tarefa.tarefa_pai_id is not None:
+        # A subtarefa herda os responsáveis da mãe: só pode ter outros além deles
+        mae = sessao.get(Tarefa, tarefa.tarefa_pai_id)
+        retirados = envolvidos(mae) - novos if mae is not None else set()
+        if retirados:
+            raise ErroTarefa("Os responsáveis da tarefa mãe valem também na subtarefa e não podem ser retirados dela: " + ", ".join(sorted(_nome(sessao.get(Usuario, i)) for i in retirados)) + ".")
     _conferir_pessoas(sessao, autor, tarefa.equipe, novos - envolvidos(tarefa))
     mudancas = {}
     for campo, valor in (("titulo", titulo), ("descricao", descricao), ("prioridade", prioridade)):
@@ -354,6 +382,8 @@ def editar(sessao: Session, autor: Usuario, tarefa: Tarefa, titulo: str, descric
             tarefa.responsavel_id = next(i for i in responsaveis_ids if i in novos)
         mudancas["responsaveis"] = {"entraram": sorted(_nome(sessao.get(Usuario, i)) for i in entrou),
                                      "sairam": sorted(_nome(sessao.get(Usuario, i)) for i in antes - novos)}
+        if tarefa.tarefa_pai_id is None:
+            propagar_responsaveis(sessao, tarefa, entrou, antes - novos)
         if entrou:
             _avisar(sessao, entrou, f"Você entrou na tarefa {_rotulo(tarefa)}", f"{_nome(autor)} incluiu você como responsável pela tarefa {_rotulo(tarefa)}.",
                     tarefa, f"tarefa-responsavel:{tarefa.id}:{tarefa.versao}", autor=autor, evento="tarefas.atribuida")
@@ -568,9 +598,13 @@ def transferir(sessao: Session, autor: Usuario, tarefa: Tarefa, para_id: int, ju
     if tarefa.equipe is not None and not lider and destino.id not in membros(tarefa.equipe):
         raise ErroTarefa("Transferência só para membros da equipe. Para outra pessoa, peça à liderança.")
     anterior = sessao.get(Usuario, tarefa.responsavel_id) if tarefa.responsavel_id else None
+    antes_transferencia = envolvidos(tarefa)
     tarefa.responsaveis = [p for p in tarefa.responsaveis if p.usuario_id != tarefa.responsavel_id] + (
         [] if destino.id in envolvidos(tarefa) else [ResponsavelTarefa(usuario_id=destino.id)])
     tarefa.responsavel_id = destino.id
+    if tarefa.tarefa_pai_id is None:
+        depois = envolvidos(tarefa)
+        propagar_responsaveis(sessao, tarefa, depois - antes_transferencia, antes_transferencia - depois)
     prazo_anterior = tarefa.prazo
     if novo_prazo is not None and _comparavel(novo_prazo) != _comparavel(tarefa.prazo):
         tarefa.prazo = novo_prazo

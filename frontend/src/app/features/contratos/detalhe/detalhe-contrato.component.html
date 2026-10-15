@@ -19,6 +19,31 @@
     }
   </div>
 
+  <div class="faixa-contrato">
+    <span class="selo-situacao" [class]="'selo-situacao ' + c.situacao">{{ rotulosSituacao[c.situacao] }}{{ c.situacao_forcada ? ' (forçada)' : '' }}</span>
+    <a [routerLink]="['/contratos/empresas', c.empresa.id]">{{ c.empresa.razao_social }}</a>
+    @if (c.apelido) { <span class="apelido-contrato">{{ c.apelido }}</span> }
+  </div>
+  <div class="resumo-medicao resumo-contrato" aria-label="Resumo do contrato">
+    <div [class.ok]="faixaVigencia() === 'ok'" [class.alerta]="faixaVigencia() === 'alerta'" [class.perigo]="faixaVigencia() === 'perigo'">
+      <span>Vigência até</span><strong>{{ c.data_fim | dataBr }}</strong>
+      <small>{{ textoVigencia() }}</small></div>
+    <div><span>Valor global (vigência atual)</span><strong>{{ c.valor_global | moeda }}</strong><small>{{ c.vigencias.length }} vigência(s) · limite {{ c.data_limite_maxima | dataBr }}</small></div>
+    <div><span>Base mensal</span><strong>{{ c.base_mensal | moeda }}</strong><small>{{ periodicidade() }}</small></div>
+    <div><span>Aditamento · Supressão acumulados</span><strong>{{ c.aditamento_acumulado_percentual | percentual }} · {{ c.supressao_acumulada_percentual | percentual }}</strong><small>{{ c.itens.length }} item(ns) financeiro(s)</small></div>
+    @if (notasDoExercicio().length; as qtd) {
+      <div class="cartao-empenho" role="button" tabindex="0" [attr.aria-label]="'Empenho de ' + exercicio + ': abrir as Notas de Empenho'" (click)="escolher('notas')" (keydown.enter)="escolher('notas')">
+        <span>Empenho de {{ exercicio }} · {{ qtd }} NE(s)</span>
+        <div class="trio-empenho">
+          <p><small>Empenhado</small><strong>{{ saldoExercicio().valor | moeda }}</strong></p>
+          <p><small>Comprometido</small><strong>{{ saldoExercicio().comprometido | moeda }}</strong></p>
+          <p><small>Utilizado</small><strong>{{ saldoExercicio().consumido | moeda }}</strong></p>
+        </div>
+        <small>Saldo livre {{ saldoExercicio().livre | moeda }} · ver Notas de Empenho ›</small>
+      </div>
+    }
+  </div>
+
   <nav class="abas abas-rolagem" role="tablist" aria-label="Seções do contrato">
     @for (a of abas; track a.id) {
       <button type="button" role="tab" [class.ativa]="aba() === a.id" [attr.aria-selected]="aba() === a.id" (click)="escolher(a.id)">{{ a.rotulo }}</button>
@@ -27,32 +52,85 @@
 
   @switch (aba()) {
     @case ('principal') {
-      <section class="cartao-dados" aria-labelledby="titulo-dados">
+      <div class="grade-cartoes-detalhe">
+        <section class="cartao-dados" aria-labelledby="titulo-identificacao">
+          <header><h2 id="titulo-identificacao">Identificação</h2></header>
+          <dl class="corpo grade-dados">
+            <div><dt>Número do contrato <app-historico-campo campo="numero" rotulo="número" [historico]="historico()" /></dt><dd class="texto-codigo">{{ c.numero }}</dd></div>
+            <div><dt>Empresa contratada <app-historico-campo campo="empresa_id" rotulo="empresa" [historico]="historico()" [traduzir]="nomeEmpresa" /></dt>
+              <dd><a [routerLink]="['/contratos/empresas', c.empresa.id]">{{ c.empresa.razao_social }}</a></dd></div>
+            <div><dt>Apelido <app-historico-campo campo="apelido" rotulo="apelido" [historico]="historico()" /></dt><dd>{{ c.apelido || '—' }}</dd></div>
+            <div><dt>Criado por</dt><dd>{{ c.criador_nome || '—' }}</dd></div>
+            <div><dt>Autoridade do despacho</dt><dd>{{ c.autoridade_despacho ? c.autoridade_despacho.nome + (c.autoridade_despacho.cargo ? ' · ' + c.autoridade_despacho.cargo : '') : '—' }}</dd></div>
+            <div class="ocupa-linha"><dt>Objeto <app-historico-campo campo="objeto" rotulo="objeto" [historico]="historico()" /></dt><dd style="white-space: pre-line">{{ c.objeto }}</dd></div>
+          </dl>
+        </section>
+        <section class="cartao-dados" aria-labelledby="titulo-datas">
+          <header><h2 id="titulo-datas">Vigência</h2></header>
+          <dl class="corpo grade-dados">
+            <div><dt>Data inicial <app-historico-campo campo="data_inicio" rotulo="data inicial" [historico]="historico()" /></dt><dd>{{ c.data_inicio | dataBr }}</dd></div>
+            <div><dt>Data final (vigência atual) <app-historico-campo campo="data_fim" rotulo="data final" [historico]="historico()" /></dt><dd><strong>{{ c.data_fim | dataBr }}</strong><small class="dica-formulario vigencia-restante">{{ textoVigencia() }}</small></dd></div>
+            <div><dt>Vigência inicial (meses) <app-historico-campo campo="vigencia_inicial_meses" rotulo="vigência inicial" [historico]="historico()" /></dt><dd>{{ c.vigencia_inicial_meses }}</dd></div>
+            <div><dt>Vigência máxima (meses) <app-historico-campo campo="vigencia_maxima_meses" rotulo="vigência máxima" [historico]="historico()" /></dt><dd>{{ c.vigencia_maxima_meses }}</dd></div>
+          </dl>
+        </section>
+        <section class="cartao-dados" aria-labelledby="titulo-valores">
+          <header><h2 id="titulo-valores">Valores</h2></header>
+          <dl class="corpo grade-dados">
+            <div><dt>Valor global (vigência atual) <app-historico-campo campo="valor_global" rotulo="valor global" [historico]="historico()" /></dt><dd><strong>{{ c.valor_global | moeda }}</strong></dd></div>
+            <div><dt>Base mensal</dt><dd>{{ c.base_mensal | moeda }}</dd></div>
+            <div><dt>Aditamento acumulado</dt><dd>{{ c.aditamento_acumulado_percentual | percentual }}</dd></div>
+            <div><dt>Supressão acumulada</dt><dd>{{ c.supressao_acumulada_percentual | percentual }}</dd></div>
+          </dl>
+        </section>
+        <section class="cartao-dados cartao-regras" aria-labelledby="titulo-regras">
+          <header><h2 id="titulo-regras">Regras de execução</h2></header>
+          <dl class="corpo grade-dados">
+            <div><dt>Periodicidade de execução <app-historico-campo campo="periodicidade_meses" rotulo="periodicidade" [historico]="historico()" /></dt><dd>{{ periodicidade() }}</dd></div>
+            <div><dt>Mês de reajuste <app-historico-campo campo="mes_reajuste" rotulo="mês de reajuste" [historico]="historico()" /></dt><dd>{{ meses[c.mes_reajuste - 1] }}</dd></div>
+            <div><dt>Liberar todas as competências <app-historico-campo campo="liberar_todas_competencias" rotulo="liberar todas as competências" [historico]="historico()" /></dt><dd>{{ c.liberar_todas_competencias ? 'Sim: medição liberada antes do fim do período' : 'Não: só após o fim do período' }}</dd></div>
+            <div><dt>Medição adicional <app-historico-campo campo="permite_medicao_adicional" rotulo="medição adicional" [historico]="historico()" /></dt><dd>{{ c.permite_medicao_adicional ? 'Permitida: mais de uma medição/pagamento no mesmo mês' : 'Não permitida' }}</dd></div>
+            <div class="ocupa-linha"><dt>Desconsiderar alertas a partir de <app-historico-campo campo="alertas_a_partir_de" rotulo="corte de alertas" [historico]="historico()" /></dt><dd>{{ c.alertas_a_partir_de ? (c.alertas_a_partir_de | dataBr) : 'Não definido (vale só o corte geral de 09/2026)' }}</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      <section class="cartao-dados" aria-labelledby="titulo-empenho">
         <header>
-          <h2 id="titulo-dados">{{ c.numero }}</h2>
-          <span class="selo-situacao" [class]="'selo-situacao ' + c.situacao">{{ rotulosSituacao[c.situacao] }}{{ c.situacao_forcada ? ' (forçada)' : '' }}</span>
+          <div><h2 id="titulo-empenho">Saldo de empenho · exercício {{ exercicio }}</h2><small>Só as Notas de Empenho do exercício. O detalhe de cada uma fica na aba Notas de Empenho.</small></div>
+          <button type="button" class="acao-secundaria acao-pequena" (click)="escolher('notas')">Ver Notas de Empenho</button>
         </header>
-        <dl class="corpo grade-dados">
-          <div><dt>Número do contrato <app-historico-campo campo="numero" rotulo="número" [historico]="historico()" /></dt><dd>{{ c.numero }}</dd></div>
-          <div><dt>Empresa contratada <app-historico-campo campo="empresa_id" rotulo="empresa" [historico]="historico()" [traduzir]="nomeEmpresa" /></dt>
-            <dd><a [routerLink]="['/contratos/empresas', c.empresa.id]">{{ c.empresa.razao_social }}</a></dd></div>
-          <div><dt>Apelido <app-historico-campo campo="apelido" rotulo="apelido" [historico]="historico()" /></dt><dd>{{ c.apelido || '—' }}</dd></div>
-          <div><dt>Data inicial <app-historico-campo campo="data_inicio" rotulo="data inicial" [historico]="historico()" /></dt><dd>{{ c.data_inicio | dataBr }}</dd></div>
-          <div><dt>Vigência inicial (meses) <app-historico-campo campo="vigencia_inicial_meses" rotulo="vigência inicial" [historico]="historico()" /></dt><dd>{{ c.vigencia_inicial_meses }}</dd></div>
-          <div><dt>Vigência máxima (meses) <app-historico-campo campo="vigencia_maxima_meses" rotulo="vigência máxima" [historico]="historico()" /></dt><dd>{{ c.vigencia_maxima_meses }}</dd></div>
-          <div><dt>Data final (vigência atual) <app-historico-campo campo="data_fim" rotulo="data final" [historico]="historico()" /></dt><dd>{{ c.data_fim | dataBr }}</dd></div>
-          <div><dt>Periodicidade de execução <app-historico-campo campo="periodicidade_meses" rotulo="periodicidade" [historico]="historico()" /></dt><dd>{{ periodicidade() }}</dd></div>
-          <div><dt>Mês de reajuste <app-historico-campo campo="mes_reajuste" rotulo="mês de reajuste" [historico]="historico()" /></dt><dd>{{ meses[c.mes_reajuste - 1] }}</dd></div>
-          <div><dt>Liberar todas as competências <app-historico-campo campo="liberar_todas_competencias" rotulo="liberar todas as competências" [historico]="historico()" /></dt><dd>{{ c.liberar_todas_competencias ? 'Sim: medição liberada antes do fim do período' : 'Não: só após o fim do período' }}</dd></div>
-          <div><dt>Medição adicional <app-historico-campo campo="permite_medicao_adicional" rotulo="medição adicional" [historico]="historico()" /></dt><dd>{{ c.permite_medicao_adicional ? 'Permitida: mais de uma medição/pagamento no mesmo mês' : 'Não permitida' }}</dd></div>
-          <div><dt>Desconsiderar alertas a partir de <app-historico-campo campo="alertas_a_partir_de" rotulo="corte de alertas" [historico]="historico()" /></dt><dd>{{ c.alertas_a_partir_de ? (c.alertas_a_partir_de | dataBr) : 'Não definido (vale só o corte geral de 09/2026)' }}</dd></div>
-          <div><dt>Base mensal</dt><dd>{{ c.base_mensal | moeda }}</dd></div>
-          <div><dt>Valor global (vigência atual) <app-historico-campo campo="valor_global" rotulo="valor global" [historico]="historico()" /></dt><dd><strong>{{ c.valor_global | moeda }}</strong></dd></div>
-          <div><dt>Aditamento acumulado</dt><dd>{{ c.aditamento_acumulado_percentual | percentual }}</dd></div>
-          <div><dt>Supressão acumulada</dt><dd>{{ c.supressao_acumulada_percentual | percentual }}</dd></div>
-          <div><dt>Criado por</dt><dd>{{ c.criador_nome || '—' }}</dd></div>
-          <div class="ocupa-linha"><dt>Objeto <app-historico-campo campo="objeto" rotulo="objeto" [historico]="historico()" /></dt><dd style="white-space: pre-line">{{ c.objeto }}</dd></div>
-        </dl>
+        <div class="corpo">
+          @if (notasDoExercicio().length) {
+            <div class="resumo-medicao resumo-empenho" aria-label="Resumo do empenho do exercício">
+              <div><span>Empenhado</span><strong>{{ saldoExercicio().valor | moeda }}</strong><small>{{ notasDoExercicio().length }} NE(s)</small></div>
+              <div><span>Consumido</span><strong>{{ saldoExercicio().consumido | moeda }}</strong><small>pagamentos já debitados</small></div>
+              <div [class.alerta]="saldoExercicio().comprometido > 0"><span>Comprometido</span><strong>{{ saldoExercicio().comprometido | moeda }}</strong><small>medições concluídas e não pagas</small></div>
+              <div [class.ok]="saldoExercicio().livre > 0" [class.perigo]="saldoExercicio().livre <= 0"><span>Saldo livre</span><strong>{{ saldoExercicio().livre | moeda }}</strong>
+                <small>{{ saldoExercicio().cancelado > 0 ? 'após ' + (saldoExercicio().cancelado | moeda) + ' cancelados' : 'disponível para novas medições' }}</small></div>
+            </div>
+            <ul class="lista-ne-saldo">
+              @for (n of notasDoExercicio(); track n.id) {
+                <li>
+                  <div class="cabecalho-ne-saldo">
+                    <b class="texto-codigo">NE {{ n.numero }}</b>
+                    <span>{{ n.valor_original | moeda }}</span>
+                    <small>saldo <b>{{ n.saldo | moeda }}</b> · livre <b>{{ n.saldo_livre | moeda }}</b></small>
+                  </div>
+                  <div class="barra-ne" role="img" [attr.aria-label]="n.percentual_consumido + '% consumido de ' + n.numero">
+                    <span class="trecho consumido" [class.amarelo]="n.faixa === 'amarelo'" [class.vermelho]="n.faixa === 'vermelho'" [style.width.%]="trechos(n).consumido" [title]="'Consumido: ' + (n.consumido | moeda)"></span>
+                    <span class="trecho cancelado" [style.width.%]="trechos(n).cancelado" [title]="'Cancelado: ' + (n.cancelado | moeda)"></span>
+                    <span class="trecho comprometido" [style.width.%]="trechos(n).comprometido" [title]="'Comprometido: ' + (n.comprometido | moeda)"></span>
+                  </div>
+                  <small class="legenda-ne">Consumido {{ n.consumido | moeda }}@if (n.cancelado !== '0.00') { · Cancelado {{ n.cancelado | moeda }} }@if (n.comprometido !== '0.00') { · Comprometido {{ n.comprometido | moeda }} } · {{ n.percentual_consumido | percentual }} consumido</small>
+                </li>
+              }
+            </ul>
+            <p class="legenda-barra-ne" aria-hidden="true"><i class="consumido"></i> Consumido <i class="cancelado"></i> Cancelado <i class="comprometido"></i> Comprometido <i class="livre"></i> Livre</p>
+          } @else {
+            <p class="estado-vazio">Nenhuma Nota de Empenho do exercício {{ exercicio }} cadastrada.</p>
+          }
+        </div>
       </section>
 
       <section class="cartao-dados" aria-labelledby="titulo-vigencia">
@@ -142,30 +220,46 @@
 
     @case ('processos') {
       <section class="cartao-dados" aria-labelledby="titulo-processos">
-        <header><h2 id="titulo-processos">Processos SEI</h2></header>
-        <dl class="corpo grade-dados">
-          <div><dt>Número - Gestão <app-historico-campo campo="sei_gestao_numero" rotulo="SEI gestão" [historico]="historico()" /></dt><dd>{{ c.sei_gestao_numero }}</dd></div>
-          <div><dt>Link - Gestão <app-historico-campo campo="sei_gestao_link" rotulo="link gestão" [historico]="historico()" /></dt><dd><a [href]="c.sei_gestao_link" target="_blank" rel="noopener">{{ c.sei_gestao_link }}</a></dd></div>
-          <div><dt>Número - Execução <app-historico-campo campo="sei_execucao_numero" rotulo="SEI execução" [historico]="historico()" /></dt><dd>{{ c.sei_execucao_numero }}</dd></div>
-          <div><dt>Link - Execução <app-historico-campo campo="sei_execucao_link" rotulo="link execução" [historico]="historico()" /></dt><dd><a [href]="c.sei_execucao_link" target="_blank" rel="noopener">{{ c.sei_execucao_link }}</a></dd></div>
-        </dl>
+        <header><div><h2 id="titulo-processos">Processos SEI</h2><small>Gestão e execução do contrato no SEI.</small></div></header>
+        <div class="corpo grade-processos">
+          @for (p of processos(); track p.chave) {
+            <article class="cartao-processo">
+              <header><strong>{{ p.rotulo }}</strong><app-historico-campo [campo]="p.campoNumero" [rotulo]="'SEI ' + p.rotulo.toLowerCase()" [historico]="historico()" /></header>
+              @if (p.numero) {
+                <div class="numero-processo"><span class="texto-codigo">{{ p.numero }}</span><app-botao-copiar [valor]="p.numero" titulo="Copiar o número do processo" tamanho="pequeno" /></div>
+              } @else { <p class="dica-formulario">Número não informado.</p> }
+              @if (p.link) {
+                <a class="acao-secundaria" [href]="p.link" target="_blank" rel="noopener noreferrer">Abrir no SEI ↗</a>
+              } @else { <span class="dica-formulario">Sem link cadastrado.</span> }
+            </article>
+          }
+        </div>
       </section>
     }
 
     @case ('equipe') {
       <section class="cartao-dados" aria-labelledby="titulo-equipe">
         <header><div><h2 id="titulo-equipe">Gestão e fiscalização</h2><small>Os seis papéis têm os mesmos poderes dentro do contrato.</small></div></header>
-        <dl class="corpo grade-dados">
+        <div class="corpo grade-equipe">
           @for (p of papeis; track p.papel) {
-            <div>
-              <dt>{{ p.rotulo }} <app-historico-campo [campo]="'equipe.' + p.papel" [rotulo]="p.rotulo" [historico]="historico()" /></dt>
-              <dd>
-                @if (membro()[p.papel]; as m) { {{ m.nome }} <small class="dica-formulario" style="display: block; margin: 2px 0 0">&#64;{{ m.login }}</small> }
-                @else { <span class="dica-formulario" style="margin: 0">Nenhum responsável definido.</span> }
-              </dd>
-            </div>
+            <article class="cartao-pessoa-equipe" [class.vazio]="!membro()[p.papel]">
+              @if (membro()[p.papel]; as m) {
+                <app-avatar [nome]="m.nome" />
+                <div class="dados-pessoa">
+                  <small class="papel-pessoa">{{ p.rotulo }} <app-historico-campo [campo]="'equipe.' + p.papel" [rotulo]="p.rotulo" [historico]="historico()" /></small>
+                  <strong>{{ m.nome }}</strong>
+                  <span class="login-pessoa texto-codigo">&#64;{{ m.login }}</span>
+                </div>
+              } @else {
+                <span class="avatar-vazio" aria-hidden="true">?</span>
+                <div class="dados-pessoa">
+                  <small class="papel-pessoa">{{ p.rotulo }} <app-historico-campo [campo]="'equipe.' + p.papel" [rotulo]="p.rotulo" [historico]="historico()" /></small>
+                  <span class="dica-formulario" style="margin: 0">Nenhum responsável definido.</span>
+                </div>
+              }
+            </article>
           }
-        </dl>
+        </div>
       </section>
     }
 

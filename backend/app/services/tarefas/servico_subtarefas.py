@@ -57,7 +57,9 @@ def criar_subtarefa(sessao: Session, autor: Usuario, mae: Tarefa, dados: DadosSu
                 raise ErroTarefa(f"A tarefa #{b.numero} é de outra equipe: só é possível depender de tarefas da mesma equipe.")
             if b.id == mae.id:
                 raise ErroTarefa("Uma subtarefa não pode depender da própria tarefa mãe.")
-    responsaveis = dados.responsaveis_ids or tuple([mae.responsavel_id, *sorted(servico.envolvidos(mae) - {mae.responsavel_id})] if mae.responsavel_id else sorted(servico.envolvidos(mae)))
+    # A subtarefa herda sempre os responsáveis da mãe (o principal da mãe primeiro); os informados entram além deles
+    da_mae = [mae.responsavel_id, *sorted(servico.envolvidos(mae) - {mae.responsavel_id})] if mae.responsavel_id else sorted(servico.envolvidos(mae))
+    responsaveis = list(dict.fromkeys([*da_mae, *dados.responsaveis_ids]))
     sub = servico.criar(sessao, autor, DadosTarefa(
         titulo=dados.titulo, descricao=dados.descricao, prazo=prazo, prioridade=dados.prioridade or mae.prioridade, equipe_id=mae.equipe_id,
         responsaveis_ids=tuple(responsaveis), marcadores_ids=tuple(m.id for m in mae.marcadores), tarefa_pai_id=mae.id,

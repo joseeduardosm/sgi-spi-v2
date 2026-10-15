@@ -373,8 +373,6 @@ def pode_desfazer(sessao: Session, contrato: Contrato, prorrogacao: Prorrogacao,
     sequencia = contrato.prorrogacoes.index(prorrogacao) + 2
     # Competências geradas na vigência criada por esta prorrogação
     competencias = [c for c in contrato.competencias if c.sequencia_vigencia == sequencia]
-    if competencias and not eh_administrador(sessao, usuario):
-        return False, "A execução da nova vigência já foi gerada: somente o SuperRoot ou quem tem controle total em Contratos pode desfazer."
     if any(c.medicao_iniciada_em or c.etapa_atual != "medicao" for c in competencias):
         return False, "Há medição registrada na nova vigência. Reabra ou desfaça a execução antes."
     if any(r.sequencia_vigencia == sequencia and r.situacao != "cancelado" for r in contrato.reajustes) or any(

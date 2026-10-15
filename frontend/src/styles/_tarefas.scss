@@ -1810,3 +1810,18 @@ app-espaco-tarefas.tela-cheia {
 .zoom-gantt { display: inline-flex; align-items: center; gap: 6px;
   output { min-width: 44px; color: var(--spi-apagado); font-size: var(--spi-texto-legenda); text-align: center; font-variant-numeric: tabular-nums; }
   .acao-pequena { min-width: 32px; padding: 0 8px; font-size: 16px; line-height: 1; } }
+
+/* Subtarefas no detalhe da tarefa: tabela com colunas ordenáveis (ID, descrição, status, responsável e data) */
+.tabela-subtarefas-envoltorio { margin: 0 0 10px; overflow-x: auto; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); }
+.tabela-subtarefas { width: 100%; border-collapse: collapse; font-size: var(--spi-texto-compacto);
+  th { padding: 8px 12px; background: var(--spi-superficie-alt); color: var(--spi-apagado); font-size: var(--spi-texto-legenda); font-weight: 600; text-align: left; white-space: nowrap; }
+  td { padding: 8px 12px; border-top: 1px solid var(--spi-borda); vertical-align: middle; }
+  tbody tr:hover { background: var(--spi-superficie-alt); }
+  .num { width: 1%; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .descricao-sub { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .data-sub { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td a { color: inherit; text-decoration: none; &:hover { color: var(--spi-vermelho); } }
+  .ordenar-sub { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+    i { font-size: 10px; font-style: normal; opacity: 0.5; }
+    &.ativa { color: var(--spi-texto); i { opacity: 1; color: var(--spi-vermelho); } }
+    &:hover { color: var(--spi-texto); } } }

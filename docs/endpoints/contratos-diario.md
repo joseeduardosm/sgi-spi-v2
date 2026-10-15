@@ -45,8 +45,8 @@ avaliação ativo e pesa na avaliação da competência da data (ver
     da empresa contratada, sem repetição;
   - "Responder para": a equipe vigente, para que as respostas não voltem à caixa de envio;
   - assunto `[Diário de bordo] Contrato NNN/AAAA — ocorrência de dd/mm/aaaa`; corpo com contrato, contratada,
-    data, quem registrou, relato, "Haverá glosa: Sim/Não" com os itens e quantidades, "Impacta a avaliação da
-    qualidade: Sim/Não" com os itens e a lista de anexos;
+    data, quem registrou, relato, "Haverá glosa:" com os itens e quantidades e "Impacta a avaliação da
+    qualidade:" com os itens (**cada linha só aparece quando a resposta é Sim**) e a lista de anexos;
   - **os anexos vão no e-mail**. Se a soma passar de 15 MB, não são anexados e o texto avisa que estão
     disponíveis no sistema;
   - o resultado (destinatários, sucesso ou erro) fica em `email`. Sem servidor SMTP ativo ou sem destinatário
@@ -63,7 +63,7 @@ JSON inválido ou fora das regras → `422 validacao`.
 | Campo | Tipo | Regras |
 |---|---|---|
 | `data_ocorrencia` | date | Obrigatória; não futura; não anterior ao início do contrato |
-| `descricao` | string | 1 a 4000 caracteres |
+| `descricao` | string | 1 a 20000 caracteres. **HTML do editor rico** (negrito, listas, links; sanitizado pela API, o mesmo das tarefas) ou texto simples antigo; editor vazio (`<p></p>`) é recusado. Nos PDFs, no XLSX, nas notificações e nos resumos da medição/avaliação a ocorrência sai como **texto puro**; no e-mail, com a formatação |
 | `possui_glosa` | boolean | A ocorrência implicará glosa? |
 | `glosas` | `[{item_id, quantidade}]` | Só com `possui_glosa`; item do contrato; quantidade > 0; sem repetir item |
 | `impacta_avaliacao` | boolean | A ocorrência impacta a avaliação da qualidade? (padrão `false`) |
@@ -114,7 +114,7 @@ curl -X POST .../api/contratos/{contrato_id}/diario \
 - "+ Anexar arquivos": até 5, listados com tamanho e "remover" antes de registrar. O envio usa `FormData`
   (`ContratosApiService.registrarOcorrencia(id, dados, arquivos)`).
 - Lista em forma de chat: quem registrou (nome e papel), data da ocorrência, data e hora do registro, relato,
-  glosas, o selo "Impacta a avaliação" com os itens, os anexos (links de download,
+  as linhas "Haverá glosa:" (itens e quantidades) e "Impacta a avaliação da qualidade:" (itens), **só quando a resposta é Sim** (e também no PDF, dentro da coluna da ocorrência, sem as colunas "Não"), os anexos (links de download,
   `ContratosApiService.baixarAnexoOcorrencia`) e o resultado do e-mail, com **Reenviar** em caso de falha. Botão **Baixar PDF**.
 
 

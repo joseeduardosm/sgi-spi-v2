@@ -2,7 +2,7 @@
 @let a = avaliacao();
 <section class="cartao-dados" aria-labelledby="titulo-avaliacao">
   <header>
-    <div><h2 id="titulo-avaliacao">2. Avaliação dos serviços</h2><small>Nota abaixo da máxima exige justificativa (inicial) ou complemento (gestor).</small></div>
+    <div><h2 id="titulo-avaliacao">Avaliação dos serviços</h2><small>Nota abaixo da máxima exige justificativa (inicial) ou complemento (gestor).</small></div>
     @if (a.nota_final !== null) {
       <div class="acoes-formulario">
         <span class="contador-ciencias completo">Nota final {{ a.nota_final | quantidade }}</span>

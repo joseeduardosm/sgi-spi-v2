@@ -60,9 +60,8 @@ def test_recusa_envia_email_com_pdf_a_equipe_e_prepostos_e_reabre_a_nf(cliente, 
 def test_ciclo_recusa_nova_nota_recusa_e_aprovacao_com_trilha_no_consolidado(cliente, admin, cenario):
     contrato, base, gestora = cenario
     fin = cabecalho(cliente, "financeiro1")
-    # Antes da retenção, CADIN e checklist já ficam prontos (correm em paralelo): a recusa não os apaga
+    # Antes da retenção, o checklist já fica pronto (corre em paralelo): a recusa não o apaga
     juntar_nf(cliente, base, gestora, "2105.00", "123")
-    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).status_code == 200
     documentos = cliente.get(base, headers=gestora).json()["documentos"]
     for d in documentos:
         cliente.post(f"{base}/checklist/{d['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
@@ -74,13 +73,14 @@ def test_ciclo_recusa_nova_nota_recusa_e_aprovacao_com_trilha_no_consolidado(cli
     assert estado["etapa_atual"] == "nota_fiscal" and estado["recusas"][0]["ordem"] == 1
     r = juntar_nf(cliente, base, gestora, "2105.00", "124")
     assert r.status_code == 200, r.text
-    assert r.json()["etapa_atual"] == "retencao" and r.json()["etapas_abertas"] == ["retencao"]  # CADIN e checklist continuam concluídos
+    assert r.json()["etapa_atual"] == "retencao" and r.json()["etapas_abertas"] == ["retencao"]  # o checklist continua concluído
     assert cliente.post(f"{base}/retencao/recusar", json={"justificativa": "Nota emitida com o CNPJ do tomador incorreto."}, headers=fin).status_code == 200
     r = juntar_nf(cliente, base, gestora, "2105.00", "125")
     assert r.status_code == 200 and [x["ordem"] for x in r.json()["recusas"]] == [1, 2]
     r = conferir_retencao(cliente, base, fin, {"ir": "31.58"})
     assert r.status_code == 200, r.text
-    assert r.json()["etapa_atual"] == "consolidado" and r.json()["pode_recusar"] is False
+    assert r.json()["etapa_atual"] == "cadin" and r.json()["pode_recusar"] is False
+    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).json()["etapa_atual"] == "consolidado"
     # Consolidado: nota 123 (recusada) → recusa 1 → nota 124 (recusada) → recusa 2 → nota 125 (aprovada) → retenção
     c = cliente.post(f"{base}/consolidado", headers=gestora)
     assert c.status_code == 200, c.text

@@ -18,6 +18,7 @@ from app.models.patrimonio import Bem, Classificacao, ItemClassificacao
 from app.models.usuario import Usuario
 from app.services import servico_anexos
 from app.services.patrimonio import servico_bens, servico_localizacoes
+from app.services.patrimonio.numeracao import proximo_numero_relacao
 from app.services.patrimonio.base import ErroPatrimonio, avisar, exigir_outra_pessoa, ids_controle_total, registrar_evento
 
 TIPOS = ("inservivel", "extraviado")
@@ -49,7 +50,7 @@ def criar(sessao: Session, tipo: str, autor: Usuario, *, id_cliente: str | None 
         existente = sessao.scalar(select(Classificacao.id).where(Classificacao.id_cliente == id_cliente))
         if existente is not None:
             return obter(sessao, existente), False
-    lista = Classificacao(id=uuid.uuid4(), id_cliente=id_cliente, tipo=tipo, status="rascunho", solicitante_id=autor.id)
+    lista = Classificacao(id=uuid.uuid4(), id_cliente=id_cliente, numero=proximo_numero_relacao(sessao), tipo=tipo, status="rascunho", solicitante_id=autor.id)
     sessao.add(lista)
     sessao.commit()
     return obter(sessao, lista.id), True

@@ -74,6 +74,7 @@ export const ROTULOS_CAMPO: Record<string, string> = {
   numero: 'Número do contrato',
   empresa_id: 'Empresa contratada',
   apelido: 'Apelido',
+  autoridade_despacho_id: 'Autoridade do despacho',
   objeto: 'Objeto',
   data_inicio: 'Data inicial',
   data_fim: 'Data final',

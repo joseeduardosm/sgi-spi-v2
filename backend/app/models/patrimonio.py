@@ -223,6 +223,8 @@ class Classificacao(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     id_cliente: Mapped[str | None] = mapped_column(String(64), unique=True)
+    # Número de exibição (#12), sequência única entre listas de inservíveis, de extraviados e baixas
+    numero: Mapped[int] = mapped_column(Integer, unique=True)
     tipo: Mapped[str] = mapped_column(String(10))
     # rascunho > pendente > aprovada / parcial / recusada
     status: Mapped[str] = mapped_column(String(10), default="rascunho", index=True)
@@ -263,6 +265,8 @@ class Baixa(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     id_cliente: Mapped[str | None] = mapped_column(String(64), unique=True)
+    # Número de exibição (#12), sequência única entre listas de inservíveis, de extraviados e baixas
+    numero: Mapped[int] = mapped_column(Integer, unique=True)
     status: Mapped[str] = mapped_column(String(10), default="rascunho", index=True)
     solicitante_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)

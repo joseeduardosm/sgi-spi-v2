@@ -171,7 +171,7 @@ def valor_autorizado(competencia: Competencia) -> Decimal:
 
 def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, retencoes: dict[uuid.UUID, dict[str, Decimal]],
                     discriminacao_conferida: bool, autor: Usuario) -> Competencia:
-    """Grava as retenções conferidas de cada nota, gera o PDF da conferência e conclui a etapa (CADIN e checklist correm em paralelo)."""
+    """Grava as retenções conferidas de cada nota, gera o PDF da conferência e conclui a etapa (o checklist corre em paralelo; o CADIN vem depois)."""
     from app.services.contratos.servico_competencias import _carregar_competencia, _validar_retencoes, concluir_etapa_paralela, etapas_abertas, total_bruto_notas
 
     contrato = obter_contrato(sessao, contrato_id)
@@ -205,7 +205,7 @@ def salvar_retencao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uui
         sessao, pdf, f"retencao_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf", "contrato-execucao-retencao", autor.id,
         contrato_id=contrato.id,
     )
-    # CADIN e checklist correm em paralelo: com os três concluídos, o consolidado é liberado
+    # Com retenção e checklist concluídos, o CADIN é liberado (e só depois o consolidado)
     concluir_etapa_paralela(competencia, "retencao")
     from app.services.contratos import avisos
     avisos.retencao_conferida(sessao, contrato, competencia, autor)

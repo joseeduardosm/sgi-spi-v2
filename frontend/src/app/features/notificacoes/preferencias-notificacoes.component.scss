@@ -16,7 +16,14 @@
 .pref-obrigatoria { display: block; margin-top: 2px; color: var(--spi-vermelho-destaque); font-size: 11px; }
 .pref-indisponivel { color: var(--cor-7c8998); }
 .pref-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px 24px; }
-.pref-horas { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.pref-grade .campo { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; }
+.pref-grade .campo select { width: 100%; max-width: 380px; }
+.pref-grade .campo > label, .pref-rotulo { font-size: 13px; font-weight: 600; color: var(--spi-texto); }
+.pref-opcoes { display: grid; gap: 10px; justify-items: start; }
+.pref-grade .dica-formulario { margin: 0; }
+.pref-horas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: 26px; }
+.pref-horas label { font-size: 13px; font-weight: 400; color: var(--spi-apagado); }
+.pref-horas input { width: auto; }
 .pref-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .pref-lista li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--cor-e2e5e8); border-radius: var(--spi-raio-m); background: var(--cor-ffffff); }
 .pref-rodape { display: flex; justify-content: flex-end; }

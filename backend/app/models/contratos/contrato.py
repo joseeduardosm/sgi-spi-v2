@@ -77,6 +77,9 @@ class Contrato(Base):
     empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_empresas.id", ondelete="RESTRICT"), index=True)
     # Nome curto para identificar o contrato nas listas, e a descrição completa do objeto
     apelido: Mapped[str] = mapped_column(String(200), default="")
+    # Autoridade que autoriza o pagamento no despacho do consolidado (nome, cargo e setor vêm do cadastro do usuário)
+    autoridade_despacho_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    autoridade_despacho = relationship("Usuario", foreign_keys=[autoridade_despacho_id])
     objeto: Mapped[str] = mapped_column(String(4000))
     data_inicio: Mapped[date] = mapped_column(Date)
     # Fim da vigência atual (avança a cada prorrogação)

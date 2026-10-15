@@ -92,6 +92,7 @@ class GravacaoContrato(BaseModel):
     )
     empresa_id: uuid.UUID = Field(..., description="Empresa ativa.")
     apelido: Texto = Field("", max_length=200)
+    autoridade_despacho_id: int | None = Field(None, description="Usuário ativo que autoriza o pagamento no despacho do consolidado (nome, cargo e setor saem do cadastro dele).")
     objeto: TextoObrigatorio = Field(..., max_length=4000)
     data_inicio: date
     vigencia_inicial_meses: int = Field(..., ge=1, le=600)
@@ -142,6 +143,14 @@ class LeituraItem(BaseModel):
     vigencia_meses: int
 
 
+class AutoridadeDespacho(BaseModel):
+    """Usuário que autoriza o pagamento no despacho do consolidado."""
+    id: int
+    nome: str
+    cargo: str
+    departamento: str
+
+
 class MembroEquipe(BaseModel):
     """Integrante vigente da equipe em um papel."""
     papel: Papel
@@ -162,7 +171,7 @@ class LeituraVigencia(BaseModel):
 class PermissoesContrato(BaseModel):
     """O que o usuário logado pode fazer neste contrato (a tela mostra ou esconde botões com isso)."""
     pode_editar: bool = Field(..., description="SuperRoot, controle total em Contratos, criador ou integrante vigente da equipe, com ACL ≥ MODIFICACAO.")
-    pode_excluir: bool = Field(..., description="Controle total em Contratos (qualquer contrato) ou criador do contrato com ACL ≥ MODIFICACAO.")
+    pode_excluir: bool = Field(..., description="Controle total em Contratos (qualquer contrato) ou criador/integrante da equipe vigente do contrato com ACL ≥ MODIFICACAO.")
     pode_administrar: bool = Field(False, description="SuperRoot ou controle total em Contratos: faz tudo sobre qualquer contrato.")
     pode_gerir_autoridades: bool = Field(False, description="Pode cadastrar as autoridades das portarias: SuperRoot, controle total ou gestor/gestor suplente deste contrato.")
 
@@ -225,6 +234,7 @@ class DetalheContrato(ResumoContrato):
     data_limite_maxima: date = Field(..., description="Início + vigência máxima − 1 dia.")
     vigencia_inicial_meses: int
     vigencia_maxima_meses: int
+    autoridade_despacho: "AutoridadeDespacho | None" = Field(None, description="Autoridade do despacho de pagamento (nulo = não cadastrada).")
     periodicidade_meses: int
     mes_reajuste: int
     liberar_todas_competencias: bool

@@ -19,6 +19,7 @@ from html import escape
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.services.tarefas.descricao import texto_da_descricao
 from app.core.banco import FabricaSessao, agora_utc
 from app.core.configuracao import obter_configuracao
 from app.models.contratos import Competencia, Contrato, OcorrenciaDiario
@@ -32,6 +33,16 @@ from app.services.contratos.servico_contratos import designacoes_vigentes, exigi
 from app.services.servico_smtp import SemServidorAtivo
 
 PRAZO_NOTA_FISCAL = timedelta(hours=48)
+
+
+import re as _re
+
+_TEM_TAG = _re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
+
+
+def _tem_html(texto: str) -> bool:
+    """A ocorrência veio do editor rico (HTML já sanitizado) ou é texto simples antigo?"""
+    return bool(_TEM_TAG.search(texto or ""))
 
 
 def emails_da_equipe(sessao: Session, contrato: Contrato) -> list[str]:
@@ -322,15 +333,15 @@ def mensagem_ocorrencia(contrato: Contrato, ocorrencia: OcorrenciaDiario) -> tup
         f"Registrada por: {autor} em {data_hora(ocorrencia.criado_em)}",
         "",
         "Ocorrência:",
-        ocorrencia.descricao,
-        "",
-        f"Haverá glosa: {'Sim' if ocorrencia.possui_glosa else 'Não'}",
-        *[f"  - {item}: {qtd}" for item, qtd in glosas],
+        texto_da_descricao(ocorrencia.descricao),
     ]
+    if ocorrencia.possui_glosa:
+        linhas_texto += ["", "Haverá glosa: Sim", *[f"  - {item}: {qtd}" for item, qtd in glosas]]
     if competencia and ocorrencia.possui_glosa:
         linhas_texto.append(f"Competência afetada: {competencia.numero_competencia}")
     impacto = [f"{i.item_nome}" + (f" ({i.grupo_nome})" if i.grupo_nome else "") for i in ocorrencia.itens_avaliacao]
-    linhas_texto.append(f"Impacta a avaliação da qualidade: {'Sim — ' + '; '.join(impacto) if ocorrencia.impacta_avaliacao else 'Não'}")
+    if ocorrencia.impacta_avaliacao:
+        linhas_texto.append("Impacta a avaliação da qualidade: Sim — " + "; ".join(impacto))
     nomes_anexos = [a.anexo.nome_original for a in ocorrencia.anexos]
     if nomes_anexos:
         linhas_texto += ["", "Anexos: " + ", ".join(nomes_anexos)]
@@ -343,14 +354,14 @@ def mensagem_ocorrencia(contrato: Contrato, ocorrencia: OcorrenciaDiario) -> tup
             ["Data da ocorrência", f"{ocorrencia.data_ocorrencia:%d/%m/%Y}"],
             ["Registrada por", f"{autor} em {data_hora(ocorrencia.criado_em)}"],
         ]),
-        f"<p><b>Ocorrência</b><br>{escape(ocorrencia.descricao).replace(chr(10), '<br>')}</p>",
-        f"<p><b>Haverá glosa:</b> {'Sim' if ocorrencia.possui_glosa else 'Não'}"
-        + (f" (competência {escape(competencia.numero_competencia)})" if competencia and ocorrencia.possui_glosa else "") + "</p>",
+        f"<p><b>Ocorrência</b></p>{ocorrencia.descricao if _tem_html(ocorrencia.descricao) else '<p>' + escape(ocorrencia.descricao).replace(chr(10), '<br>') + '</p>'}",
     ]
-    if glosas:
-        blocos.append(_tabela_html(["Item", "Quantidade glosada"], glosas))
-    blocos.append(f"<p><b>Impacta a avaliação da qualidade:</b> {'Sim' if ocorrencia.impacta_avaliacao else 'Não'}</p>")
-    if impacto:
+    if ocorrencia.possui_glosa:
+        blocos.append(f"<p><b>Haverá glosa:</b> Sim" + (f" (competência {escape(competencia.numero_competencia)})" if competencia else "") + "</p>")
+        if glosas:
+            blocos.append(_tabela_html(["Item", "Quantidade glosada"], glosas))
+    if ocorrencia.impacta_avaliacao:
+        blocos.append("<p><b>Impacta a avaliação da qualidade:</b> Sim</p>")
         blocos.append(_tabela_html(["Item do formulário de avaliação"], [[i] for i in impacto]))
     if nomes_anexos:
         blocos.append(f"<p><b>Anexos:</b> {escape(', '.join(nomes_anexos))}</p>")

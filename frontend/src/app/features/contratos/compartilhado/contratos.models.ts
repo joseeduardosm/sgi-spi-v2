@@ -195,6 +195,8 @@ export interface DetalheContrato extends ResumoContrato {
   data_limite_maxima: string;
   vigencia_inicial_meses: number;
   vigencia_maxima_meses: number;
+  /** Autoridade do despacho de pagamento (nome, cargo e setor vêm do cadastro do usuário); nulo = não cadastrada. */
+  autoridade_despacho: { id: number; nome: string; cargo: string; departamento: string } | null;
   periodicidade_meses: number;
   mes_reajuste: number;
   liberar_todas_competencias: boolean;
@@ -246,6 +248,8 @@ export interface GravacaoContrato {
   numero: string;
   empresa_id: string;
   apelido: string;
+  /** Usuário que autoriza o pagamento no despacho do consolidado. */
+  autoridade_despacho_id?: number | null;
   objeto: string;
   data_inicio: string;
   vigencia_inicial_meses: number;
@@ -480,7 +484,7 @@ export interface PlaceholderPortaria {
 /** Modelo global de checklist, formulário ou máscara de portaria (conteúdo conforme o tipo). */
 export interface Modelo {
   id: string;
-  tipo: 'checklist' | 'formulario' | 'portaria';
+  tipo: 'checklist' | 'formulario' | 'portaria' | 'despacho';
   nome: string;
   conteudo: { html?: string; variante?: VarianteMascara; itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] } & Partial<DefinicaoFormulario>;
   ativo: boolean;

@@ -10,9 +10,8 @@ import uuid
 from decimal import Decimal
 from io import BytesIO
 
-from pypdf import PdfReader
-
 from app.models.anexo import Anexo
+from app.services.tarefas.descricao import texto_da_descricao
 from app.models.contratos import Competencia, Contrato, NotaEmpenho
 from app.core.banco import agora_utc
 from app.services import servico_anexos
@@ -21,6 +20,7 @@ from app.services.documentos.pdf import (
     FUSO_SAO_PAULO,
     DocumentoPdf,
     EntradaIndice,
+    abrir_pdf,
     contar_paginas,
     contracapa,
     indice_consolidado,
@@ -105,7 +105,7 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
     _secao_desconto_reajuste(documento, competencia, arredondar(total))
     # Glosas do diário de bordo que valem nesta competência (data no período)
     glosas = [
-        [f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, o.descricao if len(o.descricao) <= 300 else o.descricao[:297] + "…",
+        [f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, (texto_da_descricao(o.descricao) if len(texto_da_descricao(o.descricao)) <= 300 else texto_da_descricao(o.descricao)[:297] + "…"),
          g.descricao_item, quantidade(g.quantidade)]
         for o in (ocorrencias_do_periodo(contrato, competencia.periodo_inicio, competencia.periodo_fim) if competencia.tipo == "regular" else [])
         for g in o.glosas
@@ -363,7 +363,7 @@ def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Deci
         for o in ocorrencias:
             impacto.setdefault(o.id, (o, []))[1].append(nomes.get(item_id, item_id))
     if impacto:
-        linhas = [[f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, o.descricao, "; ".join(itens)]
+        linhas = [[f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, texto_da_descricao(o.descricao), "; ".join(itens)]
                   for o, itens in sorted(impacto.values(), key=lambda par: (par[0].data_ocorrencia, par[0].criado_em))]
         documento.secao("Ocorrências do diário de bordo consideradas").tabela(
             ["Data", "Registrada por", "Ocorrência", "Itens impactados"], linhas, larguras=[1.1, 2.2, 6, 3])
@@ -552,7 +552,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
 def _pdf_legivel(conteudo: bytes) -> bool:
     """Um PDF corrompido não pode impedir o consolidado: ele fica de fora e o resumo lista o anexo."""
     try:
-        PdfReader(BytesIO(conteudo))
+        len(abrir_pdf(conteudo).pages)  # lê a lista de páginas: PDF com senha ou truncado falha aqui, não no meio da montagem
         return True
     except Exception:  # noqa: BLE001 — qualquer falha de leitura do PDF enviado
         return False

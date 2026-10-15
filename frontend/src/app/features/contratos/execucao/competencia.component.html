@@ -4,46 +4,58 @@
 
   <div class="barra-fixa">
     <a class="acao-secundaria" [routerLink]="['/contratos', d.contrato_id]" [queryParams]="{ aba: 'execucao' }">← Contrato {{ d.contrato_numero }}</a>
-    <div class="acoes-formulario" style="align-items: center">
+    <div class="acoes-competencia">
       <span class="selo-situacao" [class]="'selo-situacao ' + d.situacao">{{ situacoes[d.situacao] }}</span>
-      @if (d.notas_selecionadas.length) { <small class="dica-formulario" style="margin: 0">NE: {{ d.notas_selecionadas.map(n => n.numero).join(', ') }}</small> }
+      @if (d.notas_selecionadas.length) { <span class="chip-ne" title="Notas de Empenho desta competência">NE <b class="texto-codigo">{{ d.notas_selecionadas.map(n => n.numero).join(', ') }}</b></span> }
       @if (d.pode_incluir_adicional) {
-        <button type="button" class="acao-primaria acao-pequena" (click)="abrirInclusao()">Incluir nova medição</button>
+        <button type="button" class="acao-secundaria acao-pequena" (click)="abrirInclusao()">+ Incluir nova medição</button>
       }
-      @if (d.pode_excluir_adicional) {
-        <button type="button" class="acao-perigo acao-pequena" (click)="excluirAdicional()">Excluir medição adicional</button>
-      }
-      @if (d.reaberturas_permitidas && etapasAnteriores().length) {
-        <button type="button" class="acao-perigo acao-pequena" (click)="reabrindo.set(true)">Reabrir etapa</button>
-      }
-      @if (d.reaberturas_permitidas) {
-        <button type="button" class="acao-perigo-cheio acao-pequena" (click)="zerar()">Zerar competência</button>
+      @if (d.pode_excluir_adicional || (d.reaberturas_permitidas && etapasAnteriores().length) || d.reaberturas_permitidas) {
+        <details class="menu-mais-acoes">
+          <summary class="acao-secundaria acao-pequena">Mais ações ▾</summary>
+          <div class="lista-mais-acoes" role="menu" (click)="$any($event.currentTarget).parentElement.removeAttribute('open')">
+            @if (d.reaberturas_permitidas && etapasAnteriores().length) { <button type="button" role="menuitem" (click)="reabrindo.set(true)"><b>Reabrir etapa</b><small>Descarta o que foi feito nas etapas seguintes</small></button> }
+            @if (d.pode_excluir_adicional) { <button type="button" role="menuitem" class="perigo" (click)="excluirAdicional()"><b>Excluir medição adicional</b><small>Remove esta medição e seus registros</small></button> }
+            @if (d.reaberturas_permitidas) { <button type="button" role="menuitem" class="perigo" (click)="zerar()"><b>Zerar competência</b><small>Volta tudo ao início (estorna pagamentos)</small></button> }
+          </div>
+        </details>
       }
     </div>
   </div>
 
-  @if (!d.liberada) {
-    <p class="aviso-bloco informativo">O período desta competência termina em {{ d.periodo_fim | dataBr }}. A medição será liberada após o encerramento.</p>
+  @if (!d.liberada || d.tipo === 'diferenca_reajuste' || d.tipo === 'adicional' || d.avisos.length) {
+    <div class="painel-avisos" role="status">
+      @if (!d.liberada) { <p>O período desta competência termina em <b>{{ d.periodo_fim | dataBr }}</b>. A medição será liberada após o encerramento.</p> }
+      @if (d.tipo === 'diferenca_reajuste') { <p><b>Competência complementar:</b> paga a diferença de preço do reajuste sobre as quantidades já medidas. As quantidades não podem ser alteradas e não há avaliação.</p> }
+      @if (d.tipo === 'adicional') {
+        <p><b>Medição adicional</b> incluída por {{ d.adicional_por_nome }}: {{ d.adicional_justificativa }}
+          @if (d.adicional_anexo; as anexo) { · <a href="javascript:void(0)" (click)="abrirAnexoAdicional(anexo.anexo_id)">{{ anexo.nome }}</a> }
+          Ela tem as mesmas etapas da competência, de forma independente (nota fiscal, retenção e pagamento próprios).</p>
+      }
+      @for (a of d.avisos; track a) { <p>{{ a }}</p> }
+    </div>
   }
 
-  @if (d.tipo === 'diferenca_reajuste') {
-    <p class="aviso-bloco informativo">Competência complementar: paga a diferença de preço do reajuste sobre as quantidades já medidas. As quantidades não podem ser alteradas e não há avaliação.</p>
-  }
-  @if (d.tipo === 'adicional') {
-    <p class="aviso-bloco informativo">Medição adicional incluída por {{ d.adicional_por_nome }}: {{ d.adicional_justificativa }}
-      @if (d.adicional_anexo; as anexo) { · <a href="javascript:void(0)" (click)="abrirAnexoAdicional(anexo.anexo_id)">{{ anexo.nome }}</a> }
-      Ela tem as mesmas etapas da competência, de forma independente (nota fiscal, retenção e pagamento próprios).</p>
-  }
-  @for (a of d.avisos; track a) { <p class="aviso-bloco">{{ a }}</p> }
-
-  <nav class="barra-etapas" aria-label="Etapas da competência">
-    @for (e of etapasVisiveis(); track e; let n = $index) {
-      <button type="button" [class.concluida]="concluida(e) || d.etapa_atual === 'concluida'" [class.atual]="aberta(e)"
-              [class.selecionada]="selecionada() === e" [disabled]="bloqueada(e)" [attr.aria-current]="aberta(e) ? 'step' : null"
-              (click)="selecionada.set(e)">
-        <b>{{ concluida(e) || d.etapa_atual === 'concluida' ? '✓' : n + 1 }}</b> {{ rotulos[e] }}
-      </button>
-    }
+  <!-- Trilha de etapas: o caminho até a Ordem Bancária, com o que já foi feito e o que está aberto -->
+  <nav class="trilha-etapas" aria-label="Etapas da competência">
+    <div class="progresso-etapas">
+      <b class="texto-progresso">{{ etapasConcluidas() }} de {{ etapasVisiveis().length }} etapas concluídas</b>
+      <span class="divisor-progresso" aria-hidden="true"></span>
+      <b class="percentual-progresso">{{ percentualEtapas() }}%</b>
+      <div class="barra-progresso" role="progressbar" [attr.aria-valuenow]="etapasConcluidas()" aria-valuemin="0" [attr.aria-valuemax]="etapasVisiveis().length"><i [style.width.%]="100 * etapasConcluidas() / (etapasVisiveis().length || 1)"></i></div>
+    </div>
+    <ol>
+      @for (e of etapasVisiveis(); track e; let n = $index; let ultimo = $last) {
+        <li [class.feita]="concluida(e) || d.etapa_atual === 'concluida'" [class.atual]="aberta(e)" [class.selecionada]="selecionada() === e" [class.futura]="bloqueada(e)"
+            [attr.data-liga]="ultimo ? null : ligacao(e, etapasVisiveis()[n + 1])">
+          <button type="button" [disabled]="bloqueada(e)" [attr.aria-current]="aberta(e) ? 'step' : null" (click)="selecionada.set(e)">
+            <span class="bolinha-etapa" aria-hidden="true">{{ concluida(e) || d.etapa_atual === 'concluida' ? '✓' : n + 1 }}</span>
+            <span class="nome-etapa"><span class="titulo-etapa">{{ n + 1 }}. {{ rotulos[e] }}</span>
+              <small>{{ concluida(e) || d.etapa_atual === 'concluida' ? 'concluída' : aberta(e) ? 'em andamento' : 'aguardando' }}</small></span>
+          </button>
+        </li>
+      }
+    </ol>
   </nav>
 
   @switch (selecionada()) {
@@ -83,7 +95,7 @@
   <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="reabrindo.set(false)"></div>
   <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-reabrir">
     <header>
-      <div><span class="modal-sobretitulo">SuperRoot ou gestor do contrato</span><h2 id="titulo-reabrir">Reabrir etapa</h2></div>
+      <div><span class="modal-sobretitulo">Equipe, criador ou SuperRoot</span><h2 id="titulo-reabrir">Reabrir etapa</h2></div>
       <button type="button" aria-label="Fechar" (click)="reabrindo.set(false)">×</button>
     </header>
     <form (ngSubmit)="reabrir()">

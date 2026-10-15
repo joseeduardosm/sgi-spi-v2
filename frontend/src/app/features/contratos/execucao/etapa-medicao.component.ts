@@ -6,6 +6,8 @@ import { Component, computed, inject, input, OnChanges, output, signal } from '@
 import { FormsModule } from '@angular/forms';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
+import { BotaoCopiarComponent } from '../../../shared/componentes/botao-copiar/botao-copiar.component';
+import { valorPorExtenso } from '../../../shared/utilitarios/extenso';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { DetalheCompetencia, NotaSelecionada } from '../compartilhado/contratos.models';
@@ -16,7 +18,7 @@ import { paraDecimalApi, paraDecimalTela, ROTULOS_PAPEL } from '../compartilhado
 /** Etapa 1: medição, NEs em ordem de consumo, ciências (uma já basta) e memória de cálculo. */
 @Component({
   selector: 'app-etapa-medicao',
-  imports: [FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, BotaoCopiarComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-medicao.component.html',
 })
 export class EtapaMedicaoComponent implements OnChanges {
@@ -160,6 +162,28 @@ export class EtapaMedicaoComponent implements OnChanges {
   /** Itens digitados acima do saldo líquido (a API também recusa). */
   protected excedentes(): string[] {
     return this.detalhe().itens.filter((i) => this.acimaDoSaldo(i.id, i.saldo_liquido)).map((i) => i.descricao);
+  }
+
+  /** Valor por extenso (ex.: "Quatrocentos e Noventa e Sete Mil, … Reais e Sessenta e Oito Centavos"), para copiar. */
+  protected extenso(valor: number): string {
+    return valorPorExtenso(valor);
+  }
+
+  /** Algum acerto de centavos inválido (bloqueia o salvar). */
+  protected acertosInvalidos(): boolean {
+    return this.detalhe().itens.some((i) => this.acertoInvalido(i.id));
+  }
+
+  /** O que ainda impede de salvar ou concluir (aparece na barra de ações). */
+  protected pendencias(): string[] {
+    const d = this.detalhe();
+    const falta: string[] = [];
+    if (!this.notas().length) falta.push('Selecione ao menos uma NE');
+    if (this.excedentes().length) falta.push('Há item medido acima do saldo líquido');
+    if (this.acertosInvalidos()) falta.push('Há acerto de centavos inválido');
+    if (this.alterado()) falta.push('Salve a medição antes de registrar ciência ou concluir');
+    else if (d.ciencias.length < d.ciencias_minimas) falta.push('Falta ao menos uma ciência');
+    return falta;
   }
 
   /** Reenvia o e-mail da medição concluída. */

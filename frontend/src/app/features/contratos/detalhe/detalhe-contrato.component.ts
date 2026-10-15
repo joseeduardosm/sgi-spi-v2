@@ -1,9 +1,11 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para controlar a tela de detalhe do contrato e a troca entre as suas abas.
 
+import { BotaoCopiarComponent } from '../../../shared/componentes/botao-copiar/botao-copiar.component';
+import { AvatarComponent } from '../../diretorio/avatar.component';
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { catchError, forkJoin, of } from 'rxjs';
 
 import { AtalhosService } from '../../../core/navegacao/atalhos.service';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
@@ -13,7 +15,7 @@ import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { CHAVE_CONTEXTO_CARTEIRA, ContextoCarteira, ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
-import { AlteracaoCampo, DetalheContrato, Prorrogacao, VizinhosContrato } from '../compartilhado/contratos.models';
+import { AlteracaoCampo, DetalheContrato, NotaEmpenho, Prorrogacao, VizinhosContrato } from '../compartilhado/contratos.models';
 import { HistoricoCampoComponent } from '../compartilhado/historico-campo.component';
 import { LinhaDoTempoComponent } from '../compartilhado/linha-do-tempo.component';
 import { MESES, PAPEIS, PERIODICIDADES, ROTULOS_CAMPO, ROTULOS_SITUACAO, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
@@ -36,7 +38,7 @@ type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'docume
 @Component({
   selector: 'app-detalhe-contrato',
   imports: [EsqueletoComponent, 
-    RouterLink, CabecalhoModuloComponent, HistoricoCampoComponent, LinhaDoTempoComponent, AbaPrevisaoComponent, AbaDocumentosComponent,
+    RouterLink, AvatarComponent, BotaoCopiarComponent, CabecalhoModuloComponent, HistoricoCampoComponent, LinhaDoTempoComponent, AbaPrevisaoComponent, AbaDocumentosComponent,
     AbaChecklistsComponent, AbaCorrecoesComponent, AbaFormulariosComponent, AbaNotasComponent, AbaDiarioComponent, AbaExecucaoComponent, AbaPortariaComponent, ...PIPES_FORMATACAO,
   ],
   templateUrl: './detalhe-contrato.component.html',
@@ -91,6 +93,48 @@ export class DetalheContratoComponent {
     return Object.fromEntries(equipe.map((m) => [m.papel, m]));
   });
   protected readonly periodicidade = computed(() => PERIODICIDADES.find((p) => p.valor === this.contrato()?.periodicidade_meses)?.rotulo ?? '');
+  /** Notas de Empenho do contrato (para o saldo do exercício na aba Principal). */
+  protected readonly notas = signal<NotaEmpenho[]>([]);
+  /** Exercício considerado no saldo de empenho (o ano atual). */
+  protected readonly exercicio = Number(this.hoje.slice(0, 4));
+  /** NEs do exercício: o ano vem do número da NE (ex.: `2026NE00007`); sem ele, do ano do cadastro. */
+  protected readonly notasDoExercicio = computed(() => this.notas().filter((n) => (/^(\d{4})/.exec(n.numero)?.[1] ?? n.criado_em.slice(0, 4)) === String(this.exercicio)));
+  /** Totais do exercício: valor empenhado, consumido, cancelado, comprometido por medições e saldo livre. */
+  protected readonly saldoExercicio = computed(() => {
+    const soma = (f: (n: NotaEmpenho) => string) => this.notasDoExercicio().reduce((t, n) => t + Number(f(n)), 0);
+    const valor = soma((n) => n.valor_original);
+    const consumido = soma((n) => n.consumido);
+    const cancelado = soma((n) => n.cancelado);
+    const comprometido = soma((n) => n.comprometido);
+    return { valor, consumido, cancelado, comprometido, livre: valor - consumido - cancelado - comprometido };
+  });
+  /** Largura (em %) de cada trecho da barra de uma NE, sobre o valor original. */
+  protected trechos(n: NotaEmpenho): { consumido: number; cancelado: number; comprometido: number } {
+    const v = Number(n.valor_original) || 1;
+    const pct = (x: string) => Math.min(100, Math.max(0, (Number(x) / v) * 100));
+    return { consumido: pct(n.consumido), cancelado: pct(n.cancelado), comprometido: pct(n.comprometido) };
+  }
+
+  /** Dias até o fim da vigência atual (negativo se já terminou). */
+  protected readonly diasRestantes = computed(() => {
+    const c = this.contrato();
+    if (!c) return 0;
+    return Math.round((new Date(c.data_fim + 'T00:00:00').getTime() - new Date(this.hoje + 'T00:00:00').getTime()) / 86_400_000);
+  });
+  protected readonly faixaVigencia = computed<'ok' | 'alerta' | 'perigo'>(() => (this.diasRestantes() < 0 ? 'perigo' : this.diasRestantes() <= 90 ? 'alerta' : 'ok'));
+  protected readonly textoVigencia = computed(() => {
+    const d = this.diasRestantes();
+    return d < 0 ? `vencida há ${-d} dia(s)` : d === 0 ? 'vence hoje' : `faltam ${d} dia(s)`;
+  });
+  /** Processos SEI (gestão e execução) para a aba Processos. */
+  protected readonly processos = computed(() => {
+    const c = this.contrato();
+    if (!c) return [];
+    return [
+      { chave: 'gestao', rotulo: 'Gestão', campoNumero: 'sei_gestao_numero', numero: c.sei_gestao_numero, link: c.sei_gestao_link },
+      { chave: 'execucao', rotulo: 'Execução', campoNumero: 'sei_execucao_numero', numero: c.sei_execucao_numero, link: c.sei_execucao_link },
+    ];
+  });
   // Só permite prorrogar quem pode editar e com todos os códigos orçamentários dos itens preenchidos
   protected readonly podeProrrogar = computed(() => {
     const c = this.contrato();
@@ -142,8 +186,10 @@ export class DetalheContratoComponent {
       contrato: this.api.consultar(this.id()),
       historico: this.api.historico(this.id()),
       prorrogacoes: this.alteracoes.prorrogacoes(this.id()),
+      notas: this.api.notas(this.id()).pipe(catchError(() => of([] as NotaEmpenho[]))),
     }).subscribe({
-      next: ({ contrato, historico, prorrogacoes }) => {
+      next: ({ contrato, historico, prorrogacoes, notas }) => {
+        this.notas.set(notas);
         this.contrato.set(contrato);
         // O nome da tela nos recentes e favoritos passa a ser o número do contrato
         this.atalhos.rotularAtual(`Contrato ${contrato.numero}`);

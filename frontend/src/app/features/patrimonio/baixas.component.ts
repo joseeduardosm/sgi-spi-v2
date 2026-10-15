@@ -21,7 +21,7 @@ import { Baixa, COR_STATUS, ROTULOS_STATUS } from './patrimonio.models';
       <div class="pat-lista-bens">
         @for (b of baixas(); track b.id) {
           <a class="pat-cartao-bem" [routerLink]="['/patrimonio/baixas', b.id]">
-            <span class="pat-chapa">{{ b.itens.length }} bem(ns)</span>
+            <span class="pat-chapa"><b class="texto-codigo">#{{ b.numero }}</b> · Baixa · {{ b.itens.length }} bem(ns)</span>
             <span class="pat-descricao">{{ b.solicitante_nome }}</span>
             <small class="pat-sala">{{ b.criada_em | date: 'dd/MM/yyyy HH:mm' }}</small>
             <span class="pat-marcadores"><span [class]="marcador(cores[b.status])">{{ rotulos[b.status] }}</span>@if (b.tem_termo) { <span [class]="marcador(4)">Termo em PDF</span> }</span>

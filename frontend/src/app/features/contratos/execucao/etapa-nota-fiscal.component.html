@@ -1,53 +1,97 @@
 @let d = detalhe();
 <section class="cartao-dados" aria-labelledby="titulo-nf">
   <header>
-    <div><h2 id="titulo-nf">3. Nota fiscal</h2><small>Junte o PDF de cada nota (pode haver mais de uma por medição). O XML é opcional: com ele, os valores são lidos dele; sem ele, informe o valor bruto; as retenções são conferidas pelo Financeiro na etapa seguinte. Valor autorizado pela medição: {{ d.valor_autorizado | moeda }}@if (+d.desconto_reajuste > 0) { (já descontado o crédito de reajuste de {{ d.desconto_reajuste | moeda }}) }.</small></div>
+    <div>
+      <h2 id="titulo-nf">Nota fiscal</h2>
+      <small>Junte o PDF de cada nota (pode haver mais de uma por medição); o XML é opcional.</small>
+    </div>
     @if (d.nf_concluida_em) { <span class="selo-situacao">Concluída</span> }
+    @else if (d.recusas.length) { <span class="selo-situacao alerta">Recusada: junte nova nota</span> }
   </header>
   <div class="corpo">
+    <div class="resumo-autorizado-nf">
+      <span>Valor autorizado pela medição</span>
+      <strong>{{ d.valor_autorizado | moeda }}</strong>
+      @if (+d.desconto_reajuste > 0) { <small>já descontado o crédito de reajuste de {{ d.desconto_reajuste | moeda }}</small> }
+      <details class="como-funciona-nf">
+        <summary>Como funciona</summary>
+        <p>Com o XML, os valores são lidos dele; sem ele, informe o valor bruto. As retenções são conferidas pelo Financeiro na etapa seguinte.</p>
+      </details>
+    </div>
+
     @if (d.recusas.length && !d.nf_concluida_em) {
-      <p class="aviso-bloco erro" role="status">A nota anterior foi <b>recusada</b> pelo Financeiro. Junte outra nota fiscal (PDF obrigatório; XML opcional); este ciclo se repete até o Financeiro aprovar.</p>
+      @if (d.recusas[d.recusas.length - 1]; as ultima) {
+        <div class="aviso-recusa-nf" role="status">
+          <strong>A nota anterior foi recusada pelo Financeiro</strong>
+          <p class="motivo-recusa">{{ ultima.justificativa }}</p>
+          <small>por {{ ultima.recusada_por_nome }} em {{ ultima.recusada_em | date: 'dd/MM/yyyy HH:mm' }} · junte outra nota fiscal; o ciclo se repete até o Financeiro aprovar.</small>
+        </div>
+      }
     }
-    <app-historico-recusas [detalhe]="d" (atualizado)="atualizado.emit($event)" />
+    <app-historico-recusas [detalhe]="d" [recolhido]="!d.nf_concluida_em" (atualizado)="atualizado.emit($event)" />
+
     <div class="grade-formulario tres-colunas">
       <div><label for="nf-recebida">Recebida pela Administração em *</label><input id="nf-recebida" type="date" [disabled]="!editavel()" [(ngModel)]="recebidaEm" /></div>
-      <div><label for="nf-prazo">Prazo para pagamento (dias corridos) *</label><input id="nf-prazo" type="number" min="1" max="3650" [disabled]="!editavel()" [(ngModel)]="prazo" /></div>
-      <div><label>Vencimento do pagamento</label><input [value]="vencimento()" disabled /></div>
+      <div><label for="nf-prazo">Prazo para pagamento (dias corridos) *</label>
+        <input id="nf-prazo" type="number" min="1" max="3650" [disabled]="!editavel()" [(ngModel)]="prazo" />
+        @if (editavel()) {
+          <div class="atalhos-prazo" role="group" aria-label="Prazos usuais">
+            @for (dias of atalhosPrazo; track dias) { <button type="button" [class.ativo]="+prazo === dias" (click)="prazo = dias">{{ dias }} dias</button> }
+          </div>
+        }
+      </div>
+      <div><span class="rotulo-falso">Vencimento do pagamento</span>
+        <p class="vencimento-texto">@if (recebidaEm && prazo) { <b>{{ vencimento() }}</b> <small>({{ prazo }} dias após o recebimento)</small> } @else { <small>Informe o recebimento e o prazo.</small> }</p></div>
     </div>
 
     @for (l of linhas; track l; let i = $index) {
-      <p class="secao-formulario">Nota fiscal @if (linhas.length > 1) { {{ i + 1 }} } *
-        @if (editavel() && linhas.length > 1) { <button type="button" class="acao-secundaria acao-pequena" (click)="removerNota(l)">Remover</button> }</p>
-      @if (l.existente?.dados_xml; as x) {
-        <p class="dica-formulario" style="margin-top: 0">
-          {{ x.modelo_rotulo }} nº <b>{{ x.numero }}</b> · {{ x.emitente.razao_social }} · valor <b>{{ l.existente?.valor_bruto | moeda }}</b>
-        </p>
-      }
-      <div class="acoes-cartao esquerda arquivos-nf">
-        @if (l.existente?.arquivo; as a) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.nome" (click)="baixar(a.anexo_id)">Baixar PDF da nota</button> }
-        @if (l.existente?.xml; as a) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.nome" (click)="baixar(a.anexo_id)">Baixar XML da nota</button> }
+      <article class="cartao-nota-nf" [attr.aria-label]="'Nota fiscal ' + (i + 1)">
+        <header>
+          <strong>Nota fiscal @if (linhas.length > 1) { {{ i + 1 }} }</strong>
+          @if (l.existente?.dados_xml; as x) {
+            <span class="resumo-xml">{{ x.modelo_rotulo }} nº <b class="texto-codigo">{{ x.numero }}</b> · {{ x.emitente.razao_social }} · <b>{{ l.existente?.valor_bruto | moeda }}</b></span>
+          } @else if (l.existente) {
+            <span class="resumo-xml">@if (l.existente.numero) { nº <b class="texto-codigo">{{ l.existente.numero }}</b> · } <b>{{ l.existente.valor_bruto | moeda }}</b></span>
+          }
+          @if (editavel() && linhas.length > 1) { <button type="button" class="acao-secundaria acao-pequena" (click)="removerNota(l)">Remover</button> }
+        </header>
         @if (editavel()) {
-          <app-envio-pdf [rotulo]="l.existente?.arquivo ? 'Substituir PDF da nota' : 'Selecionar PDF da nota'" (selecionado)="l.arquivo = $event" />
-          <label class="acao-secundaria acao-pequena seletor-xml">
-            {{ l.xml ? 'XML: ' + l.xml.name : (l.existente?.dados_xml ? 'Substituir XML da nota' : 'Selecionar XML da nota (opcional)') }}
-            <input type="file" accept=".xml,application/xml,text/xml" (change)="escolherXml($event, l)" />
-          </label>
+          <div class="zonas-arquivo">
+            <app-campo-arquivo tipo="pdf" rotulo="PDF da nota" [obrigatorio]="true" [jaEnviado]="l.existente?.arquivo?.nome ?? null" (selecionado)="l.arquivo = $event" />
+            <app-campo-arquivo tipo="xml" rotulo="XML da nota" [jaEnviado]="l.existente?.xml?.nome ?? null" (selecionado)="l.xml = $event" />
+          </div>
         }
-      </div>
-      @if (!temXml(l)) {
-        <div class="grade-formulario tres-colunas" style="margin-top: 8px">
-          <div><label [for]="'nf-valor-' + i">Valor bruto da nota (R$) *</label><input [id]="'nf-valor-' + i" inputmode="decimal" [disabled]="!editavel()" [(ngModel)]="l.valor" /></div>
-          <div><label [for]="'nf-numero-' + i">Número da nota</label><input [id]="'nf-numero-' + i" maxlength="100" [disabled]="!editavel()" [(ngModel)]="l.numero" /></div>
+        <div class="acoes-cartao esquerda arquivos-nf">
+          @if (l.existente?.arquivo; as a) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.nome" (click)="baixar(a.anexo_id)">Baixar PDF da nota</button> }
+          @if (l.existente?.xml; as a) { <button type="button" class="acao-secundaria acao-pequena" [title]="a.nome" (click)="baixar(a.anexo_id)">Baixar XML da nota</button> }
         </div>
-      }
+        @if (!temXml(l)) {
+          <div class="grade-formulario">
+            <div><label [for]="'nf-valor-' + i">Valor bruto da nota (R$) *</label>
+              <input [id]="'nf-valor-' + i" inputmode="decimal" placeholder="0,00" [disabled]="!editavel()" [(ngModel)]="l.valor" />
+              @if (editavel() && linhas.length === 1 && d.valor_autorizado) { <button type="button" class="link-simples" (click)="l.valor = valorAutorizadoTexto()">Usar o valor autorizado ({{ d.valor_autorizado | moeda }})</button> }</div>
+            <div><label [for]="'nf-numero-' + i">Número da nota</label>
+              <input [id]="'nf-numero-' + i" class="texto-codigo" maxlength="100" [disabled]="!editavel()" [(ngModel)]="l.numero" />
+              <small class="dica-formulario">Com o XML, o número é lido dele.</small></div>
+          </div>
+        } @else if (editavel() && l.xml) {
+          <p class="dica-formulario">Os valores desta nota serão lidos do XML ao enviar.</p>
+        }
+      </article>
     }
     @if (editavel()) {
       <div class="acoes-cartao esquerda" style="margin-top: 12px">
         <button type="button" class="acao-secundaria" (click)="adicionarNota()">+ Adicionar outra nota fiscal</button>
       </div>
     }
-    @if (d.notas_fiscais.length > 1) {
-      <p class="dica-formulario">Total das {{ d.notas_fiscais.length }} notas: <b>{{ totalRegistrado() | moeda }}</b>. É esse valor que a Ordem Bancária debita nas NEs.</p>
+    @if (linhas.length > 1 || (editavel() && somaConhecida() !== null)) {
+      <p class="resumo-notas-nf" [class.confere]="diferenca() !== null && diferenca() === 0" [class.difere]="diferenca() !== null && diferenca() !== 0">
+        <span>{{ linhas.length > 1 ? 'Soma das ' + linhas.length + ' notas' : 'Valor da nota' }}:
+          @if (somaConhecida() !== null) { <b>{{ somaConhecida() | moeda }}</b> } @else { <b>será lido dos XMLs</b> }</span>
+        <span>Autorizado: <b>{{ d.valor_autorizado | moeda }}</b></span>
+        @if (diferenca() !== null) { <span>{{ diferenca() === 0 ? 'Confere com o autorizado' : 'Diferença: ' + (diferenca()! | moeda) }}</span> }
+      </p>
+      @if (linhas.length > 1) { <p class="dica-formulario">É a soma das notas que a Ordem Bancária debita nas NEs.</p> }
     }
 
     @if (d.tem_despesas_variaveis) {
@@ -80,8 +124,13 @@
     }
 
     @if (editavel()) {
-      <div class="acoes-cartao"><span class="dica-formulario">Ao juntar a nota, todo o DOF recebe o aviso por e-mail, com cópia à equipe.</span>
-        <button type="button" class="acao-primaria" [disabled]="!valido()" (click)="concluir()">Juntar nota fiscal</button></div>
+      <div class="barra-envio-nf">
+        <div class="texto-envio">
+          @if (pendencias().length) { <span class="pendencias-nf">Falta: {{ pendencias().join(' · ') }}.</span> }
+          @else { <span class="dica-formulario">Tudo certo. Ao enviar, todo o DOF recebe o aviso por e-mail, com cópia à equipe.</span> }
+        </div>
+        <button type="button" class="acao-primaria" [disabled]="!valido()" [title]="pendencias().join(', ')" (click)="concluir()">{{ d.recusas.length ? 'Enviar nova nota ao Financeiro' : 'Juntar nota fiscal' }}</button>
+      </div>
     }
 
     @if (d.nf_concluida_em) {

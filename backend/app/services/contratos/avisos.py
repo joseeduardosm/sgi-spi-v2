@@ -18,6 +18,7 @@ Chaves:
 
 from sqlalchemy.orm import Session
 
+from app.services.tarefas.descricao import texto_da_descricao
 from app.core.banco import agora_utc
 from app.models.contratos import Competencia, Contrato
 from app.models.usuario import Usuario
@@ -50,7 +51,7 @@ def ocorrencia_registrada(sessao: Session, contrato: Contrato, ocorrencia, autor
     glosa = " (com glosa)" if ocorrencia.possui_glosa else ""
     avisar_equipe(
         sessao, contrato, f"{_identificacao(contrato)}: nova ocorrência no diário de bordo{glosa}",
-        f"{ocorrencia.registrada_por_nome} registrou uma ocorrência em {ocorrencia.data_ocorrencia:%d/%m/%Y}{glosa}:\n\n{ocorrencia.descricao}",
+        f"{ocorrencia.registrada_por_nome} registrou uma ocorrência em {ocorrencia.data_ocorrencia:%d/%m/%Y}{glosa}:\n\n{texto_da_descricao(ocorrencia.descricao)}",
         chave=f"diario:{ocorrencia.id}", link=f"/contratos/{contrato.id}?aba=diario",
         prioridade="alta" if ocorrencia.possui_glosa else "normal", autor=autor, evento="contratos.ocorrencia_diario")
 
@@ -106,6 +107,8 @@ def retencao_conferida(sessao: Session, contrato: Contrato, competencia: Compete
     from app.services.contratos.servico_competencias import etapas_abertas
 
     faltam = [e for e in etapas_abertas(competencia) if e in ("cadin", "checklist")]
+    if "checklist" in faltam:
+        faltam.append("cadin")  # o CADIN só abre depois do checklist
     texto_faltam = " e ".join({"cadin": "CADIN", "checklist": "checklist"}[e] for e in faltam)
     avisar_equipe(
         sessao, contrato, f"{_identificacao(contrato)}: retenção conferida ({competencia.numero_competencia})",

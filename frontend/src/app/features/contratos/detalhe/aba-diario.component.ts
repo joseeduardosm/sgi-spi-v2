@@ -12,7 +12,8 @@ import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { AnexoOcorrencia, DiarioContrato, OcorrenciaDiario } from '../compartilhado/contratos.models';
 import { paraDecimalApi, ROTULOS_PAPEL } from '../compartilhado/rotulos';
-import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
+import { EditorRicoComponent } from '../../contratacoes/editor-rico.component';
+import { DescricaoTarefaPipe } from '../../tarefas/descricao-tarefa.pipe';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Máximo de arquivos por ocorrência (mesmo limite da API). */
@@ -26,7 +27,7 @@ interface LinhaGlosa {
 /** Aba "Diário de bordo": a equipe relata ocorrências; cada uma é enviada por e-mail à equipe e ao preposto. */
 @Component({
   selector: 'app-aba-diario',
-  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, DescricaoTarefaPipe, EditorRicoComponent, FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-diario">
       <header>
@@ -37,8 +38,22 @@ interface LinhaGlosa {
         <button type="button" class="acao-secundaria" [disabled]="!diario()?.ocorrencias?.length" (click)="baixarPdf()">Baixar PDF</button>
       </header>
 
+      @if (diario(); as dd) {
+        <div class="resumo-medicao" aria-label="Resumo do diário">
+          <div><span>Ocorrências</span><strong>{{ dd.ocorrencias.length }}</strong><small>registradas neste contrato</small></div>
+          <div [class.perigo]="contar('glosa') > 0"><span>Com glosa</span><strong>{{ contar('glosa') }}</strong><small>limitam a medição da competência</small></div>
+          <div [class.alerta]="contar('impacto') > 0"><span>Impactam a avaliação</span><strong>{{ contar('impacto') }}</strong><small>pesam na nota de qualidade</small></div>
+          <div [class.alerta]="contar('email') > 0"><span>E-mail com pendência</span><strong>{{ contar('email') }}</strong><small>em envio ou com falha</small></div>
+        </div>
+        <div class="chips-filtro filtros-diario" role="group" aria-label="Filtrar ocorrências">
+          @for (f of filtros; track f.chave) {
+            <button type="button" [class.ativo]="filtro() === f.chave" [attr.aria-pressed]="filtro() === f.chave" (click)="filtro.set(f.chave)">{{ f.rotulo }} ({{ contar(f.chave) }})</button>
+          }
+        </div>
+      }
+
       <div class="diario-chat" #chat>
-        @for (o of diario()?.ocorrencias ?? []; track o.id) {
+        @for (o of visiveis(); track o.id) {
           <article class="balao-diario" [class.minha]="o.registrada_por_id === usuarioId()" [class.com-glosa]="o.possui_glosa" [class.com-impacto]="o.impacta_avaliacao">
             <!-- Cabeçalho numa linha: autor, papel, data da ocorrência e competência (selos) e hora do registro -->
             <header>
@@ -48,11 +63,11 @@ interface LinhaGlosa {
               @if (o.competencia_rotulo) { <span class="selo-diario">Competência {{ o.competencia_rotulo }}</span> }
               <time [attr.datetime]="o.criado_em" title="Registrado em">{{ o.criado_em | date: 'dd/MM/yyyy HH:mm' }}</time>
             </header>
-            <p class="texto" [innerHTML]="o.descricao | linkificar"></p>
+            <div class="texto texto-rico" [innerHTML]="o.descricao | descricaoTarefa"></div>
             @if (o.possui_glosa) {
               <!-- Glosas como chips: item e quantidade, sem ocupar um bloco inteiro -->
               <div class="glosas-balao">
-                <span class="rotulo-glosa">Glosa</span>
+                <span class="rotulo-glosa">Haverá glosa:</span>
                 @for (g of o.glosas; track g.item_id) { <span class="chip-glosa">{{ g.descricao_item }} · <b>{{ g.quantidade | quantidade }}</b></span> }
               </div>
               @if (o.medicao_ja_concluida) { <small class="texto-erro">A medição dessa competência já foi concluída: a glosa só vale se ela for reaberta.</small> }
@@ -60,7 +75,7 @@ interface LinhaGlosa {
             @if (o.impacta_avaliacao) {
               <!-- Itens do formulário de avaliação que a ocorrência impacta -->
               <div class="glosas-balao impacto-balao">
-                <span class="rotulo-glosa">Impacta a avaliação</span>
+                <span class="rotulo-glosa">Impacta a avaliação da qualidade:</span>
                 @for (i of o.itens_avaliacao; track i.item_id) { <span class="chip-glosa" [title]="i.grupo_nome">{{ i.item_nome }}</span> }
               </div>
             }
@@ -85,7 +100,7 @@ interface LinhaGlosa {
             </footer>
           </article>
         } @empty {
-          <div class="estado-vazio">@if (diario()) { {{ 'Nenhuma ocorrência registrada.' }} } @else { <app-esqueleto tipo="lista" [linhas]="3" /> }</div>
+          <div class="estado-vazio">@if (diario()) { {{ filtro() === 'todas' ? 'Nenhuma ocorrência registrada.' : 'Nenhuma ocorrência neste filtro.' }} } @else { <app-esqueleto tipo="lista" [linhas]="3" /> }</div>
         }
       </div>
 
@@ -107,8 +122,8 @@ interface LinhaGlosa {
             </div>
             <div class="ocupa-duas">
               <label for="diario-texto">Ocorrência *</label>
-              <textarea id="diario-texto" name="descricao" required maxlength="4000" rows="3" [(ngModel)]="descricao"
-                        placeholder="Descreva o que aconteceu (ex.: posto descoberto das 8h às 12h)."></textarea>
+              @defer (on idle) { <app-editor-rico [(html)]="descricao" [colarFormatado]="true" rotulo="Ocorrência" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="3" /> }
+              <small class="dica-formulario">Descreva o que aconteceu (ex.: posto descoberto das 8h às 12h). Aceita negrito, listas e links.</small>
             </div>
           </div>
           @if (possuiGlosa) {
@@ -167,9 +182,9 @@ interface LinhaGlosa {
             }
           </div>
           @if (erro()) { <p class="aviso-formulario erro" role="alert">{{ erro() }}</p> }
-          <div class="acoes-cartao">
-            <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Registro e anexos à equipe e aos prepostos escolhidos" />
-            <small class="dica-formulario">Ocorrências não podem ser editadas depois.</small>
+          <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Registro e anexos à equipe e aos prepostos escolhidos" />
+          <div class="barra-envio-nf barra-medicao">
+            <div class="texto-envio"><span class="dica-formulario">Ocorrências não podem ser editadas depois.</span></div>
             <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Registrar ocorrência' }}</button>
           </div>
         </form>
@@ -214,6 +229,22 @@ export class AbaDiarioComponent implements OnInit {
     }
     return grupos;
   });
+  /** Filtro da lista de ocorrências. */
+  protected readonly filtro = signal<'todas' | 'glosa' | 'impacto' | 'email' | 'minhas'>('todas');
+  protected readonly filtros: { chave: 'todas' | 'glosa' | 'impacto' | 'email' | 'minhas'; rotulo: string }[] = [
+    { chave: 'todas', rotulo: 'Todas' }, { chave: 'glosa', rotulo: 'Com glosa' }, { chave: 'impacto', rotulo: 'Impactam a avaliação' },
+    { chave: 'email', rotulo: 'E-mail pendente' }, { chave: 'minhas', rotulo: 'Minhas' },
+  ];
+  /** Ocorrências que atendem ao filtro escolhido. */
+  protected readonly visiveis = computed(() => (this.diario()?.ocorrencias ?? []).filter((o) => this.atende(o, this.filtro())));
+  protected atende(o: OcorrenciaDiario, f: string): boolean {
+    return f === 'todas' || (f === 'glosa' && o.possui_glosa) || (f === 'impacto' && o.impacta_avaliacao)
+      || (f === 'email' && (o.email.enviado_em === null || !o.email.ok)) || (f === 'minhas' && o.registrada_por_id === this.usuarioId());
+  }
+  protected contar(f: string): number {
+    return (this.diario()?.ocorrencias ?? []).filter((o) => this.atende(o, f)).length;
+  }
+
   /** Há envio em segundo plano ainda sem resultado: a lista é consultada de novo em instantes. */
   private readonly aguardandoEnvio = computed(() => this.diario()?.ocorrencias.some((o) => o.email.enviado_em === null) ?? false);
 
@@ -343,7 +374,7 @@ export class AbaDiarioComponent implements OnInit {
   private validar(): string | null {
     if (!this.data) return 'Informe a data da ocorrência.';
     if (this.data > this.hoje) return 'A data da ocorrência não pode ser futura.';
-    if (!this.descricao.trim()) return 'Descreva a ocorrência.';
+    if (!this.descricao.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()) return 'Descreva a ocorrência.';
     if (this.possuiGlosa) {
       if (!this.glosas().length) return 'Informe o item e a quantidade a glosar.';
       for (const g of this.glosas()) {

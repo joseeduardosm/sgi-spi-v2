@@ -25,7 +25,7 @@ import { Classificacao, COR_STATUS, ROTULOS_STATUS } from './patrimonio.models';
       <div class="pat-lista-bens">
         @for (c of listas(); track c.id) {
           <a class="pat-cartao-bem" [routerLink]="[base, c.id]">
-            <span class="pat-chapa">{{ extraviado ? 'Extraviados' : 'Inservíveis' }} · {{ c.itens.length }} bem(ns)</span>
+            <span class="pat-chapa"><b class="texto-codigo">#{{ c.numero }}</b> · {{ extraviado ? 'Extraviados' : 'Inservíveis' }} · {{ c.itens.length }} bem(ns)</span>
             <span class="pat-descricao">{{ c.solicitante_nome }}</span>
             <small class="pat-sala">{{ c.criada_em | date: 'dd/MM/yyyy HH:mm' }}</small>
             <span class="pat-marcadores"><span [class]="marcador(cores[c.status])">{{ rotulos[c.status] }}</span></span>

@@ -164,9 +164,9 @@ def test_ob_debita_nf_e_nf_adicional_e_saldo_fica_comprometido(cliente, admin, e
     assert r.json()["valor_a_pagar"] == "2605.00"
     assert conferir_retencao(cliente, base, gestora).status_code == 400  # falta a retenção da adicional
     assert conferir_retencao(cliente, base, gestora, adicional={}).status_code == 200
-    cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
     for documento in cliente.get(base, headers=gestora).json()["documentos"]:
         cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
+    cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
     consolidado = cliente.post(f"{base}/consolidado", headers=gestora)
     # Com duas notas, o "Total das notas" (retenção e resumo executivo) soma os brutos e diz em que páginas do consolidado cada nota está
     from io import BytesIO

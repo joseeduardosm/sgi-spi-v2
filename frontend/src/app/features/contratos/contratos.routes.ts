@@ -84,6 +84,14 @@ export const ROTAS_CONTRATOS: Routes = [
     loadComponent: () => import('./modelos/modelo-portaria.component').then((m) => m.ModeloPortariaComponent),
   },
   {
+    // Página da máscara do despacho de pagamento do consolidado: `novo` ou o id (mesmas permissões da lista de modelos)
+    path: 'modelos/despacho/:id',
+    title: 'Máscara do despacho | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'contratos', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./modelos/modelo-despacho.component').then((m) => m.ModeloDespachoComponent),
+  },
+  {
     // Cadastro de contrato; "novo" precisa vir antes de ":id" para não ser lido como um id
     path: 'novo',
     title: 'Novo contrato | SGI SPI',

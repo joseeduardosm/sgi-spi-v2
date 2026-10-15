@@ -85,11 +85,12 @@ def test_previsao_sob_demanda_com_saldo_e_selo(cliente, admin, equipe):
     grade = [{"item_id": sob_demanda, "competencia": "2026-01-01", "quantidade": "10"}, {"item_id": sob_demanda, "competencia": "2026-02-01", "quantidade": "5"}]
     salva = cliente.put(_url(contrato, "/previsao/1"), json={"apontamentos": grade}, headers=gestora).json()
     vigencia = salva["vigencias"][0]
-    assert vigencia["salva"] and vigencia["itens_sob_demanda"][0]["saldo"] == "85.0000" and not vigencia["pode_editar"]
+    assert vigencia["salva"] and vigencia["itens_sob_demanda"][0]["saldo"] == "85.0000" and vigencia["pode_editar"]
     assert salva["meses"][0]["valor"] == "2105.00" and salva["total_previsto"] == "24157.50"
 
-    # Selada: usuário comum não altera; SuperRoot pode reduzir
-    assert cliente.put(_url(contrato, "/previsao/1"), json={"apontamentos": grade[:1]}, headers=gestora).status_code == 400
+    # Selada: equipe, criador e SuperRoot têm os mesmos poderes e podem alterá-la
+    assert cliente.put(_url(contrato, "/previsao/1"), json={"apontamentos": grade[:1]}, headers=gestora).status_code == 200
+    assert cliente.put(_url(contrato, "/previsao/1"), json={"apontamentos": grade}, headers=admin).status_code == 200
     assert cliente.put(_url(contrato, "/previsao/1"), json={"apontamentos": grade[:1]}, headers=admin).status_code == 200
     planilha = cliente.get(_url(contrato, "/previsao/1/xlsx"), headers=gestora)
     assert planilha.status_code == 200 and planilha.content[:2] == b"PK"
@@ -174,7 +175,7 @@ def test_requisitos_e_geracao_das_competencias(cliente, admin, equipe):
     dados["itens"][1]["quantidade_total"] = "100"
     dados["itens"][0]["valor_unitario"] = "999.00"
     r = cliente.put(_url(contrato), json=dados, headers=gestora)
-    assert r.status_code == 400 and "SuperRoot" in r.json()["detalhe"]
+    assert r.status_code == 200, r.text  # equipe tem os mesmos poderes do SuperRoot, inclusive com a execução gerada
 
 
 def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
@@ -186,7 +187,7 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     ordem_notas = [notas["2026NE00001"], notas["2026NE00002"]]
     competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()
     base = _url(contrato, f"/competencias/{competencia['id']}")
-    assert competencia["etapas"] == ["medicao", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida"]
+    assert competencia["etapas"] == ["medicao", "nota_fiscal", "retencao", "checklist", "cadin", "consolidado", "ordem_bancaria", "concluida"]
     assert [i["quantidade_prevista"] for i in competencia["itens"]] == ["2.0000", "10.0000"]
 
     # 1 Medição
@@ -222,22 +223,23 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     r = conferir_retencao(cliente, base, gestora, {"ir": "31.58"})
     assert r.status_code == 200, r.text
     detalhe = r.json()
-    assert detalhe["notas_fiscais"][0]["valor_liquido"] == "2073.42" and detalhe["etapa_atual"] == "cadin"
+    assert detalhe["notas_fiscais"][0]["valor_liquido"] == "2073.42" and detalhe["etapa_atual"] == "checklist"
     assert detalhe["retencao"]["por_nome"] and detalhe["retencao"]["pdf"]
 
-    # 4 CADIN: com pendência continua aberta; sem pendência conclui
+    # 4 Checklist (o CADIN só abre depois dele)
+    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).status_code == 400
+    for documento in detalhe["documentos"]:
+        r = cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
+    assert r.json()["etapa_atual"] == "cadin"
+
+    # 5 CADIN: com pendência continua aberta; sem pendência conclui
     r = cliente.post(f"{base}/cadin", data={"possui_pendencia": "true"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora)
     assert r.status_code == 400
     r = cliente.post(f"{base}/cadin", data={"possui_pendencia": "true", "pendencia": "Débito", "texto_notificacao": "Prezados"},
                      files={"certidao": ("c.pdf", PDF), "email": ("e.pdf", PDF)}, headers=gestora)
     assert r.json()["etapa_atual"] == "cadin"
     r = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c2.pdf", PDF)}, headers=gestora)
-    assert r.json()["etapa_atual"] == "checklist" and len(r.json()["consultas_cadin"]) == 2
-
-    # 5 Checklist
-    for documento in r.json()["documentos"]:
-        r = cliente.post(f"{base}/checklist/{documento['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=gestora)
-    assert r.json()["etapa_atual"] == "consolidado"
+    assert r.json()["etapa_atual"] == "consolidado" and len(r.json()["consultas_cadin"]) == 2
 
     # 6 Consolidado e 7 OB
     r = cliente.post(f"{base}/consolidado", headers=gestora)
@@ -287,9 +289,7 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     saldos = {n["numero"]: (n["saldo"], len(n["movimentos"])) for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
     assert saldos == {"2026NE00001": ("0.00", 1), "2026NE00002": ("48895.00", 1)}
 
-    # Reabertura (SuperRoot ou gestor): o fiscal não pode; a gestora reabre e o débito vira estorno no extrato
-    r = cliente.post(f"{base}/reabrir", json={"etapa": "consolidado", "justificativa": "OB errada"}, headers=fiscal)
-    assert r.status_code == 403
+    # Reabertura: qualquer integrante da equipe (como o SuperRoot); o débito vira estorno no extrato
     r = cliente.post(f"{base}/reabrir", json={"etapa": "consolidado", "justificativa": "OB errada"}, headers=gestora)
     assert r.status_code == 200 and r.json()["etapa_atual"] == "consolidado"
     notas_depois = cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()
@@ -427,7 +427,7 @@ def test_checklist_com_documentos_obrigatorios_e_opcionais(cliente, admin, equip
     cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
     assert juntar_nf(cliente, base, gestora, "2105.00").status_code == 200
     assert conferir_retencao(cliente, base, gestora).status_code == 200
-    detalhe = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).json()
+    detalhe = cliente.get(base, headers=gestora).json()
     assert detalhe["etapa_atual"] == "checklist"
     assert [(d["nome"], d["obrigatorio"]) for d in detalhe["documentos"]] == [("Folha de pagamento", True), ("Relatório fotográfico", False)]
 
@@ -438,7 +438,8 @@ def test_checklist_com_documentos_obrigatorios_e_opcionais(cliente, admin, equip
     # O opcional ainda está sem anexo: a etapa espera a conclusão manual
     assert detalhe["etapa_atual"] == "checklist"
     r = cliente.post(f"{base}/checklist/concluir", headers=gestora)
-    assert r.status_code == 200 and r.json()["etapa_atual"] == "consolidado"
+    assert r.status_code == 200 and r.json()["etapa_atual"] == "cadin"
+    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).json()["etapa_atual"] == "consolidado"
     consolidado = cliente.post(f"{base}/consolidado", headers=gestora)
     assert consolidado.status_code == 200
     # Opcional sem anexo não é citado no consolidado (nem no índice, nem como "Não anexado" no resumo); o anexado é
@@ -477,7 +478,7 @@ def test_correcao_de_itens_com_dois_olhos_sincroniza_so_as_competencias_abertas(
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
     item = next(i for i in contrato["itens"] if i["tipo"] == "continuo")
     assert cliente.get(_url(contrato, "/itens/correcoes"), headers=gestora).json()["pode_propor"] is True
-    assert cliente.get(_url(contrato, "/itens/correcoes"), headers=fiscal).json()["pode_propor"] is False
+    assert cliente.get(_url(contrato, "/itens/correcoes"), headers=fiscal).json()["pode_propor"] is True
 
     # Competência aberta com medição salva e ciências
     notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
@@ -494,7 +495,6 @@ def test_correcao_de_itens_com_dois_olhos_sincroniza_so_as_competencias_abertas(
     novo_preco = str(Decimal(item["valor_unitario"]) + Decimal("1.0000"))
     corpo = {"justificativa": "Preço digitado errado no cadastro do contrato.", "itens": [{"id": item["id"], "valor_unitario": novo_preco}]}
     # Fiscal não propõe; justificativa curta e valor sem mudança são recusados
-    assert cliente.post(_url(contrato, "/itens/correcoes"), json=corpo, headers=fiscal).status_code == 403
     assert cliente.post(_url(contrato, "/itens/correcoes"), json={**corpo, "justificativa": "curta"}, headers=gestora).status_code == 422
     assert cliente.post(_url(contrato, "/itens/correcoes"), json={**corpo, "itens": [{"id": item["id"], "valor_unitario": item["valor_unitario"]}]}, headers=gestora).status_code == 400
     # A prévia não grava nada
@@ -528,8 +528,8 @@ def test_correcao_de_itens_com_dois_olhos_sincroniza_so_as_competencias_abertas(
     r = cliente.post(_url(contrato, f"/itens/correcoes/{outra['id']}/recusar"), json={"motivo": "Não procede"}, headers=fiscal)
     assert r.status_code == 200 and r.json()["situacao"] == "recusada" and r.json()["motivo_decisao"] == "Não procede"
     ultima = cliente.post(_url(contrato, "/itens/correcoes"), json={"justificativa": "Mais um ajuste de preço apenas para cancelar.", "itens": [{"id": item["id"], "valor_unitario": "98.0000"}]}, headers=gestora).json()
-    assert cliente.post(_url(contrato, f"/itens/correcoes/{ultima['id']}/cancelar"), headers=fiscal).status_code == 403
-    assert cliente.post(_url(contrato, f"/itens/correcoes/{ultima['id']}/cancelar"), headers=gestora).json()["situacao"] == "cancelada"
+    # Equipe, criador e SuperRoot têm os mesmos poderes: qualquer um deles cancela a proposta
+    assert cliente.post(_url(contrato, f"/itens/correcoes/{ultima['id']}/cancelar"), headers=fiscal).json()["situacao"] == "cancelada"
 
 
 def test_checklist_lista_obrigatorios_primeiro_e_opcionais_por_ultimo(cliente, admin, equipe):
@@ -576,7 +576,7 @@ def test_documento_com_validade_e_reaproveitado_na_competencia_seguinte(cliente,
     cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
     assert juntar_nf(cliente, base, gestora, "2105.00").status_code == 200
     assert conferir_retencao(cliente, base, gestora).status_code == 200
-    detalhe = cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).json()
+    detalhe = cliente.get(base, headers=gestora).json()
     docs = {d["nome"]: d for d in detalhe["documentos"]}
     assert docs["Certidão A"]["com_validade"] and not docs["Folha"]["com_validade"]
 
@@ -588,7 +588,8 @@ def test_documento_com_validade_e_reaproveitado_na_competencia_seguinte(cliente,
         r = cliente.post(f"{base}/checklist/{docs[nome]['id']}", files={"arquivo": ("x.pdf", PDF)}, data={"validade": validade}, headers=gestora)
         assert r.status_code == 200, r.text
     detalhe = cliente.post(f"{base}/checklist/{docs['Folha']['id']}", files={"arquivo": ("f.pdf", PDF)}, headers=gestora).json()
-    assert detalhe["etapa_atual"] == "consolidado"  # todos anexados: conclui sozinha
+    assert detalhe["etapa_atual"] == "cadin"  # todos anexados: conclui sozinha e libera o CADIN
+    assert cliente.post(f"{base}/cadin", data={"possui_pendencia": "false"}, files={"certidao": ("c.pdf", PDF)}, headers=gestora).json()["etapa_atual"] == "consolidado"
 
     # A seguinte ainda não copiou o checklist (a etapa dela não começou): nada a reaproveitar até lá
     seguinte = cliente.get(_url(contrato, "/competencias/identificador/2026-02"), headers=gestora).json()
@@ -744,8 +745,7 @@ def test_zerar_competencia_apaga_a_medicao_e_as_etapas(cliente, admin, equipe):
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
-    assert cliente.post(f"{base}/zerar", headers=fiscal).status_code == 403
-    r = cliente.post(f"{base}/zerar", headers=gestora)
+    r = cliente.post(f"{base}/zerar", headers=fiscal)  # equipe, criador e SuperRoot têm os mesmos poderes
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["etapa_atual"] == "medicao" and d["ciencias"] == [] and d["notas_selecionadas"] == []

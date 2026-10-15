@@ -5,6 +5,7 @@ import { Component, inject, input, OnChanges, output, signal } from '@angular/co
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 
+import { CampoArquivoComponent } from '../../../shared/componentes/campo-arquivo/campo-arquivo.component';
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
@@ -47,7 +48,7 @@ function lerValor(texto: string | null | undefined): number {
 /** Etapa 3: a equipe junta uma ou mais NFs (PDF + XML de cada). Os valores vêm dos XMLs; as retenções são conferidas na etapa 4. */
 @Component({
   selector: 'app-etapa-nota-fiscal',
-  imports: [FormsModule, DatePipe, EnvioPdfComponent, HistoricoRecusasComponent, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, CampoArquivoComponent, EnvioPdfComponent, HistoricoRecusasComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-nota-fiscal.component.html',
 })
 export class EtapaNotaFiscalComponent implements OnChanges {
@@ -59,6 +60,8 @@ export class EtapaNotaFiscalComponent implements OnChanges {
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
 
+  /** Atalhos de prazo de pagamento, em dias corridos. */
+  protected readonly atalhosPrazo = [15, 30, 45];
   protected recebidaEm = '';
   protected prazo = 30;
   /** Uma linha por nota fiscal: a já registrada (`existente`, que mantém os arquivos) e/ou os arquivos novos escolhidos. */
@@ -143,6 +146,43 @@ export class EtapaNotaFiscalComponent implements OnChanges {
   /** Soma dos valores brutos das notas já lidas (as notas novas só têm valor depois que o XML é lido no envio). */
   protected totalRegistrado(): number {
     return this.linhas.reduce((t, l) => t + Number(l.existente?.valor_bruto ?? 0), 0);
+  }
+
+  /** Valor autorizado no formato digitado no campo (vírgula decimal). */
+  protected valorAutorizadoTexto(): string {
+    return emReais(this.detalhe().valor_autorizado);
+  }
+
+  /** Soma dos valores das notas, ou nulo enquanto houver nota nova com XML (o valor só é lido no envio). */
+  protected somaConhecida(): number | null {
+    let total = 0;
+    for (const l of this.linhas) {
+      if (l.xml) return null;
+      total += l.existente?.dados_xml ? Number(l.existente.valor_bruto ?? 0) : this.valorDigitado(l);
+    }
+    return total;
+  }
+
+  /** Soma das notas menos o valor autorizado (0 quando confere), ou nulo se a soma ainda não é conhecida. */
+  protected diferenca(): number | null {
+    const soma = this.somaConhecida();
+    if (soma === null) return null;
+    const dif = Math.round((soma - Number(this.detalhe().valor_autorizado ?? 0)) * 100) / 100;
+    return dif === 0 ? 0 : dif;
+  }
+
+  /** O que ainda falta para poder juntar a nota (aparece ao lado do botão). */
+  protected pendencias(): string[] {
+    const falta: string[] = [];
+    this.linhas.forEach((l, i) => {
+      const nome = this.linhas.length > 1 ? ` da nota ${i + 1}` : ' da nota';
+      if (!l.arquivo && !l.existente?.arquivo) falta.push(`PDF${nome}`);
+      if (!this.temXml(l) && !(this.valorDigitado(l) > 0)) falta.push(`valor bruto${nome}`);
+    });
+    if (!this.recebidaEm) falta.push('data de recebimento');
+    if (!(this.prazo >= 1 && this.prazo <= 3650)) falta.push('prazo de pagamento');
+    if (!this.despesasValidas()) falta.push('documentos das despesas variáveis');
+    return falta;
   }
 
   /** Data de vencimento do pagamento (recebimento + prazo), calculada em UTC para não sofrer com fuso. */

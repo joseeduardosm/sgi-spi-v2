@@ -347,7 +347,7 @@ def montar_consolidado(
     escritor = PdfWriter()
     origem: list[bool] = []
     for conteudo, gerado in partes:
-        leitor = PdfReader(BytesIO(conteudo) if isinstance(conteudo, bytes) else str(conteudo))
+        leitor = abrir_pdf(conteudo)
         for pagina in leitor.pages:
             escritor.add_page(pagina)
             origem.append(gerado)
@@ -375,9 +375,17 @@ def montar_consolidado(
     return saida.getvalue()
 
 
+def abrir_pdf(origem: bytes | Path | str) -> PdfReader:
+    """Abre um PDF; se estiver criptografado, tenta a senha vazia (PDFs só com restrição de edição abrem assim). Sem sucesso, levanta `ValueError`."""
+    leitor = PdfReader(BytesIO(origem) if isinstance(origem, bytes) else str(origem))
+    if leitor.is_encrypted and not leitor.decrypt(""):
+        raise ValueError("PDF protegido por senha")
+    return leitor
+
+
 def contar_paginas(conteudo: bytes | Path) -> int:
     """Quantidade de páginas de um PDF (em memória ou em disco)."""
-    return len(PdfReader(BytesIO(conteudo) if isinstance(conteudo, bytes) else str(conteudo)).pages)
+    return len(abrir_pdf(conteudo).pages)
 
 
 def mesclar_pdfs(partes: Iterable[bytes | Path]) -> bytes:
@@ -385,7 +393,7 @@ def mesclar_pdfs(partes: Iterable[bytes | Path]) -> bytes:
     escritor = PdfWriter()
     for parte in partes:
         # Cada parte pode vir em memória (bytes) ou de um arquivo em disco (Path)
-        leitor = PdfReader(BytesIO(parte) if isinstance(parte, bytes) else str(parte))
+        leitor = abrir_pdf(parte)
         for pagina in leitor.pages:
             escritor.add_page(pagina)
     saida = BytesIO()

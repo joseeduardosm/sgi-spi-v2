@@ -18,7 +18,7 @@ from app.api.routes.contratos.comum import pode_ler, traduzir_erros
 from app.core.banco import obter_sessao
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import GravacaoModelo, LeituraModelo, PlaceholderPortaria
-from app.services.contratos import portaria_mascara, servico_configuracao_execucao as servico
+from app.services.contratos import despacho_mascara, portaria_mascara, servico_configuracao_execucao as servico
 
 roteador = APIRouter(prefix="/contratos/modelos", tags=["Contratos: modelos globais"], responses=RESPOSTAS_AUTENTICADAS)
 # Criar, alterar e excluir: checklists e formulários só o SuperRoot; máscaras de portaria também quem tem controle total em Contratos
@@ -29,7 +29,7 @@ NAO_ENCONTRADO = resposta_nao_encontrado("Modelo")
 @roteador.get("", response_model=list[LeituraModelo], summary="Listar modelos globais",
               description="Modelos de checklist e de formulário para clonar nos contratos e máscaras de portaria. Exige ACL `contratos` ≥ LEITURA.")
 def listar_modelos(
-    tipo: Literal["checklist", "formulario", "portaria"] | None = Query(None),
+    tipo: Literal["checklist", "formulario", "portaria", "despacho"] | None = Query(None),
     somente_ativos: bool = Query(True),
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(pode_ler),
@@ -43,6 +43,13 @@ def listar_modelos(
 def listar_placeholders(_: Usuario = Depends(pode_ler)):
     """Placeholders permitidos (os da portaria anterior só valem na máscara com portaria anterior)."""
     return [PlaceholderPortaria(nome=nome, descricao=descricao, da_anterior=nome in portaria_mascara.DA_ANTERIOR) for nome, descricao in portaria_mascara.PLACEHOLDERS.items()]
+
+
+@roteador.get("/despacho/placeholders", response_model=list[PlaceholderPortaria], summary="Placeholders da máscara do despacho",
+              description="Lista fechada de placeholders aceitos na máscara do despacho de pagamento do consolidado (escritos `#nome`, `#nome#` ou `##nome##`). Exige ACL `contratos` ≥ LEITURA.")
+def listar_placeholders_despacho(_: Usuario = Depends(pode_ler)):
+    """Placeholders permitidos no despacho (`da_anterior` é sempre falso: não há portaria anterior)."""
+    return [PlaceholderPortaria(nome=nome, descricao=descricao, da_anterior=False) for nome, descricao in despacho_mascara.PLACEHOLDERS.items()]
 
 
 @roteador.post("", response_model=LeituraModelo, status_code=status.HTTP_201_CREATED, summary="Criar modelo global",

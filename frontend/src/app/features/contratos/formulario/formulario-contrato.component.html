@@ -155,6 +155,11 @@
             <app-seletor-usuarios [idCampo]="'equipe-' + p.papel" [multiplo]="false" [(selecionados)]="equipe[p.papel]" [fonte]="api.opcoesUsuarios" textoAjuda="Pesquisar usuário" />
           </div>
         }
+        <div class="ocupa-3">
+          <label for="autoridade-despacho">Autoridade do despacho</label>
+          <app-seletor-usuarios idCampo="autoridade-despacho" [multiplo]="false" [(selecionados)]="autoridade" [fonte]="api.opcoesUsuarios" textoAjuda="Pesquisar usuário" />
+          <p class="dica-formulario">Quem autoriza o pagamento no despacho que abre o documento consolidado (nome, cargo e setor vêm do cadastro).</p>
+        </div>
       </div>
     </section>
 

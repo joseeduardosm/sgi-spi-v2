@@ -11,13 +11,18 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from fastapi import UploadFile, status
+import uuid
+
+from fastapi import Depends, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import exigir_acl
+from app.api.dependencias import exigir_acl, obter_usuario_atual
+from app.core.banco import obter_sessao
 from app.api.respostas import erro_regra, nao_encontrado
 from app.core.erros import ErroApi
 from app.models.acl import NivelAcl
+from app.models.contratos import Contrato
+from app.models.usuario import Usuario
 from app.schemas.comum import RespostaErro
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.servico_anexos import ErroAnexo
@@ -25,7 +30,27 @@ from app.services.servico_anexos import ErroAnexo
 # Slug do recurso na ACL; todas as rotas do módulo conferem o nível do usuário nele
 RECURSO = "contratos"
 pode_ler = exigir_acl(RECURSO, NivelAcl.LEITURA)
-pode_modificar = exigir_acl(RECURSO, NivelAcl.MODIFICACAO)
+_exige_modificacao = exigir_acl(RECURSO, NivelAcl.MODIFICACAO)
+
+
+def pode_modificar(
+    request: Request, usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)
+) -> Usuario:
+    """ACL ≥ MODIFICACAO; ou, nas rotas de um contrato (`{contrato_id}`), ser o criador ou integrante da equipe vigente dele.
+
+    Estar na equipe já dá os poderes sobre o contrato, sem exigir nível de ACL. O serviço de cada rota ainda confere o vínculo (`exigir_edicao`).
+    """
+    from app.services.contratos import servico_contratos  # import tardio: evita ciclo
+
+    try:
+        contrato_id = uuid.UUID(str(request.path_params.get("contrato_id")))
+    except ValueError:
+        contrato_id = None
+    if contrato_id is not None:
+        contrato = sessao.get(Contrato, contrato_id)
+        if contrato is not None and (contrato.criador_id == usuario.id or servico_contratos.integra_equipe(contrato, usuario)):
+            return usuario
+    return _exige_modificacao(usuario=usuario, sessao=sessao)
 controle_total = exigir_acl(RECURSO, NivelAcl.CONTROLE_TOTAL)
 
 # Documentação do 403: além da ACL, o serviço confere se o usuário tem vínculo com o contrato

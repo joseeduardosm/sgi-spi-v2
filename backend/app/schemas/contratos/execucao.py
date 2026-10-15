@@ -17,7 +17,7 @@ from app.schemas.contratos.empresas import Texto, TextoObrigatorio
 from app.schemas.contratos.tipos import ValorFator, ValorMonetario, ValorQuantidade, ValorUnitario
 
 # Etapas da competência (iguais às do modelo) e a situação resumida mostrada na aba Execução
-Etapa = Literal["medicao", "avaliacao", "nota_fiscal", "retencao", "cadin", "checklist", "consolidado", "ordem_bancaria", "concluida"]
+Etapa = Literal["medicao", "avaliacao", "nota_fiscal", "retencao", "checklist", "cadin", "consolidado", "ordem_bancaria", "concluida"]
 SituacaoCompetencia = Literal["pendente", "disponivel", "em_andamento", "concluida"]
 
 
@@ -155,11 +155,11 @@ class LeituraFormulario(BaseModel):
 
 class GravacaoModelo(BaseModel):
     """Corpo para criar ou alterar um modelo global. O conteúdo exigido depende do `tipo`."""
-    tipo: Literal["checklist", "formulario", "portaria"]
+    tipo: Literal["checklist", "formulario", "portaria", "despacho"]
     nome: TextoObrigatorio = Field(..., max_length=300)
     itens: list[GravacaoDocumentoChecklist] | None = Field(None, description="Obrigatório para `checklist`.")
     definicao: DefinicaoFormulario | None = Field(None, description="Obrigatório para `formulario`.")
-    html: str | None = Field(None, description="Obrigatório para `portaria`: máscara em HTML com os placeholders permitidos (`#nomegestor`...).")
+    html: str | None = Field(None, description="Obrigatório para `portaria` e `despacho`: máscara em HTML com os placeholders permitidos (`#nomegestor`...).")
     variante: Literal["com_anterior", "sem_anterior"] | None = Field(None, description="Obrigatório para `portaria`: máscara usada com ou sem portaria anterior do contrato.")
     ativo: bool = True
 
@@ -172,6 +172,8 @@ class GravacaoModelo(BaseModel):
             raise ValueError("o modelo de formulário precisa da definição")
         if self.tipo == "portaria" and (not (self.html or "").strip() or self.variante is None):
             raise ValueError("o modelo de portaria precisa do texto e da variante (com ou sem portaria anterior)")
+        if self.tipo == "despacho" and not (self.html or "").strip():
+            raise ValueError("o modelo de despacho precisa do texto")
         return self
 
 
@@ -564,7 +566,7 @@ class DetalheCompetencia(ResumoCompetencia):
     pode_conferir_retencao: bool = Field(False, description="O usuário pode fazer a etapa de retenção (Financeiro, equipe ou SuperRoot).")
     recusas: list[LeituraRecusa] = Field(default_factory=list, description="Recusas da nota fiscal, da primeira para a última (trilha do ciclo).")
     pode_recusar: bool = Field(False, description="O usuário pode recusar a nota agora (mesma permissão da retenção, com a retenção aberta).")
-    etapas_abertas: list[Etapa] = Field(default_factory=list, description="Etapas que aceitam gravação agora (retenção, CADIN e checklist em paralelo).")
+    etapas_abertas: list[Etapa] = Field(default_factory=list, description="Etapas que aceitam gravação agora (retenção e checklist em paralelo; depois, só o CADIN).")
     etapas_concluidas: list[Etapa] = Field(default_factory=list, description="Etapas já concluídas.")
     reaberturas_permitidas: bool = Field(False, description="O usuário pode reabrir etapas (SuperRoot ou gestor vigente do contrato).")
     notas_fiscais: list[LeituraNotaFiscal] = Field(default_factory=list, description="Notas fiscais juntadas na etapa 3 (uma ou mais), em ordem.")
@@ -638,3 +640,9 @@ class Reabertura(BaseModel):
     """Corpo do `POST /reabrir`: para qual etapa voltar e por quê."""
     etapa: Etapa = Field(..., description="Etapa que volta a ficar aberta (anteriores à atual).")
     justificativa: TextoObrigatorio = Field(..., max_length=2000)
+
+
+class DespachoCompetencia(BaseModel):
+    """Texto do despacho de pagamento da competência (para mostrar e copiar)."""
+    html: str | None = Field(None, description="HTML formatado do despacho (parágrafos, negrito, centralizado); nulo se não há máscara de despacho ativa.")
+    titulo: str = Field("", description="Título do despacho, com contrato e mês.")

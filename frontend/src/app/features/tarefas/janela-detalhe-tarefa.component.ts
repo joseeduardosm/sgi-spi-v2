@@ -54,6 +54,8 @@ interface CamposEdicao { titulo: string; descricao: string; prioridade: Priorida
  *   marcadores, equipe e dados da tarefa. Cada propriedade é salva sozinha, com `versao` (409 em conflito).
  * Emite `alterada` depois de cada gravação (o quadro recarrega) e `fechar` ao sair.
  */
+type ColunaSub = 'numero' | 'titulo' | 'status' | 'responsavel' | 'prazo';
+
 @Component({
   selector: 'app-janela-detalhe-tarefa',
   imports: [EsqueletoComponent, LinkificarPipe, DescricaoTarefaPipe, EditorRicoComponent, FormsModule, RouterLink, DatePipe, DecimalPipe, SeletorUsuariosComponent, SeletorMarcadoresComponent, JanelaTarefaComponent, AvataresComponent, AgendaPessoaComponent],
@@ -78,6 +80,12 @@ export class JanelaDetalheTarefaComponent {
   protected readonly CLIPE = CLIPE;
   protected readonly textoSla = textoSla;
   protected readonly rotulosStatus = ROTULOS_STATUS;
+  /** Colunas ordenáveis da tabela de subtarefas (ID, descrição, status, responsável e data). */
+  protected readonly colunasSub: { chave: ColunaSub; rotulo: string }[] = [
+    { chave: 'numero', rotulo: 'ID' }, { chave: 'titulo', rotulo: 'Descrição' }, { chave: 'status', rotulo: 'Status' },
+    { chave: 'responsavel', rotulo: 'Responsável' }, { chave: 'prazo', rotulo: 'Data' },
+  ];
+  protected readonly ordemSub = signal<{ coluna: ColunaSub; sentido: 'asc' | 'desc' }>({ coluna: 'numero', sentido: 'asc' });
   protected readonly rotulosPrioridade = ROTULOS_PRIORIDADE;
   protected readonly prioridades: PrioridadeTarefa[] = ['baixa', 'normal', 'alta', 'critica'];
   protected readonly prazoRelativo = prazoRelativo;
@@ -468,6 +476,24 @@ export class JanelaDetalheTarefaComponent {
     const t = this.tarefa();
     if (!t) return;
     this.dialogos.executar(this.api.memorial(t.numero, formato), 'Gerando o memorial…').subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o memorial') });
+  }
+
+  /** Clicar na coluna ordena; clicar de novo inverte o sentido. */
+  protected ordenarSub(coluna: ColunaSub): void {
+    this.ordemSub.update((o) => (o.coluna === coluna ? { coluna, sentido: o.sentido === 'asc' ? 'desc' : 'asc' } : { coluna, sentido: 'asc' }));
+  }
+
+  protected subtarefasOrdenadas(t: TarefaDetalhe): TarefaDetalhe['subtarefas'] {
+    const { coluna, sentido } = this.ordemSub();
+    const ordemStatus = ['a_fazer', 'em_andamento', 'em_validacao', 'concluida'];
+    const chave = (x: TarefaDetalhe['subtarefas'][number]): string | number =>
+      coluna === 'numero' ? x.numero : coluna === 'titulo' ? x.titulo.toLowerCase() : coluna === 'status' ? ordemStatus.indexOf(x.status)
+        : coluna === 'responsavel' ? (x.responsavel?.nome.toLowerCase() ?? '\uffff') : new Date(x.prazo).getTime();
+    const fator = sentido === 'asc' ? 1 : -1;
+    return [...t.subtarefas].sort((a, b) => {
+      const ka = chave(a), kb = chave(b);
+      return (ka < kb ? -1 : ka > kb ? 1 : a.numero - b.numero) * fator;
+    });
   }
 
   protected concluidasSub(t: TarefaDetalhe): number {

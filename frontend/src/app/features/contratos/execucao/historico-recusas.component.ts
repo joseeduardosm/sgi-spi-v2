@@ -23,11 +23,11 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
       <section class="historico-recusas" aria-label="Recusas da nota fiscal">
         <p class="secao-formulario">Recusas da nota fiscal ({{ d.recusas.length }})</p>
         @for (r of d.recusas; track r.id) {
-          <article class="recusa-nf">
-            <header>
+          <details class="recusa-nf" [open]="!recolhido()">
+            <summary>
               <strong>Recusa nº {{ r.ordem }}</strong>
               <small>por {{ r.recusada_por_nome }} em {{ r.recusada_em | date: 'dd/MM/yyyy HH:mm' }}</small>
-            </header>
+            </summary>
             <p class="justificativa-recusa" [innerHTML]="r.justificativa | linkificar"></p>
             <ul class="notas-recusadas">
               @for (n of r.notas; track $index) {
@@ -46,11 +46,14 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
             @if (r.email.enviado_em === null) {
               <p class="dica-formulario">Enviando o e-mail à equipe e aos prepostos…</p>
             } @else if (r.email.ok) {
-              <p class="dica-formulario">E-mail com o PDF enviado em {{ r.email.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ r.email.destinatarios.join(', ') }}.</p>
+              <details class="email-recusa">
+                <summary>E-mail com o PDF enviado em {{ r.email.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ r.email.destinatarios.length }} destinatário(s)</summary>
+                <p>{{ r.email.destinatarios.join(', ') }}</p>
+              </details>
             } @else {
               <p class="aviso-bloco erro">O e-mail não foi enviado: {{ r.email.erro }}</p>
             }
-          </article>
+          </details>
         }
       </section>
     }
@@ -58,6 +61,8 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 })
 export class HistoricoRecusasComponent {
   readonly detalhe = input.required<DetalheCompetencia>();
+  /** Mostra cada recusa recolhida (só o resumo; abre com um clique). */
+  readonly recolhido = input(false);
   readonly atualizado = output<DetalheCompetencia>();
 
   private readonly api = inject(ExecucaoApiService);

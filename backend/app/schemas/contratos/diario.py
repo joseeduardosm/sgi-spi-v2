@@ -10,6 +10,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.contratos.tipos import ValorQuantidade
+from app.services.tarefas.descricao import sanitizar_descricao  # HTML do editor rico, o mesmo das tarefas
 
 
 class GravacaoGlosa(BaseModel):
@@ -21,7 +22,7 @@ class GravacaoGlosa(BaseModel):
 class GravacaoOcorrencia(BaseModel):
     """Nova ocorrência. Com `possui_glosa`, informe ao menos um item com quantidade."""
     data_ocorrencia: date = Field(..., description="Dia em que a ocorrência aconteceu (não pode ser futuro).")
-    descricao: str = Field(..., min_length=1, max_length=4000, description="Relato da ocorrência.")
+    descricao: str = Field(..., min_length=1, max_length=20000, description="Relato da ocorrência: HTML do editor rico (sanitizado pela API) ou texto simples.")
     possui_glosa: bool = Field(False, description="A ocorrência implicará glosa?")
     glosas: list[GravacaoGlosa] = Field(default_factory=list, description="Itens e quantidades a glosar (só com `possui_glosa`).")
     impacta_avaliacao: bool = Field(False, description="A ocorrência impacta a avaliação da qualidade?")
@@ -34,7 +35,7 @@ class GravacaoOcorrencia(BaseModel):
     @classmethod
     def _aparar(cls, valor: str) -> str:
         """Tira espaços das pontas e recusa relato em branco."""
-        valor = valor.strip()
+        valor = sanitizar_descricao(valor.strip()).strip()
         if not valor:
             raise ValueError("descreva a ocorrência")
         return valor

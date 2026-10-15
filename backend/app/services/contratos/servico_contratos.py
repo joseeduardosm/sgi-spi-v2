@@ -38,6 +38,7 @@ from app.models.contratos import (
 from app.models.usuario import Usuario
 from app.schemas.contratos.contratos import (
     AlteracaoCampo,
+    AutoridadeDespacho,
     DetalheContrato,
     GravacaoContrato,
     GravacaoItem,
@@ -65,7 +66,7 @@ FUSO = ZoneInfo("America/Sao_Paulo")
 RECURSO = "contratos"
 # Campos do contrato acompanhados pelo histórico "quem alterou, quando, de → para"
 CAMPOS_AUDITADOS = (
-    "numero", "empresa_id", "apelido", "objeto", "data_inicio", "data_fim", "vigencia_inicial_meses",
+    "numero", "empresa_id", "apelido", "autoridade_despacho_id", "objeto", "data_inicio", "data_fim", "vigencia_inicial_meses",
     "vigencia_maxima_meses", "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "permite_medicao_adicional", "alertas_a_partir_de", "sei_gestao_numero", "sei_gestao_link",
     "sei_execucao_numero", "sei_execucao_link", "situacao_forcada",
 )
@@ -144,7 +145,7 @@ def papel_para_ciencia(sessao: Session, contrato: Contrato, usuario: Usuario) ->
     designacao = next((d for d in designacoes_vigentes(contrato) if d.usuario_id == usuario.id), None)
     if designacao:
         return designacao.papel
-    return PAPEL_ADMINISTRADOR if eh_administrador(sessao, usuario) else None
+    return PAPEL_ADMINISTRADOR if pode_editar(sessao, contrato, usuario) else None
 
 
 def pode_dar_ciencia(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
@@ -158,20 +159,13 @@ def eh_administrador(sessao: Session, usuario: Usuario) -> bool:
 
 
 def pode_excluir(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
-    """Administrador (qualquer contrato) ou quem tem ACL ≥ MODIFICACAO e criou o contrato."""
-    if eh_administrador(sessao, usuario):
-        return True
-    nivel = servico_acl.resolver_acesso(sessao, usuario, RECURSO)
-    return NivelAcl.posicao(nivel) >= NivelAcl.posicao(NivelAcl.MODIFICACAO) and contrato.criador_id == usuario.id
+    """Administrador (qualquer contrato) ou quem tem ACL ≥ MODIFICACAO e criou o contrato ou integra a equipe vigente dele."""
+    return eh_administrador(sessao, usuario) or pode_editar(sessao, contrato, usuario)
 
 
 def pode_editar(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
-    """SuperRoot, controle total em Contratos (qualquer contrato), criador ou integrante vigente da equipe — sempre com ACL ≥ MODIFICACAO."""
-    # Primeiro a ACL: sem pelo menos MODIFICACAO, ninguém edita
-    nivel = servico_acl.resolver_acesso(sessao, usuario, RECURSO)
-    if NivelAcl.posicao(nivel) < NivelAcl.posicao(NivelAcl.MODIFICACAO):
-        return False
-    # Quem pode excluir (controle total) também edita qualquer contrato, mesmo sem ser da equipe nem o criador
+    """SuperRoot, controle total em Contratos (qualquer contrato), criador ou integrante vigente da equipe: todos com os mesmos poderes sobre o contrato."""
+    # Estar na equipe (ou ser o criador) já basta, sem exigir nível de ACL além do acesso ao módulo; o nível da ACL vale para o que não é de um contrato
     return eh_administrador(sessao, usuario) or contrato.criador_id == usuario.id or integra_equipe(contrato, usuario)
 
 
@@ -189,7 +183,7 @@ def permissoes(sessao: Session, contrato: Contrato, usuario: Usuario) -> Permiss
     return PermissoesContrato(
         pode_editar=pode_editar(sessao, contrato, usuario),
         pode_excluir=pode_excluir(sessao, contrato, usuario),
-        pode_administrar=eh_administrador(sessao, usuario),
+        pode_administrar=pode_editar(sessao, contrato, usuario),
         pode_gerir_autoridades=eh_administrador(sessao, usuario) or any(d.usuario_id == usuario.id and d.papel in ("gestor", "gestor_suplente") for d in designacoes_vigentes(contrato)),
     )
 
@@ -448,6 +442,7 @@ def detalhar_contrato(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario)
         mes_reajuste=contrato.mes_reajuste,
         liberar_todas_competencias=contrato.liberar_todas_competencias,
         permite_medicao_adicional=contrato.permite_medicao_adicional,
+        autoridade_despacho=AutoridadeDespacho(id=a.id, nome=a.nome_completo or a.login, cargo=a.cargo or "", departamento=a.departamento or "") if (a := contrato.autoridade_despacho) else None,
         alertas_a_partir_de=contrato.alertas_a_partir_de,
         sei_gestao_numero=contrato.sei_gestao_numero,
         sei_gestao_link=contrato.sei_gestao_link,
@@ -546,6 +541,11 @@ def _validar_cabecalho(sessao: Session, dados: GravacaoContrato, contrato: Contr
     # Contrato existente pode manter uma empresa que foi inativada depois
     if not empresa.ativa and (contrato is None or contrato.empresa_id != empresa.id):
         raise ErroRegraContrato("Selecione uma empresa ativa.")
+    if dados.autoridade_despacho_id is not None:
+        autoridade = sessao.get(Usuario, dados.autoridade_despacho_id)
+        mantida = contrato is not None and contrato.autoridade_despacho_id == dados.autoridade_despacho_id
+        if autoridade is None or (not autoridade.ativo and not mantida):
+            raise ErroRegraContrato("Selecione um usuário ativo como autoridade do despacho.")
     return numero
 
 
@@ -564,7 +564,7 @@ def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, numero: str)
     contrato.numero = numero
     contrato.sequencial, contrato.ano = partes_numero(numero)
     for campo in (
-        "empresa_id", "apelido", "objeto", "data_inicio", "vigencia_inicial_meses", "vigencia_maxima_meses",
+        "empresa_id", "apelido", "autoridade_despacho_id", "objeto", "data_inicio", "vigencia_inicial_meses", "vigencia_maxima_meses",
         "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "permite_medicao_adicional", "alertas_a_partir_de", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero",
         "sei_execucao_link", "situacao_forcada",
     ):
@@ -712,7 +712,7 @@ def alterar_contrato(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCon
     numero = _validar_cabecalho(sessao, dados, contrato)
     antes = _dados_auditados(contrato)
     _aplicar_cabecalho(contrato, dados, numero)
-    mudancas_itens = _aplicar_itens(contrato, dados.itens, autor, eh_administrador(sessao, autor))
+    mudancas_itens = _aplicar_itens(contrato, dados.itens, autor, pode_editar(sessao, contrato, autor))
     mudancas_equipe = _aplicar_equipe(sessao, contrato, dados)
     _avisar_designados(sessao, contrato, dados, mudancas_equipe, autor)
     # Cada gravação incrementa a versão
@@ -744,10 +744,10 @@ def alterar_contrato(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCon
 
 
 def excluir_contrato(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> None:
-    """Exclui o contrato (administrador, ou quem o criou com ACL ≥ MODIFICACAO); os anexos são marcados como excluídos (os arquivos ficam em disco)."""
+    """Exclui o contrato (administrador, ou criador ou integrante da equipe com ACL ≥ MODIFICACAO); os anexos são marcados como excluídos (os arquivos ficam em disco)."""
     contrato = obter_contrato(sessao, contrato_id)
     if not pode_excluir(sessao, contrato, autor):
-        raise SemPermissaoContrato("Somente quem tem controle total em Contratos, ou quem criou o contrato, pode excluí-lo.")
+        raise SemPermissaoContrato("Somente quem tem controle total em Contratos, quem criou o contrato ou quem integra a equipe dele pode excluí-lo.")
     # Todos os arquivos do contrato (documentos, execução, prorrogações, reajustes e alterações)
     for anexo in sessao.scalars(select(Anexo).where(Anexo.contrato_id == contrato.id, Anexo.excluido_em.is_(None))):
         servico_anexos.descartar(anexo)

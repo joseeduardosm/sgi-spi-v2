@@ -1,9 +1,21 @@
 @let d = detalhe();
 <section class="cartao-dados" aria-labelledby="titulo-medicao">
   <header>
-    <div><h2 id="titulo-medicao">1. Medição do serviço</h2><small>{{ detalhe().tipo === 'regular' ? 'Prevista: pró-rata 30/360 nos itens com pró-rata; sob demanda pela previsão.' : 'Quantidades já medidas desde o mês de referência do reajuste; valor unitário = preço reajustado − preço pago.' }}</small></div>
+    <div><h2 id="titulo-medicao">Medição do serviço</h2><small>{{ detalhe().tipo === 'regular' ? 'Prevista: pró-rata 30/360 nos itens com pró-rata; sob demanda pela previsão.' : 'Quantidades já medidas desde o mês de referência do reajuste; valor unitário = preço reajustado − preço pago.' }}</small></div>
+    @if (d.medicao_concluida_em) { <span class="selo-situacao">Concluída em {{ d.medicao_concluida_em | date: 'dd/MM/yyyy HH:mm' }}</span> }
+    @else if (alterado()) { <span class="selo-situacao alerta">Alterações não salvas</span> }
     @if (editavel() && detalhe().tipo === 'regular') { <button type="button" class="acao-secundaria" (click)="usarPrevista()">Usar o saldo líquido</button> }
   </header>
+  <!-- Resumo: o que importa de relance, antes e depois de salvar -->
+  <div class="resumo-medicao" aria-label="Resumo da medição">
+    <div><span>Total medido</span><strong>{{ total() | moeda }}</strong>@if (+d.desconto_reajuste > 0) { <small>após o desconto: {{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</small> }</div>
+    <div [class.alerta]="notas().length > 0 && saldoNotas() < total()" [class.ok]="notas().length > 0 && saldoNotas() >= total()">
+      <span>Saldo livre das NEs</span><strong>{{ saldoNotas() | moeda }}</strong>
+      <small>{{ !notas().length ? 'nenhuma NE selecionada' : saldoNotas() >= total() ? 'cobre o total medido' : 'não cobre o total medido' }}</small></div>
+    <div [class.ok]="d.ciencias.length >= d.ciencias_minimas" [class.alerta]="d.ciencias.length < d.ciencias_minimas">
+      <span>Ciências</span><strong>{{ d.ciencias.length }} de {{ d.ciencias_minimas }}</strong>
+      <small>{{ d.ciencias.length >= d.ciencias_minimas ? 'já pode concluir' : 'falta ao menos uma' }}</small></div>
+  </div>
   <div class="tabela-gestao-envoltorio">
     <table class="tabela-gestao">
       <thead>
@@ -22,7 +34,7 @@
             <td><strong>{{ i.descricao }}</strong>@if (i.periodo_rotulo) { <small class="trecho-mes">{{ i.periodo_rotulo }}</small> }<small>{{ i.tipo === 'continuo' ? 'Contínuo' : 'Sob demanda' }}{{ detalhe().tipo === 'regular' && i.tipo === 'continuo' && i.calcula_pro_rata && i.fator_meses !== '1.00000000' ? ' · fração ' + (i.fator_meses | quantidade) : '' }}</small></td>
             <td class="num">{{ i.valor_unitario | moedaUnitaria }}</td>
             <td class="num">{{ i.saldo | quantidade }}</td>
-            <td class="num" [class.texto-erro]="i.glosas !== '0.0000'">{{ i.glosas !== '0.0000' ? '− ' : '' }}{{ i.glosas | quantidade }}</td>
+            <td class="num" [class.texto-erro]="i.glosas !== '0.0000'">@if (i.glosas !== '0.0000') { − {{ i.glosas | quantidade }} } @else { <span class="zero-suave">—</span> }</td>
             <td class="num"><strong>{{ i.saldo_liquido | quantidade }}</strong></td>
             <td class="num" style="width: 140px">
               @if (editavel() && medivel()) {
@@ -46,11 +58,11 @@
       </tbody>
       <tfoot>
         @if (temDespesasVariaveis()) {
-          <tr><td colspan="9">Subtotal - Medição</td><td class="num">{{ subtotalMedicao() | moeda }}</td></tr>
-          <tr><td colspan="9">Subtotal - Despesas Variáveis</td><td class="num">{{ subtotalDespesas() | moeda }}</td></tr>
-          <tr><td colspan="9"><strong>Total</strong> <small>(Subtotal - Medição + Subtotal - Despesas Variáveis)</small></td><td class="num"><strong>{{ total() | moeda }}</strong></td></tr>
+          <tr><td colspan="9">Subtotal - Medição</td><td class="num"><span class="valor-com-copia"><app-botao-copiar class="copiar-extenso" [valor]="extenso(subtotalMedicao())" titulo="Copiar o valor por extenso" tamanho="pequeno" />{{ subtotalMedicao() | moeda }}</span></td></tr>
+          <tr><td colspan="9">Subtotal - Despesas Variáveis</td><td class="num"><span class="valor-com-copia"><app-botao-copiar class="copiar-extenso" [valor]="extenso(subtotalDespesas())" titulo="Copiar o valor por extenso" tamanho="pequeno" />{{ subtotalDespesas() | moeda }}</span></td></tr>
+          <tr><td colspan="9"><strong>Total</strong> <small>(Subtotal - Medição + Subtotal - Despesas Variáveis)</small></td><td class="num"><span class="valor-com-copia"><app-botao-copiar class="copiar-extenso" [valor]="extenso(total())" titulo="Copiar o valor por extenso" tamanho="pequeno" /><strong>{{ total() | moeda }}</strong></span></td></tr>
         } @else {
-          <tr><td colspan="9">Total medido</td><td class="num">{{ total() | moeda }}</td></tr>
+          <tr><td colspan="9">Total medido</td><td class="num"><span class="valor-com-copia"><app-botao-copiar class="copiar-extenso" [valor]="extenso(total())" titulo="Copiar o valor por extenso" tamanho="pequeno" />{{ total() | moeda }}</span></td></tr>
         }
         @if (+d.desconto_reajuste > 0) {
           <!-- Crédito de um reajuste com desconto retroativo: abatido do valor autorizado desta competência -->
@@ -60,7 +72,7 @@
             </td>
             <td class="num">− {{ d.desconto_reajuste | moeda }}</td>
           </tr>
-          <tr><td colspan="9">Valor após o desconto</td><td class="num"><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></td></tr>
+          <tr><td colspan="9">Valor após o desconto</td><td class="num"><span class="valor-com-copia"><app-botao-copiar class="copiar-extenso" [valor]="extenso(total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0)" titulo="Copiar o valor por extenso" tamanho="pequeno" /><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></span></td></tr>
         }
       </tfoot>
     </table>
@@ -82,18 +94,20 @@
   <div class="corpo">
     <p class="secao-formulario" style="margin-top: 0">Notas de Empenho (ordem de consumo)</p>
     @if (editavel()) {
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
-        <select class="campo-tabela" style="height: 36px; max-width: 360px; padding: 0 8px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px" aria-label="Nota de Empenho" [(ngModel)]="notaParaAdicionar">
+      <div class="adicionar-ne-medicao">
+        <select aria-label="Nota de Empenho" [(ngModel)]="notaParaAdicionar">
           <option value="">Selecione uma NE com saldo</option>
           @for (n of disponiveis(); track n.id) { <option [value]="n.id">NE {{ n.numero }} — saldo livre {{ n.saldo_livre | moeda }}</option> }
         </select>
-        <button type="button" class="acao-secundaria acao-pequena" style="height: 36px !important" [disabled]="!notaParaAdicionar" (click)="adicionarNota()">Adicionar NE</button>
+        <button type="button" class="acao-secundaria" [disabled]="!notaParaAdicionar" (click)="adicionarNota()">Adicionar NE</button>
       </div>
     }
-    <ol class="lista-ciencias" style="padding-left: 0">
+    <ol class="lista-ne-medicao">
       @for (n of notas(); track n.id; let i = $index) {
         <li>
-          <span>{{ i + 1 }}ª · NE {{ n.numero }} <small>saldo livre {{ n.saldo_livre | moeda }}@if (n.saldo_livre !== n.saldo) { (saldo {{ n.saldo | moeda }}) }</small></span>
+          <span class="ordem-ne" aria-hidden="true">{{ i + 1 }}</span>
+          <span class="dados-ne"><b class="texto-codigo">NE {{ n.numero }}</b>
+            <small>saldo livre {{ n.saldo_livre | moeda }}@if (n.saldo_livre !== n.saldo) { (saldo {{ n.saldo | moeda }}) }</small></span>
           @if (editavel()) {
             <span class="acoes-linha">
               <button type="button" aria-label="Subir" [disabled]="i === 0" (click)="moverNota(i, -1)">↑</button>
@@ -102,34 +116,36 @@
             </span>
           }
         </li>
-      } @empty { <li><small>Nenhuma NE selecionada.</small></li> }
+      } @empty { <li class="vazia"><small>Nenhuma NE selecionada.</small></li> }
     </ol>
     @if (notas().length && saldoNotas() < total()) {
       <p class="aviso-bloco erro">O saldo livre somado das NEs ({{ saldoNotas() | moeda }}) não cobre o total medido ({{ total() | moeda }}). Saldo livre = saldo − o comprometido por outras competências medidas e ainda não pagas.</p>
     }
 
-    @if (editavel()) {
-      <div class="acoes-cartao">
-        <button type="button" class="acao-primaria" [disabled]="!notas().length" (click)="salvar()">Salvar medição</button>
-      </div>
-      <!-- A ciência só surge depois de salvar (sem alteração pendente) e fica logo abaixo do Salvar -->
-      @if (d.integra_equipe && !jaRegistrei() && !alterado() && (d.medicao_concluida_em || d.itens.length)) {
-        <div class="acoes-cartao"><button type="button" class="acao-secundaria" (click)="ciencia()">Registrar minha ciência</button></div>
-      }
-    }
-
     <p class="secao-formulario">Ciências</p>
-    <span class="contador-ciencias" [class.completo]="d.ciencias.length >= d.ciencias_minimas">{{ d.ciencias.length }} ciência(s) registrada(s) · {{ d.ciencias.length >= d.ciencias_minimas ? 'já pode concluir' : 'falta ao menos uma' }}</span>
-    <ul class="lista-ciencias" style="margin-top: 8px">
+    <ul class="lista-ciencias">
       @for (c of d.ciencias; track c.usuario_id) {
         <li><span>{{ c.nome }} · {{ papeis[c.papel] }}</span><small>ciência em {{ c.registrada_em | date: 'dd/MM/yyyy HH:mm:ss' }}</small></li>
-      }
+      } @empty { <li><small>Nenhuma ciência registrada ainda.</small></li> }
     </ul>
+
     @if (editavel()) {
-      @if (alterado()) { <p class="dica-formulario" style="margin: 8px 0">Salve a medição antes de registrar ciência ou concluir.</p> }
-      <div class="acoes-cartao">
-        <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Memória e diário de bordo à equipe e aos prepostos escolhidos, pedindo a NF em 48 h" />
-        <button type="button" class="acao-primaria" [disabled]="alterado() || d.ciencias.length < d.ciencias_minimas" (click)="concluir()">Concluir medição e gerar relatório</button>
+      <p class="secao-formulario">Ao concluir</p>
+      <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Memória e diário de bordo à equipe e aos prepostos escolhidos, pedindo a NF em 48 h" />
+
+      <!-- Barra de ações fixa: o que falta e os três passos, na ordem (salvar, ciência, concluir) -->
+      <div class="barra-envio-nf barra-medicao">
+        <div class="texto-envio">
+          @if (pendencias().length) { <span class="pendencias-nf">{{ pendencias().join(' · ') }}</span> }
+          @else { <span class="dica-formulario">Tudo pronto para concluir e gerar a memória de cálculo.</span> }
+        </div>
+        <div class="botoes-barra">
+          <button type="button" class="acao-secundaria" [class.acao-primaria]="alterado()" [disabled]="!notas().length || acertosInvalidos()" (click)="salvar()">Salvar medição</button>
+          @if (d.integra_equipe && !jaRegistrei() && !alterado() && (d.medicao_concluida_em || d.itens.length)) {
+            <button type="button" class="acao-secundaria" (click)="ciencia()">Registrar minha ciência</button>
+          }
+          <button type="button" class="acao-primaria" [disabled]="alterado() || d.ciencias.length < d.ciencias_minimas" (click)="concluir()">Concluir medição e gerar relatório</button>
+        </div>
       </div>
     }
 
@@ -138,7 +154,10 @@
       @if (d.email_medicao.enviado_em === null) {
         <p class="dica-formulario">Enviando a memória e o diário de bordo, com o pedido de nota fiscal em até 48 horas…</p>
       } @else if (d.email_medicao.ok) {
-        <p class="aviso-bloco informativo">Enviado em {{ d.email_medicao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_medicao.destinatarios.join(', ') }}, com a memória de cálculo e o diário de bordo, pedindo a nota fiscal em até 48 horas.</p>
+        <details class="email-recusa">
+          <summary>Enviado em {{ d.email_medicao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_medicao.destinatarios.length }} destinatário(s), com a memória de cálculo e o diário de bordo, pedindo a nota fiscal em até 48 horas</summary>
+          <p>{{ d.email_medicao.destinatarios.join(', ') }}</p>
+        </details>
       } @else {
         <p class="aviso-bloco erro">O e-mail não foi enviado: {{ d.email_medicao.erro }}</p>
       }
@@ -149,9 +168,10 @@
 
     @if (d.memorias.length) {
       <p class="secao-formulario">Memórias emitidas</p>
-      <ul class="lista-ciencias">
+      <ul class="lista-memorias">
         @for (m of d.memorias; track m.versao) {
-          <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(m.arquivo.anexo_id)">Baixar PDF</button>@if (m.arquivo_despesas) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(m.arquivo_despesas.anexo_id)">Baixar PDF das despesas variáveis</button> }</li>
+          <li><span><b>v{{ m.versao }}</b> · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span>
+            <span class="acoes-linha"><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(m.arquivo.anexo_id)">Baixar PDF</button>@if (m.arquivo_despesas) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(m.arquivo_despesas.anexo_id)">Baixar PDF das despesas variáveis</button> }</span></li>
         }
       </ul>
     }

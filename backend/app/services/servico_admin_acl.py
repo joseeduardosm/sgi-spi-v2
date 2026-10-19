@@ -10,10 +10,11 @@ import re
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.acl import RecursoAcl, RegraAcl
+from app.models.acl import PerfilAcl, PerfilDireito, RecursoAcl, RegraAcl
 from app.models.setor import Setor
 from app.models.usuario import Usuario
 from app.schemas.acl import GravacaoRecurso, GravacaoRegra, LeituraRecurso, LeituraRegra, OpcaoSetor
+from app.services.acl_acoes import acoes_do_recurso
 from app.services.acl_niveis import textos_do_recurso
 from app.services.servico_admin_usuarios import para_opcao
 from app.services.servico_auditoria import auditar
@@ -42,6 +43,11 @@ def listar_recursos(sessao: Session) -> list[LeituraRecurso]:
     """Lista os recursos com a quantidade de regras de cada um."""
     # Conta as regras de todos os recursos em uma só consulta: {recurso_id: total}
     totais = dict(sessao.execute(select(RegraAcl.recurso_id, func.count()).group_by(RegraAcl.recurso_id)).all())
+    # Perfis ativos com direito em cada recurso (também fecham o recurso a quem não está contemplado)
+    totais_perfis = dict(sessao.execute(
+        select(PerfilDireito.recurso_id, func.count()).join(PerfilAcl, PerfilAcl.id == PerfilDireito.perfil_id)
+        .where(PerfilAcl.ativo.is_(True)).group_by(PerfilDireito.recurso_id)
+    ).all())
     return [
         LeituraRecurso(
             id=r.id,
@@ -51,7 +57,9 @@ def listar_recursos(sessao: Session) -> list[LeituraRecurso]:
             url_base=r.url_base,
             ativo=r.ativo,
             total_regras=totais.get(r.id, 0),
+            total_perfis=totais_perfis.get(r.id, 0),
             niveis=textos_do_recurso(r.slug),
+            acoes=acoes_do_recurso(r.slug),
             criado_em=r.criado_em,
             atualizado_em=r.atualizado_em,
         )

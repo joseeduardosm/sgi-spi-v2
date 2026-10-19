@@ -13,16 +13,18 @@ precisam funcionar mesmo quando o perfil está pendente: é por elas que o usuá
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import obter_usuario_autenticado
+from datetime import UTC, datetime
+
+from app.api.dependencias import obter_declaracoes, obter_usuario_autenticado
 from app.api.respostas import INVALIDO, VALIDACAO, erro_regra
 from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
 from app.models.usuario import Usuario
-from app.schemas.autenticacao import PreferenciaTema, RequisicaoLogin, RespostaToken, UsuarioSessao
+from app.schemas.autenticacao import PedidoPerfilAtivo, PedidoPersonificar, PreferenciaTema, RequisicaoLogin, RespostaToken, UsuarioSessao
 from app.schemas.comum import RespostaErro
 from app.schemas.usuarios import OpcaoUsuario, PerfilLeitura, RevisaoPerfil
 from app.schemas.setores import OpcaoDepartamento
-from app.services import servico_admin_usuarios, servico_setores
+from app.services import servico_acl, servico_admin_usuarios, servico_auditoria, servico_setores
 from app.services.servico_admin_usuarios import ErroRegraUsuario
 from app.services.servico_autenticacao import ServicoAutenticacao, para_usuario_sessao
 
@@ -64,6 +66,84 @@ def entrar(dados: RequisicaoLogin, sessao: Session = Depends(obter_sessao)) -> R
 def obter_sessao_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) -> UsuarioSessao:
     """Dados do usuário logado; o frontend chama ao abrir para confirmar que o token ainda vale."""
     return para_usuario_sessao(usuario)
+
+
+def _inicio_da_sessao(declaracoes: dict) -> datetime:
+    """Quando a sessão começou (o novo token preserva, para o limite de duração da sessão continuar valendo)."""
+    return datetime.fromtimestamp(declaracoes.get("ini", declaracoes["iat"]), UTC)
+
+
+@roteador.post(
+    "/perfil-ativo",
+    response_model=RespostaToken,
+    summary="Trocar o perfil ativo",
+    description=(
+        "Troca o perfil de acesso que vale nesta sessão e devolve um **token novo** (claim `pa`); o frontend guarda o token e recarrega o aplicativo. "
+        "O perfil precisa ser **ativo** e do próprio usuário (`403 acesso_negado` caso contrário). Na personificação, vale para o usuário personificado."
+    ),
+    responses=NAO_AUTENTICADO,
+)
+def trocar_perfil_ativo(
+    dados: PedidoPerfilAtivo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado),
+    declaracoes: dict = Depends(obter_declaracoes),
+) -> RespostaToken:
+    """Valida que o perfil é do usuário e emite o token com o perfil escolhido."""
+    perfil = next((p for p in servico_acl.perfis_do_usuario(sessao, usuario.id) if p.id == dados.perfil_id), None)
+    if perfil is None:
+        raise ErroApi(status.HTTP_403_FORBIDDEN, "Este perfil não é seu (ou está inativo).", "acesso_negado")
+    servico_auditoria.auditar(sessao, usuario.login, "autenticacao.perfil_ativo", f"Perfil {perfil.nome}", autor_id=usuario.id, alvo_tipo="perfil", alvo_id=str(perfil.id))
+    sessao.commit()
+    return ServicoAutenticacao(sessao).emitir_token(
+        usuario, perfil_ativo_id=perfil.id, personificado_por_id=declaracoes.get("imp"), inicio_sessao=_inicio_da_sessao(declaracoes))
+
+
+@roteador.post(
+    "/personificar",
+    response_model=RespostaToken,
+    summary="Personificar um usuário (SuperRoot)",
+    description=(
+        "O SuperRoot entra como outro usuário **ativo** para testar o acesso e as permissões: o token novo tem `sub` = o usuário personificado e a "
+        "declaração `imp` = o SuperRoot real. O perfil ativo passa a ser o padrão do personificado. Tudo o que for gravado fica auditado com "
+        "o autor real (`personificado_por_id`; o autor aparece como \"login (por root)\"). Já personificando, trocar de alvo é permitido (o SuperRoot "
+        "original é mantido). `403 acesso_negado` para quem não é SuperRoot; `422` se o alvo for o próprio SuperRoot ou estiver inativo."
+    ),
+    responses=NAO_AUTENTICADO,
+)
+def personificar(
+    dados: PedidoPersonificar, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado),
+    declaracoes: dict = Depends(obter_declaracoes),
+) -> RespostaToken:
+    """Só o SuperRoot **real** (o do claim `imp` quando já está personificando) personifica."""
+    real = getattr(usuario, "personificado_por", None) or usuario
+    if not real.superusuario:
+        raise ErroApi(status.HTTP_403_FORBIDDEN, "Somente o SuperRoot pode personificar outro usuário.", "acesso_negado")
+    alvo = sessao.get(Usuario, dados.usuario_id)
+    if alvo is None or not alvo.ativo:
+        raise ErroApi(status.HTTP_422_UNPROCESSABLE_ENTITY, "Escolha um usuário ativo.", "validacao")
+    if alvo.id == real.id:
+        raise ErroApi(status.HTTP_422_UNPROCESSABLE_ENTITY, "Você não pode personificar a si mesmo.", "validacao")
+    servico_auditoria.auditar(sessao, real.login, "autenticacao.personificar", f"Personificou {alvo.login}", autor_id=real.id, alvo_tipo="usuario", alvo_id=str(alvo.id))
+    sessao.commit()
+    return ServicoAutenticacao(sessao).emitir_token(alvo, personificado_por_id=real.id, inicio_sessao=_inicio_da_sessao(declaracoes))
+
+
+@roteador.post(
+    "/personificar/parar",
+    response_model=RespostaToken,
+    summary="Parar de personificar",
+    description="Encerra a personificação e devolve o token do SuperRoot real (decidido pela declaração `imp`). `422` se a sessão não está personificando.",
+    responses=NAO_AUTENTICADO,
+)
+def parar_de_personificar(
+    sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado), declaracoes: dict = Depends(obter_declaracoes),
+) -> RespostaToken:
+    """Volta ao SuperRoot original (a identidade real vem do token, não do usuário personificado)."""
+    real = getattr(usuario, "personificado_por", None)
+    if real is None:
+        raise ErroApi(status.HTTP_422_UNPROCESSABLE_ENTITY, "Esta sessão não está personificando ninguém.", "validacao")
+    servico_auditoria.auditar(sessao, real.login, "autenticacao.personificar.parar", f"Parou de personificar {usuario.login}", autor_id=real.id, alvo_tipo="usuario", alvo_id=str(usuario.id))
+    sessao.commit()
+    return ServicoAutenticacao(sessao).emitir_token(real, inicio_sessao=_inicio_da_sessao(declaracoes))
 
 
 @roteador.put(

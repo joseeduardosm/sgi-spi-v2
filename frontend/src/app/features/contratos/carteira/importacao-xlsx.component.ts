@@ -14,7 +14,7 @@ import { MESES, PERIODICIDADES, ROTULOS_TIPO_ITEM, formatarCnpj, formatarCpf } f
 const TAMANHO_MAXIMO_MB = 5;
 
 /**
- * Botão "Importar XLSX" da carteira (liberado pela ACL `importacao-contratos`). Fluxo da janela:
+ * Botão "Importar XLSX" da carteira (parte de Editar contratos: ACL `contratos` ≥ MODIFICACAO). Fluxo da janela:
  * baixar o modelo → escolher a planilha → ver a prévia (erros e avisos) → confirmar a importação.
  * A equipe não vem da planilha: depois de importar, o usuário a cadastra editando o contrato.
  */

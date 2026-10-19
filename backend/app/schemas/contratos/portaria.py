@@ -33,8 +33,19 @@ class UsuarioAutoridade(BaseModel):
     departamento: str = ""
 
 
-class SolicitacaoPortaria(BaseModel):
-    """Corpo do `POST /portarias`: a autoridade escolhida preenche cargo, setor e nome."""
+class NomeacaoEntrada(BaseModel):
+    """Uma nomeação enviada: função e usuário."""
+    papel: str = Field(..., description="`gestor`, `gestor_suplente`, `fiscal_tecnico`, `fiscal_tecnico_suplente`, `fiscal_administrativo` ou `fiscal_administrativo_suplente`.")
+    usuario_id: int
+
+
+class GravacaoNomeacoes(BaseModel):
+    """Corpo do `POST /portarias` e do `PUT /portarias/{id}/nomeacoes`: de 1 a 6 funções, com o gestor obrigatório."""
+    nomeacoes: list[NomeacaoEntrada] = Field(..., min_length=1, max_length=6)
+
+
+class EscolhaAutoridade(BaseModel):
+    """Corpo do `POST /portarias/{id}/autoridade`: a autoridade escolhida preenche cargo, setor e nome."""
     autoridade_id: uuid.UUID
 
 
@@ -43,11 +54,23 @@ class MotivoPortaria(BaseModel):
     motivo: str = Field(..., min_length=1, max_length=1000)
 
 
-class LeituraPessoaPortaria(BaseModel):
+class LeituraNomeacao(BaseModel):
     papel: str
     papel_rotulo: str
+    usuario_id: int | None
     nome: str
-    rs_informado: bool = Field(..., description="O RS está cadastrado no RH (o número em si nunca é exposto).")
+    dados_pendentes: list[str] = Field(..., description="O que falta no cadastro para a nomeação seguir (`RS/PV`, `RG/CIN`, `cargo`): o RH atualiza. Vazio quando completo.")
+    ciente_em: datetime | None = Field(None, description="Quando o nomeado deu ciência (nulo: aguardando).")
+
+
+class LeituraCienciaPendente(BaseModel):
+    """Nomeação aguardando a ciência do usuário logado (abre o modal ao entrar no sistema)."""
+    portaria_id: uuid.UUID
+    contrato_id: uuid.UUID
+    contrato: str = Field(..., description="Número e apelido do contrato.")
+    papel: str
+    papel_rotulo: str
+    nomeado_por: str
 
 
 class LeituraPortaria(BaseModel):
@@ -55,9 +78,9 @@ class LeituraPortaria(BaseModel):
     id: uuid.UUID
     titulo: str
     sigla: str
-    numero: int
-    exercicio: int
-    status: str
+    numero: int | None = Field(None, description="Só existe depois que a autoridade é escolhida (número reservado no Protocolo).")
+    exercicio: int | None
+    status: str = Field(..., description="`nomeacao`, `aguardando_ciencia`, `aguardando_autoridade`, `aguardando_aceite`, `aceita`, `publicada` ou `cancelada`.")
     status_rotulo: str
     motivo: str
     autoridade_nome: str
@@ -68,14 +91,19 @@ class LeituraPortaria(BaseModel):
     publicada_em: datetime | None
     numero_protocolo_id: uuid.UUID | None
     anterior: str | None = Field(None, description="Portaria anterior citada na revogação (None: usou a máscara sem portaria anterior).")
-    equipe: list[LeituraPessoaPortaria]
-    pendencias: list[str] = Field(..., description="O que ainda impede o aceite (RS, processo SEI, objeto).")
+    nomeacoes: list[LeituraNomeacao]
+    texto_html: str | None = Field(None, description="Texto da portaria (HTML da máscara preenchida), para copiar. Só depois da escolha da autoridade.")
+    pendencias: list[str] = Field(..., description="O que ainda impede o aceite (processo SEI, objeto, RS).")
+    aviso_reserva: str | None = Field(None, description="Mensagem enquanto o número está reservado e a publicação não chegou.")
+    tem_evidencia: bool = Field(..., description="O PDF de evidência (ciências e aceite) já foi gerado.")
     pode_decidir: bool = Field(..., description="O usuário é a autoridade signatária (ou SuperRoot) e a portaria aguarda aceite.")
-    pode_alterar: bool = Field(..., description="O usuário pode reenviar, cancelar e anexar o PDF publicado.")
+    pode_alterar: bool = Field(..., description="O usuário pode alterar nomeações, escolher a autoridade e cancelar.")
 
 
 class PainelPortarias(BaseModel):
-    """Resposta do `GET /portarias`: histórico, autoridades ativas para a solicitação e se já há portaria em andamento."""
+    """Resposta do `GET /portarias`: histórico, autoridades ativas e a equipe vigente (ponto de partida da nova portaria)."""
     portarias: list[LeituraPortaria]
     autoridades: list[LeituraAutoridade]
     em_andamento: bool
+    pode_criar: bool = Field(..., description="O usuário é da equipe do contrato ou tem controle total em Contratos.")
+    equipe_vigente: list[NomeacaoEntrada]

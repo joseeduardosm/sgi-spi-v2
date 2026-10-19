@@ -6,6 +6,9 @@
     @else if (alterado()) { <span class="selo-situacao alerta">Alterações não salvas</span> }
     @if (editavel() && detalhe().tipo === 'regular') { <button type="button" class="acao-secundaria" (click)="usarPrevista()">Usar o saldo líquido</button> }
   </header>
+  <div class="corpo"><app-rascunho-servidor #rascunhoServidor [contratoId]="d.contrato_id" tipo="medicao" [chave]="d.id" [editavel]="editavel() && !d.medicao_concluida_em"
+                           [obterDados]="dadosDoRascunhoServidor" (carregar)="carregarRascunhoDaEquipe($event)" /></div>
+  @if (rascunhoRestaurado(); as r) { <div class="corpo"><app-aviso-rascunho [salvoEm]="r.salvoEm" observacao="A medição ainda não está salva: confira e salve." (descartar)="descartarRascunho()" /></div> }
   <!-- Resumo: o que importa de relance, antes e depois de salvar -->
   <div class="resumo-medicao" aria-label="Resumo da medição">
     <div><span>Total medido</span><strong>{{ total() | moeda }}</strong>@if (+d.desconto_reajuste > 0) { <small>após o desconto: {{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</small> }</div>
@@ -140,6 +143,7 @@
           @else { <span class="dica-formulario">Tudo pronto para concluir e gerar a memória de cálculo.</span> }
         </div>
         <div class="botoes-barra">
+          <button type="button" class="acao-secundaria" [disabled]="rascunhoServidor.salvando()" (click)="rascunhoServidor.salvar()" title="Salva as quantidades digitadas para a equipe do contrato ver e continuar">Salvar rascunho</button>
           <button type="button" class="acao-secundaria" [class.acao-primaria]="alterado()" [disabled]="!notas().length || acertosInvalidos()" (click)="salvar()">Salvar medição</button>
           @if (d.integra_equipe && !jaRegistrei() && !alterado() && (d.medicao_concluida_em || d.itens.length)) {
             <button type="button" class="acao-secundaria" (click)="ciencia()">Registrar minha ciência</button>

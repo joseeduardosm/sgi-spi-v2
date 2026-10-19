@@ -14,6 +14,7 @@ import {
   DiarioContrato,
   DetalheEmpresa,
   DocumentoContrato,
+  PagamentoContrato,
   GravacaoContrato,
   GravacaoEmpresa,
   GravacaoOcorrencia,
@@ -108,6 +109,16 @@ export class ContratosApiService {
   /** Catálogo de documentos importantes, anexados ou não. */
   documentos(id: string): Observable<DocumentoContrato[]> {
     return this.http.get<DocumentoContrato[]>(`${this.base}/${id}/documentos`);
+  }
+
+  /** Pagamentos do contrato ("Pagamento MM/AAAA": OB/PD + consolidado), em Documentos Importantes. */
+  pagamentos(id: string): Observable<PagamentoContrato[]> {
+    return this.http.get<PagamentoContrato[]>(`${this.base}/${id}/pagamentos`);
+  }
+
+  /** Baixa um arquivo de uma competência (a OB/PD ou o consolidado de um pagamento). */
+  baixarArquivoDaCompetencia(id: string, competenciaId: string, anexoId: string, nome: string) {
+    return baixarArquivo(this.http, `${this.base}/${id}/competencias/${competenciaId}/arquivos/${anexoId}`, nome);
   }
 
   /** Anexa um PDF a um documento do catálogo (envio como formulário multipart). */
@@ -255,7 +266,7 @@ export class ContratosApiService {
   }
 
   /** Modelos globais, opcionalmente de um tipo. */
-  modelos(tipo?: 'checklist' | 'formulario' | 'portaria' | 'despacho', somenteAtivos = true): Observable<Modelo[]> {
+  modelos(tipo?: 'checklist' | 'formulario' | 'portaria' | 'despacho' | 'email_cadin' | 'email_ob', somenteAtivos = true): Observable<Modelo[]> {
     let params = new HttpParams().set('somente_ativos', somenteAtivos);
     if (tipo) params = params.set('tipo', tipo);
     return this.http.get<Modelo[]>(`${this.base}/modelos`, { params });
@@ -267,6 +278,16 @@ export class ContratosApiService {
   }
 
   /** Placeholders permitidos na máscara do despacho de pagamento. */
+  /** Placeholders permitidos na máscara do e-mail de pagamento (OB). */
+  placeholdersEmailOb(): Observable<PlaceholderPortaria[]> {
+    return this.http.get<PlaceholderPortaria[]>(`${this.base}/modelos/email-ob/placeholders`);
+  }
+
+  /** Placeholders permitidos na máscara do e-mail de pendência no CADIN. */
+  placeholdersEmailCadin(): Observable<PlaceholderPortaria[]> {
+    return this.http.get<PlaceholderPortaria[]>(`${this.base}/modelos/email-cadin/placeholders`);
+  }
+
   placeholdersDespacho(): Observable<PlaceholderPortaria[]> {
     return this.http.get<PlaceholderPortaria[]>(`${this.base}/modelos/despacho/placeholders`);
   }
@@ -307,7 +328,7 @@ export class ContratosApiService {
     return baixarArquivo(this.http, `${this.base}/${id}/diario/pdf?${params.toString()}`, 'diario_de_bordo.pdf');
   }
 
-  // --- Importação por planilha XLSX (ACL `importacao-contratos`) ---
+  // --- Importação por planilha XLSX (ACL `contratos` ≥ MODIFICACAO) ---
   /** Lê e valida a planilha sem gravar nada (envio multipart no campo `arquivo`). */
   previaImportacao(arquivo: File): Observable<PreviaImportacao> {
     const dados = new FormData();
@@ -327,7 +348,7 @@ export class ContratosApiService {
     return baixarArquivo(this.http, `${this.base}/importacao-xlsx/modelo`, 'modelo-importacao-contrato.xlsx');
   }
 
-  // --- Importação de checklist e formulário por XLSX (ACL `importacao-modelos`) ---
+  // --- Importação de checklist e formulário por XLSX (ACL `contratos` ≥ MODIFICACAO) ---
   /** Raiz das rotas: no contrato (versão inativa) ou nos modelos globais (SuperRoot). */
   private raizImportacaoModelo(tipo: 'checklist' | 'formulario', contratoId?: string): string {
     return contratoId

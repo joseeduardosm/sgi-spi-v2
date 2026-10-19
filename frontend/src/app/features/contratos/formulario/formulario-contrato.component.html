@@ -146,14 +146,16 @@
 
     <section class="cartao-dados" aria-labelledby="bloco-equipe">
       <header>
-        <div><h2 id="bloco-equipe">Gestão e fiscalização</h2><small>Opcional. Os seis papéis têm os mesmos poderes dentro do contrato.</small></div>
+        <div><h2 id="bloco-equipe">{{ id() ? 'Autoridade do despacho' : 'Gestão e fiscalização' }}</h2><small>@if (id()) { A equipe do contrato não é editada aqui: só muda por portaria de designação, na aba Equipe do contrato. } @else { Opcional. Os seis papéis têm os mesmos poderes dentro do contrato; depois do cadastro, a equipe só muda por portaria. }</small></div>
       </header>
       <div class="corpo grade-formulario tres-colunas">
-        @for (p of papeis; track p.papel) {
-          <div>
-            <label [for]="'equipe-' + p.papel">{{ p.rotulo }}</label>
-            <app-seletor-usuarios [idCampo]="'equipe-' + p.papel" [multiplo]="false" [(selecionados)]="equipe[p.papel]" [fonte]="api.opcoesUsuarios" textoAjuda="Pesquisar usuário" />
-          </div>
+        @if (!id()) {
+          @for (p of papeis; track p.papel) {
+            <div>
+              <label [for]="'equipe-' + p.papel">{{ p.rotulo }}</label>
+              <app-seletor-usuarios [idCampo]="'equipe-' + p.papel" [multiplo]="false" [(selecionados)]="equipe[p.papel]" [fonte]="api.opcoesUsuarios" textoAjuda="Pesquisar usuário" />
+            </div>
+          }
         }
         <div class="ocupa-3">
           <label for="autoridade-despacho">Autoridade do despacho</label>

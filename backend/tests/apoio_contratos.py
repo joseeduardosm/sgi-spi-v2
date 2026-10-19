@@ -149,3 +149,24 @@ def conferir_retencao(cliente, base: str, h: dict, principal: dict | None = None
     informadas = [principal or {}, adicional, *outras]
     corpo = {"notas": [{"nota_id": n["id"], **r} for n, r in zip(notas, informadas) if r is not None], "discriminacao_conferida": discriminacao, "enviar_email": email}
     return cliente.put(f"{base}/retencao", json=corpo, headers=h)
+
+
+def trocar_equipe_pela_portaria(contrato_id: str, equipe: dict[str, int]) -> None:
+    """Efeito da publicação de uma portaria sobre a equipe (a única via de troca): a equipe passa a ser exatamente a informada.
+
+    Os testes que só precisam de uma equipe diferente usam isto em vez de percorrer nomeações, ciências e D.O.E."""
+    import uuid
+
+    from app.core.banco import FabricaSessao
+    from app.models.contratos import PAPEIS_EQUIPE
+    from app.services.contratos import servico_contratos, setor_equipes
+    from app.services.servico_auditoria import auditar
+
+    with FabricaSessao() as sessao:
+        contrato = servico_contratos.obter_contrato(sessao, uuid.UUID(str(contrato_id)))
+        mudancas = servico_contratos.aplicar_equipe_por_ids(sessao, contrato, {papel: equipe.get(papel) for papel in PAPEIS_EQUIPE})
+        sessao.flush()
+        setor_equipes.sincronizar(sessao)
+        if mudancas:
+            auditar(sessao, "teste", "contrato.equipe.alterar", f"Contrato {contrato.numero}", alvo_tipo="contrato", alvo_id=contrato.id, dados={"campos": mudancas})
+        sessao.commit()

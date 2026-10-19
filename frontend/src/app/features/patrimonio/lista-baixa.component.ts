@@ -5,6 +5,8 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { Router, RouterLink } from '@angular/router';
 
+import { OpcaoUsuario } from '../../core/modelos/usuario.model';
+import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { classeMarcador } from '../tarefas/marcadores.paleta';
 import { CabecalhoPatrimonioComponent } from './cabecalho-patrimonio.component';
@@ -20,7 +22,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
 /** `/patrimonio/baixas/:baixaId`. */
 @Component({
   selector: 'app-lista-baixa',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoPatrimonioComponent, LeitorCodigoComponent, BuscaBemComponent, RelacionarSalaComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoPatrimonioComponent, LeitorCodigoComponent, BuscaBemComponent, RelacionarSalaComponent, SeletorUsuariosComponent],
   template: `
     <app-cabecalho-patrimonio titulo="Baixa de bens" descricao="Leia os códigos (ou digite a chapa ou o número de série), informe motivo e processo e envie para aprovação." />
     @if (baixa(); as b) {
@@ -31,9 +33,37 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
             <button type="button" class="acao-secundaria" (click)="relatorio(b, 'pdf')" title="PDF consolidado: índice, relatório, fotos e anexos">Relatório PDF</button>
             <button type="button" class="acao-secundaria" (click)="relatorio(b, 'xlsx')">Relatório Excel</button>
             @if (b.tem_termo) { <button type="button" class="acao-secundaria" (click)="termo(b)">Baixar o termo (PDF)</button> }
+            @if (souDono()) { <button type="button" class="acao-secundaria" (click)="abrirCompartilhar(b)">Compartilhar{{ b.colaboradores?.length ? ' (' + b.colaboradores!.length + ')' : '' }}</button> }
             @if (rascunho()) { <button type="button" class="acao-recusar" (click)="descartar()">Descartar rascunho</button> }
           </div>
         </div>
+
+        @if (b.colaboradores?.length) {
+          <p class="pat-aviso pat-colaboradores">Compartilhada com: <strong>{{ nomesColaboradores(b) }}</strong>@if (!souDono() && rascunho()) { · montada por {{ b.solicitante_nome }} }. Quem recebe faz tudo na baixa, mas não pode aprová-la.</p>
+        }
+
+        @if (compartilhando()) {
+          <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="compartilhando.set(false)"></div>
+          <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-compartilhar-baixa">
+            <header>
+              <div><span class="modal-sobretitulo">Baixa #{{ b.numero }}</span><h2 id="titulo-compartilhar-baixa">Compartilhar a baixa</h2></div>
+              <button type="button" aria-label="Fechar" (click)="compartilhando.set(false)">×</button>
+            </header>
+            <form (submit)="$event.preventDefault(); salvarCompartilhamento(b)">
+              <p class="dica-formulario" style="margin-top: 0">Quem receber a baixa faz <strong>tudo o que você faz nela</strong>: incluir e tirar bens, definir motivo e processo, enviar para aprovação e descartar. Só não pode aprová-la, nem você.</p>
+              <div class="grade-formulario">
+                <div class="ocupa-duas">
+                  <label for="compartilhar-usuarios-baixa">Pessoas ({{ colaboradoresEscolhidos().length }})</label>
+                  <app-seletor-usuarios idCampo="compartilhar-usuarios-baixa" [(selecionados)]="colaboradoresEscolhidos" [fonte]="fonteUsuarios" textoAjuda="Pesquisar por nome ou login" />
+                </div>
+              </div>
+              <footer>
+                <button type="button" class="acao-secundaria" (click)="compartilhando.set(false)">Cancelar</button>
+                <button type="submit" class="acao-primaria">Salvar</button>
+              </footer>
+            </form>
+          </section>
+        }
 
         @if (rascunho()) {
           <div class="pat-linha-campo">
@@ -110,7 +140,17 @@ export class ListaBaixaComponent implements OnInit {
   protected readonly marcados = signal<Set<string>>(new Set());
   protected readonly aprovados = signal<Set<string>>(new Set());
   protected readonly locais = signal<string[]>([]);
-  protected readonly rascunho = computed(() => this.baixa()?.status === 'rascunho' && this.baixa()?.solicitante_id === this.estado.acesso()?.usuario_id);
+  // Edita a baixa (rascunho) quem a montou e quem recebeu a baixa compartilhada: os poderes são os mesmos
+  protected readonly rascunho = computed(() => {
+    const b = this.baixa();
+    const eu = this.estado.acesso()?.usuario_id;
+    return b?.status === 'rascunho' && (b.solicitante_id === eu || !!b.colaboradores?.some((x) => x.id === eu));
+  });
+  /** Só quem montou a baixa escolhe com quem compartilhá-la. */
+  protected readonly souDono = computed(() => this.baixa()?.status === 'rascunho' && this.baixa()?.solicitante_id === this.estado.acesso()?.usuario_id);
+  protected readonly compartilhando = signal(false);
+  protected readonly colaboradoresEscolhidos = signal<OpcaoUsuario[]>([]);
+  protected readonly fonteUsuarios = (busca: string) => this.api.opcoesUsuarios(busca);
   protected readonly decidindo = computed(() => this.baixa()?.status === 'pendente' && this.estado.podeAdministrar() && !this.souSolicitante(this.baixa()!));
   protected chapa = '';
   protected motivo: MotivoBaixa | '' = '';
@@ -133,6 +173,22 @@ export class ListaBaixaComponent implements OnInit {
   private definir(b: Baixa): void {
     this.baixa.set(b);
     this.aviso.set('');
+  }
+
+  protected nomesColaboradores(b: Baixa): string {
+    return (b.colaboradores ?? []).map((x) => x.nome).join(', ');
+  }
+
+  protected abrirCompartilhar(b: Baixa): void {
+    this.colaboradoresEscolhidos.set((b.colaboradores ?? []).map((x) => ({ id: x.id, login: '', nome_completo: x.nome, cargo: '', ativo: true })));
+    this.compartilhando.set(true);
+  }
+
+  protected salvarCompartilhamento(b: Baixa): void {
+    this.api.compartilharBaixa(b.id, this.colaboradoresEscolhidos().map((u) => u.id)).subscribe({
+      next: (x) => { this.definir(x); this.compartilhando.set(false); },
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível compartilhar a baixa'),
+    });
   }
 
   protected souSolicitante(b: Baixa): boolean {

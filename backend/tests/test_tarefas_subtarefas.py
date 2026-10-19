@@ -30,20 +30,18 @@ def test_subtarefa_herda_da_mae_e_a_mae_se_move_sem_depender_dela(cliente, equip
 
     detalhe = cliente.get(f"{URL}/{mae['numero']}", headers=h["lia"]).json()
     assert [s["numero"] for s in detalhe["subtarefas"]] == [sub["numero"]] and detalhe["subtarefas_total"] == 1 and detalhe["subtarefas_concluidas"] == 0
-    # A mãe se move livremente com subtarefa aberta; a subtarefa só ganha um registro, sem sair do lugar
+    # A mãe se move livremente com subtarefa aberta (iniciar e entregar); a subtarefa só ganha um registro, sem sair do lugar
     antes = cliente.get(f"{URL}/{sub['numero']}", headers=h["lia"]).json()
     assert _mover(cliente, h["ana"], mae["numero"], "iniciar").status_code == 200
     assert _mover(cliente, h["ana"], mae["numero"], "entregar").status_code == 200
-    assert _mover(cliente, h["lia"], mae["numero"], "validar").status_code == 200
     depois = cliente.get(f"{URL}/{sub['numero']}", headers=h["lia"]).json()
     assert (depois["status"], depois["estagio_id"], depois["versao"]) == (antes["status"], antes["estagio_id"], antes["versao"])
     linha = cliente.get(f"{URL}/{sub['numero']}/linha-do-tempo", headers=h["lia"]).json()["itens"]
     registros = [e["titulo"] for e in linha if f"Tarefa mãe #{mae['numero']} movida" in e["titulo"]]
-    assert len(registros) == 3 and "Em andamento → Em validação" in " ".join(registros)
-    # A subtarefa segue o próprio pipeline, independente da mãe
-    _mover(cliente, h["ana"], sub["numero"], "iniciar")
-    assert _mover(cliente, h["ana"], sub["numero"], "entregar").status_code == 200
-    assert _mover(cliente, h["lia"], sub["numero"], "validar").status_code == 200
+    assert len(registros) == 2 and "Em andamento → Em validação" in " ".join(registros)
+    # Validar a mãe conclui a subtarefa junto (ver também test_mae_validada_conclui_todas_as_subtarefas_abertas)
+    assert _mover(cliente, h["lia"], mae["numero"], "validar").status_code == 200
+    assert cliente.get(f"{URL}/{sub['numero']}", headers=h["lia"]).json()["status"] == "concluida"
 
 
 def test_subtarefas_ficam_fora_das_listas_e_tem_quadro_proprio(cliente, equipe):
@@ -240,3 +238,26 @@ def test_subtarefa_herda_responsaveis_da_mae_e_acompanha_as_mudancas(cliente, eq
     assert editar_mae([ids["beto"]]).status_code == 200
     depois = ler(sub["numero"])
     assert [p["id"] for p in depois["responsaveis"]] == [ids["beto"]] and depois["responsavel"]["id"] == ids["beto"]
+
+
+def test_mae_validada_conclui_todas_as_subtarefas_abertas(cliente, equipe):
+    """Validar a tarefa mãe conclui junto todas as subtarefas, em qualquer situação, com histórico e aviso."""
+    ids, h, equipe_id = equipe
+    mae = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    subs = [cliente.post(f"{URL}/{mae['numero']}/subtarefas", json={"titulo": t}, headers=h["lia"]).json() for t in ("A fazer", "Em andamento", "Em validação", "Já concluída")]
+    assert _mover(cliente, h["ana"], subs[1]["numero"], "iniciar").status_code == 200
+    assert _mover(cliente, h["ana"], subs[2]["numero"], "iniciar").status_code == 200
+    assert _mover(cliente, h["ana"], subs[2]["numero"], "entregar").json()["status"] == "em_validacao"
+    assert _mover(cliente, h["lia"], subs[3]["numero"], "concluir").json()["status"] == "concluida"
+    # A mãe vai até a validação e é validada: nenhuma subtarefa fica aberta
+    assert _mover(cliente, h["ana"], mae["numero"], "iniciar").status_code == 200
+    assert _mover(cliente, h["ana"], mae["numero"], "entregar").json()["status"] == "em_validacao"
+    assert _mover(cliente, h["lia"], mae["numero"], "validar").json()["status"] == "concluida"
+    for sub in subs:
+        detalhe = cliente.get(f"{URL}/{sub['numero']}", headers=h["lia"]).json()
+        assert detalhe["status"] == "concluida", detalhe["titulo"]
+    linha = cliente.get(f"{URL}/{subs[0]['numero']}/linha-do-tempo", headers=h["lia"]).json()["itens"]
+    assert any(e["tipo"] == "validada" and f"mãe #{mae['numero']}" in e["titulo"] for e in linha)
+    # Só a mãe devolvida/reaberta não mexe nas subtarefas: reabrir a mãe não reabre as filhas
+    assert _mover(cliente, h["lia"], mae["numero"], "reabrir", texto="ajuste").json()["status"] == "em_andamento"
+    assert cliente.get(f"{URL}/{subs[0]['numero']}", headers=h["lia"]).json()["status"] == "concluida"

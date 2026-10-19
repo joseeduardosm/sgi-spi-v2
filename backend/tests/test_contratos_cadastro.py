@@ -5,7 +5,7 @@
 from datetime import date
 from decimal import Decimal
 
-from tests.apoio_contratos import PDF, criar_contrato, criar_empresa, dados_contrato, gerar_cnpj, gerar_cpf, item, restringir_contratos
+from tests.apoio_contratos import PDF, criar_contrato, criar_empresa, dados_contrato, gerar_cnpj, gerar_cpf, item, restringir_contratos, trocar_equipe_pela_portaria
 from tests.conftest import cabecalho, criar_usuario
 
 from app.schemas.contratos.validadores import cnpj_valido, cpf_valido
@@ -210,15 +210,17 @@ def _campos_item(lido: dict) -> dict:
 
 
 def test_equipe_troca_encerra_designacao_anterior(cliente, admin):
-    """Trocar o fiscal encerra a designação anterior e aparece no histórico."""
+    """Trocar o fiscal (pela portaria) encerra a designação anterior e aparece no histórico; o PUT do contrato não troca a equipe."""
     a, b = criar_usuario("fiscal-a"), criar_usuario("fiscal-b")
     contrato = criar_contrato(cliente, admin, equipe={"fiscal_tecnico": a})
     dados = dados_contrato(contrato["empresa"]["id"], equipe={"fiscal_tecnico": b}, versao=1,
                            itens=[{**item(), "id": contrato["itens"][0]["id"]}])
     dados["itens"].append({**_campos_item(contrato["itens"][1]), **{k: v for k, v in item().items() if k.startswith("codigo")}, "id": contrato["itens"][1]["id"]})
+    # Nem o SuperRoot troca a equipe pelo Editar
     r = cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=admin)
-    assert r.status_code == 200, r.text
-    assert [m["login"] for m in r.json()["equipe"]] == ["fiscal-b"]
+    assert r.status_code == 400 and "portaria" in r.json()["detalhe"]
+    trocar_equipe_pela_portaria(contrato["id"], {"fiscal_tecnico": b})
+    assert [m["login"] for m in cliente.get(f"/api/contratos/{contrato['id']}", headers=admin).json()["equipe"]] == ["fiscal-b"]
     historico = cliente.get(f"/api/contratos/{contrato['id']}/historico", headers=admin).json()
     assert any(h["campo"] == "equipe.fiscal_tecnico" and h["para"] == "Pessoa Teste" for h in historico)
 
@@ -229,7 +231,8 @@ def test_poderes_iguais_da_equipe_e_bloqueio_de_estranhos(cliente, admin):
     chefe = criar_usuario("chefe")
     restringir_contratos(cliente, admin, {membro: "MODIFICACAO", estranho: "MODIFICACAO", leitor: "LEITURA", chefe: "CONTROLE_TOTAL"})
     contrato = criar_contrato(cliente, admin, equipe={"fiscal_tecnico_suplente": membro})
-    dados = {**dados_contrato(contrato["empresa"]["id"], apelido="Novo"), "versao": 1}
+    # A equipe só muda por portaria: o corpo repete a equipe vigente, senão a edição é recusada
+    dados = {**dados_contrato(contrato["empresa"]["id"], apelido="Novo", equipe={"fiscal_tecnico_suplente": membro}), "versao": 1}
     dados["itens"] = [{**item(), "id": contrato["itens"][0]["id"]}]
     dados["itens"].append({**item(), **_campos_item(contrato["itens"][1]), "id": contrato["itens"][1]["id"]})
 
@@ -244,7 +247,7 @@ def test_poderes_iguais_da_equipe_e_bloqueio_de_estranhos(cliente, admin):
     dados["versao"] = 2
     assert cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=cabecalho(cliente, "chefe")).status_code == 200
     # Exclusão: CONTROLE_TOTAL, criador ou integrante da equipe (com MODIFICACAO); estranho e leitor não
-    # (o contrato acima já teve a equipe trocada pela edição, então usa-se outro com o "suplente" na equipe)
+    # (usa-se outro contrato com o "suplente" na equipe)
     outro = criar_contrato(cliente, admin, numero="014/2024", empresa_id=contrato["empresa"]["id"], equipe={"fiscal_tecnico_suplente": membro})
     assert cliente.get(f"/api/contratos/{outro['id']}", headers=cabecalho(cliente, "suplente")).json()["permissoes"]["pode_excluir"] is True
     assert cliente.get(f"/api/contratos/{outro['id']}", headers=cabecalho(cliente, "estranho")).json()["permissoes"]["pode_excluir"] is False

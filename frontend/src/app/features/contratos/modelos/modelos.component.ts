@@ -28,8 +28,8 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
           <header>
             <h2 [id]="'titulo-modelos-' + tipo.id">{{ tipo.rotulo }}</h2>
             <div class="acoes-cartao">
-              @if (tipo.id !== 'portaria' && tipo.id !== 'despacho') { <app-importacao-modelo-xlsx [tipo]="tipo.id" [pequeno]="true" (importado)="carregar()" /> }
-              @if (tipo.id === 'portaria' || tipo.id === 'despacho') { <a class="acao-primaria acao-pequena" [routerLink]="['/contratos/modelos', tipo.id, 'novo']">+ Nova</a> }
+              @if (tipo.id !== 'portaria' && tipo.id !== 'despacho' && tipo.id !== 'email_cadin' && tipo.id !== 'email_ob') { <app-importacao-modelo-xlsx [tipo]="tipo.id" [pequeno]="true" (importado)="carregar()" /> }
+              @if (tipo.id === 'portaria' || tipo.id === 'despacho' || tipo.id === 'email_cadin' || tipo.id === 'email_ob') { <a class="acao-primaria acao-pequena" [routerLink]="['/contratos/modelos', tipo.id, 'novo']">+ Nova</a> }
               @else { <button type="button" class="acao-primaria acao-pequena" (click)="abrir(tipo.id)">+ Novo</button> }
             </div>
           </header>
@@ -40,9 +40,9 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
                   <strong style="font-size: 14px">{{ m.nome }}</strong>
                   <span class="selo-situacao" [class.inativo]="!m.ativo">{{ m.ativo ? 'Ativo' : 'Inativo' }}</span>
                 </div>
-                <small>{{ m.tipo === 'despacho' ? 'Abre o documento consolidado' : m.tipo === 'portaria' ? (m.conteudo.variante === 'com_anterior' ? 'Com portaria anterior' : 'Sem portaria anterior') : m.tipo === 'checklist' ? (m.conteudo.itens?.length ?? 0) + ' documento(s)' : (m.conteudo.grupos?.length ?? 0) + ' grupo(s)' }} · atualizado em {{ m.atualizado_em | date: 'dd/MM/yyyy' }}</small>
+                <small>{{ m.tipo === 'despacho' ? 'Abre o documento consolidado' : m.tipo === 'email_cadin' ? 'Enviado aos prepostos quando o CADIN acusa pendência' : m.tipo === 'email_ob' ? 'Enviado aos prepostos quando a Ordem Bancária é lançada' : m.tipo === 'portaria' ? (m.conteudo.variante === 'com_anterior' ? 'Com portaria anterior' : 'Sem portaria anterior') : m.tipo === 'checklist' ? (m.conteudo.itens?.length ?? 0) + ' documento(s)' : (m.conteudo.grupos?.length ?? 0) + ' grupo(s)' }} · atualizado em {{ m.atualizado_em | date: 'dd/MM/yyyy' }}</small>
                 <div class="acoes-cartao esquerda">
-                  @if (m.tipo === 'portaria' || m.tipo === 'despacho') { <a class="acao-secundaria acao-pequena" [routerLink]="['/contratos/modelos', m.tipo, m.id]">Editar</a> }
+                  @if (m.tipo === 'portaria' || m.tipo === 'despacho' || m.tipo === 'email_cadin' || m.tipo === 'email_ob') { <a class="acao-secundaria acao-pequena" [routerLink]="['/contratos/modelos', m.tipo, m.id]">Editar</a> }
                   @else { <button type="button" class="acao-secundaria acao-pequena" (click)="abrir(m.tipo, m)">Editar</button> }
                   <button type="button" class="acao-perigo acao-pequena" (click)="excluir(m)">Excluir</button>
                 </div>
@@ -101,9 +101,9 @@ export class ModelosComponent implements OnInit {
 
   // As colunas da tela; quem não é SuperRoot (apenas controle total em Contratos) vê só as portarias
   protected readonly tipos = [
-    { id: 'checklist' as const, rotulo: 'Checklists' }, { id: 'formulario' as const, rotulo: 'Formulários de avaliação' }, { id: 'portaria' as const, rotulo: 'Portarias' }, { id: 'despacho' as const, rotulo: 'Despacho de pagamento' },
+    { id: 'checklist' as const, rotulo: 'Checklists' }, { id: 'formulario' as const, rotulo: 'Formulários de avaliação' }, { id: 'portaria' as const, rotulo: 'Portarias' }, { id: 'despacho' as const, rotulo: 'Despacho de pagamento' }, { id: 'email_cadin' as const, rotulo: 'E-mail de CADIN' }, { id: 'email_ob' as const, rotulo: 'E-mail de pagamento (OB)' },
   ];
-  protected readonly tiposVisiveis = computed(() => (this.autenticacao.possuiPapel('SuperRoot') ? this.tipos : this.tipos.filter((t) => t.id === 'portaria' || t.id === 'despacho')));
+  protected readonly tiposVisiveis = computed(() => (this.autenticacao.possuiPapel('SuperRoot') ? this.tipos : this.tipos.filter((t) => t.id === 'portaria' || t.id === 'despacho' || t.id === 'email_cadin' || t.id === 'email_ob')));
   // Modelos carregados e o estado das janelas de edição
   protected readonly modelos = signal<Modelo[]>([]);
   protected readonly checklistAberto = signal(false);

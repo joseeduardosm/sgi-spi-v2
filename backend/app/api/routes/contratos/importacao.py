@@ -5,8 +5,7 @@
 Fluxo da tela: baixar o modelo → preencher → enviar para a prévia → conferir erros e avisos →
 confirmar (o mesmo arquivo é enviado de novo e só então gravado).
 
-Acesso: ACL `importacao-contratos` ≥ MODIFICACAO (recurso liberado por usuário ou setor na tela de
-ACL) **e** ACL `contratos` ≥ MODIFICACAO (quem importa precisa poder cadastrar contratos).
+Acesso: ACL `contratos` ≥ MODIFICACAO (a importação faz parte de "Editar contratos e conduzir a execução").
 """
 
 from pathlib import Path
@@ -15,12 +14,10 @@ from fastapi import APIRouter, Depends, File, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import exigir_acl
 from app.api.respostas import RESPOSTAS_AUTENTICADAS
 from app.api.routes.contratos.comum import pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
-from app.models.acl import NivelAcl
 from app.models.usuario import Usuario
 from app.schemas.comum import RespostaErro
 from app.schemas.contratos.contratos import DetalheContrato
@@ -31,8 +28,6 @@ from app.services.contratos import servico_importacao_xlsx as servico
 roteador = APIRouter(prefix="/contratos/importacao-xlsx", tags=["Contratos: importação por XLSX"], responses=RESPOSTAS_AUTENTICADAS)
 
 # Slug do recurso próprio da importação na ACL (criado pela migração, liberado pelo SuperRoot)
-RECURSO = "importacao-contratos"
-pode_importar = exigir_acl(RECURSO, NivelAcl.MODIFICACAO)
 MODELO = Path(__file__).resolve().parents[3] / "recursos" / "modelo-importacao-contrato.xlsx"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -45,8 +40,8 @@ ARQUIVO_INVALIDO = {
 }
 
 
-def _exigir_acessos(usuario: Usuario = Depends(pode_importar), _: Usuario = Depends(pode_modificar)) -> Usuario:
-    """Junta as duas exigências de ACL (importação e cadastro de contratos) numa dependência só."""
+def _exigir_acessos(usuario: Usuario = Depends(pode_modificar)) -> Usuario:
+    """Importar contrato é parte de "Editar contratos e conduzir a execução": basta `contratos` ≥ MODIFICACAO."""
     return usuario
 
 
@@ -61,7 +56,7 @@ async def _conteudo(arquivo: UploadFile) -> bytes:
     "/modelo",
     response_class=FileResponse,
     summary="Baixar o modelo da planilha",
-    description="Planilha em branco \"Checklist de Alimentação do Sistema de Contratos\". Exige ACL `importacao-contratos` e "
+    description="Planilha em branco \"Checklist de Alimentação do Sistema de Contratos\". Exige ACL `contratos` ≥ MODIFICACAO"
     "`contratos` ≥ MODIFICACAO.",
     responses={status.HTTP_200_OK: {"content": {XLSX: {}}, "description": "Planilha modelo."}},
 )
@@ -76,7 +71,7 @@ def baixar_modelo(_: Usuario = Depends(_exigir_acessos)) -> FileResponse:
     summary="Prévia da importação",
     description="`multipart/form-data` com a planilha em `arquivo`. Lê e valida sem gravar nada: devolve os dados convertidos, "
     "a empresa (existente, reaproveitada sem alteração, ou nova), o preposto, os itens, os erros (com a linha) e os avisos. "
-    "Exige ACL `importacao-contratos` e `contratos` ≥ MODIFICACAO.",
+    "Exige ACL `contratos` ≥ MODIFICACAO.",
     responses=ARQUIVO_INVALIDO,
 )
 async def previa(arquivo: UploadFile = File(..., description="Planilha .xlsx"), sessao: Session = Depends(obter_sessao),
@@ -94,7 +89,7 @@ async def previa(arquivo: UploadFile = File(..., description="Planilha .xlsx"), 
     summary="Importar o contrato",
     description="`multipart/form-data` com a mesma planilha da prévia em `arquivo`. Valida de novo e, sem erros, cadastra numa "
     "única transação a empresa (se nova), o preposto (se novo) e o contrato com os itens. A equipe não é importada. "
-    "Exige ACL `importacao-contratos` e `contratos` ≥ MODIFICACAO.",
+    "Exige ACL `contratos` ≥ MODIFICACAO.",
     responses=ARQUIVO_INVALIDO,
 )
 async def importar(arquivo: UploadFile = File(..., description="Planilha .xlsx"), sessao: Session = Depends(obter_sessao),

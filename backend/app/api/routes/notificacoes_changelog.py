@@ -42,7 +42,7 @@ def obter_rascunho(sessao: Session = Depends(obter_sessao), _root: Usuario = Dep
 
 
 @roteador.post("/changelog/contagem", response_model=ContagemChangelog, summary="Quantos receberão o e-mail de changelog",
-               description="Para a tela mostrar o número antes do envio a `selecionados`: só recebe quem está ativo, tem e-mail e ligou o e-mail de \"Novidades do SGI SPI\". Só a conta root.")
+               description="Para a tela mostrar o número antes do envio a `selecionados`: recebe todo escolhido que está ativo e tem e-mail cadastrado, tenha ou não ligado o e-mail de \"Novidades do SGI SPI\". Só a conta root.")
 def contagem(dados: PedidoContagemChangelog, sessao: Session = Depends(obter_sessao), _root: Usuario = Depends(exigir_conta_root)) -> ContagemChangelog:
     lista, _ = servico_changelog.selecionados(sessao, list(dados.usuarios_ids), list(dados.setores_ids))
     return ContagemChangelog(total=len(lista), selecionados=servico_changelog.total_selecionados(sessao, list(dados.usuarios_ids), list(dados.setores_ids)))

@@ -228,8 +228,14 @@ def test_parabens_automatico_do_dia_sem_repetir(cliente, equipe):
         assert len(criadas) == 1
         assert servico_diretorio.enviar_parabens_do_dia(s) == []  # segunda execução no mesmo dia não repete
     with FabricaSessao() as s:
-        r = s.execute(select(EntregaNotificacao.destinatario_id, Notificacao.assunto).join(Notificacao).where(Notificacao.assunto == "Feliz aniversário!")).all()
-    assert r == [(ids["bia"], "Feliz aniversário!")]
+        r = s.execute(select(EntregaNotificacao.destinatario_id, Notificacao.assunto).join(Notificacao).where(Notificacao.assunto == "Feliz aniversário! 🎉")).all()
+    assert r == [(ids["bia"], "Feliz aniversário! 🎉")]
+    # Abre em modal e sai por e-mail mesmo sem a pessoa ter ligado nenhum canal nas Preferências
+    with FabricaSessao() as s:
+        n = s.scalar(select(Notificacao).where(Notificacao.assunto == "Feliz aniversário! 🎉"))
+        entrega = s.scalar(select(EntregaNotificacao).where(EntregaNotificacao.notificacao_id == n.id))
+        assert n.abrir_em_janela is True and entrega.canal_email is True and entrega.email_resumo is False
+        assert "novo ciclo repleto de saúde" in entrega.corpo_copia and entrega.corpo_copia.endswith("Secretaria de Parcerias em Investimentos - SPI")
 
 
 def test_linkedin_no_perfil_normaliza_e_aparece_no_cartao(cliente, equipe):

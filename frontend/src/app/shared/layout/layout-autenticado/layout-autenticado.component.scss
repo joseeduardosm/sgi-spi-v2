@@ -190,6 +190,32 @@
     color: #c54953;
   }
 
+  // Perfil de acesso: rótulo + o perfil ativo (ou a lista para alternar)
+  .menu-usuario-perfis {
+    gap: 4px;
+    padding: 9px;
+
+    span {
+      font-size: 11px;
+      color: var(--spi-apagado);
+    }
+
+    strong {
+      font-size: 11px;
+    }
+
+    button {
+      margin: 0;
+      padding: 7px 9px;
+      font-size: 11px;
+
+      &.ativo {
+        color: var(--spi-vermelho);
+        font-weight: 600;
+      }
+    }
+  }
+
   // Seletor de tema (Claro / Escuro / Auto): três botões lado a lado
   .seletor-tema {
     flex-direction: row;
@@ -313,5 +339,29 @@
     font-weight: 700;
     line-height: 19px;
     text-align: center;
+  }
+}
+// Faixa fixa no topo enquanto o SuperRoot personifica outro usuário
+.faixa-personificacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 14px;
+  padding: 8px 18px;
+  background: var(--spi-alerta-suave);
+  border-bottom: 1px solid var(--spi-alerta);
+  color: var(--spi-texto);
+  font-size: 12px;
+
+  button {
+    padding: 5px 10px;
+    border: 1px solid var(--spi-alerta);
+    border-radius: var(--spi-raio-p);
+    background: var(--cor-ffffff);
+    color: var(--spi-texto);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
   }
 }

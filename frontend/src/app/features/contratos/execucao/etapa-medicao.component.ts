@@ -2,23 +2,35 @@
 // Este arquivo serve para controlar a etapa 1 (medição): quantidades medidas, NEs em ordem, ciências e memória de cálculo.
 
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, input, OnChanges, output, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, input, OnChanges, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
+import { RascunhoGuardado, RascunhoService } from '../../../core/rascunho/rascunho.service';
+import { AvisoRascunhoComponent } from '../../../shared/componentes/aviso-rascunho/aviso-rascunho.component';
 import { BotaoCopiarComponent } from '../../../shared/componentes/botao-copiar/botao-copiar.component';
 import { valorPorExtenso } from '../../../shared/utilitarios/extenso';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { DetalheCompetencia, NotaSelecionada } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { RascunhoServidorComponent } from '../compartilhado/rascunho-servidor.component';
 import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 import { paraDecimalApi, paraDecimalTela, ROTULOS_PAPEL } from '../compartilhado/rotulos';
 
 /** Etapa 1: medição, NEs em ordem de consumo, ciências (uma já basta) e memória de cálculo. */
+/** Medição digitada e ainda não salva, guardada como rascunho; `base` identifica a medição gravada a que ela se refere. */
+interface RascunhoMedicao {
+  base: string;
+  medidas: Record<string, string>;
+  acertos: Record<string, string>;
+  marcadas: Record<string, boolean>;
+  notasIds: string[];
+}
+
 @Component({
   selector: 'app-etapa-medicao',
-  imports: [FormsModule, DatePipe, BotaoCopiarComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [RascunhoServidorComponent, AvisoRascunhoComponent, FormsModule, DatePipe, BotaoCopiarComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-medicao.component.html',
 })
 export class EtapaMedicaoComponent implements OnChanges {
@@ -30,6 +42,8 @@ export class EtapaMedicaoComponent implements OnChanges {
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly autenticacao = inject(AutenticacaoService);
+  private readonly rascunhos = inject(RascunhoService);
+  private readonly destruir = inject(DestroyRef);
   // O usuário logado já deu ciência nesta medição?
   protected readonly papeis = ROTULOS_PAPEL;
   protected readonly jaRegistrei = computed(() => this.detalhe().ciencias.some((c) => c.usuario_id === this.autenticacao.usuario()?.id));
@@ -56,6 +70,78 @@ export class EtapaMedicaoComponent implements OnChanges {
     this.marcadas = Object.fromEntries(d.itens.map((i) => [i.id, !!i.despesa_variavel]));
     this.notas.set(d.notas_selecionadas);
     this.alterado.set(false);
+    this.base = this.retratoDaMedicao();
+    this.restaurarRascunho();
+    if (!this.vigiando) {
+      this.vigiando = true;
+      // Guarda as quantidades, acertos e NEs digitados e ainda não salvos (some ao salvar; não vale se a medição mudou no servidor)
+      this.rascunhos.vigiar<RascunhoMedicao>(this.destruir, this.chaveRascunho(), () => this.estadoDoRascunho());
+    }
+  }
+
+  // Medição como veio do servidor (para saber se há algo digitado e não salvo) e controle do rascunho
+  private base = '';
+  private vigiando = false;
+  protected readonly rascunhoRestaurado = signal<RascunhoGuardado<RascunhoMedicao> | null>(null);
+
+  private chaveRascunho(): string {
+    return `medicao:${this.detalhe().id}`;
+  }
+
+  private retratoDaMedicao(): string {
+    return JSON.stringify([this.medidas, this.acertos, this.marcadas, this.notas().map((n) => n.id)]);
+  }
+
+  /** Só há rascunho quando se pode editar e algo difere do que está salvo. */
+  private estadoDoRascunho(): RascunhoMedicao | null {
+    if (!this.editavel() || this.detalhe().medicao_concluida_em || this.retratoDaMedicao() === this.base) return null;
+    return { base: this.base, medidas: this.medidas, acertos: this.acertos, marcadas: this.marcadas, notasIds: this.notas().map((n) => n.id) };
+  }
+
+  /** Preenche de novo o que foi digitado e não salvo, se a medição gravada continua a mesma; senão descarta o rascunho velho. */
+  private restaurarRascunho(): void {
+    this.rascunhoRestaurado.set(null);
+    const guardado = this.rascunhos.ler<RascunhoMedicao>(this.chaveRascunho());
+    if (!guardado) return;
+    if (guardado.dados.base !== this.base || !this.editavel() || this.detalhe().medicao_concluida_em) {
+      this.rascunhos.limpar(this.chaveRascunho());
+      return;
+    }
+    const d = this.detalhe();
+    this.medidas = { ...this.medidas, ...guardado.dados.medidas };
+    this.acertos = { ...this.acertos, ...guardado.dados.acertos };
+    this.marcadas = { ...this.marcadas, ...guardado.dados.marcadas };
+    // As NEs voltam na ordem guardada, só as que continuam disponíveis
+    const conhecidas = new Map([...d.notas_selecionadas, ...d.notas_disponiveis].map((n) => [n.id, n]));
+    this.notas.set(guardado.dados.notasIds.map((id) => conhecidas.get(id)).filter((n): n is NotaSelecionada => !!n));
+    this.alterado.set(true);
+    this.rascunhoRestaurado.set(guardado);
+  }
+
+  private readonly rascunhoDaEquipe = viewChild<RascunhoServidorComponent>('rascunhoServidor');
+
+  /** Campos para o rascunho salvo no servidor (visível à equipe): o que está na tela agora. */
+  protected readonly dadosDoRascunhoServidor = (): Record<string, unknown> | null => ({
+    medidas: this.medidas, acertos: this.acertos, marcadas: this.marcadas, notasIds: this.notas().map((n) => n.id),
+  });
+
+  /** Preenche a medição com o rascunho salvo pela equipe. */
+  protected carregarRascunhoDaEquipe(dados: Record<string, unknown>): void {
+    const d = this.detalhe();
+    this.medidas = { ...this.medidas, ...(dados['medidas'] as Record<string, string>) };
+    this.acertos = { ...this.acertos, ...(dados['acertos'] as Record<string, string>) };
+    this.marcadas = { ...this.marcadas, ...(dados['marcadas'] as Record<string, boolean>) };
+    const conhecidas = new Map([...d.notas_selecionadas, ...d.notas_disponiveis].map((n) => [n.id, n]));
+    this.notas.set(((dados['notasIds'] as string[]) ?? []).map((id) => conhecidas.get(id)).filter((n): n is NotaSelecionada => !!n));
+    this.alterado.set(true);
+    this.rascunhoRestaurado.set(null);
+  }
+
+  /** Descarta o rascunho e volta à medição salva. */
+  protected descartarRascunho(): void {
+    this.rascunhos.limpar(this.chaveRascunho());
+    this.rascunhoRestaurado.set(null);
+    this.ngOnChanges();
   }
 
   // NEs que ainda podem ser acrescentadas (as já escolhidas saem da lista)
@@ -224,7 +310,11 @@ export class EtapaMedicaoComponent implements OnChanges {
     }
     const itens = d.itens.map((i) => ({ id: i.id, quantidade_medida: paraDecimalApi(this.medidas[i.id]), acerto: this.acertoDe(i.id).toFixed(2), despesa_variavel: !!this.marcadas[i.id] }));
     this.api.salvarMedicao(d.contrato_id, d.id, itens, this.notas().map((n) => n.id)).subscribe({
-      next: (novo) => this.atualizado.emit(novo),
+      next: (novo) => {
+        // Medição gravada de verdade: o rascunho da equipe não serve mais
+        this.rascunhoDaEquipe()?.apagar();
+        this.atualizado.emit(novo);
+      },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível salvar a medição'),
     });
   }

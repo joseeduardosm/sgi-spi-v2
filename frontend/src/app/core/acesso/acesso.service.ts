@@ -28,6 +28,14 @@ export function rotuloNivel(niveis: NiveisTextos | undefined, nivel: NivelAcl): 
   return niveis?.[nivel]?.rotulo || ROTULOS_NIVEL[nivel];
 }
 
+/**
+ * Níveis que valem a pena oferecer num seletor: esconde os que o módulo declara iguais ao anterior ("Igual a Leitura…"),
+ * para não repetir o mesmo rótulo. Mantém o nível `atual`, mesmo repetido, para o valor gravado continuar visível.
+ */
+export function niveisDistintos(niveis: NiveisTextos | undefined, atual?: NivelAcl | ''): NivelAcl[] {
+  return NIVEIS_ACL.filter((n) => n === atual || !(niveis?.[n]?.descricao ?? '').startsWith('Igual a '));
+}
+
 /** Frase do que o nível libera no módulo; vazia sem os textos. */
 export function descricaoNivel(niveis: NiveisTextos | undefined, nivel: NivelAcl): string {
   return niveis?.[nivel]?.descricao ?? '';
@@ -44,6 +52,8 @@ export interface AcessoEfetivo {
   url_base: string;
   nivel: NivelAcl | null;
   niveis?: NiveisTextos;
+  /** De onde vem o nível: perfil ativo, setor ou regra direta (cada um com o seu nível). */
+  origens?: Partial<Record<'perfil' | 'setor' | 'direta', NivelAcl>>;
 }
 
 /**

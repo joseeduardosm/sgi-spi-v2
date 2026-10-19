@@ -11,6 +11,7 @@ import { paraCampo } from './nova-tarefa.component';
 import { TarefasApiService } from './tarefas-api.service';
 import { AcaoPipeline, PessoaCarga, TarefaDetalhe, TarefaResumo } from './tarefas.models';
 
+import { EditorRicoComponent } from '../contratacoes/editor-rico.component';
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 export type ModoJanela = 'prazo' | 'transferir' | AcaoPipeline;
 
@@ -28,13 +29,13 @@ const TEXTOS: Partial<Record<ModoJanela, { titulo: string; rotulo: string; botao
 /** Janela modal de uma ação da tarefa; emite a tarefa atualizada. */
 @Component({
   selector: 'app-janela-tarefa',
-  imports: [EsqueletoComponent, FormsModule, AgendaPessoaComponent],
+  imports: [EsqueletoComponent, FormsModule, AgendaPessoaComponent, EditorRicoComponent],
   host: { '(document:keydown.escape)': 'fechar()' },
   template: `
     @if (modo(); as m) {
       <!-- "sobre-janela": fica acima da janela da tarefa quando aberta a partir dela -->
       <div animate.leave="mov-fundo-sai" class="fundo-modal sobre-janela" role="presentation" (click)="fechar()"></div>
-      <section animate.leave="mov-modal-sai" class="modal-portal sobre-janela" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-tarefa">
+      <section animate.leave="mov-modal-sai" class="modal-portal sobre-janela" [class.modal-tarefa-grande]="m === 'devolver'" role="dialog" aria-modal="true" aria-labelledby="titulo-janela-tarefa">
         <header>
           <div><span class="modal-sobretitulo">Tarefa #{{ tarefa()?.numero }}</span><h2 id="titulo-janela-tarefa">{{ textos()?.titulo }}</h2></div>
           <button type="button" aria-label="Fechar" (click)="fechar()">×</button>
@@ -67,8 +68,16 @@ const TEXTOS: Partial<Record<ModoJanela, { titulo: string; rotulo: string; botao
                 <app-agenda-pessoa [pessoaId]="paraId()" />
               </div>
             }
-            <div class="ocupa-duas"><label for="jt-texto">{{ textos()?.rotulo }}</label>
-              <textarea id="jt-texto" name="texto" rows="4" maxlength="4000" [(ngModel)]="texto"></textarea></div>
+            <div class="ocupa-duas">
+              @if (m === 'devolver') {
+                <!-- Devolução: o motivo é escrito no editor rico (lista, negrito, links, colar com formatação) -->
+                <label>{{ textos()?.rotulo }}</label>
+                @defer (on idle) { <app-editor-rico [(html)]="texto" [colarFormatado]="true" rotulo="O que precisa ser ajustado" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="4" /> }
+              } @else {
+                <label for="jt-texto">{{ textos()?.rotulo }}</label>
+                <textarea id="jt-texto" name="texto" rows="4" maxlength="4000" [(ngModel)]="texto"></textarea>
+              }
+            </div>
           </div>
           <footer>
             <button type="button" class="acao-secundaria" (click)="fechar()">Cancelar</button>
@@ -119,7 +128,9 @@ export class JanelaTarefaComponent {
 
   protected podeConfirmar(): boolean {
     const m = this.modo();
-    if (this.textos()?.obrigatorio && !this.texto.trim()) return false;
+    // Editor rico: "vazio" pode ser `<p></p>`; vale o texto sem as tags
+    const escrito = this.modo() === 'devolver' ? this.texto.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() : this.texto.trim();
+    if (this.textos()?.obrigatorio && !escrito) return false;
     if (m === 'prazo' && !this.prazo) return false;
     if (m === 'transferir' && !this.paraId()) return false;
     return true;

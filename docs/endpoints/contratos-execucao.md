@@ -91,7 +91,7 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
     - Erros: `400` com a retenção fechada (nota ainda não juntada ou já conferida) ou justificativa curta/ausente (`422` pelo schema); `403` sem permissão. Auditoria `contrato.execucao.retencao.recusar`. `pode_recusar` no detalhe diz se o usuário vê o botão.
   - reabrir a nota fiscal (ou a retenção) desfaz a conferência; uma NF nova exige nova conferência.
   - o **Financeiro** vê as retenções a conferir em "Minhas pendências" do painel.
-- **CADIN:** com pendência, exige descrição e e-mail de comunicação, e a etapa continua aberta; sem pendência, conclui.
+- **CADIN:** com pendência, exige a descrição da pendência (a etapa continua aberta) o sistema **registra uma ocorrência no diário de bordo** (mesma data e hora do registro da consulta, na competência da etapa, sem glosa e sem impacto na avaliação) e **envia o e-mail** da máscara "E-mail de CADIN" (ver abaixo) a **todos os prepostos ativos** da contratada, com a **equipe do contrato em cópia**, em segundo plano; o resultado (`email_enviado_em`, `email_ok`, `email_destinatarios`, `email_erro`) fica na consulta e `POST …/cadin/{consulta_id}/reenviar-email` reenvia (falha por falta de máscara ativa, de preposto com e-mail ou de SMTP). A cópia do e-mail enviado é guardada em PDF (`email`) e vai ao consolidado. Sem pendência, conclui. O PDF do e-mail e o `texto_notificacao`, que antes eram pedidos, **não são mais enviados** (consultas antigas mantêm os seus).
 - **Checklist:**
   - um PDF por documento;
   - cada documento é **obrigatório** ou **opcional** (`obrigatorio`, padrão `true`; os documentos anteriores a esta opção são obrigatórios);
@@ -108,11 +108,12 @@ A memória de cálculo em PDF mostra as mesmas colunas e, havendo glosas, a seç
   - O documento reaproveitado traz `reaproveitado_contrato` (número do contrato de origem) e `reaproveitado_de` (mês); em cadeia mantém a origem original. A tela mostra "Reaproveitado do contrato X (competência mm/aaaa) · válido até …"; o **consolidado não mostra** o reaproveitamento. Com todos os documentos anexados, a etapa conclui sozinha, como no envio manual.
   - Auditoria `contrato.execucao.checklist.reaproveitar_contrato`. Migração `b8d2f6a4c1e7`.
 - **Consolidado:** um PDF só.
+  - **Tamanho:** o PDF consolidado (e os demais PDFs gerados pelo sistema) tem limite de **300 MB**, independente do `ANEXOS_TAMANHO_MAXIMO_MB`, que vale só para os arquivos enviados pelos usuários. Antes, o consolidado herdava o limite de 25 MB de um anexo comum e falhava com "O arquivo excede o limite de 25 MB" quando a soma dos anexos da competência passava disso.
   - **Quem gera:** quem pode editar o contrato (SuperRoot, controle total, criador ou integrante vigente da equipe, com ACL ≥ MODIFICACAO) gera e **gera novamente** (substituir o consolidado existente), com os mesmos direitos, inclusive depois da OB, para refazer consolidados antigos. Quem não pode editar recebe `403`. `pode_gerar_consolidado_novamente` diz se o usuário vê o botão.
   - **Índice na primeira página:** o consolidado abre com o índice ("Índice do documento consolidado"), com um documento por linha (nº, etapa, título e páginas). O **título e as páginas de cada documento são hiperlinks**: um clique leva direto à página dele no PDF (nos documentos enviados, à contracapa que o antecede). Os mesmos documentos entram nos **marcadores** do leitor de PDF. Se houver muitos documentos, o índice ocupa mais de uma página, e toda a numeração ("Página X de N") e a tabela "Composição deste documento" já contam as páginas do índice. Vale também para consolidados gerados novamente.
   - **Folha de autenticação (antes do resumo executivo):** código de verificação, SHA-256 da composição (lista ordenada do SHA-256 de cada arquivo incluído), o SHA-256 de cada documento incluído, quem gerou, quando e quem deu ciência (medição e ateste). Entra no índice, antes do resumo executivo, e o consolidado fica registrado em `contratos_documentos_autenticados` (tipo `consolidado`), podendo ser verificado em `POST /api/contratos/verificar-documento`. Não é assinatura digital.
   - **Trilha da nota fiscal:** com recusas, as notas aparecem na ordem do ciclo: nota recusada → **recusa nº N** (PDF) → … → nota aprovada → retenção (aprovação), e o resumo executivo traz a tabela "Trilha da nota fiscal" (etapa, detalhe, data e autor).
-  - **Ordem de execução:** 1 medição (última memória de cálculo) → 2 avaliação (via assinada; sem ela, o relatório gerado), quando houver → 3 notas fiscais → 4 retenção de tributos (PDF gerado) → 5 CADIN (certidão e, se houver, e-mail de notificação, por consulta) → 6 documentos do checklist → 7 **resumo executivo, por último**, com a tabela "Composição deste documento" (nº, etapa, documento e páginas).
+  - **Ordem de execução:** 1 medição (última memória de cálculo) → 2 avaliação (via assinada; sem ela, o relatório gerado), quando houver → 3 notas fiscais → 4 retenção de tributos (PDF gerado) → 5 CADIN (por consulta: certidão e, se houve pendência, a cópia do e-mail enviado; depois da **última** certidão, o **Memorial do CADIN**, só quando houve alguma pendência) → 6 documentos do checklist → 7 **resumo executivo, por último**, com a tabela "Composição deste documento" (nº, etapa, documento e páginas).
   - **Resumo executivo** é a última página do consolidado e traz só os dados da competência e o histórico do CADIN: as tabelas "Checklist mensal" e "Composição deste documento" foram retiradas, porque o índice da primeira página já lista tudo.
   - **Documentos opcionais não anexados** não aparecem em lugar nenhum do consolidado: o opcional só é citado quando foi anexado.
   - **Contracapa:** cada documento **enviado** (avaliação assinada, NFs, CADIN e checklist) vem precedido de uma página na identidade visual do sistema: "Documento N de M · etapa", nome do documento, arquivo, data de envio com o nome completo de quem enviou e dados da etapa. Um arquivo ausente ou ilegível fica só com a contracapa, que avisa que ele não foi incluído.
@@ -200,7 +201,8 @@ A API gera `id` para grupos e itens. As respostas da avaliação referenciam o `
 | `POST /competencias/{id}/reenviar-email-retencao` | Reenvia o e-mail da retenção à equipe |
 | `POST /competencias/{id}/retencao/recusar` | Recusa a nota fiscal (justificativa obrigatória; e-mail à equipe e a todos os prepostos com o PDF) e reabre a etapa da nota fiscal |
 | `POST /competencias/{id}/recusas/{recusa_id}/reenviar-email` | Reenvia o e-mail de uma recusa |
-| `POST /competencias/{id}/cadin` | `multipart`: `possui_pendencia`, `certidao`; com pendência: `pendencia`, `texto_notificacao` e `email` |
+| `POST /competencias/{id}/cadin` | `multipart`: `possui_pendencia`, `certidao`; com pendência: `pendencia` (obrigatória). Com pendência, dispara o e-mail da máscara aos prepostos (equipe em Cc) |
+| `POST /competencias/{id}/cadin/{consulta_id}/reenviar-email` | Reenvia o e-mail de uma consulta **com pendência** (quem pode editar o contrato; `400` sem pendência, `404` consulta inexistente) |
 | `POST /competencias/{id}/checklist/{documento_id}` | `multipart` `arquivo` |
 | `POST /competencias/{id}/checklist/concluir` | Conclui a etapa com os obrigatórios anexados. Falta de obrigatório → `400` com os nomes |
 | `POST /competencias/{id}/consolidado` | Gera o documento consolidado. Gerar novamente: quem pode editar o contrato (mesmo direito da primeira geração; `403` para os demais), também após a OB |
@@ -288,3 +290,41 @@ Máscara global do tipo `despacho` (`POST/PUT/DELETE /api/contratos/modelos`, em
 - **Onde aparece:** `GET /api/contratos/{contrato_id}/competencias/{competencia_id}/despacho` (`DespachoCompetencia`: `html` formatado e `titulo`; `html` nulo se não há máscara ativa; ACL ≥ LEITURA) devolve o texto preenchido com os dados atuais do contrato e da competência. A etapa **Download** mostra esse texto formatado, com o botão **Copiar** (para colar no SEI). **O documento consolidado não muda**: o despacho não entra nele e nada é gravado.
 - **PDFs protegidos:** arquivos enviados com restrição de edição (senha de proprietário) são abertos normalmente na montagem; PDFs que exigem senha para abrir ficam de fora e a contracapa avisa "Arquivo ausente ou ilegível" (antes derrubavam a geração com erro `500`).
 - Migração `a8c4e6f1b3d5` (coluna `contratos.autoridade_despacho_id` e o tipo `despacho` em `contratos_modelos`).
+
+## E-mail de pendência no CADIN (máscara) e memorial
+
+Máscara global do tipo `email_cadin` (`POST/PUT/DELETE /api/contratos/modelos`, em **Contratos → Modelos → E-mail de CADIN**), com `assunto` e `html` do editor rico e `ativo`. Quem edita: SuperRoot ou controle total em Contratos (como o despacho). **Só uma máscara pode ficar ativa** (outra ativa responde `409`); `assunto` e `html` são obrigatórios (`422`) e placeholder fora da lista responde `400`. A migração `c1e7a3d9f5b2` semeia uma máscara padrão **ativa** (editável) e cria as colunas de resultado do e-mail em `contratos_competencias_cadin`.
+
+- **Placeholders** (`GET /api/contratos/modelos/email-cadin/placeholders`, lista fechada, escritos `#nome`, `#nome#` ou `##nome##`; valem no assunto e no texto): os do despacho (menos a autoridade e o vencimento da nota fiscal) e os da consulta.
+- `#nrocontrato`: Número do contrato (ex.: 018/2024)
+- `#razaosocialempresa`: Razão social da contratada
+- `#cnpjempresa`: CNPJ da contratada
+- `#objetodocontrato`: Objeto do contrato
+- `#processogestao`: Número do processo SEI de gestão do contrato
+- `#iniciocompetencia`: Primeiro dia do período da competência (dd/mm/aaaa)
+- `#fimcompetencia`: Último dia do período da competência (dd/mm/aaaa)
+- `#mescompetencia`: Mês e ano da competência (ex.: Agosto/2026)
+- `#nomegestor`: Nome do gestor (ponha em negrito no editor)
+- `#nomegestorsuplente`: Nome do gestor suplente (ponha em negrito no editor)
+- `#nomefiscaladministrativo`: Nome do fiscal administrativo (ponha em negrito no editor)
+- `#nomefiscaladministrativosuplente`: Nome do fiscal administrativo suplente (ponha em negrito no editor)
+- `#nomefiscaltecnico`: Nome do fiscal técnico (ponha em negrito no editor)
+- `#nomefiscaltecnicosuplente`: Nome do fiscal técnico suplente (ponha em negrito no editor)
+- `#nome…`, `#cargo…`, `#funcao…` e `#setor…` para cada função da equipe (gestor, gestor suplente, fiscal administrativo, fiscal técnico e os suplentes), como no despacho (parágrafo com pessoa vazia é omitido).
+- **Da consulta:** `#pendencia` (descrição digitada), `#dataconsulta` e `#horaconsulta` (horário de São Paulo) e `#usuarioconsulta` (quem registrou).
+- **Para quem:** Para = prepostos ativos da empresa; Cc = integrantes vigentes da equipe do contrato; Reply-To = equipe.
+
+**Memorial do CADIN (consolidado).** Quando alguma consulta da competência teve pendência, o consolidado traz, logo depois da última certidão (a sem pendência), o "Memorial do CADIN": uma tabela com **todas** as consultas, da primeira à última, com número, data e hora, resultado ("Com pendência" ou "Sem pendência") e quem inseriu. Só os fatos, sem texto de conclusão. Sem pendência alguma, o consolidado segue como antes (contracapa e certidão). O memorial é gerado a cada geração do consolidado e guardado como anexo (`contrato-execucao-cadin-memorial`).
+
+## Ordem Bancária (OB): `POST /api/contratos/{contrato_id}/competencias/{competencia_id}/ordem-bancaria`
+
+Etapa final da competência. `multipart/form-data` com o campo `arquivo` (**PDF**, até `ANEXOS_TAMANHO_MAXIMO_MB`, 25 MB por padrão). É a **única informação da OB**: o sistema não recebe número, data nem valor.
+
+**Documentos Importantes:** o documento consolidado da competência e a OB/PD juntada aqui aparecem juntos em um único item **"Pagamento MM/AAAA"** do contrato, com a data em que a OB foi juntada (`GET /api/contratos/{contrato_id}/pagamentos`, ver [contratos-cadastro.md](contratos-cadastro.md)); vale também para competências já pagas, e a reabertura da competência retira o item.
+
+- **Quando:** só com `etapa_atual = ordem_bancaria` (todas as etapas anteriores concluídas, inclusive o consolidado). Em outra etapa, `400` com a etapa atual (ou "já foi concluída").
+- **O que faz:** anexa o PDF, debita nas NEs escolhidas na medição, na ordem escolhida, o **valor a pagar** (soma das notas fiscais, valores brutos), lança um `pagamento` no extrato de cada NE usada e conclui a competência (`etapa_atual = concluida`). Falta de saldo nas NEs: `400` explicando quanto falta.
+- **Repetir:** depois de aceita, a mesma chamada é recusada (`400`); para corrigir é preciso reabrir a competência (SuperRoot ou gestor), o que estorna os débitos.
+- **Quem pode:** quem pode editar o contrato (equipe vigente, criador, controle total ou SuperRoot, com Modificação em Contratos) **ou** quem tem no **perfil ativo** a ação própria **"Lançar ordem bancária"** (`LANCAR_OB`, ver [acl.md](acl.md#ações-próprias-de-um-módulo)). A ação própria vale em **qualquer contrato** e **só** para a OB: a conta não altera mais nada no contrato. Para a integração achar o contrato e a competência (`GET /contratos`, `GET /contratos/{id}/execucao`), o perfil também precisa de **Consultar contratos** (`LEITURA`).
+- **Erros:** `400` etapa errada, arquivo inválido ou sem saldo; `401`; `403` sem permissão; `404` contrato ou competência inexistente.
+- **Auditoria:** `contrato.execucao.ordem_bancaria` (com o débito e as NEs usadas).

@@ -2,11 +2,12 @@
   <div>
     <app-trilha [itens]="[{ rotulo: 'Administração' }, { rotulo: 'Controle de acesso' }]" />
     <h1>Controle de acesso</h1>
-    <small>ACL por recurso. Sem regras, o recurso fica aberto; a partir da primeira regra, só os contemplados acessam.</small>
+    <small>Acesso por perfil, setor ou usuário (vale o maior nível). Sem regras nem perfis, o recurso fica aberto; a partir do primeiro, só os contemplados acessam.</small>
   </div>
 </div>
 
 <div class="abas" role="tablist">
+  <button role="tab" type="button" [class.ativa]="aba() === 'perfis'" [attr.aria-selected]="aba() === 'perfis'" (click)="aba.set('perfis')">Perfis</button>
   <button role="tab" type="button" [class.ativa]="aba() === 'regras'" [attr.aria-selected]="aba() === 'regras'" (click)="aba.set('regras')">Regras</button>
   <button role="tab" type="button" [class.ativa]="aba() === 'recursos'" [attr.aria-selected]="aba() === 'recursos'" (click)="aba.set('recursos')">Recursos</button>
   <button role="tab" type="button" [class.ativa]="aba() === 'efetivo'" [attr.aria-selected]="aba() === 'efetivo'" (click)="aba.set('efetivo')">Acesso efetivo</button>
@@ -17,12 +18,16 @@
 }
 
 @switch (aba()) {
+  @case ('perfis') {
+    <app-perfis-acl [recursos]="recursos()" (alterou)="recarregar()" (mensagem)="mostrar($event)" />
+  }
+
   @case ('regras') {
     <section class="painel-gestao" aria-labelledby="titulo-regras">
       <div class="barra-ferramentas">
         <div>
           <h2 id="titulo-regras">Regras de acesso</h2>
-          <p>Cada regra concede um nível a usuários e/ou setores. Regra direta prevalece sobre a herdada do setor.</p>
+          <p>Cada regra concede um nível a usuários e/ou setores. Setor, usuário e perfil se somam: vale o maior nível.</p>
         </div>
         <button class="acao-primaria" type="button" (click)="abrirRegra()"><span>+</span> Nova regra</button>
       </div>
@@ -112,7 +117,7 @@
       <div class="barra-ferramentas">
         <div>
           <h2 id="titulo-efetivo">Acesso efetivo por usuário</h2>
-          <p>Nível calculado em cada recurso ativo, considerando regras diretas, setores e o papel SuperRoot.</p>
+          <p>Nível calculado em cada recurso ativo, considerando perfil ativo, setores, regras diretas e o papel SuperRoot.</p>
         </div>
       </div>
       <div class="seletor-efetivo">
@@ -121,7 +126,7 @@
       @if (acessosEfetivos(); as itens) {
         <div class="tabela-gestao-envoltorio">
           <table class="tabela-gestao">
-            <thead><tr><th>Recurso</th><th>Slug</th><th>Nível efetivo</th></tr></thead>
+            <thead><tr><th>Recurso</th><th>Slug</th><th>Nível efetivo</th><th>Origem</th></tr></thead>
             <tbody>
               @for (a of itens; track a.recurso_id) {
                 <tr>
@@ -135,11 +140,19 @@
                       <span class="selo-situacao inativo">Sem acesso</span>
                     }
                   </td>
+                  <td>
+                    @for (o of origem(a.origens); track o.chave) { <span class="etiqueta">{{ o.rotulo }}: {{ rotuloNivel(a.niveis, o.nivel) }}</span> } @empty { <small>—</small> }
+                  </td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
+      }
+      @if (usuarioConsultado()[0]) {
+        <footer class="acoes-formulario">
+          <button class="acao-secundaria" type="button" (click)="personificar()">Personificar este usuário</button>
+        </footer>
       }
     </section>
   }
@@ -167,7 +180,7 @@
         <div>
           <label for="regra-nivel">Nível de acesso</label>
           <select id="regra-nivel" formControlName="nivel">
-            @for (n of niveis; track n) { <option [ngValue]="n">{{ rotuloNivel(niveisDaRegra(), n) }}</option> }
+            @for (n of niveisDistintos(niveisDaRegra(), formularioRegra.controls.nivel.value); track n) { <option [ngValue]="n">{{ rotuloNivel(niveisDaRegra(), n) }}</option> }
           </select>
           @if (descricaoNivel(niveisDaRegra(), formularioRegra.controls.nivel.value); as dica) { <small class="dica-formulario">{{ dica }}</small> }
         </div>

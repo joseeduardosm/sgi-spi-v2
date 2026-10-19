@@ -10,6 +10,13 @@
   <app-barra-lateral />
 
   <div class="portal-coluna">
+    <!-- Personificação (SuperRoot navegando como outro usuário para testar permissões) -->
+    @if (autenticacao.usuario()?.personificado_por; as real) {
+      <div class="faixa-personificacao" role="status">
+        <span>Você está personificando <strong>{{ autenticacao.usuario()?.nome_completo }}</strong> (&#64;{{ autenticacao.usuario()?.login }}). Suas ações ficam registradas em nome de {{ real.login }}.</span>
+        <button type="button" (click)="pararPersonificacao()">Parar de personificar</button>
+      </div>
+    }
     <header class="portal-barra-topo">
       <div class="barra-topo-inicio">
         <button class="botao-menu" type="button" aria-label="Abrir menu" (click)="layout.menuCelularAberto.set(true)">
@@ -63,6 +70,20 @@
               @if (!usuario.perfil_restrito) {
                 <button type="button" role="menuitem" (click)="abrirAssinatura()"><app-icone nome="envelope" /> Assinatura de e-mail</button>
               }
+              <!-- Perfil de acesso: mostra o ativo e, com mais de um, permite alternar -->
+              @if (usuario.perfil_ativo) {
+                <div class="menu-usuario-perfis" role="group" aria-label="Perfil de acesso">
+                  <span>Perfil</span>
+                  @if ((usuario.perfis?.length ?? 0) > 1) {
+                    @for (perfil of usuario.perfis; track perfil.id) {
+                      <button type="button" role="menuitemradio" [attr.aria-checked]="perfil.id === usuario.perfil_ativo.id"
+                              [class.ativo]="perfil.id === usuario.perfil_ativo.id" (click)="trocarPerfil(perfil.id)">{{ perfil.nome }}</button>
+                    }
+                  } @else {
+                    <strong>{{ usuario.perfil_ativo.nome }}</strong>
+                  }
+                </div>
+              }
               <!-- Tema da interface: fica salvo no navegador e na conta -->
               <div class="seletor-tema" role="group" aria-label="Tema da interface">
                 <span>Tema</span>
@@ -91,6 +112,7 @@
 <app-dialogos />
 <!-- Avisos das notificações que abrem em janela (não bloqueiam a navegação) -->
 <app-janela-notificacao />
+<app-janela-ciencia-nomeacao />
 <!-- Pede a permissão do navegador para as notificações (Web Push) quando o canal está ligado e este navegador ainda não está inscrito -->
 <app-aviso-notificacoes-navegador />
 <app-abrir-chamado />

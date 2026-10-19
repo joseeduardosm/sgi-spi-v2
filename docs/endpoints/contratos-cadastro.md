@@ -59,7 +59,7 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 | `sei_gestao_numero`, `sei_execucao_numero` | string | sim | Até 100 |
 | `sei_gestao_link`, `sei_execucao_link` | string | sim | `http(s)://…`, até 1000 |
 | `situacao_forcada` | string \| null | não | `ativo`, `a_vencer`, `encerrado`, `suspenso` |
-| `equipe` | `GravacaoEquipe` | não | Um id de usuário (ou nulo) por papel |
+| `equipe` | `GravacaoEquipe` | não | Um id de usuário (ou nulo) por papel. No **cadastro** define a equipe inicial; na **alteração** (`PUT`), **ninguém** a troca, nem o SuperRoot: a equipe enviada precisa ser igual à vigente (`400` "A equipe do contrato só muda por portaria…"), pois a equipe muda só por [portaria de designação](contratos-portarias.md). A tela de edição nem mostra os campos da equipe |
 | `itens` | `GravacaoItem[]` | não | Lista completa, na ordem de exibição |
 | `versao` | integer | no `PUT` | Versão lida no detalhe |
 
@@ -67,8 +67,9 @@ Carteira de contratos, cadastro e edição (dados, processos SEI, equipe e itens
 
 ### Respostas
 
-- `ResumoContrato`: `id`, `numero`, `apelido`, `empresa_razao_social`, `objeto`, `data_inicio`, `data_fim`, `situacao`, `base_mensal`, `valor_global`, `criador_id`, `competencia_atual` e `sem_competencias`.
-  - **`competencia_atual`** (marcadores da coluna **Competência** da carteira): a competência **regular ou de diferença de reajuste mais antiga ainda não concluída**, ignorando as anteriores ao corte de cobrança (`PENDENCIAS_A_PARTIR_DE` e `alertas_a_partir_de` do contrato, a mesma regra das pendências) e as medições adicionais. Traz `identificador` (rota `/contratos/{id}/execucao/{identificador}`), `rotulo`, `situacao` (`pendente`: o período não terminou; `disponivel`: liberada sem medição iniciada; `em_andamento`), `etapas` (etapas abertas agora, até três depois da nota fiscal) e `atrasada` (medição não concluída há mais de 30 dias do fim do período, o critério dos alertas). `null` quando não há competência em aberto ("Em dia"); `sem_competencias = true` quando a execução ainda não foi gerada. Os campos vêm das competências já carregadas na página, sem consulta extra por contrato; `DetalheContrato` os herda.
+- `ResumoContrato`: `id`, `numero`, `apelido`, `empresa_razao_social`, `objeto`, `data_inicio`, `data_fim`, `situacao`, `base_mensal`, `valor_global`, `criador_id`, `competencia_atual`, `competencias_em_andamento` e `sem_competencias`.
+  - **`competencias_em_andamento`** (marcadores da coluna **Competência** da carteira): **todas** as competências já iniciadas (medição iniciada ou etapa além da medição; `situacao = em_andamento`), regulares ou de diferença de reajuste, de **agosto/2026 em diante** (as anteriores não têm marcador), da mais antiga à mais nova. Cada uma é uma **linha** de marcador `(MM/AAAA · etapa)` (etapas abertas juntas, como retenção e checklist, na mesma linha, separadas por "+"), mais "Atrasada" quando for o caso. Mesma forma de `competencia_atual`. Lista vazia quando nenhuma foi iniciada.
+  - **`competencia_atual`**: a competência **regular ou de diferença de reajuste mais antiga ainda não concluída**, de agosto/2026 em diante (`MARCADORES_A_PARTIR_DE`; é um corte só dos marcadores, diferente do de pendências/alertas `PENDENCIAS_A_PARTIR_DE`) e sem as medições adicionais. Usada só quando não há competência em andamento ("08/2026 · Medição · Disponível"). Traz `identificador` (rota `/contratos/{id}/execucao/{identificador}`), `rotulo`, `situacao` (`pendente`: o período não terminou; `disponivel`: liberada sem medição iniciada; `em_andamento`), `etapas` (etapas abertas agora, até três depois da nota fiscal) e `atrasada` (medição não concluída há mais de 30 dias do fim do período, o critério dos alertas). `null` quando não há competência em aberto ("Em dia"); `sem_competencias = true` quando a execução ainda não foi gerada. Os campos vêm das competências já carregadas na página, sem consulta extra por contrato; `DetalheContrato` os herda.
 - `PaginaContratos`: `itens`, `total`, `pagina`, `tamanho_pagina`.
 - `DetalheContrato` = `ResumoContrato` +
   - `sequencial`, `ano` e `empresa` (`OpcaoEmpresa`);
@@ -150,6 +151,10 @@ Resposta **`204`**. Exige ACL ≥ `MODIFICACAO`; excluir contrato de outra pesso
 
 `AlteracaoCampo[]`, do mais recente para o mais antigo. A tela filtra por `campo` para montar o ícone de histórico de cada campo. Os campos de equipe aparecem como `equipe.<papel>`, com os nomes.
 
+## `GET /api/contratos/{contrato_id}/pagamentos`
+
+Pagamentos do contrato em **Documentos Importantes**, do mais recente ao mais antigo: um item **"Pagamento MM/AAAA"** por competência com OB/PD juntada na última etapa da execução, reunindo o **documento consolidado** (`consolidado`, nulo em competências antigas sem consolidado) e a **OB/PD** (`ob`), nessa ordem com a data em que a OB foi juntada (`juntado_em`). Os arquivos baixam por `GET /api/contratos/{contrato_id}/competencias/{competencia_id}/arquivos/{anexo_id}`. Exige ACL ≥ `LEITURA`. Erro: `404`.
+
 ## `GET /api/contratos/{contrato_id}/documentos`
 
 `LeituraDocumento[]`: os 23 tipos do catálogo (001 DFD … 023 Termos de Recebimento), anexados ou não, e os termos aditivos de prorrogação (024 em diante). A aba é só um repositório: nenhuma etapa depende dela.
@@ -190,3 +195,7 @@ Relatório em PDF da aba **Itens** (A4 paisagem, gerado na hora, nada é gravado
   - tabela dos itens com os mesmos números de `GET /api/contratos/{contrato_id}` (`itens[]`): nº, descrição, UF, tipo e faturamento, códigos (Classe · ND · SIAFÍSICO · CATMAT/CATSER), quantidade total, mensal, executada e disponível, valor unitário vigente, subtotal mensal (só contínuos) e meses da vigência.
 - **Resposta `200 OK`:** `application/pdf` com `Content-Disposition: attachment`.
 - **Angular:** botão **Relatório PDF** no cabeçalho da aba Itens (`/contratos/:id?aba=itens`), desabilitado sem itens.
+
+## Grupo sistêmico "Equipes de contratos"
+
+Ao cadastrar, alterar a equipe ou excluir um contrato, o sistema recalcula o setor sistêmico **Equipes de contratos** (ver [setores.md](setores.md)): quem integra a equipe de algum contrato entra; quem não integra mais nenhuma sai.

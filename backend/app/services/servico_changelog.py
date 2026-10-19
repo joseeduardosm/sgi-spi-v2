@@ -182,7 +182,10 @@ def destinatarios(sessao: Session) -> list[str]:
 
 def selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: list[int]) -> tuple[list[str], str]:
     """E-mails dos usuários escolhidos e das pessoas dos setores escolhidos (membros ou com o setor, ou um setor filho,
-    como Departamento), e a descrição da seleção para o histórico."""
+    como Departamento), e a descrição da seleção para o histórico.
+
+    Quem a administração escolhe **recebe sempre** (ativo e com e-mail), sem depender da preferência "Novidades do SGI SPI":
+    a preferência só filtra o envio a `todos`."""
     from app.services.rh.papeis import setor_com_descendentes, usuarios_dos_setores
 
     usuarios = list(sessao.scalars(select(Usuario).where(Usuario.id.in_(usuarios_ids), Usuario.ativo.is_(True)))) if usuarios_ids else []
@@ -194,11 +197,11 @@ def selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: list[int
         partes.append("usuários: " + ", ".join(sorted((u.nome_completo or u.login) for u in usuarios)))
     if escolhidos:
         partes.append("setores: " + ", ".join(sorted(s.nome for s in escolhidos)))
-    return _emails(_quem_optou(sessao, pessoas.values())), "; ".join(partes)
+    return _emails(pessoas.values()), "; ".join(partes)
 
 
 def total_selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: list[int]) -> int:
-    """Quantas pessoas ativas a seleção reúne, tenham ou não ligado o e-mail (para a tela comparar com quem de fato recebe)."""
+    """Quantas pessoas ativas a seleção reúne (as que não têm e-mail cadastrado não recebem)."""
     from app.services.rh.papeis import setor_com_descendentes, usuarios_dos_setores
 
     pessoas = {u.id for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(usuarios_ids), Usuario.ativo.is_(True)))} if usuarios_ids else set()
@@ -218,7 +221,7 @@ def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, d
     elif destino == "selecionados":
         lista, descricao = selecionados(sessao, list(usuarios_ids), list(setores_ids))
         if not lista:
-            raise ErroChangelog("Nenhum destinatário ativo, com e-mail, que tenha ligado o e-mail de \"Novidades do SGI SPI\" entre os usuários e setores escolhidos.")
+            raise ErroChangelog("Nenhum destinatário ativo e com e-mail cadastrado entre os usuários e setores escolhidos.")
     else:
         lista = [email_teste or ""]
     envio = EnvioChangelog(

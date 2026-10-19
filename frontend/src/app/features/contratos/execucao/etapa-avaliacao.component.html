@@ -11,6 +11,9 @@
     }
   </header>
   <div class="corpo">
+    <app-rascunho-servidor #rascunhoServidor [contratoId]="d.contrato_id" tipo="avaliacao" [chave]="d.id" [editavel]="editavel() && !a.concluida_em"
+                           [obterDados]="dadosDoRascunhoServidor" (carregar)="carregarRascunhoDaEquipe($event)" />
+    @if (rascunhoRestaurado(); as r) { <app-aviso-rascunho [salvoEm]="r.salvoEm" observacao="As notas ainda não estão salvas: confira e salve." (descartar)="descartarRascunho()" /> }
     <p class="dica-formulario">Escala: @for (n of a.definicao.escala; track $index) { <b>{{ n.valor }}</b> {{ n.legenda }}{{ $last ? '' : ' · ' }} }</p>
     @if (a.ocorrencias.length) {
       <p class="aviso-bloco">{{ a.ocorrencias.length }} ocorrência(s) do diário de bordo no período impactam itens desta avaliação (marcados abaixo). Nota máxima nesses itens exige justificativa.</p>
@@ -47,7 +50,7 @@
       </table>
     }
     @if (editavel() && !a.concluida_em) {
-      <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!completas(iniciais)" (click)="salvarInicial()">Salvar avaliação inicial</button></div>
+      <div class="acoes-cartao"><button type="button" class="acao-secundaria" [disabled]="rascunhoServidor.salvando()" (click)="rascunhoServidor.salvar()" title="Salva as notas digitadas para a equipe do contrato ver e continuar">Salvar rascunho</button> <button type="button" class="acao-primaria" [disabled]="!completas(iniciais)" (click)="salvarInicial()">Salvar avaliação inicial</button></div>
     }
 
     <!-- Avaliação do gestor: só quando alguma nota inicial ficou abaixo da máxima -->
@@ -84,7 +87,7 @@
           <textarea id="complemento-geral" [disabled]="!editavel() || !!a.concluida_em" [(ngModel)]="complemento"></textarea></div>
       </div>
       @if (editavel() && !a.concluida_em) {
-        <div class="acoes-cartao"><button type="button" class="acao-primaria" [disabled]="!completas(gestor)" (click)="salvarGestor()">Salvar avaliação do gestor</button></div>
+        <div class="acoes-cartao"><button type="button" class="acao-secundaria" [disabled]="rascunhoServidor.salvando()" (click)="rascunhoServidor.salvar()" title="Salva as notas digitadas para a equipe do contrato ver e continuar">Salvar rascunho</button> <button type="button" class="acao-primaria" [disabled]="!completas(gestor)" (click)="salvarGestor()">Salvar avaliação do gestor</button></div>
       }
     }
 

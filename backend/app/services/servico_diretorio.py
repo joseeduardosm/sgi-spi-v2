@@ -338,9 +338,11 @@ def apagar_parabens(sessao: Session, usuario: Usuario, alvo_id: int, hoje: date 
 def corpo_parabens_automatico(nome: str) -> str:
     """Texto institucional enviado no dia do aniversário."""
     return (
-        f"{nome},\n\nA Secretaria de Parcerias em Investimentos parabeniza você por mais um ano de vida.\n\n"
-        "Desejamos que esta data seja marcada por alegria, saúde, prosperidade e muitas realizações.\n\n"
-        "Agradecemos sua dedicação e sua contribuição para o serviço público.\n\nFeliz aniversário!"
+        "Feliz aniversário! 🎉\n\n"
+        "A Secretaria de Parcerias em Investimentos deseja a você um novo ciclo repleto de saúde, alegrias e realizações pessoais e profissionais.\n\n"
+        "Agradecemos por fazer parte da nossa equipe e contribuir com seu trabalho e dedicação.\n\n"
+        "Que seu dia seja especial e que não faltem motivos para celebrar!\n\n"
+        "Secretaria de Parcerias em Investimentos - SPI"
     )
 
 
@@ -354,7 +356,10 @@ def enviar_parabens_do_dia(sessao: Session, hoje: date | None = None) -> list:
         if data_no_ano(p.data_nascimento, hoje.year) != hoje:
             continue
         m = notificacoes.notificar(
-            sessao, [p.id], "Feliz aniversário!", corpo_parabens_automatico(_nome(p)), chave=f"aniversario:{p.id}:{hoje.isoformat()}", link="/", evento="diretorio.feliz_aniversario")
+            sessao, [p.id], "Feliz aniversário! 🎉", corpo_parabens_automatico(_nome(p)), chave=f"aniversario:{p.id}:{hoje.isoformat()}", link="/",
+            evento="diretorio.feliz_aniversario",
+            # Modal na próxima vez que a pessoa abre o sistema e e-mail sempre, sem depender da preferência de canais
+            abrir_em_janela=True, forcar_email=True)
         if m is not None:
             criadas.append(m)
     sessao.commit()

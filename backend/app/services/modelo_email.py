@@ -35,9 +35,9 @@ def imagem_logo() -> ImagemEmbutida:
 
 # --- Texto formatado (`## título`, `- lista`, `**negrito**`) → HTML do e-mail -------------------------------------------
 
-ESTILO_P = "margin:0 0 12px;font-size:14px;line-height:1.6;color:#2b3137"
+ESTILO_P = "margin:0 0 12px;font-size:14px;line-height:1.55;color:#2b3137"
 ESTILO_H2 = f"margin:20px 0 8px;font-size:15px;color:{VERMELHO}"
-ESTILO_UL = "margin:0 0 12px;padding-left:20px;font-size:14px;line-height:1.55;color:#2b3137"
+ESTILO_UL = "margin:0 0 12px;padding-left:22px;font-size:14px;line-height:1.55;color:#2b3137"
 
 
 def _inline(texto: str) -> str:
@@ -79,7 +79,7 @@ def corpo_html(corpo: str) -> str:
             while nivel > alvo:
                 partes.append("</ul>")
                 nivel -= 1
-            partes.append(f'<li style="margin:0 0 4px">{_inline(item.group(2))}</li>')
+            partes.append(f'<li style="margin:0 0 8px">{_inline(item.group(2))}</li>')
             continue
         while nivel:
             partes.append("</ul>")
@@ -110,7 +110,7 @@ def para_previa(html: str) -> str:
 def paragrafos(textos: list[str]) -> str:
     """Parágrafos com as quebras de linha preservadas."""
     return "".join(
-        f'<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#2b3137;white-space:pre-line">{escape(t)}</p>' for t in textos if t
+        f'<p style="margin:0 0 16px;font-size:14px;line-height:1.55;color:#2b3137;white-space:pre-line">{escape(t)}</p>' for t in textos if t
     )
 
 
@@ -137,18 +137,18 @@ def pagina(titulo: str, conteudo_html: str, *, link_url: str | None = None, rotu
     return f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(titulo)}</title></head>
 <body style="margin:0;padding:0;background:#f1f2f4">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f2f4;padding:24px 12px"><tr><td align="center">
-  <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;background:#ffffff;border:1px solid #dfe2e6;font-family:Arial,Helvetica,sans-serif">
-    <tr><td align="center" style="padding:16px 28px 8px;text-align:center">
-      <img src="cid:{CID_LOGO}" width="584" alt="Secretaria de Parcerias em Investimentos · Governo do Estado de São Paulo" style="display:block;margin:0 auto;border:0;width:100%;max-width:584px;height:auto">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f2f4;padding:12px 12px"><tr><td align="center">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:none;background:#ffffff;border:1px solid #dfe2e6;font-family:Arial,Helvetica,sans-serif">
+    <tr><td align="center" style="padding:18px 32px 10px;text-align:center">
+      <img src="cid:{CID_LOGO}" width="680" alt="Secretaria de Parcerias em Investimentos · Governo do Estado de São Paulo" style="display:block;margin:0 auto;border:0;width:100%;max-width:680px;height:auto">
     </td></tr>
     <tr><td style="height:4px;background:{VERMELHO};font-size:0;line-height:0">&nbsp;</td></tr>
-    <tr><td style="padding:26px 28px 20px">
-      {sobre}<h1 style="margin:0 0 16px;font-size:19px;line-height:1.35;color:#1f262d">{escape(titulo)}</h1>
+    <tr><td style="padding:28px 32px 26px">
+      {sobre}<h1 style="margin:0 0 16px;font-size:20px;line-height:1.35;color:#1f262d">{escape(titulo)}</h1>
       {conteudo_html}
       {botao_html}
     </td></tr>
-    <tr><td style="padding:16px 28px 20px;background:#f7f8f9;border-top:1px solid #e6e8eb">
+    <tr><td style="padding:18px 32px 22px;background:#f7f8f9;border-top:1px solid #e6e8eb">
       <div style="font-size:12px;font-weight:bold;color:#3a424a">SGI SPI – Sistema de Gestão Integrada</div>
       <div style="font-size:11px;line-height:1.5;color:#7b8490;margin-top:4px">{escape(nota_rodape)}<br>
         Secretaria de Parcerias em Investimentos · Governo do Estado de São Paulo</div>

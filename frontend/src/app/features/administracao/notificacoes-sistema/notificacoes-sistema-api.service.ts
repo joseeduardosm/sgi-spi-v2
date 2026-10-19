@@ -29,7 +29,7 @@ export class NotificacoesSistemaApiService {
     return this.http.post<EnvioChangelog>(`${this.base}/envios`, pedido);
   }
 
-  /** Quantos da seleção receberão o e-mail (só quem ligou "Novidades do SGI SPI"). */
+  /** Quantos da seleção receberão o e-mail (todo escolhido ativo e com e-mail). */
   contagem(usuariosIds: number[], setoresIds: number[]): Observable<{ total: number; selecionados: number }> {
     return this.http.post<{ total: number; selecionados: number }>(`${this.base}/contagem`, { usuarios_ids: usuariosIds, setores_ids: setoresIds });
   }

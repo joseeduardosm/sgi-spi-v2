@@ -40,6 +40,7 @@ from app.models.tarefas import (
     DependenciaTarefa, EstagioTarefa, MarcoTarefa, MembroEquipeTarefas, ResponsavelTarefa, SeguidorTarefa, Tarefa, VinculoMarcadorTarefa,
 )
 from app.models.usuario import Usuario
+from app.services.tarefas.descricao import sanitizar_descricao, texto_da_descricao
 from app.services import servico_anexos, notificacoes
 from app.services.tarefas import paleta
 from app.services.servico_auditoria import auditar
@@ -514,6 +515,14 @@ def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str
         de = ROTULOS_STATUS[tarefa.status]
         raise ErroTarefa(f"Não é possível \"{acao}\" esta tarefa agora (situação: {de}), ou você não tem permissão para isso.", 403, "sem_permissao")
     texto = (texto or "").strip()
+    if acao == "devolver":
+        # O motivo da devolução vem do editor rico: HTML sanitizado (editor vazio vira vazio e cai no "informe o motivo")
+        try:
+            texto = sanitizar_descricao(texto).strip()
+        except ValueError as erro:
+            raise ErroTarefa(str(erro)) from erro
+    elif len(texto) > 4000:
+        raise ErroTarefa("O texto passa de 4000 caracteres.")
     if acao in EXIGEM_MOTIVO and not texto:
         raise ErroTarefa("Informe o motivo.")
     de, para = tarefa.status, ACOES_PIPELINE[acao][1]
@@ -546,9 +555,34 @@ def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str
         tipo, titulos["entregar"] = "status", "Tarefa concluída"
     _evento(sessao, tarefa, tipo, autor, titulos[acao], texto, de=de, para=para)
     registrar_nas_subtarefas(sessao, tarefa, autor, f"{ROTULOS_STATUS[de]} → {ROTULOS_STATUS[para]}", de=de, para=para)
+    # Mãe validada (ou concluída pela liderança): todas as subtarefas ainda abertas são concluídas junto com ela
+    if para == "concluida" and acao in ("validar", "concluir", "entregar"):
+        _concluir_subtarefas(sessao, autor, tarefa, agora)
     _avisos_pipeline(sessao, autor, tarefa, acao, para, texto)
     sessao.commit()
     return tarefa
+
+
+def _concluir_subtarefas(sessao: Session, autor: Usuario, mae: Tarefa, agora) -> None:
+    """Conclui as subtarefas abertas da mãe validada: situação, estágio, marco, histórico e avisos. As controladas por outro módulo ficam de fora. Sem commit."""
+    for sub in sessao.scalars(select(Tarefa).where(Tarefa.tarefa_pai_id == mae.id, Tarefa.status != "concluida").order_by(Tarefa.numero)):
+        if sub.controlada_externamente:
+            continue
+        de = sub.status
+        if sub.em_andamento_desde is not None:
+            sub.segundos_em_andamento += max(0, int((agora - _comparavel(sub.em_andamento_desde)).total_seconds()))
+            sub.em_andamento_desde = None
+        sub.iniciada_em = sub.iniciada_em or agora
+        sub.entregue_em = sub.entregue_em or agora
+        sub.status, sub.concluida_em, sub.versao = "concluida", agora, sub.versao + 1
+        sub.estagio_id = estagio_da_categoria(sessao, sub.equipe_id, "concluida")
+        reavaliar_marco(sessao, sub.marco_id)
+        _evento(sessao, sub, "validada", autor, f"Concluída junto com a tarefa mãe #{mae.numero}", "", de=de, para="concluida", mae=mae.numero)
+        notificacoes.encerrar(sessao, prefixo=f"tarefa-validacao:{sub.id}:")
+        notificacoes.encerrar(sessao, prefixo=f"tarefa-validacao-parada:{sub.id}:")
+        notificacoes.encerrar(sessao, prefixo=f"tarefa-prazo-aviso:{sub.id}:")
+        _avisar(sessao, envolvidos(sub), f"Tarefa concluída: {_rotulo(sub)}", f"{_nome(autor)} validou a tarefa mãe {_rotulo(mae)}; a subtarefa {_rotulo(sub)} foi concluída junto com ela.",
+                sub, f"tarefa-concluida:{sub.id}:{sub.versao}", autor=autor, categoria="comunicado", evento="tarefas.concluida")
 
 
 def _avisos_pipeline(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, para: str, texto: str) -> None:
@@ -568,7 +602,7 @@ def _avisos_pipeline(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str,
                 tarefa, f"tarefa-validada:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="comunicado", evento="tarefas.entrega_validada")
     elif acao == "devolver":
         _avisar(sessao, executores, f"Entrega devolvida: {_rotulo(tarefa)}",
-                f"{_nome(autor)} devolveu a tarefa {_rotulo(tarefa)} para ajustes.\n\nMotivo: {texto}",
+                f"{_nome(autor)} devolveu a tarefa {_rotulo(tarefa)} para ajustes.\n\nMotivo: {texto_da_descricao(texto)}",
                 tarefa, f"tarefa-devolvida:{tarefa.id}:{tarefa.versao}", autor=autor, categoria="pendencia", prioridade="alta", evento="tarefas.entrega_devolvida")
     elif acao == "reabrir":
         _avisar(sessao, executores, f"Tarefa reaberta: {_rotulo(tarefa)}", f"{_nome(autor)} reabriu a tarefa {_rotulo(tarefa)}.\n\nMotivo: {texto}",
@@ -633,12 +667,19 @@ def _mencionados(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str) ->
 
 def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquivos: list[tuple[str, BinaryIO]], em_resposta_a: uuid.UUID | None = None) -> EventoTarefa:
     _exigir("comentar" in acoes(sessao, autor, tarefa), "Você não pode comentar nesta tarefa.")
-    texto = (texto or "").strip()
-    if not texto and not arquivos:
+    # O comentário vem do editor rico: HTML sanitizado (editor vazio vira vazio) ou texto simples; menções, avisos e limites usam o texto puro
+    try:
+        texto = sanitizar_descricao((texto or "").strip()).strip()
+    except ValueError as erro:
+        raise ErroTarefa(str(erro)) from erro
+    puro = texto_da_descricao(texto).strip()
+    if not puro and not arquivos:
         raise ErroTarefa("Escreva um comentário ou anexe um arquivo.")
+    if len(puro) > 4000:
+        raise ErroTarefa(f"O comentário passa de 4000 caracteres ({len(puro)}).")
     if len(arquivos) > MAXIMO_ANEXOS:
         raise ErroTarefa(f"Envie no máximo {MAXIMO_ANEXOS} arquivos por vez.")
-    titulo = "Comentário" if texto else ("Anexo" if len(arquivos) == 1 else f"{len(arquivos)} anexos")
+    titulo = "Comentário" if puro else ("Anexo" if len(arquivos) == 1 else f"{len(arquivos)} anexos")
     # Resposta: guarda quem e o que foi respondido (o trecho fica salvo, para a citação continuar legível se o original for removido depois)
     citado = None
     if em_resposta_a is not None:
@@ -648,7 +689,7 @@ def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquiv
             raise ErroTarefa("O registro a responder não existe nesta tarefa ou não tem texto.", 404, "nao_encontrado")
     evento = _evento(sessao, tarefa, "comentario", autor, titulo, texto,
                      resposta_a=str(citado.id) if citado else None, resposta_autor=citado.autor_nome if citado else None,
-                     resposta_texto=(citado.texto[:240] + ("…" if len(citado.texto) > 240 else "")) if citado else None)
+                     resposta_texto=(texto_da_descricao(citado.texto)[:240] + ("…" if len(texto_da_descricao(citado.texto)) > 240 else "")) if citado else None)
     sessao.flush()
     try:
         for nome, conteudo in arquivos:
@@ -659,12 +700,12 @@ def comentar(sessao: Session, autor: Usuario, tarefa: Tarefa, texto: str, arquiv
         raise ErroTarefa(str(erro)) from erro
     tarefa.atualizado_em = agora_utc()
     outros = (envolvidos(tarefa) | ({tarefa.criado_por_id} - {None}))
-    mencionados = _mencionados(sessao, autor, tarefa, texto)
+    mencionados = _mencionados(sessao, autor, tarefa, puro)
     outros -= mencionados
     if mencionados:
-        _avisar(sessao, mencionados, f"{_nome(autor)} mencionou você em {_rotulo(tarefa)}", f"{_nome(autor)} escreveu:\n\n{texto[:300]}",
+        _avisar(sessao, mencionados, f"{_nome(autor)} mencionou você em {_rotulo(tarefa)}", f"{_nome(autor)} escreveu:\n\n{puro[:300]}",
                 tarefa, f"tarefa-mencao:{evento.id}", autor=autor, categoria="atribuicao", prioridade="alta", evento="tarefas.mencao")
-    resumo = texto[:300] + ("…" if len(texto) > 300 else "") if texto else f"{len(arquivos)} arquivo(s) anexado(s)."
+    resumo = puro[:300] + ("…" if len(puro) > 300 else "") if puro else f"{len(arquivos)} arquivo(s) anexado(s)."
     _avisar(sessao, outros, f"Novo comentário em {_rotulo(tarefa)}", f"{_nome(autor)} comentou:\n\n{resumo}",
             tarefa, f"tarefa-comentario:{evento.id}", autor=autor, categoria="comunicado", exceto=mencionados, evento="tarefas.comentario")
     sessao.commit()

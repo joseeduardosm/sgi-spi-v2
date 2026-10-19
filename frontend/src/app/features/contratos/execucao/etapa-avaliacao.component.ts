@@ -2,7 +2,9 @@
 // Este arquivo serve para controlar a etapa 2 (avaliação dos serviços): notas, ocorrências do diário, ateste, PDF, e-mail à contratada e reconsideração.
 
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, input, OnChanges, output, signal } from '@angular/core';
+import { RascunhoGuardado, RascunhoService } from '../../../core/rascunho/rascunho.service';
+import { AvisoRascunhoComponent } from '../../../shared/componentes/aviso-rascunho/aviso-rascunho.component';
+import { Component, computed, DestroyRef, inject, input, OnChanges, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
@@ -13,16 +15,25 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { DetalheCompetencia, OcorrenciaAvaliacao, RespostaAvaliacao } from '../compartilhado/contratos.models';
 import { ROTULOS_PAPEL } from '../compartilhado/rotulos';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { RascunhoServidorComponent } from '../compartilhado/rascunho-servidor.component';
 import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
 import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
 /** Nota e justificativa digitadas para um item. */
 type Resposta = { nota: string; justificativa: string };
 
+/** Notas e justificativas ainda não salvas, guardadas como rascunho; `base` identifica a avaliação gravada a que elas se referem. */
+interface RascunhoAvaliacao {
+  base: string;
+  iniciais: Record<string, Resposta>;
+  gestor: Record<string, Resposta>;
+  complemento: string;
+}
+
 /** Etapa 2: avaliação inicial, avaliação do gestor, ateste, PDF assinado e reconsideração. */
 @Component({
   selector: 'app-etapa-avaliacao',
-  imports: [LinkificarPipe, FormsModule, RouterLink, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
+  imports: [RascunhoServidorComponent, AvisoRascunhoComponent, LinkificarPipe, FormsModule, RouterLink, DatePipe, EnvioPdfComponent, OpcaoEmailComponent, ...PIPES_FORMATACAO],
   templateUrl: './etapa-avaliacao.component.html',
   // Colunas fixas: Peso, Nota e Justificativa ficam alinhadas em todos os grupos, qualquer que seja o tamanho dos textos
   styles: `
@@ -43,6 +54,8 @@ export class EtapaAvaliacaoComponent implements OnChanges {
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly autenticacao = inject(AutenticacaoService);
+  private readonly rascunhos = inject(RascunhoService);
+  private readonly destruir = inject(DestroyRef);
 
   // Rótulos dos papéis da equipe (Gestor, Fiscal técnico...) para a lista de ciências
   protected readonly papeis = ROTULOS_PAPEL;
@@ -80,6 +93,10 @@ export class EtapaAvaliacaoComponent implements OnChanges {
   // Retrato das respostas gravadas já carregadas na tela: a atualização periódica da competência (ex.: acompanhamento do envio do e-mail)
   // traz um objeto novo, mas não pode apagar as notas escolhidas e ainda não salvas
   private assinatura = '';
+  // Respostas como vieram do servidor (para saber se há algo digitado e ainda não salvo) e controle do rascunho
+  private base = '';
+  private vigiando = false;
+  protected readonly rascunhoRestaurado = signal<RascunhoGuardado<RascunhoAvaliacao> | null>(null);
 
   /** Quando a competência muda de verdade (respostas gravadas ou outra avaliação), recarrega as respostas a partir dela. */
   ngOnChanges(): void {
@@ -95,6 +112,61 @@ export class EtapaAvaliacaoComponent implements OnChanges {
     // O gestor começa com as notas dele ou, se ainda não avaliou, com as da avaliação inicial
     this.gestor = { ...vazio(), ...(a.respostas_gestor.length ? mapa(a.respostas_gestor) : mapa(a.respostas_iniciais)) };
     this.complemento = a.complemento_gestor;
+    this.base = this.retratoDasRespostas();
+    this.restaurarRascunho();
+    if (!this.vigiando) {
+      this.vigiando = true;
+      // Guarda as notas e justificativas digitadas e ainda não salvas (some ao salvar; não vale se a avaliação já mudou no servidor)
+      this.rascunhos.vigiar<RascunhoAvaliacao>(this.destruir, this.chaveRascunho(), () => this.estadoDoRascunho());
+    }
+  }
+
+  private chaveRascunho(): string {
+    return `avaliacao:${this.detalhe().id}`;
+  }
+
+  private retratoDasRespostas(): string {
+    return JSON.stringify([this.iniciais, this.gestor, this.complemento]);
+  }
+
+  /** Só há rascunho quando se pode editar e algo difere do que está salvo. */
+  private estadoDoRascunho(): RascunhoAvaliacao | null {
+    if (!this.editavel() || this.avaliacao().concluida_em || this.retratoDasRespostas() === this.base) return null;
+    return { base: this.assinatura, iniciais: this.iniciais, gestor: this.gestor, complemento: this.complemento };
+  }
+
+  /** Preenche de novo o que foi digitado e não salvo, se a avaliação gravada continua a mesma; senão descarta o rascunho velho. */
+  private restaurarRascunho(): void {
+    this.rascunhoRestaurado.set(null);
+    const guardado = this.rascunhos.ler<RascunhoAvaliacao>(this.chaveRascunho());
+    if (!guardado) return;
+    if (guardado.dados.base !== this.assinatura || !this.editavel() || this.avaliacao().concluida_em) {
+      this.rascunhos.limpar(this.chaveRascunho());
+      return;
+    }
+    this.iniciais = { ...this.iniciais, ...guardado.dados.iniciais };
+    this.gestor = { ...this.gestor, ...guardado.dados.gestor };
+    this.complemento = guardado.dados.complemento;
+    this.rascunhoRestaurado.set(guardado);
+  }
+
+  /** Campos para o rascunho salvo no servidor (visível à equipe): sempre as notas da tela, mesmo incompletas. */
+  protected readonly dadosDoRascunhoServidor = (): Record<string, unknown> | null => ({ iniciais: this.iniciais, gestor: this.gestor, complemento: this.complemento });
+
+  /** Preenche a tela com o rascunho salvo pela equipe. */
+  protected carregarRascunhoDaEquipe(dados: Record<string, unknown>): void {
+    this.iniciais = { ...this.iniciais, ...(dados['iniciais'] as Record<string, Resposta>) };
+    this.gestor = { ...this.gestor, ...(dados['gestor'] as Record<string, Resposta>) };
+    this.complemento = String(dados['complemento'] ?? '');
+    this.rascunhoRestaurado.set(null);
+  }
+
+  /** Descarta o rascunho e volta às notas salvas. */
+  protected descartarRascunho(): void {
+    this.rascunhos.limpar(this.chaveRascunho());
+    this.rascunhoRestaurado.set(null);
+    this.assinatura = '';
+    this.ngOnChanges();
   }
 
   /** A nota está preenchida e abaixo da máxima (exige justificativa). */
@@ -134,21 +206,30 @@ export class EtapaAvaliacaoComponent implements OnChanges {
   }
 
   /** Executa a chamada (com a janela "Executando" se houver mensagem) e devolve a competência atualizada. */
-  private emitir(requisicao: ReturnType<ExecucaoApiService['acaoAvaliacao']>, titulo: string, processando?: string): void {
+  private emitir(requisicao: ReturnType<ExecucaoApiService['acaoAvaliacao']>, titulo: string, processando?: string, apagarRascunho = false): void {
     const fluxo = processando ? this.dialogos.executar(requisicao, processando) : requisicao;
-    fluxo.subscribe({ next: (novo) => this.atualizado.emit(novo), error: (e) => this.dialogos.mostrarErro(e, titulo) });
+    fluxo.subscribe({
+      next: (novo) => {
+        // Notas gravadas de verdade: o rascunho da equipe não serve mais
+        if (apagarRascunho) this.rascunhoDaEquipe()?.apagar();
+        this.atualizado.emit(novo);
+      },
+      error: (e) => this.dialogos.mostrarErro(e, titulo),
+    });
   }
+
+  private readonly rascunhoDaEquipe = viewChild<RascunhoServidorComponent>('rascunhoServidor');
 
   /** Grava a avaliação inicial. */
   protected salvarInicial(): void {
     const d = this.detalhe();
-    this.emitir(this.api.avaliacaoInicial(d.contrato_id, d.id, this.respostas(this.iniciais)), 'Não foi possível salvar a avaliação inicial');
+    this.emitir(this.api.avaliacaoInicial(d.contrato_id, d.id, this.respostas(this.iniciais)), 'Não foi possível salvar a avaliação inicial', undefined, true);
   }
 
   /** Grava a avaliação do gestor. */
   protected salvarGestor(): void {
     const d = this.detalhe();
-    this.emitir(this.api.avaliacaoGestor(d.contrato_id, d.id, this.respostas(this.gestor), this.complemento.trim()), 'Não foi possível salvar a avaliação do gestor');
+    this.emitir(this.api.avaliacaoGestor(d.contrato_id, d.id, this.respostas(this.gestor), this.complemento.trim()), 'Não foi possível salvar a avaliação do gestor', undefined, true);
   }
 
   /** Registra a ciência do usuário no ateste. */

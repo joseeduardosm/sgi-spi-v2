@@ -34,6 +34,7 @@ from app.models.contratos.contrato import (
     ItemContrato,
 )
 from app.models.contratos.correcoes import CorrecaoItens, HistoricoItemContrato
+from app.models.contratos.rascunho import RascunhoContrato
 from app.models.contratos.diario import AnexoOcorrencia, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
 from app.models.contratos.empresa import EmpresaContratada, PrepostoEmpresa
 from app.models.contratos.execucao import (
@@ -54,7 +55,7 @@ from app.models.contratos.execucao import (
     ModeloGlobal,
     SelecaoNotaEmpenho,
 )
-from app.models.contratos.portaria import AutoridadePortaria, PortariaContrato
+from app.models.contratos.portaria import AutoridadePortaria, NomeacaoPortaria, PortariaContrato
 from app.models.contratos.orcamento import (
     ApontamentoPrevisao,
     LimitePrevisao,
@@ -68,6 +69,7 @@ __all__ = [
     "AbatimentoReajuste",
     "AutoridadePortaria",
     "PortariaContrato",
+    "NomeacaoPortaria",
     "AnexoOcorrencia",
     "ItemAvaliacaoOcorrencia",
     "ETAPAS",
@@ -107,6 +109,7 @@ __all__ = [
     "MovimentoNotaEmpenho",
     "NotaEmpenho",
     "OcorrenciaDiario",
+    "RascunhoContrato",
     "PrepostoEmpresa",
     "PrevisaoVigencia",
     "ProcessoProrrogacao",

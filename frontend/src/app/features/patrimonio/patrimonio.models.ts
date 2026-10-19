@@ -11,6 +11,19 @@ export const ROTULOS_SITUACAO: Record<SituacaoBem, string> = { ativo: 'Ativo', e
 export const ROTULOS_GARANTIA: Record<GarantiaBem, string> = { indefinida: 'Indefinida', vigente: 'Vigente', vencida: 'Vencida' };
 export const ROTULOS_CONSERVACAO: Record<number, string> = { 1: 'Péssimo', 2: 'Ruim', 3: 'Regular', 4: 'Bom', 5: 'Ótimo' };
 export const ROTULOS_MOTIVO_BAIXA: Record<MotivoBaixa, string> = { alienacao: 'Alienação', doacao: 'Doação', transferencia: 'Transferência', inutilizacao: 'Inutilização', extravio: 'Extravio' };
+/** Categorias do bem inservível (classificação do desfazimento, Decreto 9.373/2018): rótulo e resumo. */
+export type CategoriaInservivel = 'ocioso' | 'recuperavel' | 'antieconomico' | 'irrecuperavel';
+export const CATEGORIAS_INSERVIVEL: { codigo: CategoriaInservivel; rotulo: string; descricao: string }[] = [
+  { codigo: 'ocioso', rotulo: 'Ocioso', descricao: 'Em perfeitas condições de uso, mas não está sendo aproveitado.' },
+  { codigo: 'recuperavel', rotulo: 'Recuperável', descricao: 'Não está em condições de uso, mas a recuperação é possível e o custo não passa de 50% do valor de mercado.' },
+  { codigo: 'antieconomico', rotulo: 'Antieconômico', descricao: 'Manutenção onerosa ou rendimento precário (uso prolongado, desgaste ou obsolescência); recuperar custa mais de 50% do valor de mercado.' },
+  { codigo: 'irrecuperavel', rotulo: 'Irrecuperável', descricao: 'Não pode mais ser usado para o fim a que se destina, por perda das características ou inviabilidade econômica de recuperação.' },
+];
+/** Rótulo curto da categoria (vazio se não houver). */
+export function rotuloCategoria(codigo: string | null | undefined): string {
+  return CATEGORIAS_INSERVIVEL.find((c) => c.codigo === codigo)?.rotulo ?? '';
+}
+
 export const ROTULOS_STATUS: Record<string, string> = {
   pendente: 'Pendente', autorizada: 'Autorizada', concluida: 'Concluída', recusada: 'Recusada', cancelada: 'Cancelada', rascunho: 'Rascunho', aprovada: 'Aprovada', parcial: 'Aprovada em parte',
 };
@@ -37,7 +50,7 @@ export interface Bem {
   uge: string | null; ua: string | null; divisao: string | null; valor_aquisicao: string | null; valor_atual: string | null; valor_efetivo: string | null;
   data_aquisicao: string | null; garantia_meses: number | null; garantia_fim: string | null; situacao_garantia: GarantiaBem; vence_em_90_dias: boolean;
   marca: string | null; modelo: string | null; numero_serie: string | null; nota_fiscal: string | null; fornecedor: string | null; observacoes: string | null;
-  criado_por_nome: string | null; classificacao_pendente: boolean; em_movimentacao: boolean; dados_contabeis_pendentes: boolean; fotos: { id: string; nome: string }[]; avisos: string[];
+  criado_por_nome: string | null; classificacao_pendente: boolean; categoria_inservivel?: CategoriaInservivel | null; em_movimentacao: boolean; dados_contabeis_pendentes: boolean; fotos: { id: string; nome: string }[]; avisos: string[];
   criado_em: string; atualizado_em: string; baixado_em: string | null;
 }
 export interface ListaBens { total: number; pagina: number; itens: Bem[] }
@@ -64,12 +77,16 @@ export interface Movimentacao {
 }
 
 export interface ItemClassificacao {
-  id: string; bem_id: string; chapa: string | null; numero_serie: string | null; rotulo: string; descricao: string; sala_rotulo: string; situacao_anterior: string | null; justificativa: string | null; anexo_nome: string | null;
+  id: string; bem_id: string; chapa: string | null; numero_serie: string | null; rotulo: string; descricao: string; sala_rotulo: string; situacao_anterior: string | null; justificativa: string | null; categoria?: CategoriaInservivel | null; anexo_nome: string | null;
+  /** Informações do bem, para pesquisar dentro da lista. */
+  marca?: string | null; modelo?: string | null; grupo_nome?: string | null; responsavel_nome?: string | null; nota_fiscal?: string | null; fornecedor?: string | null; observacoes?: string | null;
   resultado: 'aprovado' | 'recusado' | null;
 }
 export interface Classificacao {
   id: string; numero: number; tipo: 'inservivel' | 'extraviado'; status: string; solicitante_id: number | null; solicitante_nome: string; criada_em: string; enviada_em: string | null;
   decidido_por_nome: string | null; decidido_em: string | null; motivo_recusa: string | null; itens: ItemClassificacao[];
+  /** Pessoas com quem a lista foi compartilhada (fazem tudo o que o solicitante faz, menos aprová-la). */
+  colaboradores?: { id: number; nome: string }[];
 }
 
 export interface ItemBaixa {
@@ -79,6 +96,8 @@ export interface ItemBaixa {
 export interface Baixa {
   id: string; numero: number; status: string; solicitante_id: number | null; solicitante_nome: string; criada_em: string; enviada_em: string | null; decidido_por_nome: string | null;
   decidido_em: string | null; motivo_recusa: string | null; tem_termo: boolean; itens: ItemBaixa[];
+  /** Pessoas com quem a baixa foi compartilhada (fazem tudo o que o solicitante faz, menos aprová-la). */
+  colaboradores?: { id: number; nome: string }[];
 }
 
 export interface IndicadoresPatrimonio {

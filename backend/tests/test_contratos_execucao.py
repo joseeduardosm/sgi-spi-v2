@@ -283,6 +283,12 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     meses = cliente.get("/api/contratos/painel", params={"exercicio": 2026}, headers=gestora).json()["execucao"]["meses"]
     pagos = {m["competencia"][:7]: m["pago"] for m in meses if Decimal(m["pago"])}
     assert list(pagos) == ["2026-01"]
+    # Documentos Importantes: um "Pagamento MM/AAAA" com a OB/PD e o consolidado juntos, na data da juntada da OB
+    pagamentos = cliente.get(_url(contrato, "/pagamentos"), headers=gestora).json()
+    assert [p["titulo"] for p in pagamentos] == ["Pagamento 01/2026"]
+    assert pagamentos[0]["ob"]["nome"] == "ob.pdf" and pagamentos[0]["consolidado"]["nome"].startswith("consolidado-") and pagamentos[0]["juntado_em"]
+    baixado = cliente.get(f"{_url(contrato, '/competencias')}/{pagamentos[0]['competencia_id']}/arquivos/{pagamentos[0]['consolidado']['anexo_id']}", headers=gestora)
+    assert baixado.status_code == 200 and baixado.content.startswith(b"%PDF")
     # Depois da OB, o SuperRoot ainda pode gerar novamente (a competência continua concluída)
     r = cliente.post(f"{base}/consolidado", headers=admin)
     assert r.status_code == 200 and r.json()["etapa_atual"] == "concluida"

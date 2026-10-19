@@ -30,8 +30,11 @@ class OcorrenciaDiario(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
-    # Dia em que a ocorrência aconteceu (define a competência das glosas); o registro tem data e hora próprias
+    # Dia em que a ocorrência aconteceu; o registro tem data e hora próprias
     data_ocorrencia: Mapped[date] = mapped_column(Date, index=True)
+    # Competência (dia 1 do mês) que a ocorrência afeta: onde valem as glosas e o impacto na avaliação. Não precisa ser a da data
+    # (ex.: documento errado enviado em 03/08 afeta a competência 07). Nulo (registros antigos sem competência): vale a da data
+    competencia_afetada: Mapped[date | None] = mapped_column(Date, index=True)
     descricao: Mapped[str] = mapped_column(Text)
     possui_glosa: Mapped[bool] = mapped_column(Boolean, default=False)
     # A ocorrência pesa na avaliação da qualidade (itens do formulário em `itens_avaliacao`)

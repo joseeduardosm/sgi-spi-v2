@@ -24,7 +24,7 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.respostas import INVALIDO, RESPOSTAS_AUTENTICADAS, resposta_nao_encontrado
-from app.api.routes.contratos.comum import ARQUIVO_RECUSADO, SEM_VINCULO, arquivo_pdf, pode_ler, pode_modificar, traduzir_erros
+from app.api.routes.contratos.comum import ARQUIVO_RECUSADO, SEM_VINCULO, arquivo_pdf, pode_ler, pode_lancar_ob, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
 from app.models.usuario import Usuario
@@ -564,26 +564,38 @@ def reenviar_email_retencao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, s
 # --- Etapa 5: CADIN --------------------------------------------------------------------------
 
 @roteador.post("/competencias/{competencia_id}/cadin", response_model=DetalheCompetencia, summary="Registrar consulta ao CADIN",
-               description="`multipart/form-data`: `possui_pendencia`, `certidao` (PDF). Com pendência: `pendencia` (até 2000), "
-               "`texto_notificacao` e `email` (PDF), e a etapa continua aberta. Sem pendência, conclui a etapa.",
+               description="`multipart/form-data`: `possui_pendencia`, `certidao` (PDF). Com pendência: `pendencia` (até 2000, obrigatória); a etapa continua aberta "
+               "e o sistema envia, em segundo plano, o e-mail da máscara \"E-mail de CADIN\" (Contratos › Modelos) a **todos os prepostos ativos** da empresa, com a "
+               "**equipe do contrato em cópia**, e guarda a cópia em PDF para o consolidado. Sem pendência, conclui a etapa.",
                responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
 def cadin(
     contrato_id: uuid.UUID,
     competencia_id: uuid.UUID,
     possui_pendencia: Annotated[bool, Form()],
+    tarefas: BackgroundTasks,
     certidao: UploadFile = File(...),
     pendencia: Annotated[str, Form(max_length=2000)] = "",
-    texto_notificacao: Annotated[str, Form(max_length=2500)] = "",
-    email: UploadFile | None = File(None),
     sessao: Session = Depends(obter_sessao),
     autor: Usuario = Depends(pode_modificar),
 ):
-    """Etapa 4: registra a consulta ao CADIN. Com pendência, a etapa fica aberta até regularizar."""
+    """Etapa 4: registra a consulta ao CADIN. Com pendência, a etapa fica aberta até regularizar e o e-mail sai aos prepostos."""
     with traduzir_erros(sessao):
-        competencias.registrar_cadin(
-            sessao, contrato_id, competencia_id, possui_pendencia, pendencia, texto_notificacao, arquivo_pdf(certidao),
-            arquivo_pdf(email) if email else None, autor,
-        )
+        consulta_id = competencias.registrar_cadin(sessao, contrato_id, competencia_id, possui_pendencia, pendencia, arquivo_pdf(certidao), autor)
+        if possui_pendencia:
+            tarefas.add_task(servico_notificacoes.notificar_cadin, contrato_id, consulta_id)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/cadin/{consulta_id}/reenviar-email", response_model=DetalheCompetencia, summary="Reenviar o e-mail da pendência no CADIN",
+               description="Reenvia aos prepostos ativos (equipe em cópia) o e-mail da máscara \"E-mail de CADIN\" de uma consulta **com pendência**, em segundo plano. "
+               "Quem pode editar o contrato. Útil quando o primeiro envio falhou (sem máscara ativa, sem preposto com e-mail ou SMTP fora do ar).",
+               responses={**NAO_ENCONTRADA, **SEM_VINCULO})
+def reenviar_email_cadin(contrato_id: uuid.UUID, competencia_id: uuid.UUID, consulta_id: uuid.UUID, tarefas: BackgroundTasks,
+                         sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Valida a permissão e agenda o reenvio."""
+    with traduzir_erros(sessao):
+        servico_notificacoes.exigir_reenvio_cadin(sessao, contrato_id, competencia_id, consulta_id, autor)
+        tarefas.add_task(servico_notificacoes.notificar_cadin, contrato_id, consulta_id)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
@@ -651,13 +663,30 @@ def consolidado(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Sessi
 
 
 @roteador.post("/competencias/{competencia_id}/ordem-bancaria", response_model=DetalheCompetencia, summary="Anexar OB e concluir",
-               description="`multipart/form-data` (`arquivo`, PDF). Debita o valor autorizado nas NEs, na ordem escolhida, e conclui a competência.",
+               description="`multipart/form-data` (`arquivo`, PDF de até 25 MB). Só com a competência na etapa `ordem_bancaria` (`etapa_atual`): debita nas NEs escolhidas, na ordem escolhida, o **valor a pagar** "
+               "(soma das notas fiscais) e conclui a competência; o arquivo é a única informação da OB (sem número, data ou valor). Falta de saldo nas NEs, etapa errada ou arquivo inválido: `400`. "
+               "Depois de aceita, repetir a chamada é recusado (`400`). Quem pode: quem edita o contrato (equipe vigente, criador, controle total ou SuperRoot, com Modificação em Contratos) "
+               "**ou** quem tem no perfil a ação própria \"Lançar ordem bancária\" (vale em qualquer contrato, só para a OB).",
                responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
-def ordem_bancaria(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
-                   autor: Usuario = Depends(pode_modificar)):
-    """Etapa 7: anexa a OB, debita as NEs na ordem escolhida e conclui a competência."""
+def ordem_bancaria(contrato_id: uuid.UUID, competencia_id: uuid.UUID, tarefas: BackgroundTasks, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
+                   autor: Usuario = Depends(pode_lancar_ob)):
+    """Etapa 8: anexa a OB, debita as NEs na ordem escolhida e conclui a competência; o e-mail de pagamento sai em segundo plano."""
     with traduzir_erros(sessao):
         competencias.registrar_ordem_bancaria(sessao, contrato_id, competencia_id, *arquivo_pdf(arquivo), autor)
+        tarefas.add_task(servico_notificacoes.notificar_ob, contrato_id, competencia_id)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/ordem-bancaria/reenviar-email", response_model=DetalheCompetencia, summary="Reenviar o e-mail de pagamento",
+               description="Reenvia aos prepostos ativos (equipe em cópia) o e-mail da máscara \"E-mail de pagamento\" de uma competência com a OB lançada, em segundo plano. "
+               "Quem pode editar o contrato ou tem a ação \"Lançar ordem bancária\". Útil quando o primeiro envio falhou (sem máscara ativa, sem preposto com e-mail ou SMTP fora do ar).",
+               responses={**NAO_ENCONTRADA, **SEM_VINCULO})
+def reenviar_email_ob(contrato_id: uuid.UUID, competencia_id: uuid.UUID, tarefas: BackgroundTasks, sessao: Session = Depends(obter_sessao),
+                      autor: Usuario = Depends(pode_lancar_ob)):
+    """Valida a permissão e agenda o reenvio."""
+    with traduzir_erros(sessao):
+        servico_notificacoes.exigir_reenvio_ob(sessao, contrato_id, competencia_id, autor)
+        tarefas.add_task(servico_notificacoes.notificar_ob, contrato_id, competencia_id)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 

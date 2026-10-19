@@ -23,6 +23,7 @@ from typing import BinaryIO
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.services.acl_acoes import ACAO_LANCAR_OB
 from app.services.tarefas.descricao import texto_da_descricao
 from app.core.banco import agora_utc
 from app.models.anexo import Anexo
@@ -76,7 +77,7 @@ from app.schemas.contratos.execucao import (
     RespostaAvaliacao,
     ResumoCompetencia,
 )
-from app.services import servico_anexos
+from app.services import servico_acl, servico_anexos
 from app.services.contratos import avisos, calculos, despacho_documento, documentos_execucao, leitor_nota_xml, servico_autenticacao, servico_diario, servico_retencao, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_configuracao_execucao import (
@@ -790,7 +791,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         [
             GlosaDoPeriodo(ocorrencia_id=o.id, data_ocorrencia=o.data_ocorrencia, descricao_ocorrencia=texto_da_descricao(o.descricao),
                            registrada_por_nome=o.registrada_por_nome, item_id=g.item_id, descricao_item=g.descricao_item, quantidade=g.quantidade)
-            for o in servico_diario.ocorrencias_do_periodo(contrato, competencia.periodo_inicio, competencia.periodo_fim)
+            for o in servico_diario.ocorrencias_da_competencia(contrato, competencia)
             for g in o.glosas
         ]
         if competencia.tipo == "regular" else []
@@ -802,6 +803,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         contrato_id=contrato.id, contrato_numero=contrato.numero, empresa_cnpj="".join(c for c in contrato.empresa.cnpj if c.isdigit()),
         etapas=etapas_da_competencia(competencia),
         pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(sessao, contrato, usuario),
+        pode_lancar_ob=pode_editar(sessao, contrato, usuario) or servico_acl.tem_acao_no_perfil(sessao, usuario, "contratos", ACAO_LANCAR_OB),
         pode_gerar_consolidado_novamente=pode_gerar_consolidado_novamente(contrato, usuario) and pode_editar(sessao, contrato, usuario),
         liberada=_liberada(competencia),
         itens=[
@@ -846,6 +848,8 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         glosas_periodo=glosas_periodo,
         email_nf=EmailMedicao(enviado_em=competencia.email_nf_enviado_em, ok=competencia.email_nf_ok,
                               destinatarios=competencia.email_nf_destinatarios or [], erro=competencia.email_nf_erro),
+        email_ob=EmailMedicao(enviado_em=competencia.email_ob_enviado_em, ok=competencia.email_ob_ok,
+                              destinatarios=competencia.email_ob_destinatarios or [], erro=competencia.email_ob_erro),
         email_retencao=EmailMedicao(enviado_em=competencia.email_retencao_enviado_em, ok=competencia.email_retencao_ok,
                                     destinatarios=competencia.email_retencao_destinatarios or [], erro=competencia.email_retencao_erro),
         retencao=LeituraRetencao(
@@ -869,6 +873,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
                 id=c.id, possui_pendencia=c.possui_pendencia, pendencia=c.pendencia, texto_notificacao=c.texto_notificacao,
                 certidao=_arquivo(anexos.get(c.certidao_anexo_id)), email=_arquivo(anexos.get(c.email_anexo_id)),
                 criado_por_nome=c.criado_por_nome, criado_em=c.criado_em,
+                email_enviado_em=c.email_enviado_em, email_ok=c.email_ok, email_destinatarios=c.email_destinatarios or [], email_erro=c.email_erro,
             )
             for c in competencia.consultas_cadin
         ],
@@ -955,7 +960,7 @@ def saldos_da_medicao(contrato: Contrato, competencia: Competencia) -> dict[uuid
 
     - Saldo do item contínuo: a quantidade prevista da competência (já com pró-rata);
     - saldo do item sob demanda: o que resta do item na vigência (limite − executado nas outras competências);
-    - glosas: soma das glosas do diário de bordo com data dentro do período da competência;
+    - glosas: soma das glosas do diário de bordo das ocorrências que afetam a competência (apontada no registro, mesmo que a data seja de outro mês);
     - diferença de reajuste: sem glosas; o saldo é a quantidade já medida (fixa).
     """
     itens = {i.id: i for i in contrato.itens}
@@ -967,7 +972,7 @@ def saldos_da_medicao(contrato: Contrato, competencia: Competencia) -> dict[uuid
     def glosas_do_trecho(linha) -> dict:
         periodo = (linha.periodo_inicio or competencia.periodo_inicio, linha.periodo_fim or competencia.periodo_fim)
         if periodo not in glosas_por_periodo:
-            glosas_por_periodo[periodo] = servico_diario.glosas_do_periodo(contrato, *periodo) if regular else {}
+            glosas_por_periodo[periodo] = servico_diario.glosas_da_competencia(contrato, competencia, periodo) if regular else {}
         return glosas_por_periodo[periodo]
 
     resultado = {}
@@ -1808,32 +1813,38 @@ def _validar_retencoes(retencoes: dict[str, Decimal], bruto: Decimal, qual: str)
 # ---------------------------------------------------------------------------------------------
 
 def registrar_cadin(
-    sessao: Session, contrato_id, competencia_id, possui_pendencia: bool, pendencia: str, texto_notificacao: str,
-    certidao: tuple, email: tuple | None, autor: Usuario,
-) -> None:
-    """Etapa 4: registra a consulta ao CADIN; sem pendência, a etapa é concluída."""
+    sessao: Session, contrato_id, competencia_id, possui_pendencia: bool, pendencia: str, certidao: tuple, autor: Usuario,
+) -> uuid.UUID:
+    """Etapa 4: registra a consulta ao CADIN; sem pendência, a etapa é concluída. Devolve o id da consulta.
+
+    Com pendência, o e-mail aos prepostos (cópia para a equipe) sai pela máscara "E-mail de CADIN" em segundo plano (`notificar_cadin`).
+    """
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     _exigir_etapa(competencia, "cadin", "A consulta ao CADIN")
-    # Com pendência, a descrição e o e-mail de comunicação à contratada são obrigatórios
-    if possui_pendencia and (not pendencia.strip() or email is None):
-        raise ErroRegraContrato("Com pendência no CADIN, descreva a pendência e anexe o e-mail de comunicação.")
-    # Cada consulta é guardada (histórico); os textos da pendência só valem quando há pendência
+    # Com pendência, a descrição é obrigatória (ela vai no e-mail à contratada)
+    if possui_pendencia and not pendencia.strip():
+        raise ErroRegraContrato("Com pendência no CADIN, descreva a pendência: ela vai no e-mail à contratada.")
+    # Cada consulta é guardada (histórico); a descrição só vale quando há pendência
     consulta = ConsultaCadin(
-        possui_pendencia=possui_pendencia, pendencia=pendencia.strip() if possui_pendencia else "",
-        texto_notificacao=texto_notificacao.strip() if possui_pendencia else "",
+        possui_pendencia=possui_pendencia, pendencia=pendencia.strip() if possui_pendencia else "", texto_notificacao="",
         certidao_anexo=servico_anexos.guardar_pdf(sessao, certidao[0], certidao[1], "contrato-execucao-cadin-certidao", autor.id, contrato_id=contrato.id),
-        email_anexo=servico_anexos.guardar_pdf(sessao, email[0], email[1], "contrato-execucao-cadin-email", autor.id, contrato_id=contrato.id) if possui_pendencia and email else None,
         criado_por_id=autor.id, criado_por_nome=_nome(autor), criado_em=agora_utc(),
     )
     competencia.consultas_cadin.append(consulta)
+    # Pendência: vira ocorrência no diário de bordo, com a mesma data e hora do registro da consulta
+    if possui_pendencia:
+        servico_diario.registrar_pendencia_cadin(sessao, contrato, competencia, consulta, autor)
     # Com pendência, a etapa continua aberta até uma nova consulta sem pendência
     if not possui_pendencia:
         competencia.cadin_concluido_em = agora_utc()
         competencia.etapa_atual = proxima_etapa(competencia, "cadin")
     _auditar(sessao, autor, "contrato.execucao.cadin", contrato, competencia, possui_pendencia=possui_pendencia)
+    sessao.flush()
+    consulta_id = consulta.id
     sessao.commit()
+    return consulta_id
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2048,7 +2059,15 @@ def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuar
     ciencias = [{"nome": c.nome, "papel": c.papel, "em": c.registrada_em} for c in competencia.ciencias]
     if competencia.avaliacao is not None:
         ciencias += [{"nome": c["nome"], "papel": c["papel"], "em": c["ciencia_em"]} for c in ciencias_ateste(competencia.avaliacao)]
-    conteudo, sha_composicao = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor), enviados_por, ciencias)
+    # Memorial do CADIN: só quando alguma consulta acusou pendência (depois da última certidão, sem texto de conclusão)
+    memorial_id = None
+    if any(c.possui_pendencia for c in competencia.consultas_cadin):
+        memorial = servico_anexos.guardar_pdf_gerado(
+            sessao, documentos_execucao.memorial_cadin(contrato, competencia, _nome(autor)), f"memorial-cadin-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf",
+            "contrato-execucao-cadin-memorial", autor.id, contrato_id=contrato.id)
+        sessao.flush()
+        anexos[memorial.id], memorial_id = memorial, memorial.id
+    conteudo, sha_composicao = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor), enviados_por, ciencias, memorial_id)
     nome = f"consolidado-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-consolidado", autor.id, contrato_id=contrato.id)
     competencia.consolidado_anexo, competencia.consolidado_em = anexo, agora_utc()
@@ -2067,9 +2086,15 @@ def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuar
 # ---------------------------------------------------------------------------------------------
 
 def registrar_ordem_bancaria(sessao: Session, contrato_id, competencia_id, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
-    """Anexa a OB, debita o valor autorizado nas NEs (em ordem) e conclui a competência."""
+    """Anexa a OB, debita o valor autorizado nas NEs (em ordem) e conclui a competência.
+
+    Quem edita o contrato pode; quem tem no perfil a ação própria "Lançar ordem bancária" também, em qualquer contrato (e só para isto).
+    """
+    from app.services.acl_acoes import ACAO_LANCAR_OB
+
     contrato = obter_contrato(sessao, contrato_id)
-    exigir_edicao(sessao, contrato, autor)
+    if not servico_acl.tem_acao_no_perfil(sessao, autor, "contratos", ACAO_LANCAR_OB):
+        exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     _exigir_etapa(competencia, "ordem_bancaria", "A ordem bancária")
     # Divide o valor a pagar entre as NEs na ordem escolhida; se faltar saldo, `_exigir_saldo` explica quanto
@@ -2242,6 +2267,8 @@ def _reabrir_etapa(sessao: Session, contrato: Contrato, competencia: Competencia
                 estornos[nota.numero] = liquido
         competencia.concluida_em = competencia.ob_enviada_em = None
         competencia.ob_anexo_id = None
+        competencia.email_ob_enviado_em = competencia.email_ob_ok = competencia.email_ob_erro = None
+        competencia.email_ob_destinatarios = []
     # A etapa escolhida volta a ficar aberta mantendo o que foi preenchido; as POSTERIORES são descartadas e
     # começam vazias quando a competência chegar a elas (anexos antigos continuam guardados, sem vínculo)
     descartadas = [e for e in etapas if posterior(e)]

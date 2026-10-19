@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.configuracao import obter_configuracao
 from app.models.usuario import Usuario
+from app.services import servico_perfil
 from app.services.rh import servico_periodos
 from app.services.rh.papeis import dados_funcionais, exigir_cgp, setor_do_usuario
 from app.services.rh.servico_afastamentos import saldos
@@ -34,8 +35,8 @@ def _nome(u: Usuario | None) -> str:
 
 def linhas(sessao: Session, referencia: date) -> list[list]:
     """Uma linha por servidor ativo (em ordem de nome)."""
-    login_admin = obter_configuracao().login_admin.strip().lower()
-    usuarios = [u for u in sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True))) if u.login.strip().lower() != login_admin]
+    # A conta root e as contas de integração não são servidores: ficam fora
+    usuarios = [u for u in sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True))) if not servico_perfil.dispensado_da_confirmacao(u)]
     resultado = []
     for u in sorted(usuarios, key=lambda x: _nome(x).lower()):
         dados = dados_funcionais(sessao, u.id)

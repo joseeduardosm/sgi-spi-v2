@@ -2,22 +2,24 @@
 # Este arquivo serve para expor as rotas da portaria de designação do contrato e das autoridades signatárias.
 """Rotas das portarias contratuais.
 
-- `/contratos/{contrato_id}/portarias`: painel, solicitação (reserva o número no Protocolo), reenvio, aceite, devolução, cancelamento,
-  exportação da minuta (Word/PDF com marca d'água "MINUTA") e envio do PDF publicado.
+- `/contratos/{contrato_id}/portarias`: painel, criação (nomeações), escolha da autoridade (reserva o número no Protocolo), aceite, devolução, cancelamento
+  e PDF de evidência. A publicação é feita pelo Protocolo, ao anexar o PDF do D.O.E. ao número reservado.
+- `/portarias/ciencias` e `/portarias/{id}/ciencia`: ciência de quem foi nomeado (qualquer usuário autenticado).
 - `/portarias/autoridades`: cadastro das autoridades signatárias (escrita: SuperRoot, controle total em Contratos ou gestor/suplente de um contrato).
 """
 
 import uuid
-from typing import Annotated, Literal
-
-from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.respostas import RESPOSTAS_AUTENTICADAS, resposta_nao_encontrado
-from app.api.routes.contratos.comum import ARQUIVO_RECUSADO, SEM_VINCULO, pode_ler, pode_modificar, traduzir_erros
+from app.api.routes.contratos.comum import SEM_VINCULO, pode_ler, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.models.usuario import Usuario
-from app.schemas.contratos.portaria import GravacaoAutoridade, LeituraAutoridade, MotivoPortaria, PainelPortarias, SolicitacaoPortaria, UsuarioAutoridade
+from app.api.dependencias import obter_usuario_autenticado
+from app.schemas.contratos.portaria import (EscolhaAutoridade, GravacaoAutoridade, GravacaoNomeacoes, LeituraAutoridade, LeituraCienciaPendente, MotivoPortaria, PainelPortarias,
+                                            UsuarioAutoridade)
+from app.services import servico_anexos
 from app.services.contratos import servico_portaria
 
 TAGS = ["Contratos: portaria"]
@@ -34,24 +36,35 @@ def painel(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usua
 
 
 @roteador.post("/contratos/{contrato_id}/portarias", response_model=PainelPortarias, status_code=status.HTTP_201_CREATED, tags=TAGS,
-               summary="Solicitar portaria", description="Reserva o próximo número de \"Portaria\" no Protocolo, vinculado ao contrato, congela o texto com a equipe vigente "
-               "e envia para o aceite da autoridade escolhida. Uma portaria em andamento por contrato (409).", responses=ESCRITA)
-def solicitar(contrato_id: uuid.UUID, dados: SolicitacaoPortaria, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+               summary="Criar portaria (nomeações)", description="Abre a portaria com de 1 a 6 nomeações (função + usuário; o gestor é obrigatório). Quem cria: a equipe do contrato "
+               "ou quem tem controle total em Contratos (perfil Administrador de Contratos). Cada nomeado precisa ter RS/PV, RG/CIN e cargo preenchidos: enquanto faltar, a nomeação "
+               "fica pendente e o RH é avisado. Com os dados completos, cada um recebe o pedido de ciência. Uma portaria em andamento por contrato (409).", responses=ESCRITA)
+def criar(contrato_id: uuid.UUID, dados: GravacaoNomeacoes, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     with traduzir_erros(sessao):
-        servico_portaria.solicitar(sessao, contrato_id, dados.autoridade_id, autor)
+        servico_portaria.criar(sessao, contrato_id, dados.nomeacoes, autor)
         return servico_portaria.painel(sessao, contrato_id, autor)
 
 
-@roteador.post("/contratos/{contrato_id}/portarias/{portaria_id}/reenviar", response_model=PainelPortarias, tags=TAGS, summary="Reenviar portaria para aceite",
-               description="Refaz o texto com a equipe e os dados atuais e volta a portaria (devolvida ou aguardando) para o aceite.", responses=ESCRITA)
-def reenviar(contrato_id: uuid.UUID, portaria_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+@roteador.put("/contratos/{contrato_id}/portarias/{portaria_id}/nomeacoes", response_model=PainelPortarias, tags=TAGS, summary="Alterar as nomeações",
+              description="Troca as nomeações enquanto a portaria não tem autoridade (quem mudou perde a ciência). Depois disso, devolva ou cancele a portaria (409).", responses=ESCRITA)
+def alterar_nomeacoes(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: GravacaoNomeacoes, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     with traduzir_erros(sessao):
-        servico_portaria.reenviar(sessao, contrato_id, portaria_id, autor)
+        servico_portaria.definir_nomeacoes(sessao, contrato_id, portaria_id, dados.nomeacoes, autor)
+        return servico_portaria.painel(sessao, contrato_id, autor)
+
+
+@roteador.post("/contratos/{contrato_id}/portarias/{portaria_id}/autoridade", response_model=PainelPortarias, tags=TAGS, summary="Escolher a autoridade e gerar a portaria",
+               description="Com todos os nomeados cientes: escolhe a autoridade competente, gera o texto (para copiar) e **reserva** o número em \"Portaria SPI SSGC\" no Protocolo, ainda pendente. "
+               "409 se faltar ciência; 400 sem máscara ativa, sem faixa de numeração do ano ou sem processo SEI/objeto no contrato.", responses=ESCRITA)
+def escolher_autoridade(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: EscolhaAutoridade, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    with traduzir_erros(sessao):
+        servico_portaria.escolher_autoridade(sessao, contrato_id, portaria_id, dados.autoridade_id, autor)
         return servico_portaria.painel(sessao, contrato_id, autor)
 
 
 @roteador.post("/contratos/{contrato_id}/portarias/{portaria_id}/aceite", response_model=PainelPortarias, tags=TAGS, summary="Aceitar portaria",
-               description="Aceite da autoridade signatária (ou do SuperRoot). Atualiza o texto com a equipe e o RS atuais; sem RS, processo SEI ou objeto, responde 400.", responses=ESCRITA)
+               description="Aceite da autoridade signatária (ou do SuperRoot). Atualiza o texto, gera o PDF de evidência (ciências e aceite) e deixa a portaria aguardando o D.O.E.; "
+               "sem processo SEI, objeto ou RS, responde 400.", responses=ESCRITA)
 def aceitar(contrato_id: uuid.UUID, portaria_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):
     with traduzir_erros(sessao):
         servico_portaria.aceitar(sessao, contrato_id, portaria_id, autor)
@@ -59,7 +72,7 @@ def aceitar(contrato_id: uuid.UUID, portaria_id: uuid.UUID, sessao: Session = De
 
 
 @roteador.post("/contratos/{contrato_id}/portarias/{portaria_id}/devolucao", response_model=PainelPortarias, tags=TAGS, summary="Devolver portaria",
-               description="A autoridade devolve a portaria ao solicitante com o motivo.", responses=ESCRITA)
+               description="A autoridade devolve a portaria com o motivo: o número volta ao Protocolo e quem criou ajusta as nomeações ou escolhe outra autoridade.", responses=ESCRITA)
 def devolver(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: MotivoPortaria, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):
     with traduzir_erros(sessao):
         servico_portaria.devolver(sessao, contrato_id, portaria_id, dados.motivo, autor)
@@ -74,24 +87,29 @@ def cancelar(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: MotivoPortar
         return servico_portaria.painel(sessao, contrato_id, autor)
 
 
-@roteador.get("/contratos/{contrato_id}/portarias/{portaria_id}/minuta", tags=TAGS, summary="Exportar minuta da portaria",
-              description="Word (`docx`) ou PDF com a marca d'água \"MINUTA\", antes e depois do aceite, para postar no SEI e no DOE.",
-              responses={status.HTTP_200_OK: {"content": {"application/pdf": {}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {}}}, **NAO_ENCONTRADO})
-def minuta(contrato_id: uuid.UUID, portaria_id: uuid.UUID, formato: Annotated[Literal["docx", "pdf"], Query()] = "docx", sessao: Session = Depends(obter_sessao),
-           _: Usuario = Depends(pode_ler)) -> Response:
+@roteador.get("/contratos/{contrato_id}/portarias/{portaria_id}/evidencia", tags=TAGS, summary="PDF de evidência da portaria",
+              description="PDF com a ciência de cada nomeado e o aceite da autoridade, para juntar ao SEI antes da publicação. Existe depois do aceite (400 antes).",
+              responses={status.HTTP_200_OK: {"content": {"application/pdf": {}}}, **NAO_ENCONTRADO})
+def baixar_evidencia(contrato_id: uuid.UUID, portaria_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)) -> Response:
     with traduzir_erros():
-        conteudo, nome, tipo = servico_portaria.exportar(sessao, contrato_id, portaria_id, formato)
-    return Response(content=conteudo, media_type=tipo, headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+        anexo = servico_portaria.evidencia(sessao, contrato_id, portaria_id)
+        conteudo = servico_anexos.caminho(anexo).read_bytes()
+    return Response(content=conteudo, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{anexo.nome_original}"'})
 
 
-@roteador.post("/contratos/{contrato_id}/portarias/{portaria_id}/publicacao", response_model=PainelPortarias, tags=TAGS, summary="Anexar PDF publicado da portaria",
-               description="Com a portaria aceita, recebe o PDF publicado: fica anexado ao número do Protocolo e em Documentos Importantes do contrato (tipo 16).",
-               responses={**ESCRITA, **ARQUIVO_RECUSADO})
-def publicar(contrato_id: uuid.UUID, portaria_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
-             autor: Usuario = Depends(pode_modificar)):
+@roteador.get("/portarias/ciencias", response_model=list[LeituraCienciaPendente], tags=TAGS, summary="Nomeações aguardando a minha ciência",
+              description="Nomeações do usuário logado em portarias aguardando ciência. Qualquer usuário autenticado (o nomeado pode não ter acesso ao módulo); a tela abre o modal ao entrar.")
+def minhas_ciencias(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado)):
+    return servico_portaria.ciencias_pendentes(sessao, usuario)
+
+
+@roteador.post("/portarias/{portaria_id}/ciencia", response_model=list[LeituraCienciaPendente], tags=TAGS, summary="Dar ciência da nomeação",
+               description="O nomeado confirma que está ciente (todas as funções dele na portaria). Com todos cientes, a portaria segue para a escolha da autoridade. Devolve as ciências ainda pendentes do usuário.",
+               responses={**NAO_ENCONTRADO, **SEM_VINCULO})
+def dar_ciencia(portaria_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado)):
     with traduzir_erros(sessao):
-        servico_portaria.publicar(sessao, contrato_id, portaria_id, arquivo.file, arquivo.filename or "portaria.pdf", autor)
-        return servico_portaria.painel(sessao, contrato_id, autor)
+        servico_portaria.registrar_ciencia(sessao, portaria_id, usuario)
+        return servico_portaria.ciencias_pendentes(sessao, usuario)
 
 
 # --- Autoridades --------------------------------------------------------------------------------

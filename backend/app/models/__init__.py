@@ -6,7 +6,7 @@ Cada classe aqui representa uma tabela. Importar todas neste arquivo garante que
 `Base.metadata` conheça o banco inteiro: o Alembic compara esse retrato com o banco real para
 gerar as migrações, e os testes o usam para criar as tabelas no SQLite.
 """
-from app.models.acl import NivelAcl, RecursoAcl, RegraAcl, acl_regras_setores, acl_regras_usuarios
+from app.models.acl import NivelAcl, PerfilAcl, PerfilDireito, PerfilSetor, RecursoAcl, RegraAcl, UsuarioPerfil, acl_regras_setores, acl_regras_usuarios
 from app.models.anexo import Anexo
 from app.models.auditoria import RegistroAuditoria
 from app.models.contratacoes import (
@@ -36,7 +36,7 @@ from app.models.notificacao_preferencias import ConfigNotificacaoUsuario, Inscri
 from app.models.noticias import AnexoNoticia, AtalhoPortal, CategoriaNoticia, ConfiguracaoPortal, Noticia, RevisaoNoticia
 from app.models.reserva_espacos import ConfiguracaoReservaEspacos, EspacoReservavel, EventoReservaEspaco, FiscalReservaEspacos, ReservaEspaco
 from app.models.patrimonio import (
-    Baixa, Bem, Classificacao, EventoPatrimonio, FotoBem, GrupoMaterial, ItemBaixa, ItemClassificacao, ItemMovimentacao, Localizacao, Movimentacao,
+    Baixa, Bem, Classificacao, ColaboradorBaixa, ColaboradorClassificacao, EventoPatrimonio, FotoBem, GrupoMaterial, ItemBaixa, ItemClassificacao, ItemMovimentacao, Localizacao, Movimentacao,
     ParametroPatrimonio, PrefixoChapa,
 )
 from app.models.protocolo import EventoProtocolo, NumeroProtocolo, SequenciaProtocolo, TipoProtocolo
@@ -51,7 +51,7 @@ from app.models.usuario import OrigemUsuario, Papel, Usuario
 
 # Nomes exportados por `from app.models import *`
 __all__ = [
-    "Baixa", "Bem", "Classificacao", "EventoPatrimonio", "FotoBem", "GrupoMaterial", "PrefixoChapa", "ItemBaixa", "ItemClassificacao", "ItemMovimentacao",
+    "Baixa", "Bem", "Classificacao", "ColaboradorBaixa", "ColaboradorClassificacao", "EventoPatrimonio", "FotoBem", "GrupoMaterial", "PrefixoChapa", "ItemBaixa", "ItemClassificacao", "ItemMovimentacao",
     "Localizacao", "Movimentacao", "ParametroPatrimonio",
     "ConfiguracaoReservaEspacos",
     "EspacoReservavel",
@@ -126,6 +126,10 @@ __all__ = [
     "RecursoAcl",
     "RegistroAuditoria",
     "RegraAcl",
+    "PerfilAcl",
+    "PerfilDireito",
+    "PerfilSetor",
+    "UsuarioPerfil",
     "Setor",
     "Usuario",
     "acl_regras_setores",

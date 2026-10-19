@@ -120,7 +120,7 @@ export class JanelaDetalheTarefaComponent {
   protected textoComentario = '';
   /** Comentário que está sendo respondido (a resposta o cita e entra no topo, como qualquer comentário novo). */
   protected readonly respondendoA = signal<EventoTarefa | null>(null);
-  private readonly campoComentario = viewChild<ElementRef<HTMLTextAreaElement>>('campoComentario');
+  private readonly campoComentario = viewChild<EditorRicoComponent>('editorComentario');
   protected readonly arquivos = signal<File[]>([]);
   protected readonly enviando = signal(false);
 
@@ -343,7 +343,7 @@ export class JanelaDetalheTarefaComponent {
   /** Escolhe o comentário a responder: mostra a citação acima do campo e leva o foco para ele. */
   protected responder(evento: EventoTarefa): void {
     this.respondendoA.set(evento);
-    setTimeout(() => this.campoComentario()?.nativeElement.focus());
+    setTimeout(() => this.campoComentario()?.focar());
   }
 
   protected cancelarResposta(): void {
@@ -352,7 +352,14 @@ export class JanelaDetalheTarefaComponent {
 
   /** Trecho curto do comentário para a citação (a API já limita o que guarda nas respostas). */
   protected trecho(texto: string, limite = 140): string {
-    return texto.length > limite ? texto.slice(0, limite).trimEnd() + '…' : texto;
+    // O comentário pode ser HTML do editor rico: a citação mostra só o texto
+    const puro = descricaoEhHtml(texto) ? this.textoPuro(texto) : texto;
+    return puro.length > limite ? puro.slice(0, limite).trimEnd() + '…' : puro;
+  }
+
+  /** Texto puro de um HTML do editor rico. */
+  private textoPuro(html: string): string {
+    return new DOMParser().parseFromString(html, 'text/html').body.textContent?.replace(/\u00a0/g, ' ').trim() ?? '';
   }
 
   /** Leva à citação: rola até o comentário original (se já está na lista) e o destaca por um instante. */
@@ -368,8 +375,13 @@ export class JanelaDetalheTarefaComponent {
     this.arquivos.update((l) => l.filter((_, j) => j !== i));
   }
 
+  /** O editor vazio guarda `<p></p>`: vazio é o que não tem texto. */
+  protected comentarioVazio(): boolean {
+    return !this.textoPuro(this.textoComentario);
+  }
+
   protected comentar(): void {
-    if (!this.textoComentario.trim() && !this.arquivos().length) return;
+    if (this.comentarioVazio() && !this.arquivos().length) return;
     this.enviando.set(true);
     this.dialogos.executar(this.api.comentar(this.numero(), this.textoComentario.trim(), this.arquivos(), this.respondendoA()?.id ?? null), 'Enviando o comentário…').subscribe({
       next: () => {
@@ -585,7 +597,7 @@ export class JanelaDetalheTarefaComponent {
   /** Insere `@login` no comentário (o campo volta para "Mencionar alguém…"). */
   protected mencionar(login: string): void {
     if (!login) return;
-    this.textoComentario = `${this.textoComentario}${this.textoComentario && !this.textoComentario.endsWith(' ') ? ' ' : ''}@${login} `;
+    this.campoComentario()?.inserir(`@${login} `);
   }
 
   // --- Marco da tarefa ---

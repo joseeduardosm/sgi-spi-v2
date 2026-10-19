@@ -98,4 +98,4 @@ class PedidoContagemChangelog(BaseModel):
 
 class ContagemChangelog(BaseModel):
     total: int = Field(..., description="Quantos da seleção receberão: ativos, com e-mail e que ligaram o e-mail de \"Novidades do SGI SPI\".")
-    selecionados: int = Field(..., description="Quantas pessoas a seleção reúne (antes de tirar quem não ligou o e-mail).")
+    selecionados: int = Field(..., description="Quantas pessoas a seleção reúne (antes de tirar quem está inativo ou sem e-mail).")

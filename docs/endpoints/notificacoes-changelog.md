@@ -25,9 +25,9 @@ Avisar todos os usuários, por e-mail oficial (brasão, cabeçalho institucional
 3. **Prévia** (`POST /changelog/previa`): o HTML do e-mail com o brasão embutido.
 4. **Envio** (`POST /changelog/envios`), sem repetir endereço:
    - `teste`: só `email_teste`;
-   - `selecionados`: 1 ou mais usuários (`usuarios_ids`) e/ou setores sistêmicos ou institucionais (`setores_ids`). Um setor inclui os membros, quem o tem como Departamento e os **setores filhos**;
+   - `selecionados`: 1 ou mais usuários (`usuarios_ids`) e/ou setores sistêmicos ou institucionais (`setores_ids`). Um setor inclui os membros, quem o tem como Departamento e os **setores filhos**. **Quem a administração escolhe recebe sempre** (ativo e com e-mail cadastrado), sem depender da preferência "Novidades do SGI SPI"; sem nenhum destinatário assim, `400`;
    - `todos`: usuários **ativos** com e-mail **que ligaram o e-mail de "Novidades do SGI SPI"** (evento `sistema.novidades`) nas Preferências. Ninguém começa com ele ligado: sem opt-in, não há destinatários (`400`).
-   - Só usuários ativos, com e-mail e que ligaram o e-mail de novidades recebem (o `teste` continua indo para o endereço digitado). Sai **um e-mail por destinatário**, em segundo plano, pelo servidor SMTP ativo. Só os envios a todos avançam a data do próximo rascunho (`ate_data`).
+   - Só usuários ativos e com e-mail recebem; a preferência de novidades só filtra o envio a `todos` (o `teste` continua indo para o endereço digitado). Sai **um e-mail por destinatário**, em segundo plano, pelo servidor SMTP ativo. Só os envios a todos avançam a data do próximo rascunho (`ate_data`).
 5. **Histórico** (`GET /changelog/envios`): os 30 últimos, com `enviados`, `falhas`, `erros` e `concluido_em` (nulo enquanto envia).
 
 ## Endpoints

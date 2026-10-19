@@ -6,6 +6,36 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-19
+
+Migrações novas desde 2026-10-15 (aplicar com `alembic upgrade head`; cabeça `e9b3c5a7d1f2`): `c1e7a3d9f5b2` (e-mail de CADIN por máscara), `d2f8b6a4c0e1`, `e3a9c7b5d1f4` e `f4b0d8c6e2a5` (perfis de acesso, nomes e ações independentes), `a7c3e9f1b5d2` (setor sistêmico "Equipes de contratos"), `b8d4f0a6c2e3` (diário: pendências de CADIN antigas), `c9e5a1b7d3f8` (rascunhos compartilhados do contrato), `d0f6b2c8e4a9` (conta de integração), `e1a7c3b9d5f2` e `a3c9e5b1d7f4` (colaboradores das listas e da baixa), `f2b8d4c0a6e1` (e-mail de pagamento da OB), `b4d0f6c2e8a5` (categoria do inservível), `c5e1a7d3f9b6` (perfis por setor), `d7a2f5c8b1e4` (remove os recursos de ACL de importação) e `e9b3c5a7d1f2` (portarias em etapas).
+
+### Adicionado
+- **Contratos: portaria de designação em etapas (único caminho para mudar a equipe).** Máquina de estados em `contratos_portarias.status`: `nomeacao` → `aguardando_ciencia` → `aguardando_autoridade` → `aguardando_aceite` → `aceita` → `publicada` (ou `cancelada`). Nova tabela `contratos_portarias_nomeacoes` (função, usuário, `ciente_em`; única por portaria+função; até 6) e `contratos_portarias.evidencia_anexo_id`; `numero`, `exercicio` e `sigla` ficam nulos até a escolha da autoridade (migração `e9b3c5a7d1f2`; as portarias em andamento do fluxo antigo foram canceladas).
+  - Endpoints: `POST /contratos/{id}/portarias` (nomeações), `PUT …/{portaria}/nomeacoes`, `POST …/autoridade` (gera o texto da máscara e **reserva** o número no Protocolo), `POST …/aceite`, `…/devolucao` (libera o número), `…/cancelamento`, `GET …/evidencia` (PDF), `GET /portarias/ciencias` e `POST /portarias/{id}/ciencia` (qualquer usuário autenticado). Removidos `…/reenviar`, `…/minuta` e `…/publicacao`.
+  - Dados do RH: a nomeação exige RS/PV, RG/CIN (`rh_dados_funcionais`) e cargo; faltando, fica com `dados_pendentes` e a CGP é avisada (`contratos.portaria_dados_rh`). `servico_cadastro` reavalia as portarias quando o RH salva os dados.
+  - Ciência: aviso `contratos.portaria_nomeacao` no sino **e por e-mail forçado** (`forcar_email`), com link `?aba=equipe&ciencia=<id>` que reabre o modal `app-janela-ciencia-nomeacao`. A autoridade só é escolhida com cadastro completo e todas as ciências (`409`).
+  - Publicação: `servico_protocolo.anexar` chama `servico_portaria.validar_anexo_no_numero` (só PDF e só depois do aceite) e `publicar_pelo_protocolo`, que aplica a equipe (`servico_contratos.aplicar_equipe_por_ids`, exatamente a nomeada), sincroniza o setor "Equipes de contratos" e grava o tipo 16 de Documentos Importantes. `servico_protocolo.liberar` ganhou `ignorar_dono`.
+  - PDF de evidência (`portaria_documento.gerar_evidencia`, no aceite): função, nomeado e ciência de cada um, autoridade e aceite. A minuta Word/PDF e `app/recursos/portarias/` foram removidos.
+  - Front: a aba "Portarias" saiu; o fluxo fica na aba **Equipe** (`portarias-equipe.component`, tabela de nomeações com colunas ordenáveis Função | Nome | Situação e marcadores de cadastro e ciência).
+- **Contratos: `GET /contratos/{id}/pagamentos`** ("Pagamento MM/AAAA" em Documentos Importantes: documento consolidado + OB/PD e a data da juntada).
+- **Contratos: diário de bordo em PDF** reescrito em formato de diário (uma página por dia com ocorrência; glosas por item no fim) com **anexos das ocorrências juntados ao fim** (lista de anexos, folha de rosto por arquivo; PDF como está, PNG/JPG como página, demais formatos só na folha), numerados "Página X de N".
+- **ACL: perfis de acesso.** Perfis com ações independentes por módulo (`LANCAR_OB` etc.), perfil ativo (claim `pa`), personificação (`imp`), perfis atribuídos **por setor ou grupo sistêmico** (`acl_perfis_setores`, `PUT /acl/perfis/{id}/setores`, árvore de setores na aba Usuários e "recebe pelo setor X" na ficha do usuário). Nova conta de integração (tratada como root nas dispensas).
+- **Contratos: rascunhos compartilhados, e-mail de CADIN e de pagamento da OB por máscara, setor sistêmico "Equipes de contratos", diário com ocorrência automática do CADIN.**
+- **Patrimônio: colaboradores das listas e da baixa, categorias do inservível (ocioso, recuperável, antieconômico, irrecuperável), justificativa em editor rico (até 2000 caracteres) editável e removível, busca em todos os campos e seleção de uma sala inteira.** Relatório em PDF com as mesmas colunas do Excel.
+- **Tarefas:** histórico e comentários com texto rico; concluir a tarefa mãe conclui as subtarefas.
+
+### Alterado
+- **Contratos: a equipe não é mais editável no Editar** (`PUT /contratos/{id}` responde `400` se a equipe difere da vigente, nem o SuperRoot); a tela de edição não mostra os campos. No cadastro (`POST`) a equipe inicial continua aceita.
+- **ACL:** as importações XLSX (contratos, checklists e formulários) passam a exigir só `contratos` ≥ MODIFICACAO; os recursos `importacao-contratos` e `importacao-modelos` foram removidos (migração `d7a2f5c8b1e4`).
+- **E-mails do sistema:** layout em largura total, texto de 14 px e cabeçalho/rodapé mantidos (`modelo_email.py`).
+- `guardar_pdf_gerado` tem limite próprio de 300 MB (o consolidado soma anexos de até 25 MB cada); `splitInRow` na tabela comum dos PDFs.
+- Botões: catálogo de classes em `DESIGN.md` e regra no `CLAUDE.md` para não usar classe de botão que dependa de ancestral.
+
+### Corrigido
+- Erro ao gerar o consolidado quando os anexos somavam mais de 25 MB; `LayoutError` em PDFs (diário, relatórios de Patrimônio) com texto muito longo numa célula.
+- Chave duplicada ao trocar o nomeado de uma função já existente na portaria.
+
 ## 2026-10-15
 
 Migrações novas desde 2026-10-13 (aplicar com `alembic upgrade head`; cabeça `a8c4e6f1b3d5`): `e6a2c4d8b1f3` (número das relações do Patrimônio), `f7b3d5e9c2a4` (devolve à etapa pendente as competências paradas em CADIN) e `a8c4e6f1b3d5` (autoridade do despacho no contrato e tipo de modelo `despacho`).

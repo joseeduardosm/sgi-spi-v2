@@ -8,7 +8,7 @@ import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-p
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { DocumentoContrato } from '../compartilhado/contratos.models';
+import { ArquivoPagamento, DocumentoContrato, PagamentoContrato } from '../compartilhado/contratos.models';
 import { ContratacoesApiService } from '../../contratacoes/contratacoes-api.service';
 import { DocumentoResumo } from '../../contratacoes/contratacoes.models';
 import { ProtocoloApiService } from '../../protocolo/protocolo-api.service';
@@ -56,6 +56,32 @@ import { NumeroProtocolo } from '../../protocolo/protocolo.models';
         </table>
       </div>
     </section>
+
+    <!-- Um item por pagamento: a OB/PD juntada na última etapa e o consolidado da mesma competência -->
+    @if (pagamentos().length) {
+      <section class="cartao-dados" aria-labelledby="titulo-pagamentos">
+        <header><div><h2 id="titulo-pagamentos">Pagamentos</h2><small>Cada pagamento reúne o documento consolidado e a OB/PD da competência, com a data em que a OB foi juntada.</small></div></header>
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>Pagamento</th><th>Documento consolidado</th><th>OB / PD</th><th>Juntado em</th></tr></thead>
+            <tbody>
+              @for (p of pagamentos(); track p.competencia_id) {
+                <tr>
+                  <td><strong>{{ p.titulo }}</strong></td>
+                  <td>@if (p.consolidado) {
+                    <small>{{ p.consolidado.nome }} · {{ p.consolidado.tamanho | tamanho }}</small>
+                    <button type="button" class="acao-secundaria acao-pequena" (click)="baixarPagamento(p, p.consolidado)">Baixar PDF</button>
+                  } @else { <small>Não gerado</small> }</td>
+                  <td><small>{{ p.ob.nome }} · {{ p.ob.tamanho | tamanho }}</small>
+                    <button type="button" class="acao-secundaria acao-pequena" (click)="baixarPagamento(p, p.ob)">Baixar PDF</button></td>
+                  <td>{{ p.juntado_em.slice(0, 10) | dataBr }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
 
     <!-- Documentos do Protocolo (portarias, ofícios…) vinculados a este contrato; só aparece para quem tem acesso ao Protocolo -->
     @if (protocolo().length) {
@@ -106,10 +132,12 @@ export class AbaDocumentosComponent implements OnInit {
   protected readonly contratacoes = signal<DocumentoResumo[]>([]);
   private readonly dialogos = inject(DialogosService);
   protected readonly documentos = signal<DocumentoContrato[]>([]);
+  protected readonly pagamentos = signal<PagamentoContrato[]>([]);
 
   /** Carrega o catálogo de documentos ao abrir a aba. */
   ngOnInit(): void {
     this.api.documentos(this.contratoId()).subscribe({ next: (d) => this.documentos.set(d), error: (e) => this.dialogos.mostrarErro(e) });
+    this.api.pagamentos(this.contratoId()).subscribe({ next: (p) => this.pagamentos.set(p), error: () => this.pagamentos.set([]) });
     // Sem acesso ao Protocolo (403) a seção simplesmente não aparece
     this.protocoloApi.doContrato(this.contratoId()).subscribe({ next: (n) => this.protocolo.set(n), error: () => this.protocolo.set([]) });
     // Sem acesso a Contratações (403) a seção simplesmente não aparece
@@ -138,6 +166,11 @@ export class AbaDocumentosComponent implements OnInit {
       next: (d) => this.documentos.set(d),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível limpar o documento'),
     });
+  }
+
+  /** Baixa a OB/PD ou o consolidado de um pagamento. */
+  protected baixarPagamento(pagamento: PagamentoContrato, arquivo: ArquivoPagamento): void {
+    this.api.baixarArquivoDaCompetencia(this.contratoId(), pagamento.competencia_id, arquivo.anexo_id, arquivo.nome).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }
 
   /** Baixa o PDF do documento. */

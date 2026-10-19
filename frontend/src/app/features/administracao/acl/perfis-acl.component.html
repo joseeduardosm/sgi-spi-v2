@@ -1,0 +1,134 @@
+<div class="acl-perfis">
+  <section class="cartao-dados" aria-labelledby="titulo-lista-perfis">
+    <header>
+      <div><h2 id="titulo-lista-perfis">Perfis</h2><small>Conjuntos de permissões atribuíveis a usuários.</small></div>
+      <button class="acao-primaria acao-pequena" type="button" (click)="criar()"><span>+</span> Novo perfil</button>
+    </header>
+    <ul class="acl-perfis-lista">
+      @for (p of perfis(); track p.id) {
+        <li>
+          <button type="button" [class.ativo]="detalhe()?.id === p.id" (click)="abrir(p)">
+            <strong>{{ p.nome }} @if (!p.ativo) { <span class="selo-situacao inativo">Inativo</span> }</strong>
+            <small>{{ p.total_usuarios }} usuário(s) · {{ p.total_direitos }} módulo(s)</small>
+          </button>
+        </li>
+      } @empty {
+        <li class="estado-vazio">@if (perfis() === null) { <app-esqueleto tipo="lista" [linhas]="4" /> } @else { Nenhum perfil cadastrado. }</li>
+      }
+    </ul>
+  </section>
+
+  @if (novo() || detalhe(); as aberto) {
+    <section class="cartao-dados acl-perfil-detalhe" aria-labelledby="titulo-detalhe-perfil">
+      <header>
+        <div>
+          <h2 id="titulo-detalhe-perfil">{{ detalhe()?.nome ?? 'Novo perfil' }}</h2>
+          @if (detalhe(); as d) { <small>{{ d.total_usuarios }} usuário(s) · {{ d.total_direitos }} módulo(s) liberado(s)</small> }
+        </div>
+        @if (detalhe()) { <button class="acao-recusar" type="button" (click)="excluir()">Excluir</button> }
+      </header>
+
+      <div class="acl-perfil-corpo">
+        <!-- Barra lateral: dados gerais, todos os módulos e usuários (como o perfil do GLPI) -->
+        @if (detalhe()) {
+          <nav class="acl-perfil-menu" aria-label="Seções do perfil">
+            <button type="button" [class.ativo]="secao() === 'geral'" (click)="abrirSecao('geral')">Perfil</button>
+            @for (r of modulos(); track r.id) {
+              <button type="button" [class.ativo]="secao() === r.id" (click)="abrirSecao(r.id)">
+                <span>{{ r.nome }}</span>
+                @if (totalNoPerfil(r.id); as total) { <b class="acl-perfil-contagem" [attr.title]="total + ' ação(ões) liberada(s)'">{{ total }}</b> }
+              </button>
+            }
+            <button type="button" [class.ativo]="secao() === 'usuarios'" (click)="abrirSecao('usuarios')">Usuários <b class="acl-perfil-contagem">{{ detalhe()!.total_usuarios }}</b></button>
+          </nav>
+        }
+
+        <div class="acl-perfil-conteudo">
+          @if (moduloAberto(); as m) {
+            <h3>{{ m.nome }}</h3>
+            <p class="dica-formulario">Marque o que o perfil pode fazer neste módulo. As ações são independentes: marcar uma não marca as outras. Sem nenhuma marcada, o perfil não dá acesso ao módulo.</p>
+            <div class="tabela-gestao-envoltorio">
+              <table class="tabela-gestao matriz-acoes">
+                <thead>
+                  <tr>
+                    <th></th>
+                    @for (a of m.acoes; track a.codigo) { <th class="coluna-marca">{{ a.rotulo }}</th> }
+                    <th class="coluna-marca">Marcar/desmarcar todos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>{{ m.nome }}</strong>
+                      @if (m.total_regras === 0 && !(m.total_perfis ?? 0)) { <small>Aberto a todos hoje</small> }</td>
+                    @for (a of m.acoes; track a.codigo) {
+                      <td class="coluna-marca">
+                        <input type="checkbox" [attr.aria-label]="a.rotulo" [attr.title]="a.descricao" [checked]="acoesMarcadas().has(a.codigo)" (change)="alternarAcao(a.codigo)" />
+                      </td>
+                    }
+                    <td class="coluna-marca"><input type="checkbox" aria-label="Marcar ou desmarcar todas as ações" [checked]="todasMarcadas()" (change)="alternarTodas()" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <ul class="acl-acoes-descricao">
+              @for (a of m.acoes; track a.codigo) { <li><b>{{ a.rotulo }}:</b> {{ a.descricao }}</li> }
+            </ul>
+            @if (erroModulo()) { <p class="aviso-formulario erro" role="alert">{{ erroModulo() }}</p> }
+            <footer class="acoes-formulario">
+              <button [class.carregando]="salvando()" class="acao-primaria" type="button" (click)="salvarModulo()" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar' }}</button>
+            </footer>
+          } @else if (secao() === 'usuarios') {
+            <label for="perfil-usuarios">Usuários com este perfil ({{ usuariosDoPerfil().length }})</label>
+            <app-seletor-usuarios idCampo="perfil-usuarios" [(selecionados)]="usuariosDoPerfil" [fonte]="usuariosApi.opcoes" textoAjuda="Adicionar usuário" />
+            <label for="perfil-busca-setor">Setores e grupos com este perfil ({{ setoresMarcados().size }})</label>
+            <input id="perfil-busca-setor" type="search" placeholder="Buscar setor ou grupo" [ngModel]="buscaSetor" (ngModelChange)="filtrarSetores($event)" [ngModelOptions]="{ standalone: true }" />
+            <ul class="acl-arvore-setores" role="group" aria-label="Setores e grupos">
+              @for (l of arvoreSetores(); track l.setor.id) {
+                <li [style.padding-left.px]="l.nivel * 20">
+                  <label><input type="checkbox" [checked]="setoresMarcados().has(l.setor.id)" (change)="alternarSetor(l.setor.id)" /> {{ l.setor.nome }}@if (l.setor.sistemico) { <small>(grupo)</small> }</label>
+                </li>
+              } @empty { <li class="dica-formulario">Nenhum setor encontrado.</li> }
+            </ul>
+            <p class="dica-formulario">Marcar um setor marca também os setores abaixo dele; cada um pode ser desmarcado depois. Quem é membro de um setor marcado recebe o perfil.</p>
+            <p class="dica-formulario">Quem não tinha outro perfil passa a ter este como padrão. Cada usuário escolhe o perfil ativo no menu do usuário.</p>
+            @if (detalhe(); as d) {
+              <ul class="acl-perfis-usuarios">
+                @for (u of d.usuarios; track u.id) {
+                  <li><span>{{ u.nome_completo }} <small>&#64;{{ u.login }}@if (u.padrao) { · padrão }</small></span>
+                    <button class="acao-secundaria acao-pequena" type="button" (click)="personificar(u.id)" [disabled]="!u.ativo">Personificar</button></li>
+                }
+              </ul>
+            }
+            @if (erro()) { <p class="aviso-formulario erro" role="alert">{{ erro() }}</p> }
+            <footer class="acoes-formulario">
+              <button [class.carregando]="salvando()" class="acao-primaria" type="button" (click)="salvarUsuarios()" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar usuários' }}</button>
+            </footer>
+          } @else {
+            <form (ngSubmit)="salvarGeral()" novalidate>
+              <div class="grade-formulario">
+                <div class="ocupa-duas">
+                  <label for="perfil-nome">Nome</label>
+                  <input id="perfil-nome" name="nome" [(ngModel)]="nome" maxlength="100" placeholder="Ex.: Gestor de contratos" />
+                </div>
+                <div class="ocupa-duas">
+                  <label for="perfil-descricao">Descrição</label>
+                  <textarea id="perfil-descricao" name="descricao" [(ngModel)]="descricao" rows="3"></textarea>
+                </div>
+              </div>
+              <div class="linha-caixas">
+                <label><input type="checkbox" name="ativo" [(ngModel)]="ativo" /> Ativo (perfil inativo não vale para ninguém)</label>
+              </div>
+              @if (novo()) { <p class="dica-formulario">Depois de criar o perfil, os módulos aparecem na barra lateral para você marcar as permissões de cada um.</p> }
+              @if (erro()) { <p class="aviso-formulario erro" role="alert">{{ erro() }}</p> }
+              <footer class="acoes-formulario">
+                <button [class.carregando]="salvando()" class="acao-primaria" type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : (novo() ? 'Criar perfil' : 'Salvar') }}</button>
+              </footer>
+            </form>
+          }
+        </div>
+      </div>
+    </section>
+  } @else {
+    <section class="cartao-dados"><div class="corpo"><p class="estado-vazio">Escolha um perfil na lista ou crie um novo.</p></div></section>
+  }
+</div>

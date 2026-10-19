@@ -10,7 +10,7 @@ import { ContratosApiService } from './contratos-api.service';
 import { PreviaImportacaoModelo } from './contratos.models';
 
 /**
- * Botão "Importar XLSX" (liberado pela ACL `importacao-modelos`). Sem `contratoId` cria um modelo
+ * Botão "Importar XLSX" (parte de Editar contratos: ACL `contratos` ≥ MODIFICACAO). Sem `contratoId` cria um modelo
  * global; com ele, cria uma versão inativa do checklist/formulário do contrato. Fluxo da janela:
  * baixar o modelo → escolher a planilha → ver a prévia (erros e avisos) → confirmar.
  */
@@ -104,7 +104,7 @@ export class ImportacaoModeloXlsxComponent {
   private readonly dialogos = inject(DialogosService);
   private readonly acesso = inject(AcessoService);
 
-  protected readonly liberado = computed(() => this.acesso.pode('importacao-modelos', 'MODIFICACAO') && this.acesso.pode('contratos', 'MODIFICACAO'));
+  protected readonly liberado = computed(() => this.acesso.pode('contratos', 'MODIFICACAO'));
   protected readonly aberta = signal(false);
   protected readonly arquivo = signal<File | null>(null);
   protected readonly erroArquivo = signal<string | null>(null);

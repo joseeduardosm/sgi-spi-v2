@@ -9,3 +9,7 @@ logs/
 dados/
 backups/
 apoio/
+
+# Cópias de segurança soltas na pasta do backend (contêm segredos ou dados internos): nunca vão para o Git
+backend/.env.bak*
+backend/backup-*.json

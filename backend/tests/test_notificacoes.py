@@ -153,19 +153,6 @@ def test_designacao_na_equipe_abre_janela(cliente, admin, pessoas):
     cliente.get(f"{URL}/{janela['id']}", headers=h["ana"])
     resumo = cliente.get(f"{URL}/resumo", headers=h["ana"]).json()
     assert resumo["janela"] is None and resumo["pendentes"] == 1
-    # Trocar o gestor avisa o novo; manter a equipe não gera aviso de novo
-    corpo = {k: contrato[k] for k in ("numero", "apelido", "objeto", "data_inicio", "vigencia_inicial_meses", "vigencia_maxima_meses",
-                                      "periodicidade_meses", "mes_reajuste", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero",
-                                      "sei_execucao_link")}
-    itens = [{k: i[k] for k in ("id", "descricao", "tipo", "calcula_pro_rata", "codigo_classe", "codigo_natureza_despesa", "codigo_siafisico",
-                                "codigo_catmat_catser", "quantidade_mensal", "valor_unitario", "unidade_fornecimento")} | {"quantidade_total": i["quantidade_original"]}
-             for i in contrato["itens"]]
-    corpo |= {"empresa_id": contrato["empresa"]["id"], "itens": itens, "equipe": {"gestor": ids["bruno"], "fiscal_tecnico": ids["ana"]},
-              "versao": contrato["versao"]}
-    r = cliente.put(f"/api/contratos/{contrato['id']}", json=corpo, headers=admin)
-    assert r.status_code == 200, r.text
-    assert cliente.get(f"{URL}/resumo", headers=h["bruno"]).json()["janela"]["assunto"].startswith("Você foi cadastrado como Gestor")
-    assert "Fiscal técnico" in cliente.get(f"{URL}/resumo", headers=h["ana"]).json()["janela"]["assunto"]
     # Excluir o contrato apaga os avisos dele
     assert cliente.delete(f"/api/contratos/{contrato['id']}", headers=admin).status_code == 204
     assert cliente.get(URL, params={"estado": "todas"}, headers=h["ana"]).json()["total"] == 0

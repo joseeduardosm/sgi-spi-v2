@@ -8,8 +8,8 @@
     </div>
     <div class="acoes-formulario">
       @if (contaRoot()) { <app-importacao-sgi /> }
-      <!-- Liberado por usuário/setor na ACL `importacao-contratos` (e exige poder cadastrar contratos) -->
-      @if (acesso.pode('importacao-contratos', 'MODIFICACAO') && acesso.pode('contratos', 'MODIFICACAO')) { <app-importacao-xlsx /> }
+      <!-- Parte de "Editar contratos e conduzir a execução" (ACL `contratos` ≥ MODIFICACAO) -->
+      @if (acesso.pode('contratos', 'MODIFICACAO')) { <app-importacao-xlsx /> }
       @if (acesso.pode('contratos', 'MODIFICACAO')) {
         <a class="acao-primaria" routerLink="/contratos/novo"><span>+</span> Novo contrato</a>
       }
@@ -44,12 +44,15 @@
             <td><a class="link-contrato" [routerLink]="['/contratos', c.id]" [title]="'Abrir o contrato ' + c.numero + ' (Ctrl+clique ou botão do meio abre em nova aba)'"><strong>{{ c.numero }}</strong></a>@if (c.apelido) { <small class="apelido-contrato">{{ c.apelido | uppercase }}</small> }</td>
             <td><strong>{{ c.empresa_razao_social }}</strong><small>{{ c.objeto.length > 110 ? c.objeto.slice(0, 110) + '…' : c.objeto }}</small></td>
             <td class="celula-marcadores">
-              <div class="marcadores">
-                @for (m of marcadores(c); track m.texto) {
-                  @if (m.rota) { <a [class]="classeMarcador(m.cor)" [routerLink]="m.rota" [title]="m.titulo">{{ m.texto }}</a> }
-                  @else { <span [class]="classeMarcador(m.cor)" [title]="m.titulo">{{ m.texto }}</span> }
-                }
-              </div>
+              <!-- Uma linha por competência em andamento: (MM/AAAA · etapa) -->
+              @for (linha of marcadores(c); track $index) {
+                <div class="marcadores">
+                  @for (m of linha; track m.texto) {
+                    @if (m.rota) { <a [class]="classeMarcador(m.cor)" [routerLink]="m.rota" [title]="m.titulo">{{ m.texto }}</a> }
+                    @else { <span [class]="classeMarcador(m.cor)" [title]="m.titulo">{{ m.texto }}</span> }
+                  }
+                </div>
+              }
             </td>
             <td>{{ c.data_inicio | dataBr }}</td>
             <td>{{ c.data_fim | dataBr }}</td>

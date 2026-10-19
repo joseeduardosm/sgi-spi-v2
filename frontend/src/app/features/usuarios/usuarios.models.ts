@@ -51,6 +51,8 @@ export interface DetalheUsuario {
   login: string;
   ativo: boolean;
   superusuario: boolean;
+  /** Conta de integração: dispensada de completar e confirmar o cadastro. */
+  conta_integracao?: boolean;
   origem: OrigemUsuario;
   possui_senha_local: boolean;
   diretorio_nome: string | null;
@@ -78,6 +80,7 @@ export interface CriacaoUsuario {
   senha: string;
   ativo: boolean;
   superusuario: boolean;
+  conta_integracao?: boolean;
   perfil: DadosPerfil;
 }
 
@@ -86,6 +89,7 @@ export interface AlteracaoUsuario {
   senha: string | null;
   ativo: boolean;
   superusuario: boolean;
+  conta_integracao?: boolean;
   perfil: DadosPerfil;
 }
 

@@ -85,6 +85,21 @@ export class ExecucaoApiService {
     return this.http.delete<Checklist[]>(this.url(id, `/checklists/${checklistId}`));
   }
 
+  // --- Rascunhos salvos no servidor (visíveis à equipe) ---
+  /** Rascunho salvo da tela (`null` se não há). Nas telas por competência, `chave` é o id da competência. */
+  lerRascunho(contratoId: string, tipo: TipoRascunho, chave = ''): Observable<RascunhoServidor | null> {
+    return this.http.get<RascunhoServidor | null>(this.url(contratoId, `/rascunhos/${tipo}`), { params: { chave } });
+  }
+
+  /** Salva (ou grava por cima) o rascunho; `versao` é a que a pessoa viu (`null` se não havia). */
+  salvarRascunho(contratoId: string, tipo: TipoRascunho, chave: string, dados: Record<string, unknown>, versao: number | null): Observable<RascunhoServidor> {
+    return this.http.put<RascunhoServidor>(this.url(contratoId, `/rascunhos/${tipo}`), { dados, versao }, { params: { chave } });
+  }
+
+  apagarRascunho(contratoId: string, tipo: TipoRascunho, chave = ''): Observable<void> {
+    return this.http.delete<void>(this.url(contratoId, `/rascunhos/${tipo}`), { params: { chave } });
+  }
+
   // --- Destinatários dos e-mails da execução ---
   /** Prepostos ativos com e-mail, em um grupo só. */
   gruposPrepostos(id: string): Observable<GrupoDestinatarios[]> {
@@ -271,6 +286,16 @@ export class ExecucaoApiService {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/cadin'), this.formulario(campos));
   }
 
+  /** Reenvia o e-mail da pendência no CADIN (aos prepostos, equipe em cópia). */
+  reenviarEmailCadin(id: string, c: string, consultaId: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/cadin/${consultaId}/reenviar-email`), {});
+  }
+
+  /** Reenvia aos prepostos o e-mail de pagamento da competência com a OB lançada (equipe em cópia). */
+  reenviarEmailOb(id: string, c: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/ordem-bancaria/reenviar-email'), {});
+  }
+
   /** Conclui a etapa do checklist com os documentos obrigatórios anexados (opcionais podem faltar). */
   concluirChecklist(id: string, c: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/checklist/concluir'), {});
@@ -338,4 +363,18 @@ export class ExecucaoApiService {
   reenviarEmailAvaliacao(id: string, competenciaId: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, competenciaId, '/reenviar-email-avaliacao'), null);
   }
+}
+
+/** Tela que pode ter rascunho salvo no servidor. */
+export type TipoRascunho = 'diario' | 'avaliacao' | 'medicao';
+
+/** Rascunho salvo no servidor (`LeituraRascunho` da API). */
+export interface RascunhoServidor {
+  tipo: TipoRascunho;
+  chave: string;
+  dados: Record<string, unknown>;
+  versao: number;
+  atualizado_em: string;
+  atualizado_por_id: number | null;
+  atualizado_por_nome: string;
 }

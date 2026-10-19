@@ -23,6 +23,7 @@ class GravacaoOcorrencia(BaseModel):
     """Nova ocorrência. Com `possui_glosa`, informe ao menos um item com quantidade."""
     data_ocorrencia: date = Field(..., description="Dia em que a ocorrência aconteceu (não pode ser futuro).")
     descricao: str = Field(..., min_length=1, max_length=20000, description="Relato da ocorrência: HTML do editor rico (sanitizado pela API) ou texto simples.")
+    competencia_afetada: str | None = Field(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Competência que a ocorrência afeta (`AAAA-MM`; é onde valem a glosa e o impacto na avaliação). Pode ser diferente da data da ocorrência. Vazio: a competência da data.")
     possui_glosa: bool = Field(False, description="A ocorrência implicará glosa?")
     glosas: list[GravacaoGlosa] = Field(default_factory=list, description="Itens e quantidades a glosar (só com `possui_glosa`).")
     impacta_avaliacao: bool = Field(False, description="A ocorrência impacta a avaliação da qualidade?")
@@ -96,7 +97,8 @@ class LeituraOcorrencia(BaseModel):
     registrada_por_nome: str
     registrada_por_papel: str = Field(..., description="Papel de quem registrou (ex.: `gestor`, `fiscal_tecnico`) ou vazio.")
     criado_em: datetime = Field(..., description="Data e hora do registro.")
-    competencia_rotulo: str | None = Field(None, description="Competência cujo período contém a data da ocorrência.")
+    competencia_rotulo: str | None = Field(None, description="Competência afetada pela ocorrência (ex.: `09/2026`); nulo se ainda não existe competência para ela.")
+    competencia_afetada: str | None = Field(None, description="Competência afetada no formato `AAAA-MM`.")
     anexos: list[LeituraAnexoOcorrencia] = []
     impacta_avaliacao: bool = False
     itens_avaliacao: list[LeituraItemAvaliacao] = []
@@ -119,9 +121,19 @@ class OpcaoItemAvaliacao(BaseModel):
     grupo: str
 
 
+class OpcaoCompetenciaDiario(BaseModel):
+    """Competência regular do contrato que pode ser apontada como afetada pela ocorrência."""
+    identificador: str = Field(..., description="`AAAA-MM`.")
+    rotulo: str = Field(..., description="Ex.: `09/2026`.")
+    periodo_inicio: date
+    periodo_fim: date
+    medicao_concluida: bool = Field(False, description="A medição dessa competência já foi concluída (a glosa só vale se ela for reaberta).")
+
+
 class DiarioContrato(BaseModel):
     ocorrencias: list[LeituraOcorrencia] = Field(..., description="Em ordem cronológica de registro (mais antiga primeiro).")
     pode_registrar: bool
     itens: list[OpcaoItemGlosa]
+    competencias: list[OpcaoCompetenciaDiario] = Field(default_factory=list, description="Competências regulares do contrato (mais recente primeiro), para escolher a afetada.")
     itens_avaliacao: list[OpcaoItemAvaliacao] = Field(default_factory=list,
                                                       description="Itens do formulário de avaliação ativo (vazio sem formulário ativo).")

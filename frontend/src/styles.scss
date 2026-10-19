@@ -6,6 +6,7 @@
 @use 'bootstrap/dist/css/bootstrap.min.css';
 // Módulo de contratos (usa só seletores próprios ou modificadores dos componentes abaixo)
 @use 'styles/contratos';
+@use 'styles/acl';
 @use 'styles/tarefas';
 @use 'styles/noticias';
 @use 'styles/melhorias';
@@ -798,6 +799,17 @@ textarea {
     color: #8a2d35;
     background: var(--cor-fcf0f1);
   }
+
+  // Aviso "Rascunho restaurado": texto e botão "Descartar rascunho" lado a lado
+  &.aviso-rascunho {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 14px;
+    color: var(--spi-texto);
+    background: var(--spi-info-suave);
+  }
 }
 
 .secao-formulario {
@@ -841,6 +853,12 @@ textarea {
   }
 }
 
+
+/* Usuários: a linha inteira abre o usuário */
+.tabela-usuarios {
+  .linha-clicavel { cursor: pointer; }
+  .linha-clicavel:hover td, .linha-clicavel:focus-visible td { background: var(--cor-fafbfc); }
+}
 
 /* Notificações: tabela da caixa, selos de prioridade, janela da mensagem e formulário de envio */
 .tabela-mensagens {
@@ -1739,7 +1757,7 @@ button.gantt-barra {
   top: calc(env(safe-area-inset-top, 0px) + 12px);
 
   // Sem os dados funcionais (usuário fora da CGP), o cartão vazio não aparece
-  .cartao-dados:not(:has(.bloco-dados-funcionais)) { display: none; }
+  .cartao-dados:not(:has(.bloco-dados-funcionais)):not(.cartao-perfis-acesso) { display: none; }
   .grade-formulario { grid-template-columns: 1fr 1fr; }
 }
 

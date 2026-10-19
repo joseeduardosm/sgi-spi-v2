@@ -143,7 +143,7 @@ export class NotificacoesSistemaComponent implements OnInit {
     this.atualizarContagem();
   }
 
-  /** Quantos da seleção receberão (só quem ligou o e-mail de "Novidades do SGI SPI"); mostrado na janela do envio a escolhidos. */
+  /** Quantos da seleção receberão (todo escolhido ativo e com e-mail, tenha ou não ligado "Novidades do SGI SPI"); mostrado na janela do envio a escolhidos. */
   protected readonly contagem = signal<{ total: number; selecionados: number } | null>(null);
 
   protected atualizarContagem(): void {

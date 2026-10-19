@@ -41,6 +41,8 @@ class RegistroAuditoria(Base):
     alvo_tipo: Mapped[str | None] = mapped_column(String(60))
     alvo_id: Mapped[str | None] = mapped_column(String(64))
     dados: Mapped[dict[str, Any] | None] = mapped_column(TipoJson)
+    # SuperRoot que fez a operação **personificando** o usuário de `autor`/`autor_id` (nulo no uso normal)
+    personificado_por_id: Mapped[int | None] = mapped_column(Integer)
 
 
 # Acelera a consulta do histórico de um registro, em ordem cronológica

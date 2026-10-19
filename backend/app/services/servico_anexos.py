@@ -41,6 +41,10 @@ def diretorio_anexos() -> Path:
     return Path(obter_configuracao().anexos_diretorio)
 
 
+# Limite dos PDFs gerados pelo sistema (o consolidado soma vários anexos)
+LIMITE_PDF_GERADO = 300 * 1024 * 1024
+
+
 def tamanho_maximo() -> int:
     """Tamanho máximo de um anexo, em bytes."""
     return obter_configuracao().anexos_tamanho_maximo_mb * 1024 * 1024
@@ -53,10 +57,13 @@ def _blocos(origem: BinaryIO) -> Iterator[bytes]:
 
 
 def guardar_pdf(
-    sessao: Session, origem: BinaryIO, nome_original: str, categoria: str, enviado_por_id: int | None, contrato_id: uuid.UUID | None = None
+    sessao: Session, origem: BinaryIO, nome_original: str, categoria: str, enviado_por_id: int | None, contrato_id: uuid.UUID | None = None,
+    limite_bytes: int | None = None,
 ) -> Anexo:
-    """Valida e grava o PDF; devolve o `Anexo` já adicionado à sessão (sem commit)."""
-    limite = tamanho_maximo()
+    """Valida e grava o PDF; devolve o `Anexo` já adicionado à sessão (sem commit).
+
+    `limite_bytes` troca o limite de envio (`ANEXOS_TAMANHO_MAXIMO_MB`); só os PDFs gerados pelo sistema o usam."""
+    limite = limite_bytes or tamanho_maximo()
     agora = agora_utc()
     identificador = uuid.uuid4()
     # Organiza os arquivos por ano/mês, com nome aleatório (evita colisão e não expõe o nome original)
@@ -79,7 +86,7 @@ def guardar_pdf(
                 tamanho += len(bloco)
                 # Interrompe assim que passar do limite, sem precisar ler o resto
                 if tamanho > limite:
-                    raise ErroAnexo(f"O arquivo excede o limite de {obter_configuracao().anexos_tamanho_maximo_mb} MB.")
+                    raise ErroAnexo(f"O arquivo excede o limite de {limite // (1024 * 1024)} MB.")
                 resumo.update(bloco)
                 temporario.write(bloco)
         if tamanho == 0:
@@ -112,8 +119,11 @@ def guardar_pdf(
 def guardar_pdf_gerado(
     sessao: Session, conteudo: bytes, nome: str, categoria: str, gerado_por_id: int | None, contrato_id: uuid.UUID | None = None
 ) -> Anexo:
-    """Grava um PDF produzido pelo próprio sistema (memórias, pareceres, consolidados)."""
-    return guardar_pdf(sessao, BytesIO(conteudo), nome, categoria, gerado_por_id, contrato_id)
+    """Grava um PDF produzido pelo próprio sistema (memórias, pareceres, consolidados).
+
+    O limite é o dos PDFs gerados (`LIMITE_PDF_GERADO`), maior que o do envio: o consolidado junta todos os anexos
+    da competência, cada um de até `ANEXOS_TAMANHO_MAXIMO_MB`, e passava do limite de um anexo comum."""
+    return guardar_pdf(sessao, BytesIO(conteudo), nome, categoria, gerado_por_id, contrato_id, limite_bytes=LIMITE_PDF_GERADO)
 # Não passa pela validação de PDF (o conteúdo não é PDF); grava direto no destino
 
 

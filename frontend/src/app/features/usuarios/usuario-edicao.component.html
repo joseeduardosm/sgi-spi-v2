@@ -39,6 +39,8 @@
               <label><input type="checkbox" formControlName="ativo" /> Conta ativa</label>
               <label [title]="ehSuperRoot() ? '' : 'Só um SuperRoot concede este papel'">
                 <input type="checkbox" formControlName="superusuario" /> Administrador do sistema (SuperRoot)</label>
+              <label [title]="ehSuperRoot() ? 'Para contas usadas por outro sistema (API): não precisam completar nem confirmar o cadastro todo mês' : 'Só um SuperRoot define este tipo de conta'">
+                <input type="checkbox" formControlName="conta_integracao" /> Conta de integração (dispensada de confirmar o cadastro)</label>
             </div>
             @if (usuario()?.origem === 'ldap') {
               <p class="dica-formulario">Conta corporativa: nome, e-mail e situação são atualizados pelo diretório. Definir uma senha local a torna "Local + LDAP" (contingência).</p>
@@ -60,6 +62,28 @@
           <section class="cartao-dados">
             <div class="corpo"><app-dados-funcionais [usuarioId]="u.id" [botaoProprio]="false" /></div>
           </section>
+          <!-- Perfis de acesso: só o SuperRoot atribui; o usuário alterna entre eles no menu do usuário -->
+          @if (ehSuperRoot()) {
+            <section class="cartao-dados cartao-perfis-acesso" aria-labelledby="titulo-perfis-acesso">
+              <header><div><h2 id="titulo-perfis-acesso">Perfis de acesso</h2><small>Soma-se às regras por setor e diretas; vale o maior nível. O padrão vale ao entrar.</small></div></header>
+              <div class="corpo">
+                <ul class="acl-perfis-usuarios">
+                  @for (p of perfisDisponiveis(); track p.id) {
+                    <li>
+                      <label><input type="checkbox" [checked]="perfisMarcados().has(p.id)" (change)="alternarPerfil(p.id)" /> {{ p.nome }}@if (perfisPorSetor().get(p.id); as setores) { <small>· recebe pelo setor {{ setores.join(', ') }}</small> }</label>
+                      <label class="acl-perfil-padrao"><input type="radio" name="perfil-padrao" [checked]="perfilPadrao() === p.id" [disabled]="!perfisMarcados().has(p.id)"
+                                                              (change)="perfilPadrao.set(p.id)" /> Padrão</label>
+                    </li>
+                  } @empty {
+                    <li><small>Nenhum perfil ativo cadastrado.</small></li>
+                  }
+                </ul>
+                <footer class="acoes-formulario">
+                  <button [class.carregando]="salvandoPerfis()" type="button" class="acao-secundaria" (click)="salvarPerfis()" [disabled]="salvandoPerfis()">Salvar perfis</button>
+                </footer>
+              </div>
+            </section>
+          }
         </aside>
       }
     </div>
@@ -72,6 +96,9 @@
     <div class="barra-salvar-usuario">
       @if (usuario() && podeGerir() && !somenteLeitura()) {
         <button type="button" class="acao-recusar" (click)="excluir()">Excluir usuário</button>
+      }
+      @if (usuario() && ehSuperRoot() && usuario()!.ativo) {
+        <button type="button" class="acao-secundaria" (click)="personificar()" title="Navegar como este usuário para testar as permissões">Personificar</button>
       }
       <span class="espaco"></span>
       <button [class.carregando]="salvando()" type="button" class="acao-secundaria" (click)="voltar()" [disabled]="salvando()">Voltar para a lista</button>

@@ -92,6 +92,21 @@ export const ROTAS_CONTRATOS: Routes = [
     loadComponent: () => import('./modelos/modelo-despacho.component').then((m) => m.ModeloDespachoComponent),
   },
   {
+    // Página da máscara do e-mail de pendência no CADIN: `novo` ou o id (mesmas permissões da lista de modelos)
+    path: 'modelos/email_cadin/:id',
+    title: 'Máscara do e-mail de CADIN | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'contratos', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./modelos/modelo-email-cadin.component').then((m) => m.ModeloEmailCadinComponent),
+  },  {
+    // Página da máscara do e-mail de pendência no CADIN: `novo` ou o id (mesmas permissões da lista de modelos)
+    path: 'modelos/email_ob/:id',
+    title: 'Máscara do e-mail de CADIN | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'contratos', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./modelos/modelo-email-ob.component').then((m) => m.ModeloEmailObComponent),
+  },
+  {
     // Cadastro de contrato; "novo" precisa vir antes de ":id" para não ser lido como um id
     path: 'novo',
     title: 'Novo contrato | SGI SPI',

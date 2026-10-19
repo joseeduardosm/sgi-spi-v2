@@ -6,7 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { debounceTime, Subject } from 'rxjs';
 
 import { AcessoService } from '../../core/acesso/acesso.service';
@@ -27,6 +27,7 @@ export class UsuariosComponent implements OnInit {
   protected readonly autenticacao = inject(AutenticacaoService);
   private readonly acesso = inject(AcessoService);
   protected readonly api = inject(UsuariosApiService);
+  private readonly roteador = inject(Router);
 
   protected readonly rotulosOrigem = ROTULOS_ORIGEM;
   protected readonly ehSuperRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
@@ -95,5 +96,12 @@ export class UsuariosComponent implements OnInit {
       if (erro.status === 0 || erro.status >= 502) return 'Serviço indisponível. Tente novamente em instantes.';
     }
     return padrao;
+  }
+
+  /** Clique na linha (ou Enter com ela em foco): abre o usuário. Cliques nos links e botões da própria linha (Editar, Excluir) e com Ctrl/Shift seguem o comportamento normal. */
+  protected abrirLinha(evento: Event, usuario: { id: number }): void {
+    const alvo = evento.target as HTMLElement;
+    if (alvo.closest('a, button') || (evento instanceof MouseEvent && (evento.ctrlKey || evento.metaKey || evento.shiftKey))) return;
+    void this.roteador.navigate(['/usuarios', usuario.id]);
   }
 }

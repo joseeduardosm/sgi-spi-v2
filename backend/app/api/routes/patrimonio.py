@@ -83,7 +83,7 @@ def _bem(sessao: Session, b: Bem, em_mov: bool) -> esquema.BemLeitura:
         valor_atual=b.valor_atual, valor_efetivo=servico_bens.valor_efetivo(b), data_aquisicao=b.data_aquisicao, garantia_meses=b.garantia_meses,
         garantia_fim=servico_bens.garantia_fim(b), situacao_garantia=servico_bens.situacao_garantia(b), vence_em_90_dias=servico_bens.vence_em_90_dias(b), marca=b.marca,
         modelo=b.modelo, numero_serie=b.numero_serie, nota_fiscal=b.nota_fiscal, fornecedor=b.fornecedor, observacoes=b.observacoes,
-        criado_por_nome=_nome_de(sessao, b.criado_por_id), classificacao_pendente=b.classificacao_pendente, em_movimentacao=em_mov, dados_contabeis_pendentes=b.dados_contabeis_pendentes,
+        criado_por_nome=_nome_de(sessao, b.criado_por_id), classificacao_pendente=b.classificacao_pendente, categoria_inservivel=b.categoria_inservivel if b.situacao == "inservivel" else None, em_movimentacao=em_mov, dados_contabeis_pendentes=b.dados_contabeis_pendentes,
         fotos=[esquema.FotoLeitura(id=f.id, nome=f.anexo.nome_original) for f in b.fotos], avisos=servico_bens.avisos(sessao, b), criado_em=b.criado_em,
         atualizado_em=b.atualizado_em, baixado_em=b.baixado_em)
 
@@ -110,8 +110,11 @@ def _classificacao(c) -> esquema.ClassificacaoLeitura:
     return esquema.ClassificacaoLeitura(
         id=c.id, numero=c.numero, tipo=c.tipo, status=c.status, solicitante_id=c.solicitante_id, solicitante_nome=nome_do_autor(c.solicitante), criada_em=c.criada_em, enviada_em=c.enviada_em,
         decidido_por_nome=nome_do_autor(c.decidido_por) if c.decidido_por else None, decidido_em=c.decidido_em, motivo_recusa=c.motivo_recusa,
+        colaboradores=[esquema.ColaboradorLista(id=x.usuario_id, nome=nome_do_autor(x.usuario)) for x in sorted(c.colaboradores, key=lambda x: nome_do_autor(x.usuario).lower())],
         itens=[esquema.ItemClassificacaoLeitura(id=i.id, bem_id=i.bem_id, chapa=i.bem.chapa, numero_serie=i.bem.numero_serie, rotulo=i.bem.rotulo, descricao=i.bem.descricao, sala_rotulo=rotulo_curto(i.bem.localizacao),
-                                                situacao_anterior=i.situacao_anterior, justificativa=i.justificativa, anexo_nome=i.anexo.nome_original if i.anexo else None,
+                                                marca=i.bem.marca, modelo=i.bem.modelo, grupo_nome=i.bem.grupo.nome if i.bem.grupo else None,
+                                                responsavel_nome=nome_do_autor(i.bem.responsavel) if i.bem.responsavel_id else None, nota_fiscal=i.bem.nota_fiscal, fornecedor=i.bem.fornecedor,
+                                                observacoes=i.bem.observacoes, situacao_anterior=i.situacao_anterior, justificativa=i.justificativa, categoria=i.categoria, anexo_nome=i.anexo.nome_original if i.anexo else None,
                                                 resultado=i.resultado) for i in c.itens])
 
 
@@ -119,6 +122,7 @@ def _baixa(b) -> esquema.BaixaLeitura:
     return esquema.BaixaLeitura(
         id=b.id, numero=b.numero, status=b.status, solicitante_id=b.solicitante_id, solicitante_nome=nome_do_autor(b.solicitante), criada_em=b.criada_em, enviada_em=b.enviada_em,
         decidido_por_nome=nome_do_autor(b.decidido_por) if b.decidido_por else None, decidido_em=b.decidido_em, motivo_recusa=b.motivo_recusa, tem_termo=b.termo_anexo_id is not None,
+        colaboradores=[esquema.ColaboradorLista(id=x.usuario_id, nome=nome_do_autor(x.usuario)) for x in sorted(b.colaboradores, key=lambda x: nome_do_autor(x.usuario).lower())],
         itens=[esquema.ItemBaixaLeitura(id=i.id, bem_id=i.bem_id, chapa=i.bem.chapa, numero_serie=i.bem.numero_serie, rotulo=i.bem.rotulo, descricao=i.bem.descricao, situacao_anterior=i.situacao_anterior,
                                         valor_aquisicao=i.bem.valor_aquisicao, motivo=i.motivo, processo=i.processo, resultado=i.resultado) for i in b.itens])
 
@@ -468,7 +472,7 @@ CLA_NAO_ENCONTRADA = resposta_nao_encontrado("Lista de classificação")
 
 
 @roteador.get("/classificacoes", response_model=list[esquema.ClassificacaoLeitura], summary="Listas de inservíveis e extraviados",
-              description="Filtros por status e solicitante.")
+              description="Filtros por status e por pessoa (`solicitante_id`: as listas que ela montou **e** as compartilhadas com ela).")
 def listar_classificacoes(status_: Literal["rascunho", "pendente", "aprovada", "parcial", "recusada"] | None = Query(None, alias="status"), solicitante_id: int | None = None,
                           sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> list[esquema.ClassificacaoLeitura]:
     return [_classificacao(c) for c in servico_classificacoes.listar(sessao, status=status_, solicitante_id=solicitante_id)]
@@ -515,10 +519,19 @@ def tirar_bem_classificacao(classificacao_id: uuid.UUID, item_id: uuid.UUID, ses
 
 
 @roteador.post("/classificacoes/{classificacao_id}/justificativa", response_model=esquema.ClassificacaoLeitura, summary="Justificar os bens marcados",
-               description="Uma justificativa (mínimo de 10 caracteres) vale para todos os itens marcados; também dá para justificar um a um.", responses={**CONFLITO, **INVALIDO, **CLA_NAO_ENCONTRADA})
+               description="Uma justificativa vale para todos os itens marcados; também dá para justificar um a um. Gravar de novo **edita** (substitui a justificativa e a categoria anteriores); para apagar, use `POST .../justificativa/remover`.", responses={**CONFLITO, **INVALIDO, **CLA_NAO_ENCONTRADA})
 def justificar_classificacao(classificacao_id: uuid.UUID, dados: esquema.Justificativa, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> esquema.ClassificacaoLeitura:
     with _traduzir(sessao):
-        return _classificacao(servico_classificacoes.justificar(sessao, classificacao_id, dados.itens_ids, dados.justificativa, usuario))
+        return _classificacao(servico_classificacoes.justificar(sessao, classificacao_id, dados.itens_ids, dados.justificativa, usuario, categoria=dados.categoria))
+
+
+@roteador.post("/classificacoes/{classificacao_id}/justificativa/remover", response_model=esquema.ClassificacaoLeitura, summary="Excluir a justificativa dos bens marcados",
+               description="Só em rascunho, por quem monta ou colabora na lista. Apaga a justificativa e a categoria dos itens indicados; para enviar a lista eles precisam de uma nova justificativa. "
+               "Para **editar**, grave de novo com `POST .../justificativa` (substitui a anterior).", responses={**CONFLITO, **INVALIDO, **CLA_NAO_ENCONTRADA})
+def remover_justificativa_classificacao(classificacao_id: uuid.UUID, dados: esquema.RemocaoJustificativa, sessao: Session = Depends(obter_sessao),
+                                        usuario: Usuario = Depends(operar)) -> esquema.ClassificacaoLeitura:
+    with _traduzir(sessao):
+        return _classificacao(servico_classificacoes.remover_justificativa(sessao, classificacao_id, dados.itens_ids, usuario))
 
 
 @roteador.post("/classificacoes/{classificacao_id}/itens/{item_id}/anexo", response_model=esquema.ClassificacaoLeitura, summary="Anexar ao item",
@@ -543,6 +556,15 @@ def baixar_anexo_classificacao(classificacao_id: uuid.UUID, item_id: uuid.UUID, 
         raise ErroApi(status.HTTP_404_NOT_FOUND, str(erro), "nao_encontrado") from erro
 
 
+@roteador.put("/classificacoes/{classificacao_id}/colaboradores", response_model=esquema.ClassificacaoLeitura, summary="Compartilhar a lista",
+              description="Só quem montou a lista, e só em rascunho. Substitui os colaboradores (lista vazia deixa de compartilhar). Quem recebe faz tudo o que o solicitante faz na lista "
+              "(incluir e tirar bens, justificar, anexar, enviar para aprovação e descartar) e recebe um aviso; não pode, depois, aprovar a própria lista (`403 auto_aprovacao`).",
+              responses={**CONFLITO, **INVALIDO, **CLA_NAO_ENCONTRADA})
+def compartilhar_classificacao(classificacao_id: uuid.UUID, dados: esquema.GravacaoColaboradores, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> esquema.ClassificacaoLeitura:
+    with _traduzir(sessao):
+        return _classificacao(servico_classificacoes.definir_colaboradores(sessao, classificacao_id, dados.usuarios_ids, usuario))
+
+
 @roteador.post("/classificacoes/{classificacao_id}/enviar", response_model=esquema.ClassificacaoLeitura, summary="Enviar para aprovação",
                description="Todos os bens precisam de justificativa (`409 sem_justificativa`). Os bens ficam com \"Classificação pendente\" e não podem ser movimentados. Avisa quem aprova.",
                responses={**CONFLITO, **INVALIDO, **CLA_NAO_ENCONTRADA})
@@ -564,7 +586,7 @@ def decidir_classificacao(classificacao_id: uuid.UUID, dados: esquema.Decisao, s
 BAIXA_NAO_ENCONTRADA = resposta_nao_encontrado("Baixa")
 
 
-@roteador.get("/baixas", response_model=list[esquema.BaixaLeitura], summary="Listar baixas", description="Filtros por status e solicitante.")
+@roteador.get("/baixas", response_model=list[esquema.BaixaLeitura], summary="Listar baixas", description="Filtros por status e por pessoa (`solicitante_id`: as baixas que ela montou **e** as compartilhadas com ela).")
 def listar_baixas(status_: Literal["rascunho", "pendente", "aprovada", "parcial", "recusada"] | None = Query(None, alias="status"), solicitante_id: int | None = None,
                   sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> list[esquema.BaixaLeitura]:
     return [_baixa(b) for b in servico_baixas.listar(sessao, status=status_, solicitante_id=solicitante_id)]
@@ -612,6 +634,15 @@ def tirar_bem_baixa(baixa_id: uuid.UUID, item_id: uuid.UUID, sessao: Session = D
 def motivo_baixa(baixa_id: uuid.UUID, dados: esquema.MotivoItensBaixa, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> esquema.BaixaLeitura:
     with _traduzir(sessao):
         return _baixa(servico_baixas.definir_motivo(sessao, baixa_id, dados.itens_ids, dados.motivo, dados.processo, usuario))
+
+
+@roteador.put("/baixas/{baixa_id}/colaboradores", response_model=esquema.BaixaLeitura, summary="Compartilhar a baixa",
+              description="Só quem montou a baixa, e só em rascunho. Substitui os colaboradores (lista vazia deixa de compartilhar). Quem recebe faz tudo o que o solicitante faz na baixa "
+              "(incluir e tirar bens, definir motivo e processo, enviar para aprovação e descartar) e recebe um aviso; não pode, depois, aprovar a própria baixa (`403 auto_aprovacao`).",
+              responses={**CONFLITO, **INVALIDO, **BAIXA_NAO_ENCONTRADA})
+def compartilhar_baixa(baixa_id: uuid.UUID, dados: esquema.GravacaoColaboradores, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> esquema.BaixaLeitura:
+    with _traduzir(sessao):
+        return _baixa(servico_baixas.definir_colaboradores(sessao, baixa_id, dados.usuarios_ids, usuario))
 
 
 @roteador.post("/baixas/{baixa_id}/enviar", response_model=esquema.BaixaLeitura, summary="Enviar a baixa para aprovação",

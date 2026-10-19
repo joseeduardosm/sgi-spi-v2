@@ -42,8 +42,8 @@ export class BuscaBemComponent {
   /** Texto digitado (mão dupla): o pai limpa o campo depois de incluir. */
   readonly texto = model('');
   readonly nome = input('busca-bem');
-  readonly rotulo = input('Chapa ou número de série');
-  readonly placeholder = input('Digite parte da chapa ou do nº de série');
+  readonly rotulo = input('Pesquisar bem');
+  readonly placeholder = input('Pesquise por chapa, série, descrição, marca, modelo, local…');
   /** Restringe a busca a uma situação (ex.: só os inservíveis na baixa). */
   readonly situacao = input<string>('');
   readonly escolhido = output<Bem>();

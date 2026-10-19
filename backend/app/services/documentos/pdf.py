@@ -138,7 +138,7 @@ class DocumentoPdf:
         proporcoes = larguras or [1] * len(cabecalho)
         total = sum(proporcoes)
         # repeatRows=1 repete o cabeçalho quando a tabela passa para a página seguinte
-        tabela = Table(dados, colWidths=[util * p / total for p in proporcoes], repeatRows=1)
+        tabela = Table(dados, colWidths=[util * p / total for p in proporcoes], repeatRows=1, splitInRow=1)
         estilos = [
             ("BACKGROUND", (0, 0), (-1, 0), VERMELHO_SUAVE),
             ("LINEBELOW", (0, 0), (-1, 0), 0.8, VERMELHO),

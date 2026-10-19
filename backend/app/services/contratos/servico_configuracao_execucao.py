@@ -39,7 +39,7 @@ from app.schemas.contratos.execucao import (
     LeituraModelo,
 )
 from app.services.contratacoes import conteudo as conteudo_html
-from app.services.contratos import despacho_mascara, portaria_mascara
+from app.services.contratos import despacho_mascara, email_cadin_mascara, email_ob_mascara, portaria_mascara
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato
 from app.services.servico_auditoria import auditar, valor_json
@@ -406,6 +406,26 @@ def _conteudo(dados: GravacaoModelo) -> dict[str, Any]:
         if ruins:
             raise ErroRegraContrato("Placeholders não permitidos na máscara: " + ", ".join(ruins) + ". Use somente os da lista ao lado do editor.")
         return {"html": html}
+    if dados.tipo == "email_cadin":
+        try:
+            html = conteudo_html.sanitizar(dados.html or "")
+        except conteudo_html.ErroConteudo as erro:
+            raise ErroRegraContrato(str(erro)) from erro
+        assunto = (dados.assunto or "").strip()
+        ruins = email_cadin_mascara.invalidos(assunto, html)
+        if ruins:
+            raise ErroRegraContrato("Placeholders não permitidos na máscara: " + ", ".join(ruins) + ". Use somente os da lista ao lado do editor.")
+        return {"assunto": assunto, "html": html}
+    if dados.tipo == "email_ob":
+        try:
+            html = conteudo_html.sanitizar(dados.html or "")
+        except conteudo_html.ErroConteudo as erro:
+            raise ErroRegraContrato(str(erro)) from erro
+        assunto = (dados.assunto or "").strip()
+        ruins = email_ob_mascara.invalidos(assunto, html)
+        if ruins:
+            raise ErroRegraContrato("Placeholders não permitidos na máscara: " + ", ".join(ruins) + ". Use somente os da lista ao lado do editor.")
+        return {"assunto": assunto, "html": html}
     return definicao_com_ids(dados.definicao)
 
 
@@ -413,7 +433,7 @@ def exigir_permissao_modelo(sessao: Session, usuario: Usuario, tipo: str) -> Non
     """Máscaras de portaria: SuperRoot ou controle total em Contratos. Checklists e formulários: só SuperRoot."""
     if usuario.superusuario:
         return
-    if tipo in ("portaria", "despacho") and servico_acl.resolver_acesso(sessao, usuario, "contratos") == NivelAcl.CONTROLE_TOTAL:
+    if tipo in ("portaria", "despacho", "email_cadin", "email_ob") and servico_acl.resolver_acesso(sessao, usuario, "contratos") == NivelAcl.CONTROLE_TOTAL:
         return
     raise SemPermissaoContrato("Somente o SuperRoot altera este tipo de modelo; as máscaras de portaria também exigem controle total em Contratos.")
 
@@ -448,10 +468,11 @@ def salvar_modelo(sessao: Session, dados: GravacaoModelo, autor: Usuario, modelo
     if modelo_id and modelo.tipo != dados.tipo:
         raise ErroRegraContrato("O tipo do modelo não pode ser alterado.")
     conteudo = _conteudo(dados)
-    if dados.tipo == "despacho" and dados.ativo:
-        outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == "despacho", ModeloGlobal.ativo.is_(True))) if m.id != modelo.id), None)
+    if dados.tipo in ("despacho", "email_cadin", "email_ob") and dados.ativo:
+        outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == dados.tipo, ModeloGlobal.ativo.is_(True))) if m.id != modelo.id), None)
         if outro is not None:
-            raise ErroRegraContrato(f"Já existe uma máscara de despacho ativa (\"{outro.nome}\"): desative-a antes.", conflito=True)
+            qual = {"despacho": "de despacho", "email_cadin": "de e-mail de CADIN", "email_ob": "de e-mail de pagamento"}[dados.tipo]
+            raise ErroRegraContrato(f"Já existe uma máscara {qual} ativa (\"{outro.nome}\"): desative-a antes.", conflito=True)
     if dados.tipo == "portaria" and dados.ativo:
         outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == "portaria", ModeloGlobal.ativo.is_(True)))
                       if m.id != modelo.id and m.conteudo.get("variante") == dados.variante), None)

@@ -53,7 +53,7 @@ Cada sequência pode ter `liberar_a_partir_de` (entre `inicio` e `fim + 1`; nulo
 | `GET /numeros/{id}` | LEITURA | Detalhe com a **linha do tempo** (visível mesmo com documento sigiloso) |
 | `POST /numeros/{id}/liberar` | Dono ou administração (MODIFICACAO+) | `{ motivo }`: só reservado e sem documento; volta a livre |
 | `POST /numeros/{id}/anular` | CONTROLE_TOTAL | `{ motivo }`: tira o número de uso para sempre (o documento anexado fica guardado) |
-| `POST /numeros/{id}/anexo` | Dono ou administração | `multipart` `arquivo` (PDF, Office/LibreOffice, TXT, CSV, PNG, JPG); o número vira `utilizado`; um documento por número (`409`) |
+| `POST /numeros/{id}/anexo` | Dono ou administração | `multipart` `arquivo` (PDF, Office/LibreOffice, TXT, CSV, PNG, JPG); o número vira `utilizado`; um documento por número (`409`). **Número de portaria de designação de contrato**: só depois do aceite da autoridade e só PDF (`409`); o anexo é o D.O.E. e **publica a portaria**, aplicando a nova equipe do contrato (ver [contratos-portarias.md](contratos-portarias.md)) |
 | `GET /numeros/{id}/anexo` | LEITURA | Baixa o documento. **Sigiloso: só o dono e o SuperRoot** (`403 documento_sigiloso`) |
 | `PUT /numeros/{id}/sigilo` | Dono ou SuperRoot | `{ sigiloso }`: marca ou desmarca o sigilo |
 | `PUT /numeros/{id}/contrato` | Dono ou administração | `{ contrato_id \| null }`: vínculo opcional com um contrato (exige acesso ao Módulo de Contratos) |

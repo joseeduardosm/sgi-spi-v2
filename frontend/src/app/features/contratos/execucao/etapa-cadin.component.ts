@@ -56,14 +56,13 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
                 @for (c of [ciclo()]; track c) {
                   <div class="zonas-arquivo">
                     <app-campo-arquivo tipo="pdf" rotulo="Certidão do CADIN" [obrigatorio]="true" (selecionado)="certidao = $event" />
-                    @if (possuiPendencia) { <app-campo-arquivo tipo="pdf" rotulo="E-mail de comunicação" [obrigatorio]="true" (selecionado)="email = $event" /> }
                   </div>
                 }
                 @if (possuiPendencia) {
                   <div class="grade-formulario">
                     <div class="ocupa-duas"><label for="cadin-pendencia">Qual é a pendência? *</label><textarea id="cadin-pendencia" maxlength="2000" [(ngModel)]="pendencia"></textarea></div>
-                    <div class="ocupa-duas"><label for="cadin-texto">Texto de notificação</label><textarea id="cadin-texto" maxlength="2500" [(ngModel)]="textoNotificacao"></textarea></div>
                   </div>
+                  <p class="dica-formulario">Ao registrar, o sistema envia o e-mail da máscara "E-mail de CADIN" (Contratos › Modelos) a <strong>todos os prepostos ativos</strong> da contratada, com a <strong>equipe do contrato em cópia</strong>, e guarda a cópia no consolidado.</p>
                 }
               </div>
             </li>
@@ -87,11 +86,19 @@ import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
                 <tr>
                   <td>{{ c.criado_em | date: 'dd/MM/yyyy HH:mm' }}</td>
                   <td><span class="selo-situacao" [class.alerta]="c.possui_pendencia">{{ c.possui_pendencia ? 'Pendência encontrada' : 'Sem pendência' }}</span></td>
-                  <td>{{ c.pendencia || '—' }}@if (c.texto_notificacao) { <small>{{ c.texto_notificacao }}</small> }</td>
+                  <td>{{ c.pendencia || '—' }}
+                    @if (c.possui_pendencia) {
+                      @if (c.email_ok === true) { <small>E-mail enviado a {{ c.email_destinatarios.join(', ') }}</small> }
+                      @else if (c.email_ok === false) { <small class="texto-erro">E-mail não enviado: {{ c.email_erro }}</small> }
+                      @else if (emEnvio(c.criado_em)) { <small>E-mail em envio…</small> }
+                      @else { <small class="texto-erro">E-mail não enviado: esta consulta é anterior ao envio automático. Use "Reenviar e-mail".</small> }
+                    }
+                  </td>
                   <td>{{ c.criado_por_nome }}</td>
                   <td>
                     <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(c.certidao.anexo_id)">Baixar certidão</button>
                     @if (c.email) { · <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(c.email.anexo_id)">Baixar e-mail</button> }
+                    @if (c.possui_pendencia && editavel() && c.email_ok !== true && (c.email_enviado_em || !emEnvio(c.criado_em))) { · <button type="button" class="acao-secundaria acao-pequena" (click)="reenviar(c.id)">Reenviar e-mail</button> }
                   </td>
                 </tr>
               } @empty {
@@ -114,10 +121,8 @@ export class EtapaCadinComponent {
   // Campos do formulário (ligados por [(ngModel)]) e os PDFs escolhidos
   protected possuiPendencia = false;
   protected pendencia = '';
-  protected textoNotificacao = '';
   protected readonly urlCadin = 'https://www.fazenda.sp.gov.br/cadin_estadual/pages/publ/cadin.aspx';
   protected certidao: File | null = null;
-  protected email: File | null = null;
 
 
   /** Só os dígitos do CNPJ (sem pontos, barra nem traço). */
@@ -140,7 +145,6 @@ export class EtapaCadinComponent {
     if (!this.certidao) falta.push('certidão do CADIN');
     if (this.possuiPendencia) {
       if (!this.pendencia.trim()) falta.push('descrição da pendência');
-      if (!this.email) falta.push('e-mail de comunicação');
     }
     return falta;
   }
@@ -148,17 +152,29 @@ export class EtapaCadinComponent {
   /** Envia a consulta; em seguida, limpa o formulário para uma nova consulta. */
   protected registrar(): void {
     const d = this.detalhe();
-    const campos = { possui_pendencia: this.possuiPendencia, certidao: this.certidao, pendencia: this.pendencia.trim(),
-                     // O e-mail só vai quando há pendência
-                     texto_notificacao: this.textoNotificacao.trim(), email: this.possuiPendencia ? this.email : null };
+    const campos = { possui_pendencia: this.possuiPendencia, certidao: this.certidao, pendencia: this.pendencia.trim() };
     this.dialogos.executar(this.api.cadin(d.contrato_id, d.id, campos), 'Registrando a consulta…').subscribe({
       next: (novo) => {
-        this.pendencia = this.textoNotificacao = '';
-        this.certidao = this.email = null;
+        this.pendencia = '';
+        this.certidao = null;
         this.ciclo.update((v) => v + 1);
         this.atualizado.emit(novo);
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível registrar a consulta'),
+    });
+  }
+
+  /** Reenvia o e-mail da pendência (o envio é em segundo plano: a tela mostra o resultado quando a competência for recarregada). */
+  /** Consulta registrada há pouco: o e-mail ainda sai em segundo plano. Passado esse tempo sem resultado, nunca foi enviado (consulta anterior ao envio automático). */
+  protected emEnvio(criadoEm: string): boolean {
+    return Date.now() - new Date(criadoEm).getTime() < 5 * 60_000;
+  }
+
+  protected reenviar(consultaId: string): void {
+    const d = this.detalhe();
+    this.dialogos.executar(this.api.reenviarEmailCadin(d.contrato_id, d.id, consultaId), 'Reenviando o e-mail…').subscribe({
+      next: (novo) => this.atualizado.emit(novo),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível reenviar o e-mail'),
     });
   }
 

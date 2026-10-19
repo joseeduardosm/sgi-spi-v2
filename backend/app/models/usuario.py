@@ -38,6 +38,9 @@ class Usuario(Base):
     hash_senha: Mapped[str | None] = mapped_column(String(255))
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     superusuario: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Conta de uma integração entre sistemas (ex.: lançar a OB): não tem pessoa para preencher e confirmar o cadastro todo mês, então é dispensada disso
+    # (só disso: ela NÃO ganha os recursos exclusivos da conta root)
+    conta_integracao: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     origem: Mapped[str] = mapped_column(String(20), default=OrigemUsuario.LOCAL)
 
     # Vínculo LDAP

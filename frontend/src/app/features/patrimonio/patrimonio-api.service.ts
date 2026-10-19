@@ -100,11 +100,18 @@ export class PatrimonioApiService {
   classificacoes(filtros: object = {}): Observable<Classificacao[]> { return this.http.get<Classificacao[]>(`${this.base}/classificacoes`, { params: parametros(filtros) }); }
   classificacao(id: string): Observable<Classificacao> { return this.http.get<Classificacao>(`${this.base}/classificacoes/${id}`); }
   criarClassificacao(tipo: string, idCliente?: string): Observable<Classificacao> { return this.http.post<Classificacao>(`${this.base}/classificacoes`, { tipo, id_cliente: idCliente ?? null }); }
+  /** Compartilha a lista (rascunho) com as pessoas indicadas, substituindo as anteriores. */
+  compartilharClassificacao(id: string, usuariosIds: number[]): Observable<Classificacao> { return this.http.put<Classificacao>(`${this.base}/classificacoes/${id}/colaboradores`, { usuarios_ids: usuariosIds }); }
   descartarClassificacao(id: string): Observable<void> { return this.http.delete<void>(`${this.base}/classificacoes/${id}`); }
   incluirNaClassificacao(id: string, entrada: { chapa?: string; bem_id?: string }): Observable<Classificacao> { return this.http.post<Classificacao>(`${this.base}/classificacoes/${id}/bens`, entrada); }
   tirarDaClassificacao(id: string, itemId: string): Observable<Classificacao> { return this.http.delete<Classificacao>(`${this.base}/classificacoes/${id}/bens/${itemId}`); }
-  justificar(id: string, itensIds: string[], justificativa: string): Observable<Classificacao> {
-    return this.http.post<Classificacao>(`${this.base}/classificacoes/${id}/justificativa`, { itens_ids: itensIds, justificativa });
+  /** Apaga a justificativa (e a categoria) dos itens. */
+  removerJustificativa(id: string, itensIds: string[]): Observable<Classificacao> {
+    return this.http.post<Classificacao>(`${this.base}/classificacoes/${id}/justificativa/remover`, { itens_ids: itensIds });
+  }
+
+  justificar(id: string, itensIds: string[], justificativa: string, categoria: string | null = null): Observable<Classificacao> {
+    return this.http.post<Classificacao>(`${this.base}/classificacoes/${id}/justificativa`, { itens_ids: itensIds, justificativa, categoria });
   }
   anexarNaClassificacao(id: string, itemId: string, arquivo: File): Observable<Classificacao> {
     const f = new FormData();
@@ -121,6 +128,8 @@ export class PatrimonioApiService {
   baixas(filtros: object = {}): Observable<Baixa[]> { return this.http.get<Baixa[]>(`${this.base}/baixas`, { params: parametros(filtros) }); }
   baixa(id: string): Observable<Baixa> { return this.http.get<Baixa>(`${this.base}/baixas/${id}`); }
   criarBaixa(idCliente?: string): Observable<Baixa> { return this.http.post<Baixa>(`${this.base}/baixas`, { id_cliente: idCliente ?? null }); }
+  /** Compartilha a baixa (rascunho) com as pessoas indicadas, substituindo as anteriores. */
+  compartilharBaixa(id: string, usuariosIds: number[]): Observable<Baixa> { return this.http.put<Baixa>(`${this.base}/baixas/${id}/colaboradores`, { usuarios_ids: usuariosIds }); }
   descartarBaixa(id: string): Observable<void> { return this.http.delete<void>(`${this.base}/baixas/${id}`); }
   incluirNaBaixa(id: string, entrada: { chapa?: string; bem_id?: string }): Observable<Baixa> { return this.http.post<Baixa>(`${this.base}/baixas/${id}/bens`, entrada); }
   tirarDaBaixa(id: string, itemId: string): Observable<Baixa> { return this.http.delete<Baixa>(`${this.base}/baixas/${id}/bens/${itemId}`); }

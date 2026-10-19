@@ -15,6 +15,9 @@ import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.componen
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Setores institucionais e grupos sistêmicos, usados como grupos de acesso na ACL. */
+/** Colunas da tabela que podem ordenar a lista. */
+type ColunaOrdem = 'nome' | 'tipo' | 'setor_pai' | 'lider' | 'membros' | 'situacao';
+
 @Component({
   selector: 'app-setores',
   imports: [EsqueletoComponent, FormsModule, ReactiveFormsModule, SeletorUsuariosComponent, TrilhaComponent],
@@ -34,13 +37,50 @@ export class SetoresComponent implements OnInit {
   protected busca = '';
   private readonly termo = signal('');
   protected readonly setores = signal<Setor[]>([]);
+  // Ordenação pelos títulos das colunas (feita aqui, sobre a lista já carregada). Padrão: nome, de A a Z
+  protected readonly ordenarPor = signal<ColunaOrdem>('nome');
+  protected readonly direcao = signal<'asc' | 'desc'>('asc');
   protected readonly filtrados = computed(() => {
     const termo = this.termo().toLowerCase();
-    return termo
+    const lista = termo
       ? this.setores().filter((s) => `${s.nome} ${s.setor_pai_nome ?? ''} ${s.lider_nome ?? ''}`.toLowerCase().includes(termo))
       : this.setores();
+    const coluna = this.ordenarPor();
+    const sinal = this.direcao() === 'asc' ? 1 : -1;
+    // Números comparam como número; textos, em português e sem diferenciar acento ou maiúscula; vazios vão para o fim
+    const valor = (s: Setor): string | number => {
+      switch (coluna) {
+        case 'tipo': return s.sistemico ? 'Sistêmico' : 'Institucional';
+        case 'setor_pai': return s.setor_pai_nome ?? '';
+        case 'lider': return s.lider_nome ?? '';
+        case 'membros': return s.total_membros;
+        case 'situacao': return s.ativo ? 'Ativo' : 'Inativo';
+        default: return s.nome;
+      }
+    };
+    return [...lista].sort((a, b) => {
+      const x = valor(a), y = valor(b);
+      if (x === '' && y !== '') return 1;
+      if (y === '' && x !== '') return -1;
+      const comparacao = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'pt-BR', { numeric: true, sensitivity: 'base' });
+      return sinal * comparacao || a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+    });
   });
   protected readonly carregando = signal(true);
+
+  /** Clique no título da coluna: ordena por ela; de novo, inverte o sentido. */
+  protected ordenar(coluna: ColunaOrdem): void {
+    if (this.ordenarPor() === coluna) this.direcao.update((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      this.ordenarPor.set(coluna);
+      // Quantidade de membros: do maior para o menor primeiro
+      this.direcao.set(coluna === 'membros' ? 'desc' : 'asc');
+    }
+  }
+
+  protected sentido(coluna: ColunaOrdem): 'ascending' | 'descending' | 'none' {
+    return this.ordenarPor() !== coluna ? 'none' : this.direcao() === 'asc' ? 'ascending' : 'descending';
+  }
   protected readonly aviso = signal<{ texto: string; erro: boolean } | null>(null);
 
   // Estado da janela de cadastro; líder e membros vêm dos seletores de usuários

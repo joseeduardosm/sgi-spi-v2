@@ -180,6 +180,20 @@ Fundo transparente, texto `--spi-apagado`, sem borda, raio 8px. Hover: fundo `--
 ### Botão destrutivo
 Contornado com texto e borda `--spi-perigo`; só vira preenchido dentro do modal de confirmação.
 
+### Catálogo de classes de botão (usar só estas, e só nos contextos indicados)
+Causa recorrente de botão "no visual nativo do navegador": usar uma classe que só tem estilo **dentro de outro contexto** (ex.: `button.acao-aprovar` só existe dentro das linhas de tabela do painel de afastamentos). Antes de usar **qualquer** classe de botão, confira onde ela é definida (`grep -rn "nome-da-classe" frontend/src/styles.scss frontend/src/styles`) e se o seletor depende de um ancestral. Classes **globais**, seguras em qualquer lugar (cartão, modal, rodapé):
+
+| Uso | Classe | Aparência |
+|---|---|---|
+| Ação principal (uma por tela/modal) | `.acao-primaria` | vermelho cheio |
+| Ação comum (Voltar, Exportar, Fechar) | `.acao-secundaria` | contornado |
+| Aprovar, confirmar, "sim", ciente | `.acao-positiva` (ou `.acao-aprovar-janela`) | verde cheio, altura 39px |
+| Recusar, "não", devolver | `.acao-recusar` | vermelho claro |
+| Excluir, cancelar o que já existe | `.acao-perigo` | contornado em `--spi-perigo` |
+| Versão compacta (linhas, cartões) | `.acao-pequena` junto de uma das acima | menor |
+
+Sim/não lado a lado: sempre `.acao-positiva` + `.acao-recusar` (verde e vermelho, separados). **Todo `<button>` precisa de uma classe da tabela**; botão sem classe, ou com classe sem estilo global, é erro. Depois de escrever a tela, abra-a (ou rode o build e diga que não abriu) e confira que **nenhum botão ficou com o visual nativo** (fundo cinza do navegador, borda 2px).
+
 ### Campo de formulário
 Já existe estilo base global — manter. Borda 1px `--spi-borda-campo`, raio 6px, altura mínima 46px, fundo `--spi-superficie`. Foco: borda `--spi-vermelho` + `--spi-anel-foco`. Rótulo acima em 13–14px peso 600 `--spi-rotulo`. Erro: borda `--spi-perigo` + mensagem 12px `--spi-perigo` abaixo.
 

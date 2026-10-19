@@ -110,7 +110,7 @@ Todo usuário (inclusive os SuperRoot; só a conta root é dispensada) precisa m
 - **Revalidação:** feita em `PUT /api/autenticacao/perfil`, que grava `perfil_revisado_em`.
 - **Restrição:** enquanto houver campo obrigatório vazio ou a confirmação do mês não tiver sido feita, o **backend** recusa todos os endpoints com `403` e `codigo = revisao_perfil_obrigatoria`. Continuam liberados: `/api/autenticacao/login`, `/sessao`, `/perfil`, `/perfil/opcoes-gestor` e `/perfil/opcoes-departamento`.
 - **Sessão:** `GET /api/autenticacao/sessao` informa `perfil_restrito`, `campos_pendentes`, `revisao_obrigatoria` e `conta_root`.
-- **Quem é dispensado:** só a conta administrativa principal (login `LOGIN_ADMIN`, padrão `root`). Os SuperRoot também confirmam o perfil todo mês e informam o superior imediato.
+- **Quem é dispensado:** a conta administrativa principal (login `LOGIN_ADMIN`, padrão `root`) e as **contas de integração** (`usuarios.conta_integracao`, definida pelo SuperRoot na ficha do usuário; contas usadas por outro sistema, que não têm pessoa para confirmar o cadastro todo mês). A conta de integração é dispensada **só disso**: não ganha os recursos exclusivos da conta root. Os SuperRoot também confirmam o perfil todo mês e informam o superior imediato.
 
 Contas criadas pelo LDAP começam com perfil incompleto (só nome e e-mail vêm do diretório). No primeiro acesso, a pessoa completa e confirma o cadastro.
 
@@ -138,10 +138,9 @@ Cálculo do nível efetivo:
 
 1. SuperRoot → `CONTROLE_TOTAL`.
 2. Recurso não cadastrado, inativo ou **sem regras** → `CONTROLE_TOTAL` para qualquer usuário autenticado (política aberta).
-3. A partir da **primeira regra**, o recurso vira **lista positiva**: só usuários ou setores contemplados têm acesso.
-4. Se houver regra **direta** para o usuário, vale a de maior nível entre as diretas. As regras dos setores são ignoradas.
-5. Senão, vale o maior nível entre as regras dos **setores ativos** dos quais o usuário é membro.
-6. Nenhuma regra aplicável → sem acesso.
+3. A partir da **primeira regra ou do primeiro direito de perfil**, o recurso vira **lista positiva**: só quem estiver contemplado tem acesso.
+4. **Soma:** o nível é o **maior** entre o **perfil ativo** do usuário, as regras dos **setores** dele e as regras **diretas** (a regra direta deixou de prevalecer sobre a do setor). Ver [perfis de acesso](endpoints/acl.md#perfis-de-acesso).
+5. Nenhuma origem aplicável (nem perfil ativo, nem setor, nem regra direta) → sem acesso.
 
 No backend, o endpoint declara o nível mínimo com `exigir_acl`, que é verificado antes da execução:
 

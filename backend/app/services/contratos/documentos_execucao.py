@@ -91,7 +91,7 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
     )
     # Importação local: servico_competencias e servico_diario também importam este módulo
     from app.services.contratos.servico_competencias import saldos_da_medicao
-    from app.services.contratos.servico_diario import ocorrencias_do_periodo
+    from app.services.contratos.servico_diario import ocorrencias_da_competencia
 
     _cabecalho_contrato(documento, contrato, competencia)
     saldos = saldos_da_medicao(contrato, competencia)
@@ -103,11 +103,11 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
         _quadro_subtotais(documento, competencia)
         total = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), Decimal(0))) + sum((i.acerto or Decimal(0) for i in competencia.itens), Decimal(0))
     _secao_desconto_reajuste(documento, competencia, arredondar(total))
-    # Glosas do diário de bordo que valem nesta competência (data no período)
+    # Glosas do diário de bordo das ocorrências que afetam esta competência (a apontada no registro; a data pode ser de outro mês)
     glosas = [
         [f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, (texto_da_descricao(o.descricao) if len(texto_da_descricao(o.descricao)) <= 300 else texto_da_descricao(o.descricao)[:297] + "…"),
          g.descricao_item, quantidade(g.quantidade)]
-        for o in (ocorrencias_do_periodo(contrato, competencia.periodo_inicio, competencia.periodo_fim) if competencia.tipo == "regular" else [])
+        for o in ocorrencias_da_competencia(contrato, competencia)
         for g in o.glosas
     ]
     if glosas:
@@ -383,8 +383,24 @@ def relatorio_avaliacao(contrato: Contrato, competencia: Competencia, nota: Deci
     return documento.gerar()
 
 
+def memorial_cadin(contrato: Contrato, competencia: Competencia, autor: str) -> bytes:
+    """Memorial do CADIN: uma tabela com **todas** as consultas, da primeira até a última (sem pendência), com data e hora e quem inseriu cada uma.
+
+    Só os fatos, sem texto de conclusão: a sequência por si só mostra quanto a regularização levou. Entra no consolidado, depois da última
+    certidão, e só quando houve alguma pendência.
+    """
+    memorial = DocumentoPdf("Memorial do CADIN", f"Contrato {contrato.numero} · Competência {competencia.competencia:%m/%Y}", autor=autor)
+    memorial.secao("Consultas ao CADIN").tabela(
+        ["Nº", "Data e hora", "Resultado", "Inserido por"],
+        [[str(n), data_hora(c.criado_em), "Com pendência" if c.possui_pendencia else "Sem pendência", c.criado_por_nome]
+         for n, c in enumerate(competencia.consultas_cadin, start=1)],
+        larguras=[0.6, 2, 2, 4],
+    )
+    return memorial.gerar()
+
+
 def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: dict, autor: str, enviados_por: dict | None = None,
-                ciencias: list[dict] | None = None) -> tuple[bytes, str]:
+                ciencias: list[dict] | None = None, memorial_cadin_anexo_id=None) -> tuple[bytes, str]:
     """Documento consolidado da competência, na ordem de execução, com páginas numeradas em sequência.
 
     A **primeira página é o índice**: cada documento aparece com o título e as páginas clicáveis (hiperlink
@@ -450,6 +466,9 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
         documentos.append(("CADIN", "Certidão do CADIN", consulta.certidao_anexo_id, False, resultado))
         if consulta.email_anexo_id:
             documentos.append(("CADIN", "E-mail de notificação da pendência no CADIN", consulta.email_anexo_id, False, resultado[:1]))
+    # Houve pendência: o memorial vem logo depois da última certidão (a sem pendência) e mostra a sequência de consultas
+    if memorial_cadin_anexo_id is not None:
+        documentos.append(("CADIN", "Memorial do CADIN", memorial_cadin_anexo_id, True, []))
     for documento in sorted(competencia.documentos, key=lambda x: (not x.obrigatorio, x.ordem)):
         if documento.anexo_id:
             tipo = "Obrigatório" if documento.obrigatorio else "Opcional"

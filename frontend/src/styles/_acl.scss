@@ -1,0 +1,103 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para os estilos da aba Perfis da administração de ACL (lista de perfis + detalhe).
+
+.acl-perfis {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: 24px;
+  align-items: start;
+
+  .cartao-dados { margin-bottom: 0; }
+  .abas { margin: 0; padding: 0 22px; }
+  .acoes-formulario { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  .aviso-formulario { margin: 12px 0 0; }
+  .dica-formulario { margin: 0 0 12px; }
+}
+
+.acl-perfis-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  button {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 22px;
+    border: 0;
+    border-top: 1px solid var(--spi-borda);
+    background: var(--cor-ffffff);
+    text-align: left;
+    cursor: pointer;
+
+    small { color: var(--spi-apagado); font-size: 11px; }
+    &:hover, &.ativo { background: var(--spi-vermelho-suave); }
+  }
+}
+
+.acl-perfis-usuarios {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--spi-borda);
+  }
+}
+
+@media (max-width: 760px) {
+  .acl-perfis { grid-template-columns: 1fr; }
+}
+
+// Seleção de perfis na ficha do usuário
+.acl-perfis-usuarios label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; }
+.acl-perfis-usuarios .acl-perfil-padrao { color: var(--spi-apagado); font-size: 12px; }
+
+// Detalhe do perfil: barra lateral com os módulos + página do módulo (como o perfil do GLPI)
+.acl-perfil-corpo { display: grid; grid-template-columns: minmax(200px, 250px) 1fr; align-items: start; }
+.acl-perfil-menu {
+  display: flex; flex-direction: column; border-right: 1px solid var(--spi-borda);
+  button {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 11px 18px; border: 0;
+    border-bottom: 1px solid var(--spi-borda); background: transparent; color: var(--spi-texto); font-size: 13px; text-align: left; cursor: pointer;
+    &:hover { background: var(--cor-f7f7f8); }
+    &.ativo { background: var(--spi-vermelho-suave); color: var(--spi-vermelho); font-weight: 600; }
+  }
+}
+.acl-perfil-contagem {
+  min-width: 22px; padding: 1px 7px; border-radius: var(--spi-raio-pilula); background: var(--spi-sucesso-suave); color: var(--spi-sucesso);
+  font-size: 11px; font-weight: 600; text-align: center;
+}
+.acl-perfil-conteudo { padding: 18px 22px; min-width: 0; h3 { margin: 0 0 6px; font-size: 15px; font-weight: 700; } }
+.matriz-acoes {
+  .coluna-marca { text-align: center; vertical-align: middle; }
+  input[type='checkbox'] { width: 18px; height: 18px; cursor: pointer; }
+}
+.acl-acoes-descricao { margin: 14px 0 0; padding: 0; list-style: none; color: var(--spi-apagado); font-size: 12px; li { padding: 3px 0; } }
+
+@media (max-width: 760px) {
+  .acl-perfil-corpo { grid-template-columns: 1fr; }
+  .acl-perfil-menu { border-right: 0; border-bottom: 1px solid var(--spi-borda); }
+}
+
+// Controle de acesso: em telas largas o conteúdo usa 80% da área cinza (a moldura das telas limita a 1840 px; aqui ela cede para essa tela)
+@media (min-width: 1400px) {
+  // A moldura define a largura no próprio componente (seletor com atributo): a classe repetida garante a precedência
+  .portal-conteudo.portal-conteudo:has(> app-acl) { width: 100%; }
+  app-acl { display: block; width: 80%; margin: 0 auto; }
+}
+
+// Árvore de setores e grupos na aba Usuários do perfil
+.acl-arvore-setores {
+  max-height: 280px; margin: 10px 0 0; padding: 4px 12px; overflow-y: auto; list-style: none;
+  border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m);
+  li { padding-top: 6px; padding-bottom: 6px; }
+  label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; }
+  input[type='checkbox'] { width: auto; height: auto; margin: 0; }
+}

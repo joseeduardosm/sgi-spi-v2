@@ -44,16 +44,6 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
         "MODIFICACAO": _n("Editar contratos e conduzir a execução", "Cria contratos e empresas, importa planilhas e, sendo da equipe do contrato (ou o criador), edita o contrato, conduz as etapas da competência e solicita a portaria de designação. Exclui os contratos que ele mesmo criou."),
         "CONTROLE_TOTAL": _n("Administrar contratos e empresas", "Tudo isso, em qualquer contrato (mesmo sem ser da equipe nem o criador), e também exclui contratos e empresas e cadastra as autoridades signatárias e as máscaras das portarias."),
     },
-    "importacao-contratos": {
-        "LEITURA": _n("Sem acesso útil", "Este módulo não tem consulta: use Modificação para importar."),
-        "MODIFICACAO": _n("Importar contratos (XLSX)", "Envia a planilha de contratos e confirma a importação."),
-        "CONTROLE_TOTAL": _n("Importar contratos (XLSX)", "Igual a Modificação: o módulo não diferencia."),
-    },
-    "importacao-modelos": {
-        "LEITURA": _n("Sem acesso útil", "Este módulo não tem consulta: use Modificação para importar."),
-        "MODIFICACAO": _n("Importar checklists e formulários", "Envia a planilha de modelos de checklist e formulário e confirma a importação."),
-        "CONTROLE_TOTAL": _n("Importar checklists e formulários", "Igual a Modificação: o módulo não diferencia."),
-    },
     "relatorios": {
         "LEITURA": _n("Sem efeito hoje", "Os relatórios gerenciais da carteira são restritos ao SuperRoot; este nível ainda não libera nada."),
         "MODIFICACAO": _n("Sem efeito hoje", "Igual a Leitura: o módulo não diferencia."),

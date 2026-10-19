@@ -34,6 +34,7 @@ from app.core.configuracao import obter_configuracao
 from app.models.rh import DadosFuncionais
 from app.models.usuario import Usuario
 from app.schemas.rh import GravacaoDadosFuncionais
+from app.services import servico_perfil
 from app.services.contratos.servico_importacao_xlsx import normalizar, texto
 from app.services.rh import servico_periodos
 from app.services.rh.papeis import exigir_cgp, setor_do_usuario
@@ -99,10 +100,10 @@ def _sim_nao(valor: bool | None) -> str:
 # ---------------------------------------------------------------------------------------------
 
 def modelo(sessao: Session, autor: Usuario) -> bytes:
-    """Planilha com todos os servidores ativos e os valores atuais (menos a conta root)."""
+    """Planilha com todos os servidores ativos e os valores atuais (menos a conta root e as contas de integração)."""
     exigir_cgp(sessao, autor)
-    login_admin = obter_configuracao().login_admin.strip().lower()
-    usuarios = sorted((u for u in sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True))) if u.login.strip().lower() != login_admin),
+    # Menos a conta root e as contas de integração (não são servidores)
+    usuarios = sorted((u for u in sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True))) if not servico_perfil.dispensado_da_confirmacao(u)),
                       key=lambda u: (u.nome_completo or u.login).lower())
     logins = {u.id: u.login for u in sessao.scalars(select(Usuario))}
     livro = Workbook()

@@ -85,3 +85,27 @@ def test_seguidor_recebe_avisos_informativos_e_mencao(cliente, equipe):
     # Deixar de seguir
     r = cliente.delete(f"{URL}/{t['numero']}/seguir", headers=h["beto"])
     assert r.json()["seguindo"] is False and r.json()["seguidores"] == []
+
+
+def test_comentario_em_texto_rico_sanitiza_menciona_e_avisa_com_texto_puro(cliente, equipe):
+    """O comentário vem do editor rico: HTML sanitizado, menção lida no texto, aviso sem tags e limite de 4000 caracteres de texto."""
+    ids, h, equipe_id = equipe
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    cliente.post(f"{URL}/{t['numero']}/seguir", headers=h["beto"])
+    html = "<p>@beto revise a <strong>cláusula 7</strong>:</p><ul><li>prazo</li></ul><script>x()</script>"
+    r = cliente.post(f"{URL}/{t['numero']}/comentarios", data={"texto": html}, headers=h["ana"])
+    assert r.status_code == 201
+    ev = r.json()
+    assert "<strong>cláusula 7</strong>" in ev["texto"] and "<li>prazo</li>" in ev["texto"] and "<script" not in ev["texto"]
+    assert _avisos(f"tarefa-mencao:{ev['id']}") == [ids["beto"]]
+    from sqlalchemy import select
+    from app.core.banco import FabricaSessao
+    from app.models import Notificacao
+    with FabricaSessao() as sessao:
+        aviso = sessao.scalar(select(Notificacao).where(Notificacao.chave == f"tarefa-mencao:{ev['id']}"))
+        assert "cláusula 7" in aviso.corpo and "<" not in aviso.corpo
+    # Editor vazio e sem anexo: recusado; texto puro acima de 4000 caracteres: recusado; resposta cita só o texto
+    assert cliente.post(f"{URL}/{t['numero']}/comentarios", data={"texto": "<p></p>"}, headers=h["ana"]).status_code == 400
+    assert cliente.post(f"{URL}/{t['numero']}/comentarios", data={"texto": "<p>" + "a" * 4001 + "</p>"}, headers=h["ana"]).status_code == 400
+    resp = cliente.post(f"{URL}/{t['numero']}/comentarios", data={"texto": "<p>Ok</p>", "em_resposta_a": ev["id"]}, headers=h["lia"]).json()
+    assert resp["dados"]["resposta_texto"].startswith("@beto revise a cláusula 7") and "<" not in resp["dados"]["resposta_texto"]

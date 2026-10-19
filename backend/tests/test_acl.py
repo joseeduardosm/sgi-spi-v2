@@ -63,15 +63,15 @@ def test_primeira_regra_vira_lista_positiva(cliente, admin):
     assert "usuarios" not in {a["slug"] for a in cliente.get("/api/acl/meus-acessos", headers=cabecalho(cliente, "joao")).json()}
 
 
-def test_heranca_por_setor_e_prioridade_da_regra_direta(cliente, admin):
-    """Regra por setor vale para os membros, mas a regra direta do usuário prevalece."""
+def test_heranca_por_setor_e_soma_com_regra_direta(cliente, admin):
+    """Regra por setor vale para os membros; setor e regra direta se somam (vale o maior nível)."""
     ana, bia = criar_usuario("ana"), criar_usuario("bia")
     rid = _recurso(cliente, admin)
     sid = _setor(cliente, admin, "Contratos", [ana, bia])
     _regra(cliente, admin, rid, "CONTROLE_TOTAL", setores=[sid])
-    _regra(cliente, admin, rid, "LEITURA", usuarios=[bia])  # direta prevalece, mesmo sendo menor
+    _regra(cliente, admin, rid, "LEITURA", usuarios=[bia])  # soma: o setor (maior) continua valendo
     assert _nivel_efetivo(cliente, admin, ana) == "CONTROLE_TOTAL"
-    assert _nivel_efetivo(cliente, admin, bia) == "LEITURA"
+    assert _nivel_efetivo(cliente, admin, bia) == "CONTROLE_TOTAL"
 
 
 def test_maior_nivel_entre_regras_diretas(cliente, admin):

@@ -123,6 +123,11 @@ export class EditorRicoComponent implements AfterViewInit, OnDestroy {
     this.editor?.chain().focus().insertContent(texto).run();
   }
 
+  /** Leva o cursor ao fim do texto (ex.: ao escolher um comentário para responder). */
+  focar(): void {
+    this.editor?.commands.focus('end');
+  }
+
   protected ativo(nome: string): boolean {
     return this.editor?.isActive(nome) ?? false;
   }

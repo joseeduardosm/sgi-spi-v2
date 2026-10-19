@@ -20,6 +20,7 @@ def _hoje(monkeypatch):
     monkeypatch.setattr("app.services.contratos.servico_competencias.hoje", lambda: HOJE)
     monkeypatch.setattr("app.services.contratos.servico_painel.hoje", lambda: HOJE)
     monkeypatch.setattr("app.services.contratos.servico_competencias.PENDENCIAS_A_PARTIR_DE", date(2000, 1, 1))
+    monkeypatch.setattr("app.services.contratos.competencia_atual.MARCADORES_A_PARTIR_DE", date(2000, 1, 1))
 
 
 def _linha(cliente, h, contrato):
@@ -65,3 +66,27 @@ def test_detalhe_do_contrato_continua_funcionando(cliente, admin):
     contrato = criar_contrato(cliente, admin)
     detalhe = cliente.get(f"/api/contratos/{contrato['id']}", headers=admin).json()
     assert detalhe["sem_competencias"] is True and detalhe["competencia_atual"] is None
+
+
+def test_competencias_em_andamento_uma_linha_por_competencia_e_corte_de_agosto(cliente, admin, monkeypatch):
+    """Só entram as competências já iniciadas; as anteriores a agosto/2026 não têm marcador."""
+    gestora = criar_usuario("gestora")
+    restringir_contratos(cliente, admin, {gestora: "MODIFICACAO"})
+    h = cabecalho(cliente, "gestora")
+    contrato = criar_contrato(cliente, admin, equipe={"gestor": gestora})
+    _preparar_execucao(cliente, contrato, h)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=h)
+    # Nada iniciado: as competências estão disponíveis, nenhuma em andamento
+    assert _linha(cliente, h, contrato)["competencias_em_andamento"] == []
+    # Inicia a medição de 01/2026 (salvar a medição inicia a competência)
+    competencia = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=h).json()
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=h).json()]
+    medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
+    r = cliente.put(_url(contrato, f"/competencias/{competencia['id']}/medicao"), json=medicao, headers=h)
+    assert r.status_code == 200, r.text
+    andamento = _linha(cliente, h, contrato)["competencias_em_andamento"]
+    assert [c["identificador"] for c in andamento] == ["2026-01"] and andamento[0]["situacao"] == "em_andamento"
+    # Com o corte em agosto/2026, a competência de janeiro não gera marcador
+    monkeypatch.setattr("app.services.contratos.competencia_atual.MARCADORES_A_PARTIR_DE", date(2026, 8, 1))
+    linha = _linha(cliente, h, contrato)
+    assert linha["competencias_em_andamento"] == [] and linha["competencia_atual"]["identificador"] == "2026-08"

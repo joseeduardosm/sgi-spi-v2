@@ -30,12 +30,12 @@
     <table class="tabela-gestao">
       <thead>
         <tr>
-          <th>Setor ou grupo</th>
-          <th>Tipo</th>
-          <th>Setor pai</th>
-          <th>Líder</th>
-          <th>Membros</th>
-          <th>Situação</th>
+          <th [attr.aria-sort]="sentido('nome')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'nome'" (click)="ordenar('nome')" title="Ordenar por setor ou grupo">Setor ou grupo<span aria-hidden="true">{{ ordenarPor() === 'nome' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('tipo')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'tipo'" (click)="ordenar('tipo')" title="Ordenar por tipo">Tipo<span aria-hidden="true">{{ ordenarPor() === 'tipo' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('setor_pai')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'setor_pai'" (click)="ordenar('setor_pai')" title="Ordenar por setor pai">Setor pai<span aria-hidden="true">{{ ordenarPor() === 'setor_pai' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('lider')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'lider'" (click)="ordenar('lider')" title="Ordenar por líder">Líder<span aria-hidden="true">{{ ordenarPor() === 'lider' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('membros')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'membros'" (click)="ordenar('membros')" title="Ordenar por quantidade de membros">Membros<span aria-hidden="true">{{ ordenarPor() === 'membros' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
+          <th [attr.aria-sort]="sentido('situacao')"><button type="button" class="ordenar-coluna" [class.ativa]="ordenarPor() === 'situacao'" (click)="ordenar('situacao')" title="Ordenar por situação">Situação<span aria-hidden="true">{{ ordenarPor() === 'situacao' ? (direcao() === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
           @if (ehAdministrador()) { <th class="coluna-acoes">Ações</th> }
         </tr>
       </thead>

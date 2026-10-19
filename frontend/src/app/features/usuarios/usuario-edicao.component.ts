@@ -15,6 +15,7 @@ import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { DadosFuncionaisComponent } from '../rh/dados-funcionais.component';
 import { CamposPerfilComponent } from './campos-perfil.component';
 import { criarFormularioPerfil, dadosDoFormularioPerfil, gestorComoOpcao, preencherFormularioPerfil } from './formulario-perfil';
+import { AclApiService, PerfilAcl } from '../administracao/acl/acl-api.service';
 import { UsuariosApiService } from './usuarios-api.service';
 import { DetalheUsuario } from './usuarios.models';
 
@@ -39,6 +40,7 @@ export class UsuarioEdicaoComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
   private readonly construtor = inject(NonNullableFormBuilder);
+  private readonly aclApi = inject(AclApiService);
 
   protected readonly rotulosOrigem = ROTULOS_ORIGEM;
   protected readonly ehSuperRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
@@ -58,6 +60,7 @@ export class UsuarioEdicaoComponent implements OnInit {
     senha: [''],
     ativo: [true],
     superusuario: [false],
+    conta_integracao: [false],
   });
   protected readonly perfil = criarFormularioPerfil(this.construtor, false);
 
@@ -79,15 +82,73 @@ export class UsuarioEdicaoComponent implements OnInit {
     });
   }
 
+  // Perfis de acesso (só SuperRoot): todos os perfis, os marcados e o padrão
+  protected readonly perfisDisponiveis = signal<PerfilAcl[]>([]);
+  protected readonly perfisMarcados = signal<Set<number>>(new Set());
+  /** Perfis que o usuário recebe pelo setor/grupo (nome do perfil → setores). */
+  protected readonly perfisPorSetor = signal<Map<number, string[]>>(new Map());
+  protected readonly perfilPadrao = signal<number | null>(null);
+  protected readonly salvandoPerfis = signal(false);
+
+  private carregarPerfis(usuarioId: number): void {
+    this.aclApi.listarPerfis().subscribe((lista) => this.perfisDisponiveis.set(lista.filter((p) => p.ativo)));
+    this.aclApi.perfisDoUsuario(usuarioId).subscribe((lista) => {
+      this.perfisMarcados.set(new Set(lista.filter((p) => p.direto).map((p) => p.perfil_id)));
+      this.perfisPorSetor.set(new Map(lista.filter((p) => p.via_setores.length).map((p) => [p.perfil_id, p.via_setores])));
+      this.perfilPadrao.set(lista.find((p) => p.padrao)?.perfil_id ?? null);
+    });
+  }
+
+  protected alternarPerfil(id: number): void {
+    this.perfisMarcados.update((conjunto) => {
+      const novo = new Set(conjunto);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+    // O padrão precisa estar entre os marcados
+    if (!this.perfisMarcados().has(this.perfilPadrao() ?? -1)) this.perfilPadrao.set([...this.perfisMarcados()][0] ?? null);
+    else if (this.perfilPadrao() === null) this.perfilPadrao.set(id);
+  }
+
+  protected salvarPerfis(): void {
+    const u = this.usuario();
+    if (!u) return;
+    this.salvandoPerfis.set(true);
+    this.dialogos.executar(this.aclApi.definirPerfisDoUsuario(u.id, [...this.perfisMarcados()], this.perfilPadrao()), 'Salvando perfis…').subscribe({
+      next: () => {
+        this.salvandoPerfis.set(false);
+        this.dialogos.avisar('Perfis atualizados', 'Os perfis de acesso do usuário foram salvos.');
+        this.carregarPerfis(u.id);
+      },
+      error: (e) => {
+        this.salvandoPerfis.set(false);
+        this.dialogos.mostrarErro(e, 'Não foi possível salvar os perfis');
+      },
+    });
+  }
+
+  /** O SuperRoot navega como este usuário para testar as permissões (a aplicação recarrega em `/`). */
+  protected personificar(): void {
+    const u = this.usuario();
+    if (!u) return;
+    this.autenticacao.personificar(u.id).subscribe({
+      next: () => window.location.assign('/'),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível personificar o usuário'),
+    });
+  }
+
   private preparar(u: DetalheUsuario | null): void {
     this.usuario.set(u);
-    this.conta.reset({ login: u?.login ?? '', senha: '', ativo: u?.ativo ?? true, superusuario: u?.superusuario ?? false });
+    if (u && this.ehSuperRoot()) this.carregarPerfis(u.id);
+    this.conta.reset({ login: u?.login ?? '', senha: '', ativo: u?.ativo ?? true, superusuario: u?.superusuario ?? false, conta_integracao: u?.conta_integracao ?? false });
     // Na edição o login não muda; a senha só é obrigatória na criação
     if (u) this.conta.controls.login.disable();
     this.conta.controls.senha.setValidators(u ? [Validators.minLength(8)] : [Validators.required, Validators.minLength(8)]);
     // Papel SuperRoot e senha de outra pessoa: só o SuperRoot mexe
     if (!this.ehSuperRoot()) {
       this.conta.controls.superusuario.disable();
+      this.conta.controls.conta_integracao.disable();
       if (u) this.conta.controls.senha.disable();
     }
     if (this.somenteLeitura()) {
@@ -118,8 +179,8 @@ export class UsuarioEdicaoComponent implements OnInit {
     this.salvando.set(true);
     this.erro.set(null);
     const requisicao = atual
-      ? this.api.alterar(atual.id, { senha: valores.senha || null, ativo: valores.ativo, superusuario: valores.superusuario, perfil })
-      : this.api.criar({ login: valores.login.trim(), senha: valores.senha, ativo: valores.ativo, superusuario: valores.superusuario, perfil });
+      ? this.api.alterar(atual.id, { senha: valores.senha || null, ativo: valores.ativo, superusuario: valores.superusuario, conta_integracao: valores.conta_integracao, perfil })
+      : this.api.criar({ login: valores.login.trim(), senha: valores.senha, ativo: valores.ativo, superusuario: valores.superusuario, conta_integracao: valores.conta_integracao, perfil });
     // Um só "Salvar": conta e perfil, depois os dados funcionais do RH (quando o bloco está disponível)
     const tudo = requisicao.pipe(
       switchMap((salvo) => {

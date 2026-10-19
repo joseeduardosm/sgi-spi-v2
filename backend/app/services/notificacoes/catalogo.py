@@ -52,6 +52,8 @@ _MODULOS: list[tuple[str, str, list[tuple]]] = [
         ("medicao_atrasada", "Medição atrasada", "A equipe do contrato recebe quando a medição de uma competência está atrasada."),
         ("correcao_itens", "Correção de itens do contrato", "A equipe do contrato recebe quando uma correção de itens é proposta, aplicada ou recusada."),
         ("portaria", "Portaria de designação", "Você recebe quando uma portaria de designação precisa do seu aceite ou muda de situação."),
+        ("portaria_nomeacao", "Nomeação em portaria (ciência)", "Você recebe quando é indicado em uma portaria de designação e precisa dar ciência."),
+        ("portaria_dados_rh", "Dados do RH pendentes para uma nomeação", "O RH (CGP) recebe quando alguém indicado em uma portaria de designação está com RS/PV, RG/CIN ou cargo em branco."),
     ]),
     ("tarefas", "Tarefas", [
         ("atribuida", "Tarefa atribuída a você", "Você recebe quando uma tarefa é criada para você, quando entra como responsável ou quando ela é transferida a você."),
@@ -116,7 +118,8 @@ _MODULOS: list[tuple[str, str, list[tuple]]] = [
         ("movimentacao_pendente", "Movimentação aguardando autorização", "Quem administra o Patrimônio recebe quando uma movimentação é solicitada."),
         ("movimentacao_decidida", "Movimentação autorizada, recusada ou concluída", "Quem solicitou recebe a decisão e a conclusão da movimentação."),
         ("classificacao_pendente", "Classificação aguardando aprovação", "Quem administra o Patrimônio recebe quando uma lista de inservíveis ou extraviados é enviada."),
-        ("classificacao_decidida", "Classificação decidida", "Quem enviou a lista recebe a decisão."),
+        ("classificacao_decidida", "Classificação decidida", "Quem enviou a lista (e quem colaborou nela) recebe a decisão."),
+        ("classificacao_compartilhada", "Lista compartilhada com você", "Você recebe quando alguém compartilha uma lista de inservíveis, de extraviados ou uma baixa para você ajudar a montar."),
         ("baixa_pendente", "Baixa aguardando aprovação", "Quem administra o Patrimônio recebe quando uma baixa é enviada."),
         ("baixa_decidida", "Baixa decidida", "Quem enviou a baixa recebe a decisão."),
     ]),

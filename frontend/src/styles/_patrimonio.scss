@@ -442,3 +442,47 @@
   .corpo-relacionar p { margin: 0 0 14px; }
   > footer { padding: 14px 25px 22px; }
 }
+
+/* Lista de inservíveis/extraviados em rascunho: barra de seleção (selecionar todos, pesquisa, criar justificativa) */
+.patrimonio {
+  .pat-barra-selecao {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 12px; padding: 10px 14px;
+    border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--spi-superficie-alt);
+    .pat-selecionar-todos { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; cursor: pointer; }
+    .pat-selecao { flex: none; width: 22px; height: 22px; accent-color: #af3741; }
+    .pat-busca-lista { flex: 1 1 260px; min-width: 200px; margin: 0; }
+    .pat-contagem-selecao { color: var(--spi-apagado); font-size: 12px; }
+  }
+  .pat-justificativa { font-style: normal; margin-top: 4px; padding: 6px 10px; border-left: 3px solid var(--spi-borda); color: var(--spi-texto); font-size: 13px;
+    p { margin: 0 0 4px; } ul, ol { margin: 0 0 4px; padding-left: 20px; } }
+  .pat-sem-justificativa { color: var(--spi-alerta); font-weight: 600; }
+}
+
+/* Modal "Criar justificativa" (lista de inservíveis/extraviados): maior, com a categoria em duas colunas e o editor alto */
+.modal-portal.modal-justificativa {
+  width: min(900px, calc(100% - 28px));
+
+  .editor-rico .superficie-editor { min-height: 240px; }
+
+  /* Categoria do bem inservível: quatro opções com o resumo de cada uma (rádio pequeno, ao lado do texto) */
+  .pat-categorias {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0 0 8px; padding: 0; border: 0;
+
+    legend { grid-column: 1 / -1; margin: 0 0 2px; padding: 0; font-size: 13px; font-weight: 600; }
+
+    .pat-categoria {
+      display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 12px 14px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m);
+      background: var(--cor-ffffff); font-weight: 400; cursor: pointer; transition: border-color 0.12s, background 0.12s;
+      &:hover { border-color: var(--spi-borda-campo); }
+      &.selecionada { border-color: var(--spi-vermelho); background: var(--spi-vermelho-suave); }
+
+      // O estilo global dos campos (largura total) não vale para o rádio
+      input[type='radio'] { flex: none; width: 18px; height: 18px; margin: 2px 0 0; padding: 0; accent-color: var(--spi-vermelho); }
+      span { display: grid; gap: 3px; min-width: 0; text-align: left; }
+      b { font-size: 14px; font-weight: 600; color: var(--spi-titulo); }
+      small { color: var(--spi-apagado); font-size: 12px; line-height: 1.4; }
+    }
+  }
+
+  @media (max-width: 700px) { .pat-categorias { grid-template-columns: 1fr; } }
+}

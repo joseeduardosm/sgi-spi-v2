@@ -68,9 +68,22 @@ class ServicoAutenticacao:
         self.sessao.commit()
         return usuario
 
-    def emitir_token(self, usuario: Usuario) -> RespostaToken:
-        """Gera o JWT com o id do usuário e devolve a resposta completa do login."""
-        token, expira_em = criar_token_acesso(str(usuario.id), {"login": usuario.login, "papeis": usuario.papeis})
+    def emitir_token(self, usuario: Usuario, *, perfil_ativo_id: int | None = None, personificado_por_id: int | None = None,
+                     inicio_sessao=None) -> RespostaToken:
+        """Gera o JWT com o id do usuário e devolve a resposta completa do login.
+
+        `perfil_ativo_id` (claim `pa`) fixa o perfil escolhido no menu; `personificado_por_id` (claim `imp`) marca a personificação:
+        `sub` é o usuário personificado e `imp`, o SuperRoot real.
+        """
+        extras: dict = {"login": usuario.login, "papeis": usuario.papeis}
+        if perfil_ativo_id is not None:
+            extras["pa"] = perfil_ativo_id
+        if personificado_por_id is not None:
+            extras["imp"] = personificado_por_id
+            usuario.personificado_por = self.sessao.get(Usuario, personificado_por_id)
+        if perfil_ativo_id is not None:
+            usuario.perfil_ativo_id = perfil_ativo_id
+        token, expira_em = criar_token_acesso(str(usuario.id), extras, inicio_sessao=inicio_sessao)
         return RespostaToken(
             token_acesso=token,
             tipo_token="bearer",
@@ -81,8 +94,20 @@ class ServicoAutenticacao:
 
 
 def para_usuario_sessao(usuario: Usuario) -> UsuarioSessao:
-    """Converte o usuário do banco no formato de sessão usado pelo frontend."""
+    """Converte o usuário do banco no formato de sessão usado pelo frontend (com os perfis e a personificação, se houver)."""
+    from sqlalchemy.orm import object_session
+
+    from app.schemas.autenticacao import PerfilSessao, PersonificadorSessao
+    from app.services import servico_acl
+
+    sessao = object_session(usuario)
+    perfis = servico_acl.perfis_do_usuario(sessao, usuario.id) if sessao is not None else []
+    ativo_id = servico_acl.perfil_ativo_id(sessao, usuario) if sessao is not None else None
+    real = getattr(usuario, "personificado_por", None)
     return UsuarioSessao(
+        perfis=[PerfilSessao(id=p.id, nome=p.nome) for p in perfis],
+        perfil_ativo=next((PerfilSessao(id=p.id, nome=p.nome) for p in perfis if p.id == ativo_id), None),
+        personificado_por=PersonificadorSessao(id=real.id, login=real.login, nome_completo=real.nome_completo or real.login) if real else None,
         id=usuario.id,
         login=usuario.login,
         nome_completo=usuario.nome_completo or usuario.login,

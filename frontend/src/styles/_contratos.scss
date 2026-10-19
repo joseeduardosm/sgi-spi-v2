@@ -1084,134 +1084,6 @@ a.acao-primaria {
   }
 }
 
-/* Diário de bordo: lista em forma de chat */
-.diario-chat {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  /* Acompanha a altura da janela: mais ocorrências visíveis sem rolar a página inteira */
-  max-height: max(360px, calc(100vh - 420px));
-  overflow-y: auto;
-  padding: 14px 18px;
-  background: var(--cor-f7f8fa);
-}
-
-.balao-diario {
-  align-self: flex-start;
-  max-width: min(980px, 82%);
-  padding: 9px 13px;
-  border: 1px solid var(--cor-e3e6e9);
-  border-radius: 4px 14px 14px 14px;
-  background: var(--cor-ffffff);
-  
-
-  &.minha {
-    align-self: flex-end;
-    border-radius: 14px 4px 14px 14px;
-    background: var(--cor-fdf5f5);
-  }
-
-  &.com-glosa {
-    border-left: 3px solid var(--spi-vermelho);
-  }
-
-  /* Ocorrência que pesa na avaliação da qualidade */
-  &.com-impacto:not(.com-glosa) {
-    border-left: 3px solid #d08a1e;
-  }
-
-  > header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px 8px;
-    font-size: 12px;
-
-    .papel {
-      color: var(--cor-6a7786);
-    }
-
-    time {
-      margin-left: auto;
-      color: #8e99a6;
-      font-size: 11px;
-    }
-  }
-
-  /* Data da ocorrência e competência como selos no cabeçalho */
-  .selo-diario {
-    padding: 1px 8px;
-    border-radius: var(--spi-raio-g);
-    background: var(--cor-eff1f4);
-    color: var(--cor-4d5966);
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  .texto {
-    margin: 5px 0 0;
-    font-size: 13px;
-    line-height: 1.45;
-    white-space: pre-wrap;
-  }
-
-  /* Ocorrência escrita no editor rico: parágrafos e listas com respiro curto */
-  .texto-rico { p { margin: 0 0 6px; } ul, ol { margin: 0 0 6px; padding-left: 20px; } a { color: var(--spi-vermelho); } > :last-child { margin-bottom: 0; } }
-
-  /* Glosas em chips numa linha (quebra se não couber) */
-  .glosas-balao {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin-top: 7px;
-    font-size: 12px;
-
-    .rotulo-glosa {
-      color: var(--spi-vermelho);
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-    }
-
-    .chip-glosa {
-      padding: 2px 9px;
-      border: 1px solid var(--cor-f1c9cd);
-      border-radius: var(--spi-raio-m);
-      background: var(--cor-fcf0f1);
-    }
-  }
-
-  /* Impacto na avaliação: mesmos chips, em âmbar */
-  .impacto-balao {
-    .rotulo-glosa {
-      color: #a8650b;
-    }
-
-    .chip-glosa {
-      border-color: var(--cor-f0d9b0);
-      background: var(--cor-fdf6e9);
-    }
-  }
-
-  .anexos-balao {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 14px;
-    margin-top: 7px;
-    font-size: 12px;
-  }
-
-  > footer {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 5px;
-    color: #8e99a6;
-    font-size: 11px;
-  }
-}
-
 .diario-formulario {
   padding: 18px 22px;
   border-top: 1px solid var(--cor-ecedef);
@@ -2104,22 +1976,53 @@ details.nota-xml { padding: 0; overflow: hidden;
   legend { float: none; width: auto; margin: 0; padding: 0 6px; font-size: var(--spi-texto-compacto); font-weight: 600; }
   .linha-adicionar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; } }
 
-/* Diário de bordo: filtros e cartões de ocorrência no padrão novo (sobrepõem o estilo de balão anterior) */
+/* Diário de bordo: resumo, filtros e feed de ocorrências em largura total, agrupado por dia */
 .resumo-medicao > div.perigo { border-color: var(--spi-perigo); background: var(--spi-perigo-suave); strong, small { color: var(--spi-perigo); } }
-.filtros-diario { padding: 12px 22px 0; border-bottom: 0; }
-.diario-chat { background: var(--spi-fundo); }
-.balao-diario { border-color: var(--spi-borda); border-radius: var(--spi-raio-g); background: var(--spi-superficie); padding: 12px 16px;
-  &.minha { border-radius: var(--spi-raio-g); background: var(--spi-vermelho-suave); }
-  &.com-glosa { border-left: 4px solid var(--spi-perigo); }
-  &.com-impacto:not(.com-glosa) { border-left: 4px solid var(--spi-alerta); }
-  > header { font-size: var(--spi-texto-compacto); .papel { color: var(--spi-apagado); } time { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); } }
+.diario {
+  .acoes-cartao { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .diario-novo { border-top: 1px solid var(--spi-borda); background: var(--spi-superficie-alt); }
+  .diario-novo .diario-formulario { border-top: 0; background: transparent; }
+
+  /* Resumo numa linha só (os números dos chips de filtro repetem estes; aqui ficam como leitura rápida) */
+  .resumo-diario { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 14px 22px 0;
+    > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 14px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--spi-superficie-alt);
+      span { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); } strong { font-size: var(--spi-titulo-secao); font-variant-numeric: tabular-nums; }
+      &.perigo { border-color: var(--spi-perigo); background: var(--spi-perigo-suave); strong { color: var(--spi-perigo); } }
+      &.alerta { border-color: var(--spi-alerta); background: var(--spi-alerta-suave); strong { color: var(--spi-alerta); } } } }
+  .filtros-diario { padding: 12px 22px 0; border-bottom: 0; }
+
+  .diario-feed { display: flex; flex-direction: column; gap: 22px; padding: 18px 22px 22px; }
+  .dia-diario { display: flex; flex-direction: column; gap: 10px; }
+  .dia-titulo { display: flex; align-items: baseline; gap: 10px; margin: 0; font-size: var(--spi-texto-corpo); font-weight: 700; color: var(--spi-texto);
+    small { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); font-weight: 400; }
+    &::after { content: ''; flex: 1; height: 1px; background: var(--spi-borda); align-self: center; } }
+  .mais-diario { display: flex; justify-content: center; }
+
+  /* Cartão da ocorrência: borda de 1px; só glosa (perigo) ou impacto (alerta) ganham a faixa lateral */
+  .balao-diario { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); background: var(--spi-superficie);
+    &.com-glosa { border-left: 4px solid var(--spi-perigo); }
+    &.com-impacto { border-left: 4px solid var(--spi-alerta); } }
+  .cabeca-diario { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    .avatar-diario { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: var(--spi-raio-pilula); background: var(--spi-superficie-alt); border: 1px solid var(--spi-borda); color: var(--spi-apagado); font-size: var(--spi-texto-legenda); font-weight: 700; }
+    .autor-diario { display: flex; flex-direction: column; min-width: 0; strong { display: flex; align-items: center; gap: 8px; font-size: var(--spi-texto-corpo); } small { color: var(--spi-apagado); } }
+    .marcas-diario { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-left: auto; time { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); } } }
   .selo-diario { padding: 2px 10px; border-radius: var(--spi-raio-pilula); background: var(--spi-superficie-alt); border: 1px solid var(--spi-borda); color: var(--spi-texto); font-size: var(--spi-texto-legenda); font-weight: 600; }
-  .texto { margin-top: 8px; font-size: var(--spi-texto-corpo); }
-  .glosas-balao .rotulo-glosa { color: var(--spi-perigo); }
-  .glosas-balao .chip-glosa { padding: 2px 10px; border: 1px solid var(--spi-perigo); border-radius: var(--spi-raio-pilula); background: var(--spi-perigo-suave); color: var(--spi-perigo); }
-  .impacto-balao .rotulo-glosa { color: var(--spi-alerta); }
-  .impacto-balao .chip-glosa { border-color: var(--spi-alerta); background: var(--spi-alerta-suave); color: var(--spi-alerta); }
-  > footer { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); } }
+
+  /* Relato: largura de leitura confortável; o comprido nasce recolhido, com degradê e "Ver tudo" */
+  .texto { margin: 0; max-width: none; font-size: var(--spi-texto-corpo); line-height: 1.55; overflow-wrap: anywhere; }
+  .texto.recolhido { position: relative; max-height: 11.5em; overflow: hidden;
+    &::after { content: ''; position: absolute; inset: auto 0 0 0; height: 3.2em; background: linear-gradient(to bottom, transparent, var(--spi-superficie)); pointer-events: none; } }
+  .ver-tudo { align-self: flex-start; }
+
+  .status-diario { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .itens-diario { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip-diario { padding: 2px 10px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-pilula); background: var(--spi-superficie-alt); color: var(--spi-texto); font-size: var(--spi-texto-legenda); font-variant-numeric: tabular-nums; }
+
+  .balao-diario > footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding-top: 10px; border-top: 1px solid var(--spi-borda); color: var(--spi-apagado); font-size: var(--spi-texto-legenda); }
+  .anexos-balao { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+  .email-diario { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+}
+@media (max-width: 640px) { .diario { .diario-feed { padding: 14px 12px 18px; } .balao-diario { padding: 12px; } .cabeca-diario .marcas-diario { margin-left: 0; } .resumo-diario, .filtros-diario { padding-left: 12px; padding-right: 12px; } } }
 .diario-formulario { border-top: 1px solid var(--spi-borda); background: var(--spi-superficie); }
 
 .selo-situacao.info { color: var(--spi-info); background: var(--spi-info-suave); }

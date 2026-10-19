@@ -164,6 +164,13 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
                 <div class="dados-arquivo"><strong>Ordem Bancária</strong><small>O valor de {{ d.valor_a_pagar | moeda }} foi debitado nas NEs.</small></div>
                 <button type="button" class="acao-secundaria" (click)="baixar(d.ordem_bancaria.anexo_id)">Baixar Ordem Bancária</button>
               </article>
+              <!-- E-mail aos prepostos avisando o pagamento (máscara "E-mail de pagamento") -->
+              @if (d.email_ob; as e) {
+                @if (e.ok === true) { <p class="dica-formulario">E-mail de pagamento enviado a {{ e.destinatarios.join(', ') }}.</p> }
+                @else if (e.ok === false) { <p class="dica-formulario texto-erro">E-mail de pagamento não enviado: {{ e.erro }}</p> }
+                @else { <p class="dica-formulario">E-mail de pagamento em envio…</p> }
+                @if (e.ok !== true && e.enviado_em && d.pode_lancar_ob) { <button type="button" class="acao-secundaria acao-pequena" (click)="reenviarEmailOb()">Reenviar e-mail de pagamento</button> }
+              }
               <div class="espaco-fim-etapa"></div>
             } @else if (editavel()) {
               <app-campo-arquivo tipo="pdf" rotulo="Ordem Bancária (PDF)" [obrigatorio]="true" (selecionado)="ob = $event" />
@@ -332,6 +339,15 @@ export class EtapaFinaisComponent {
         if (novo.consolidado) this.baixar(novo.consolidado.anexo_id);
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o documento consolidado'),
+    });
+  }
+
+  /** Reenvia o e-mail de pagamento aos prepostos (quando o primeiro envio falhou). */
+  protected reenviarEmailOb(): void {
+    const d = this.detalhe();
+    this.dialogos.executar(this.api.reenviarEmailOb(d.contrato_id, d.id), 'Reenviando o e-mail…').subscribe({
+      next: (novo) => this.atualizado.emit(novo),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível reenviar o e-mail'),
     });
   }
 

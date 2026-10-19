@@ -10,6 +10,7 @@ import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.ser
 import { AtalhosService } from '../../../core/navegacao/atalhos.service';
 import { PreferenciaTema, TemaService } from '../../../core/tema/tema.service';
 import { CaixaNotificacoesService } from '../../../core/notificacoes/caixa-notificacoes.service';
+import { JanelaCienciaNomeacaoComponent } from '../../../features/contratos/compartilhado/janela-ciencia-nomeacao.component';
 import { JanelaNotificacaoComponent } from '../../../features/notificacoes/janela-notificacao.component';
 import { FolhaPontoDialogoComponent } from '../../../features/rh/folha-ponto-dialogo.component';
 import { DialogosComponent } from '../../componentes/dialogos/dialogos.component';
@@ -28,7 +29,7 @@ import { LayoutService } from '../layout.service';
 @Component({
   selector: 'app-layout-autenticado',
   imports: [
-    RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaNotificacaoComponent, FolhaPontoDialogoComponent,
+    RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaNotificacaoComponent, JanelaCienciaNomeacaoComponent, FolhaPontoDialogoComponent,
     BotaoMelhoriasComponent, BuscaGlobalComponent, AbrirChamadoComponent, PaletaComandosComponent, AvisoNotificacoesNavegadorComponent, BarraProgressoComponent,
   ],
   templateUrl: './layout-autenticado.component.html',
@@ -134,6 +135,24 @@ export class LayoutAutenticadoComponent {
   protected abrirFolhaPonto(): void {
     this.layout.fecharSobreposicoes();
     this.folhaPontoAberta.set(true);
+  }
+
+  /**
+   * Troca o perfil ativo. Depois do token novo, recarrega a aplicação em `/`: zera acessos, atalhos, notificações
+   * e demais caches, e o usuário já vê o sistema como o novo perfil enxerga.
+   */
+  protected trocarPerfil(perfilId: number): void {
+    if (this.autenticacao.usuario()?.perfil_ativo?.id === perfilId) return;
+    this.autenticacao.trocarPerfil(perfilId).subscribe({ next: () => this.recarregarAplicacao() });
+  }
+
+  /** Encerra a personificação e volta a ser o SuperRoot. */
+  protected pararPersonificacao(): void {
+    this.autenticacao.pararPersonificacao().subscribe({ next: () => this.recarregarAplicacao() });
+  }
+
+  private recarregarAplicacao(): void {
+    window.location.assign('/');
   }
 
   /** Encerra a sessão a partir do menu do usuário. */

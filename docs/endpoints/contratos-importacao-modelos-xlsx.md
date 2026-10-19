@@ -16,10 +16,9 @@ Fluxo, igual ao da [importação de contratos](contratos-importacao-xlsx.md):
 5. **confirmar**: o mesmo arquivo é enviado de novo, validado outra vez e só então gravado.
 
 **Autorização:**
-- ACL `importacao-modelos` ≥ MODIFICACAO **e** ACL `contratos` ≥ MODIFICACAO. Sem uma delas: `403 acl_negado`.
+- ACL `contratos` ≥ MODIFICACAO (parte de "Editar contratos e conduzir a execução"; não há recurso de ACL separado desde a migração `d7a2f5c8b1e4`). Sem ela: `403 acl_negado`.
 - No contrato, vale também o vínculo exigido para editá-lo (criador, equipe de gestão e fiscalização ou SuperRoot): `403 acesso_negado`.
 - Nos modelos globais, só o SuperRoot (`403 acesso_negado`).
-- O recurso `importacao-modelos` é criado pela migração `e5a8c3d7f2b1` **fechado** (CONTROLE_TOTAL só para a conta administrativa principal); o SuperRoot libera os demais em `/admin/acl`.
 
 ---
 

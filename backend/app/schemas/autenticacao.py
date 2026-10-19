@@ -18,6 +18,19 @@ class RequisicaoLogin(BaseModel):
     senha: str = Field(..., min_length=1, max_length=128, description="Senha em texto puro (trafega apenas via HTTPS em produção).")
 
 
+class PerfilSessao(BaseModel):
+    """Perfil de acesso do usuário (para o menu do usuário)."""
+    id: int = Field(..., description="Identificador do perfil.")
+    nome: str = Field(..., description="Nome do perfil.")
+
+
+class PersonificadorSessao(BaseModel):
+    """SuperRoot que está personificando o usuário da sessão."""
+    id: int
+    login: str
+    nome_completo: str
+
+
 class UsuarioSessao(BaseModel):
     """Resumo do usuário logado, usado pelo frontend para montar o menu e aplicar restrições."""
     id: int = Field(..., description="Identificador do usuário.")
@@ -33,6 +46,10 @@ class UsuarioSessao(BaseModel):
     revisao_obrigatoria: bool = Field(False, description="Revalidação do perfil vencida (mais de 30 dias) ou nunca feita.")
     conta_root: bool = Field(False, description="Conta administrativa principal (login `LOGIN_ADMIN`): libera a tela Notificações do sistema.")
     tema: Literal["claro", "escuro", "auto"] = Field("auto", description="Tema da interface escolhido pelo usuário (`auto` segue o sistema operacional).")
+    perfis: list[PerfilSessao] = Field(default_factory=list, description="Perfis de acesso ativos do usuário (entre eles ele alterna no menu do usuário).")
+    perfil_ativo: PerfilSessao | None = Field(None, description="Perfil que vale nesta sessão (o escolhido ou o padrão); nulo se o usuário não tem perfis.")
+    personificado_por: PersonificadorSessao | None = Field(
+        None, description="Só na personificação: o SuperRoot real que está usando a sessão como este usuário (o frontend mostra a faixa \"Parar de personificar\").")
 
 
 class RespostaToken(BaseModel):
@@ -48,3 +65,13 @@ class PreferenciaTema(BaseModel):
     """Corpo do `PUT /api/autenticacao/tema`."""
 
     tema: Literal["claro", "escuro", "auto"] = Field(..., description="`claro`, `escuro` ou `auto` (segue o tema do sistema operacional).")
+
+
+class PedidoPerfilAtivo(BaseModel):
+    """Corpo do `POST /api/autenticacao/perfil-ativo`."""
+    perfil_id: int = Field(..., description="Perfil (ativo e do próprio usuário) que passa a valer na sessão.")
+
+
+class PedidoPersonificar(BaseModel):
+    """Corpo do `POST /api/autenticacao/personificar`."""
+    usuario_id: int = Field(..., description="Usuário ativo cujo acesso o SuperRoot quer testar.")

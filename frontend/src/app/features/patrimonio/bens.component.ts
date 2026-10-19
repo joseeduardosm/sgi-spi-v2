@@ -15,7 +15,7 @@ import { CabecalhoPatrimonioComponent } from './cabecalho-patrimonio.component';
 import { LeitorCodigoComponent } from './leitor-codigo.component';
 import { PatrimonioApiService } from './patrimonio-api.service';
 import { PatrimonioEstadoService } from './patrimonio-estado.service';
-import { Bem, COR_SITUACAO, FiltrosBens, ROTULOS_CONSERVACAO, ROTULOS_GARANTIA, ROTULOS_SITUACAO } from './patrimonio.models';
+import { Bem, COR_SITUACAO, FiltrosBens, ROTULOS_CONSERVACAO, ROTULOS_GARANTIA, ROTULOS_SITUACAO, rotuloCategoria } from './patrimonio.models';
 import { SeletorSalaComponent } from './seletor-sala.component';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
@@ -125,7 +125,7 @@ function gravarLocal(chave: string, valor: unknown): void {
                     <td [class.num]="c.direita">
                       @switch (c.id) {
                         @case ('chapa') { <a [routerLink]="['/patrimonio/bens', b.id]"><strong class="texto-codigo">{{ b.rotulo }}</strong></a> }
-                        @case ('situacao') { <span [class]="marcador(cores[b.situacao])">{{ situacoesMapa[b.situacao] }}</span> }
+                        @case ('situacao') { <span [class]="marcador(cores[b.situacao])">{{ situacoesMapa[b.situacao] }}@if (b.categoria_inservivel) { · {{ rotuloCategoria(b.categoria_inservivel) }} }</span> }
                         @case ('conservacao') { {{ b.conservacao }} · {{ conservacaoMapa[b.conservacao] }} }
                         @case ('valor_aquisicao') { {{ b.valor_aquisicao ? (b.valor_aquisicao | moeda) : '—' }} }
                         @case ('valor_atual') { {{ b.valor_atual ? (b.valor_atual | moeda) : '—' }} }
@@ -155,7 +155,7 @@ function gravarLocal(chave: string, valor: unknown): void {
             <span class="pat-descricao">{{ b.descricao }}</span>
             <small class="pat-sala">{{ b.sala_rotulo }}</small>
             <span class="pat-marcadores">
-              <span [class]="marcador(cores[b.situacao])">{{ situacoesMapa[b.situacao] }}</span>
+              <span [class]="marcador(cores[b.situacao])">{{ situacoesMapa[b.situacao] }}@if (b.categoria_inservivel) { · {{ rotuloCategoria(b.categoria_inservivel) }} }</span>
               <span [class]="marcador(b.conservacao <= 2 ? 1 : b.conservacao === 3 ? 3 : 10)">{{ b.conservacao }} · {{ conservacaoMapa[b.conservacao] }}</span>
               @if (b.situacao_garantia === 'vencida') { <span [class]="marcador(1)">Fora de garantia</span> }
               @if (b.vence_em_90_dias) { <span [class]="marcador(3)">Garantia vence em breve</span> }
@@ -252,6 +252,7 @@ export class BensComponent implements OnInit {
   protected readonly marcador = classeMarcador;
   protected readonly cores = COR_SITUACAO;
   protected readonly situacoesMapa = ROTULOS_SITUACAO;
+  protected readonly rotuloCategoria = rotuloCategoria;
   protected readonly conservacaoMapa = ROTULOS_CONSERVACAO;
   protected readonly situacoes = Object.entries(ROTULOS_SITUACAO);
   protected readonly conservacoes = Object.entries(ROTULOS_CONSERVACAO);

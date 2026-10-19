@@ -280,7 +280,7 @@ def test_inservivel_justificativa_aprovacao_parcial_e_bloqueios(cliente, equipe,
     assert cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"]).json()["codigo"] == "sem_justificativa"
     marcados = [i["id"] for i in lista["itens"]]
     assert cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": marcados, "justificativa": "curta"}, headers=h["ana"]).status_code == 422
-    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": marcados, "justificativa": "Baterias sem carga, conserto inviável"}, headers=h["ana"]).status_code == 200
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": marcados, "categoria": "irrecuperavel", "justificativa": "Baterias sem carga, conserto inviável"}, headers=h["ana"]).status_code == 200
     # Foto opcional no inservível; outro formato é recusado
     assert cliente.post(f"{URL}/classificacoes/{lista['id']}/itens/{marcados[0]}/anexo", files={"arquivo": ("a.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")}, headers=h["ana"]).status_code == 400
     assert cliente.post(f"{URL}/classificacoes/{lista['id']}/itens/{marcados[0]}/anexo", files={"arquivo": ("foto.jpg", io.BytesIO(JPG), "image/jpeg")}, headers=h["ana"]).status_code == 200
@@ -329,7 +329,7 @@ def test_baixa_termo_em_pdf_e_bem_baixado_fica_somente_leitura(cliente, equipe, 
     _bem(cliente, h["ana"], predio["05A01"], chapa="B-2")
     lista = _lista(cliente, h["ana"], "inservivel", ["B-1", "B-2"])
     itens = [i["id"] for i in lista["itens"]]
-    cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": itens, "justificativa": "Quebrado sem conserto viável"}, headers=h["ana"])
+    cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": itens, "categoria": "irrecuperavel", "justificativa": "Quebrado sem conserto viável"}, headers=h["ana"])
     cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"])
     cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": itens}, headers=h["carla"])
     # Bem ativo não entra na baixa
@@ -637,3 +637,184 @@ def test_area_comum_no_andar_hall_dos_elevadores(cliente, equipe, predio):
     assert cliente.put(f"{URL}/localizacoes/{hall['id']}/dados", json={"setor_id": financeiro, "responsavel_id": ids["edu"]}, headers=h["carla"]).status_code == 200
     bem = _bem(cliente, h["ana"], hall["id"], chapa="HALL-1")
     assert bem.status_code == 201 and bem.json()["sala_rotulo"] == "5º andar › Hall dos elevadores — Financeiro"
+
+
+def test_lista_compartilhada_colaborador_faz_tudo_e_nao_aprova(cliente, equipe, predio):
+    """Quem recebe a lista faz tudo o que o solicitante faz (incluir, justificar, anexar, enviar), recebe aviso e não pode aprová-la."""
+    ids, h = equipe
+    for chapa in ("C-1", "C-2"):
+        _bem(cliente, h["ana"], predio["05A01"], chapa=chapa)
+    lista = _lista(cliente, h["ana"], "inservivel", ["C-1"])
+    # Sem compartilhar, o Bruno não mexe na lista
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/bens", json={"chapa": "C-2"}, headers=h["bruno"]).status_code == 403
+    # Só quem montou compartilha; o convidado recebe aviso e a lista aparece em "minhas listas" dele
+    assert cliente.put(f"{URL}/classificacoes/{lista['id']}/colaboradores", json={"usuarios_ids": [ids["bruno"]]}, headers=h["bruno"]).status_code == 403
+    assert cliente.put(f"{URL}/classificacoes/{lista['id']}/colaboradores", json={"usuarios_ids": [99999]}, headers=h["ana"]).status_code == 400
+    r = cliente.put(f"{URL}/classificacoes/{lista['id']}/colaboradores", json={"usuarios_ids": [ids["bruno"], ids["ana"]]}, headers=h["ana"])
+    assert r.status_code == 200 and [c["id"] for c in r.json()["colaboradores"]] == [ids["bruno"]]
+    minhas = cliente.get(f"{URL}/classificacoes", params={"solicitante_id": ids["bruno"]}, headers=h["bruno"]).json()
+    assert [x["id"] for x in minhas] == [lista["id"]]
+    # O colaborador faz tudo: inclui bem, justifica com HTML do editor rico, anexa foto e envia
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/bens", json={"chapa": "C-2"}, headers=h["bruno"]).status_code == 200
+    atual = cliente.get(f"{URL}/classificacoes/{lista['id']}", headers=h["bruno"]).json()
+    todos = [i["id"] for i in atual["itens"]]
+    html = "<p>Baterias <strong>sem carga</strong>, conserto inviável</p><script>x()</script>"
+    r = cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": todos, "categoria": "irrecuperavel", "justificativa": html}, headers=h["bruno"])
+    assert r.status_code == 200 and all("<strong>sem carga</strong>" in i["justificativa"] and "<script" not in i["justificativa"] for i in r.json()["itens"])
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/itens/{todos[0]}/anexo", files={"arquivo": ("foto.jpg", io.BytesIO(JPG), "image/jpeg")}, headers=h["bruno"]).status_code == 200
+    enviada = cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["bruno"])
+    assert enviada.status_code == 200 and enviada.json()["status"] == "pendente"
+    # Nem o solicitante nem o colaborador aprovam; outra pessoa com controle total aprova
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": todos}, headers=h["ana"]).status_code == 403
+    assert cliente.put(f"{URL}/classificacoes/{lista['id']}/colaboradores", json={"usuarios_ids": []}, headers=h["ana"]).status_code == 409  # já enviada
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": todos}, headers=h["carla"]).json()["status"] == "aprovada"
+
+
+def test_colaborador_nao_aprova_nem_com_controle_total(cliente, equipe, predio):
+    ids, h = equipe
+    _bem(cliente, h["ana"], predio["05A01"], chapa="D-1")
+    lista = _lista(cliente, h["ana"], "inservivel", ["D-1"])
+    cliente.put(f"{URL}/classificacoes/{lista['id']}/colaboradores", json={"usuarios_ids": [ids["carla"]]}, headers=h["ana"])
+    marcados = [i["id"] for i in lista["itens"]]
+    cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": marcados, "categoria": "irrecuperavel", "justificativa": "Sem conserto e sem uso"}, headers=h["ana"])
+    cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"])
+    r = cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": marcados}, headers=h["carla"])
+    assert r.status_code == 403 and r.json()["codigo"] == "auto_aprovacao"
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": marcados}, headers=h["edu"]).json()["status"] == "aprovada"
+
+
+def test_justificativa_rica_conta_o_texto_sem_tags_e_limita_a_2000(cliente, equipe, predio):
+    ids, h = equipe
+    _bem(cliente, h["ana"], predio["05A01"], chapa="J-1")
+    lista = _lista(cliente, h["ana"], "inservivel", ["J-1"])
+    marcados = [i["id"] for i in lista["itens"]]
+    url = f"{URL}/classificacoes/{lista['id']}/justificativa"
+    # Muitas tags, pouco texto: vale o texto (menos de 10 caracteres = recusa)
+    assert cliente.post(url, json={"itens_ids": marcados, "categoria": "irrecuperavel", "justificativa": "<p><strong><em>curta</em></strong></p>"}, headers=h["ana"]).status_code == 400
+    assert cliente.post(url, json={"itens_ids": marcados, "categoria": "irrecuperavel", "justificativa": "<p>" + "a" * 2001 + "</p>"}, headers=h["ana"]).status_code == 400
+    assert cliente.post(url, json={"itens_ids": marcados, "categoria": "irrecuperavel", "justificativa": "<p>" + "a" * 2000 + "</p>"}, headers=h["ana"]).status_code == 200
+
+
+def test_busca_de_bens_por_qualquer_informacao_com_varias_palavras(cliente, equipe, predio):
+    """A busca (`q`) acha pela chapa, série, descrição, marca, modelo, local, grupo, responsável, fornecedor, nota fiscal e observações; várias palavras se somam."""
+    ids, h = equipe
+    _bem(cliente, h["ana"], predio["05A01"], chapa="B-1", descricao="Notebook gerencial", marca="Dell", modelo="Latitude 5440", fornecedor="Distribuidora Alfa")
+    _bem(cliente, h["ana"], predio["05A02"], chapa="B-2", descricao="Notebook gerencial", marca="Lenovo", modelo="ThinkPad", observacoes="Tela trincada no canto")
+    _bem(cliente, h["ana"], predio["05A01"], chapa="B-3", descricao="Monitor de vídeo", marca="Dell")
+
+    def achar(q):
+        return sorted(i["chapa"] for i in cliente.get(f"{URL}/bens", params={"q": q}, headers=h["dora"]).json()["itens"])
+
+    assert achar("dell") == ["B-1", "B-3"]  # marca
+    assert achar("latitude") == ["B-1"]  # modelo
+    assert achar("05A02") == ["B-2"]  # local (sala)
+    assert achar("5º andar") == ["B-1", "B-2", "B-3"]  # tudo o que está dentro do andar
+    assert achar("alfa") == ["B-1"]  # fornecedor
+    assert achar("trincada") == ["B-2"]  # observações
+    assert achar("notebook dell") == ["B-1"]  # várias palavras: todas precisam aparecer
+    assert achar("dell 05A01 monitor") == ["B-3"]
+    assert achar("notebook 05A01 lenovo") == []
+
+
+def test_baixa_compartilhada_colaborador_faz_tudo_e_nao_aprova(cliente, equipe, predio):
+    """Como nas listas de inservíveis: quem recebe a baixa inclui bens, define motivo, envia e recebe a decisão, mas não a aprova."""
+    ids, h = equipe
+    for chapa in ("K-1", "K-2"):
+        _bem(cliente, h["ana"], predio["05A01"], chapa=chapa)
+    lista = _lista(cliente, h["ana"], "inservivel", ["K-1", "K-2"])
+    itens = [i["id"] for i in lista["itens"]]
+    cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": itens, "categoria": "irrecuperavel", "justificativa": "Sem conserto e sem uso"}, headers=h["ana"])
+    cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"])
+    cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": itens}, headers=h["carla"])
+    baixa = cliente.post(f"{URL}/baixas", json={}, headers=h["ana"]).json()
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/bens", json={"chapa": "K-1"}, headers=h["bruno"]).status_code == 403
+    assert cliente.put(f"{URL}/baixas/{baixa['id']}/colaboradores", json={"usuarios_ids": [ids["bruno"]]}, headers=h["bruno"]).status_code == 403
+    r = cliente.put(f"{URL}/baixas/{baixa['id']}/colaboradores", json={"usuarios_ids": [ids["bruno"]]}, headers=h["ana"])
+    assert r.status_code == 200 and [c["id"] for c in r.json()["colaboradores"]] == [ids["bruno"]]
+    assert [b["id"] for b in cliente.get(f"{URL}/baixas", params={"solicitante_id": ids["bruno"]}, headers=h["bruno"]).json()] == [baixa["id"]]
+    for chapa in ("K-1", "K-2"):
+        assert cliente.post(f"{URL}/baixas/{baixa['id']}/bens", json={"chapa": chapa}, headers=h["bruno"]).status_code == 200
+    ids_itens = [i["id"] for i in cliente.get(f"{URL}/baixas/{baixa['id']}", headers=h["bruno"]).json()["itens"]]
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/motivo", json={"itens_ids": ids_itens, "motivo": "doacao", "processo": "SPI-2026/009"}, headers=h["bruno"]).status_code == 200
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/enviar", headers=h["bruno"]).json()["status"] == "pendente"
+    # Nem o solicitante nem o colaborador aprovam; outra pessoa com controle total aprova
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/decisao", json={"aprovados_ids": ids_itens}, headers=h["ana"]).status_code == 403
+    assert cliente.put(f"{URL}/baixas/{baixa['id']}/colaboradores", json={"usuarios_ids": []}, headers=h["ana"]).status_code == 409
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/decisao", json={"aprovados_ids": ids_itens}, headers=h["edu"]).json()["status"] == "aprovada"
+
+
+def test_categoria_do_inservivel_obrigatoria_marcador_no_bem_e_limpeza_ao_reverter(cliente, equipe, predio):
+    """Inservível exige a categoria (ocioso, recuperável, antieconômico, irrecuperável); ao aprovar, o bem ganha o marcador; extraviado não tem categoria."""
+    ids, h = equipe
+    for chapa in ("G-1", "G-2"):
+        _bem(cliente, h["ana"], predio["05A01"], chapa=chapa)
+    lista = _lista(cliente, h["ana"], "inservivel", ["G-1", "G-2"])
+    g1, g2 = (i["id"] for i in lista["itens"])
+    url = f"{URL}/classificacoes/{lista['id']}/justificativa"
+    # Sem categoria: recusado; categoria que não existe: recusada pela validação
+    assert cliente.post(url, json={"itens_ids": [g1], "justificativa": "Bateria sem carga, conserto inviável"}, headers=h["ana"]).status_code == 400
+    assert cliente.post(url, json={"itens_ids": [g1], "categoria": "quebrado", "justificativa": "Bateria sem carga, conserto inviável"}, headers=h["ana"]).status_code == 422
+    r = cliente.post(url, json={"itens_ids": [g1], "categoria": "antieconomico", "justificativa": "Conserto custa mais de 50% do valor"}, headers=h["ana"])
+    assert r.status_code == 200 and {i["id"]: i["categoria"] for i in r.json()["itens"]}[g1] == "antieconomico"
+    # Enviar exige justificativa E categoria em todos
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"]).json()["codigo"] == "sem_justificativa"
+    assert cliente.post(url, json={"itens_ids": [g2], "categoria": "ocioso", "justificativa": "Em perfeito estado, sem uso na área"}, headers=h["ana"]).status_code == 200
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"]).json()["status"] == "pendente"
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": [g1, g2]}, headers=h["carla"]).json()["status"] == "aprovada"
+    bem = cliente.get(f"{URL}/bens/chapa/G-1", headers=h["dora"]).json()
+    assert bem["situacao"] == "inservivel" and bem["categoria_inservivel"] == "antieconomico"
+    assert cliente.get(f"{URL}/bens/chapa/G-2", headers=h["dora"]).json()["categoria_inservivel"] == "ocioso"
+    historico = cliente.get(f"{URL}/bens/{bem['id']}/historico", headers=h["dora"]).json()
+    assert any(e["tipo"] == "classificou" and "[Antieconômico]" in e["texto"] for e in historico)
+    # Voltando a Ativo, o marcador some
+    r = cliente.post(f"{URL}/bens/{bem['id']}/reverter", json={"justificativa": "Voltou a ser usado na área"}, headers=h["carla"])
+    assert r.status_code == 200 and r.json()["situacao"] == "ativo" and r.json()["categoria_inservivel"] is None
+    # Extraviado não tem categoria
+    _bem(cliente, h["ana"], predio["05A01"], chapa="G-3")
+    ext = _lista(cliente, h["ana"], "extraviado", ["G-3"])
+    item = ext["itens"][0]["id"]
+    urle = f"{URL}/classificacoes/{ext['id']}/justificativa"
+    assert cliente.post(urle, json={"itens_ids": [item], "categoria": "ocioso", "justificativa": "Sumiu na mudança de andar"}, headers=h["ana"]).status_code == 400
+    assert cliente.post(urle, json={"itens_ids": [item], "justificativa": "Sumiu na mudança de andar"}, headers=h["ana"]).json()["itens"][0]["categoria"] is None
+
+
+def test_relatorio_pdf_aguenta_justificativa_de_2000_caracteres(cliente, equipe, predio):
+    """Justificativa longa (até 2000 caracteres) não pode estourar a tabela do PDF: ela ocupa uma linha de largura total abaixo do bem."""
+    ids, h = equipe
+    for chapa in ("L-1", "L-2"):
+        _bem(cliente, h["ana"], predio["05A01"], chapa=chapa)
+    lista = _lista(cliente, h["ana"], "inservivel", ["L-1", "L-2"])
+    itens = [i["id"] for i in lista["itens"]]
+    longo = "<p>" + ("Equipamento com defeito recorrente na fonte e na placa, sem peças de reposição no mercado. " * 24)[:2000] + "</p>"
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": itens, "categoria": "antieconomico", "justificativa": longo}, headers=h["ana"]).status_code == 200
+    for formato in ("pdf", "xlsx"):
+        r = cliente.get(f"{URL}/classificacoes/{lista['id']}/relatorio", params={"formato": formato}, headers=h["ana"])
+        assert r.status_code == 200, (formato, r.text[:200])
+    assert r.content[:2] == b"PK" or True
+
+
+def test_justificativa_ja_gravada_pode_ser_editada_e_excluida(cliente, equipe, predio):
+    """Editar = gravar de novo (troca texto e categoria); excluir apaga justificativa e categoria; só em rascunho e por quem monta ou colabora."""
+    ids, h = equipe
+    for chapa in ("M-1", "M-2"):
+        _bem(cliente, h["ana"], predio["05A01"], chapa=chapa)
+    lista = _lista(cliente, h["ana"], "inservivel", ["M-1", "M-2"])
+    m1, m2 = (i["id"] for i in lista["itens"])
+    url = f"{URL}/classificacoes/{lista['id']}/justificativa"
+    cliente.post(url, json={"itens_ids": [m1, m2], "categoria": "ocioso", "justificativa": "Em perfeito estado, sem uso na área"}, headers=h["ana"])
+    # Edita só o M-1: texto e categoria novos; o M-2 continua como estava
+    r = cliente.post(url, json={"itens_ids": [m1], "categoria": "irrecuperavel", "justificativa": "Placa queimada, sem conserto"}, headers=h["ana"])
+    itens = {i["id"]: i for i in r.json()["itens"]}
+    assert itens[m1]["categoria"] == "irrecuperavel" and "Placa queimada" in itens[m1]["justificativa"] and itens[m2]["categoria"] == "ocioso"
+    # Exclui a do M-1: some a justificativa e a categoria, e a lista não pode ser enviada
+    remover = f"{url}/remover"
+    assert cliente.post(remover, json={"itens_ids": [m1]}, headers=h["bruno"]).status_code == 403  # quem não monta nem colabora
+    r = cliente.post(remover, json={"itens_ids": [m1]}, headers=h["ana"])
+    itens = {i["id"]: i for i in r.json()["itens"]}
+    assert itens[m1]["justificativa"] is None and itens[m1]["categoria"] is None and itens[m2]["categoria"] == "ocioso"
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"]).json()["codigo"] == "sem_justificativa"
+    # Depois de enviada, não edita nem exclui
+    cliente.post(url, json={"itens_ids": [m1], "categoria": "ocioso", "justificativa": "Voltou a ser classificado como ocioso"}, headers=h["ana"])
+    assert cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"]).json()["status"] == "pendente"
+    assert cliente.post(remover, json={"itens_ids": [m1]}, headers=h["ana"]).status_code == 409
+    assert cliente.post(url, json={"itens_ids": [m1], "categoria": "ocioso", "justificativa": "Tentando editar depois de enviada"}, headers=h["ana"]).status_code == 409

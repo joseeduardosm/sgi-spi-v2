@@ -140,7 +140,8 @@ export class CompetenciaComponent implements OnInit {
   protected editavel(etapa: Etapa): boolean {
     const d = this.detalhe()!;
     // A retenção de tributos também pode ser feita pelo Financeiro (sem poder editar o contrato)
-    const pode = etapa === 'retencao' ? d.pode_conferir_retencao : d.pode_editar;
+    // A Ordem Bancária também pode ser lançada por quem tem a ação "Lançar ordem bancária" no perfil (sem poder editar o contrato)
+    const pode = etapa === 'retencao' ? d.pode_conferir_retencao : etapa === 'ordem_bancaria' ? (d.pode_lancar_ob ?? d.pode_editar) : d.pode_editar;
     return pode && d.liberada && this.aberta(etapa);
   }
 

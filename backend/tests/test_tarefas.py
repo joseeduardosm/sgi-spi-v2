@@ -496,3 +496,27 @@ def test_descricao_rica_e_sanitizada_e_texto_antigo_fica_como_esta(cliente, equi
     # A busca enxerga o texto do HTML
     achou = cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id, "busca": "urgente"}, headers=h["lia"]).json()["itens"]
     assert [i["numero"] for i in achou] == [t["numero"]]
+
+
+def test_devolver_aceita_html_do_editor_rico_sanitizado(cliente, equipe):
+    """O motivo da devolução vem do editor rico: HTML sanitizado no histórico; editor vazio é recusado; o aviso leva só o texto."""
+    ids, h, equipe_id = equipe
+    t = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    n = t["numero"]
+    _mover(cliente, h["ana"], n, "iniciar")
+    _mover(cliente, h["ana"], n, "entregar")
+    # Editor vazio (`<p></p>`) é o mesmo que sem motivo
+    assert _mover(cliente, h["lia"], n, "devolver", "<p></p>").status_code == 400
+    html = "<p>Ajustar a <strong>cláusula 7</strong>:</p><ul><li>prazo</li></ul><script>alert(1)</script>"
+    r = _mover(cliente, h["lia"], n, "devolver", html)
+    assert r.status_code == 200 and r.json()["status"] == "em_andamento"
+    linha = cliente.get(f"{URL}/{n}/linha-do-tempo", headers=h["lia"]).json()
+    evento = next(e for e in linha["itens"] if e["tipo"] == "devolvida")
+    assert "<strong>cláusula 7</strong>" in evento["texto"] and "<li>prazo</li>" in evento["texto"] and "<script" not in evento["texto"]
+    # A notificação leva o texto puro, sem tags
+    from sqlalchemy import select
+    from app.core.banco import FabricaSessao
+    from app.models import Notificacao
+    with FabricaSessao() as sessao:
+        aviso = sessao.scalar(select(Notificacao).where(Notificacao.chave.like(f"tarefa-devolvida:{t['id']}:%")))
+        assert "cláusula 7" in aviso.corpo and "<" not in aviso.corpo.split("Motivo:")[1]

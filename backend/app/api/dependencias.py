@@ -72,11 +72,36 @@ def obter_usuario_autenticado(
     # Usuário excluído ou desativado depois da emissão do token perde o acesso imediatamente
     if usuario is None or not usuario.ativo:
         raise _nao_autenticado("Usuário inválido ou inativo.")
+    # Personificação: `sub` é o usuário personificado e `imp`, o SuperRoot real. O SuperRoot precisa continuar ativo e SuperRoot, senão a sessão cai.
+    if conteudo.get("imp") is not None:
+        real = sessao.get(Usuario, int(conteudo["imp"]))
+        if real is None or not real.ativo or not real.superusuario:
+            raise _nao_autenticado("Personificação inválida.")
+        usuario.personificado_por = real
+        # `auditar` lê isto para gravar quem realmente agiu (sem mexer nas chamadas de auditoria)
+        sessao.info["personificado_por"] = (real.id, real.login)
+    # Perfil ativo escolhido no menu do usuário (claim `pa`): vale só se ainda for um perfil ativo do usuário; senão, o padrão
+    if conteudo.get("pa") is not None:
+        escolhido = int(conteudo["pa"])
+        if any(p.id == escolhido for p in servico_acl.perfis_do_usuario(sessao, usuario.id)):
+            usuario.perfil_ativo_id = escolhido
     # Quem está usando o sistema não cai: perto do vencimento, a resposta traz um token novo (só para usuário ativo)
     renovado = renovar_token(conteudo)
     if renovado:
         resposta.headers[CABECALHO_TOKEN_RENOVADO], resposta.headers[CABECALHO_TOKEN_EXPIRA_EM] = renovado[0], renovado[1].isoformat()
     return usuario
+
+
+def obter_declaracoes(credenciais: HTTPAuthorizationCredentials | None = Depends(esquema_bearer)) -> dict:
+    """Declarações (claims) do token da requisição: `sub`, `ini`, `pa` (perfil ativo), `imp` (SuperRoot real, na personificação)."""
+    if credenciais is None:
+        raise _nao_autenticado("Não autenticado.")
+    try:
+        return decodificar_token_acesso(credenciais.credentials)
+    except jwt.ExpiredSignatureError:
+        raise _nao_autenticado("Sessão expirada.")
+    except jwt.InvalidTokenError:
+        raise _nao_autenticado("Token inválido.")
 
 
 def obter_usuario_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) -> Usuario:
@@ -127,7 +152,7 @@ def exigir_gestao(recurso: str) -> Callable[..., Usuario]:
     def verificar(usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)) -> Usuario:
         if usuario.superusuario:
             return usuario
-        if not servico_acl.possui_regras(sessao, recurso) or servico_acl.resolver_acesso(sessao, usuario, recurso) != NivelAcl.CONTROLE_TOTAL:
+        if not servico_acl.possui_regras(sessao, recurso) or not servico_acl.pode_porta(sessao, usuario, recurso, NivelAcl.CONTROLE_TOTAL):
             raise ErroApi(status.HTTP_403_FORBIDDEN, f"Esta operação exige CONTROLE_TOTAL em '{recurso}'.", "acl_negado",
                           recurso=recurso, nivel_exigido=NivelAcl.CONTROLE_TOTAL)
         return usuario
@@ -143,10 +168,9 @@ def exigir_acl(recurso: str, nivel_minimo: str = NivelAcl.LEITURA) -> Callable[.
     """
 
     def verificar(usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)) -> Usuario:
-        # Nível efetivo do usuário no recurso (regras diretas e herdadas dos setores)
-        efetivo = servico_acl.resolver_acesso(sessao, usuario, recurso)
-        # Os níveis são ordenados: LEITURA < MODIFICACAO < CONTROLE_TOTAL
-        if NivelAcl.posicao(efetivo) < NivelAcl.posicao(nivel_minimo):
+        # Regras de setor/diretas valem por nível (LEITURA < MODIFICACAO < CONTROLE_TOTAL); o perfil vale pela ação exata da porta
+        if not servico_acl.pode_porta(sessao, usuario, recurso, nivel_minimo):
+            efetivo = servico_acl.resolver_acesso(sessao, usuario, recurso)
             raise ErroApi(
                 status.HTTP_403_FORBIDDEN,
                 f"Você não possui o nível de acesso necessário para este recurso. "

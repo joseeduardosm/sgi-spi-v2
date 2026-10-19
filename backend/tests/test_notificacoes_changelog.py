@@ -147,7 +147,7 @@ def test_envio_a_usuarios_e_setores_escolhidos(cliente, admin):
         sessao.add(MembroSetor(setor_id=grupo.id, usuario_id=ids["davi"]))
         sessao.commit()
         diretoria_id, grupo_id = diretoria.id, grupo.id
-    # Eva não ligou o e-mail de novidades (a seleção a reúne, mas ela não recebe); os demais ligaram
+    # Eva não ligou o e-mail de novidades, mas quem a administração escolhe recebe mesmo assim; a preferência só filtra o envio a `todos`
     ligar_canais([ids["ana"], ids["bia"], ids["caio"], ids["davi"]], eventos=["sistema.novidades"])
     rascunho = cliente.get(f"{URL}/rascunho", headers=admin).json()
     nomes = {s["nome"]: s for s in rascunho["setores"]}
@@ -155,7 +155,7 @@ def test_envio_a_usuarios_e_setores_escolhidos(cliente, admin):
     corpo = {"assunto": "Novidades", "corpo": "Olá", "destino": "selecionados"}
     # Seleção vazia é recusada
     assert cliente.post(f"{URL}/envios", json=corpo, headers=admin).status_code == 422
-    # Ana (usuária) + Diretoria A (Bia pelo Departamento e Caio pelo setor filho) + Auditores (Davi, membro); Eva fica de fora
+    # Ana (usuária) + Diretoria A (Bia pelo Departamento e Caio pelo setor filho) + Auditores (Davi, membro)
     r = cliente.post(f"{URL}/envios", json={**corpo, "usuarios_ids": [ids["ana"]], "setores_ids": [diretoria_id, grupo_id]}, headers=admin)
     assert r.status_code == 202, r.text
     envio = r.json()
@@ -171,6 +171,6 @@ def test_envio_a_usuarios_e_setores_escolhidos(cliente, admin):
         vazio_id = vazio.id
     r = cliente.post(f"{URL}/envios", json={**corpo, "setores_ids": [vazio_id]}, headers=admin)
     assert r.status_code == 400 and "Nenhum destinatário" in r.json()["detalhe"]
-    # A tela mostra quantos receberão: seleção com a Eva e a Ana = 2 pessoas, só 1 recebe
+    # A tela mostra quantos receberão: seleção com a Eva e a Ana = 2 pessoas, as 2 recebem (a preferência não vale para escolhidos)
     contagem = cliente.post(f"{URL}/contagem", json={"usuarios_ids": [ids["ana"], ids["eva"]]}, headers=admin).json()
-    assert contagem == {"total": 1, "selecionados": 2}
+    assert contagem == {"total": 2, "selecionados": 2}

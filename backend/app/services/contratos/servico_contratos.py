@@ -43,6 +43,8 @@ from app.schemas.contratos.contratos import (
     GravacaoContrato,
     GravacaoItem,
     LeituraDocumento,
+    LeituraPagamento,
+    ArquivoPagamento,
     LeituraItem,
     LeituraVigencia,
     MarcoLinhaTempo,
@@ -55,7 +57,7 @@ from app.schemas.contratos.contratos import (
 )
 from app.schemas.contratos.empresas import OpcaoEmpresa
 from app.services import servico_acl, servico_anexos
-from app.services.contratos import calculos, valores
+from app.services.contratos import calculos, setor_equipes, valores
 from app.services.contratos.catalogo_documentos import CATALOGO, POR_CODIGO, nome_download
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.servico_auditoria import auditar, auditar_alteracoes, historico_campos
@@ -363,7 +365,7 @@ def opcoes_carga_resumo() -> list:
 
 def resumo(contrato: Contrato) -> ResumoContrato:
     """Converte o contrato na linha da carteira (com base mensal e valor global calculados)."""
-    from app.services.contratos.competencia_atual import competencia_atual
+    from app.services.contratos.competencia_atual import competencia_atual, competencias_em_andamento
 
     base, valor = totais(contrato)
     return ResumoContrato(
@@ -379,6 +381,7 @@ def resumo(contrato: Contrato) -> ResumoContrato:
         base_mensal=base,
         valor_global=valor,
         competencia_atual=competencia_atual(contrato),
+        competencias_em_andamento=competencias_em_andamento(contrato),
         sem_competencias=not contrato.competencias,
     )
 
@@ -629,13 +632,30 @@ def _aplicar_itens(contrato: Contrato, itens: list[GravacaoItem], usuario: Usuar
 
 
 def _aplicar_equipe(sessao: Session, contrato: Contrato, dados: GravacaoContrato) -> dict:
-    """Troca de designados: encerra a designação anterior e abre (ou reabre) a nova."""
-    agora = agora_utc()
+    """Troca de designados a partir do corpo do contrato (cadastro inicial e SuperRoot)."""
+    return aplicar_equipe_por_ids(sessao, contrato, {papel: getattr(dados.equipe, papel) for papel in PAPEIS_EQUIPE})
+
+
+def equipe_difere(contrato: Contrato, dados: GravacaoContrato) -> bool:
+    """Indica se o corpo traz uma equipe diferente da vigente (a equipe só muda por portaria, ou pelo SuperRoot)."""
+    vigentes = {d.papel: d.usuario_id for d in designacoes_vigentes(contrato)}
+    return any(vigentes.get(papel) != getattr(dados.equipe, papel) for papel in PAPEIS_EQUIPE)
+
+
+def aplicar_equipe_por_ids(sessao: Session, contrato: Contrato, novos: dict[str, int | None], momento: datetime | None = None) -> dict:
+    """Troca de designados: encerra a designação anterior e abre (ou reabre) a nova. `novos` = {papel: usuário ou None}.
+
+    Papel ausente de `novos` fica como está. É o único ponto que grava a equipe: o cadastro inicial, o SuperRoot e a publicação
+    da portaria passam por aqui.
+    """
+    agora = momento or agora_utc()
     # Designações vigentes indexadas pelo papel
     vigentes = {d.papel: d for d in designacoes_vigentes(contrato, agora)}
     alteracoes: dict = {}
     for papel in PAPEIS_EQUIPE:
-        novo_id = getattr(dados.equipe, papel)
+        if papel not in novos:
+            continue
+        novo_id = novos[papel]
         # Mesmo usuário no papel: nada muda
         atual = vigentes.get(papel)
         if (atual.usuario_id if atual else None) == novo_id:
@@ -691,6 +711,7 @@ def criar_contrato(sessao: Session, dados: GravacaoContrato, autor: Usuario, com
     _aplicar_itens(contrato, dados.itens, autor)
     mudancas_equipe = _aplicar_equipe(sessao, contrato, dados)
     sessao.flush()
+    setor_equipes.sincronizar(sessao)
     _avisar_designados(sessao, contrato, dados, mudancas_equipe, autor)
     auditar(sessao, autor.login, "contrato.criar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"numero": contrato.numero, "itens": len(dados.itens)})
@@ -713,16 +734,14 @@ def alterar_contrato(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoCon
     antes = _dados_auditados(contrato)
     _aplicar_cabecalho(contrato, dados, numero)
     mudancas_itens = _aplicar_itens(contrato, dados.itens, autor, pode_editar(sessao, contrato, autor))
-    mudancas_equipe = _aplicar_equipe(sessao, contrato, dados)
-    _avisar_designados(sessao, contrato, dados, mudancas_equipe, autor)
+    # A equipe só muda por portaria (ver `servico_portaria`), nem o SuperRoot a altera por aqui
+    if equipe_difere(contrato, dados):
+        raise ErroRegraContrato("A equipe do contrato só muda por portaria de designação (aba Equipe → Nova portaria).")
     # Cada gravação incrementa a versão
     contrato.versao += 1
     # Três registros de auditoria: campos do cabeçalho, equipe e itens
     auditar_alteracoes(sessao, autor.login, autor.id, "contrato.alterar", "contrato", contrato.id,
                        f"Contrato {contrato.numero}", antes, _dados_auditados(contrato))
-    if mudancas_equipe:
-        auditar(sessao, autor.login, "contrato.equipe.alterar", f"Contrato {contrato.numero}", autor_id=autor.id,
-                alvo_tipo="contrato", alvo_id=contrato.id, dados={"campos": mudancas_equipe})
     if mudancas_itens:
         auditar(sessao, autor.login, "contrato.itens.alterar", f"Contrato {contrato.numero}", autor_id=autor.id,
                 alvo_tipo="contrato", alvo_id=contrato.id, dados={"itens": mudancas_itens})
@@ -757,6 +776,9 @@ def excluir_contrato(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) ->
     auditar(sessao, autor.login, "contrato.excluir", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados=_dados_auditados(contrato))
     sessao.delete(contrato)
+    sessao.flush()
+    # A equipe do contrato excluído deixa o setor sistêmico, se não integra outro contrato
+    setor_equipes.sincronizar(sessao)
     sessao.commit()
 
 
@@ -796,6 +818,28 @@ def listar_documentos(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraDo
             )
         )
     return lista
+
+
+def listar_pagamentos(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraPagamento]:
+    """Pagamentos do contrato (mais recente primeiro): cada competência com OB/PD juntada vira "Pagamento MM/AAAA", com a OB e o consolidado num só item."""
+    from app.models.contratos.execucao import Competencia
+
+    obter_contrato(sessao, contrato_id)
+    competencias = sessao.scalars(
+        select(Competencia).where(Competencia.contrato_id == contrato_id, Competencia.ob_anexo_id.is_not(None)).order_by(Competencia.competencia.desc())
+    )
+
+    def arquivo(anexo) -> ArquivoPagamento | None:
+        return ArquivoPagamento(anexo_id=anexo.id, nome=anexo.nome_original, tamanho=anexo.tamanho) if anexo is not None and anexo.excluido_em is None else None
+
+    saida = []
+    for c in competencias:
+        ob = arquivo(c.ob_anexo)
+        if ob is None:
+            continue
+        saida.append(LeituraPagamento(competencia_id=c.id, titulo=f"Pagamento {c.competencia:%m/%Y}", juntado_em=c.ob_enviada_em or c.concluida_em,
+                                      ob=ob, consolidado=arquivo(c.consolidado_anexo)))
+    return saida
 
 
 def enviar_documento(

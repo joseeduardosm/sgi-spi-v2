@@ -119,6 +119,8 @@ class Bem(Base):
     observacoes: Mapped[str | None] = mapped_column(Text)
     # "Classificação pendente": o bem está numa lista enviada para aprovação e não pode ser movimentado
     classificacao_pendente: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Categoria do bem inservível (decreto de desfazimento): ocioso, recuperavel, antieconomico ou irrecuperavel; preenchida quando a lista é aprovada
+    categoria_inservivel: Mapped[str | None] = mapped_column(String(15))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
@@ -238,6 +240,23 @@ class Classificacao(Base):
     solicitante = relationship("Usuario", foreign_keys=[solicitante_id])
     decidido_por = relationship("Usuario", foreign_keys=[decidido_por_id])
     itens: Mapped[list["ItemClassificacao"]] = relationship(back_populates="classificacao", cascade="all, delete-orphan")
+    # Pessoas com quem a lista foi compartilhada: fazem tudo o que o solicitante faz na lista (incluir, justificar, anexar, enviar, descartar)
+    colaboradores: Mapped[list["ColaboradorClassificacao"]] = relationship(cascade="all, delete-orphan")
+
+    @property
+    def colaboradores_ids(self) -> set[int]:
+        return {c.usuario_id for c in self.colaboradores}
+
+
+class ColaboradorClassificacao(Base):
+    """Usuário com quem a lista (em rascunho) foi compartilhada pelo solicitante."""
+    __tablename__ = "patrimonio_classificacao_colaboradores"
+
+    classificacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("patrimonio_classificacoes.id", ondelete="CASCADE"), primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True, index=True)
+    adicionado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    usuario = relationship("Usuario", foreign_keys=[usuario_id], lazy="joined")
 
 
 class ItemClassificacao(Base):
@@ -248,6 +267,8 @@ class ItemClassificacao(Base):
     classificacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("patrimonio_classificacoes.id", ondelete="CASCADE"), index=True)
     bem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("patrimonio_bens.id", ondelete="RESTRICT"), index=True)
     justificativa: Mapped[str | None] = mapped_column(Text)
+    # Inservível: ocioso, recuperavel, antieconomico ou irrecuperavel (escolhida junto com a justificativa; extraviado não tem)
+    categoria: Mapped[str | None] = mapped_column(String(15))
     # Boletim de ocorrência, e-mail ou foto (extraviado) / foto (inservível)
     anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     situacao_anterior: Mapped[str | None] = mapped_column(String(15))
@@ -280,6 +301,23 @@ class Baixa(Base):
     solicitante = relationship("Usuario", foreign_keys=[solicitante_id])
     decidido_por = relationship("Usuario", foreign_keys=[decidido_por_id])
     itens: Mapped[list["ItemBaixa"]] = relationship(back_populates="baixa", cascade="all, delete-orphan")
+    # Pessoas com quem a baixa foi compartilhada: fazem tudo o que o solicitante faz nela (menos aprová-la)
+    colaboradores: Mapped[list["ColaboradorBaixa"]] = relationship(cascade="all, delete-orphan")
+
+    @property
+    def colaboradores_ids(self) -> set[int]:
+        return {c.usuario_id for c in self.colaboradores}
+
+
+class ColaboradorBaixa(Base):
+    """Usuário com quem a baixa (em rascunho) foi compartilhada pelo solicitante."""
+    __tablename__ = "patrimonio_baixa_colaboradores"
+
+    baixa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("patrimonio_baixas.id", ondelete="CASCADE"), primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True, index=True)
+    adicionado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    usuario = relationship("Usuario", foreign_keys=[usuario_id], lazy="joined")
 
 
 class ItemBaixa(Base):

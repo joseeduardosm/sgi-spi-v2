@@ -118,15 +118,18 @@ def test_aba_ausente_e_arquivo_invalido(cliente, admin):
 
 
 def test_acl_e_papel_da_importacao_de_modelos(cliente, admin):
-    """Sem liberação em `importacao-modelos` o usuário recebe 403; modelos globais exigem SuperRoot."""
+    """A importação é parte de `contratos` ≥ MODIFICACAO (403 para quem só consulta); modelos globais exigem SuperRoot."""
     contrato = criar_contrato(cliente, admin)
-    criar_usuario("comum")
+    consulta = criar_usuario("consulta")
     liberado = criar_usuario("liberado")
-    recurso = cliente.post("/api/acl/recursos", json={"nome": "Importação", "slug": "importacao-modelos"}, headers=admin).json()
-    corpo = {"recurso_id": recurso["id"], "nivel": "MODIFICACAO", "usuarios_ids": [liberado], "setores_ids": []}
-    assert cliente.post("/api/acl/regras", json=corpo, headers=admin).status_code == 201
+    recursos = cliente.get("/api/acl/recursos", headers=admin).json()
+    recurso = next((r for r in recursos if r["slug"] == "contratos"), None) or cliente.post(
+        "/api/acl/recursos", json={"nome": "Contratos", "slug": "contratos"}, headers=admin).json()
+    for nivel, quem in (("LEITURA", consulta), ("MODIFICACAO", liberado)):
+        corpo = {"recurso_id": recurso["id"], "nivel": nivel, "usuarios_ids": [quem], "setores_ids": []}
+        assert cliente.post("/api/acl/regras", json=corpo, headers=admin).status_code == 201
     url = f"/api/contratos/{contrato['id']}/checklists/importacao-xlsx/modelo"
-    r = cliente.get(url, headers=cabecalho(cliente, "comum"))
-    assert r.status_code == 403 and r.json()["recurso"] == "importacao-modelos"
-    # Liberado na ACL, mas sem papel SuperRoot: o modelo global continua negado
+    r = cliente.get(url, headers=cabecalho(cliente, "consulta"))
+    assert r.status_code == 403 and r.json()["recurso"] == "contratos"
+    # Com edição de contratos, mas sem papel SuperRoot: o modelo global continua negado
     assert cliente.get(f"{GLOBAL}/checklist/modelo", headers=cabecalho(cliente, "liberado")).status_code == 403

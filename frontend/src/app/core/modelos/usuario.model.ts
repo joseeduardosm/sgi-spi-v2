@@ -7,6 +7,19 @@ export type Papel = 'SuperRoot';
 /** Como a conta autentica: senha local, AD (LDAP) ou as duas. */
 export type OrigemUsuario = 'local' | 'ldap' | 'local_ldap';
 
+/** Perfil de acesso do usuário (aparece no menu do usuário). */
+export interface PerfilSessao {
+  id: number;
+  nome: string;
+}
+
+/** SuperRoot que está personificando o usuário da sessão. */
+export interface PersonificadorSessao {
+  id: number;
+  login: string;
+  nome_completo: string;
+}
+
 /** Usuário da sessão (`UsuarioSessao` da API). */
 export interface Usuario {
   id: number;
@@ -22,6 +35,11 @@ export interface Usuario {
   conta_root?: boolean;
   /** Tema da interface escolhido pelo usuário (`auto` segue o sistema operacional). */
   tema?: 'claro' | 'escuro' | 'auto';
+  /** Perfis ativos do usuário (para alternar no menu do usuário) e o que vale agora. */
+  perfis?: PerfilSessao[];
+  perfil_ativo?: PerfilSessao | null;
+  /** Preenchido quando um SuperRoot está personificando este usuário. */
+  personificado_por?: PersonificadorSessao | null;
 }
 
 /** Forma reduzida usada em seletores (`OpcaoUsuario` da API). */

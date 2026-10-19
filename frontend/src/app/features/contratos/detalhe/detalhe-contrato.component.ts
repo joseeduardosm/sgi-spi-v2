@@ -22,7 +22,7 @@ import { MESES, PAPEIS, PERIODICIDADES, ROTULOS_CAMPO, ROTULOS_SITUACAO, ROTULOS
 import { AbaChecklistsComponent } from './aba-checklists.component';
 import { AbaCorrecoesComponent } from './aba-correcoes.component';
 import { AbaDocumentosComponent } from './aba-documentos.component';
-import { AbaPortariaComponent } from './aba-portaria.component';
+import { PortariasEquipeComponent } from './portarias-equipe.component';
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { AbaDiarioComponent } from './aba-diario.component';
 import { AbaExecucaoComponent } from './aba-execucao.component';
@@ -32,14 +32,14 @@ import { AbaPrevisaoComponent } from './aba-previsao.component';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 /** Abas da tela de detalhe. */
-type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'correcoes' | 'notas' | 'diario' | 'execucao' | 'portaria';
+type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'correcoes' | 'notas' | 'diario' | 'execucao';
 
 /** Tela 3: detalhe do contrato com abas. */
 @Component({
   selector: 'app-detalhe-contrato',
   imports: [EsqueletoComponent, 
     RouterLink, AvatarComponent, BotaoCopiarComponent, CabecalhoModuloComponent, HistoricoCampoComponent, LinhaDoTempoComponent, AbaPrevisaoComponent, AbaDocumentosComponent,
-    AbaChecklistsComponent, AbaCorrecoesComponent, AbaFormulariosComponent, AbaNotasComponent, AbaDiarioComponent, AbaExecucaoComponent, AbaPortariaComponent, ...PIPES_FORMATACAO,
+    AbaChecklistsComponent, AbaCorrecoesComponent, AbaFormulariosComponent, AbaNotasComponent, AbaDiarioComponent, AbaExecucaoComponent, PortariasEquipeComponent, ...PIPES_FORMATACAO,
   ],
   templateUrl: './detalhe-contrato.component.html',
 })
@@ -72,7 +72,6 @@ export class DetalheContratoComponent {
     { id: 'notas', rotulo: 'Notas de Empenho' },
     { id: 'diario', rotulo: 'Diário de bordo' },
     { id: 'execucao', rotulo: 'Execução' },
-    { id: 'portaria', rotulo: 'Portarias' },
   ];
   // Estado: aba aberta, contrato, histórico de campos e prorrogações
   protected readonly aba = signal<Aba>('principal');
@@ -150,7 +149,9 @@ export class DetalheContratoComponent {
 
   constructor() {
     // Abre a aba indicada na URL (?aba=...) uma vez
-    const aba = this.rota.snapshot.queryParamMap.get('aba') as Aba | null;
+    // Links antigos (?aba=portaria) caem na aba Equipe, onde a portaria passou a ficar
+    const pedida = this.rota.snapshot.queryParamMap.get('aba');
+    const aba = (pedida === 'portaria' ? 'equipe' : pedida) as Aba | null;
     if (aba && this.abas.some((a) => a.id === aba)) this.aba.set(aba);
     // A cada contrato (inclusive ao navegar ‹ › para outro, pois o Angular reaproveita este componente), recarrega os dados e os vizinhos
     effect(() => {

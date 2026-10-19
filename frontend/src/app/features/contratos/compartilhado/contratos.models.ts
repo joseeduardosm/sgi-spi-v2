@@ -129,6 +129,8 @@ export interface ResumoContrato {
   criador_id: number | null;
   /** Competência mais antiga ainda não concluída (marcadores da carteira); null se não há. */
   competencia_atual: CompetenciaAtualCarteira | null;
+  /** Competências já iniciadas (agosto/2026 em diante): uma linha de marcador `(MM/AAAA - etapa)` cada. */
+  competencias_em_andamento?: CompetenciaAtualCarteira[];
   /** A execução do contrato ainda não foi gerada. */
   sem_competencias: boolean;
   data_inicio: string;
@@ -484,9 +486,9 @@ export interface PlaceholderPortaria {
 /** Modelo global de checklist, formulário ou máscara de portaria (conteúdo conforme o tipo). */
 export interface Modelo {
   id: string;
-  tipo: 'checklist' | 'formulario' | 'portaria' | 'despacho';
+  tipo: 'checklist' | 'formulario' | 'portaria' | 'despacho' | 'email_cadin' | 'email_ob';
   nome: string;
-  conteudo: { html?: string; variante?: VarianteMascara; itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] } & Partial<DefinicaoFormulario>;
+  conteudo: { html?: string; assunto?: string; variante?: VarianteMascara; itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] } & Partial<DefinicaoFormulario>;
   ativo: boolean;
   atualizado_em: string;
 }
@@ -689,9 +691,15 @@ export interface ConsultaCadin {
   pendencia: string;
   texto_notificacao: string;
   certidao: Arquivo;
+  /** Cópia (PDF) do e-mail enviado pelo sistema aos prepostos. */
   email: Arquivo | null;
   criado_por_nome: string;
   criado_em: string;
+  /** Resultado do e-mail da máscara "E-mail de CADIN" (Para: prepostos; Cc: equipe). */
+  email_enviado_em: string | null;
+  email_ok: boolean | null;
+  email_destinatarios: string[];
+  email_erro: string | null;
 }
 
 /** Documento do checklist mensal na competência (etapa 5). */
@@ -792,6 +800,10 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   glosas_periodo: GlosaDoPeriodo[];
   email_medicao: EnvioEmail;
   email_nf: EnvioEmail;
+  /** E-mail aos prepostos avisando que a competência foi paga (enviado ao lançar a OB). */
+  email_ob?: EnvioEmail;
+  /** Pode anexar a OB e reenviar o e-mail de pagamento (quem edita o contrato ou tem a ação "Lançar ordem bancária"). */
+  pode_lancar_ob?: boolean;
   email_retencao: EnvioEmail;
   retencao: { concluida_em: string | null; por_nome: string; discriminacao_conferida: boolean; pdf: Arquivo | null } | null;
   pode_conferir_retencao: boolean;
@@ -1171,7 +1183,9 @@ export interface OcorrenciaDiario {
   registrada_por_nome: string;
   registrada_por_papel: string;
   criado_em: string;
+  /** Competência afetada pela ocorrência (ex.: 09/2026), não necessariamente a da data. */
   competencia_rotulo: string | null;
+  competencia_afetada: string | null;
   medicao_ja_concluida: boolean;
   email: EnvioEmail;
 }
@@ -1182,10 +1196,14 @@ export interface DiarioContrato {
   itens: { id: string; ordem: number; descricao: string; tipo: TipoItem }[];
   /** Itens do formulário de avaliação ativo (vazio sem formulário ativo). */
   itens_avaliacao: { id: string; nome: string; grupo: string }[];
+  /** Competências regulares do contrato (mais recente primeiro) para apontar a afetada. */
+  competencias: { identificador: string; rotulo: string; periodo_inicio: string; periodo_fim: string; medicao_concluida: boolean }[];
 }
 
 export interface GravacaoOcorrencia {
   data_ocorrencia: string;
+  /** `AAAA-MM`; vazio = a competência da data. */
+  competencia_afetada?: string | null;
   descricao: string;
   possui_glosa: boolean;
   glosas: { item_id: string; quantidade: string }[];
@@ -1345,7 +1363,7 @@ export interface VizinhosContrato {
 
 // --- Portaria de designação (docs/endpoints/contratos-portarias.md) ---
 
-export type StatusPortaria = 'aguardando_aceite' | 'devolvida' | 'aceita' | 'publicada' | 'cancelada';
+export type StatusPortaria = 'nomeacao' | 'aguardando_ciencia' | 'aguardando_autoridade' | 'aguardando_aceite' | 'aceita' | 'publicada' | 'cancelada';
 
 export interface AutoridadePortaria {
   id: string;
@@ -1376,18 +1394,28 @@ export interface UsuarioAutoridade {
   departamento: string;
 }
 
-export interface PessoaPortaria {
+/** Função + usuário enviados ao criar ou alterar as nomeações. */
+export interface NomeacaoEntrada {
+  papel: string;
+  usuario_id: number;
+}
+
+export interface NomeacaoPortaria {
   papel: string;
   papel_rotulo: string;
+  usuario_id: number | null;
   nome: string;
-  rs_informado: boolean;
+  /** O que falta no cadastro (RS/PV, RG/CIN, cargo): o RH atualiza. Vazio quando completo. */
+  dados_pendentes: string[];
+  ciente_em: string | null;
 }
 
 export interface Portaria {
   id: string;
   titulo: string;
-  numero: number;
-  exercicio: number;
+  sigla: string;
+  numero: number | null;
+  exercicio: number | null;
   status: StatusPortaria;
   status_rotulo: string;
   motivo: string;
@@ -1397,9 +1425,14 @@ export interface Portaria {
   aceita_por_nome: string | null;
   aceita_em: string | null;
   publicada_em: string | null;
+  numero_protocolo_id: string | null;
   anterior: string | null;
-  equipe: PessoaPortaria[];
+  nomeacoes: NomeacaoPortaria[];
+  /** Texto da portaria (HTML da máscara), depois da escolha da autoridade. */
+  texto_html: string | null;
   pendencias: string[];
+  aviso_reserva: string | null;
+  tem_evidencia: boolean;
   pode_decidir: boolean;
   pode_alterar: boolean;
 }
@@ -1408,4 +1441,31 @@ export interface PainelPortarias {
   portarias: Portaria[];
   autoridades: AutoridadePortaria[];
   em_andamento: boolean;
+  pode_criar: boolean;
+  equipe_vigente: NomeacaoEntrada[];
+}
+
+/** Nomeação aguardando a ciência do usuário logado (modal ao entrar no sistema). */
+export interface CienciaPendente {
+  portaria_id: string;
+  contrato_id: string;
+  contrato: string;
+  papel: string;
+  papel_rotulo: string;
+  nomeado_por: string;
+}
+
+export interface ArquivoPagamento {
+  anexo_id: string;
+  nome: string;
+  tamanho: number;
+}
+
+/** "Pagamento MM/AAAA" em Documentos Importantes: OB/PD e consolidado da competência. */
+export interface PagamentoContrato {
+  competencia_id: string;
+  titulo: string;
+  juntado_em: string;
+  ob: ArquivoPagamento;
+  consolidado: ArquivoPagamento | null;
 }

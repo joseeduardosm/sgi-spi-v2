@@ -12,9 +12,7 @@ Cadastra um contrato (e, se preciso, a empresa e o preposto) a partir da planilh
 5. **confirmar**. O mesmo arquivo é enviado de novo e só então é gravado.
 
 **Autorização (todos os endpoints desta página):**
-- ACL `importacao-contratos` ≥ MODIFICACAO **e** ACL `contratos` ≥ MODIFICACAO. Sem uma delas: `403 acl_negado`.
-- O recurso `importacao-contratos` é criado pela migração `d4f7b2c9e1a3` **fechado**: uma única regra, com CONTROLE_TOTAL para a conta administrativa principal.
-- O SuperRoot libera os demais usuários e setores em **Controle de acesso** (`/admin/acl`) e sempre tem acesso.
+- ACL `contratos` ≥ MODIFICACAO (a importação faz parte de "Editar contratos e conduzir a execução"; não há recurso de ACL separado desde a migração `d7a2f5c8b1e4`). Sem ela: `403 acl_negado`.
 
 ---
 

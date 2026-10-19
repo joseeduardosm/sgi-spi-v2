@@ -70,7 +70,7 @@ Valida login e senha e emite um token JWT de acesso. Com um diretório LDAP ativ
 }
 ```
 
-Só a conta root (login `LOGIN_ADMIN`, padrão `root`) pode ter campos pendentes sem ficar restrita; os SuperRoot também confirmam o perfil todo mês. `conta_root = true` identifica essa conta: o Angular mostra as Notificações (ver [notificações.md](notificacoes-changelog.md)).
+Só a conta root (login `LOGIN_ADMIN`, padrão `root`) e as **contas de integração** (`conta_integracao`) podem ter campos pendentes sem ficar restritas; os SuperRoot também confirmam o perfil todo mês. A conta de integração **não** é `conta_root`. `conta_root = true` identifica essa conta: o Angular mostra as Notificações (ver [notificações.md](notificacoes-changelog.md)).
 
 ### Erros
 
@@ -97,8 +97,43 @@ Use sempre `AutenticacaoService.entrar()`, que grava a sessão e agenda a expira
 Retorna o `UsuarioSessao` do dono do token, com a situação do perfil recalculada. O frontend usa este endpoint para validar a sessão restaurada do navegador.
 
 - **Autorização:** Bearer.
-- **Resposta `200`:** `UsuarioSessao`, ver acima.
+- **Resposta `200`:** `UsuarioSessao`, ver acima. Traz também `perfis` (`[{id, nome}]`, perfis ativos do usuário), `perfil_ativo` (`{id, nome}` ou nulo) e `personificado_por` (`{id, login, nome_completo}` ou nulo; preenchido quando um SuperRoot está personificando).
 - **Erros:** `401` (`nao_autenticado`), com `detalhe` `Não autenticado.`, `Token inválido.`, `Sessão expirada.` ou `Usuário inválido ou inativo.`
+
+---
+
+## `POST /api/autenticacao/perfil-ativo`
+
+Troca o **perfil de acesso ativo** do usuário (só ele vale no cálculo do acesso; ver [acl.md](acl.md#perfis-de-acesso)). Devolve um token novo com o claim `pa`; o Angular guarda a sessão e **recarrega a aplicação em `/`** (zera acessos, atalhos e notificações).
+
+- **Autorização:** Bearer.
+- **Corpo:** `{"perfil_id": 3}`.
+- **Resposta `200`:** `RespostaToken` (como o login), com o `usuario` já no novo perfil.
+- **Erros:** `401` (`nao_autenticado`); `403` (`acesso_negado`) se o perfil não é do usuário ou está inativo.
+- **Auditoria:** `autenticacao.perfil_ativo`.
+
+---
+
+## Personificação de usuário
+
+O **SuperRoot real** pode navegar como outro usuário para testar a atribuição de permissões (como no GLPI). O token passa a ter `sub` = usuário personificado e o claim `imp` = id do SuperRoot; o claim é mantido na renovação do token. O usuário personificado é o que vale para ACL, notificações e dados; o **autor real fica registrado na auditoria** (`personificado_por_id` e o autor gravado como `alvo (por root)`). O front mostra a faixa "Você está personificando…" com o botão **Parar de personificar** e recarrega em `/` ao iniciar e ao parar.
+
+### `POST /api/autenticacao/personificar`
+
+- **Autorização:** SuperRoot real (também aceito com a personificação em curso, para trocar de alvo).
+- **Corpo:** `{"usuario_id": 7}`.
+- **Resposta `200`:** `RespostaToken`; `usuario.personificado_por` identifica o SuperRoot.
+- **Erros:** `403` (`acesso_negado`) para quem não é SuperRoot; `404` se o alvo não existe; `422` (`validacao`) se o alvo está inativo ou é o próprio SuperRoot.
+- **Auditoria:** `autenticacao.personificar`.
+
+### `POST /api/autenticacao/personificar/parar`
+
+Devolve a sessão do SuperRoot.
+
+- **Autorização:** Bearer com personificação em curso.
+- **Resposta `200`:** `RespostaToken` do SuperRoot.
+- **Erros:** `422` (`validacao`) se não há personificação em curso.
+- **Auditoria:** `autenticacao.personificar.parar`.
 
 ---
 

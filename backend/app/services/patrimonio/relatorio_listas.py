@@ -12,6 +12,7 @@ Excel: as mesmas colunas, com a miniatura da última foto na célula, a aba **Fo
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from html import escape
 from io import BytesIO
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from sqlalchemy.orm import Session
 
 from app.models.patrimonio import Baixa, Bem, Classificacao, ItemClassificacao
 from app.models.usuario import Usuario
+from app.services.patrimonio.servico_classificacoes import CATEGORIAS
+from app.services.tarefas.descricao import texto_da_descricao
 from app.services import servico_anexos
 from app.services.documentos.pdf import (
     BORDA, ESTILO_LINK_INDICE, ESTILO_PEQUENO, FUSO_SAO_PAULO, VERMELHO, VERMELHO_SUAVE, DocumentoPdf, EntradaIndice, AlvoLink, contar_paginas,
@@ -119,7 +122,7 @@ def da_classificacao(sessao: Session, lista: Classificacao) -> Relatorio:
     extraviado = lista.tipo == "extraviado"
     nome = "extraviados" if extraviado else "inserviveis"
     itens = [
-        ItemRelatorio(i, item.bem.rotulo, _descricao(item.bem), _sala(item.bem), _fotos(sessao, item.bem), item.justificativa or "", _arquivo(sessao, item.anexo))
+        ItemRelatorio(i, item.bem.rotulo, _descricao(item.bem), _sala(item.bem), _fotos(sessao, item.bem), (f"{CATEGORIAS[item.categoria][0]}: " if item.categoria in CATEGORIAS else "") + texto_da_descricao(item.justificativa or ""), _arquivo(sessao, item.anexo))
         for i, item in enumerate(lista.itens, start=1)
     ]
     campos = [("Situação da lista", STATUS.get(lista.status, lista.status)), ("Solicitante", nome_do_autor(lista.solicitante)), ("Criada em", _quando(lista.criada_em)),
@@ -222,9 +225,18 @@ def _pagina_de_imagem(titulo: str, subtitulo: str, arquivo: Arquivo, autor: str)
     return documento.gerar()
 
 
+def _html_seguro(texto_simples: str) -> str:
+    """Texto da justificativa para um Paragraph do PDF: escapa `<`, `>` e `&` e mantém as quebras de linha."""
+    return escape(texto_simples).replace("\n", "<br/>")
+
+
 def _tabela_relatorio(rel: Relatorio, documento: DocumentoPdf, registro: list, com_anexo: bool, anexos_ok: set[int], fotos_ok: set[int]) -> Table:
+    """Mesmas colunas do Excel, na mesma ordem: Item, Chapa / Série, Descrição, Local, Fotos, Justificativa (ou Motivo/Processo) e Anexo.
+
+    A justificativa pode ter até 2000 caracteres: a coluna é larga e a linha pode continuar na página seguinte (`splitInRow`).
+    """
     cabecalho = ["Item", "Chapa / Série", "Descrição (marca - modelo)", "Local", "Fotos (últimas)", rel.rotulo_justificativa] + (["Anexo"] if com_anexo else [])
-    proporcoes = [0.6, 1.5, 3.2, 2.2, 2.9, 2.6] + ([1.2] if com_anexo else [])
+    proporcoes = [0.6, 1.4, 2.6, 1.8, 2.5, 4.4] + ([1.2] if com_anexo else [])
     util = documento._largura_util()
     larguras = [util * p / sum(proporcoes) for p in proporcoes]
     linhas = [[Paragraph(f"<b>{c}</b>", ESTILO_PEQUENO) for c in cabecalho]]
@@ -241,11 +253,11 @@ def _tabela_relatorio(rel: Relatorio, documento: DocumentoPdf, registro: list, c
         else:
             celula_fotos = [texto("Sem foto", ESTILO_PEQUENO)]
         linha = [texto(str(item.numero)), texto(item.rotulo, ESTILO_PEQUENO), texto(item.descricao, ESTILO_PEQUENO), texto(item.local, ESTILO_PEQUENO), celula_fotos,
-                 texto(item.justificativa or "—", ESTILO_PEQUENO)]
+                 Paragraph(_html_seguro(item.justificativa or "—"), ESTILO_PEQUENO)]
         if com_anexo:
             linha.append(_Link(f"<u>Anexo {item.numero}</u>", ("anexo", item.numero), registro) if item.numero in anexos_ok else texto("—", ESTILO_PEQUENO))
         linhas.append(linha)
-    tabela = Table(linhas, colWidths=larguras, repeatRows=1)
+    tabela = Table(linhas, colWidths=larguras, repeatRows=1, splitInRow=1)
     tabela.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), VERMELHO_SUAVE), ("LINEBELOW", (0, 0), (-1, 0), 0.8, VERMELHO), ("LINEBELOW", (0, 1), (-1, -1), 0.3, BORDA),
         ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),

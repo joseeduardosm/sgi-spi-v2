@@ -67,6 +67,30 @@ export class AutenticacaoService {
     );
   }
 
+  /** Perfil ativo escolhido no menu do usuário: a API devolve um token novo e a sessão é trocada. */
+  trocarPerfil(perfilId: number): Observable<Usuario> {
+    return this.trocarSessao(this.http.post<RespostaToken>(`${ambiente.urlApi}/autenticacao/perfil-ativo`, { perfil_id: perfilId }));
+  }
+
+  /** O SuperRoot passa a navegar como o usuário informado (testar as permissões dele). */
+  personificar(usuarioId: number): Observable<Usuario> {
+    return this.trocarSessao(this.http.post<RespostaToken>(`${ambiente.urlApi}/autenticacao/personificar`, { usuario_id: usuarioId }));
+  }
+
+  /** Encerra a personificação e volta à sessão do SuperRoot. */
+  pararPersonificacao(): Observable<Usuario> {
+    return this.trocarSessao(this.http.post<RespostaToken>(`${ambiente.urlApi}/autenticacao/personificar/parar`, {}));
+  }
+
+  /** Guarda a sessão devolvida por uma troca de perfil/personificação (o mesmo formato do login). */
+  private trocarSessao(requisicao: Observable<RespostaToken>): Observable<Usuario> {
+    return requisicao.pipe(
+      map((resposta) => ({ tokenAcesso: resposta.token_acesso, expiraEm: new Date(resposta.expira_em).getTime(), usuario: resposta.usuario })),
+      tap((sessao) => this.iniciar(sessao)),
+      map((sessao) => sessao.usuario),
+    );
+  }
+
   /** Encerra a sessão local. O JWT é stateless: basta descartá-lo no cliente. */
   sair(motivo: MotivoSaida = 'usuario'): void {
     // Sessão expirada: guarda a tela de onde a pessoa saiu para o login devolvê-la a ela

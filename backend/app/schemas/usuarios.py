@@ -97,6 +97,7 @@ class CriacaoUsuario(BaseModel):
     senha: str = Field(..., min_length=8, max_length=128, description="Senha local, mínimo 8 caracteres.")
     ativo: bool = True
     superusuario: bool = Field(False, description="Administrador do sistema (papel SuperRoot).")
+    conta_integracao: bool = Field(False, description="Conta de integração entre sistemas: dispensada de completar e confirmar o cadastro (só a conta root e estas são).")
     perfil: DadosPerfil = DadosPerfil()
 
 
@@ -105,6 +106,7 @@ class AlteracaoUsuario(BaseModel):
     senha: str | None = Field(None, max_length=128, description="Nova senha local (mín. 8). Vazia ou ausente mantém a atual.")
     ativo: bool
     superusuario: bool
+    conta_integracao: bool | None = Field(None, description="Conta de integração (dispensada da confirmação do cadastro). Ausente mantém o valor atual; só o SuperRoot altera.")
     perfil: DadosPerfil
 
     @field_validator("senha")
@@ -122,6 +124,7 @@ class DetalheUsuario(BaseModel):
     login: str
     ativo: bool
     superusuario: bool
+    conta_integracao: bool = Field(False, description="Conta de integração entre sistemas (dispensada da confirmação do cadastro).")
     origem: str = Field(..., description="`local`, `ldap` ou `local_ldap`.")
     possui_senha_local: bool = Field(..., description="A conta possui senha local utilizável.")
     diretorio_nome: str | None = Field(None, description="Diretório LDAP vinculado.")

@@ -102,10 +102,10 @@ def validar_superior(sessao: Session, usuario_id: int, gestor_id: int | None, ob
 
 
 def superior_obrigatorio(sessao: Session, usuario: Usuario) -> bool:
-    """Só a conta root e quem a CGP marcou como topo da hierarquia estão dispensados (os SuperRoot não)."""
-    from app.services.servico_perfil import dispensado
+    """Só a conta root, as contas de integração e quem a CGP marcou como topo da hierarquia estão dispensados (os SuperRoot não)."""
+    from app.services.servico_perfil import dispensado_da_confirmacao
 
-    if dispensado(usuario):
+    if dispensado_da_confirmacao(usuario):
         return False
     dados = dados_funcionais(sessao, usuario.id)
     return not (dados and dados.sem_superior)
@@ -192,8 +192,17 @@ def revisar_perfil(sessao: Session, usuario: Usuario, dados: DadosPerfil) -> Usu
             f"{_nome(usuario)} alterou os campos: {campos}. As alterações aguardam validação da CGP.",
             chave=f"cadastro:{usuario.id}:{agora_utc():%Y%m%d%H%M%S%f}", categoria="revisao", prioridade="normal",
             link=f"/rh/validacoes?usuario={usuario.id}", evento="rh.cadastro_validacao")
+    _reavaliar_portarias(sessao, usuario.id)
     sessao.commit()
     return usuario
+
+
+def _reavaliar_portarias(sessao: Session, usuario_id: int) -> None:
+    """Dados do RH ou cargo mudaram: portarias de designação que esperavam esse cadastro seguem para a ciência (sem commit)."""
+    from app.services.contratos import servico_portaria
+
+    sessao.flush()
+    servico_portaria.reavaliar_usuario(sessao, usuario_id)
 
 
 def situacao_campos(sessao: Session, usuario: Usuario) -> dict[str, dict]:
@@ -286,6 +295,7 @@ def _aplicar_validacao(sessao: Session, alteracao_id: uuid.UUID, autor: Usuario)
     auditar(sessao, autor.login, "rh.cadastro.validar", usuario.login, autor_id=autor.id, alvo_tipo="usuario", alvo_id=str(usuario.id),
             dados={"campo": alteracao.campo, "valor": alteracao.valor_proposto})
     _encerrar_aviso_se_concluido(sessao, usuario.id)
+    _reavaliar_portarias(sessao, usuario.id)
     return alteracao
 
 
@@ -359,6 +369,7 @@ def salvar_funcionais(sessao: Session, usuario_id: int, dados: dict, autor: Usua
     from app.services.rh.folha_ponto import encerrar_aviso_dados
 
     encerrar_aviso_dados(sessao, registro)
+    _reavaliar_portarias(sessao, usuario_id)
     auditar(sessao, autor.login, "rh.cadastro.funcionais", usuario.login, autor_id=autor.id, alvo_tipo="usuario", alvo_id=str(usuario_id),
             dados={"campos": {c: {"de": antes[c], "para": dados[c]} for c in dados if antes[c] != dados[c]}})
     if commit:

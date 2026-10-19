@@ -40,12 +40,19 @@ def auditar(
     `alvo_tipo`/`alvo_id` identificam o registro de forma estruturada (histórico por campo) e
     `dados` guarda o conteúdo do ato em JSON.
     """
+    # Personificação: quem agiu de fato foi o SuperRoot que está personificando `autor` (guardado na sessão pela dependência de autenticação)
+    # (as ações de iniciar/parar a personificação já são do SuperRoot real e não levam a marca)
+    real = None if acao.startswith("autenticacao.personificar") else sessao.info.get("personificado_por")
+    personificado_por_id = real[0] if real else None
+    if real:
+        autor = f"{autor} (por {real[1]})"
     # Apenas adiciona à sessão: a linha é gravada junto com a operação auditada, no mesmo commit.
     # Se a operação falhar e houver rollback, a auditoria também é descartada (fica coerente).
     sessao.add(
         RegistroAuditoria(
             autor=autor,
             autor_id=autor_id,
+            personificado_por_id=personificado_por_id,
             acao=acao,
             alvo=alvo,
             detalhes=detalhes,

@@ -18,6 +18,9 @@ GarantiaBem = Literal["indefinida", "vigente", "vencida"]
 
 # --- Acesso ----------------------------------------------------------------------------------
 
+CategoriaInservivel = Literal["ocioso", "recuperavel", "antieconomico", "irrecuperavel"]
+
+
 class AcessoPatrimonio(BaseModel):
     usuario_id: int
     pode_operar: bool = Field(..., description="MODIFICACAO ou mais: cadastra bens e solicita movimentações, classificações e baixas.")
@@ -159,6 +162,7 @@ class BemLeitura(BaseModel):
     observacoes: str | None
     criado_por_nome: str | None = Field(None, description="Quem cadastrou o bem (nulo nos importados e nos cadastros de usuário removido).")
     classificacao_pendente: bool
+    categoria_inservivel: CategoriaInservivel | None = Field(None, description="Categoria do bem inservível, definida quando a lista foi aprovada (nula nos demais e nos inservíveis antigos).")
     em_movimentacao: bool
     dados_contabeis_pendentes: bool
     fotos: list[FotoLeitura]
@@ -306,10 +310,30 @@ class ItemClassificacaoLeitura(BaseModel):
     rotulo: str
     descricao: str
     sala_rotulo: str
+    # Informações do bem para pesquisar e selecionar dentro da lista (marca, modelo, grupo, responsável etc.)
+    marca: str | None = None
+    modelo: str | None = None
+    grupo_nome: str | None = None
+    responsavel_nome: str | None = None
+    nota_fiscal: str | None = None
+    fornecedor: str | None = None
+    observacoes: str | None = None
     situacao_anterior: str | None
     justificativa: str | None
+    categoria: CategoriaInservivel | None = None
     anexo_nome: str | None
     resultado: Literal["aprovado", "recusado"] | None
+
+
+class ColaboradorLista(BaseModel):
+    """Pessoa com quem a lista foi compartilhada."""
+    id: int
+    nome: str
+
+
+class GravacaoColaboradores(BaseModel):
+    """Com quem compartilhar a lista (substitui os anteriores; lista vazia deixa de compartilhar)."""
+    usuarios_ids: list[int] = Field(default_factory=list, max_length=50, description="Usuários ativos que passam a poder fazer tudo na lista, como quem a montou.")
 
 
 class ClassificacaoLeitura(BaseModel):
@@ -324,6 +348,7 @@ class ClassificacaoLeitura(BaseModel):
     decidido_por_nome: str | None
     decidido_em: datetime | None
     motivo_recusa: str | None
+    colaboradores: list[ColaboradorLista] = Field(default_factory=list, description="Pessoas com quem a lista foi compartilhada (fazem tudo o que o solicitante faz, inclusive enviar; não podem aprová-la).")
     itens: list[ItemClassificacaoLeitura]
 
 
@@ -339,7 +364,12 @@ class EntradaBem(BaseModel):
 
 class Justificativa(BaseModel):
     itens_ids: list[uuid.UUID] = Field(..., min_length=1, description="Itens marcados; a justificativa vale para todos.")
-    justificativa: str = Field(..., min_length=10, description="Mínimo de 10 caracteres.")
+    categoria: CategoriaInservivel | None = Field(None, description="**Obrigatória na lista de inservíveis** (nula na de extraviados): `ocioso`, `recuperavel`, `antieconomico` ou `irrecuperavel`, a classificação do desfazimento (Decreto 9.373/2018).")
+    justificativa: str = Field(..., min_length=10, max_length=30000, description="HTML do editor rico (sanitizado pela API) ou texto simples. O texto, sem as tags, precisa ter de 10 a 2000 caracteres.")
+
+
+class RemocaoJustificativa(BaseModel):
+    itens_ids: list[uuid.UUID] = Field(..., min_length=1, description="Itens cuja justificativa (e categoria) será apagada.")
 
 
 class Decisao(BaseModel):
@@ -375,6 +405,7 @@ class BaixaLeitura(BaseModel):
     decidido_em: datetime | None
     motivo_recusa: str | None
     tem_termo: bool
+    colaboradores: list[ColaboradorLista] = Field(default_factory=list, description="Pessoas com quem a baixa foi compartilhada (fazem tudo o que o solicitante faz, inclusive enviar; não podem aprová-la).")
     itens: list[ItemBaixaLeitura]
 
 

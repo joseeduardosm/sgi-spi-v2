@@ -139,6 +139,24 @@ def obter_por_chapa(sessao: Session, chapa: str) -> Bem:
     return bem
 
 
+def _busca_da_palavra(sessao: Session, termo: str):
+    """Condição de uma palavra da busca em todas as informações do bem (o local pega a sala e tudo o que está dentro dela: andar, lado, prédio)."""
+    texto = lambda c: func.lower(func.coalesce(c, ""))  # noqa: E731
+    campos = [texto(Bem.chapa), texto(Bem.descricao), texto(Bem.numero_serie), texto(Bem.marca), texto(Bem.modelo), texto(Bem.fornecedor), texto(Bem.nota_fiscal),
+              texto(Bem.uge), texto(Bem.ua), texto(Bem.divisao), texto(Bem.observacoes)]
+    condicao = or_(*[c.like(termo) for c in campos])
+    grupos = select(GrupoMaterial.id).where(or_(texto(GrupoMaterial.nome).like(termo), texto(GrupoMaterial.codigo).like(termo)))
+    responsaveis = select(Usuario.id).where(or_(texto(Usuario.nome_completo).like(termo), texto(Usuario.login).like(termo)))
+    locais = list(sessao.scalars(select(Localizacao.id).where(or_(texto(Localizacao.codigo).like(termo), texto(Localizacao.nome).like(termo))).limit(40)))
+    ids_locais: set = set()
+    for local_id in locais:
+        ids_locais |= set(servico_localizacoes.ids_da_subarvore(sessao, local_id))
+    condicao = or_(condicao, Bem.grupo_id.in_(grupos), Bem.responsavel_id.in_(responsaveis))
+    if ids_locais:
+        condicao = or_(condicao, Bem.localizacao_id.in_(ids_locais))
+    return condicao
+
+
 def _filtros(
     sessao: Session, *, q: str | None, situacao: str | None, localizacao_id: uuid.UUID | None, grupo_id: uuid.UUID | None, conservacao: int | None,
     garantia: str | None, contabeis_pendentes: bool | None, incluir_baixados: bool,
@@ -153,9 +171,10 @@ def _filtros(
     elif not incluir_baixados:
         condicoes.append(Bem.situacao != "baixado")
     if q and q.strip():
-        termo = f"%{q.strip().lower()}%"
-        condicoes.append(or_(func.lower(Bem.chapa).like(termo), func.lower(Bem.descricao).like(termo), func.lower(func.coalesce(Bem.numero_serie, "")).like(termo),
-                             func.lower(func.coalesce(Bem.marca, "")).like(termo), func.lower(func.coalesce(Bem.modelo, "")).like(termo)))
+        # Cada palavra precisa aparecer em algum campo do bem (chapa, série, descrição, marca, modelo, local, grupo, responsável, fornecedor, nota fiscal, UGE/UA/divisão,
+        # observações): "notebook dell 05A01" acha os notebooks Dell daquela sala. Palavras separadas por espaço se somam (E).
+        for palavra in q.strip().lower().split():
+            condicoes.append(_busca_da_palavra(sessao, f"%{palavra}%"))
     if localizacao_id:
         condicoes.append(Bem.localizacao_id.in_(servico_localizacoes.ids_da_subarvore(sessao, localizacao_id)))
     if grupo_id:

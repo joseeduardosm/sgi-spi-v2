@@ -130,14 +130,16 @@ def test_arquivo_que_nao_e_xlsx_e_recusado(cliente, admin):
 
 
 def test_acl_da_importacao_e_modelo(cliente, admin):
-    """Sem a liberação em `importacao-contratos`, o usuário recebe 403 mesmo podendo cadastrar contratos."""
-    fulano, liberado = criar_usuario("fulano"), criar_usuario("liberado")
-    recurso = cliente.post("/api/acl/recursos", json={"nome": "Importação", "slug": "importacao-contratos"}, headers=admin).json()
-    corpo = {"recurso_id": recurso["id"], "nivel": "MODIFICACAO", "usuarios_ids": [liberado], "setores_ids": []}
-    assert cliente.post("/api/acl/regras", json=corpo, headers=admin).status_code == 201
-    r = enviar(cliente, cabecalho(cliente, "fulano"), planilha())
-    assert r.status_code == 403 and r.json()["recurso"] == "importacao-contratos"
-    assert fulano
+    """A importação é parte de `contratos` ≥ MODIFICACAO: quem só consulta recebe 403, quem edita importa."""
+    consulta, liberado = criar_usuario("consulta"), criar_usuario("liberado")
+    recursos = cliente.get("/api/acl/recursos", headers=admin).json()
+    recurso = next((r for r in recursos if r["slug"] == "contratos"), None) or cliente.post(
+        "/api/acl/recursos", json={"nome": "Contratos", "slug": "contratos"}, headers=admin).json()
+    for nivel, quem in (("LEITURA", consulta), ("MODIFICACAO", liberado)):
+        corpo = {"recurso_id": recurso["id"], "nivel": nivel, "usuarios_ids": [quem], "setores_ids": []}
+        assert cliente.post("/api/acl/regras", json=corpo, headers=admin).status_code == 201
+    r = enviar(cliente, cabecalho(cliente, "consulta"), planilha())
+    assert r.status_code == 403 and r.json()["recurso"] == "contratos"
     assert enviar(cliente, cabecalho(cliente, "liberado"), planilha()).status_code == 200
     modelo = cliente.get(f"{URL}/modelo", headers=cabecalho(cliente, "liberado"))
     assert modelo.status_code == 200 and modelo.content[:2] == b"PK"

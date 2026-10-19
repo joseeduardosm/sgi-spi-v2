@@ -47,6 +47,7 @@ Perfil institucional usado na criação e na alteração. Os textos são aparado
 | `login` | string | Login |
 | `ativo` | boolean | Situação da conta |
 | `superusuario` | boolean | Papel SuperRoot |
+| `conta_integracao` | boolean | Conta de integração entre sistemas (ex.: lançar a OB pela API): dispensada de completar e confirmar o cadastro todo mês, mas sem os recursos exclusivos da conta root |
 | `origem` | string | `local`, `ldap` ou `local_ldap` |
 | `possui_senha_local` | boolean | Tem senha local utilizável |
 | `diretorio_nome` | string \| null | Diretório LDAP vinculado |
@@ -106,6 +107,7 @@ Cria **conta local**. Resposta **`201`**: `DetalheUsuario`.
 | `senha` | string | sim | 8 a 128 |
 | `ativo` | boolean | não (`true`) | |
 | `superusuario` | boolean | não (`false`) | Concede o papel SuperRoot |
+| `conta_integracao` | boolean | não (`false`) | Marca a conta como de integração (ver acima) |
 | `perfil` | `DadosPerfil` | não | |
 
 ```json
@@ -123,6 +125,7 @@ Altera situação, papel, perfil e, opcionalmente, a senha local.
 | `senha` | string \| null | não | Nova senha (mín. 8). Vazia/nula mantém a atual |
 | `ativo` | boolean | sim | |
 | `superusuario` | boolean | sim | |
+| `conta_integracao` | boolean | não | Ausente mantém o valor atual; só o SuperRoot altera (`400` para os demais) |
 | `perfil` | `DadosPerfil` | sim | Substitui o perfil inteiro |
 
 Resposta `200`: `DetalheUsuario`. Erros:

@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../../environments/ambiente';
 import { baixarArquivo } from '../../../shared/utilitarios/download';
-import { AutoridadePortaria, GravacaoAutoridade, PainelPortarias, UsuarioAutoridade } from './contratos.models';
+import { AutoridadePortaria, CienciaPendente, GravacaoAutoridade, NomeacaoEntrada, PainelPortarias, UsuarioAutoridade } from './contratos.models';
 
 /** Portarias do contrato e autoridades (docs/endpoints/contratos-portarias.md). */
 @Injectable({ providedIn: 'root' })
@@ -20,12 +20,18 @@ export class PortariasApiService {
     return this.http.get<PainelPortarias>(`${this.base}/${contratoId}/portarias`);
   }
 
-  solicitar(contratoId: string, autoridadeId: string): Observable<PainelPortarias> {
-    return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias`, { autoridade_id: autoridadeId });
+  /** Abre a portaria com as nomeações (função + usuário). */
+  criar(contratoId: string, nomeacoes: NomeacaoEntrada[]): Observable<PainelPortarias> {
+    return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias`, { nomeacoes });
   }
 
-  reenviar(contratoId: string, portariaId: string): Observable<PainelPortarias> {
-    return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/reenviar`, {});
+  alterarNomeacoes(contratoId: string, portariaId: string, nomeacoes: NomeacaoEntrada[]): Observable<PainelPortarias> {
+    return this.http.put<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/nomeacoes`, { nomeacoes });
+  }
+
+  /** Com todos cientes: escolhe a autoridade, gera o texto e reserva o número no Protocolo. */
+  escolherAutoridade(contratoId: string, portariaId: string, autoridadeId: string): Observable<PainelPortarias> {
+    return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/autoridade`, { autoridade_id: autoridadeId });
   }
 
   aceitar(contratoId: string, portariaId: string): Observable<PainelPortarias> {
@@ -40,15 +46,18 @@ export class PortariasApiService {
     return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/cancelamento`, { motivo });
   }
 
-  publicar(contratoId: string, portariaId: string, arquivo: File): Observable<PainelPortarias> {
-    const dados = new FormData();
-    dados.append('arquivo', arquivo);
-    return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/publicacao`, dados);
+  /** Baixa o PDF de evidência (ciências e aceite), para juntar ao SEI. */
+  baixarEvidencia(contratoId: string, portariaId: string) {
+    return baixarArquivo(this.http, `${this.base}/${contratoId}/portarias/${portariaId}/evidencia`, 'evidencia-portaria.pdf');
   }
 
-  /** Baixa a minuta com marca d'água "MINUTA". */
-  baixarMinuta(contratoId: string, portariaId: string, formato: 'docx' | 'pdf') {
-    return baixarArquivo(this.http, `${this.base}/${contratoId}/portarias/${portariaId}/minuta?formato=${formato}`, `minuta.${formato}`);
+  /** Nomeações do usuário logado aguardando a ciência dele. */
+  ciencias(): Observable<CienciaPendente[]> {
+    return this.http.get<CienciaPendente[]>(`${ambiente.urlApi}/portarias/ciencias`);
+  }
+
+  darCiencia(portariaId: string): Observable<CienciaPendente[]> {
+    return this.http.post<CienciaPendente[]>(`${ambiente.urlApi}/portarias/${portariaId}/ciencia`, {});
   }
 
   autoridades(): Observable<AutoridadePortaria[]> {

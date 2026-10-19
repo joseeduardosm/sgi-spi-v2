@@ -97,13 +97,17 @@ def pode_enviar_setores(sessao: Session, usuario: Usuario) -> bool:
     return resolver_acesso(sessao, usuario, RECURSO_SETORES) == NivelAcl.CONTROLE_TOTAL
 
 
-def _publicar(sessao: Session, notificacao: Notificacao, destinatarios: list[Usuario], *, evento: str) -> list[EntregaNotificacao]:
+def _publicar(sessao: Session, notificacao: Notificacao, destinatarios: list[Usuario], *, evento: str, forcar_email: bool = False) -> list[EntregaNotificacao]:
     """Cria uma entrega (com a fotografia do texto e os canais escolhidos por cada destinatário) e agenda o despacho depois do commit."""
     notificacao.evento = evento
     notificacao.id = notificacao.id or uuid.uuid4()
     canais = preferencias.canais_por_destinatario(
         sessao, [u.id for u in destinatarios], evento, contrato_id=notificacao.contrato_id, tarefa_id=notificacao.tarefa_id, agora=notificacao.publicada_em,
     )
+    if forcar_email:
+        # Aviso institucional que sai por e-mail para todos, sem depender da preferência (ex.: parabéns de aniversário)
+        for c in canais.values():
+            c.email, c.email_resumo = True, False
     entregas = [
         EntregaNotificacao(
             id=uuid.uuid4(), destinatario_id=u.id, assunto_copia=notificacao.assunto, corpo_copia=notificacao.corpo, entregue_em=notificacao.publicada_em,
@@ -145,13 +149,13 @@ def enviar_avulsa(sessao: Session, dados: DadosEnvio, autor: Usuario) -> Notific
 def notificar(
     sessao: Session, destinatarios_ids: list[int], assunto: str, corpo: str, *, chave: str, categoria: str = "comunicado",
     prioridade: str = "normal", link: str | None = None, contrato_id: uuid.UUID | None = None, tarefa_id: uuid.UUID | None = None,
-    abrir_em_janela: bool = False, autor: Usuario | None = None, evento: str,
+    abrir_em_janela: bool = False, autor: Usuario | None = None, evento: str, forcar_email: bool = False,
 ) -> Notificacao | None:
     """Aviso automático (sem commit: grava junto com a operação que o originou).
 
     Não repete a `chave` para quem já recebeu e não avisa o próprio autor da ação (exceto janelas).
     `evento` é obrigatório e precisa existir no catálogo (`catalogo.EVENTOS`): é por ele que cada pessoa escolhe os canais (e-mail, navegador,
-    desktop). A caixa recebe sempre. Devolve a notificação criada, ou None se ninguém precisar receber.
+    desktop). A caixa recebe sempre. `forcar_email=True` faz o e-mail sair para todos os destinatários, sem depender da preferência (só para avisos institucionais, como o parabéns). Devolve a notificação criada, ou None se ninguém precisar receber.
     """
     if evento not in EVENTOS:
         raise ErroNotificacao(f"Evento de notificação desconhecido: {evento!r}. Cadastre-o em notificacoes/catalogo.py.", 500, "evento_desconhecido")
@@ -176,7 +180,7 @@ def notificar(
         autor_id=None, autor_nome="Sistema", publicada_em=agora_utc(), link=link, origem="automatica",
         chave=chave, contrato_id=contrato_id, tarefa_id=tarefa_id, abrir_em_janela=abrir_em_janela,
     )
-    _publicar(sessao, mensagem, destinatarios, evento=evento)
+    _publicar(sessao, mensagem, destinatarios, evento=evento, forcar_email=forcar_email)
     return mensagem
 
 

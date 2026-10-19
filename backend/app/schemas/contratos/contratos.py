@@ -198,7 +198,8 @@ class ResumoContrato(BaseModel):
     situacao: Situacao
     base_mensal: ValorMonetario = Field(..., description="Soma dos subtotais mensais dos itens contínuos.")
     valor_global: ValorMonetario = Field(..., description="Valor da vigência atual (ou o valor reajustado).")
-    competencia_atual: CompetenciaAtualCarteira | None = Field(None, description="Competência mais antiga ainda não concluída (regular ou diferença de reajuste, depois do corte de cobrança); `null` se não há.")
+    competencia_atual: CompetenciaAtualCarteira | None = Field(None, description="Competência mais antiga ainda não concluída (regular ou diferença de reajuste, de agosto/2026 em diante); `null` se não há.")
+    competencias_em_andamento: list[CompetenciaAtualCarteira] = Field(default_factory=list, description="Todas as competências já iniciadas (medição iniciada ou etapa além da medição; de agosto/2026 em diante), da mais antiga à mais nova: cada uma é uma linha de marcador `(MM/AAAA - etapa)` na carteira.")
     sem_competencias: bool = Field(False, description="A execução do contrato ainda não foi gerada (nenhuma competência).")
 
 
@@ -275,6 +276,22 @@ class LeituraDocumento(BaseModel):
     tamanho: int | None = Field(None, description="Bytes.")
     enviado_em: datetime | None
     enviado_por_nome: str | None
+
+
+class ArquivoPagamento(BaseModel):
+    """Arquivo de um pagamento (OB/PD ou consolidado)."""
+    anexo_id: uuid.UUID
+    nome: str
+    tamanho: int
+
+
+class LeituraPagamento(BaseModel):
+    """Um pagamento em "Documentos Importantes": o documento consolidado da competência e a OB/PD juntada na última etapa."""
+    competencia_id: uuid.UUID
+    titulo: str = Field(..., description="`Pagamento MM/AAAA` (mês da competência).")
+    juntado_em: datetime = Field(..., description="Data em que a OB/PD foi juntada.")
+    consolidado: ArquivoPagamento | None = Field(None, description="Documento consolidado da competência; ausente em competências antigas sem consolidado gerado.")
+    ob: ArquivoPagamento
 
 
 class AlteracaoCampo(BaseModel):

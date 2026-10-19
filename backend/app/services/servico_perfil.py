@@ -84,6 +84,15 @@ def dispensado(usuario: Usuario) -> bool:
     return usuario.login.strip().lower() == obter_configuracao().login_admin.strip().lower()
 
 
+def dispensado_da_confirmacao(usuario: Usuario) -> bool:
+    """Não precisa completar nem confirmar o cadastro: a conta root e as **contas de integração** (`conta_integracao`).
+
+    Diferente de `dispensado`, que identifica só a conta root e libera os recursos exclusivos dela (Notificações do sistema, migração...): a conta
+    de integração é dispensada apenas da confirmação do cadastro.
+    """
+    return dispensado(usuario) or bool(usuario.conta_integracao)
+
+
 def perfil_restrito(usuario: Usuario) -> bool:
-    """Perfil incompleto ou confirmação do mês pendente: só pode atualizar o próprio perfil (exceto a conta root)."""
-    return not dispensado(usuario) and (bool(campos_pendentes(usuario)) or revisao_vencida(usuario))
+    """Perfil incompleto ou confirmação do mês pendente: só pode atualizar o próprio perfil (exceto a conta root e as contas de integração)."""
+    return not dispensado_da_confirmacao(usuario) and (bool(campos_pendentes(usuario)) or revisao_vencida(usuario))

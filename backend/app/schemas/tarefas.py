@@ -234,7 +234,7 @@ class MudancaPrazo(BaseModel):
 class Movimento(BaseModel):
     acao: AcaoPipeline
     estagio_id: uuid.UUID | None = Field(None, description="Estágio (coluna) de destino, da categoria da nova situação; vazio = o primeiro estágio dela.")
-    texto: str = Field("", max_length=4000, description="Comentário da entrega; motivo obrigatório para devolver e reabrir.")
+    texto: str = Field("", max_length=20000, description="Comentário da entrega; motivo obrigatório para devolver e reabrir. Na devolução é HTML do editor rico (sanitizado pela API) ou texto simples; nas demais ações, texto simples (até 4000 caracteres).")
     versao: int | None = None
 
 

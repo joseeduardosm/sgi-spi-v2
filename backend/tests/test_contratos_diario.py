@@ -136,6 +136,50 @@ def test_ocorrencia_em_rich_text_e_sanitizada_e_vira_texto_nos_pdfs(cliente, adm
     assert "descoberto" in texto and "<strong>" not in texto and "<ul>" not in texto
 
 
+def test_pdf_do_diario_tem_uma_pagina_por_dia_com_ocorrencia(cliente, admin, cenario):
+    """Diário de verdade: um dia = uma página com todas as ocorrências dele; dias sem ocorrência não geram página; texto enorme não quebra."""
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    contrato, gestora, _ = cenario
+    _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-01-10", descricao="Primeira do dia dez.")
+    _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-01-10", descricao="Segunda do dia dez.")
+    _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-01-20", descricao="Única do dia vinte.")
+    gigante = _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-01-25", descricao="palavra longa de relato. " * 700)
+    assert gigante.status_code == 201, gigante.text
+    pdf = cliente.get(_url(contrato, "/diario/pdf"), params={"inicio": "2026-01-01", "fim": "2026-01-31"}, headers=gestora).content
+    paginas = [p.extract_text() for p in PdfReader(BytesIO(pdf)).pages]
+    assert "Sábado, 10 de janeiro de 2026" in paginas[0] and "Primeira do dia dez" in paginas[0] and "Segunda do dia dez" in paginas[0]
+    assert "Terça-feira, 20 de janeiro de 2026" in paginas[1] and "Única do dia vinte" in paginas[1] and "Primeira" not in paginas[1]
+    assert not any("Dia 11" in p or "11 de janeiro" in p for p in paginas)
+    assert "Domingo, 25 de janeiro de 2026" in paginas[2] and len(paginas) > 3
+
+
+def test_pdf_do_diario_junta_os_anexos_no_fim_numa_lista(cliente, admin, cenario):
+    """Anexos das ocorrências: lista de anexos no fim, e cada arquivo vem com folha de rosto (PDF como está, imagem como página, TXT só na folha)."""
+    import base64
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    from tests.apoio_contratos import PDF
+
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+    contrato, gestora, _ = cenario
+    arquivos = [("foto-posto.png", png, "image/png"), ("laudo.pdf", PDF, "application/pdf"), ("nota.txt", b"texto simples", "text/plain")]
+    r = _ocorrencia(cliente, contrato, gestora, arquivos=arquivos, data_ocorrencia="2026-01-12")
+    assert r.status_code == 201, r.text
+    pdf = cliente.get(_url(contrato, "/diario/pdf"), params={"inicio": "2026-01-01", "fim": "2026-01-31"}, headers=gestora).content
+    paginas = [p.extract_text() for p in PdfReader(BytesIO(pdf)).pages]
+    lista = next(i for i, t in enumerate(paginas) if "Lista de anexos (3)" in t)
+    assert all(nome in paginas[lista] for nome in ("foto-posto.png", "laudo.pdf", "nota.txt"))
+    # Diário (1 dia + lista) e depois: folha de rosto + imagem, folha de rosto + PDF, folha de rosto do TXT
+    assert len(paginas) == lista + 1 + (2 + 2 + 1)
+    assert "Anexo 1 de 3" in paginas[lista + 1] and "Anexo 3 de 3" in paginas[-1] and "não é exibido dentro do PDF" in paginas[-1]
+    assert "Página 1 de" in paginas[0]
+
+
 def test_pdf_do_diario(cliente, admin, cenario):
     """O diário em PDF sai com o nome padronizado."""
     contrato, gestora, _ = cenario
@@ -177,6 +221,28 @@ def test_glosas_do_periodo_limitam_a_medicao(cliente, admin, cenario):
     _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-01-20", possui_glosa=True, glosas=[{"item_id": limpeza, "quantidade": "0.25"}])
     r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas, "enviar_email": True}, headers=gestora)
     assert r.status_code == 400 and "saldo líquido" in r.json()["detalhe"]
+
+
+def test_competencia_afetada_pode_ser_diferente_da_data_da_ocorrencia(cliente, admin, cenario):
+    """Ocorrência de 03/02 que afeta a competência 01/2026: a glosa vale em janeiro (não em fevereiro) e o diário mostra a competência afetada."""
+    contrato, gestora, fiscal = cenario
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    limpeza = _itens(contrato)["Limpeza"]
+    diario = cliente.get(_url(contrato, "/diario"), headers=gestora).json()
+    assert {"identificador": "2026-01", "rotulo": "01/2026"}.items() <= next(c for c in diario["competencias"] if c["identificador"] == "2026-01").items()
+    # Competência inexistente é recusada
+    assert _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-02-03", competencia_afetada="2031-05").status_code == 400
+    r = _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-02-03", competencia_afetada="2026-01", possui_glosa=True, glosas=[{"item_id": limpeza, "quantidade": "0.5"}])
+    assert r.status_code == 201, r.text
+    assert (r.json()["competencia_afetada"], r.json()["competencia_rotulo"]) == ("2026-01", "01/2026")
+    # Sem informar, vale a competência da data
+    assert _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-02-04").json()["competencia_afetada"] == "2026-02"
+    janeiro = _competencia(cliente, contrato, gestora, "2026-01")
+    fevereiro = _competencia(cliente, contrato, gestora, "2026-02")
+    assert [g["quantidade"] for g in janeiro["glosas_periodo"]] == ["0.5000"] and fevereiro["glosas_periodo"] == []
+    linha = next(i for i in janeiro["itens"] if i["descricao"] == "Limpeza")
+    assert linha["glosas"] == "0.5000"
 
 
 def test_medicao_concluida_envia_memoria_e_diario_pedindo_nf_em_48h(cliente, admin, cenario):

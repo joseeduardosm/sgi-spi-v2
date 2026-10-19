@@ -2,7 +2,7 @@
 // Este arquivo serve para montar os marcadores (chips) da competência atual e das etapas abertas de cada contrato na carteira.
 
 import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
-import { ResumoContrato } from '../compartilhado/contratos.models';
+import { CompetenciaAtualCarteira, ResumoContrato } from '../compartilhado/contratos.models';
 
 /** Marcador exibido na carteira; `cor` é o índice da paleta de etiquetas de Tarefas (`classeMarcador`). */
 export interface MarcadorCompetencia {
@@ -27,25 +27,37 @@ const COR_ETAPA: Record<string, number> = {
 };
 
 /**
- * Marcadores do contrato na carteira: a competência atual, a(s) etapa(s) aberta(s) e o alerta de atraso.
- * Sem execução gerada: "Sem competências"; tudo concluído: "Em dia".
+ * Marcadores do contrato na carteira, **uma linha por competência**.
+ * - Com competências já iniciadas (em andamento): uma linha `(MM/AAAA - etapa)` para cada uma (etapas abertas juntas separadas por " + "), mais "Atrasada" na linha da atrasada.
+ * - Sem nenhuma iniciada: a competência atual (disponível ou pendente), "Em dia" ou "Sem competências".
  */
-export function marcadoresCompetencia(c: Pick<ResumoContrato, 'id' | 'sem_competencias' | 'competencia_atual'>): MarcadorCompetencia[] {
-  if (c.sem_competencias) return [{ texto: 'Sem competências', cor: COR_CINZA, titulo: 'A execução do contrato ainda não foi gerada' }];
-  const atual = c.competencia_atual;
-  if (!atual) return [{ texto: 'Em dia', cor: COR_VERDE, titulo: 'Nenhuma competência em aberto' }];
-  const rota = ['/contratos', c.id, 'execucao', atual.identificador];
-  const marcadores: MarcadorCompetencia[] = [{ texto: atual.rotulo, cor: COR_AZUL, titulo: `Competência ${atual.rotulo}: abrir a execução`, rota }];
-  if (atual.situacao === 'pendente') {
-    marcadores.push({ texto: 'Medição · Pendente', cor: COR_CINZA, titulo: 'O período da competência ainda não terminou', rota });
-  } else if (atual.situacao === 'disponivel') {
-    marcadores.push({ texto: 'Medição · Disponível', cor: COR_AMARELO, titulo: 'Liberada para medição; a medição ainda não foi iniciada', rota });
-  } else {
-    for (const etapa of atual.etapas) {
-      const rotulo = (ROTULOS_ETAPA as Record<string, string>)[etapa] ?? etapa;
-      marcadores.push({ texto: rotulo, cor: COR_ETAPA[etapa] ?? COR_AZUL, titulo: `Etapa aberta: ${rotulo}`, rota });
-    }
+export function marcadoresCompetencia(
+  c: Pick<ResumoContrato, 'id' | 'sem_competencias' | 'competencia_atual'> & { competencias_em_andamento?: CompetenciaAtualCarteira[] },
+): MarcadorCompetencia[][] {
+  if (c.sem_competencias) return [[{ texto: 'Sem competências', cor: COR_CINZA, titulo: 'A execução do contrato ainda não foi gerada' }]];
+  const rotaDe = (identificador: string) => ['/contratos', c.id, 'execucao', identificador];
+  const andamento = c.competencias_em_andamento ?? [];
+  if (andamento.length) {
+    return andamento.map((comp) => {
+      const rota = rotaDe(comp.identificador);
+      const etapas = comp.etapas.map((e) => (ROTULOS_ETAPA as Record<string, string>)[e] ?? e);
+      const linha: MarcadorCompetencia[] = [{
+        texto: `${comp.rotulo} · ${etapas.join(' + ')}`, cor: COR_ETAPA[comp.etapas[0]] ?? COR_AZUL,
+        titulo: `Competência ${comp.rotulo}, etapa em andamento: ${etapas.join(' + ')}. Abrir a execução`, rota,
+      }];
+      if (comp.atrasada) linha.push({ texto: 'Atrasada', cor: COR_VERMELHO, titulo: 'Medição não concluída há mais de 30 dias do fim do período', rota });
+      return linha;
+    });
   }
-  if (atual.atrasada) marcadores.push({ texto: 'Atrasada', cor: COR_VERMELHO, titulo: 'Medição não concluída há mais de 30 dias do fim do período', rota });
-  return marcadores;
+  const atual = c.competencia_atual;
+  if (!atual) return [[{ texto: 'Em dia', cor: COR_VERDE, titulo: 'Nenhuma competência em aberto' }]];
+  const rota = rotaDe(atual.identificador);
+  const linha: MarcadorCompetencia[] = [{ texto: atual.rotulo, cor: COR_AZUL, titulo: `Competência ${atual.rotulo}: abrir a execução`, rota }];
+  if (atual.situacao === 'pendente') {
+    linha.push({ texto: 'Medição · Pendente', cor: COR_CINZA, titulo: 'O período da competência ainda não terminou', rota });
+  } else if (atual.situacao === 'disponivel') {
+    linha.push({ texto: 'Medição · Disponível', cor: COR_AMARELO, titulo: 'Liberada para medição; a medição ainda não foi iniciada', rota });
+  }
+  if (atual.atrasada) linha.push({ texto: 'Atrasada', cor: COR_VERMELHO, titulo: 'Medição não concluída há mais de 30 dias do fim do período', rota });
+  return [linha];
 }

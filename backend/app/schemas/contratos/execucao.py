@@ -155,11 +155,12 @@ class LeituraFormulario(BaseModel):
 
 class GravacaoModelo(BaseModel):
     """Corpo para criar ou alterar um modelo global. O conteúdo exigido depende do `tipo`."""
-    tipo: Literal["checklist", "formulario", "portaria", "despacho"]
+    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob"]
     nome: TextoObrigatorio = Field(..., max_length=300)
     itens: list[GravacaoDocumentoChecklist] | None = Field(None, description="Obrigatório para `checklist`.")
     definicao: DefinicaoFormulario | None = Field(None, description="Obrigatório para `formulario`.")
-    html: str | None = Field(None, description="Obrigatório para `portaria` e `despacho`: máscara em HTML com os placeholders permitidos (`#nomegestor`...).")
+    html: str | None = Field(None, description="Obrigatório para `portaria`, `despacho`, `email_cadin` e `email_ob`: máscara em HTML com os placeholders permitidos (`#nomegestor`...).")
+    assunto: str | None = Field(None, max_length=300, description="Obrigatório para `email_cadin` e `email_ob`: assunto do e-mail (aceita os mesmos placeholders).")
     variante: Literal["com_anterior", "sem_anterior"] | None = Field(None, description="Obrigatório para `portaria`: máscara usada com ou sem portaria anterior do contrato.")
     ativo: bool = True
 
@@ -174,6 +175,10 @@ class GravacaoModelo(BaseModel):
             raise ValueError("o modelo de portaria precisa do texto e da variante (com ou sem portaria anterior)")
         if self.tipo == "despacho" and not (self.html or "").strip():
             raise ValueError("o modelo de despacho precisa do texto")
+        if self.tipo == "email_cadin" and (not (self.html or "").strip() or not (self.assunto or "").strip()):
+            raise ValueError("o modelo de e-mail de CADIN precisa do assunto e do texto")
+        if self.tipo == "email_ob" and (not (self.html or "").strip() or not (self.assunto or "").strip()):
+            raise ValueError("o modelo de e-mail de pagamento precisa do assunto e do texto")
         return self
 
 
@@ -429,9 +434,13 @@ class LeituraConsultaCadin(BaseModel):
     pendencia: str
     texto_notificacao: str
     certidao: LeituraArquivo
-    email: LeituraArquivo | None
+    email: LeituraArquivo | None = Field(None, description="Cópia (PDF) do e-mail enviado pelo sistema aos prepostos; vai ao consolidado.")
     criado_por_nome: str
     criado_em: datetime
+    email_enviado_em: datetime | None = Field(None, description="Quando o sistema tentou enviar o e-mail (nulo: ainda não tentou, ou consulta sem pendência).")
+    email_ok: bool | None = Field(None, description="Resultado do envio (nulo: sem tentativa).")
+    email_destinatarios: list[str] = Field(default_factory=list, description="Para (prepostos) e Cc (equipe) do último envio.")
+    email_erro: str | None = Field(None, description="Motivo da falha (sem máscara ativa, sem preposto com e-mail, SMTP).")
 
 
 class SugestaoOutroContrato(BaseModel):
@@ -527,6 +536,7 @@ class DetalheCompetencia(ResumoCompetencia):
     adicional_anexo: LeituraArquivo | None = Field(None, description="Anexo opcional da justificativa da medição adicional.")
     etapas: list[Etapa] = Field(..., description="Etapas desta competência, em ordem (sem `avaliacao` se não houver formulário).")
     pode_editar: bool
+    pode_lancar_ob: bool = Field(False, description="O usuário pode anexar a Ordem Bancária e reenviar o e-mail de pagamento: quem pode editar o contrato ou tem a ação \"Lançar ordem bancária\" no perfil.")
     integra_equipe: bool = Field(..., description="O usuário pode registrar ciência.")
     pode_gerar_consolidado_novamente: bool = Field(
         ..., description="O usuário pode substituir o consolidado já gerado (todos que podem editar o contrato)."
@@ -561,6 +571,7 @@ class DetalheCompetencia(ResumoCompetencia):
     glosas_periodo: list[GlosaDoPeriodo] = Field(default_factory=list, description="Glosas do diário de bordo que valem nesta competência.")
     email_medicao: EmailMedicao = Field(default_factory=EmailMedicao, description="Resultado do e-mail da medição concluída.")
     email_nf: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail ao Financeiro (cópia à equipe) com a NF juntada.")
+    email_ob: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail aos prepostos avisando que a competência foi paga (enviado ao lançar a Ordem Bancária, pela máscara \"E-mail de pagamento\").")
     email_retencao: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail à equipe com as retenções conferidas.")
     retencao: LeituraRetencao | None = Field(None, description="Conferência da retenção de tributos, se feita.")
     pode_conferir_retencao: bool = Field(False, description="O usuário pode fazer a etapa de retenção (Financeiro, equipe ou SuperRoot).")

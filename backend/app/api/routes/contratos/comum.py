@@ -53,6 +53,21 @@ def pode_modificar(
     return _exige_modificacao(usuario=usuario, sessao=sessao)
 controle_total = exigir_acl(RECURSO, NivelAcl.CONTROLE_TOTAL)
 
+
+def pode_lancar_ob(
+    request: Request, usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)
+) -> Usuario:
+    """Quem pode anexar a OB: quem já edita o contrato (`pode_modificar`) **ou** quem tem a ação própria "Lançar ordem bancária" no perfil ativo.
+
+    A ação própria vale em qualquer contrato e **só** para a OB (não dá nenhum outro poder sobre o contrato).
+    """
+    from app.services import servico_acl
+    from app.services.acl_acoes import ACAO_LANCAR_OB
+
+    if servico_acl.tem_acao_no_perfil(sessao, usuario, RECURSO, ACAO_LANCAR_OB):
+        return usuario
+    return pode_modificar(request=request, usuario=usuario, sessao=sessao)
+
 # Documentação do 403: além da ACL, o serviço confere se o usuário tem vínculo com o contrato
 SEM_VINCULO = {
     status.HTTP_403_FORBIDDEN: {

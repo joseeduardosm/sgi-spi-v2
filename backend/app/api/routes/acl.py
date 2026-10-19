@@ -17,10 +17,15 @@ from sqlalchemy.orm import Session
 from app.api.dependencias import exigir_papeis, obter_usuario_atual
 from app.api.respostas import CONFLITO, INVALIDO, RESPOSTAS_AUTENTICADAS, erro_regra, nao_encontrado, resposta_nao_encontrado
 from app.core.banco import obter_sessao
+from app.models.acl import NivelAcl
 from app.models.usuario import Papel, Usuario
-from app.schemas.acl import AcessoEfetivo, GravacaoRecurso, GravacaoRegra, LeituraRecurso, LeituraRegra
+from app.schemas.acl import (
+    AcessoEfetivo, DetalhePerfil, GravacaoAcoesModulo, GravacaoPerfil, GravacaoPerfisDoUsuario, GravacaoRecurso, GravacaoRegra,
+    GravacaoSetoresPerfil, GravacaoUsuariosPerfil, LeituraPerfil, LeituraRecurso, LeituraRegra, PerfilDoUsuario,
+)
 from app.services import servico_acl
 from app.services import servico_admin_acl as servico
+from app.services import servico_perfis_acl as perfis
 from app.services.acl_niveis import textos_do_recurso
 from app.services.servico_admin_acl import AclNaoEncontrado, ErroRegraAcl
 
@@ -29,18 +34,26 @@ roteador = APIRouter(prefix="/acl", tags=["Controle de acesso (ACL)"], responses
 super_root = exigir_papeis(Papel.SUPER_ROOT)
 
 
-def _efetivos(sessao: Session, usuario: Usuario, somente_concedidos: bool) -> list[AcessoEfetivo]:
+def _efetivos(sessao: Session, usuario: Usuario, somente_concedidos: bool, perfil_id: int | None = None) -> list[AcessoEfetivo]:
     """Nível efetivo do usuário em cada recurso ativo.
 
     Com `somente_concedidos`, omite os recursos em que o usuário não tem acesso (o frontend só
     precisa saber o que mostrar); sem ele, lista todos (`nivel` nulo = sem acesso), para a
     consulta do SuperRoot.
     """
-    return [
-        AcessoEfetivo(recurso_id=r.id, nome=r.nome, slug=r.slug, url_base=r.url_base, nivel=nivel, niveis=textos_do_recurso(r.slug))
-        for r, nivel in servico_acl.acessos_efetivos(sessao, usuario)
-        if nivel is not None or not somente_concedidos
-    ]
+    detalhes = servico_acl.acessos_detalhados(sessao, usuario, perfil_id)
+    ativo = perfil_id if perfil_id is not None else servico_acl.perfil_ativo_id(sessao, usuario)
+    do_perfil = servico_acl.acoes_do_perfil(sessao, ativo) if ativo is not None and not usuario.superusuario else {}
+    resposta = []
+    for r, nivel, origens in detalhes:
+        marcadas = do_perfil.get(r.id, set())
+        acoes = [a for a in NivelAcl.TODOS if a in marcadas] + sorted(a for a in marcadas if a not in NivelAcl.TODOS)
+        # Para a interface, uma ação marcada já mostra o módulo (a rota confere a ação exata); ações próprias não contam como nível
+        mostrado = max([nivel, *[a for a in acoes if a in NivelAcl.TODOS]], key=NivelAcl.posicao) if acoes else nivel
+        if mostrado is not None or not somente_concedidos:
+            resposta.append(AcessoEfetivo(recurso_id=r.id, nome=r.nome, slug=r.slug, url_base=r.url_base, nivel=mostrado,
+                                          niveis=textos_do_recurso(r.slug), origens=origens, acoes=acoes))
+    return resposta
 
 
 @roteador.get(
@@ -58,15 +71,20 @@ def listar_meus_acessos(sessao: Session = Depends(obter_sessao), usuario: Usuari
     "/efetivo/{usuario_id}",
     response_model=list[AcessoEfetivo],
     summary="Acesso efetivo de um usuário",
-    description="Nível efetivo do usuário em cada recurso ativo (`nivel` nulo = sem acesso). Restrito ao SuperRoot.",
+    description="Nível efetivo do usuário em cada recurso ativo (`nivel` nulo = sem acesso), com a origem de cada nível (`origens`: perfil, setor, direta). Restrito ao SuperRoot.",
     responses=resposta_nao_encontrado("Usuário"),
 )
-def consultar_acesso_efetivo(usuario_id: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(super_root)) -> list[AcessoEfetivo]:
+def consultar_acesso_efetivo(
+    usuario_id: int,
+    perfil_id: int | None = Query(None, description="Simula este perfil como o ativo (padrão: o perfil padrão do usuário)."),
+    sessao: Session = Depends(obter_sessao),
+    _: Usuario = Depends(super_root),
+) -> list[AcessoEfetivo]:
     """Ferramenta de conferência do SuperRoot: o que um usuário específico consegue acessar."""
     usuario = sessao.get(Usuario, usuario_id)
     if usuario is None:
         raise nao_encontrado("Usuário")
-    return _efetivos(sessao, usuario, somente_concedidos=False)
+    return _efetivos(sessao, usuario, somente_concedidos=False, perfil_id=perfil_id)
 
 
 # --- Recursos -------------------------------------------------------------------
@@ -191,3 +209,118 @@ def excluir_regra(regra_id: int, sessao: Session = Depends(obter_sessao), autor:
     except AclNaoEncontrado:
         raise nao_encontrado("Regra")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Perfis ---------------------------------------------------------------------
+
+def _perfil_ou_erro(acao, sessao: Session):
+    """Executa `acao` convertendo os erros de regra e de não encontrado em respostas HTTP."""
+    try:
+        return acao()
+    except AclNaoEncontrado:
+        raise nao_encontrado("Perfil")
+    except ErroRegraAcl as erro:
+        sessao.rollback()
+        raise erro_regra(str(erro), erro.conflito)
+
+
+@roteador.get("/perfis", response_model=list[LeituraPerfil], summary="Listar perfis", description="Perfis de acesso com a quantidade de usuários e de módulos liberados. Restrito ao SuperRoot.")
+def listar_perfis(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(super_root)) -> list[LeituraPerfil]:
+    return perfis.listar(sessao)
+
+
+@roteador.post(
+    "/perfis", response_model=DetalhePerfil, status_code=status.HTTP_201_CREATED, summary="Cadastrar perfil",
+    description="Nome único (sem diferenciar maiúsculas). Nasce sem direitos e sem usuários. Restrito ao SuperRoot.", responses={**CONFLITO, **INVALIDO},
+)
+def criar_perfil(dados: GravacaoPerfil, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalhePerfil:
+    perfil = _perfil_ou_erro(lambda: perfis.gravar(sessao, dados, autor), sessao)
+    return perfis.detalhar(sessao, perfil.id)
+
+
+@roteador.get("/perfis/{perfil_id}", response_model=DetalhePerfil, summary="Detalhar perfil", description="Perfil com a matriz de direitos e os usuários. Restrito ao SuperRoot.", responses=resposta_nao_encontrado("Perfil"))
+def detalhar_perfil(perfil_id: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(super_root)) -> DetalhePerfil:
+    return _perfil_ou_erro(lambda: perfis.detalhar(sessao, perfil_id), sessao)
+
+
+@roteador.put(
+    "/perfis/{perfil_id}", response_model=DetalhePerfil, summary="Alterar perfil", description="Nome, descrição e ativo. Perfil inativo não vale para ninguém. Restrito ao SuperRoot.",
+    responses={**resposta_nao_encontrado("Perfil"), **CONFLITO, **INVALIDO},
+)
+def alterar_perfil(perfil_id: int, dados: GravacaoPerfil, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalhePerfil:
+    _perfil_ou_erro(lambda: perfis.gravar(sessao, dados, autor, perfil_id), sessao)
+    return perfis.detalhar(sessao, perfil_id)
+
+
+@roteador.delete(
+    "/perfis/{perfil_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Excluir perfil",
+    description="Só exclui perfil sem usuários (409 se estiver em uso; desative-o ou retire os usuários). Restrito ao SuperRoot.",
+    responses={**resposta_nao_encontrado("Perfil"), **CONFLITO},
+)
+def excluir_perfil(perfil_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> Response:
+    _perfil_ou_erro(lambda: perfis.excluir(sessao, perfil_id, autor), sessao)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@roteador.put(
+    "/perfis/{perfil_id}/modulos/{recurso_id}", response_model=DetalhePerfil, summary="Definir ações de um módulo no perfil",
+    description="Adiciona o módulo ao perfil ou troca as ações dele. As ações são **independentes** (marcar uma não marca as outras) e precisam estar em "
+                "`acoes` do recurso (`GET /acl/recursos`). Atenção: um módulo hoje aberto a todos passa a ser restrito a quem estiver contemplado. Restrito ao SuperRoot.",
+    responses={**resposta_nao_encontrado("Perfil"), **INVALIDO},
+)
+def definir_acoes_modulo_perfil(perfil_id: int, recurso_id: int, dados: GravacaoAcoesModulo, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalhePerfil:
+    _perfil_ou_erro(lambda: perfis.definir_acoes_do_modulo(sessao, perfil_id, recurso_id, list(dados.acoes), autor), sessao)
+    return perfis.detalhar(sessao, perfil_id)
+
+
+@roteador.delete(
+    "/perfis/{perfil_id}/modulos/{recurso_id}", response_model=DetalhePerfil, summary="Remover módulo do perfil",
+    description="Tira o módulo (todas as ações) do perfil. Restrito ao SuperRoot.", responses=resposta_nao_encontrado("Perfil ou módulo"),
+)
+def remover_modulo_perfil(perfil_id: int, recurso_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalhePerfil:
+    _perfil_ou_erro(lambda: perfis.remover_modulo(sessao, perfil_id, recurso_id, autor), sessao)
+    return perfis.detalhar(sessao, perfil_id)
+
+
+@roteador.put(
+    "/perfis/{perfil_id}/usuarios", response_model=DetalhePerfil, summary="Definir usuários do perfil",
+    description="Substitui os usuários que têm o perfil. Quem não tinha outro perfil passa a tê-lo como padrão. Restrito ao SuperRoot.",
+    responses={**resposta_nao_encontrado("Perfil"), **INVALIDO},
+)
+def definir_usuarios_perfil(perfil_id: int, dados: GravacaoUsuariosPerfil, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalhePerfil:
+    _perfil_ou_erro(lambda: perfis.definir_usuarios(sessao, perfil_id, dados.usuarios_ids, autor), sessao)
+    return perfis.detalhar(sessao, perfil_id)
+
+
+@roteador.put(
+    "/perfis/{perfil_id}/setores", response_model=DetalhePerfil, summary="Definir setores e grupos do perfil",
+    description="Substitui os setores e grupos sistêmicos que recebem o perfil: quem é membro deles (setor ativo) passa a ter o perfil, além dos usuários atribuídos diretamente. "
+                "A API guarda exatamente os ids enviados (a tela marca os filhos junto com o pai, mas cada setor segue independente). Restrito ao SuperRoot.",
+    responses={**resposta_nao_encontrado("Perfil"), **INVALIDO},
+)
+def definir_setores_perfil(perfil_id: int, dados: GravacaoSetoresPerfil, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> DetalhePerfil:
+    _perfil_ou_erro(lambda: perfis.definir_setores(sessao, perfil_id, dados.setores_ids, autor), sessao)
+    return perfis.detalhar(sessao, perfil_id)
+
+
+@roteador.get("/usuarios/{usuario_id}/perfis", response_model=list[PerfilDoUsuario], summary="Perfis de um usuário", description="Perfis atribuídos diretamente (`direto`, com o padrão) e os que ele recebe pelos setores/grupos (`via_setores`, só leitura). Restrito ao SuperRoot.", responses=resposta_nao_encontrado("Usuário"))
+def perfis_do_usuario(usuario_id: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(super_root)) -> list[PerfilDoUsuario]:
+    try:
+        return perfis.perfis_do_usuario(sessao, usuario_id)
+    except AclNaoEncontrado:
+        raise nao_encontrado("Usuário")
+
+
+@roteador.put(
+    "/usuarios/{usuario_id}/perfis", response_model=list[PerfilDoUsuario], summary="Definir perfis de um usuário",
+    description="Substitui os perfis do usuário e define o padrão (`padrao_id`; sem ele vale o atual ou o primeiro). Restrito ao SuperRoot.",
+    responses={**resposta_nao_encontrado("Usuário"), **INVALIDO},
+)
+def definir_perfis_do_usuario(usuario_id: int, dados: GravacaoPerfisDoUsuario, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(super_root)) -> list[PerfilDoUsuario]:
+    try:
+        return perfis.definir_perfis_do_usuario(sessao, usuario_id, dados, autor)
+    except AclNaoEncontrado:
+        raise nao_encontrado("Usuário")
+    except ErroRegraAcl as erro:
+        sessao.rollback()
+        raise erro_regra(str(erro), erro.conflito)

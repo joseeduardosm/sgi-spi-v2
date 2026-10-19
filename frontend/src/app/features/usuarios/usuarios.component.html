@@ -38,7 +38,7 @@
   }
 
   <div class="tabela-gestao-envoltorio">
-    <table class="tabela-gestao">
+    <table class="tabela-gestao tabela-usuarios">
       <thead>
         <tr>
           <th>Usuário</th>
@@ -52,7 +52,7 @@
       </thead>
       <tbody>
         @for (u of itens(); track u.id) {
-          <tr>
+          <tr class="linha-clicavel" tabindex="0" (click)="abrirLinha($event, u)" (keydown.enter)="abrirLinha($event, u)">
             <td>
               <strong>{{ u.perfil.nome_completo || u.login }}</strong>
               <small>&#64;{{ u.login }}{{ u.superusuario ? ' · SuperRoot' : '' }}</small>

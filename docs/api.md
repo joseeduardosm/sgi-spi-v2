@@ -67,7 +67,7 @@ Navegador
 | `diretorio_favoritos`, `diretorio_parabens` | Módulo Diretório: contatos favoritos por usuário e mural de parabéns (foto e opt-out de aniversário ficam em colunas de `usuarios`) |
 | `notificacoes_envios_changelog` | Notificações: e-mails de changelog enviados pela conta root (texto, destino, até que data do CHANGELOG e resultado) |
 | `setores`, `membros_setor` | Setores e seus membros |
-| `acl_recursos`, `acl_regras`, `acl_regras_usuarios`, `acl_regras_setores` | Controle de acesso |
+| `acl_recursos`, `acl_regras`, `acl_regras_usuarios`, `acl_regras_setores`, `acl_perfis`, `acl_perfis_direitos`, `usuarios_perfis` | Controle de acesso (regras e perfis) |
 | `auditoria` | Registro das operações. `alvo_tipo`/`alvo_id` identificam o registro alterado e `dados` (JSONB) guarda o conteúdo do ato; nas alterações, `{"campos": {"campo": {"de", "para"}}}` alimenta o histórico por campo |
 | `contratos_empresas`, `contratos_empresas_prepostos` | Empresas contratadas e prepostos |
 | `contratos`, `contratos_itens`, `contratos_equipe`, `contratos_documentos` | Contrato, itens financeiros, designações da equipe (com início e fim) e documentos importantes |
@@ -80,7 +80,7 @@ Navegador
 | `contratos_reajustes`, `contratos_reajustes_itens`, `contratos_reajustes_memorias` | Reajustes e memórias versionadas |
 | `contratos_abatimentos_reajuste` | Crédito de desconto de reajuste retroativo abatido no valor autorizado das competências (`competencia_id` nulo = pendente) |
 | `contratos_alteracoes`, `contratos_alteracoes_itens`, `contratos_alteracoes_ciencias` | Aditamentos e supressões |
-| `portarias_autoridades`, `contratos_portarias` | Autoridades signatárias e portarias de designação (texto congelado, número do Protocolo, aceite e publicação) |
+| `portarias_autoridades`, `contratos_portarias`, `contratos_portarias_nomeacoes` | Autoridades signatárias, portarias de designação (texto congelado, número do Protocolo, aceite e publicação) e as nomeações com a ciência de cada nomeado |
 | `anexos` | Metadados dos PDFs enviados ou gerados (nome original, chave em disco, SHA-256, tamanho, categoria, autor e `contrato_id` quando pertence a um contrato — usado para descartar os arquivos ao excluir o contrato). O arquivo fica em `ANEXOS_DIRETORIO/AAAA/MM/<uuid>.pdf` |
 
 ## URL base
@@ -136,6 +136,9 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` `POST` `PUT` `DELETE` | `/api/atalhos[/…]` | Bearer (leitura); ACL `atalhos` ≥ MODIFICACAO (gestão) | Atalhos fixos da barra lateral, por categoria (CRUD) | [atalhos.md](endpoints/atalhos.md) |
 | `GET` | `/api/contratos/{contrato_id}/vizinhos` | LEITURA | Contrato anterior e próximo na lista (carteira) | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `PUT` | `/api/autenticacao/tema` | Bearer (1) | Salva meu tema da interface (claro, escuro ou automático) | [autenticacao.md](endpoints/autenticacao.md#put-apiautenticacaotema) |
+| `POST` | `/api/autenticacao/perfil-ativo` | Bearer | Troca o perfil de acesso ativo (token novo) | [autenticacao.md](endpoints/autenticacao.md#post-apiautenticacaoperfil-ativo) |
+| `POST` | `/api/autenticacao/personificar` | SuperRoot | Navega como outro usuário (token novo) | [autenticacao.md](endpoints/autenticacao.md#personificação-de-usuário) |
+| `POST` | `/api/autenticacao/personificar/parar` | Bearer | Encerra a personificação | [autenticacao.md](endpoints/autenticacao.md#personificação-de-usuário) |
 | `GET` | `/api/autenticacao/perfil` | Bearer (1) | Meu perfil institucional | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaoperfil) |
 | `PUT` | `/api/autenticacao/perfil` | Bearer (1) | Atualiza e revalida meu perfil | [autenticacao.md](endpoints/autenticacao.md#put-apiautenticacaoperfil) |
 | `GET` | `/api/autenticacao/perfil/opcoes-departamento` | Bearer (1) | Setores para o combobox Departamento | [autenticacao.md](endpoints/autenticacao.md#get-apiautenticacaoperfilopcoes-departamento) |
@@ -157,6 +160,12 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `PUT` `DELETE` | `/api/acl/recursos/{recurso_id}` | SuperRoot | Altera / exclui recurso | [acl.md](endpoints/acl.md#recursos) |
 | `GET` `POST` | `/api/acl/regras` | SuperRoot | Lista / cria regras | [acl.md](endpoints/acl.md#regras) |
 | `PUT` `DELETE` | `/api/acl/regras/{regra_id}` | SuperRoot | Altera / exclui regra | [acl.md](endpoints/acl.md#regras) |
+| `GET` `POST` | `/api/acl/perfis` | SuperRoot | Lista / cadastra perfis de acesso | [acl.md](endpoints/acl.md#perfis-de-acesso) |
+| `GET` `PUT` `DELETE` | `/api/acl/perfis/{perfil_id}` | SuperRoot | Detalha / altera / exclui perfil | [acl.md](endpoints/acl.md#perfis-de-acesso) |
+| `PUT` `DELETE` | `/api/acl/perfis/{perfil_id}/modulos/{recurso_id}` | SuperRoot | Adiciona/edita (ações independentes) ou remove um módulo do perfil | [acl.md](endpoints/acl.md#perfis-de-acesso) |
+| `PUT` | `/api/acl/perfis/{perfil_id}/usuarios` | SuperRoot | Substitui os usuários do perfil | [acl.md](endpoints/acl.md#perfis-de-acesso) |
+| `PUT` | `/api/acl/perfis/{perfil_id}/setores` | SuperRoot | Substitui os setores/grupos que recebem o perfil | [acl.md](endpoints/acl.md#perfis-de-acesso) |
+| `GET` `PUT` | `/api/acl/usuarios/{usuario_id}/perfis` | SuperRoot | Perfis de um usuário e o padrão | [acl.md](endpoints/acl.md#perfis-de-acesso) |
 | `GET` `POST` | `/api/ldap/diretorios` | SuperRoot | Lista / cadastra diretórios | [ldap.md](endpoints/ldap.md) |
 | `POST` | `/api/ldap/diretorios/testar` | SuperRoot | Testa configuração sem salvar | [ldap.md](endpoints/ldap.md#post-apildapdiretoriostestar) |
 | `GET` `PUT` `DELETE` | `/api/ldap/diretorios/{diretorio_id}` | SuperRoot | Consulta / altera / exclui diretório | [ldap.md](endpoints/ldap.md) |
@@ -236,6 +245,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` `POST` | `/api/contratos/{contrato_id}/diario` | LEITURA / edição do contrato | Diário de bordo: lista / registra ocorrência (e-mail à equipe e ao preposto) | [contratos-diario.md](endpoints/contratos-diario.md) |
 | `POST` | `/api/contratos/{contrato_id}/diario/{ocorrencia_id}/reenviar` | Edição do contrato | Reenvia o e-mail da ocorrência | [contratos-diario.md](endpoints/contratos-diario.md) |
 | `GET` | `/api/contratos/{contrato_id}/diario/{ocorrencia_id}/anexos/{anexo_id}` | LEITURA | Baixa um anexo da ocorrência | [contratos-diario.md](endpoints/contratos-diario.md) |
+| `GET` `PUT` `DELETE` | `/api/contratos/{contrato_id}/rascunhos/{tipo}` | LEITURA / edição do contrato | Rascunho compartilhado do diário, da avaliação e da medição (botão Salvar rascunho) | [contratos-rascunhos.md](endpoints/contratos-rascunhos.md) |
 | `GET` | `/api/contratos/{contrato_id}/diario/pdf` | LEITURA | Diário de bordo em PDF | [contratos-diario.md](endpoints/contratos-diario.md) |
 | `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-medicao` | Edição do contrato | Reenvia o e-mail da medição concluída | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-avaliacao` | Edição do contrato | Reenvia o relatório de avaliação à contratada | [contratos-execucao.md](endpoints/contratos-execucao.md) |
@@ -244,13 +254,13 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `POST` | `/api/contratos/{contrato_id}/competencias/{competencia_id}/reenviar-email-retencao` | Financeiro, equipe ou SuperRoot | Reenvia o e-mail da retenção à equipe | [contratos-execucao.md](endpoints/contratos-execucao.md) |
 | `POST` | `/api/contratos/migracao-sgi/rascunho` | Conta root | Lê um contrato no SGI e devolve o rascunho do cadastro (nada é gravado) | [contratos-migracao-sgi.md](endpoints/contratos-migracao-sgi.md) |
 | `GET` `POST` | `/api/contratos/migracao-sgi` | SuperRoot | Importação completa dos contratos do SGI SPI (estado / iniciar; sem uso na tela) | [contratos-migracao-sgi.md](endpoints/contratos-migracao-sgi.md) |
-| `POST` | `/api/contratos/importacao-xlsx/previa` | ACL `importacao-contratos` e `contratos` ≥ MODIFICACAO | Prévia da importação de contrato por planilha XLSX | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
-| `POST` | `/api/contratos/importacao-xlsx` | ACL `importacao-contratos` e `contratos` ≥ MODIFICACAO | Importa o contrato da planilha | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
-| `GET` | `/api/contratos/importacao-xlsx/modelo` | ACL `importacao-contratos` e `contratos` ≥ MODIFICACAO | Baixa a planilha modelo | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
-| `GET` `POST` | `/api/contratos/{contrato_id}/{recurso}/importacao-xlsx/{modelo|previa}` | ACL `importacao-modelos`, `contratos` ≥ MODIFICACAO e poder editar o contrato | Modelo e prévia da importação de checklist (`checklists`) ou formulário (`formularios`) por XLSX | [contratos-importacao-modelos-xlsx.md](endpoints/contratos-importacao-modelos-xlsx.md) |
+| `POST` | `/api/contratos/importacao-xlsx/previa` | `contratos` ≥ MODIFICACAO | Prévia da importação de contrato por planilha XLSX | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
+| `POST` | `/api/contratos/importacao-xlsx` | `contratos` ≥ MODIFICACAO | Importa o contrato da planilha | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
+| `GET` | `/api/contratos/importacao-xlsx/modelo` | `contratos` ≥ MODIFICACAO | Baixa a planilha modelo | [contratos-importacao-xlsx.md](endpoints/contratos-importacao-xlsx.md) |
+| `GET` `POST` | `/api/contratos/{contrato_id}/{recurso}/importacao-xlsx/{modelo|previa}` | `contratos` ≥ MODIFICACAO e poder editar o contrato | Modelo e prévia da importação de checklist (`checklists`) ou formulário (`formularios`) por XLSX | [contratos-importacao-modelos-xlsx.md](endpoints/contratos-importacao-modelos-xlsx.md) |
 | `POST` | `/api/contratos/{contrato_id}/checklists/importacao-xlsx` | idem | Cria versão inativa do checklist a partir da planilha | [contratos-importacao-modelos-xlsx.md](endpoints/contratos-importacao-modelos-xlsx.md) |
 | `POST` | `/api/contratos/{contrato_id}/formularios/importacao-xlsx` | idem | Cria versão inativa do formulário de avaliação a partir da planilha | [contratos-importacao-modelos-xlsx.md](endpoints/contratos-importacao-modelos-xlsx.md) |
-| `GET` `POST` | `/api/contratos/modelos/importacao-xlsx/{tipo}[/modelo|/previa]` | ACL `importacao-modelos` e SuperRoot | Modelo, prévia e criação de modelo global (checklist/formulário) por XLSX | [contratos-importacao-modelos-xlsx.md](endpoints/contratos-importacao-modelos-xlsx.md) |
+| `GET` `POST` | `/api/contratos/modelos/importacao-xlsx/{tipo}[/modelo|/previa]` | SuperRoot | Modelo, prévia e criação de modelo global (checklist/formulário) por XLSX | [contratos-importacao-modelos-xlsx.md](endpoints/contratos-importacao-modelos-xlsx.md) |
 | `GET` | `/api/contratos/{contrato_id}/exportacao-xlsx` | ACL `contratos` ≥ LEITURA | Baixa o contrato em XLSX, já preenchido, no formato da importação | [contratos-exportacao-xlsx.md](endpoints/contratos-exportacao-xlsx.md) |
 | `GET` | `/api/contratos/{contrato_id}/checklists/{checklist_id}/xlsx` | ACL `contratos` ≥ LEITURA | Baixa uma versão do checklist em XLSX | [contratos-exportacao-xlsx.md](endpoints/contratos-exportacao-xlsx.md) |
 | `GET` | `/api/contratos/{contrato_id}/formularios/{formulario_id}/xlsx` | ACL `contratos` ≥ LEITURA | Baixa uma versão do formulário de avaliação em XLSX | [contratos-exportacao-xlsx.md](endpoints/contratos-exportacao-xlsx.md) |
@@ -264,7 +274,8 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | vários | `/api/contratos/{contrato_id}/prorrogacao*`, `/prorrogacoes/*` | LEITURA / pode editar (2) | Prorrogação | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#prorrogação) |
 | vários | `/api/contratos/{contrato_id}/reajustes/*` | LEITURA / pode editar (2) | Reajuste | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#reajuste) |
 | vários | `/api/contratos/{contrato_id}/alteracoes/*` | LEITURA / pode editar (2) | Aditamento e supressão | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#aditamento--supressão) |
-| vários | `/api/contratos/{contrato_id}/portarias*`, `/api/portarias/autoridades*` | LEITURA / pode editar (2) / autoridade signatária / CONTROLE_TOTAL (autoridades) | Portaria de designação de gestão e fiscalização, com número reservado no Protocolo | [contratos-portarias.md](endpoints/contratos-portarias.md) |
+| vários | `/api/contratos/{contrato_id}/portarias*`, `/api/portarias/ciencias`, `/api/portarias/{portaria_id}/ciencia`, `/api/portarias/autoridades*` | LEITURA / equipe ou CONTROLE_TOTAL (criar) / autoridade signatária / nomeado (ciência) / CONTROLE_TOTAL (autoridades) | Portaria de designação (nomeações, ciência, autoridade, aceite; publicada pelo Protocolo), único caminho para mudar a equipe | [contratos-portarias.md](endpoints/contratos-portarias.md) |
+| `GET` | `/api/contratos/{contrato_id}/pagamentos` | LEITURA | "Pagamento MM/AAAA" em Documentos Importantes: consolidado e OB/PD da competência, com a data da juntada | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 (1) Funciona mesmo com o perfil institucional pendente. Todos os demais endpoints autenticados exigem perfil em dia, exceto para o SuperRoot.
 
 (2) **Pode editar** o contrato: ACL `contratos` ≥ MODIFICACAO **e** ser SuperRoot, ter **controle total** em Contratos (qualquer contrato), criador do contrato ou integrante vigente da equipe (gestor, fiscais e suplentes). Sem vínculo: `403 acesso_negado`.

@@ -127,7 +127,7 @@ class ModeloGlobal(Base):
 
     __tablename__ = "contratos_modelos"
     # Tipos aceitos; `portaria` guarda a máscara do texto da portaria de designação ({"html", "variante"}); `despacho`, a do despacho de pagamento do consolidado ({"html"})
-    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria', 'despacho')", name="ck_contratos_modelos_tipo"),)
+    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria', 'despacho', 'email_cadin', 'email_ob')", name="ck_contratos_modelos_tipo"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     tipo: Mapped[str] = mapped_column(String(20), index=True)
@@ -220,6 +220,11 @@ class Competencia(Base):
     email_retencao_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list, server_default=text("'[]'"))
     email_retencao_erro: Mapped[str | None] = mapped_column(Text)
     # E-mail à equipe e ao preposto ao concluir a medição (memória + diário do período; pede a NF em 48 h)
+    # E-mail aos prepostos avisando que a competência foi paga (máscara "E-mail de pagamento", enviado ao lançar a OB)
+    email_ob_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_ob_ok: Mapped[bool | None] = mapped_column(Boolean)
+    email_ob_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list, server_default=text("'[]'"))
+    email_ob_erro: Mapped[str | None] = mapped_column(Text)
     email_medicao_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_medicao_ok: Mapped[bool | None] = mapped_column(Boolean)
     email_medicao_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list, server_default=text("'[]'"))
@@ -408,12 +413,18 @@ class ConsultaCadin(Base):
     possui_pendencia: Mapped[bool] = mapped_column(Boolean)
     pendencia: Mapped[str] = mapped_column(String(2000), default="")
     texto_notificacao: Mapped[str] = mapped_column(String(2500), default="")
-    # Certidão consultada (obrigatória) e o e-mail de notificação (só com pendência)
+    # Certidão consultada (obrigatória) e a cópia (PDF) do e-mail de notificação enviado pelo sistema (só com pendência; nas consultas antigas,
+    # o PDF que a pessoa anexava)
     certidao_anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     email_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criado_por_nome: Mapped[str] = mapped_column(String(250))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+    # Envio do e-mail da máscara "E-mail de CADIN" (Para: prepostos; Cc: equipe do contrato), no padrão dos demais e-mails da competência
+    email_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_ok: Mapped[bool | None] = mapped_column(Boolean)
+    email_destinatarios: Mapped[list[str] | None] = mapped_column(TipoJson)
+    email_erro: Mapped[str | None] = mapped_column(Text)
 
     competencia: Mapped[Competencia] = relationship(back_populates="consultas_cadin")
     certidao_anexo: Mapped[Anexo] = relationship(foreign_keys=[certidao_anexo_id])

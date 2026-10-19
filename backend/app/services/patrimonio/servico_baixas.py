@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.banco import agora_utc, hoje_sao_paulo
 from app.models.patrimonio import Baixa, Bem, EventoPatrimonio, ItemBaixa
 from app.models.usuario import Usuario
+from app.models.patrimonio import ColaboradorBaixa
 from app.services import servico_anexos
 from app.services.patrimonio.numeracao import proximo_numero_relacao
 from app.services.documentos.pdf import DocumentoPdf
@@ -25,7 +26,7 @@ from app.services.patrimonio.base import ErroPatrimonio, avisar, exigir_outra_pe
 
 MOTIVOS = {"alienacao": "Alienação", "doacao": "Doação", "transferencia": "Transferência", "inutilizacao": "Inutilização", "extravio": "Extravio"}
 CARGA = (selectinload(Baixa.itens).selectinload(ItemBaixa.bem).selectinload(Bem.localizacao), selectinload(Baixa.itens).selectinload(ItemBaixa.bem).selectinload(Bem.grupo),
-         selectinload(Baixa.solicitante), selectinload(Baixa.decidido_por))
+         selectinload(Baixa.solicitante), selectinload(Baixa.decidido_por), selectinload(Baixa.colaboradores))
 
 
 def obter(sessao: Session, baixa_id: uuid.UUID) -> Baixa:
@@ -40,7 +41,8 @@ def listar(sessao: Session, *, status: str | None = None, solicitante_id: int | 
     if status:
         consulta = consulta.where(Baixa.status == status)
     if solicitante_id:
-        consulta = consulta.where(Baixa.solicitante_id == solicitante_id)
+        # "Minhas baixas": as que a pessoa montou e as compartilhadas com ela
+        consulta = consulta.where((Baixa.solicitante_id == solicitante_id) | Baixa.colaboradores.any(ColaboradorBaixa.usuario_id == solicitante_id))
     return list(sessao.scalars(consulta))
 
 
@@ -58,8 +60,36 @@ def criar(sessao: Session, autor: Usuario, *, id_cliente: str | None = None) -> 
 def _editavel(baixa: Baixa, autor: Usuario) -> None:
     if baixa.status != "rascunho":
         raise ErroPatrimonio("A baixa já foi enviada: não pode mais ser alterada.", 409, "conflito")
+    # Quem montou e quem recebeu a baixa compartilhada têm os mesmos poderes sobre ela
+    if baixa.solicitante_id != autor.id and autor.id not in baixa.colaboradores_ids:
+        raise ErroPatrimonio("Só quem montou a baixa, ou quem recebeu a baixa compartilhada, a altera.", 403, "acl_negado")
+
+
+def definir_colaboradores(sessao: Session, baixa_id: uuid.UUID, usuarios_ids: list[int], autor: Usuario) -> Baixa:
+    """Compartilha a baixa (em rascunho) com as pessoas indicadas, substituindo as anteriores; só quem a montou decide com quem compartilha.
+
+    Quem recebe faz tudo o que o solicitante faz, inclusive enviá-la para aprovação. Por isso não pode, depois, aprová-la.
+    """
+    baixa = obter(sessao, baixa_id)
+    if baixa.status != "rascunho":
+        raise ErroPatrimonio("A baixa já foi enviada: não é mais possível compartilhá-la.", 409, "conflito")
     if baixa.solicitante_id != autor.id:
-        raise ErroPatrimonio("Só quem montou a baixa a altera.", 403, "acl_negado")
+        raise ErroPatrimonio("Só quem montou a baixa escolhe com quem compartilhá-la.", 403, "acl_negado")
+    novos = set(usuarios_ids) - {autor.id}
+    if novos and set(sessao.scalars(select(Usuario.id).where(Usuario.id.in_(novos), Usuario.ativo.is_(True)))) != novos:
+        raise ErroPatrimonio("Há usuário inexistente ou inativo na lista de colaboradores.")
+    antigos = baixa.colaboradores_ids
+    for colaborador in [c for c in baixa.colaboradores if c.usuario_id not in novos]:
+        baixa.colaboradores.remove(colaborador)
+    for usuario_id in novos - antigos:
+        baixa.colaboradores.append(ColaboradorBaixa(baixa_id=baixa.id, usuario_id=usuario_id))
+    sessao.flush()
+    if novos - antigos:
+        avisar(sessao, sorted(novos - antigos), f"Baixa #{baixa.numero} compartilhada com você",
+               f"{autor.nome_completo or autor.login} compartilhou a baixa #{baixa.numero}: você pode incluir bens, definir motivo e processo e enviar, como ele.",
+               f"patrimonio-bx-colab-{baixa.id}", autor, f"/patrimonio/baixas/{baixa.id}", evento="patrimonio.classificacao_compartilhada")
+    sessao.commit()
+    return obter(sessao, baixa.id)
 
 
 def adicionar_bem(sessao: Session, baixa_id: uuid.UUID, autor: Usuario, *, bem_id: uuid.UUID | None = None, chapa: str | None = None) -> Baixa:
@@ -170,6 +200,8 @@ def decidir(sessao: Session, baixa_id: uuid.UUID, aprovados_ids: list[uuid.UUID]
     if baixa.status != "pendente":
         raise ErroPatrimonio("A baixa não está pendente.", 409, "conflito")
     exigir_outra_pessoa(autor, baixa.solicitante_id)
+    if autor.id in baixa.colaboradores_ids:
+        raise ErroPatrimonio("Quem recebeu a baixa compartilhada não pode aprová-la ou recusá-la.", 403, "auto_aprovacao")
     aprovados = set(aprovados_ids)
     recusados = [i for i in baixa.itens if i.id not in aprovados]
     if recusados and not (motivo_recusa and motivo_recusa.strip()):
@@ -193,6 +225,6 @@ def decidir(sessao: Session, baixa_id: uuid.UUID, aprovados_ids: list[uuid.UUID]
         anexo = servico_anexos.guardar_pdf_gerado(sessao, gerar_termo(sessao, baixa, autor), f"termo-baixa-{hoje_sao_paulo():%Y%m%d}.pdf", "patrimonio-termo-baixa", autor.id)
         sessao.flush()
         baixa.termo_anexo_id = anexo.id
-    avisar(sessao, [baixa.solicitante_id] if baixa.solicitante_id else [], "Baixa decidida", f"Resultado: {baixa.status}.", f"patrimonio-bx-dec-{baixa.id}", autor, f"/patrimonio/baixas/{baixa.id}", evento="patrimonio.baixa_decidida")
+    avisar(sessao, sorted(({baixa.solicitante_id} - {None}) | baixa.colaboradores_ids), "Baixa decidida", f"Resultado: {baixa.status}.", f"patrimonio-bx-dec-{baixa.id}", autor, f"/patrimonio/baixas/{baixa.id}", evento="patrimonio.baixa_decidida")
     sessao.commit()
     return obter(sessao, baixa.id)

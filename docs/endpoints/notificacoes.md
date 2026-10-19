@@ -168,6 +168,8 @@ Cada linha é um evento que a pessoa pode ligar por e-mail, navegador e desktop 
 | Contratos | `contratos.medicao_atrasada` | Medição atrasada | A equipe do contrato recebe quando a medição de uma competência está atrasada. |
 | Contratos | `contratos.correcao_itens` | Correção de itens do contrato | A equipe do contrato recebe quando uma correção de itens é proposta, aplicada ou recusada. |
 | Contratos | `contratos.portaria` | Portaria de designação | Você recebe quando uma portaria de designação precisa do seu aceite ou muda de situação. |
+| Contratos | `contratos.portaria_nomeacao` | Nomeação em portaria (ciência) | Você recebe quando é indicado em uma portaria de designação e precisa dar ciência. |
+| Contratos | `contratos.portaria_dados_rh` | Dados do RH pendentes para uma nomeação | O RH (CGP) recebe quando alguém indicado em uma portaria está com RS/PV, RG/CIN ou cargo em branco. |
 | Tarefas | `tarefas.atribuida` | Tarefa atribuída a você | Você recebe quando uma tarefa é criada para você, quando entra como responsável ou quando ela é transferida a você. |
 | Tarefas | `tarefas.prazo_alterado` | Prazo alterado | Os envolvidos recebem quando o prazo de uma tarefa muda. |
 | Tarefas | `tarefas.aguardando_validacao` | Aguardando sua validação | Quem valida recebe quando uma entrega aguarda validação, e de novo quando ela fica parada. |
@@ -216,7 +218,8 @@ Cada linha é um evento que a pessoa pode ligar por e-mail, navegador e desktop 
 | Patrimônio | `patrimonio.movimentacao_pendente` | Movimentação aguardando autorização | Quem administra o Patrimônio recebe quando uma movimentação é solicitada. |
 | Patrimônio | `patrimonio.movimentacao_decidida` | Movimentação autorizada, recusada ou concluída | Quem solicitou recebe a decisão e a conclusão da movimentação. |
 | Patrimônio | `patrimonio.classificacao_pendente` | Classificação aguardando aprovação | Quem administra o Patrimônio recebe quando uma lista de inservíveis ou extraviados é enviada. |
-| Patrimônio | `patrimonio.classificacao_decidida` | Classificação decidida | Quem enviou a lista recebe a decisão. |
+| Patrimônio | `patrimonio.classificacao_decidida` | Classificação decidida | Quem enviou a lista (e quem colaborou nela) recebe a decisão. |
+| Patrimônio | `patrimonio.classificacao_compartilhada` | Lista compartilhada com você | Você recebe quando alguém compartilha uma lista de inservíveis ou extraviados para você ajudar a montar. |
 | Patrimônio | `patrimonio.baixa_pendente` | Baixa aguardando aprovação | Quem administra o Patrimônio recebe quando uma baixa é enviada. |
 | Patrimônio | `patrimonio.baixa_decidida` | Baixa decidida | Quem enviou a baixa recebe a decisão. |
 | Diretório | `diretorio.recado_aniversario` | Recado de aniversário | Você recebe quando um colega deixa um recado no seu aniversário. |

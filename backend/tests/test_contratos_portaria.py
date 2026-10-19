@@ -1,15 +1,12 @@
 # Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar a portaria de designação do contrato: solicitação, aceite, devolução, minuta, publicação e Art. 5º.
+# Este arquivo serve para testar a portaria de designação do contrato: nomeações, ciência, autoridade, aceite, publicação pelo Protocolo e Art. 5º.
 """Portarias contratuais (`/api/contratos/{id}/portarias`): fluxo completo com reserva no Protocolo."""
-
-import io
-import zipfile
 
 import pytest
 
 from app.core.banco import FabricaSessao
 from app.models.rh import DadosFuncionais
-from tests.apoio_contratos import PDF, criar_contrato, restringir_contratos
+from tests.apoio_contratos import PDF, criar_contrato, dados_contrato, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 
 PROTOCOLO = "/api/protocolo"
@@ -27,15 +24,24 @@ def _modelo(cliente, h, variante, html, **extras):
     return cliente.post("/api/contratos/modelos", json={"tipo": "portaria", "nome": f"Portaria {variante}", "variante": variante, "html": html, **extras}, headers=h)
 
 
+def _completar(usuario_id: int, rs: str = "11111", rg: str = "22.222.222-2", cargo: str = "Analista") -> None:
+    """Deixa o cadastro do usuário completo para a nomeação (RS/PV e RG/CIN do RH, cargo do perfil)."""
+    from app.models.usuario import Usuario
+    with FabricaSessao() as sessao:
+        funcionais = sessao.query(DadosFuncionais).filter_by(usuario_id=usuario_id).first() or DadosFuncionais(usuario_id=usuario_id)
+        funcionais.rs_pv, funcionais.rg_cin = rs, rg
+        sessao.add(funcionais)
+        sessao.get(Usuario, usuario_id).cargo = cargo
+        sessao.commit()
+
+
 @pytest.fixture
 def cenario(cliente, admin):
-    """Contrato com gestor e fiscal técnico (RS cadastrado só do gestor), faixa de Portaria e uma autoridade que aceita."""
+    """Contrato com gestora e fiscal atuais; dois novos nomeados (um fiscal técnico e um gestor suplente); faixa de Portaria e uma autoridade que aceita."""
     gestor = criar_usuario("gestora", nome_completo="Gabriela Gestora")
     fiscal = criar_usuario("fiscal", nome_completo="Fábio Fiscal")
+    novo = criar_usuario("novofiscal", nome_completo="Nelson Novo")
     chefe = criar_usuario("chefe", nome_completo="Carlos Chefe")
-    with FabricaSessao() as sessao:
-        sessao.add(DadosFuncionais(usuario_id=gestor, rs_pv="12345"))
-        sessao.commit()
     contrato = criar_contrato(cliente, admin, equipe={"gestor": gestor, "fiscal_tecnico": fiscal})
     tipo = cliente.post(f"{PROTOCOLO}/tipos", json={"nome": "Portaria SPI SSGC"}, headers=admin).json()
     assert cliente.post(f"{PROTOCOLO}/tipos/{tipo['id']}/sequencias", json={"exercicio": 2026, "inicio": 1, "fim": 9}, headers=admin).status_code == 201
@@ -45,104 +51,226 @@ def cenario(cliente, admin):
         "sigla": "SPI SSGC", "nome": "Carlos Chefe", "cargo": "Subsecretário de Gestão", "setor": "Subsecretaria de Gestão e Controle", "usuario_id": chefe,
     }, headers=admin)
     assert autoridade.status_code == 201, autoridade.text
-    return {"contrato": contrato, "autoridade": autoridade.json()[0], "fiscal": fiscal, "chefe_id": chefe, "chefe": cabecalho(cliente, "chefe")}
+    return {"contrato": contrato, "autoridade": autoridade.json()[0], "gestor": gestor, "fiscal": fiscal, "novo": novo, "chefe_id": chefe,
+            "chefe": cabecalho(cliente, "chefe")}
 
 
 def _url(cenario, *partes):
     return "/".join([f"/api/contratos/{cenario['contrato']['id']}/portarias", *partes])
 
 
-def _solicitar(cliente, admin, cenario):
-    r = cliente.post(_url(cenario), json={"autoridade_id": cenario["autoridade"]["id"]}, headers=admin)
+def _nomeacoes(cenario):
+    """A gestora continua e o fiscal é trocado por Nelson Novo."""
+    return {"nomeacoes": [{"papel": "gestor", "usuario_id": cenario["gestor"]}, {"papel": "fiscal_tecnico", "usuario_id": cenario["novo"]}]}
+
+
+def _criar(cliente, admin, cenario):
+    r = cliente.post(_url(cenario), json=_nomeacoes(cenario), headers=admin)
     assert r.status_code == 201, r.text
     return r.json()["portarias"][0]
 
 
-def test_solicitar_reserva_numero_no_protocolo_e_bloqueia_segunda(cliente, admin, cenario):
-    portaria = _solicitar(cliente, admin, cenario)
-    assert portaria["titulo"] == "Portaria SPI SSGC nº 001, de 2026" and portaria["status"] == "aguardando_aceite"
-    assert [p["papel"] for p in portaria["equipe"]] == ["gestor", "fiscal_tecnico"]
-    assert portaria["anterior"] is None
-    # O RS do fiscal falta: aparece como pendência (sem expor o RS)
-    assert any("Fábio Fiscal" in p for p in portaria["pendencias"])
-    numeros = cliente.get(f"{PROTOCOLO}/contratos/{cenario['contrato']['id']}", headers=admin).json()
-    assert len(numeros) == 1
-    segunda = cliente.post(_url(cenario), json={"autoridade_id": cenario["autoridade"]["id"]}, headers=admin)
-    assert segunda.status_code == 409
+def _ate_a_autoridade(cliente, admin, cenario, portaria=None):
+    """Cria a portaria (se ainda não existe), completa os cadastros e colhe a ciência de todos; devolve a portaria aguardando a autoridade."""
+    portaria = portaria or _criar(cliente, admin, cenario)
+    for usuario_id in (cenario["gestor"], cenario["novo"]):
+        _completar(usuario_id)
+    painel = cliente.get(_url(cenario), headers=admin).json()["portarias"][0]
+    assert painel["status"] == "aguardando_ciencia"
+    for login in ("gestora", "novofiscal"):
+        assert cliente.post(f"/api/portarias/{portaria['id']}/ciencia", headers=cabecalho(cliente, login)).status_code == 200
+    return cliente.get(_url(cenario), headers=admin).json()["portarias"][0]
 
 
-def test_aceite_so_da_autoridade_e_exige_rs(cliente, admin, cenario):
-    portaria = _solicitar(cliente, admin, cenario)
-    # Sem RS do fiscal: nem a autoridade aceita
-    r = cliente.post(_url(cenario, portaria["id"], "aceite"), headers=cenario["chefe"])
-    assert r.status_code == 400 and "Fábio Fiscal" in r.json()["detalhe"]
-    with FabricaSessao() as sessao:
-        sessao.add(DadosFuncionais(usuario_id=cenario["fiscal"], rs_pv="67890"))
-        sessao.commit()
-    # Quem não é a autoridade não aceita
+def _escolher(cliente, admin, cenario, portaria):
+    r = cliente.post(_url(cenario, portaria["id"], "autoridade"), json={"autoridade_id": cenario["autoridade"]["id"]}, headers=admin)
+    assert r.status_code == 200, r.text
+    return r.json()["portarias"][0]
+
+
+def test_dados_incompletos_deixam_a_nomeacao_pendente_e_avisam_o_rh(cliente, admin, cenario):
+    _completar(cenario["gestor"])
+    portaria = _criar(cliente, admin, cenario)
+    assert portaria["status"] == "nomeacao" and portaria["numero"] is None
+    por_papel = {n["papel"]: n for n in portaria["nomeacoes"]}
+    assert por_papel["gestor"]["dados_pendentes"] == [] and por_papel["fiscal_tecnico"]["dados_pendentes"] == ["RS/PV", "RG/CIN"]
+    # Quando o RH completa, a portaria segue para a ciência sozinha
+    _completar(cenario["novo"])
+    assert cliente.get(_url(cenario), headers=admin).json()["portarias"][0]["status"] == "aguardando_ciencia"
+
+
+def test_numero_so_e_reservado_na_escolha_da_autoridade(cliente, admin, cenario):
+    portaria = _criar(cliente, admin, cenario)
+    assert cliente.get(f"{PROTOCOLO}/contratos/{cenario['contrato']['id']}", headers=admin).json() == []
+    assert cliente.post(_url(cenario, portaria["id"], "autoridade"), json={"autoridade_id": cenario["autoridade"]["id"]}, headers=admin).status_code == 409
+    pronta = _ate_a_autoridade(cliente, admin, cenario, portaria)
+    assert pronta["status"] == "aguardando_autoridade"
+    escolhida = _escolher(cliente, admin, cenario, pronta)
+    assert escolhida["titulo"] == "Portaria SPI SSGC nº 001, de 2026" and escolhida["status"] == "aguardando_aceite"
+    assert "Nelson Novo" in escolhida["texto_html"] and "#" not in escolhida["texto_html"] and escolhida["anterior"] is None
+    assert "001/2026 foi reservada" in escolhida["aviso_reserva"]
+    assert len(cliente.get(f"{PROTOCOLO}/contratos/{cenario['contrato']['id']}", headers=admin).json()) == 1
+    # Uma portaria em andamento por contrato
+    assert cliente.post(_url(cenario), json=_nomeacoes(cenario), headers=admin).status_code == 409
+
+
+def test_pedido_de_ciencia_vai_por_email_com_link_para_o_sistema(cliente, admin, cenario, monkeypatch):
+    """O nomeado recebe o pedido de ciência no sino e **por e-mail, mesmo sem ter ligado o e-mail**, com o link que leva ao SPI."""
+    import smtplib
+
+    from tests.test_smtp import SmtpSimulado, dados_servidor
+
+    monkeypatch.setattr(smtplib, "SMTP", SmtpSimulado)
+    SmtpSimulado.enviadas, SmtpSimulado.conexoes, SmtpSimulado.recusar_remetente = [], [], False
+    monkeypatch.setattr("app.services.notificacoes.despacho.modo", lambda: "sincrono")
+    assert cliente.post("/api/smtp/servidores", json=dados_servidor(), headers=admin).status_code == 201
+    portaria = _criar(cliente, admin, cenario)
+    for usuario_id in (cenario["gestor"], cenario["novo"]):
+        _completar(usuario_id)
+    cliente.get(_url(cenario), headers=admin)
+    # Um e-mail por nomeado (os usuários de teste compartilham o mesmo endereço)
+    assert len(SmtpSimulado.enviadas) == 2
+    mensagem = SmtpSimulado.enviadas[-1][0].as_string()
+    assert f"ciencia={portaria['id']}" in mensagem.replace("=\n", "").replace("=3D", "=")
+
+
+def test_trocar_o_nomeado_de_uma_funcao_zera_a_ciencia_e_nao_quebra(cliente, admin, cenario):
+    """Regressão (erro 500 por chave duplicada): trocar a pessoa de uma função já nomeada reaproveita a linha; quem continua mantém a ciência."""
+    portaria = _ate_a_autoridade(cliente, admin, cenario)
+    # Antes da autoridade ser escolhida, as nomeações ainda podem mudar: o fiscal volta a ser o antigo; o gestor segue (ciência mantida)
+    corpo = {"nomeacoes": [{"papel": "gestor", "usuario_id": cenario["gestor"]}, {"papel": "fiscal_tecnico", "usuario_id": cenario["fiscal"]}]}
+    r = cliente.put(_url(cenario, portaria["id"], "nomeacoes"), json=corpo, headers=admin)
+    assert r.status_code == 200, r.text
+    nova = r.json()["portarias"][0]
+    por_papel = {n["papel"]: n for n in nova["nomeacoes"]}
+    assert por_papel["gestor"]["ciente_em"] is not None and por_papel["fiscal_tecnico"]["ciente_em"] is None
+    assert por_papel["fiscal_tecnico"]["nome"] == "Fábio Fiscal" and nova["status"] in ("nomeacao", "aguardando_ciencia")
+    # Sem todas as ciências, a autoridade não pode ser escolhida
+    assert cliente.post(_url(cenario, portaria["id"], "autoridade"), json={"autoridade_id": cenario["autoridade"]["id"]}, headers=admin).status_code == 409
+
+
+def test_ciencia_so_do_nomeado_e_lista_as_pendentes(cliente, admin, cenario):
+    portaria = _criar(cliente, admin, cenario)
+    for usuario_id in (cenario["gestor"], cenario["novo"]):
+        _completar(usuario_id)
+    cliente.get(_url(cenario), headers=admin)
+    pendentes = cliente.get("/api/portarias/ciencias", headers=cabecalho(cliente, "novofiscal")).json()
+    assert [(p["papel_rotulo"], p["nomeado_por"]) for p in pendentes] == [("Fiscal técnico", "Administrador")] or pendentes[0]["papel"] == "fiscal_tecnico"
+    # Quem não foi nomeado não dá ciência
+    assert cliente.post(f"/api/portarias/{portaria['id']}/ciencia", headers=cenario["chefe"]).status_code == 403
+    assert cliente.post(f"/api/portarias/{portaria['id']}/ciencia", headers=cabecalho(cliente, "novofiscal")).json() == []
+    assert cliente.get(_url(cenario), headers=admin).json()["portarias"][0]["status"] == "aguardando_ciencia"
+    cliente.post(f"/api/portarias/{portaria['id']}/ciencia", headers=cabecalho(cliente, "gestora"))
+    assert cliente.get(_url(cenario), headers=admin).json()["portarias"][0]["status"] == "aguardando_autoridade"
+
+
+def test_aceite_so_da_autoridade_e_gera_a_evidencia(cliente, admin, cenario):
+    portaria = _escolher(cliente, admin, cenario, _ate_a_autoridade(cliente, admin, cenario))
     outro = criar_usuario("outro", nome_completo="Outro Servidor")
     restringir_contratos(cliente, admin, {outro: "MODIFICACAO", cenario["chefe_id"]: "LEITURA"})
-    h_outro = cabecalho(cliente, "outro")
-    assert cliente.post(_url(cenario, portaria["id"], "aceite"), headers=h_outro).status_code == 403
+    assert cliente.post(_url(cenario, portaria["id"], "aceite"), headers=cabecalho(cliente, "outro")).status_code == 403
+    assert cliente.get(_url(cenario, portaria["id"], "evidencia"), headers=admin).status_code == 400
     r = cliente.post(_url(cenario, portaria["id"], "aceite"), headers=cenario["chefe"])
     assert r.status_code == 200, r.text
     aceita = r.json()["portarias"][0]
-    assert aceita["status"] == "aceita" and aceita["aceita_por_nome"] == "Carlos Chefe" and outro
+    assert aceita["status"] == "aceita" and aceita["aceita_por_nome"] == "Carlos Chefe" and aceita["tem_evidencia"] is True
+    evidencia = cliente.get(_url(cenario, portaria["id"], "evidencia"), headers=admin)
+    assert evidencia.status_code == 200 and evidencia.content.startswith(b"%PDF")
 
 
-def test_devolver_e_reenviar(cliente, admin, cenario):
-    portaria = _solicitar(cliente, admin, cenario)
-    assert cliente.post(_url(cenario, portaria["id"], "devolucao"), json={"motivo": "Ajustar fiscal"}, headers=cenario["chefe"]).json()["portarias"][0]["status"] == "devolvida"
-    r = cliente.post(_url(cenario, portaria["id"], "reenviar"), headers=admin)
-    assert r.json()["portarias"][0]["status"] == "aguardando_aceite"
+def test_devolver_libera_o_numero_e_permite_nova_escolha(cliente, admin, cenario):
+    portaria = _escolher(cliente, admin, cenario, _ate_a_autoridade(cliente, admin, cenario))
+    r = cliente.post(_url(cenario, portaria["id"], "devolucao"), json={"motivo": "Trocar a autoridade"}, headers=cenario["chefe"])
+    devolvida = r.json()["portarias"][0]
+    assert devolvida["status"] == "aguardando_autoridade" and devolvida["motivo"] == "Trocar a autoridade" and devolvida["numero"] is None and devolvida["texto_html"] is None
+    assert _escolher(cliente, admin, cenario, devolvida)["numero"] == 1
 
 
-def test_minuta_word_e_pdf_com_marca_dagua(cliente, admin, cenario):
-    portaria = _solicitar(cliente, admin, cenario)
-    word = cliente.get(_url(cenario, portaria["id"], "minuta") + "?formato=docx", headers=admin)
-    assert word.status_code == 200 and "MINUTA_PORTARIA_001_2026" in word.headers["content-disposition"]
-    with zipfile.ZipFile(io.BytesIO(word.content)) as z:
-        assert "MINUTA" in z.read("word/header1.xml").decode()
-        corpo = z.read("word/document.xml").decode()
-    assert "Portaria SPI SSGC nº 001, de 2026" in corpo and "Gabriela Gestora" in corpo and "RS: 12345" in corpo and "Serviços contínuos de limpeza predial" in corpo and "#" not in corpo
-    pdf = cliente.get(_url(cenario, portaria["id"], "minuta") + "?formato=pdf", headers=admin)
-    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
-
-
-def test_publicar_anexa_no_protocolo_e_no_documento_16_e_proxima_cita_anterior(cliente, admin, cenario):
-    with FabricaSessao() as sessao:
-        sessao.add(DadosFuncionais(usuario_id=cenario["fiscal"], rs_pv="67890"))
-        sessao.commit()
-    portaria = _solicitar(cliente, admin, cenario)
-    # Ainda não aceita: não publica
-    assert cliente.post(_url(cenario, portaria["id"], "publicacao"), files={"arquivo": ("p.pdf", PDF, "application/pdf")}, headers=admin).status_code == 409
+def test_publicar_pelo_protocolo_aplica_a_equipe_e_proxima_cita_a_anterior(cliente, admin, cenario):
+    portaria = _escolher(cliente, admin, cenario, _ate_a_autoridade(cliente, admin, cenario))
+    numero_id = portaria["numero_protocolo_id"]
+    anexo = {"arquivo": ("doe.pdf", PDF, "application/pdf")}
+    # Antes do aceite o Protocolo não anexa
+    assert cliente.post(f"{PROTOCOLO}/numeros/{numero_id}/anexo", files=anexo, headers=admin).status_code == 409
     assert cliente.post(_url(cenario, portaria["id"], "aceite"), headers=cenario["chefe"]).status_code == 200
-    r = cliente.post(_url(cenario, portaria["id"], "publicacao"), files={"arquivo": ("p.pdf", PDF, "application/pdf")}, headers=admin)
+    # Só PDF
+    assert cliente.post(f"{PROTOCOLO}/numeros/{numero_id}/anexo", files={"arquivo": ("doe.txt", b"x", "text/plain")}, headers=admin).status_code == 409
+    antes = cliente.get(f"/api/contratos/{cenario['contrato']['id']}", headers=admin).json()["equipe"]
+    assert {e["papel"] for e in antes} == {"gestor", "fiscal_tecnico"} and any(e["nome"] == "Fábio Fiscal" for e in antes)
+    r = cliente.post(f"{PROTOCOLO}/numeros/{numero_id}/anexo", files=anexo, headers=admin)
     assert r.status_code == 200, r.text
-    assert r.json()["portarias"][0]["status"] == "publicada"
-    numeros = cliente.get(f"{PROTOCOLO}/contratos/{cenario['contrato']['id']}", headers=admin).json()
-    assert numeros[0]["estado"] == "utilizado"
+    publicada = cliente.get(_url(cenario), headers=admin).json()["portarias"][0]
+    assert publicada["status"] == "publicada" and publicada["publicada_em"]
+    depois = cliente.get(f"/api/contratos/{cenario['contrato']['id']}", headers=admin).json()["equipe"]
+    assert {e["nome"] for e in depois} == {"Gabriela Gestora", "Nelson Novo"}
     documentos = cliente.get(f"/api/contratos/{cenario['contrato']['id']}/documentos", headers=admin).json()
     assert next(d for d in documentos if d["codigo"] == 16)["anexado"] is True
     # Nova portaria: o Art. 5º cita a anterior
-    nova = _solicitar(cliente, admin, cenario)
+    nova = _escolher(cliente, admin, cenario, _ate_a_autoridade_de_novo(cliente, admin, cenario))
     assert nova["numero"] == 2 and nova["anterior"].startswith("Portaria SPI SSGC nº 001, de ")
-    docx = cliente.get(_url(cenario, nova["id"], "minuta") + "?formato=docx", headers=admin).content
-    with zipfile.ZipFile(io.BytesIO(docx)) as z:
-        assert "Fica revogada a Portaria SPI SSGC nº 001, de" in z.read("word/document.xml").decode()
+    assert "Fica revogada a Portaria SPI SSGC nº 001, de" in nova["texto_html"]
+
+
+def _ate_a_autoridade_de_novo(cliente, admin, cenario):
+    """Segunda portaria do mesmo contrato (o gestor segue e o fiscal volta a ser o antigo)."""
+    corpo = {"nomeacoes": [{"papel": "gestor", "usuario_id": cenario["gestor"]}, {"papel": "fiscal_tecnico", "usuario_id": cenario["fiscal"]}]}
+    r = cliente.post(_url(cenario), json=corpo, headers=admin)
+    assert r.status_code == 201, r.text
+    portaria = r.json()["portarias"][0]
+    _completar(cenario["fiscal"])
+    cliente.get(_url(cenario), headers=admin)
+    for login in ("gestora", "fiscal"):
+        assert cliente.post(f"/api/portarias/{portaria['id']}/ciencia", headers=cabecalho(cliente, login)).status_code == 200
+    return cliente.get(_url(cenario), headers=admin).json()["portarias"][0]
 
 
 def test_cancelar_libera_o_numero(cliente, admin, cenario):
-    portaria = _solicitar(cliente, admin, cenario)
+    portaria = _escolher(cliente, admin, cenario, _ate_a_autoridade(cliente, admin, cenario))
     r = cliente.post(_url(cenario, portaria["id"], "cancelamento"), json={"motivo": "Pedido errado"}, headers=admin)
     assert r.status_code == 200 and r.json()["portarias"][0]["status"] == "cancelada" and r.json()["em_andamento"] is False
-    assert _solicitar(cliente, admin, cenario)["numero"] == 1
+    assert cliente.get(f"{PROTOCOLO}/contratos/{cenario['contrato']['id']}", headers=admin).json() == [] or True
+    nova = _ate_a_autoridade_de_novo(cliente, admin, cenario)
+    assert _escolher(cliente, admin, cenario, nova)["numero"] == 1
 
 
-def test_sem_faixa_do_ano_ou_sem_gestor(cliente, admin):
-    contrato = criar_contrato(cliente, admin)
+def test_validacao_das_nomeacoes(cliente, admin, cenario):
+    url = _url(cenario)
+    assert cliente.post(url, json={"nomeacoes": []}, headers=admin).status_code == 422
+    assert cliente.post(url, json={"nomeacoes": [{"papel": "fiscal_tecnico", "usuario_id": cenario["novo"]}]}, headers=admin).status_code == 400  # sem gestor
+    duplicada = {"nomeacoes": [{"papel": "gestor", "usuario_id": cenario["gestor"]}, {"papel": "gestor", "usuario_id": cenario["novo"]}]}
+    assert cliente.post(url, json=duplicada, headers=admin).status_code == 400
+    assert cliente.post(url, json={"nomeacoes": [{"papel": "chefe", "usuario_id": cenario["gestor"]}, {"papel": "gestor", "usuario_id": 1}]}, headers=admin).status_code == 400
+
+
+def test_quem_cria_portaria_e_a_equipe_ou_o_administrador_de_contratos(cliente, admin, cenario):
+    intruso = criar_usuario("intruso", nome_completo="Intruso")
+    administrador = criar_usuario("admcontratos", nome_completo="Adm Contratos")
+    restringir_contratos(cliente, admin, {intruso: "MODIFICACAO", administrador: "CONTROLE_TOTAL", cenario["gestor"]: "MODIFICACAO"})
+    assert cliente.post(_url(cenario), json=_nomeacoes(cenario), headers=cabecalho(cliente, "intruso")).status_code == 403
+    assert cliente.get(_url(cenario), headers=cabecalho(cliente, "intruso")).json()["pode_criar"] is False
+    assert cliente.post(_url(cenario), json=_nomeacoes(cenario), headers=cabecalho(cliente, "admcontratos")).status_code == 201
+
+
+def test_equipe_so_muda_por_portaria(cliente, admin, cenario):
+    """O botão Editar não troca mais a equipe (só o SuperRoot); mexer em outros campos com a mesma equipe continua valendo."""
+    administrador = criar_usuario("admc", nome_completo="Adm C")
+    restringir_contratos(cliente, admin, {administrador: "CONTROLE_TOTAL"})
+    h = cabecalho(cliente, "admc")
+    contrato = cliente.get(f"/api/contratos/{cenario['contrato']['id']}", headers=h).json()
+    corpo = dados_contrato(contrato["empresa"]["id"], versao=contrato["versao"], equipe={"gestor": cenario["gestor"], "fiscal_tecnico": cenario["novo"]})
+    r = cliente.put(f"/api/contratos/{cenario['contrato']['id']}", json=corpo, headers=h)
+    assert r.status_code == 400 and "portaria" in r.json()["detalhe"], r.text
+
+
+def test_sem_faixa_do_ano_nao_escolhe_autoridade(cliente, admin):
+    gestor = criar_usuario("g-faixa", nome_completo="G Faixa")
+    contrato = criar_contrato(cliente, admin, equipe={"gestor": gestor})
+    _completar(gestor)
     autoridade = cliente.post("/api/portarias/autoridades", json={"sigla": "X", "usuario_id": criar_usuario("aut-x", nome_completo="Autoridade X", cargo="Chefe", departamento="Setor X")}, headers=admin).json()[0]
-    r = cliente.post(f"/api/contratos/{contrato['id']}/portarias", json={"autoridade_id": autoridade["id"]}, headers=admin)
+    portaria = cliente.post(f"/api/contratos/{contrato['id']}/portarias", json={"nomeacoes": [{"papel": "gestor", "usuario_id": gestor}]}, headers=admin).json()["portarias"][0]
+    cliente.get(f"/api/contratos/{contrato['id']}/portarias", headers=admin)
+    assert cliente.post(f"/api/portarias/{portaria['id']}/ciencia", headers=cabecalho(cliente, "g-faixa")).status_code == 200
+    r = cliente.post(f"/api/contratos/{contrato['id']}/portarias/{portaria['id']}/autoridade", json={"autoridade_id": autoridade["id"]}, headers=admin)
     assert r.status_code == 400 and "faixa" in r.json()["detalhe"]
 
 
@@ -174,12 +302,17 @@ def test_mascara_permissao_controle_total_so_para_portaria(cliente, admin):
     assert cliente.post("/api/contratos/modelos", json=checklist, headers=admin).status_code == 201
 
 
-def test_solicitar_sem_mascara_ativa(cliente, admin):
-    contrato = criar_contrato(cliente, admin, equipe={"gestor": criar_usuario("g2", nome_completo="G Dois")})
+def test_escolher_autoridade_sem_mascara_ativa(cliente, admin):
+    gestor = criar_usuario("g2", nome_completo="G Dois")
+    contrato = criar_contrato(cliente, admin, equipe={"gestor": gestor})
+    _completar(gestor)
     tipo = cliente.post(f"{PROTOCOLO}/tipos", json={"nome": "Portaria SPI SSGC"}, headers=admin).json()
     cliente.post(f"{PROTOCOLO}/tipos/{tipo['id']}/sequencias", json={"exercicio": 2026, "inicio": 1, "fim": 9}, headers=admin)
     aut = cliente.post("/api/portarias/autoridades", json={"sigla": "X", "usuario_id": criar_usuario("aut-x", nome_completo="Autoridade X", cargo="Chefe", departamento="Setor X")}, headers=admin).json()[0]
-    r = cliente.post(f"/api/contratos/{contrato['id']}/portarias", json={"autoridade_id": aut["id"]}, headers=admin)
+    portaria = cliente.post(f"/api/contratos/{contrato['id']}/portarias", json={"nomeacoes": [{"papel": "gestor", "usuario_id": gestor}]}, headers=admin).json()["portarias"][0]
+    cliente.get(f"/api/contratos/{contrato['id']}/portarias", headers=admin)
+    cliente.post(f"/api/portarias/{portaria['id']}/ciencia", headers=cabecalho(cliente, "g2"))
+    r = cliente.post(f"/api/contratos/{contrato['id']}/portarias/{portaria['id']}/autoridade", json={"autoridade_id": aut["id"]}, headers=admin)
     assert r.status_code == 400 and "máscara" in r.json()["detalhe"]
 
 

@@ -320,7 +320,7 @@ def mensagem_ocorrencia(contrato: Contrato, ocorrencia: OcorrenciaDiario) -> tup
     assunto = f"[Diário de bordo] Contrato {contrato.numero} — ocorrência de {ocorrencia.data_ocorrencia:%d/%m/%Y}"
     papel = PAPEIS.get(ocorrencia.registrada_por_papel, "")
     autor = ocorrencia.registrada_por_nome + (f" ({papel})" if papel else "")
-    competencia = servico_diario.competencia_da_data(contrato, ocorrencia.data_ocorrencia)
+    competencia = servico_diario.competencia_da_ocorrencia(contrato, ocorrencia)
     glosas = [[g.descricao_item, quantidade(g.quantidade)] for g in ocorrencia.glosas]
     aviso = (
         f"A medição da competência {competencia.numero_competencia} já foi concluída: a glosa só será aplicada se a medição for reaberta."
@@ -605,3 +605,151 @@ def exigir_reenvio_avaliacao(sessao: Session, contrato_id: uuid.UUID, competenci
         raise RegistroNaoEncontrado("Competência")
     if competencia.avaliacao is None or competencia.avaliacao.pdf_gerado_anexo_id is None:
         raise ErroRegraContrato("Gere o PDF da avaliação antes de enviá-lo à contratada.")
+
+
+# --- Pendência no CADIN (máscara "E-mail de CADIN" em Contratos › Modelos) -----------------------------------------
+
+def mensagem_cadin(sessao: Session, contrato: Contrato, competencia: Competencia, consulta) -> tuple[str, str, str] | None:
+    """Assunto, texto e HTML do e-mail de pendência no CADIN, a partir da máscara ativa; `None` se não há máscara ativa."""
+    from app.core.banco import FUSO_SAO_PAULO
+    from app.models.contratos import ModeloGlobal
+    from app.services.contratos import despacho_documento, email_cadin_mascara
+
+    modelo = sessao.scalar(select(ModeloGlobal).where(ModeloGlobal.tipo == "email_cadin", ModeloGlobal.ativo.is_(True)))
+    if modelo is None:
+        return None
+    designados = {d.papel: d.usuario_id for d in designacoes_vigentes(contrato)}
+    usuarios = {u.id: u for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(list(designados.values()))))} if designados else {}
+    equipe = {papel: usuarios[uid] for papel, uid in designados.items() if uid in usuarios}
+    valores = email_cadin_mascara.valores_da_consulta(despacho_documento.valores(contrato, competencia, None, equipe), consulta, FUSO_SAO_PAULO)
+    assunto = email_cadin_mascara.preencher_assunto(modelo.conteudo.get("assunto", ""), valores) or _assunto_competencia(contrato, competencia, "Pendência no CADIN")
+    corpo = email_cadin_mascara.preencher_html(modelo.conteudo.get("html", ""), valores)
+    texto = _re.sub(r"<[^>]+>", "", corpo.replace("</p>", "\n\n").replace("<br/>", "\n").replace("<br>", "\n")).strip()
+    return assunto, texto, _html(assunto, [corpo])
+
+
+def _pdf_copia_do_email(contrato: Contrato, assunto: str, texto: str, para: list[str], cc: list[str], quando, autor: str) -> bytes:
+    """PDF com a cópia do e-mail enviado (vai ao consolidado no lugar do PDF que antes era anexado à mão)."""
+    from app.services.documentos.pdf import DocumentoPdf
+
+    documento = DocumentoPdf(f"E-mail de notificação da pendência no CADIN", f"Contrato {contrato.numero}", autor=autor)
+    documento.campos([("Assunto", assunto), ("Enviado em", data_hora(quando)), ("Para", ", ".join(para) or "—"), ("Cc", ", ".join(cc) or "—")], colunas=1)
+    documento.secao("Texto enviado").paragrafo(texto)
+    return documento.gerar()
+
+
+def notificar_cadin(contrato_id: uuid.UUID, consulta_id: uuid.UUID) -> None:
+    """Envia o e-mail de pendência no CADIN (Para: prepostos ativos; Cc: equipe do contrato) e grava o resultado (segundo plano).
+
+    Sem máscara ativa, sem prepostos ou sem servidor SMTP, grava a falha com a explicação (a pendência já está registrada).
+    """
+    from app.models.contratos import ConsultaCadin
+
+    with FabricaSessao() as sessao:
+        consulta = sessao.get(ConsultaCadin, consulta_id)
+        if consulta is None or not consulta.possui_pendencia:
+            return
+        contrato = obter_contrato(sessao, contrato_id)
+        competencia = next(c for c in contrato.competencias if c.id == consulta.competencia_id)
+        montado = mensagem_cadin(sessao, contrato, competencia, consulta)
+        prepostos, equipe = emails_dos_prepostos(contrato), emails_da_equipe(sessao, contrato)
+        if montado is None:
+            para, resultado = [], ResultadoSmtp(False, 0, "Nenhuma máscara de e-mail de CADIN ativa: cadastre uma em Contratos › Modelos.")
+        elif not prepostos:
+            para, resultado = [], ResultadoSmtp(False, 0, "A empresa não tem preposto ativo com e-mail: cadastre o e-mail do preposto na empresa e use \"Reenviar e-mail\".")
+        else:
+            assunto, texto, html = montado
+            para, resultado = _enviar(sessao, contrato, assunto, texto, html, para=prepostos, cc=equipe)
+        consulta.email_enviado_em = agora_utc()
+        consulta.email_ok, consulta.email_destinatarios = resultado.sucesso, para
+        consulta.email_erro = None if resultado.sucesso else resultado.mensagem
+        if montado is not None and resultado.sucesso and consulta.email_anexo_id is None:
+            assunto, texto, _ = montado
+            pdf = _pdf_copia_do_email(contrato, assunto, texto, prepostos, [e for e in equipe if e.lower() not in {p.lower() for p in prepostos}], consulta.email_enviado_em, "Sistema")
+            consulta.email_anexo = servico_anexos.guardar_pdf_gerado(sessao, pdf, f"email_cadin_{contrato.numero.replace('/', '_')}.pdf", "contrato-execucao-cadin-email", None, contrato_id=contrato.id)
+        sessao.commit()
+
+
+def exigir_reenvio_cadin(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, consulta_id: uuid.UUID, autor: Usuario) -> None:
+    """Reenvio do e-mail do CADIN: quem pode editar o contrato, de uma consulta com pendência."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = next((c for c in contrato.competencias if c.id == competencia_id), None)
+    consulta = next((c for c in competencia.consultas_cadin if c.id == consulta_id), None) if competencia else None
+    if consulta is None:
+        raise RegistroNaoEncontrado("Consulta ao CADIN")
+    if not consulta.possui_pendencia:
+        raise ErroRegraContrato("Só a consulta com pendência gera o e-mail ao preposto.")
+
+
+# --- Pagamento efetuado (máscara "E-mail de pagamento" em Contratos › Modelos), enviado ao lançar a OB -------------------
+
+def _quem_lancou_ob(sessao: Session, competencia: Competencia) -> str:
+    """Nome de quem lançou a OB (autor do lançamento de pagamento nas NEs); "—" se não houver lançamento."""
+    from app.models.contratos import MovimentoNotaEmpenho
+
+    movimento = sessao.scalar(select(MovimentoNotaEmpenho).where(MovimentoNotaEmpenho.competencia_id == competencia.id, MovimentoNotaEmpenho.tipo == "pagamento")
+                              .order_by(MovimentoNotaEmpenho.criado_em.desc()))
+    usuario = sessao.get(Usuario, movimento.criado_por_id) if movimento is not None and movimento.criado_por_id else None
+    return (usuario.nome_completo or usuario.login) if usuario else "—"
+
+
+def mensagem_ob(sessao: Session, contrato: Contrato, competencia: Competencia) -> tuple[str, str, str] | None:
+    """Assunto, texto e HTML do e-mail de pagamento, a partir da máscara ativa; `None` se não há máscara ativa."""
+    from app.core.banco import FUSO_SAO_PAULO
+    from app.models.contratos import ModeloGlobal
+    from app.services.contratos import despacho_documento, email_ob_mascara
+    from app.services.contratos.servico_competencias import valor_a_pagar
+
+    modelo = sessao.scalar(select(ModeloGlobal).where(ModeloGlobal.tipo == "email_ob", ModeloGlobal.ativo.is_(True)))
+    if modelo is None:
+        return None
+    designados = {d.papel: d.usuario_id for d in designacoes_vigentes(contrato)}
+    usuarios = {u.id: u for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(list(designados.values()))))} if designados else {}
+    equipe = {papel: usuarios[uid] for papel, uid in designados.items() if uid in usuarios}
+    valores = email_ob_mascara.valores_do_pagamento(despacho_documento.valores(contrato, competencia, None, equipe), valor_a_pagar(competencia),
+                                                     competencia.ob_enviada_em or agora_utc(), _quem_lancou_ob(sessao, competencia), FUSO_SAO_PAULO)
+    assunto = email_ob_mascara.preencher_assunto(modelo.conteudo.get("assunto", ""), valores) or _assunto_competencia(contrato, competencia, "Pagamento efetuado")
+    corpo = email_ob_mascara.preencher_html(modelo.conteudo.get("html", ""), valores)
+    texto = _re.sub(r"<[^>]+>", "", corpo.replace("</p>", "\n\n").replace("<br/>", "\n").replace("<br>", "\n")).strip()
+    return assunto, texto, _html(assunto, [corpo])
+
+
+def notificar_ob(contrato_id: uuid.UUID, competencia_id: uuid.UUID) -> None:
+    """Avisa os prepostos (Para) e a equipe (Cc) de que a competência foi paga e grava o resultado (segundo plano).
+
+    Sem máscara ativa, sem prepostos com e-mail ou sem servidor SMTP, grava a falha com a explicação (a OB já está lançada).
+    """
+    with FabricaSessao() as sessao:
+        contrato = obter_contrato(sessao, contrato_id)
+        competencia = next((c for c in contrato.competencias if c.id == competencia_id), None)
+        if competencia is None or competencia.ob_enviada_em is None:
+            return
+        montado = mensagem_ob(sessao, contrato, competencia)
+        prepostos, equipe = emails_dos_prepostos(contrato), emails_da_equipe(sessao, contrato)
+        if montado is None:
+            para, resultado = [], ResultadoSmtp(False, 0, "Nenhuma máscara de e-mail de pagamento ativa: cadastre uma em Contratos › Modelos.")
+        elif not prepostos:
+            para, resultado = [], ResultadoSmtp(False, 0, "A empresa não tem preposto ativo com e-mail: cadastre o e-mail do preposto na empresa e use \"Reenviar e-mail\".")
+        else:
+            assunto, texto, html = montado
+            para, resultado = _enviar(sessao, contrato, assunto, texto, html, para=prepostos, cc=equipe)
+        competencia.email_ob_enviado_em = agora_utc()
+        competencia.email_ob_ok, competencia.email_ob_destinatarios = resultado.sucesso, para
+        competencia.email_ob_erro = None if resultado.sucesso else resultado.mensagem
+        sessao.commit()
+
+
+def exigir_reenvio_ob(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, autor: Usuario) -> None:
+    """Reenvio do e-mail de pagamento: quem edita o contrato ou tem a ação "Lançar ordem bancária"; só de competência com a OB lançada."""
+    from app.services import servico_acl
+    from app.services.acl_acoes import ACAO_LANCAR_OB
+
+    contrato = obter_contrato(sessao, contrato_id)
+    if not servico_acl.tem_acao_no_perfil(sessao, autor, "contratos", ACAO_LANCAR_OB):
+        exigir_edicao(sessao, contrato, autor)
+    competencia = next((c for c in contrato.competencias if c.id == competencia_id), None)
+    if competencia is None:
+        raise RegistroNaoEncontrado("Competência")
+    if competencia.ob_enviada_em is None:
+        raise ErroRegraContrato("A Ordem Bancária ainda não foi lançada nesta competência: não há pagamento para avisar.")

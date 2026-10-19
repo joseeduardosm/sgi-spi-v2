@@ -137,6 +137,7 @@ def para_detalhes(sessao: Session, usuarios: list[Usuario]) -> list[DetalheUsuar
             login=u.login,
             ativo=u.ativo,
             superusuario=u.superusuario,
+            conta_integracao=u.conta_integracao,
             origem=u.origem,
             possui_senha_local=bool(u.hash_senha),
             diretorio_nome=diretorios.get(u.diretorio_id) if u.diretorio_id else None,
@@ -197,6 +198,7 @@ def criar_conta_local(sessao: Session, dados: CriacaoUsuario, autor: str) -> Usu
         origem=OrigemUsuario.LOCAL,
         ativo=dados.ativo,
         superusuario=dados.superusuario,
+        conta_integracao=dados.conta_integracao,
     )
     sessao.add(usuario)
     # flush para obter o id antes de validar o gestor (que não pode ser o próprio usuário)
@@ -222,6 +224,11 @@ def alterar_usuario(sessao: Session, usuario_id: int, dados: AlteracaoUsuario, a
         alteracoes.append(f"ativo={dados.ativo}")
     if usuario.superusuario != dados.superusuario:
         alteracoes.append(f"superusuario={dados.superusuario}")
+    if dados.conta_integracao is not None and dados.conta_integracao != usuario.conta_integracao:
+        if not autor.superusuario:
+            raise ErroRegraUsuario("Só o SuperRoot define uma conta como de integração.")
+        alteracoes.append(f"conta_integracao={dados.conta_integracao}")
+        usuario.conta_integracao = dados.conta_integracao
     usuario.ativo = dados.ativo
     usuario.superusuario = dados.superusuario
     _aplicar_perfil(sessao, usuario, dados.perfil)

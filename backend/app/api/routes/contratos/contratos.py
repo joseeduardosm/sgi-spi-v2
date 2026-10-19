@@ -32,6 +32,7 @@ from app.schemas.contratos.contratos import (
     DetalheContrato,
     GravacaoContrato,
     LeituraDocumento,
+    LeituraPagamento,
     PaginaContratos,
     VizinhosContrato,
     ProximoNumero,
@@ -184,6 +185,19 @@ def vizinhos(
 ) -> VizinhosContrato:
     """Anterior e próximo na ordem da carteira."""
     return servico.vizinhos_na_carteira(sessao, contrato_id, busca, usuario.id if meus else None, ordenar_por, direcao)
+
+
+@roteador.get(
+    "/{contrato_id}/pagamentos",
+    response_model=list[LeituraPagamento],
+    summary="Pagamentos do contrato",
+    description="Um item \"Pagamento MM/AAAA\" por competência com a OB/PD juntada na última etapa, com o documento consolidado da mesma competência, a data da juntada e os "
+                "ids dos anexos (baixe por `GET /competencias/{competencia_id}/arquivos/{anexo_id}`). Faz parte de Documentos Importantes. Exige ACL `contratos` ≥ LEITURA.",
+    responses=NAO_ENCONTRADO,
+)
+def listar_pagamentos(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)) -> list[LeituraPagamento]:
+    with traduzir_erros():
+        return servico.listar_pagamentos(sessao, contrato_id)
 
 
 @roteador.get(

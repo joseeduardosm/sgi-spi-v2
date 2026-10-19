@@ -82,3 +82,67 @@ class RegraAcl(Base):
     recurso: Mapped[RecursoAcl] = relationship(lazy="joined")
     usuarios = relationship("Usuario", secondary=acl_regras_usuarios, lazy="selectin", order_by="Usuario.nome_completo")
     setores = relationship("Setor", secondary=acl_regras_setores, lazy="selectin", order_by="Setor.nome")
+
+
+class PerfilAcl(Base):
+    """Perfil de acesso: um conjunto de direitos (módulo × nível) que pode ser atribuído a vários usuários.
+
+    O usuário tem um ou mais perfis e **um ativo por vez** (o padrão ou o escolhido no menu do usuário). O nível do perfil ativo soma-se às
+    regras por setor e às diretas: vale o maior nível.
+    """
+
+    __tablename__ = "acl_perfis"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nome: Mapped[str] = mapped_column(String(100))
+    descricao: Mapped[str] = mapped_column(Text, default="")
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
+
+    direitos: Mapped[list["PerfilDireito"]] = relationship(back_populates="perfil", cascade="all, delete-orphan", lazy="selectin")
+    vinculos: Mapped[list["UsuarioPerfil"]] = relationship(back_populates="perfil", cascade="all, delete-orphan", lazy="selectin")
+    # Setores e grupos sistêmicos que recebem o perfil: quem é membro deles passa a ter o perfil (além dos vínculos diretos)
+    setores_vinculados: Mapped[list["PerfilSetor"]] = relationship(back_populates="perfil", cascade="all, delete-orphan", lazy="selectin")
+
+
+# Nome do perfil único sem diferenciar maiúsculas/minúsculas
+Index("ux_acl_perfis_nome_minusculo", func.lower(PerfilAcl.nome), unique=True)
+
+
+class PerfilDireito(Base):
+    """Uma ação que o perfil concede em um recurso (sem linha = a ação não vale). As ações são independentes: não herdam umas das outras."""
+
+    __tablename__ = "acl_perfis_direitos"
+
+    perfil_id: Mapped[int] = mapped_column(ForeignKey("acl_perfis.id", ondelete="CASCADE"), primary_key=True)
+    recurso_id: Mapped[int] = mapped_column(ForeignKey("acl_recursos.id", ondelete="CASCADE"), primary_key=True, index=True)
+    # Código da ação (`LEITURA`, `MODIFICACAO` ou `CONTROLE_TOTAL`, a porta que ela abre; ver `acl_acoes.py`)
+    nivel: Mapped[str] = mapped_column(String(20), primary_key=True)
+
+    perfil: Mapped[PerfilAcl] = relationship(back_populates="direitos")
+    recurso: Mapped[RecursoAcl] = relationship(lazy="joined")
+
+
+class UsuarioPerfil(Base):
+    """Perfil atribuído a um usuário (`padrao` = o perfil que vale ao entrar; só um por usuário)."""
+
+    __tablename__ = "usuarios_perfis"
+
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True)
+    perfil_id: Mapped[int] = mapped_column(ForeignKey("acl_perfis.id", ondelete="CASCADE"), primary_key=True, index=True)
+    padrao: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    perfil: Mapped[PerfilAcl] = relationship(back_populates="vinculos")
+
+
+class PerfilSetor(Base):
+    """Setor ou grupo sistêmico que recebe o perfil: todos os seus membros ativos passam a ter o perfil."""
+
+    __tablename__ = "acl_perfis_setores"
+
+    perfil_id: Mapped[int] = mapped_column(ForeignKey("acl_perfis.id", ondelete="CASCADE"), primary_key=True)
+    setor_id: Mapped[int] = mapped_column(ForeignKey("setores.id", ondelete="CASCADE"), primary_key=True, index=True)
+
+    perfil: Mapped[PerfilAcl] = relationship(back_populates="setores_vinculados")
+    setor = relationship("Setor", lazy="joined")

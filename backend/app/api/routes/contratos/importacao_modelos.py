@@ -7,7 +7,7 @@ Duas famílias de rotas, com o mesmo fluxo (baixar o modelo → prévia → conf
   **inativa** (é preciso ativá-la depois, como no cadastro manual);
 - modelos globais: `/api/contratos/modelos/importacao-xlsx/{checklist|formulario}` cria um modelo global (SuperRoot).
 
-Acesso: ACL `importacao-modelos` ≥ MODIFICACAO **e** ACL `contratos` ≥ MODIFICACAO; no contrato, também o
+Acesso: ACL `contratos` ≥ MODIFICACAO; no contrato, também o
 vínculo exigido para editá-lo (403 `acesso_negado`); nos modelos globais, o papel SuperRoot.
 """
 
@@ -18,12 +18,11 @@ from fastapi import APIRouter, Depends, File, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import exigir_acl, exigir_papeis
+from app.api.dependencias import exigir_papeis
 from app.api.respostas import RESPOSTAS_AUTENTICADAS, resposta_nao_encontrado
 from app.api.routes.contratos.comum import SEM_VINCULO, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
-from app.models.acl import NivelAcl
 from app.models.usuario import Papel, Usuario
 from app.schemas.comum import RespostaErro
 from app.schemas.contratos.execucao import LeituraChecklist, LeituraFormulario, LeituraModelo
@@ -35,8 +34,6 @@ from app.services.contratos.servico_importacao_xlsx import TAMANHO_MAXIMO, ErroP
 roteador = APIRouter(prefix="/contratos", tags=["Contratos: importação de modelos por XLSX"], responses=RESPOSTAS_AUTENTICADAS)
 
 # Slug do recurso próprio na ACL (criado pela migração, liberado pelo SuperRoot)
-RECURSO = "importacao-modelos"
-pode_importar = exigir_acl(RECURSO, NivelAcl.MODIFICACAO)
 super_root = exigir_papeis(Papel.SUPER_ROOT)
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 NAO_ENCONTRADO = resposta_nao_encontrado("Contrato")
@@ -51,13 +48,13 @@ ARQUIVO_INVALIDO = {
 RESPOSTA_MODELO = {status.HTTP_200_OK: {"content": {XLSX: {}}, "description": "Planilha modelo."}}
 
 
-def _acesso_contrato(usuario: Usuario = Depends(pode_importar), _: Usuario = Depends(pode_modificar)) -> Usuario:
-    """Junta as duas exigências de ACL (importação e edição de contratos) numa dependência só."""
+def _acesso_contrato(usuario: Usuario = Depends(pode_modificar)) -> Usuario:
+    """Importar checklist/formulário é parte de "Editar contratos e conduzir a execução": basta `contratos` ≥ MODIFICACAO."""
     return usuario
 
 
-def _acesso_global(usuario: Usuario = Depends(pode_importar), _: Usuario = Depends(super_root)) -> Usuario:
-    """Modelos globais: ACL de importação e papel SuperRoot."""
+def _acesso_global(usuario: Usuario = Depends(super_root)) -> Usuario:
+    """Modelos globais: só o papel SuperRoot."""
     return usuario
 
 
@@ -84,7 +81,7 @@ def _erro_planilha(erro: ErroPlanilha) -> ErroApi:
 # ---------------------------------------------------------------------------------------------
 
 @roteador.get("/{contrato_id}/{recurso}/importacao-xlsx/modelo", response_class=Response, summary="Baixar a planilha modelo (checklist ou formulário)",
-              description="`recurso` = `checklists` ou `formularios`. Exige ACL `importacao-modelos` e `contratos` ≥ MODIFICACAO.",
+              description="`recurso` = `checklists` ou `formularios`. Exige ACL `contratos` ≥ MODIFICACAO.",
               responses=RESPOSTA_MODELO)
 def baixar_modelo_contrato(contrato_id: uuid.UUID, recurso: Literal["checklists", "formularios"], _: Usuario = Depends(_acesso_contrato)) -> Response:
     """Entrega o modelo; não depende do contrato."""
@@ -94,7 +91,7 @@ def baixar_modelo_contrato(contrato_id: uuid.UUID, recurso: Literal["checklists"
 @roteador.post("/{contrato_id}/{recurso}/importacao-xlsx/previa", response_model=PreviaImportacaoModelo,
                summary="Prévia da importação de checklist ou formulário",
                description="`multipart/form-data` com a planilha em `arquivo`. Lê e valida sem gravar: devolve o que foi lido, os erros "
-               "(com a linha) e os avisos. Exige ACL `importacao-modelos` e `contratos` ≥ MODIFICACAO.",
+               "(com a linha) e os avisos. Exige ACL `contratos` ≥ MODIFICACAO.",
                responses={**ARQUIVO_INVALIDO, **NAO_ENCONTRADO})
 async def previa_contrato(contrato_id: uuid.UUID, recurso: Literal["checklists", "formularios"], arquivo: UploadFile = File(..., description="Planilha .xlsx"),
                           sessao: Session = Depends(obter_sessao), _: Usuario = Depends(_acesso_contrato)) -> PreviaImportacaoModelo:
@@ -107,7 +104,7 @@ async def previa_contrato(contrato_id: uuid.UUID, recurso: Literal["checklists",
 @roteador.post("/{contrato_id}/checklists/importacao-xlsx", response_model=list[LeituraChecklist], status_code=status.HTTP_201_CREATED,
                summary="Importar checklist da planilha (versão inativa)",
                description="`multipart/form-data` com a mesma planilha da prévia. Valida de novo e, sem erros, cria uma versão **inativa** do "
-               "checklist; devolve a lista de versões. Exige ACL `importacao-modelos`, `contratos` ≥ MODIFICACAO e poder editar o contrato.",
+               "checklist; devolve a lista de versões. Exige ACL `contratos` ≥ MODIFICACAO e poder editar o contrato.",
                responses={**ARQUIVO_INVALIDO, **NAO_ENCONTRADO, **SEM_VINCULO})
 async def importar_checklist(contrato_id: uuid.UUID, arquivo: UploadFile = File(..., description="Planilha .xlsx"),
                              sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(_acesso_contrato)):
@@ -124,7 +121,7 @@ async def importar_checklist(contrato_id: uuid.UUID, arquivo: UploadFile = File(
 @roteador.post("/{contrato_id}/formularios/importacao-xlsx", response_model=list[LeituraFormulario], status_code=status.HTTP_201_CREATED,
                summary="Importar formulário de avaliação da planilha (versão inativa)",
                description="`multipart/form-data` com a mesma planilha da prévia. Valida de novo e, sem erros, cria uma versão **inativa** do "
-               "formulário; devolve a lista de versões. Exige ACL `importacao-modelos`, `contratos` ≥ MODIFICACAO e poder editar o contrato.",
+               "formulário; devolve a lista de versões. Exige ACL `contratos` ≥ MODIFICACAO e poder editar o contrato.",
                responses={**ARQUIVO_INVALIDO, **NAO_ENCONTRADO, **SEM_VINCULO})
 async def importar_formulario(contrato_id: uuid.UUID, arquivo: UploadFile = File(..., description="Planilha .xlsx"),
                               sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(_acesso_contrato)):
@@ -143,14 +140,14 @@ async def importar_formulario(contrato_id: uuid.UUID, arquivo: UploadFile = File
 # ---------------------------------------------------------------------------------------------
 
 @roteador.get("/modelos/importacao-xlsx/{tipo}/modelo", response_class=Response, summary="Baixar a planilha modelo de um modelo global",
-              description="`tipo` = `checklist` ou `formulario`. Exige ACL `importacao-modelos` e papel SuperRoot.", responses=RESPOSTA_MODELO)
+              description="`tipo` = `checklist` ou `formulario`. Exige papel SuperRoot.", responses=RESPOSTA_MODELO)
 def baixar_modelo_global(tipo: Literal["checklist", "formulario"], _: Usuario = Depends(_acesso_global)) -> Response:
     """Entrega o modelo da planilha."""
     return _modelo(tipo)
 
 
 @roteador.post("/modelos/importacao-xlsx/{tipo}/previa", response_model=PreviaImportacaoModelo, summary="Prévia da importação de modelo global",
-               description="`multipart/form-data` com a planilha em `arquivo`. Não grava nada. Exige ACL `importacao-modelos` e papel SuperRoot.",
+               description="`multipart/form-data` com a planilha em `arquivo`. Não grava nada. Exige papel SuperRoot.",
                responses=ARQUIVO_INVALIDO)
 async def previa_global(tipo: Literal["checklist", "formulario"], arquivo: UploadFile = File(..., description="Planilha .xlsx"),
                         _: Usuario = Depends(_acesso_global)) -> PreviaImportacaoModelo:
@@ -163,7 +160,7 @@ async def previa_global(tipo: Literal["checklist", "formulario"], arquivo: Uploa
 @roteador.post("/modelos/importacao-xlsx/{tipo}", response_model=LeituraModelo, status_code=status.HTTP_201_CREATED,
                summary="Importar modelo global da planilha",
                description="`multipart/form-data` com a mesma planilha da prévia. Valida de novo e, sem erros, cria o modelo global. "
-               "Exige ACL `importacao-modelos` e papel SuperRoot.", responses=ARQUIVO_INVALIDO)
+               "Exige papel SuperRoot.", responses=ARQUIVO_INVALIDO)
 async def importar_global(tipo: Literal["checklist", "formulario"], arquivo: UploadFile = File(..., description="Planilha .xlsx"),
                           sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(_acesso_global)) -> LeituraModelo:
     """Cria o modelo global a partir da planilha."""

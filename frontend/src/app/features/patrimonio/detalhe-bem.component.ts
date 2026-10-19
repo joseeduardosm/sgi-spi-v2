@@ -12,7 +12,7 @@ import { montarChapa, separarChapa } from './chapa-prefixo';
 import { LeitorCodigoComponent } from './leitor-codigo.component';
 import { PatrimonioApiService } from './patrimonio-api.service';
 import { PatrimonioEstadoService } from './patrimonio-estado.service';
-import { Bem, COR_SITUACAO, DadosBem, Evento, ROTULOS_CONSERVACAO, ROTULOS_GARANTIA, ROTULOS_SITUACAO } from './patrimonio.models';
+import { Bem, COR_SITUACAO, DadosBem, Evento, ROTULOS_CONSERVACAO, ROTULOS_GARANTIA, ROTULOS_SITUACAO, rotuloCategoria } from './patrimonio.models';
 import { SeletorSalaComponent } from './seletor-sala.component';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
@@ -39,7 +39,7 @@ const CAMPOS_EDITAVEIS = ['chapa', 'descricao', 'conservacao', 'situacao', 'orig
       <section class="painel-gestao patrimonio" [class.pat-compacto]="editando()" [class.pat-formulario]="editando()">
         <div class="pat-topo-bem">
           <span class="pat-marcadores">
-            <span [class]="marcador(cores[b.situacao])">{{ situacoes[b.situacao] }}</span>
+            <span [class]="marcador(cores[b.situacao])">{{ situacoes[b.situacao] }}@if (b.categoria_inservivel) { · {{ rotuloCategoria(b.categoria_inservivel) }} }</span>
             @if (b.classificacao_pendente) { <span [class]="marcador(3)">Classificação pendente</span> }
             @if (b.em_movimentacao) { <span [class]="marcador(4)">Em movimentação</span> }
             @if (b.dados_contabeis_pendentes) { <span [class]="marcador(0)">Dados contábeis pendentes</span> }
@@ -235,6 +235,7 @@ export class DetalheBemComponent implements OnInit, OnDestroy {
   protected readonly marcador = classeMarcador;
   protected readonly cores = COR_SITUACAO;
   protected readonly situacoes = ROTULOS_SITUACAO;
+  protected readonly rotuloCategoria = rotuloCategoria;
   protected readonly conservacoes = Object.entries(ROTULOS_CONSERVACAO);
   protected readonly rotulosCampo = ROTULOS_CAMPO;
   protected readonly rotulosEvento = ROTULOS_EVENTO;

@@ -193,8 +193,11 @@
                     <button type="button" class="link-simples" aria-label="Cancelar a resposta" (click)="cancelarResposta()">×</button>
                   </div>
                 }
-                <textarea #campoComentario name="comentario" rows="2" maxlength="4000" placeholder="Escreva um comentário… (os envolvidos são avisados; use @login para avisar alguém; Ctrl+V cola prints e arquivos)" aria-label="Comentário"
-                          (paste)="colarArquivos($event)" [(ngModel)]="textoComentario"></textarea>
+                <!-- Comentário em texto rico; Ctrl+V cola prints e arquivos como anexos (o texto colado segue no editor) -->
+                <div class="comentario-rico" (paste)="colarArquivos($event)">
+                  @defer (on idle) { <app-editor-rico #editorComentario [(html)]="textoComentario" [colarFormatado]="true" rotulo="Comentário" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="2" /> }
+                </div>
+                <small class="dica-formulario">Os envolvidos são avisados. Use &#64;login para avisar alguém e Ctrl+V para colar prints e arquivos.</small>
                 @if (pessoasMencao().length) {
                   <select class="mencionar" name="mencionar" aria-label="Mencionar alguém" [ngModel]="''" (ngModelChange)="mencionar($event)">
                     <option value="">@ Mencionar alguém…</option>
@@ -266,7 +269,7 @@
                             <strong>↩ {{ texto(e.dados['resposta_autor']) }}</strong> <span>{{ texto(e.dados['resposta_texto']) }}</span>
                           </blockquote>
                         }
-                        @if (e.texto) { <p class="texto-evento" [class.justificativa]="e.tipo !== 'comentario'" [innerHTML]="e.texto | linkificar"></p> }
+                        @if (e.texto) { <div class="texto-evento" [class.justificativa]="e.tipo !== 'comentario'" [class.texto-evento-html]="e.tipo === 'devolvida' || e.tipo === 'comentario'" [innerHTML]="(e.tipo === 'devolvida' || e.tipo === 'comentario' ? (e.texto | descricaoTarefa) : (e.texto | linkificar))"></div> }
                         @if (e.anexos.length) {
                           <ul class="anexos-evento">
                             @for (a of e.anexos; track a.id) {

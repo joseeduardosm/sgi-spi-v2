@@ -338,12 +338,14 @@ def _dono_ou_admin(sessao: Session, numero: NumeroProtocolo, usuario: Usuario) -
     return numero.reservado_por_id == usuario.id or controle_total(sessao, usuario)
 
 
-def liberar(sessao: Session, numero_id: uuid.UUID, motivo: str, autor: Usuario) -> NumeroProtocolo:
-    """Desfaz uma reserva ainda sem documento: o número volta a livre (o histórico fica)."""
+def liberar(sessao: Session, numero_id: uuid.UUID, motivo: str, autor: Usuario, *, ignorar_dono: bool = False) -> NumeroProtocolo:
+    """Desfaz uma reserva ainda sem documento: o número volta a livre (o histórico fica).
+
+    `ignorar_dono=True` é para as portarias dos contratos, que reservam o número por trás de um fluxo próprio e já conferiram a permissão."""
     numero = _numero(sessao, numero_id)
     if numero.estado != "reservado":
         raise ErroProtocolo("Só é possível liberar um número reservado e sem documento.", 409, "conflito")
-    if not _dono_ou_admin(sessao, numero, autor):
+    if not ignorar_dono and not _dono_ou_admin(sessao, numero, autor):
         raise ErroProtocolo("Só quem reservou o número ou a administração do Protocolo pode liberá-lo.", 403, "sem_permissao")
     motivo = (motivo or "").strip()
     if not motivo:
@@ -388,6 +390,14 @@ def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo
         raise ErroProtocolo("Este número já possui documento anexado e não pode ser reutilizado.", 409, "conflito")
     if not ignorar_dono and not _dono_ou_admin(sessao, numero, autor):
         raise ErroProtocolo("Só quem reservou o número ou a administração do Protocolo pode anexar o documento.", 403, "sem_permissao")
+    # Número de uma portaria de designação: só depois do aceite da autoridade e com o PDF do D.O.E. (a publicação aplica a equipe)
+    from app.services.contratos import servico_portaria
+    from app.services.contratos.erros import ErroRegraContrato
+
+    try:
+        servico_portaria.validar_anexo_no_numero(sessao, numero.id, nome_arquivo)
+    except ErroRegraContrato as erro:
+        raise ErroProtocolo(str(erro), 409, "conflito") from erro
     try:
         anexo = servico_anexos.guardar_arquivo(sessao, origem, nome_arquivo, "protocolo-documento", autor.id)
     except servico_anexos.ErroAnexo as erro:
@@ -397,6 +407,8 @@ def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo
     notificacoes.encerrar(sessao, prefixo=f"protocolo:{numero.id}:")
     rotulo = f"{numero.sequencia.tipo.nome} {formatar_numero(numero.numero, numero.sequencia.exercicio)}"
     auditar(sessao, autor.login, "protocolo.anexar", rotulo, autor_id=autor.id, alvo_tipo="protocolo_numero", alvo_id=numero.id)
+    # Se o número é de uma portaria aceita, o D.O.E. anexado a publica e aplica a nova equipe (na mesma transação)
+    servico_portaria.publicar_pelo_protocolo(sessao, numero, autor)
     sessao.commit()
     return numero
 

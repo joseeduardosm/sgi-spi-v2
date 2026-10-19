@@ -6,21 +6,23 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
-import { AcessoEfetivo, descricaoNivel, NiveisTextos, NIVEIS_ACL, NivelAcl, rotuloNivel } from '../../../core/acesso/acesso.service';
+import { AcessoEfetivo, descricaoNivel, NiveisTextos, NIVEIS_ACL, NivelAcl, niveisDistintos, rotuloNivel } from '../../../core/acesso/acesso.service';
 import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { Setor, SetoresApiService } from '../../setores/setores-api.service';
 import { UsuariosApiService } from '../../usuarios/usuarios-api.service';
 import { AclApiService, RecursoAcl, RegraAcl } from './acl-api.service';
+import { PerfisAclComponent } from './perfis-acl.component';
+import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { TrilhaComponent } from '../../../shared/componentes/trilha/trilha.component';
 
 /** Abas da tela. */
-type Aba = 'regras' | 'recursos' | 'efetivo';
+type Aba = 'perfis' | 'regras' | 'recursos' | 'efetivo';
 
 /** Administração de ACL: recursos, regras e consulta de acesso efetivo (SuperRoot). */
 @Component({
   selector: 'app-acl',
-  imports: [FormsModule, ReactiveFormsModule, DatePipe, SeletorUsuariosComponent, TrilhaComponent],
+  imports: [FormsModule, ReactiveFormsModule, DatePipe, SeletorUsuariosComponent, TrilhaComponent, PerfisAclComponent],
   templateUrl: './acl.component.html',
   host: { '(document:keydown.escape)': 'fecharFormularios()' },
 })
@@ -29,12 +31,14 @@ export class AclComponent implements OnInit {
   private readonly setoresApi = inject(SetoresApiService);
   protected readonly usuarios = inject(UsuariosApiService);
   private readonly construtor = inject(NonNullableFormBuilder);
+  private readonly autenticacao = inject(AutenticacaoService);
 
   // Listas fixas para os seletores de nível
   protected readonly niveis = NIVEIS_ACL;
   protected readonly rotuloNivel = rotuloNivel;
+  protected readonly niveisDistintos = niveisDistintos;
   protected readonly descricaoNivel = descricaoNivel;
-  protected readonly aba = signal<Aba>('regras');
+  protected readonly aba = signal<Aba>('perfis');
   protected readonly aviso = signal<{ texto: string; erro: boolean } | null>(null);
 
   // Dados carregados e o filtro de regras por recurso
@@ -115,6 +119,27 @@ export class AclComponent implements OnInit {
     });
   }
 
+  /** Nome legível da origem de um nível efetivo. */
+  protected origem(origens: AcessoEfetivo['origens']): { chave: string; rotulo: string; nivel: NivelAcl }[] {
+    const nomes: Record<string, string> = { perfil: 'Perfil', setor: 'Setor', direta: 'Direta' };
+    return Object.entries(origens ?? {}).map(([chave, nivel]) => ({ chave, rotulo: nomes[chave] ?? chave, nivel: nivel as NivelAcl }));
+  }
+
+  /** O SuperRoot navega como o usuário consultado para testar as permissões dele (a aplicação recarrega em `/`). */
+  protected personificar(): void {
+    const usuario = this.usuarioConsultado()[0];
+    if (!usuario) return;
+    this.autenticacao.personificar(usuario.id).subscribe({
+      next: () => window.location.assign('/'),
+      error: (erro) => this.falhar(erro, 'Não foi possível personificar o usuário.'),
+    });
+  }
+
+  /** Mensagem vinda da aba de perfis. */
+  protected mostrar(aviso: { texto: string; erro: boolean }): void {
+    this.aviso.set(aviso);
+  }
+
   /** Filtra a tabela de regras pelo recurso escolhido (0 = todos). */
   protected filtrarPorRecurso(valor: number): void {
     this.recursoFiltrado.set(Number(valor));
@@ -123,7 +148,9 @@ export class AclComponent implements OnInit {
   /** Texto que explica a política atual do recurso (aberto, lista positiva ou inativo). */
   protected politica(r: RecursoAcl): string {
     if (!r.ativo) return 'Inativo: acesso aberto';
-    return r.total_regras ? `Lista positiva · ${r.total_regras} regra(s)` : 'Aberto: sem regras';
+    const perfis = r.total_perfis ?? 0;
+    if (!r.total_regras && !perfis) return 'Aberto: sem regras nem perfis';
+    return `Lista positiva · ${r.total_regras} regra(s) · ${perfis} perfil(is)`;
   }
 
   // --- Regras ---

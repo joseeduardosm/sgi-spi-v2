@@ -17,6 +17,7 @@ O **Departamento** do perfil guarda o nome de um setor institucional ativo. Quan
 Detalhes:
 - A comparação é pelo nome do setor, sem diferenciar maiúsculas. Departamento que não corresponde a um setor institucional ativo não cria nem remove vínculos.
 - Participações em outros setores (grupos sistêmicos ou incluídas à mão em `membros_ids`) não são tocadas.
+- **Grupo sistêmico automático "Equipes de contratos"** (migração `a7c3e9f1b5d2`): o sistema mantém sozinho os membros. Entra todo usuário ativo com designação vigente na equipe de ao menos um contrato (gestor, fiscais etc.); sai quando deixa de integrar a equipe de todos os contratos (troca de designado, contrato excluído ou usuário inativado). A lista é recalculada na mesma transação de `POST /contratos`, `PUT /contratos/{id}` (quando a equipe muda) e `DELETE /contratos/{id}`. Não edite os membros à mão: a próxima alteração de equipe os recalcula. Serve para dar regras de ACL ou enviar notificações a todas as equipes de contratos.
 - Alteração **pendente** de validação não muda a participação; só a validação.
 - Renomear o setor (`PUT /api/setores/{id}` com `nome` novo) atualiza o Departamento dos usuários que apontavam para o nome antigo.
 - A migração `a7c1e5b9d3f4` aplicou a regra aos usuários que já tinham o Departamento válido, mas nenhum vínculo.

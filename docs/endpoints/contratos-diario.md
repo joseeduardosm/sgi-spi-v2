@@ -63,6 +63,7 @@ JSON inválido ou fora das regras → `422 validacao`.
 | Campo | Tipo | Regras |
 |---|---|---|
 | `data_ocorrencia` | date | Obrigatória; não futura; não anterior ao início do contrato |
+| `competencia_afetada` | string | `AAAA-MM`, competência **regular já gerada** do contrato (`400` se não existir). **É onde valem a glosa e o impacto na avaliação**, mesmo que a data da ocorrência seja de outro mês (ex.: documento errado enviado em 03/08 afeta a 07/2026). Vazio: a competência cujo período contém a data |
 | `descricao` | string | 1 a 20000 caracteres. **HTML do editor rico** (negrito, listas, links; sanitizado pela API, o mesmo das tarefas) ou texto simples antigo; editor vazio (`<p></p>`) é recusado. Nos PDFs, no XLSX, nas notificações e nos resumos da medição/avaliação a ocorrência sai como **texto puro**; no e-mail, com a formatação |
 | `possui_glosa` | boolean | A ocorrência implicará glosa? |
 | `glosas` | `[{item_id, quantidade}]` | Só com `possui_glosa`; item do contrato; quantidade > 0; sem repetir item |
@@ -93,7 +94,7 @@ de avaliação ativo, para marcar o impacto (vazio sem formulário ativo).
 | `POST /api/contratos/{contrato_id}/diario` | `multipart/form-data` (`dados` + `arquivos`). Registra a ocorrência e agenda o e-mail | `201` `LeituraOcorrencia`, `400 invalido`, `403`, `404`, `422` |
 | `GET /api/contratos/{contrato_id}/diario/{ocorrencia_id}/anexos/{anexo_id}` | Baixa um anexo da ocorrência (ACL LEITURA) | `200` arquivo, `404` |
 | `POST /api/contratos/{contrato_id}/diario/{ocorrencia_id}/reenviar` | Reenvia o e-mail (síncrono) e devolve a ocorrência com o novo resultado | `200`, `403`, `404` |
-| `GET /api/contratos/{contrato_id}/diario/pdf?inicio=&fim=` | Diário em PDF (A4 paisagem): ocorrências com data no período (limites inclusivos; sem período = todo o contrato) e glosas por item. Nome `DIARIO_DE_BORDO_SPI_NNN_AAAA.pdf` | `200` `application/pdf`, `404` |
+| `GET /api/contratos/{contrato_id}/diario/pdf?inicio=&fim=` | Diário em PDF (A4 paisagem) em formato de diário: **uma página por dia com ocorrência**, com todas as ocorrências do dia (quem registrou e quando, relato em texto puro, competência afetada, glosa, impacto na avaliação e anexos); dias sem ocorrência não geram página e um dia com muito texto continua nas páginas seguintes. Período: limites inclusivos, sem período = todo o contrato. Depois, uma página com as glosas por item e, se houver anexos nas ocorrências, a **lista de anexos** (nº, data da ocorrência, arquivo e páginas): os arquivos são **juntados ao fim do PDF**, cada um precedido de uma folha de rosto (PDF entra como está, PNG/JPG vira uma página; Office, TXT e CSV não cabem no PDF e ficam só com a folha de rosto avisando para baixar no sistema). Todas as páginas saem numeradas em sequência ("Página X de N"). Nome `DIARIO_DE_BORDO_SPI_NNN_AAAA.pdf` | `200` `application/pdf`, `404` |
 
 Exemplo de registro com glosa, impacto e uma foto:
 
@@ -119,3 +120,17 @@ curl -X POST .../api/contratos/{contrato_id}/diario \
 
 
 **E-mail da ocorrência:** o envio por e-mail à equipe e aos prepostos só acontece com `enviar_email = true` em `dados` (padrão `false`); o reenvio manual continua disponível.
+
+
+## Competência afetada
+
+- `LeituraOcorrencia.competencia_afetada` (`AAAA-MM`) e `competencia_rotulo` (ex.: `09/2026`) vêm da competência apontada no registro; registros antigos foram migrados (`b9d5f7a2c4e6`) com a competência que continha a data. A tela mostra o selo "Competência afetada".
+- `GET /diario` devolve `competencias[]` (`identificador`, `rotulo`, `periodo_inicio`, `periodo_fim`, `medicao_concluida`) para o formulário; o campo sugere a competência da data enquanto a pessoa não escolher outra.
+- A glosa limita a medição **da competência afetada** (`glosas_periodo` do detalhe da competência e saldo líquido dos itens), o relatório de glosas da memória de cálculo lista as ocorrências que afetam a competência, e o impacto na avaliação (`ocorrencias_que_impactam`) também. Competência com mais de um trecho de preço: a glosa vai ao trecho da data; a de data fora da competência vai ao primeiro trecho.
+- O PDF do diário (por período de datas) continua filtrando pela **data da ocorrência** e acrescenta "Competência afetada: mm/aaaa" no relato.
+
+## Ocorrência automática da pendência no CADIN
+
+Todo registro de consulta ao CADIN **com pendência** (`POST /competencias/{id}/cadin`) cria uma ocorrência no diário de bordo, em nome de quem registrou a consulta: `criado_em` é o instante do registro da consulta, `data_ocorrencia` o dia dele (horário de São Paulo), `competencia_afetada` a competência da etapa (se regular), com o texto "Pendência no CADIN … Pendência: …" e **sem glosa, sem impacto na avaliação e sem e-mail próprio** (a equipe já recebe em cópia o e-mail ao preposto). Auditada como `contrato.diario.registrar` com `origem = cadin`. Reenviar o e-mail ou registrar uma consulta sem pendência não cria ocorrência.
+
+**Pendências antigas:** a migração `b8d4f0a6c2e3` criou a ocorrência das consultas com pendência registradas **antes** dessa automação, como se tivessem sido registradas à época (mesmo instante da consulta, em nome de quem a registrou; sem duplicar).

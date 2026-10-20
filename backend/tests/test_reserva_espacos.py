@@ -178,3 +178,48 @@ def test_lembrete_um_dia_antes_e_fila(cliente, admin):
         # A predefinida de amanhã não tem usuário a avisar (responsável digitado); o solicitante é o fiscal, que também é avisado
         assert servico.lembrar(sessao, hoje_sao_paulo()) == 1
         assert servico.lembrar(sessao, hoje_sao_paulo()) == 0
+
+
+def _perfil(cliente, admin, nome: str, recurso_id: int, acoes: list[str], usuarios: list[int]) -> None:
+    """Perfil com as colunas indicadas do recurso `reserva-espacos` e os usuários que o recebem."""
+    perfil = cliente.post("/api/acl/perfis", json={"nome": nome, "descricao": "", "ativo": True}, headers=admin).json()
+    assert cliente.put(f"/api/acl/perfis/{perfil['id']}/modulos/{recurso_id}", json={"acoes": acoes}, headers=admin).status_code == 200
+    assert cliente.put(f"/api/acl/perfis/{perfil['id']}/usuarios", json={"usuarios_ids": usuarios}, headers=admin).status_code == 200
+
+
+def test_colunas_da_acl_solicitar_aprovar_e_controle_total(cliente, admin):
+    """Solicitar só solicita; Aprovar só defere, indefere e cancela; quem pode os dois precisa dos dois; Controle total faz tudo e cria espaços."""
+    espaco = cliente.post(f"{URL}/espacos", json={"nome": "Sala A", "cor": "#3810c6", "capacidade": 8}, headers=admin).json()["id"]
+    ids = {nome: criar_usuario(nome, nome_completo=nome.title()) for nome in ("solicita", "aprova", "ambos", "total", "fora")}
+    recurso = cliente.post("/api/acl/recursos", json={"nome": "Reserva de Espaços", "slug": "reserva-espacos"}, headers=admin).json()["id"]
+    _perfil(cliente, admin, "Solicitante de reservas", recurso, ["LEITURA"], [ids["solicita"]])
+    _perfil(cliente, admin, "Aprovador de reservas", recurso, ["MODIFICACAO"], [ids["aprova"]])
+    _perfil(cliente, admin, "Solicita e aprova", recurso, ["LEITURA", "MODIFICACAO"], [ids["ambos"]])
+    _perfil(cliente, admin, "Administrador de reservas", recurso, ["CONTROLE_TOTAL"], [ids["total"]])
+    h = {nome: cabecalho(cliente, nome) for nome in ids}
+
+    # Sem coluna nenhuma, nem entra (o módulo deixou de ser aberto ao criar o primeiro perfil)
+    assert cliente.get(f"{URL}/contexto", headers=h["fora"]).status_code == 403
+    # Solicitar: vê a agenda, solicita e cancela a própria; não vê a fila nem aprova
+    assert cliente.get(f"{URL}/contexto", headers=h["solicita"]).json()["pode_solicitar"] is True
+    reserva = cliente.post(f"{URL}/reservas", json=_corpo(espaco), headers=h["solicita"])
+    assert reserva.status_code == 201, reserva.text
+    rid = reserva.json()["reservas"][0]["id"]
+    assert cliente.get(f"{URL}/fila", headers=h["solicita"]).status_code == 403
+    assert cliente.post(f"{URL}/reservas/{rid}/analise", json={"decisao": "deferir"}, headers=h["solicita"]).status_code == 403
+    assert cliente.post(f"{URL}/espacos", json={"nome": "Sala X"}, headers=h["solicita"]).status_code == 403
+    # Aprovar: vê a fila, defere e cancela; não solicita nem cria espaço
+    assert cliente.post(f"{URL}/reservas", json=_corpo(espaco, ini="11:00", fim="12:00"), headers=h["aprova"]).status_code == 403
+    assert [r["id"] for r in cliente.get(f"{URL}/fila", headers=h["aprova"]).json()] == [rid]
+    assert cliente.post(f"{URL}/espacos", json={"nome": "Sala X"}, headers=h["aprova"]).status_code == 403
+    assert cliente.get(f"{URL}/painel", headers=h["aprova"]).status_code == 403
+    assert cliente.post(f"{URL}/reservas/{rid}/analise", json={"decisao": "deferir"}, headers=h["aprova"]).status_code == 200
+    assert cliente.post(f"{URL}/reservas/{rid}/cancelamento", json={"escopo": "ocorrencia", "motivo": "Sala em manutenção"}, headers=h["aprova"]).status_code == 200
+    # Os dois: solicita e aprova a própria fila
+    outra = cliente.post(f"{URL}/reservas", json=_corpo(espaco, ini="14:00", fim="15:00"), headers=h["ambos"])
+    assert outra.status_code == 201, outra.text
+    assert cliente.get(f"{URL}/fila", headers=h["ambos"]).status_code == 200
+    # Controle total faz tudo e cria espaço
+    assert cliente.post(f"{URL}/espacos", json={"nome": "Sala Nova", "cor": "#111111", "capacidade": 4}, headers=h["total"]).status_code == 201
+    assert cliente.post(f"{URL}/reservas", json=_corpo(espaco, ini="16:00", fim="17:00"), headers=h["total"]).status_code == 201
+    assert cliente.get(f"{URL}/fila", headers=h["total"]).status_code == 200 and cliente.get(f"{URL}/painel", headers=h["total"]).status_code == 200

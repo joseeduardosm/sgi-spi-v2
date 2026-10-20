@@ -101,6 +101,9 @@
                 }
               </td>
             </tr>
+            @if (a.status !== 'cancelado') {
+              <tr class="linha-trilha"><td colspan="6"><app-trilha-etapas [etapas]="trilha(a)" ariaLabel="Etapas do pedido" [compacta]="true" /></td></tr>
+            }
           } @empty {
             <tr><td class="estado-vazio" colspan="6">Nenhum pedido neste exercício.</td></tr>
           }

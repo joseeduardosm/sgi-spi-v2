@@ -1,6 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para o painel de férias e licença-prêmio da CGP e dos autorizadores (calendário, filtros, alertas e aprovação).
 
+import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaAfastamento } from './trilha-afastamento';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -32,12 +34,13 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-painel-afastamentos',
-  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, GraficoComponent, CabecalhoRhComponent, LancamentoAfastamentoComponent],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, GraficoComponent, CabecalhoRhComponent, LancamentoAfastamentoComponent],
   templateUrl: './painel-afastamentos.component.html',
   // Esc fecha o detalhe do período e a janela de recusa
   host: { '(document:keydown.escape)': 'detalhe.set(null); recusando.set(null)' },
 })
 export class PainelAfastamentosComponent implements OnInit {
+  protected readonly trilha = trilhaAfastamento;
   private readonly api = inject(RhApiService);
   private readonly dialogos = inject(DialogosService);
 

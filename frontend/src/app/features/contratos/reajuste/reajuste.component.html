@@ -11,6 +11,7 @@
           @if (p.pode_editar) { <button type="button" class="acao-perigo" (click)="cancelar(r)">Cancelar reajuste</button> }
         </header>
         <div class="corpo">
+          <app-trilha-etapas [etapas]="trilha(r)" ariaLabel="Etapas do reajuste" [compacta]="true" />
           <!-- Mês de referência e mês de reajuste sempre no topo -->
           <dl class="resumo-reajuste">
             <div><dt>Novos valores a partir de</dt><dd>{{ r.data_efeito | dataBr }}</dd></div>

@@ -115,9 +115,9 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
         "CONTROLE_TOTAL": _n("Alterar as políticas de SLA", "Igual a Modificação: o módulo não diferencia."),
     },
     "reserva-espacos": {
-        "LEITURA": _n("Usar a reserva de espaços", "Vê a agenda, solicita e altera as próprias reservas; os fiscais analisam as solicitações."),
-        "MODIFICACAO": _n("Usar a reserva de espaços", "Igual a Leitura: o módulo não diferencia."),
-        "CONTROLE_TOTAL": _n("Usar a reserva de espaços", "Igual a Leitura: o módulo não diferencia."),
+        "LEITURA": _n("Solicitar reservas", "Vê a agenda, solicita reservas e altera ou cancela as próprias. Só isso: não aprova nada."),
+        "MODIFICACAO": _n("Aprovar reservas", "Vê a fila, defere, indefere e cancela reservas de qualquer pessoa. Só isso: para também solicitar, marque \"Solicitar reservas\" junto."),
+        "CONTROLE_TOTAL": _n("Administrar a reserva de espaços", "Faz tudo (solicitar e aprovar) e ainda cria, altera e exclui espaços, lança reservas predefinidas e vê o painel, a exportação e a configuração."),
     },
 }
 

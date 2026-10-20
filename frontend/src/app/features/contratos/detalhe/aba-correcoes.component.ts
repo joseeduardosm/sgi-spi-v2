@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para a aba "Correções de itens": corrigir preço e quantidades depois de geradas as competências (proposta, prévia e confirmação por outra pessoa).
 
+import { EtapaTrilha, TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -29,7 +30,7 @@ interface LinhaEdicao {
  */
 @Component({
   selector: 'app-aba-correcoes',
-  imports: [LinkificarPipe, FormsModule, DatePipe],
+  imports: [TrilhaEtapasComponent, LinkificarPipe, FormsModule, DatePipe],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-correcoes">
       <header>
@@ -48,6 +49,7 @@ interface LinhaEdicao {
               <span class="selo-situacao" [class.inativo]="c.situacao !== 'pendente' && c.situacao !== 'aplicada'">{{ situacoes[c.situacao] }}</span>
             </button>
             @if (aberta(c)) {
+              <app-trilha-etapas [etapas]="trilha(c)" ariaLabel="Etapas da correção" [compacta]="true" />
               <p style="margin: 8px 0 4px; font-size: 13px"><b>Justificativa:</b> <span [innerHTML]="c.justificativa | linkificar"></span></p>
               @for (m of c.mudancas; track m.item_id) {
                 <div style="font-size: 12.5px; margin: 6px 0"><b>{{ m.descricao }}</b>
@@ -129,6 +131,17 @@ interface LinhaEdicao {
   `,
 })
 export class AbaCorrecoesComponent implements OnInit {
+  /** Proposta → Confirmação por outra pessoa → Aplicada; recusada e cancelada marcam o passo em que parou. */
+  protected trilha(c: { situacao: string; autor_nome: string; decidido_por_nome: string }): EtapaTrilha[] {
+    const aplicada = c.situacao === 'aplicada';
+    const encerrada = c.situacao === 'recusada' || c.situacao === 'cancelada';
+    return [
+      { id: 'proposta', rotulo: 'Proposta', estado: 'concluida', subtitulo: `por ${c.autor_nome}` },
+      { id: 'confirmacao', rotulo: 'Confirmação por outra pessoa', estado: aplicada ? 'concluida' : encerrada ? 'recusada' : 'atual', subtitulo: encerrada ? c.situacao : aplicada ? `por ${c.decidido_por_nome}` : 'quem propôs não confirma' },
+      { id: 'aplicada', rotulo: 'Aplicada', estado: aplicada ? 'concluida' : 'bloqueada', subtitulo: aplicada ? 'competências sincronizadas' : undefined },
+    ];
+  }
+
   readonly contratoId = input.required<string>();
   readonly itens = input.required<ItemContrato[]>();
   /** Avisa a tela quando uma correção foi aplicada (para recarregar os itens do contrato). */

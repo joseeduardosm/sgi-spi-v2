@@ -117,6 +117,25 @@ class Bem(Base):
     nota_fiscal: Mapped[str | None] = mapped_column(String(60))
     fornecedor: Mapped[str | None] = mapped_column(String(200))
     observacoes: Mapped[str | None] = mapped_column(Text)
+    # --- Dados do SAM (Sistema de Administração de Materiais/Patrimônio do Estado): vêm da importação da "Visão Geral" e ficam no bem ---
+    item_codigo: Mapped[str | None] = mapped_column(String(20))            # código do item (CATMAT/CATSER)
+    uo: Mapped[str | None] = mapped_column(String(20))                     # unidade orçamentária
+    tipo_sam: Mapped[str | None] = mapped_column(String(40))
+    conta_contabil: Mapped[str | None] = mapped_column(String(20))
+    conta_depreciacao: Mapped[str | None] = mapped_column(String(20))
+    depreciacao_acumulada: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    depreciacao_mensal: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    vida_util_meses: Mapped[int | None] = mapped_column(Integer)           # vida útil total, em meses (a "120" de "8/120")
+    meses_depreciados: Mapped[int | None] = mapped_column(Integer)         # meses já depreciados (o "8" de "8/120")
+    ultima_depreciacao_ref: Mapped[str | None] = mapped_column(String(6))  # mês de referência da última depreciação (AAAAMM)
+    data_incorporacao: Mapped[date | None] = mapped_column(Date)
+    empenho: Mapped[str | None] = mapped_column(String(40))
+    numero_documento: Mapped[str | None] = mapped_column(String(40))       # documento do SAM que incorporou o bem
+    ultimo_historico: Mapped[str | None] = mapped_column(String(120))
+    data_ultimo_historico: Mapped[date | None] = mapped_column(Date)
+    estado_sam: Mapped[str | None] = mapped_column(String(30))             # estado de conservação como o SAM registra (Novo, Ótimo, Bom, Antieconômico...)
+    destino_uge: Mapped[str | None] = mapped_column(String(20))
+    responsavel_sam: Mapped[str | None] = mapped_column(String(120))       # responsável pelo bem no SAM (texto; o responsável do sistema vem da sala)
     # "Classificação pendente": o bem está numa lista enviada para aprovação e não pode ser movimentado
     classificacao_pendente: Mapped[bool] = mapped_column(Boolean, default=False)
     # Categoria do bem inservível (decreto de desfazimento): ocioso, recuperavel, antieconomico ou irrecuperavel; preenchida quando a lista é aprovada
@@ -288,7 +307,12 @@ class Baixa(Base):
     id_cliente: Mapped[str | None] = mapped_column(String(64), unique=True)
     # Número de exibição (#12), sequência única entre listas de inservíveis, de extraviados e baixas
     numero: Mapped[int] = mapped_column(Integer, unique=True)
-    status: Mapped[str] = mapped_column(String(10), default="rascunho", index=True)
+    # rascunho → aguardando_aceite (autoridade externa) → concluida (PDF do de acordo / D.O.E. anexado); recusada ao final também é possível
+    status: Mapped[str] = mapped_column(String(20), default="rascunho", index=True)
+    # Lista de inservíveis (ou extraviados) aprovada de onde a baixa herda os bens; nula nas baixas anteriores à nova regra
+    classificacao_origem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("patrimonio_classificacoes.id", ondelete="SET NULL"), index=True)
+    # PDF anexado ao concluir: o de acordo da autoridade (na maioria das vezes, a publicação no D.O.E.)
+    doe_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     solicitante_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     enviada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

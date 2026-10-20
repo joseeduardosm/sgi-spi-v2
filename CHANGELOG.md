@@ -6,6 +6,23 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-20
+
+Migrações novas (aplicar com `alembic upgrade head`; cabeça `b3e8d1f6a9c4`): `a2d7b9e1c5f3` (baixa herda a lista aprovada), `f1c6a8d2e4b7` (recurso ACL da Reserva de Espaços) e `b3e8d1f6a9c4` (dados do SAM no bem).
+
+### Adicionado
+- **Trilha de etapas comum (`app-trilha-etapas`)**, extraída da competência da execução (numeração 1 → 2 → 3, ✓ nas concluídas, vermelho na atual, barra de progresso, rolagem no celular, `aria-current`). Regra escrita no `DESIGN.md` e no `CLAUDE.md`. Aplicada em: portaria de designação, competência, reajuste, prorrogação, correção de itens, aditamento/supressão (as abas viraram a trilha navegável), importações XLSX (contratos, checklist/formulário e dados funcionais do RH), RH férias e licença-prêmio, Patrimônio (movimentação, inservíveis/extraviados e baixa), notícias, melhorias e modal do número do Protocolo. Ramos (devolvida, recusada, cancelada) aparecem como selo sob a trilha.
+- **Patrimônio: baixa de bens com a regra nova.** A baixa herda uma lista de inservíveis aprovada (uma lista por baixa; botão "Dar baixa" na lista), fica "Aguardando aceite da autoridade" com o termo em PDF e **conclui quando alguém com controle total anexa o PDF do de acordo/D.O.E.**; os bens passam a Baixado. Status: `rascunho` → `aguardando_aceite` → `concluida` (ou `recusada`). Migração `a2d7b9e1c5f3` (`classificacao_origem_id`, `doe_anexo_id`; `pendente` → `aguardando_aceite`, `aprovada`/`parcial` → `concluida`). Endpoints: `POST /baixas` agora exige `classificacao_id`; novos `POST /baixas/{id}/conclusao`, `POST /baixas/{id}/recusa` e `GET /baixas/{id}/conclusao`.
+- **Patrimônio: importação das planilhas do SAM (Visão Geral).** `scripts/importar-patrimonio-sam.py` (simulação por padrão, `--aplicar`, idempotente por `sam:<chapa>`) cadastrou 2.540 bens ativos e 303 baixados, completou 34 já existentes e criou um grupo de material por código do SAM. Chapa = SPI + 6 dígitos. Migração `b3e8d1f6a9c4` com 18 campos novos no bem (item, UO, contas contábil e de depreciação, depreciação acumulada e mensal, vida útil e meses depreciados, incorporação, empenho, documento, último histórico, estado e responsável no SAM). `BemLeitura` ganhou o objeto `sam` e o detalhe do bem, a seção "Dados do SAM" (só leitura).
+- **Reserva de Espaços na ACL:** recurso `reserva-espacos` com as colunas **Solicitar reservas** (só solicita), **Aprovar reservas** (só defere, indefere e cancela; quem faz os dois precisa dos dois) e **Controle total** (tudo, mais criar espaços). `ContextoReserva` ganhou `pode_solicitar` e `pode_administrar`. Migração `f1c6a8d2e4b7`.
+
+### Alterado
+- ACL: formulário "Novo perfil" ocupa a largura toda e a aba passou a se chamar "Quem recebe".
+- Diário de bordo: tratamento de datas sem fuso (UTC) na pendência de CADIN.
+
+### Corrigido
+- Formulário "Novo perfil" apertado; recurso ACL ausente da Reserva de Espaços; teste instável de data do CADIN no SQLite.
+
 ## 2026-10-19
 
 Migrações novas desde 2026-10-15 (aplicar com `alembic upgrade head`; cabeça `e9b3c5a7d1f2`): `c1e7a3d9f5b2` (e-mail de CADIN por máscara), `d2f8b6a4c0e1`, `e3a9c7b5d1f4` e `f4b0d8c6e2a5` (perfis de acesso, nomes e ações independentes), `a7c3e9f1b5d2` (setor sistêmico "Equipes de contratos"), `b8d4f0a6c2e3` (diário: pendências de CADIN antigas), `c9e5a1b7d3f8` (rascunhos compartilhados do contrato), `d0f6b2c8e4a9` (conta de integração), `e1a7c3b9d5f2` e `a3c9e5b1d7f4` (colaboradores das listas e da baixa), `f2b8d4c0a6e1` (e-mail de pagamento da OB), `b4d0f6c2e8a5` (categoria do inservível), `c5e1a7d3f9b6` (perfis por setor), `d7a2f5c8b1e4` (remove os recursos de ACL de importação) e `e9b3c5a7d1f2` (portarias em etapas).

@@ -126,6 +126,28 @@ class FotoLeitura(BaseModel):
     nome: str
 
 
+class DadosSam(BaseModel):
+    """Dados que o SAM guarda sobre o bem (vêm da importação da Visão Geral); campos vazios quando o bem não veio do SAM."""
+    item_codigo: str | None = Field(None, description="Código do item no SAM.")
+    uo: str | None = Field(None, description="Unidade orçamentária.")
+    tipo_sam: str | None = None
+    conta_contabil: str | None = None
+    conta_depreciacao: str | None = None
+    depreciacao_acumulada: Decimal | None = None
+    depreciacao_mensal: Decimal | None = None
+    vida_util_meses: int | None = Field(None, description="Vida útil total, em meses.")
+    meses_depreciados: int | None = Field(None, description="Meses já depreciados (o 8 de 8/120).")
+    ultima_depreciacao_ref: str | None = Field(None, description="Mês de referência da última depreciação (AAAAMM).")
+    data_incorporacao: date | None = None
+    empenho: str | None = None
+    numero_documento: str | None = None
+    ultimo_historico: str | None = None
+    data_ultimo_historico: date | None = None
+    estado_sam: str | None = Field(None, description="Estado de conservação como o SAM registra (Novo, Ótimo, Bom, Antieconômico).")
+    destino_uge: str | None = None
+    responsavel_sam: str | None = Field(None, description="Responsável pelo bem no SAM (texto).")
+
+
 class BemLeitura(BaseModel):
     id: uuid.UUID
     chapa: str | None = Field(None, description="Nula nos bens sem patrimônio (identificados pelo número de série).")
@@ -170,6 +192,7 @@ class BemLeitura(BaseModel):
     criado_em: datetime
     atualizado_em: datetime
     baixado_em: datetime | None
+    sam: DadosSam | None = Field(None, description="Dados do SAM; nulo quando o bem não tem nenhum (cadastrado direto no sistema).")
 
 
 class ListaBens(BaseModel):
@@ -355,6 +378,7 @@ class ClassificacaoLeitura(BaseModel):
 class GravacaoLista(BaseModel):
     id_cliente: str | None = Field(None, max_length=64, description="Idempotência do envio offline.")
     tipo: Literal["inservivel", "extraviado"] | None = Field(None, description="Obrigatório na classificação; ignorado na baixa.")
+    classificacao_id: uuid.UUID | None = Field(None, description="Obrigatório na baixa: lista de inservíveis (ou extraviados) aprovada de onde a baixa herda os bens; ignorado na classificação.")
 
 
 class EntradaBem(BaseModel):
@@ -370,6 +394,10 @@ class Justificativa(BaseModel):
 
 class RemocaoJustificativa(BaseModel):
     itens_ids: list[uuid.UUID] = Field(..., min_length=1, description="Itens cuja justificativa (e categoria) será apagada.")
+
+
+class RecusaBaixa(BaseModel):
+    motivo: str = Field(..., min_length=1, max_length=1000, description="Por que a autoridade não deu o aceite.")
 
 
 class Decisao(BaseModel):
@@ -396,15 +424,18 @@ class ItemBaixaLeitura(BaseModel):
 class BaixaLeitura(BaseModel):
     id: uuid.UUID
     numero: int = Field(..., description="Número de exibição (#12), único entre listas e baixas.")
-    status: Literal["rascunho", "pendente", "aprovada", "parcial", "recusada"]
+    status: Literal["rascunho", "aguardando_aceite", "concluida", "recusada"] = Field(..., description="`rascunho` → `aguardando_aceite` (autoridade externa) → `concluida` (PDF do de acordo / D.O.E. anexado); `recusada` se a autoridade não aceitar.")
+    classificacao_origem_id: uuid.UUID | None = Field(None, description="Lista de onde a baixa herdou os bens (nula nas baixas anteriores à regra nova).")
+    classificacao_origem_numero: int | None = None
     solicitante_id: int | None
     solicitante_nome: str
     criada_em: datetime
     enviada_em: datetime | None
-    decidido_por_nome: str | None
+    decidido_por_nome: str | None = Field(None, description="Quem concluiu ou recusou a baixa.")
     decidido_em: datetime | None
     motivo_recusa: str | None
     tem_termo: bool
+    tem_conclusao: bool = Field(False, description="O PDF do de acordo da autoridade (D.O.E.) já foi anexado.")
     colaboradores: list[ColaboradorLista] = Field(default_factory=list, description="Pessoas com quem a baixa foi compartilhada (fazem tudo o que o solicitante faz, inclusive enviar; não podem aprová-la).")
     itens: list[ItemBaixaLeitura]
 

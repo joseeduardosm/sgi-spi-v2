@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para controlar a tela de aditamento/supressão (justificativa, quantitativos, ciências e formalização).
 
+import { EtapaTrilha, EstadoEtapa, TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -26,7 +27,7 @@ type Documento = 'justificativa' | 'autorizacao' | 'de_acordo' | 'termo';
 /** Tela 7: aditamento ou supressão (justificativa → quantitativos → memória e ciências → formalização). */
 @Component({
   selector: 'app-alteracao',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './alteracao.component.html',
 })
 export class AlteracaoComponent implements OnInit {
@@ -46,6 +47,20 @@ export class AlteracaoComponent implements OnInit {
   protected readonly contrato = signal<DetalheContrato | null>(null);
   protected readonly painel = signal<PainelAlteracao | null>(null);
   protected readonly aba = signal<Aba>('justificativa');
+
+  /** Justificativa → Quantitativos → Memória e ciências → Formalização, com o mesmo bloqueio progressivo que as abas tinham. */
+  protected trilha(a: { justificativa?: unknown; situacao: string; ciencias: unknown[]; ciencias_minimas: number }): EtapaTrilha[] {
+    const justificada = !!a.justificativa;
+    const quantitativos = justificada && a.situacao !== 'rascunho';
+    const cientes = a.ciencias.length >= a.ciencias_minimas;
+    const passo = (feito: boolean, liberado: boolean): EstadoEtapa => (feito ? 'concluida' : liberado ? 'atual' : 'bloqueada');
+    return [
+      { id: 'justificativa', rotulo: 'Justificativa', estado: passo(justificada, true) },
+      { id: 'quantitativos', rotulo: 'Quantitativos', estado: passo(quantitativos, justificada) },
+      { id: 'memoria', rotulo: 'Memória e ciências', estado: passo(quantitativos && cientes, quantitativos), subtitulo: quantitativos ? `${a.ciencias.length} de ${a.ciencias_minimas} ciências` : undefined },
+      { id: 'formalizacao', rotulo: 'Formalização', estado: a.situacao === 'concluida' ? 'concluida' : quantitativos && cientes ? 'atual' : 'bloqueada' },
+    ];
+  }
   // Campos da abertura, novas quantidades por item e PDFs escolhidos por tipo de documento
   protected vigencia: number | null = null;
   protected mesEfeito = '';

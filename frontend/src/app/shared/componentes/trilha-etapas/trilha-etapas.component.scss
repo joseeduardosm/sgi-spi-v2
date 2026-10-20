@@ -1,0 +1,60 @@
+// Trilha de etapas: mesmo visual da competência da execução (bolinha numerada, linha entre passos, barra de progresso). Só variáveis --spi-*.
+:host { display: block; --bolinha: 46px; }
+:host(.compacta) { --bolinha: 30px; }
+
+.trilha-etapas {
+  margin: 0 0 18px; padding: 18px 24px 20px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-gg); background: var(--spi-superficie);
+  &.compacta { --bolinha: 30px; margin: 0; padding: 10px 12px; border-radius: var(--spi-raio-g); }
+}
+.progresso-etapas {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 20px; color: var(--spi-texto);
+  .texto-progresso { font-size: var(--spi-texto-destaque); font-weight: 600; }
+  .divisor-progresso { align-self: stretch; width: 1px; background: var(--spi-borda); }
+  .percentual-progresso { color: var(--spi-sucesso); font-size: var(--spi-titulo-secao); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .barra-progresso { flex: 1 1 200px; height: 10px; margin: 0; overflow: hidden; border-radius: var(--spi-raio-pilula); background: var(--spi-borda);
+    i { display: block; height: 100%; border-radius: var(--spi-raio-pilula); background: var(--spi-sucesso); transition: width 300ms ease-out; } }
+}
+ol { display: flex; gap: 0; margin: 0; padding: 0; overflow-x: auto; scroll-snap-type: x proximity; list-style: none; }
+li {
+  position: relative; flex: 1 1 0; min-width: 118px; scroll-snap-align: center;
+  // A linha liga o centro de uma bolinha ao da seguinte; a posição vem do tamanho da bolinha (--bolinha), não de números fixos
+  &:not(:last-child)::after {
+    content: ''; position: absolute; top: calc(10px + var(--bolinha) / 2); left: calc(50% + var(--bolinha) / 2 + 6px); right: calc(-50% + var(--bolinha) / 2 + 6px);
+    height: 2px; background: var(--spi-borda-campo);
+  }
+  &[data-liga='verde']::after { background: var(--spi-sucesso); }
+  &[data-liga='vermelha']::after { background: var(--spi-vermelho); }
+}
+button, .passo {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; width: calc(100% - 12px); margin: 0 6px; padding: 10px 6px 12px;
+  border: 1px solid transparent; border-radius: var(--spi-raio-g); background: transparent; color: var(--spi-apagado); font: inherit; text-align: center;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { color: var(--spi-texto); }
+button:disabled { cursor: not-allowed; opacity: 0.6; }
+button:focus { outline: none; }
+button:focus-visible { box-shadow: var(--spi-anel-foco); }
+.bolinha-etapa {
+  position: relative; z-index: 1; display: grid; place-items: center; width: var(--bolinha); height: var(--bolinha); border: 2px solid var(--spi-borda-campo); border-radius: 50%;
+  background: var(--spi-superficie); font-size: var(--spi-titulo-secao); font-weight: 600;
+}
+.compacta .bolinha-etapa { font-size: var(--spi-texto-corpo); }
+.nome-etapa {
+  display: flex; flex-direction: column; gap: 2px;
+  .titulo-etapa { color: var(--spi-texto); font-size: var(--spi-texto-destaque); font-weight: 600; }
+  small { color: var(--spi-apagado); font-size: var(--spi-texto-corpo); font-weight: 400; }
+}
+.compacta li { min-width: 100px; }
+.compacta .nome-etapa { .titulo-etapa { font-size: var(--spi-texto-corpo); } small { font-size: var(--spi-texto-legenda); } }
+li.feita .bolinha-etapa { border-color: var(--spi-sucesso); background: var(--spi-sucesso); color: #fff; }
+li.atual .bolinha-etapa { border-color: var(--spi-vermelho); background: var(--spi-vermelho); color: #fff; }
+li.recusada .bolinha-etapa { border-color: var(--spi-perigo); background: var(--spi-perigo-suave); color: var(--spi-perigo); }
+li.selecionada.feita button { border-color: var(--spi-sucesso); background: var(--spi-sucesso-suave); }
+li.selecionada.atual button { border-color: var(--spi-vermelho); background: var(--spi-vermelho-suave); }
+li.selecionada:not(.feita):not(.atual) button { border-color: var(--spi-borda-campo); background: var(--spi-superficie-alt); }
+// Celular: as bolinhas ficam menores e a trilha rola de lado, parando em cada passo
+@media (max-width: 700px) {
+  .trilha-etapas:not(.compacta) { padding: 14px 12px 16px; --bolinha: 38px; }
+  li { flex: 0 0 130px; }
+}
+@media (prefers-reduced-motion: reduce) { .barra-progresso i { transition: none; } }

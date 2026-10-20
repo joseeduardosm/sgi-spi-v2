@@ -127,7 +127,8 @@ export class PatrimonioApiService {
   // Baixas
   baixas(filtros: object = {}): Observable<Baixa[]> { return this.http.get<Baixa[]>(`${this.base}/baixas`, { params: parametros(filtros) }); }
   baixa(id: string): Observable<Baixa> { return this.http.get<Baixa>(`${this.base}/baixas/${id}`); }
-  criarBaixa(idCliente?: string): Observable<Baixa> { return this.http.post<Baixa>(`${this.base}/baixas`, { id_cliente: idCliente ?? null }); }
+  /** A baixa herda os bens aprovados de uma lista de inservíveis/extraviados já aprovada. */
+  criarBaixa(classificacaoId: string, idCliente?: string): Observable<Baixa> { return this.http.post<Baixa>(`${this.base}/baixas`, { classificacao_id: classificacaoId, id_cliente: idCliente ?? null }); }
   /** Compartilha a baixa (rascunho) com as pessoas indicadas, substituindo as anteriores. */
   compartilharBaixa(id: string, usuariosIds: number[]): Observable<Baixa> { return this.http.put<Baixa>(`${this.base}/baixas/${id}/colaboradores`, { usuarios_ids: usuariosIds }); }
   descartarBaixa(id: string): Observable<void> { return this.http.delete<void>(`${this.base}/baixas/${id}`); }
@@ -137,9 +138,14 @@ export class PatrimonioApiService {
     return this.http.post<Baixa>(`${this.base}/baixas/${id}/motivo`, { itens_ids: itensIds, motivo, processo });
   }
   enviarBaixa(id: string): Observable<Baixa> { return this.http.post<Baixa>(`${this.base}/baixas/${id}/enviar`, {}); }
-  decidirBaixa(id: string, aprovadosIds: string[], motivoRecusa?: string): Observable<Baixa> {
-    return this.http.post<Baixa>(`${this.base}/baixas/${id}/decisao`, { aprovados_ids: aprovadosIds, motivo_recusa: motivoRecusa ?? null });
+  /** Conclui a baixa com o PDF do de acordo da autoridade (na maioria das vezes, a publicação no D.O.E.). */
+  concluirBaixa(id: string, arquivo: File): Observable<Baixa> {
+    const dados = new FormData();
+    dados.append('arquivo', arquivo);
+    return this.http.post<Baixa>(`${this.base}/baixas/${id}/conclusao`, dados);
   }
+  recusarBaixa(id: string, motivo: string): Observable<Baixa> { return this.http.post<Baixa>(`${this.base}/baixas/${id}/recusa`, { motivo }); }
+  baixarConclusaoBaixa(id: string): Observable<unknown> { return baixarArquivo(this.http, `${this.base}/baixas/${id}/conclusao`, 'de-acordo-baixa.pdf'); }
   /** Relatório consolidado (PDF) ou Excel de uma lista de inservíveis/extraviados. */
   relatorioClassificacao(id: string, formato: 'pdf' | 'xlsx', tipo: string): Observable<unknown> { return baixarArquivo(this.http, `${this.base}/classificacoes/${id}/relatorio?formato=${formato}`, `relatorio-${tipo}.${formato}`); }
   /** Relatório consolidado (PDF) ou Excel de uma baixa. */

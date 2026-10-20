@@ -1,6 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para oferecer o botão "Importar XLSX" de checklists e formulários de avaliação (contrato e modelos globais).
 
+import { TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaImportacao } from './trilha-importacao';
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 
 import { AcessoService } from '../../../core/acesso/acesso.service';
@@ -16,6 +18,7 @@ import { PreviaImportacaoModelo } from './contratos.models';
  */
 @Component({
   selector: 'app-importacao-modelo-xlsx',
+  imports: [TrilhaEtapasComponent],
   host: { '(document:keydown.escape)': 'fechar()' },
   template: `
     @if (liberado()) {
@@ -34,6 +37,7 @@ import { PreviaImportacaoModelo } from './contratos.models';
         </header>
 
         <div class="corpo-importacao">
+          <app-trilha-etapas [etapas]="trilha()" ariaLabel="Etapas da importação" [compacta]="true" />
           <p class="dica-formulario" style="margin-top: 0">
             {{ contratoId() ? 'A importação cria uma versão inativa; ative-a depois de conferir.' : 'A importação cria um modelo global.' }}
             <button type="button" class="acao-secundaria acao-pequena" (click)="baixarModelo()">Baixar modelo</button>
@@ -110,6 +114,7 @@ export class ImportacaoModeloXlsxComponent {
   protected readonly erroArquivo = signal<string | null>(null);
   protected readonly previa = signal<PreviaImportacaoModelo | null>(null);
   protected readonly ocupado = signal(false);
+  protected readonly trilha = computed(() => trilhaImportacao(!!this.arquivo(), this.previa()));
 
   /** Escala da prévia em uma linha (ex.: "0 Ruim · 5 Regular"). */
   protected escala(): string {

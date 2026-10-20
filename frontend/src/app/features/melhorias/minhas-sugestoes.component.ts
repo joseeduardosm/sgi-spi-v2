@@ -1,6 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para listar as sugestões do usuário logado, com a situação, a resposta da equipe e os prints.
 
+import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaSugestao } from './trilha-sugestao';
 import { DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
@@ -15,7 +17,7 @@ import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-minhas-sugestoes',
-  imports: [EsqueletoComponent, LinkificarPipe, DatePipe, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, DatePipe, CabecalhoMelhoriasComponent, ImagemAutenticadaDirective],
   template: `
     <app-cabecalho-melhorias titulo="Minhas sugestões"
       descricao="Sugestões que você enviou pelo botão &quot;Sugerir melhoria&quot;, com a situação e a resposta da equipe." />
@@ -28,6 +30,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
             <span class="modulo-sugestao">{{ modulos[s.modulo] ?? s.modulo }}</span>
             <time [attr.datetime]="s.criado_em">{{ s.criado_em | date: 'dd/MM/yyyy HH:mm' }}</time>
           </header>
+          <app-trilha-etapas [etapas]="trilha(s.situacao)" ariaLabel="Andamento da sugestão" [compacta]="true" />
           <p class="texto-sugestao" [innerHTML]="s.texto | linkificar"></p>
           @if (s.prints.length) {
             <div class="prints-sugestao">
@@ -51,6 +54,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
   `,
 })
 export class MinhasSugestoesComponent implements OnInit {
+  protected readonly trilha = trilhaSugestao;
   private readonly api = inject(MelhoriasApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly rota = inject(ActivatedRoute);

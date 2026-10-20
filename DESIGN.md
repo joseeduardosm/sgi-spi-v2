@@ -209,6 +209,12 @@ Fundo `--spi-superficie-alt`, sem borda, raio 12px, padding 12–16px. Para agru
 ### Tabela
 Dentro de card. Cabeçalho: fundo `--spi-superficie-alt`, texto 11–12px peso 600 caixa alta `--spi-apagado`. Linhas: 13–14px, borda inferior 1px `--spi-borda`, padding vertical 10–12px, hover `--spi-superficie-alt`, selecionada `--spi-superficie-ativa`. Números, datas e códigos alinhados à direita (códigos em `--spi-fonte-mono`). No celular, a tabela vira lista de cards.
 
+### Trilha de etapas (`app-trilha-etapas`)
+Todo fluxo com **3 ou mais passos sequenciais** (portaria de designação, férias, movimentação, baixa, reajuste…) mostra o andamento na mesma trilha da competência da execução: bolinhas numeradas ligadas por uma linha, ✓ nas concluídas (verde), a atual em vermelho, as que ainda não abrem apagadas, e a barra "X de N etapas concluídas". **Não crie trilha própria**: use `shared/componentes/trilha-etapas` e monte `EtapaTrilha[]` (`{ id, rotulo, estado, subtitulo?, titulo?, opcional? }`) a partir do que a API já devolve.
+- **Estados:** `concluida`, `atual` (mais de um = passos paralelos), `aguardando`, `bloqueada` (sem clique) e `recusada`. Devolução, recusa e cancelamento **não ramificam o desenho**: o passo afetado vira `recusada` (ou volta a `atual`) e um selo/aviso `.selo-*` explica o motivo logo abaixo.
+- **Completa** (com barra de progresso) no topo da tela de detalhe; **`compacta`** (bolinhas menores, sem barra) em cartões, listas e modais. `navegavel` só quando cada passo mostra uma tela própria (competência).
+- **Passos opcionais** levam `opcional: true`. No celular a trilha rola de lado e para em cada passo (`scroll-snap`); o texto do estado fica sempre visível (não depender só de cor).
+
 ### Selo de status (classes `.selo-*`, já existem)
 Hoje há vários selos com estilos próprios (`.selo-situacao`, `.selo-status`, `.selo-origem`, `.selo-nivel`, `.selo-risco`, `.selo-prioridade-tarefa`…), todos com raio 10px e texto de 10px. **Não criar classe nova**: unificar o visual desses selos no padrão abaixo, mantendo os nomes e os modificadores que já existem (`.a_vencer`, `.inativo` etc.).
 Raio 999px, padding 3px × 10px, 12px peso 600, fundo `--spi-*-suave`, texto `--spi-*`, bolinha de 6px da mesma cor antes do texto (opcional). Sem borda. Um status por selo.

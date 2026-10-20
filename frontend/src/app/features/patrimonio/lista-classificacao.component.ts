@@ -1,5 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para montar, justificar, enviar e aprovar uma lista de inservíveis ou extraviados.
+import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaClassificacao } from './trilhas-patrimonio';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -24,17 +26,19 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
 /** `/patrimonio/inserviveis/:classificacaoId` ou `/patrimonio/extraviados/:classificacaoId` (conforme o tipo da lista). */
 @Component({
   selector: 'app-lista-classificacao',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoPatrimonioComponent, LeitorCodigoComponent, RelacionarSalaComponent, BuscaBemComponent, EditorRicoComponent, DescricaoTarefaPipe, SeletorUsuariosComponent],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, CabecalhoPatrimonioComponent, LeitorCodigoComponent, RelacionarSalaComponent, BuscaBemComponent, EditorRicoComponent, DescricaoTarefaPipe, SeletorUsuariosComponent],
   template: `
     <app-cabecalho-patrimonio [titulo]="lista() ? (lista()!.tipo === 'inservivel' ? 'Lista de inservíveis' : 'Lista de extraviados') : 'Lista'" descricao="Só entram bens cadastrados e Ativos ou Em manutenção." />
     @if (lista(); as c) {
       <section class="painel-gestao patrimonio">
+        <app-trilha-etapas [etapas]="trilha(c)" ariaLabel="Etapas da lista" />
         <div class="pat-topo-bem">
           <span class="pat-marcadores"><b class="texto-codigo">#{{ c.numero }}</b><span [class]="marcador(cores[c.status])">{{ rotulos[c.status] }}</span><span [class]="marcador(0)">{{ c.solicitante_nome }}</span></span>
           <div class="pat-acoes">
             <button type="button" class="acao-secundaria" (click)="relatorio(c, 'pdf')" title="PDF consolidado: índice, relatório, fotos e anexos">Relatório PDF</button>
             <button type="button" class="acao-secundaria" (click)="relatorio(c, 'xlsx')">Relatório Excel</button>
             @if (souDono()) { <button type="button" class="acao-secundaria" (click)="abrirCompartilhar(c)">Compartilhar{{ c.colaboradores?.length ? ' (' + c.colaboradores!.length + ')' : '' }}</button> }
+            @if ((c.status === 'aprovada' || c.status === 'parcial') && estado.podeOperar()) { <button type="button" class="acao-primaria" (click)="darBaixa(c)">Dar baixa dos bens</button> }
             @if (rascunho()) { <button type="button" class="acao-recusar" (click)="descartar()">Descartar rascunho</button> }
           </div>
         </div>
@@ -181,6 +185,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
   `,
 })
 export class ListaClassificacaoComponent implements OnInit {
+  protected readonly trilha = trilhaClassificacao;
   private readonly api = inject(PatrimonioApiService);
   private readonly fila = inject(FilaOfflineService);
   private readonly roteador = inject(Router);
@@ -285,6 +290,11 @@ export class ListaClassificacaoComponent implements OnInit {
       next: (x) => this.definir(x),
       error: (e) => (e?.status === 0 ? guardar() : this.aviso.set(e?.error?.detalhe ?? `Não foi possível incluir ${c}.`)),
     });
+  }
+
+  /** Começa a baixa herdando os bens aprovados desta lista. */
+  protected darBaixa(c: Classificacao): void {
+    this.api.criarBaixa(c.id, crypto.randomUUID()).subscribe({ next: (b) => void this.roteador.navigate(['/patrimonio/baixas', b.id]), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível começar a baixa') });
   }
 
   protected relatorio(c: Classificacao, formato: 'pdf' | 'xlsx'): void {

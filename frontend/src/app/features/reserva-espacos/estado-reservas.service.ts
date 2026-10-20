@@ -11,10 +11,12 @@ import { Contexto, Espaco } from './reservas.models';
 export class EstadoReservasService {
   private readonly api = inject(ReservasApiService);
   readonly ehFiscal = signal(false);
+  readonly podeSolicitar = signal(true);
+  readonly podeAdministrar = signal(false);
   readonly espacos = signal<Espaco[]>([]);
 
   /** Recarrega o papel e os espaços (chame depois de criar, alterar ou excluir espaço). */
   carregar(): Observable<Contexto> {
-    return this.api.contexto().pipe(tap((c) => { this.ehFiscal.set(c.eh_fiscal); this.espacos.set(c.espacos); }));
+    return this.api.contexto().pipe(tap((c) => { this.ehFiscal.set(c.eh_fiscal); this.podeSolicitar.set(c.pode_solicitar); this.podeAdministrar.set(c.pode_administrar); this.espacos.set(c.espacos); }));
   }
 }

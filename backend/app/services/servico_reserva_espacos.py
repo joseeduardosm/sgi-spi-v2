@@ -26,6 +26,7 @@ from app.models.reserva_espacos import (
 )
 from app.models.usuario import Usuario
 from app.services import notificacoes
+from app.services import servico_acl
 from app.services.servico_auditoria import auditar
 
 RECORRENCIAS = ("nenhuma", "diaria", "semanal", "quinzenal", "mensal")
@@ -90,15 +91,57 @@ def ids_fiscais(sessao: Session) -> list[int]:
     return list(sessao.scalars(select(FiscalReservaEspacos.usuario_id)))
 
 
-def eh_fiscal(sessao: Session, usuario: Usuario) -> bool:
+RECURSO_ACL = "reserva-espacos"
+
+
+def papeis(sessao: Session, usuario: Usuario) -> tuple[bool, bool, bool]:
+    """(solicitar, aprovar, administrar) do usuário, conforme as colunas do recurso `reserva-espacos` na ACL.
+
+    - **Solicitar reservas** (LEITURA): vê a agenda, solicita e altera/cancela as próprias reservas. Só isso.
+    - **Aprovar reservas** (MODIFICACAO): vê a fila e as reservas, defere, indefere e cancela reservas. Só isso: para solicitar também, precisa da coluna de solicitar.
+    - **Controle total**: faz tudo e ainda cria e altera espaços, reservas predefinidas, painel e exportação.
+    Com o módulo ainda sem regras nem perfis (aberto), todos solicitam e só os fiscais da tabela (legado) e o SuperRoot aprovam e administram.
+    O fiscal da tabela `reserva_espacos_fiscais` segue valendo como aprovador e administrador.
+    """
     if usuario.superusuario:
-        return True
-    return sessao.get(FiscalReservaEspacos, usuario.id) is not None
+        return True, True, True
+    legado = sessao.get(FiscalReservaEspacos, usuario.id) is not None
+    if not servico_acl.possui_regras(sessao, RECURSO_ACL):
+        return True, legado, legado
+    administrar = legado or servico_acl.pode_porta(sessao, usuario, RECURSO_ACL, "CONTROLE_TOTAL")
+    # Controle total faz tudo; solicitar e aprovar são colunas independentes (quem pode as duas precisa das duas)
+    return (administrar or servico_acl.pode_porta(sessao, usuario, RECURSO_ACL, "LEITURA"),
+            administrar or servico_acl.pode_porta(sessao, usuario, RECURSO_ACL, "MODIFICACAO"), administrar)
+
+
+def pode_solicitar(sessao: Session, usuario: Usuario) -> bool:
+    return papeis(sessao, usuario)[0]
+
+
+def eh_admin(sessao: Session, usuario: Usuario) -> bool:
+    return papeis(sessao, usuario)[2]
+
+
+def eh_fiscal(sessao: Session, usuario: Usuario) -> bool:
+    """Aprova reservas (ou administra o módulo): vê a fila e todas as reservas, defere, indefere e cancela."""
+    _, aprovar, administrar = papeis(sessao, usuario)
+    return aprovar or administrar
+
+
+def tem_algum_papel(sessao: Session, usuario: Usuario) -> bool:
+    return any(papeis(sessao, usuario))
 
 
 def exigir_fiscal(sessao: Session, usuario: Usuario) -> None:
+    """Operações de quem aprova reservas (fila, lista geral, deferir/indeferir e cancelar qualquer)."""
     if not eh_fiscal(sessao, usuario):
-        raise ErroReserva("Somente os fiscais da reserva de espaços realizam esta operação.", 403, "acesso_negado")
+        raise ErroReserva("Somente quem aprova reservas realiza esta operação (coluna \"Aprovar reservas\" em Controle de acesso).", 403, "acesso_negado")
+
+
+def exigir_admin(sessao: Session, usuario: Usuario) -> None:
+    """Operações do controle total: espaços, reservas predefinidas, painel, exportação e configuração."""
+    if not eh_admin(sessao, usuario):
+        raise ErroReserva("Somente quem tem controle total na reserva de espaços realiza esta operação.", 403, "acesso_negado")
 
 
 def pode_ver(sessao: Session, usuario: Usuario, reserva: ReservaEspaco) -> bool:
@@ -249,7 +292,9 @@ def _evento(reserva: ReservaEspaco, tipo: str, usuario: Usuario | None, detalhes
 def solicitar(sessao: Session, usuario: Usuario, dados: DadosReserva, predefinida: bool = False) -> ResultadoSolicitacao:
     """Cria a reserva (ou a série). `predefinida` (só fiscal) já nasce DEFERIDA, em nome do responsável indicado."""
     _validar_dados(dados)
-    fiscal = eh_fiscal(sessao, usuario)
+    fiscal = eh_admin(sessao, usuario)
+    if not predefinida and not pode_solicitar(sessao, usuario):
+        raise ErroReserva("Você não pode solicitar reservas (coluna \"Solicitar reservas\" em Controle de acesso).", 403, "acesso_negado")
     if predefinida and not fiscal:
         raise ErroReserva("Somente os fiscais criam reservas predefinidas.", 403, "acesso_negado")
     espaco = espaco_ou_erro(sessao, dados.espaco_id)
@@ -395,7 +440,7 @@ def disponiveis(sessao: Session, dia: date, inicio: time, fim: time) -> list[Esp
 
 def editar(sessao: Session, usuario: Usuario, reserva: ReservaEspaco, dados: DadosReserva) -> ReservaEspaco:
     """Altera uma reserva aguardando aprovação (o solicitante, ou o fiscal); a recorrência não muda depois de criada."""
-    fiscal = eh_fiscal(sessao, usuario)
+    fiscal = eh_admin(sessao, usuario)
     if not fiscal and reserva.solicitante_id != usuario.id:
         raise ErroReserva("Você só altera as reservas que solicitou.", 403, "acesso_negado")
     if reserva.status != STATUS_AGUARDANDO:

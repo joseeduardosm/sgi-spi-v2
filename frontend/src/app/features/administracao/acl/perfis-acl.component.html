@@ -28,7 +28,7 @@
         @if (detalhe()) { <button class="acao-recusar" type="button" (click)="excluir()">Excluir</button> }
       </header>
 
-      <div class="acl-perfil-corpo">
+      <div class="acl-perfil-corpo" [class.sem-menu]="!detalhe()">
         <!-- Barra lateral: dados gerais, todos os módulos e usuários (como o perfil do GLPI) -->
         @if (detalhe()) {
           <nav class="acl-perfil-menu" aria-label="Seções do perfil">
@@ -39,7 +39,7 @@
                 @if (totalNoPerfil(r.id); as total) { <b class="acl-perfil-contagem" [attr.title]="total + ' ação(ões) liberada(s)'">{{ total }}</b> }
               </button>
             }
-            <button type="button" [class.ativo]="secao() === 'usuarios'" (click)="abrirSecao('usuarios')">Usuários <b class="acl-perfil-contagem">{{ detalhe()!.total_usuarios }}</b></button>
+            <button type="button" [class.ativo]="secao() === 'usuarios'" (click)="abrirSecao('usuarios')">Quem recebe <b class="acl-perfil-contagem">{{ detalhe()!.total_usuarios }}</b></button>
           </nav>
         }
 

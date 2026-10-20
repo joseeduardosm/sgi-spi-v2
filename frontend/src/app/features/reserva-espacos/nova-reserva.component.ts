@@ -43,7 +43,7 @@ import { GravacaoReserva, isoLocal, Recorrencia, UsuarioBusca } from './reservas
             <div><label for="nr-ate">Repetir até</label><input id="nr-ate" name="ate" type="date" required [min]="dados.data" [(ngModel)]="dados.recorrencia_ate" /></div>
           }
         }
-        @if (estado.ehFiscal() && !editando()) {
+        @if (estado.podeAdministrar() && !editando()) {
           <div class="ocupa-duas caixa-predefinida">
             <label class="linha-caixa"><input type="checkbox" name="pre" [(ngModel)]="predefinida" /> Reserva predefinida (já registrada como deferida, em nome de outra pessoa)</label>
           </div>

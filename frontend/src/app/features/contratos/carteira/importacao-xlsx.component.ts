@@ -1,7 +1,9 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para oferecer o botão "Importar XLSX", que cadastra um contrato a partir da planilha modelo.
 
-import { Component, inject, signal } from '@angular/core';
+import { TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaImportacao } from '../compartilhado/trilha-importacao';
+import { computed, Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
@@ -20,7 +22,7 @@ const TAMANHO_MAXIMO_MB = 5;
  */
 @Component({
   selector: 'app-importacao-xlsx',
-  imports: [...PIPES_FORMATACAO],
+  imports: [TrilhaEtapasComponent, ...PIPES_FORMATACAO],
   host: { '(document:keydown.escape)': 'fechar()' },
   template: `
     <button type="button" class="acao-secundaria" (click)="abrir()">Importar XLSX</button>
@@ -34,6 +36,7 @@ const TAMANHO_MAXIMO_MB = 5;
         </header>
 
         <div class="corpo-importacao">
+          <app-trilha-etapas [etapas]="trilha()" ariaLabel="Etapas da importação" [compacta]="true" />
           <p class="dica-formulario" style="margin-top: 0">
             Preencha a planilha "Checklist de Alimentação do Sistema de Contratos" e envie para conferir a prévia.
             A equipe de gestão e fiscalização não é importada: cadastre-a editando o contrato depois.
@@ -121,6 +124,7 @@ export class ImportacaoXlsxComponent {
   protected readonly erroArquivo = signal<string | null>(null);
   protected readonly previa = signal<PreviaImportacao | null>(null);
   protected readonly ocupado = signal(false);
+  protected readonly trilha = computed(() => trilhaImportacao(!!this.arquivo(), this.previa()));
 
   // Textos e formatadores usados no template
   protected readonly meses = MESES;

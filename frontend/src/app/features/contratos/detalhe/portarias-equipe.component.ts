@@ -5,6 +5,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { EtapaTrilha, EstadoEtapa, TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
 import { BotaoCopiarComponent } from '../../../shared/componentes/botao-copiar/botao-copiar.component';
 import { SeletorUsuariosComponent } from '../../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
@@ -21,7 +22,7 @@ const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', s
 /** Portaria de designação na aba Equipe: a equipe só muda por aqui (nomeações → ciência → autoridade → aceite → D.O.E. no Protocolo). */
 @Component({
   selector: 'app-portarias-equipe',
-  imports: [FormsModule, DatePipe, BotaoCopiarComponent, SeletorUsuariosComponent, HtmlConfiavelPipe, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, TrilhaEtapasComponent, BotaoCopiarComponent, SeletorUsuariosComponent, HtmlConfiavelPipe, ...PIPES_FORMATACAO],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-portaria">
       <header>
@@ -59,6 +60,9 @@ const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', s
             </header>
             @if (portaria.motivo && portaria.status === 'cancelada') { <p><strong>Cancelada:</strong> {{ portaria.motivo }}</p> }
             @if (portaria.motivo && portaria.status === 'aguardando_autoridade') { <p role="alert"><strong>Devolvida pela autoridade:</strong> {{ portaria.motivo }}</p> }
+            @if (portaria.status !== 'cancelada') {
+              <app-trilha-etapas [etapas]="trilha(portaria)" ariaLabel="Etapas da portaria" [compacta]="portaria.status === 'publicada'" />
+            }
             <div class="tabela-gestao-envoltorio">
               <table class="tabela-gestao">
                 <thead>
@@ -236,6 +240,25 @@ export class PortariasEquipeComponent implements OnInit {
 
   protected sentido(coluna: string): 'ascending' | 'descending' | 'none' {
     return this.ordenarPor() !== coluna ? 'none' : this.direcao() === 'asc' ? 'ascending' : 'descending';
+  }
+
+  /** Passos da portaria na trilha comum: do status atual para trás tudo está concluído; devolvida volta ao passo 3 (o motivo aparece como aviso). */
+  protected trilha(p: Portaria): EtapaTrilha[] {
+    const ordem: Record<string, number> = { nomeacao: 0, aguardando_ciencia: 1, aguardando_autoridade: 2, aguardando_aceite: 3, aceita: 5, publicada: 6 };
+    const posicao = ordem[p.status] ?? 0;
+    const cientes = p.nomeacoes.filter((n) => !!n.ciente_em).length;
+    const passos: { id: string; rotulo: string; subtitulo?: (e: EstadoEtapa) => string | undefined }[] = [
+      { id: 'nomeacoes', rotulo: 'Nomeações', subtitulo: (e) => (e === 'atual' ? 'dados do RH pendentes' : undefined) },
+      { id: 'ciencia', rotulo: 'Ciência dos nomeados', subtitulo: (e) => (e === 'atual' ? `${cientes} de ${p.nomeacoes.length} cientes` : undefined) },
+      { id: 'autoridade', rotulo: 'Autoridade e texto', subtitulo: (e) => (e === 'atual' ? 'escolher a autoridade' : undefined) },
+      { id: 'aceite', rotulo: 'Aceite da autoridade', subtitulo: (e) => (e === 'atual' ? 'aguardando o aceite' : undefined) },
+      { id: 'evidencia', rotulo: 'PDF de evidência', subtitulo: (e) => (e === 'concluida' ? 'gerado no aceite' : undefined) },
+      { id: 'doe', rotulo: 'Publicação (D.O.E.)', subtitulo: (e) => (e === 'atual' ? 'Protocolo anexa o D.O.E.' : undefined) },
+    ];
+    return passos.map((passo, i) => {
+      const estado: EstadoEtapa = i < posicao ? 'concluida' : i === posicao && p.status !== 'publicada' ? 'atual' : p.status === 'publicada' ? 'concluida' : 'bloqueada';
+      return { id: passo.id, rotulo: passo.rotulo, estado, subtitulo: passo.subtitulo?.(estado) };
+    });
   }
 
   /** Todas as nomeações com cadastro completo e ciência dada: só então a autoridade pode ser escolhida. */

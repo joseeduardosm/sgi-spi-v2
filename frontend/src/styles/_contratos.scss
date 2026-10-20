@@ -461,28 +461,7 @@ a.acao-primaria {
   }
 }
 
-/* Barra de etapas da competência */
-.trilha-etapas { margin: 0 0 18px; padding: 18px 24px 20px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-gg); background: var(--spi-superficie);
-  .progresso-etapas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 20px; color: var(--spi-texto);
-    .texto-progresso { font-size: var(--spi-texto-destaque); font-weight: 600; }
-    .divisor-progresso { align-self: stretch; width: 1px; background: var(--spi-borda); }
-    .percentual-progresso { color: var(--spi-sucesso); font-size: var(--spi-titulo-secao); font-weight: 700; font-variant-numeric: tabular-nums; }
-    .barra-progresso { flex: 1 1 200px; height: 10px; margin: 0; border-radius: var(--spi-raio-pilula); } .barra-progresso i { border-radius: var(--spi-raio-pilula); background: var(--spi-sucesso); transition: width 300ms ease-out; } }
-  ol { display: flex; gap: 0; margin: 0; padding: 0; overflow-x: auto; list-style: none; }
-  li { position: relative; flex: 1 0 auto; min-width: 150px;
-    &:not(:last-child)::after { content: ''; position: absolute; top: 33px; left: calc(50% + 28px); right: calc(-50% + 28px); height: 2px; background: var(--spi-borda-campo); }
-    &[data-liga='verde']::after { background: var(--spi-sucesso); } &[data-liga='vermelha']::after { background: var(--spi-vermelho); }
-    button { display: flex; flex-direction: column; align-items: center; gap: 8px; width: calc(100% - 12px); margin: 0 6px; padding: 10px 6px 12px; border: 1px solid transparent; border-radius: var(--spi-raio-g); background: transparent; color: var(--spi-apagado); text-align: center; cursor: pointer; }
-    button:hover:not(:disabled) { color: var(--spi-texto); } button:disabled { cursor: not-allowed; opacity: 0.6; }
-    button:focus { outline: none; } button:focus-visible { box-shadow: var(--spi-anel-foco); }
-    .bolinha-etapa { position: relative; z-index: 1; display: grid; place-items: center; width: 46px; height: 46px; border: 2px solid var(--spi-borda-campo); border-radius: 50%; background: var(--spi-superficie); font-size: var(--spi-titulo-secao); font-weight: 600; }
-    .nome-etapa { display: flex; flex-direction: column; gap: 2px; .titulo-etapa { color: var(--spi-texto); font-size: var(--spi-texto-destaque); font-weight: 600; } small { color: var(--spi-apagado); font-size: var(--spi-texto-corpo); font-weight: 400; } }
-    &.feita .bolinha-etapa { border-color: var(--spi-sucesso); background: var(--spi-sucesso); color: #fff; }
-    &.atual .bolinha-etapa { border-color: var(--spi-vermelho); background: var(--spi-vermelho); color: #fff; }
-    &.selecionada.feita button { border-color: var(--spi-sucesso); background: var(--spi-sucesso-suave); }
-    &.selecionada.atual button { border-color: var(--spi-vermelho); background: var(--spi-vermelho-suave); }
-    &.selecionada:not(.feita):not(.atual) button { border-color: var(--spi-borda-campo); background: var(--spi-superficie-alt); } } }
-@media (prefers-reduced-motion: reduce) { .trilha-etapas .barra-progresso i { transition: none; } }
+/* A barra de etapas da competência agora é o componente comum app-trilha-etapas (shared/componentes/trilha-etapas) */
 .acoes-competencia { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .chip-ne { padding: 3px 10px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-pilula); background: var(--spi-superficie); color: var(--spi-apagado); font-size: var(--spi-texto-legenda); b { color: var(--spi-texto); } }
 .menu-mais-acoes { position: relative;

@@ -1,6 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para a tela do usuário agendar férias e licença-prêmio num calendário do exercício.
 
+import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaAfastamento } from './trilha-afastamento';
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -34,11 +36,12 @@ function dataBr(texto: string): string {
  */
 @Component({
   selector: 'app-ferias',
-  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, CabecalhoRhComponent],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, CabecalhoRhComponent],
   templateUrl: './ferias.component.html',
   host: { '(document:keydown.escape)': 'limparSelecao()' },
 })
 export class FeriasComponent implements OnInit {
+  protected readonly trilha = trilhaAfastamento;
   private readonly api = inject(RhApiService);
   private readonly dialogos = inject(DialogosService);
 

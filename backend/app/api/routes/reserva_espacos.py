@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import exigir_acl
+from app.api.dependencias import obter_usuario_atual
 from app.api.respostas import CONFLITO, INVALIDO, VALIDACAO, resposta_nao_encontrado
 from app.core.banco import hoje_sao_paulo, obter_sessao
 from app.core.erros import ErroApi
@@ -30,7 +30,14 @@ from app.services.servico_reserva_espacos import DadosReserva, ErroReserva
 
 RECURSO = "reserva-espacos"
 roteador = APIRouter(prefix="/reserva-espacos", tags=["Reserva de Espaços"], responses=VALIDACAO)
-ver = exigir_acl(RECURSO, NivelAcl.LEITURA)
+
+
+def ver(usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)) -> Usuario:
+    """Porta do módulo: quem solicita, quem aprova ou quem administra (as colunas do recurso `reserva-espacos` na ACL). Cada rota confere o seu papel."""
+    if not servico.tem_algum_papel(sessao, usuario):
+        raise ErroApi(status.HTTP_403_FORBIDDEN, "Você não possui acesso à Reserva de Espaços (solicitar, aprovar ou controle total).", "acl_negado", recurso=RECURSO)
+    return usuario
+
 SEM_FISCAL = {status.HTTP_403_FORBIDDEN: {"description": "Operação exclusiva dos fiscais (`acesso_negado`) ou sem acesso ao recurso (`acl_negado`)."}}
 RESERVA_NAO_ENCONTRADA = resposta_nao_encontrado("Reserva")
 
@@ -87,7 +94,8 @@ def contexto(usuario: Usuario = Depends(ver), sessao: Session = Depends(obter_se
     consulta = select(EspacoReservavel).order_by(EspacoReservavel.nome)
     if not fiscal:
         consulta = consulta.where(EspacoReservavel.ativo.is_(True))
-    return ContextoReserva(eh_fiscal=fiscal, espacos=[_espaco(e) for e in sessao.scalars(consulta)])
+    solicitar, _, administrar = servico.papeis(sessao, usuario)
+    return ContextoReserva(eh_fiscal=fiscal, pode_solicitar=solicitar, pode_administrar=administrar, espacos=[_espaco(e) for e in sessao.scalars(consulta)])
 
 
 @roteador.get("/agenda", response_model=list[ReservaLeitura], summary="Agenda do período",
@@ -132,7 +140,7 @@ def listar(status_: StatusReserva | None = Query(None, alias="status"), espaco_i
 def exportar(status_: StatusReserva | None = Query(None, alias="status"), espaco_id: int | None = None, inicio: date | None = None, fim: date | None = None,
              busca: str = "", usuario: Usuario = Depends(ver), sessao: Session = Depends(obter_sessao)) -> Response:
     with _traduzir(sessao):
-        servico.exigir_fiscal(sessao, usuario)
+        servico.exigir_admin(sessao, usuario)
     itens, _ = servico.listar(sessao, status_, espaco_id, inicio, fim, busca, 1, 100000)
     return Response(servico.exportar_xlsx(itens), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": 'attachment; filename="reservas-espacos.xlsx"'})
@@ -212,7 +220,7 @@ def cancelar(reserva_id: int, corpo: Cancelamento, usuario: Usuario = Depends(ve
 @roteador.get("/usuarios", response_model=list[Fiscal], summary="Buscar usuários (fiscal)", description="Até 20 usuários ativos por nome ou login, para escolher o responsável de uma reserva predefinida.", responses=SEM_FISCAL)
 def usuarios(busca: str = Query("", max_length=100), usuario: Usuario = Depends(ver), sessao: Session = Depends(obter_sessao)) -> list[Fiscal]:
     with _traduzir(sessao):
-        servico.exigir_fiscal(sessao, usuario)
+        servico.exigir_admin(sessao, usuario)
     consulta = select(Usuario).where(Usuario.ativo.is_(True))
     if busca.strip():
         termo = f"%{busca.strip().lower()}%"
@@ -225,7 +233,7 @@ def usuarios(busca: str = Query("", max_length=100), usuario: Usuario = Depends(
 @roteador.post("/espacos", response_model=EspacoLeitura, status_code=status.HTTP_201_CREATED, summary="Cadastrar espaço (fiscal)", responses={**CONFLITO, **SEM_FISCAL})
 def criar_espaco(corpo: GravacaoEspaco, usuario: Usuario = Depends(ver), sessao: Session = Depends(obter_sessao)) -> EspacoLeitura:
     with _traduzir(sessao):
-        servico.exigir_fiscal(sessao, usuario)
+        servico.exigir_admin(sessao, usuario)
         espaco = servico.salvar_espaco(sessao, usuario, None, corpo.model_dump())
     sessao.commit()
     return _espaco(espaco)
@@ -234,7 +242,7 @@ def criar_espaco(corpo: GravacaoEspaco, usuario: Usuario = Depends(ver), sessao:
 @roteador.put("/espacos/{espaco_id}", response_model=EspacoLeitura, summary="Alterar espaço (fiscal)", responses={**CONFLITO, **SEM_FISCAL, **resposta_nao_encontrado("Espaço")})
 def alterar_espaco(espaco_id: int, corpo: GravacaoEspaco, usuario: Usuario = Depends(ver), sessao: Session = Depends(obter_sessao)) -> EspacoLeitura:
     with _traduzir(sessao):
-        servico.exigir_fiscal(sessao, usuario)
+        servico.exigir_admin(sessao, usuario)
         espaco = servico.salvar_espaco(sessao, usuario, servico.espaco_ou_erro(sessao, espaco_id), corpo.model_dump())
     sessao.commit()
     return _espaco(espaco)
@@ -244,7 +252,7 @@ def alterar_espaco(espaco_id: int, corpo: GravacaoEspaco, usuario: Usuario = Dep
                  responses={**SEM_FISCAL, **resposta_nao_encontrado("Espaço")})
 def excluir_espaco(espaco_id: int, usuario: Usuario = Depends(ver), sessao: Session = Depends(obter_sessao)) -> dict[str, str]:
     with _traduzir(sessao):
-        servico.exigir_fiscal(sessao, usuario)
+        servico.exigir_admin(sessao, usuario)
         resultado = servico.excluir_espaco(sessao, usuario, servico.espaco_ou_erro(sessao, espaco_id))
     sessao.commit()
     return {"resultado": resultado}
@@ -256,7 +264,7 @@ def excluir_espaco(espaco_id: int, usuario: Usuario = Depends(ver), sessao: Sess
 def painel(ano: int | None = Query(None, ge=2000, le=2200), mes: int | None = Query(None, ge=1, le=12), usuario: Usuario = Depends(ver),
            sessao: Session = Depends(obter_sessao)) -> PainelReservas:
     with _traduzir(sessao):
-        servico.exigir_fiscal(sessao, usuario)
+        servico.exigir_admin(sessao, usuario)
     hoje = hoje_sao_paulo()
     return PainelReservas(**servico.painel(sessao, ano or hoje.year, mes or hoje.month))
 
@@ -271,7 +279,7 @@ def _configuracao(sessao: Session) -> ConfiguracaoLeitura:
 @roteador.get("/configuracao", response_model=ConfiguracaoLeitura, summary="Configuração (fiscal)", description="Horário de funcionamento, antecedência mínima, duração máxima e fiscais.", responses=SEM_FISCAL)
 def ler_configuracao(usuario: Usuario = Depends(ver), sessao: Session = Depends(obter_sessao)) -> ConfiguracaoLeitura:
     with _traduzir(sessao):
-        servico.exigir_fiscal(sessao, usuario)
+        servico.exigir_admin(sessao, usuario)
     return _configuracao(sessao)
 
 

@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para controlar a tela de reajuste: abertura, evidência do índice, memória, apostilamento e conclusão.
 
+import { EtapaTrilha, TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -23,10 +24,21 @@ const INDICE = /^-?\d+(\.\d{1,8})?$/;
 /** Tela 6: reajuste (evidência do índice, memória, apostilamento e conclusão). Percentual por item: positivo reajusta, negativo dá desconto. */
 @Component({
   selector: 'app-reajuste',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './reajuste.component.html',
 })
 export class ReajusteComponent implements OnInit {
+  /** Etapas do reajuste na trilha comum, derivadas do que já foi anexado (a conclusão exige evidência, memória e apostilamento). */
+  protected trilha(r: { evidencia?: unknown; memorias?: unknown[]; apostilamento?: unknown }): EtapaTrilha[] {
+    const tem = [true, !!r.evidencia, (r.memorias?.length ?? 0) > 0, !!r.apostilamento];
+    const primeiraPendente = tem.findIndex((x) => !x);
+    const passos = ['Abertura', 'Evidência do índice', 'Memória de cálculo', 'Apostilamento'];
+    return [
+      ...passos.map((rotulo, i): EtapaTrilha => ({ id: 'p' + i, rotulo, estado: tem[i] ? 'concluida' : i === primeiraPendente ? 'atual' : 'aguardando' })),
+      { id: 'conclusao', rotulo: 'Conclusão', estado: primeiraPendente === -1 ? 'atual' : 'bloqueada', subtitulo: primeiraPendente === -1 ? 'pronto para concluir' : undefined },
+    ];
+  }
+
   readonly id = input.required<string>();
 
   private readonly api = inject(AlteracoesApiService);

@@ -2,27 +2,29 @@
 # Este arquivo serve para as regras da baixa de bens inservíveis ou extraviados (lista, motivo, processo, aprovação e termo em PDF).
 """Baixa.
 
-Só entram bens já aprovados como inservíveis ou extraviados. O usuário informa motivo (alienação, doação, transferência, inutilização ou
-extravio) e número do processo, para a seleção toda ou por grupos de bens, e envia para aprovação. O controle total (nunca o próprio
-solicitante) aprova tudo, parte ou recusa. Os aprovados viram **Baixado** e a aprovação gera o **termo em PDF**. O bem baixado sai dos
-painéis, mas nunca é excluído. A baixa aqui não baixa o bem no SAM: o termo serve para fazer isso lá.
+Nasce de **uma lista de inservíveis (ou extraviados) já aprovada** e herda os bens aprovados dela (uma lista por baixa; o mesmo PDF do de acordo pode ser
+anexado em várias baixas). O usuário informa motivo (alienação, doação, transferência, inutilização ou extravio) e número do processo, para a seleção toda
+ou por grupos de bens, e envia: o sistema gera o **termo em PDF** (para instruir o SEI) e a baixa fica **aguardando o aceite da autoridade**, que é externa.
+Quem tem controle total (gestores do patrimônio) **conclui anexando o PDF do de acordo da autoridade**, na maioria das vezes a publicação no D.O.E.: os bens
+viram **Baixado**. O bem baixado sai dos painéis, mas nunca é excluído. A baixa aqui não baixa o bem no SAM: o termo serve para fazer isso lá.
 """
 
 import uuid
 from decimal import Decimal
+from typing import BinaryIO
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.banco import agora_utc, hoje_sao_paulo
-from app.models.patrimonio import Baixa, Bem, EventoPatrimonio, ItemBaixa
+from app.models.patrimonio import Baixa, Bem, Classificacao, EventoPatrimonio, ItemBaixa, ItemClassificacao
 from app.models.usuario import Usuario
 from app.models.patrimonio import ColaboradorBaixa
 from app.services import servico_anexos
 from app.services.patrimonio.numeracao import proximo_numero_relacao
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.patrimonio import servico_bens
-from app.services.patrimonio.base import ErroPatrimonio, avisar, exigir_outra_pessoa, ids_controle_total, nome_do_autor, registrar_evento
+from app.services.patrimonio.base import ErroPatrimonio, avisar, ids_controle_total, nome_do_autor, registrar_evento
 
 MOTIVOS = {"alienacao": "Alienação", "doacao": "Doação", "transferencia": "Transferência", "inutilizacao": "Inutilização", "extravio": "Extravio"}
 CARGA = (selectinload(Baixa.itens).selectinload(ItemBaixa.bem).selectinload(Bem.localizacao), selectinload(Baixa.itens).selectinload(ItemBaixa.bem).selectinload(Bem.grupo),
@@ -46,12 +48,25 @@ def listar(sessao: Session, *, status: str | None = None, solicitante_id: int | 
     return list(sessao.scalars(consulta))
 
 
-def criar(sessao: Session, autor: Usuario, *, id_cliente: str | None = None) -> tuple[Baixa, bool]:
+def criar(sessao: Session, autor: Usuario, *, classificacao_id: uuid.UUID, id_cliente: str | None = None) -> tuple[Baixa, bool]:
+    """Começa a baixa herdando os bens aprovados de uma lista de inservíveis/extraviados já aprovada (uma baixa ativa por lista)."""
     if id_cliente:
         existente = sessao.scalar(select(Baixa.id).where(Baixa.id_cliente == id_cliente))
         if existente is not None:
             return obter(sessao, existente), False
-    baixa = Baixa(id=uuid.uuid4(), id_cliente=id_cliente, numero=proximo_numero_relacao(sessao), status="rascunho", solicitante_id=autor.id)
+    lista = sessao.scalar(select(Classificacao).where(Classificacao.id == classificacao_id).options(selectinload(Classificacao.itens).selectinload(ItemClassificacao.bem)))
+    if lista is None:
+        raise ErroPatrimonio("Lista de origem não encontrada.", 404, "nao_encontrado")
+    if lista.status not in ("aprovada", "parcial"):
+        raise ErroPatrimonio("A baixa só nasce de uma lista aprovada (ou aprovada em parte).", 409, "lista_nao_aprovada")
+    if sessao.scalar(select(Baixa.id).where(Baixa.classificacao_origem_id == lista.id, Baixa.status != "recusada")) is not None:
+        raise ErroPatrimonio("Esta lista já tem uma baixa. O mesmo PDF do de acordo pode ser anexado em várias baixas, mas cada lista tem uma só.", 409, "conflito")
+    bens = [i.bem for i in lista.itens if i.resultado == "aprovado" and i.bem.situacao in ("inservivel", "extraviado")]
+    if not bens:
+        raise ErroPatrimonio("A lista não tem bem aprovado que ainda possa ser baixado.", 409, "sem_bens")
+    baixa = Baixa(id=uuid.uuid4(), id_cliente=id_cliente, numero=proximo_numero_relacao(sessao), status="rascunho", solicitante_id=autor.id, classificacao_origem_id=lista.id)
+    for bem in bens:
+        baixa.itens.append(ItemBaixa(id=uuid.uuid4(), bem_id=bem.id, situacao_anterior=bem.situacao))
     sessao.add(baixa)
     sessao.commit()
     return obter(sessao, baixa.id), True
@@ -96,15 +111,17 @@ def adicionar_bem(sessao: Session, baixa_id: uuid.UUID, autor: Usuario, *, bem_i
     """Leitura contínua de códigos, ou a chapa digitada (extraviados). Só bens já aprovados como inservíveis ou extraviados."""
     baixa = obter(sessao, baixa_id)
     _editavel(baixa, autor)
+    if baixa.classificacao_origem_id is not None:
+        raise ErroPatrimonio("Esta baixa herda os bens da lista aprovada: para incluir outro bem, aprove-o em uma lista e dê a baixa dela.", 409, "conflito")
     bem = servico_bens.obter(sessao, bem_id) if bem_id else servico_bens.obter_por_chapa(sessao, chapa or "")
     if bem.situacao not in ("inservivel", "extraviado"):
         raise ErroPatrimonio(f"O bem {bem.rotulo} não é inservível nem extraviado: classifique-o antes.", 409, "bem_invalido")
     if any(i.bem_id == bem.id for i in baixa.itens):
         raise ErroPatrimonio(f"O bem {bem.rotulo} já está na lista.", 409, "conflito")
     # Um bem não entra em duas baixas em andamento
-    em_outra = sessao.scalar(select(ItemBaixa.id).join(Baixa).where(ItemBaixa.bem_id == bem.id, Baixa.status == "pendente"))
+    em_outra = sessao.scalar(select(ItemBaixa.id).join(Baixa).where(ItemBaixa.bem_id == bem.id, Baixa.status == "aguardando_aceite"))
     if em_outra is not None:
-        raise ErroPatrimonio(f"O bem {bem.rotulo} já está em uma baixa aguardando aprovação.", 409, "conflito")
+        raise ErroPatrimonio(f"O bem {bem.rotulo} já está em uma baixa aguardando o aceite da autoridade.", 409, "conflito")
     baixa.itens.append(ItemBaixa(id=uuid.uuid4(), bem_id=bem.id, situacao_anterior=bem.situacao))
     sessao.commit()
     return obter(sessao, baixa.id)
@@ -146,6 +163,7 @@ def descartar(sessao: Session, baixa_id: uuid.UUID, autor: Usuario) -> None:
 
 
 def enviar(sessao: Session, baixa_id: uuid.UUID, autor: Usuario) -> Baixa:
+    """Valida motivo e processo, gera o termo em PDF (instrui o SEI) e deixa a baixa aguardando o aceite da autoridade."""
     baixa = obter(sessao, baixa_id)
     _editavel(baixa, autor)
     if not baixa.itens:
@@ -153,8 +171,13 @@ def enviar(sessao: Session, baixa_id: uuid.UUID, autor: Usuario) -> Baixa:
     sem = [i.bem.rotulo for i in baixa.itens if not i.motivo or not i.processo]
     if sem:
         raise ErroPatrimonio(f"Falta motivo e processo para: {', '.join(sem[:10])}.", 409, "sem_motivo")
-    baixa.status, baixa.enviada_em = "pendente", agora_utc()
-    avisar(sessao, ids_controle_total(sessao), "Baixa de bens aguardando aprovação", f"{nome_do_autor(autor)} enviou {len(baixa.itens)} bem(ns).",
+    baixa.status, baixa.enviada_em = "aguardando_aceite", agora_utc()
+    sessao.flush()
+    anexo = servico_anexos.guardar_pdf_gerado(sessao, gerar_termo(sessao, baixa, autor), f"termo-baixa-{hoje_sao_paulo():%Y%m%d}-{baixa.numero}.pdf", "patrimonio-termo-baixa", autor.id)
+    sessao.flush()
+    baixa.termo_anexo_id = anexo.id
+    avisar(sessao, ids_controle_total(sessao), "Baixa aguardando o aceite da autoridade",
+           f"{nome_do_autor(autor)} enviou a baixa #{baixa.numero} ({len(baixa.itens)} bem(ns)). Leve o termo à autoridade e, com o de acordo (ou a publicação no D.O.E.), anexe o PDF para concluir.",
            f"patrimonio-bx-{baixa.id}", autor, f"/patrimonio/baixas/{baixa.id}", categoria="pendencia", evento="patrimonio.baixa_pendente")
     sessao.commit()
     return obter(sessao, baixa.id)
@@ -172,11 +195,11 @@ def _real(valor: Decimal | None) -> str:
 
 def gerar_termo(sessao: Session, baixa: Baixa, autor: Usuario) -> bytes:
     """Termo de baixa em PDF: lista de bens, valores, situação anterior e justificativas, para instruir o processo."""
-    aprovados = [i for i in baixa.itens if i.resultado == "aprovado"]
+    aprovados = list(baixa.itens)
     documento = DocumentoPdf(titulo="Termo de baixa de bens móveis", subtitulo=f"{len(aprovados)} bem(ns) · {hoje_sao_paulo():%d/%m/%Y}", autor=nome_do_autor(autor))
     documento.secao("Dados da baixa").campos([
-        ("Solicitante", nome_do_autor(baixa.solicitante)), ("Aprovador", nome_do_autor(baixa.decidido_por)),
-        ("Enviada em", baixa.enviada_em.strftime("%d/%m/%Y %H:%M") if baixa.enviada_em else "—"), ("Aprovada em", baixa.decidido_em.strftime("%d/%m/%Y %H:%M") if baixa.decidido_em else "—"),
+        ("Solicitante", nome_do_autor(baixa.solicitante)), ("Baixa nº", f"#{baixa.numero}"),
+        ("Enviada em", baixa.enviada_em.strftime("%d/%m/%Y %H:%M") if baixa.enviada_em else "—"), ("Aceite", "Autoridade competente (fora do sistema)"),
     ])
     documento.secao("Bens baixados")
     linhas = []
@@ -194,37 +217,47 @@ def gerar_termo(sessao: Session, baixa: Baixa, autor: Usuario) -> bytes:
     return documento.gerar()
 
 
-def decidir(sessao: Session, baixa_id: uuid.UUID, aprovados_ids: list[uuid.UUID], motivo_recusa: str | None, autor: Usuario) -> Baixa:
-    """Aprova os itens indicados (viram Baixado, com data, solicitante e aprovador) e recusa os demais, que exigem motivo."""
+def concluir(sessao: Session, baixa_id: uuid.UUID, arquivo: BinaryIO, nome_arquivo: str, autor: Usuario) -> Baixa:
+    """Conclui a baixa com o PDF do de acordo da autoridade (na maioria das vezes, a publicação no D.O.E.): os bens viram Baixado.
+
+    Quem tem controle total faz isso, inclusive quem montou a baixa: a decisão é da autoridade, fora do sistema."""
     baixa = obter(sessao, baixa_id)
-    if baixa.status != "pendente":
-        raise ErroPatrimonio("A baixa não está pendente.", 409, "conflito")
-    exigir_outra_pessoa(autor, baixa.solicitante_id)
-    if autor.id in baixa.colaboradores_ids:
-        raise ErroPatrimonio("Quem recebeu a baixa compartilhada não pode aprová-la ou recusá-la.", 403, "auto_aprovacao")
-    aprovados = set(aprovados_ids)
-    recusados = [i for i in baixa.itens if i.id not in aprovados]
-    if recusados and not (motivo_recusa and motivo_recusa.strip()):
-        raise ErroPatrimonio("A recusa exige motivo.")
+    if baixa.status != "aguardando_aceite":
+        raise ErroPatrimonio("A baixa não está aguardando o aceite da autoridade.", 409, "conflito")
+    try:
+        anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome_arquivo or "doe.pdf", "patrimonio-baixa-doe", autor.id)
+    except servico_anexos.ErroAnexo as erro:
+        raise ErroPatrimonio(str(erro)) from erro
+    sessao.flush()
     agora = agora_utc()
     for item in baixa.itens:
         bem = servico_bens.obter(sessao, item.bem_id)
-        if item.id in aprovados:
-            item.resultado = "aprovado"
-            registrar_evento(sessao, bem, "baixou", autor, campo="situacao", anterior=bem.situacao, novo="baixado",
-                             texto=f"Baixa por {MOTIVOS.get(item.motivo or '', '')}, processo {item.processo}",
-                             dados={"solicitante": baixa.solicitante.login if baixa.solicitante else None, "autorizador": autor.login, "processo": item.processo})
-            bem.situacao, bem.baixado_em = "baixado", agora
-        else:
-            item.resultado = "recusado"
-            registrar_evento(sessao, bem, "baixa_recusada", autor, texto=f"Baixa recusada: {motivo_recusa.strip()}")
-    baixa.status = "aprovada" if not recusados else "recusada" if not aprovados else "parcial"
-    baixa.decidido_por_id, baixa.decidido_em, baixa.motivo_recusa = autor.id, agora, (motivo_recusa or "").strip() or None
-    if aprovados:
-        sessao.flush()
-        anexo = servico_anexos.guardar_pdf_gerado(sessao, gerar_termo(sessao, baixa, autor), f"termo-baixa-{hoje_sao_paulo():%Y%m%d}.pdf", "patrimonio-termo-baixa", autor.id)
-        sessao.flush()
-        baixa.termo_anexo_id = anexo.id
-    avisar(sessao, sorted(({baixa.solicitante_id} - {None}) | baixa.colaboradores_ids), "Baixa decidida", f"Resultado: {baixa.status}.", f"patrimonio-bx-dec-{baixa.id}", autor, f"/patrimonio/baixas/{baixa.id}", evento="patrimonio.baixa_decidida")
+        item.resultado = "aprovado"
+        registrar_evento(sessao, bem, "baixou", autor, campo="situacao", anterior=bem.situacao, novo="baixado",
+                         texto=f"Baixa por {MOTIVOS.get(item.motivo or '', '')}, processo {item.processo}",
+                         dados={"solicitante": baixa.solicitante.login if baixa.solicitante else None, "concluida_por": autor.login, "processo": item.processo})
+        bem.situacao, bem.baixado_em = "baixado", agora
+    baixa.status, baixa.doe_anexo_id = "concluida", anexo.id
+    baixa.decidido_por_id, baixa.decidido_em, baixa.motivo_recusa = autor.id, agora, None
+    avisar(sessao, sorted(({baixa.solicitante_id} - {None}) | baixa.colaboradores_ids), "Baixa concluída", f"A baixa #{baixa.numero} foi concluída: os bens estão Baixados.",
+           f"patrimonio-bx-dec-{baixa.id}", autor, f"/patrimonio/baixas/{baixa.id}", evento="patrimonio.baixa_decidida")
+    sessao.commit()
+    return obter(sessao, baixa.id)
+
+
+def recusar(sessao: Session, baixa_id: uuid.UUID, motivo: str, autor: Usuario) -> Baixa:
+    """A autoridade não deu o aceite: a baixa é recusada (os bens continuam inservíveis e a lista pode ganhar outra baixa)."""
+    baixa = obter(sessao, baixa_id)
+    if baixa.status != "aguardando_aceite":
+        raise ErroPatrimonio("A baixa não está aguardando o aceite da autoridade.", 409, "conflito")
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise ErroPatrimonio("A recusa exige motivo.")
+    for item in baixa.itens:
+        item.resultado = "recusado"
+        registrar_evento(sessao, servico_bens.obter(sessao, item.bem_id), "baixa_recusada", autor, texto=f"Baixa recusada: {motivo}")
+    baixa.status, baixa.decidido_por_id, baixa.decidido_em, baixa.motivo_recusa = "recusada", autor.id, agora_utc(), motivo
+    avisar(sessao, sorted(({baixa.solicitante_id} - {None}) | baixa.colaboradores_ids), "Baixa recusada", f"A baixa #{baixa.numero} foi recusada: {motivo}",
+           f"patrimonio-bx-dec-{baixa.id}", autor, f"/patrimonio/baixas/{baixa.id}", evento="patrimonio.baixa_decidida")
     sessao.commit()
     return obter(sessao, baixa.id)

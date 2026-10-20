@@ -1,5 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para a página da movimentação: autorizar ou recusar, receber os bens lendo o código de cada um, concluir e cancelar.
+import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaMovimentacao } from './trilhas-patrimonio';
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -16,11 +18,12 @@ import { COR_STATUS, Movimentacao, ROTULOS_STATUS } from './patrimonio.models';
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-detalhe-movimentacao',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoPatrimonioComponent, LeitorCodigoComponent],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoPatrimonioComponent, LeitorCodigoComponent],
   template: `
     <app-cabecalho-patrimonio titulo="Movimentação" descricao="Origem, destino, motivo e andamento do recebimento." />
     @if (mov(); as m) {
       <section class="painel-gestao patrimonio">
+        <app-trilha-etapas [etapas]="trilha(m)" ariaLabel="Etapas da movimentação" />
         <div class="pat-topo-bem">
           <span class="pat-marcadores"><span [class]="marcador(cores[m.status])">{{ rotulos[m.status] }}</span></span>
           <div class="pat-acoes">
@@ -64,6 +67,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
   `,
 })
 export class DetalheMovimentacaoComponent implements OnInit {
+  protected readonly trilha = trilhaMovimentacao;
   private readonly api = inject(PatrimonioApiService);
   private readonly dialogos = inject(DialogosService);
   protected readonly estado = inject(PatrimonioEstadoService);

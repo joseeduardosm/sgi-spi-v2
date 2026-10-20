@@ -1,6 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para a janela de carga em lote dos dados funcionais do RH por planilha (CGP).
 
+import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaImportacao } from '../contratos/compartilhado/trilha-importacao';
 import { Component, computed, inject, model, output, signal } from '@angular/core';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
@@ -22,6 +24,7 @@ const ROTULOS: Record<string, string> = {
  */
 @Component({
   selector: 'app-importacao-funcionais',
+  imports: [TrilhaEtapasComponent],
   host: { '(document:keydown.escape)': 'aberta.set(false)' },
   template: `
     @if (aberta()) {
@@ -32,6 +35,7 @@ const ROTULOS: Record<string, string> = {
           <button type="button" aria-label="Fechar" (click)="aberta.set(false)">×</button>
         </header>
         <div class="corpo-importacao-rh">
+          <app-trilha-etapas [etapas]="trilha()" ariaLabel="Etapas da importação" [compacta]="true" />
           <ol class="passos-importacao">
             <li>Baixe o modelo: ele já traz todos os servidores ativos e os valores atuais.
               <button type="button" class="acao-secundaria acao-pequena" (click)="baixarModelo()">Baixar modelo</button></li>
@@ -88,6 +92,7 @@ export class ImportacaoFuncionaisComponent {
   private readonly dialogos = inject(DialogosService);
   protected readonly arquivo = signal<File | null>(null);
   protected readonly resultado = signal<ResultadoImportacaoRh | null>(null);
+  protected readonly trilha = computed(() => trilhaImportacao(!!this.arquivo(), this.resultado() ? { pode_importar: this.resultado()!.com_erro === 0 } : null));
   protected readonly linhasRelevantes = computed(() => (this.resultado()?.linhas ?? []).filter((l) => l.erros.length || l.mudancas.length));
   protected readonly podeImportar = computed(() => {
     const r = this.resultado();

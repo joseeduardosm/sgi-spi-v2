@@ -13,12 +13,7 @@
             <small>Vigência {{ a.vigencia_inicio | dataBr }} a {{ a.vigencia_fim | dataBr }} · valor da vigência {{ a.valor_global_original | moeda }}</small></div>
           @if (p.pode_editar) { <button type="button" class="acao-perigo" (click)="cancelar(a)">Cancelar</button> }
         </header>
-        <nav class="abas" role="tablist" style="margin: 0 22px">
-          <button type="button" role="tab" [class.ativa]="aba() === 'justificativa'" (click)="aba.set('justificativa')">1. Justificativa</button>
-          <button type="button" role="tab" [class.ativa]="aba() === 'quantitativos'" [disabled]="!a.justificativa" (click)="aba.set('quantitativos')">2. Quantitativos</button>
-          <button type="button" role="tab" [class.ativa]="aba() === 'memoria'" [disabled]="a.situacao === 'rascunho'" (click)="aba.set('memoria')">3. Memória e ciências</button>
-          <button type="button" role="tab" [class.ativa]="aba() === 'formalizacao'" [disabled]="a.ciencias.length < a.ciencias_minimas" (click)="aba.set('formalizacao')">4. Formalização</button>
-        </nav>
+        <div style="margin: 0 22px 14px"><app-trilha-etapas [etapas]="trilha(a)" ariaLabel="Etapas do processo" [navegavel]="true" [selecionada]="aba()" (escolheu)="aba.set($any($event))" /></div>
         <div class="corpo">
           @switch (aba()) {
             @case ('justificativa') {

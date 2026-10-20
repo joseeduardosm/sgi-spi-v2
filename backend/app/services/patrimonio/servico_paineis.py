@@ -70,7 +70,7 @@ def painel(sessao: Session, *, agrupar_por: str = "andar", situacao: str | None 
     em_aberto = sessao.scalar(select(func.count(Movimentacao.id)).where(Movimentacao.status.in_(("pendente", "autorizada")))) or 0
     solicitacoes = (sessao.scalar(select(func.count(Movimentacao.id)).where(Movimentacao.status == "pendente")) or 0) \
         + (sessao.scalar(select(func.count(Classificacao.id)).where(Classificacao.status == "pendente")) or 0) \
-        + (sessao.scalar(select(func.count(Baixa.id)).where(Baixa.status == "pendente")) or 0)
+        + (sessao.scalar(select(func.count(Baixa.id)).where(Baixa.status == "aguardando_aceite")) or 0)
     return {
         "indicadores": {
             "total_bens": len(bens), "valor_aquisicao": aquisicao, "valor_atual": atual, "fora_garantia": len(fora_garantia),

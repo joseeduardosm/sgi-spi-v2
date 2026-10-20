@@ -17,7 +17,12 @@ export interface Espaco {
 }
 
 export interface Contexto {
+  /** Aprova reservas (coluna "Aprovar reservas") ou administra: vê a fila, defere, indefere e cancela. */
   eh_fiscal: boolean;
+  /** Coluna "Solicitar reservas" (ou controle total). */
+  pode_solicitar: boolean;
+  /** Controle total: espaços, reserva predefinida, painel, exportação e configuração. */
+  pode_administrar: boolean;
   espacos: Espaco[];
 }
 

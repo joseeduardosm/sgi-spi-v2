@@ -85,7 +85,17 @@ def _bem(sessao: Session, b: Bem, em_mov: bool) -> esquema.BemLeitura:
         modelo=b.modelo, numero_serie=b.numero_serie, nota_fiscal=b.nota_fiscal, fornecedor=b.fornecedor, observacoes=b.observacoes,
         criado_por_nome=_nome_de(sessao, b.criado_por_id), classificacao_pendente=b.classificacao_pendente, categoria_inservivel=b.categoria_inservivel if b.situacao == "inservivel" else None, em_movimentacao=em_mov, dados_contabeis_pendentes=b.dados_contabeis_pendentes,
         fotos=[esquema.FotoLeitura(id=f.id, nome=f.anexo.nome_original) for f in b.fotos], avisos=servico_bens.avisos(sessao, b), criado_em=b.criado_em,
-        atualizado_em=b.atualizado_em, baixado_em=b.baixado_em)
+        atualizado_em=b.atualizado_em, baixado_em=b.baixado_em, sam=_dados_sam(b))
+
+
+# Campos do bem que vêm do SAM (importação da Visão Geral)
+CAMPOS_SAM = tuple(esquema.DadosSam.model_fields)
+
+
+def _dados_sam(b: Bem) -> esquema.DadosSam | None:
+    """Agrupa os dados do SAM do bem; sem nenhum preenchido, devolve `None` (a tela esconde a seção)."""
+    valores = {campo: getattr(b, campo) for campo in CAMPOS_SAM}
+    return esquema.DadosSam(**valores) if any(v is not None for v in valores.values()) else None
 
 
 def _bem_completo(sessao: Session, b: Bem) -> esquema.BemLeitura:
@@ -121,7 +131,8 @@ def _classificacao(c) -> esquema.ClassificacaoLeitura:
 def _baixa(b) -> esquema.BaixaLeitura:
     return esquema.BaixaLeitura(
         id=b.id, numero=b.numero, status=b.status, solicitante_id=b.solicitante_id, solicitante_nome=nome_do_autor(b.solicitante), criada_em=b.criada_em, enviada_em=b.enviada_em,
-        decidido_por_nome=nome_do_autor(b.decidido_por) if b.decidido_por else None, decidido_em=b.decidido_em, motivo_recusa=b.motivo_recusa, tem_termo=b.termo_anexo_id is not None,
+        classificacao_origem_id=b.classificacao_origem_id, classificacao_origem_numero=None, decidido_por_nome=nome_do_autor(b.decidido_por) if b.decidido_por else None, decidido_em=b.decidido_em, motivo_recusa=b.motivo_recusa,
+        tem_termo=b.termo_anexo_id is not None, tem_conclusao=b.doe_anexo_id is not None,
         colaboradores=[esquema.ColaboradorLista(id=x.usuario_id, nome=nome_do_autor(x.usuario)) for x in sorted(b.colaboradores, key=lambda x: nome_do_autor(x.usuario).lower())],
         itens=[esquema.ItemBaixaLeitura(id=i.id, bem_id=i.bem_id, chapa=i.bem.chapa, numero_serie=i.bem.numero_serie, rotulo=i.bem.rotulo, descricao=i.bem.descricao, situacao_anterior=i.situacao_anterior,
                                         valor_aquisicao=i.bem.valor_aquisicao, motivo=i.motivo, processo=i.processo, resultado=i.resultado) for i in b.itens])
@@ -473,7 +484,7 @@ CLA_NAO_ENCONTRADA = resposta_nao_encontrado("Lista de classificação")
 
 @roteador.get("/classificacoes", response_model=list[esquema.ClassificacaoLeitura], summary="Listas de inservíveis e extraviados",
               description="Filtros por status e por pessoa (`solicitante_id`: as listas que ela montou **e** as compartilhadas com ela).")
-def listar_classificacoes(status_: Literal["rascunho", "pendente", "aprovada", "parcial", "recusada"] | None = Query(None, alias="status"), solicitante_id: int | None = None,
+def listar_classificacoes(status_: Literal["rascunho", "aguardando_aceite", "concluida", "recusada"] | None = Query(None, alias="status"), solicitante_id: int | None = None,
                           sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> list[esquema.ClassificacaoLeitura]:
     return [_classificacao(c) for c in servico_classificacoes.listar(sessao, status=status_, solicitante_id=solicitante_id)]
 
@@ -593,10 +604,14 @@ def listar_baixas(status_: Literal["rascunho", "pendente", "aprovada", "parcial"
 
 
 @roteador.post("/baixas", response_model=esquema.BaixaLeitura, status_code=status.HTTP_201_CREATED, summary="Começar uma baixa (rascunho)",
-               description="MODIFICACAO. Reenvio com o mesmo `id_cliente` devolve a existente (`200`).", responses={200: {"description": "Reenvio já recebido (`id_cliente`)."}})
+               description="MODIFICACAO. Exige `classificacao_id`: a baixa **herda os bens aprovados** de uma lista de inservíveis (ou extraviados) já aprovada, uma baixa por lista "
+               "(`409` se a lista não está aprovada, já tem baixa ou não tem bem que possa ser baixado; `422` sem `classificacao_id`). Reenvio com o mesmo `id_cliente` devolve a existente (`200`).",
+               responses={200: {"description": "Reenvio já recebido (`id_cliente`)."}, **CONFLITO, **INVALIDO})
 def criar_baixa(dados: esquema.GravacaoLista, resposta: Response, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> esquema.BaixaLeitura:
+    if dados.classificacao_id is None:
+        raise ErroApi(status.HTTP_422_UNPROCESSABLE_ENTITY, "Informe a lista aprovada de onde a baixa herda os bens (`classificacao_id`).", "validacao")
     with _traduzir(sessao):
-        baixa, criada = servico_baixas.criar(sessao, usuario, id_cliente=dados.id_cliente)
+        baixa, criada = servico_baixas.criar(sessao, usuario, classificacao_id=dados.classificacao_id, id_cliente=dados.id_cliente)
     if not criada:
         resposta.status_code = status.HTTP_200_OK
     return _baixa(baixa)
@@ -652,12 +667,37 @@ def enviar_baixa(baixa_id: uuid.UUID, sessao: Session = Depends(obter_sessao), u
         return _baixa(servico_baixas.enviar(sessao, baixa_id, usuario))
 
 
-@roteador.post("/baixas/{baixa_id}/decisao", response_model=esquema.BaixaLeitura, summary="Aprovar, aprovar em parte ou recusar a baixa",
-               description="Só CONTROLE_TOTAL e nunca o próprio solicitante (`403 auto_aprovacao`). Os aprovados viram **Baixado** (com data, solicitante e aprovador), saem dos painéis e "
-               "nunca são excluídos; a aprovação gera o termo em PDF. A baixa aqui não baixa o bem no SAM.", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO, **BAIXA_NAO_ENCONTRADA})
-def decidir_baixa(baixa_id: uuid.UUID, dados: esquema.Decisao, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> esquema.BaixaLeitura:
+@roteador.post("/baixas/{baixa_id}/conclusao", response_model=esquema.BaixaLeitura, summary="Concluir a baixa com o PDF do de acordo da autoridade",
+               description="Só CONTROLE_TOTAL (gestores do patrimônio), inclusive quem montou a baixa: a decisão é da autoridade, fora do sistema. `multipart/form-data` com `arquivo` (PDF do de acordo, "
+               "na maioria das vezes a publicação no D.O.E.). Só com a baixa `aguardando_aceite` (`409`); `400` se não for PDF. Os bens viram **Baixado** (com data, solicitante e quem concluiu), saem dos "
+               "painéis e nunca são excluídos. A baixa aqui não baixa o bem no SAM.", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO, **BAIXA_NAO_ENCONTRADA})
+def concluir_baixa(baixa_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> esquema.BaixaLeitura:
     with _traduzir(sessao):
-        return _baixa(servico_baixas.decidir(sessao, baixa_id, dados.aprovados_ids, dados.motivo_recusa, usuario))
+        return _baixa(servico_baixas.concluir(sessao, baixa_id, arquivo.file, arquivo.filename or "doe.pdf", usuario))
+
+
+@roteador.post("/baixas/{baixa_id}/recusa", response_model=esquema.BaixaLeitura, summary="Registrar que a autoridade recusou a baixa",
+               description="Só CONTROLE_TOTAL, com `motivo`. Só com a baixa `aguardando_aceite` (`409`). Os bens continuam inservíveis/extraviados e a lista pode receber outra baixa.",
+               responses={**SEM_ADMIN, **CONFLITO, **INVALIDO, **BAIXA_NAO_ENCONTRADA})
+def recusar_baixa(baixa_id: uuid.UUID, dados: esquema.RecusaBaixa, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> esquema.BaixaLeitura:
+    with _traduzir(sessao):
+        return _baixa(servico_baixas.recusar(sessao, baixa_id, dados.motivo, usuario))
+
+
+@roteador.get("/baixas/{baixa_id}/conclusao", response_class=FileResponse, summary="Baixar o PDF do de acordo da autoridade (D.O.E.)",
+              description="O PDF anexado ao concluir a baixa.", responses=BAIXA_NAO_ENCONTRADA)
+def baixar_conclusao(baixa_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)):
+    from app.models.anexo import Anexo
+
+    with _traduzir():
+        baixa = servico_baixas.obter(sessao, baixa_id)
+    anexo = sessao.get(Anexo, baixa.doe_anexo_id) if baixa.doe_anexo_id else None
+    if anexo is None:
+        raise ErroApi(status.HTTP_404_NOT_FOUND, "Esta baixa ainda não foi concluída com o PDF do de acordo.", "nao_encontrado")
+    try:
+        return servico_anexos.resposta_download(anexo)
+    except servico_anexos.ErroAnexo as erro:
+        raise ErroApi(status.HTTP_404_NOT_FOUND, str(erro), "nao_encontrado") from erro
 
 
 @roteador.get("/baixas/{baixa_id}/termo", response_class=FileResponse, summary="Baixar o termo de baixa (PDF)",

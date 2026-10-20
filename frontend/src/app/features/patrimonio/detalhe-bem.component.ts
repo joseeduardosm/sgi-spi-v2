@@ -158,6 +158,12 @@ const CAMPOS_EDITAVEIS = ['chapa', 'descricao', 'conservacao', 'situacao', 'orig
                 <div><dt>{{ d.rotulo }}@if (d.campo) { <button type="button" class="pat-historico-campo" [attr.aria-label]="'Histórico de ' + d.rotulo" title="Histórico deste campo" (click)="historicoDoCampo(b, d.campo)">⟲</button> }</dt><dd>{{ d.valor || '—' }}</dd></div>
               }
             </dl>
+            @if (dadosSam(b); as linhas) {
+              <h3 class="pat-subtitulo">Dados do SAM</h3>
+              <dl class="pat-dados">
+                @for (d of linhas; track d.rotulo) { <div><dt>{{ d.rotulo }}</dt><dd>{{ d.valor || '—' }}</dd></div> }
+              </dl>
+            }
             @if (campoAberto(); as c) {
               <div class="pat-painel-acao">
                 <strong>Histórico: {{ rotulosCampo[c] ?? c }}</strong>
@@ -292,6 +298,25 @@ export class DetalheBemComponent implements OnInit, OnDestroy {
       { rotulo: 'Fim da garantia', valor: b.garantia_fim ? data(b.garantia_fim) : 'Indefinida' }, { rotulo: 'Garantia', valor: ROTULOS_GARANTIA[b.situacao_garantia] },
       { rotulo: 'Marca', valor: b.marca ?? '', campo: 'marca' }, { rotulo: 'Modelo', valor: b.modelo ?? '', campo: 'modelo' }, { rotulo: 'Número de série', valor: b.numero_serie ?? '', campo: 'numero_serie' },
       { rotulo: 'Nota fiscal', valor: b.nota_fiscal ?? '', campo: 'nota_fiscal' }, { rotulo: 'Fornecedor', valor: b.fornecedor ?? '', campo: 'fornecedor' }, { rotulo: 'Observações', valor: b.observacoes ?? '', campo: 'observacoes' },
+    ];
+  }
+
+  /** Linhas da seção "Dados do SAM" (só leitura, vêm da importação da Visão Geral); `null` quando o bem não tem nenhum dado do SAM. */
+  protected dadosSam(b: Bem): { rotulo: string; valor: string }[] | null {
+    const s = b.sam;
+    if (!s) return null;
+    const real = (v: string | null) => (v === null ? '' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+    const data = (v: string | null) => (v ? new Date(v + 'T00:00:00').toLocaleDateString('pt-BR') : '');
+    const ref = (v: string | null) => (v ? `${v.slice(4, 6)}/${v.slice(0, 4)}` : '');
+    return [
+      { rotulo: 'Código do item', valor: s.item_codigo ?? '' }, { rotulo: 'Estado no SAM', valor: s.estado_sam ?? '' }, { rotulo: 'Responsável no SAM', valor: s.responsavel_sam ?? '' },
+      { rotulo: 'UO', valor: s.uo ?? '' }, { rotulo: 'Destino UGE', valor: s.destino_uge ?? '' },
+      { rotulo: 'Conta contábil', valor: s.conta_contabil ?? '' }, { rotulo: 'Conta de depreciação', valor: s.conta_depreciacao ?? '' },
+      { rotulo: 'Depreciação acumulada', valor: real(s.depreciacao_acumulada) }, { rotulo: 'Depreciação mensal', valor: real(s.depreciacao_mensal) },
+      { rotulo: 'Vida útil', valor: s.vida_util_meses === null ? '' : `${s.meses_depreciados ?? 0} de ${s.vida_util_meses} meses depreciados` },
+      { rotulo: 'Última depreciação', valor: ref(s.ultima_depreciacao_ref) }, { rotulo: 'Data de incorporação', valor: data(s.data_incorporacao) },
+      { rotulo: 'Empenho', valor: s.empenho ?? '' }, { rotulo: 'Número do documento', valor: s.numero_documento ?? '' },
+      { rotulo: 'Último histórico', valor: s.ultimo_historico ? `${s.ultimo_historico}${s.data_ultimo_historico ? ' · ' + data(s.data_ultimo_historico) : ''}` : '' },
     ];
   }
 

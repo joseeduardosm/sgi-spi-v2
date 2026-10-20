@@ -21,11 +21,15 @@ import { EstadoReservasService } from './estado-reservas.service';
       </div>
       <nav aria-label="Atalhos da Reserva de Espaços">
         <a class="acao-secundaria" routerLink="/reserva-espacos" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">Agenda</a>
-        <a class="acao-secundaria" routerLink="/reserva-espacos/minhas" routerLinkActive="ativo">Minhas reservas</a>
-        <a class="acao-primaria" routerLink="/reserva-espacos/nova">Nova reserva</a>
+        @if (estado.podeSolicitar()) {
+          <a class="acao-secundaria" routerLink="/reserva-espacos/minhas" routerLinkActive="ativo">Minhas reservas</a>
+          <a class="acao-primaria" routerLink="/reserva-espacos/nova">Nova reserva</a>
+        }
         @if (estado.ehFiscal()) {
-          <a class="acao-secundaria" routerLink="/reserva-espacos/fila" routerLinkActive="ativo">Fila do fiscal</a>
+          <a class="acao-secundaria" routerLink="/reserva-espacos/fila" routerLinkActive="ativo">Fila de aprovação</a>
           <a class="acao-secundaria" routerLink="/reserva-espacos/reservas" routerLinkActive="ativo" [routerLinkActiveOptions]="{ exact: true }">Todas</a>
+        }
+        @if (estado.podeAdministrar()) {
           <a class="acao-secundaria" routerLink="/reserva-espacos/espacos" routerLinkActive="ativo">Espaços</a>
           <a class="acao-secundaria" routerLink="/reserva-espacos/painel" routerLinkActive="ativo">Painel</a>
           <a class="acao-secundaria" routerLink="/reserva-espacos/configuracao" routerLinkActive="ativo">Configuração</a>

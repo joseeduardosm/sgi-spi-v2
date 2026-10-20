@@ -16,6 +16,7 @@ import { CabecalhoProtocoloComponent } from './cabecalho-protocolo.component';
 import { ProtocoloApiService } from './protocolo-api.service';
 import { ListaNumeros, NumeroProtocolo, ROTULOS_ESTADO, ROTULOS_EVENTO, SequenciaProtocolo, TipoProtocolo } from './protocolo.models';
 
+import { EtapaTrilha, TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 type Janela = null | 'reservar' | 'detalhe';
 type AcaoMotivo = 'liberar' | 'anular';
@@ -27,7 +28,7 @@ type AcaoMotivo = 'liberar' | 'anular';
  */
 @Component({
   selector: 'app-numeracao',
-  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, CabecalhoProtocoloComponent],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, CabecalhoProtocoloComponent],
   template: `
     <app-cabecalho-protocolo titulo="Protocolo" descricao="Reserve o próximo número de ofícios, portarias e resoluções e anexe o documento." />
     <section class="painel-gestao protocolo">
@@ -108,6 +109,7 @@ type AcaoMotivo = 'liberar' | 'anular';
           <button type="button" aria-label="Fechar" (click)="fechar()">×</button>
         </header>
         <div class="corpo-numero">
+          <app-trilha-etapas [etapas]="trilhaNumero(n)" ariaLabel="Ciclo do número" [compacta]="true" />
           <dl class="dados-numero">
             <div><dt>Finalidade</dt><dd>{{ n.finalidade || '—' }}</dd></div>
             <div><dt>Reservado por</dt><dd>{{ n.reservado_por_nome || '—' }}</dd></div>
@@ -228,6 +230,17 @@ export class NumeracaoComponent implements OnInit {
     this.lista.set(null);
     if (!this.sequenciaId()) return;
     this.api.numeros(this.sequenciaId()).subscribe({ next: (l) => this.lista.set(l), error: (e) => this.dialogos.mostrarErro(e) });
+  }
+
+  /** Ciclo do número na trilha comum: Livre → Reservado → Utilizado (anulado marca o passo em que parou como recusado). */
+  protected trilhaNumero(n: NumeroProtocolo): EtapaTrilha[] {
+    const usado = n.estado === 'utilizado';
+    const anulado = n.estado === 'anulado';
+    return [
+      { id: 'livre', rotulo: 'Livre', estado: 'concluida', subtitulo: 'número disponível' },
+      { id: 'reservado', rotulo: 'Reservado', estado: anulado ? 'recusada' : usado ? 'concluida' : 'atual', subtitulo: anulado ? 'anulado' : usado ? 'reservado' : 'aguardando o documento' },
+      { id: 'utilizado', rotulo: 'Utilizado', estado: usado ? 'concluida' : 'bloqueada', subtitulo: usado ? 'com documento' : 'anexe o documento' },
+    ];
   }
 
   protected clicarNumero(n: NumeroProtocolo): void {

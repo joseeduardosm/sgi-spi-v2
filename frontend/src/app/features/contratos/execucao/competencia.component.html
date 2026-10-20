@@ -37,26 +37,7 @@
   }
 
   <!-- Trilha de etapas: o caminho até a Ordem Bancária, com o que já foi feito e o que está aberto -->
-  <nav class="trilha-etapas" aria-label="Etapas da competência">
-    <div class="progresso-etapas">
-      <b class="texto-progresso">{{ etapasConcluidas() }} de {{ etapasVisiveis().length }} etapas concluídas</b>
-      <span class="divisor-progresso" aria-hidden="true"></span>
-      <b class="percentual-progresso">{{ percentualEtapas() }}%</b>
-      <div class="barra-progresso" role="progressbar" [attr.aria-valuenow]="etapasConcluidas()" aria-valuemin="0" [attr.aria-valuemax]="etapasVisiveis().length"><i [style.width.%]="100 * etapasConcluidas() / (etapasVisiveis().length || 1)"></i></div>
-    </div>
-    <ol>
-      @for (e of etapasVisiveis(); track e; let n = $index; let ultimo = $last) {
-        <li [class.feita]="concluida(e) || d.etapa_atual === 'concluida'" [class.atual]="aberta(e)" [class.selecionada]="selecionada() === e" [class.futura]="bloqueada(e)"
-            [attr.data-liga]="ultimo ? null : ligacao(e, etapasVisiveis()[n + 1])">
-          <button type="button" [disabled]="bloqueada(e)" [attr.aria-current]="aberta(e) ? 'step' : null" (click)="selecionada.set(e)">
-            <span class="bolinha-etapa" aria-hidden="true">{{ concluida(e) || d.etapa_atual === 'concluida' ? '✓' : n + 1 }}</span>
-            <span class="nome-etapa"><span class="titulo-etapa">{{ n + 1 }}. {{ rotulos[e] }}</span>
-              <small>{{ concluida(e) || d.etapa_atual === 'concluida' ? 'concluída' : aberta(e) ? 'em andamento' : 'aguardando' }}</small></span>
-          </button>
-        </li>
-      }
-    </ol>
-  </nav>
+  <app-trilha-etapas [etapas]="trilha()" ariaLabel="Etapas da competência" [navegavel]="true" [selecionada]="selecionada()" (escolheu)="selecionada.set($any($event))" />
 
   @switch (selecionada()) {
     @case ('medicao') { <app-etapa-medicao [detalhe]="d" [editavel]="editavel('medicao')" (atualizado)="aplicar($event)" /> }

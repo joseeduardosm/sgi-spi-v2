@@ -112,7 +112,9 @@ class Cancelamento(BaseModel):
 
 
 class ContextoReserva(BaseModel):
-    eh_fiscal: bool
+    eh_fiscal: bool = Field(..., description="Aprova reservas (ou administra): vê a fila e todas as reservas, defere, indefere e cancela.")
+    pode_solicitar: bool = Field(True, description="Coluna \"Solicitar reservas\" da ACL: vê a agenda, solicita e altera/cancela as próprias reservas.")
+    pode_administrar: bool = Field(False, description="Controle total: cria e altera espaços, reservas predefinidas, painel, exportação e configuração.")
     espacos: list[EspacoLeitura]
 
 

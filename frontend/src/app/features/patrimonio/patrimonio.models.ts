@@ -25,11 +25,11 @@ export function rotuloCategoria(codigo: string | null | undefined): string {
 }
 
 export const ROTULOS_STATUS: Record<string, string> = {
-  pendente: 'Pendente', autorizada: 'Autorizada', concluida: 'Concluída', recusada: 'Recusada', cancelada: 'Cancelada', rascunho: 'Rascunho', aprovada: 'Aprovada', parcial: 'Aprovada em parte',
+  pendente: 'Pendente', autorizada: 'Autorizada', concluida: 'Concluída', recusada: 'Recusada', cancelada: 'Cancelada', rascunho: 'Rascunho', aprovada: 'Aprovada', parcial: 'Aprovada em parte', aguardando_aceite: 'Aguardando aceite da autoridade',
 };
 /** Cor (índice da paleta dos marcadores de Tarefas) de cada situação do bem e de cada status. */
 export const COR_SITUACAO: Record<SituacaoBem, number> = { ativo: 10, em_manutencao: 3, inservivel: 2, extraviado: 1, baixado: 0 };
-export const COR_STATUS: Record<string, number> = { pendente: 3, autorizada: 4, concluida: 10, recusada: 1, cancelada: 0, rascunho: 0, aprovada: 10, parcial: 3 };
+export const COR_STATUS: Record<string, number> = { pendente: 3, autorizada: 4, concluida: 10, recusada: 1, cancelada: 0, rascunho: 0, aprovada: 10, parcial: 3, aguardando_aceite: 3 };
 
 export interface AcessoPatrimonio { usuario_id: number; pode_operar: boolean; pode_administrar: boolean }
 
@@ -52,6 +52,14 @@ export interface Bem {
   marca: string | null; modelo: string | null; numero_serie: string | null; nota_fiscal: string | null; fornecedor: string | null; observacoes: string | null;
   criado_por_nome: string | null; classificacao_pendente: boolean; categoria_inservivel?: CategoriaInservivel | null; em_movimentacao: boolean; dados_contabeis_pendentes: boolean; fotos: { id: string; nome: string }[]; avisos: string[];
   criado_em: string; atualizado_em: string; baixado_em: string | null;
+  sam: DadosSam | null;
+}
+/** Dados que o SAM guarda sobre o bem (importação da Visão Geral). */
+export interface DadosSam {
+  item_codigo: string | null; uo: string | null; tipo_sam: string | null; conta_contabil: string | null; conta_depreciacao: string | null;
+  depreciacao_acumulada: string | null; depreciacao_mensal: string | null; vida_util_meses: number | null; meses_depreciados: number | null;
+  ultima_depreciacao_ref: string | null; data_incorporacao: string | null; empenho: string | null; numero_documento: string | null;
+  ultimo_historico: string | null; data_ultimo_historico: string | null; estado_sam: string | null; destino_uge: string | null; responsavel_sam: string | null;
 }
 export interface ListaBens { total: number; pagina: number; itens: Bem[] }
 
@@ -96,6 +104,8 @@ export interface ItemBaixa {
 export interface Baixa {
   id: string; numero: number; status: string; solicitante_id: number | null; solicitante_nome: string; criada_em: string; enviada_em: string | null; decidido_por_nome: string | null;
   decidido_em: string | null; motivo_recusa: string | null; tem_termo: boolean; itens: ItemBaixa[];
+  /** Lista aprovada de onde a baixa herdou os bens (nula nas baixas antigas) e se o PDF do de acordo da autoridade (D.O.E.) já foi anexado. */
+  classificacao_origem_id?: string | null; tem_conclusao?: boolean;
   /** Pessoas com quem a baixa foi compartilhada (fazem tudo o que o solicitante faz, menos aprová-la). */
   colaboradores?: { id: number; nome: string }[];
 }

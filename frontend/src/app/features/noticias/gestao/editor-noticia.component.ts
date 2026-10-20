@@ -1,6 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para escrever e revisar uma notícia: texto, capa 2:1, publicação, aviso, anexos e o fluxo de aprovação.
 
+import { TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { trilhaNoticia } from '../trilha-noticia';
 import { DatePipe } from '@angular/common';
 import { Component, computed, DestroyRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -23,11 +25,12 @@ import { Recorte, RecorteCapaComponent } from './recorte-capa.component';
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 @Component({
   selector: 'app-editor-noticia',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, SeletorUsuariosComponent, CabecalhoNoticiasComponent, EditorTextoComponent,
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, SeletorUsuariosComponent, CabecalhoNoticiasComponent, EditorTextoComponent,
             ImagemAutenticadaDirective, RecorteCapaComponent],
   templateUrl: './editor-noticia.component.html',
 })
 export class EditorNoticiaComponent implements OnInit {
+  protected readonly trilha = trilhaNoticia;
   protected readonly api = inject(NoticiasApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly rota = inject(ActivatedRoute);

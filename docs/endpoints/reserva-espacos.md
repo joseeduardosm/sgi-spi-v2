@@ -11,13 +11,18 @@ Migrado da Reserva de Espaços do 10.23.1.243 (Django). Carga dos dados: `script
 
 ## Papéis
 
-Recurso ACL `reserva-espacos` (sem regras = aberto a todo usuário autenticado). Dentro dele:
+Recurso ACL `reserva-espacos` com **três colunas** em Controle de acesso (perfis: caixas de marcação independentes; regras: níveis hierárquicos):
 
-| Papel | O que pode |
-|---|---|
-| Solicitante (qualquer usuário) | Ver a agenda, solicitar (com recorrência), ver, alterar (só aguardando aprovação) e cancelar o que criou ou em que é responsável |
-| Fiscal (tabela `reserva_espacos_fiscais`) ou SuperRoot | Tudo do solicitante, mais: fila, deferir/indeferir, reserva predefinida, ver todas as reservas, cadastrar espaços, painel e exportação |
-| SuperRoot | Também grava a configuração e a lista de fiscais |
+| Coluna | Nível | O que pode |
+|---|---|---|
+| **Solicitar reservas** | `LEITURA` | Ver a agenda, solicitar (com recorrência), ver, alterar (só aguardando aprovação) e cancelar o que criou ou em que é responsável. **Só isso**: não vê a fila nem aprova. |
+| **Aprovar reservas** | `MODIFICACAO` | Ver a fila e todas as reservas, **deferir, indeferir e cancelar** (qualquer uma, inclusive a série). **Só isso**: não solicita, não cria espaço, não vê painel. Quem pode os dois precisa marcar as duas colunas. |
+| **Controle total** | `CONTROLE_TOTAL` | Faz tudo (solicitar e aprovar) e ainda **cria, altera e exclui espaços**, lança reserva predefinida e vê o painel, a exportação e a configuração (`GET`). |
+| SuperRoot | | Tudo, e só ele grava a configuração (horário e lista de fiscais). |
+
+- **Módulo aberto:** enquanto o recurso não tem regras nem perfis (como hoje, até alguém criar), todos solicitam; aprovam e administram só os **fiscais** da tabela `reserva_espacos_fiscais` (legado) e o SuperRoot. Ao criar o primeiro perfil ou regra, o módulo passa a ser uma lista positiva: quem não tem nenhuma coluna recebe `403 acl_negado` (migração `f1c6a8d2e4b7` cadastrou o recurso).
+- Os fiscais da tabela continuam valendo como aprovadores **e** administradores (compatibilidade). `GET /contexto` devolve `eh_fiscal` (aprova ou administra), `pode_solicitar` e `pode_administrar`, e a tela esconde o que a pessoa não pode fazer.
+- Sem a coluna de solicitar, `POST /reservas` responde `403 acesso_negado`; sem a de aprovar, fila, lista geral, análise e cancelamento de reservas alheias respondem `403`; sem controle total, espaços, predefinida, painel, exportação, busca de usuários e configuração respondem `403`.
 
 Operação de fiscal sem o papel → `403 acesso_negado`.
 

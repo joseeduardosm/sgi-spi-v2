@@ -167,6 +167,7 @@
       <div><span class="modal-sobretitulo">{{ tipos[a.tipo] }} · {{ status[a.status] }}</span><h2 id="titulo-detalhe-afastamento">{{ a.nome }}</h2></div>
       <button type="button" aria-label="Fechar" (click)="detalhe.set(null)">×</button>
     </header>
+    <div style="margin: 0 25px 12px"><app-trilha-etapas [etapas]="trilha(a)" ariaLabel="Etapas do pedido" [compacta]="true" /></div>
     <dl class="detalhe-afastamento">
       <dt>Setor</dt><dd>{{ a.setor }}</dd>
       <dt>Período</dt><dd>{{ data(a.inicio) }} a {{ data(a.fim) }} ({{ a.dias }} dias)@if (a.substitui_id) { · alteração de pedido aprovado }</dd>

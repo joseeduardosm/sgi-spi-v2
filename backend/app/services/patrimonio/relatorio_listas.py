@@ -42,7 +42,7 @@ from app.services.patrimonio.servico_localizacoes import rotulo_curto
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MAXIMO_FOTOS = 3
-STATUS = {"rascunho": "Rascunho", "pendente": "Aguardando aprovação", "aprovada": "Aprovada", "parcial": "Aprovada em parte", "recusada": "Recusada"}
+STATUS = {"rascunho": "Rascunho", "pendente": "Aguardando aprovação", "aguardando_aceite": "Aguardando aceite da autoridade", "concluida": "Concluída", "aprovada": "Aprovada", "parcial": "Aprovada em parte", "recusada": "Recusada"}
 
 
 def _local(valor: datetime) -> datetime:

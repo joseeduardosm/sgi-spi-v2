@@ -1,0 +1,31 @@
+<nav class="trilha-etapas" [class.compacta]="compacta()" [attr.aria-label]="ariaLabel()">
+  @if (mostrarProgresso() && !compacta()) {
+    <div class="progresso-etapas">
+      <b class="texto-progresso">{{ concluidas() }} de {{ etapas().length }} etapas concluídas</b>
+      <span class="divisor-progresso" aria-hidden="true"></span>
+      <b class="percentual-progresso">{{ percentual() }}%</b>
+      <div class="barra-progresso" role="progressbar" [attr.aria-label]="ariaLabel() + ': etapas concluídas'" [attr.aria-valuenow]="concluidas()" aria-valuemin="0" [attr.aria-valuemax]="etapas().length"><i [style.width.%]="larguraBarra()"></i></div>
+    </div>
+  }
+  <ol>
+    @for (e of etapas(); track e.id; let n = $index; let ultimo = $last) {
+      <li [class.feita]="e.estado === 'concluida'" [class.atual]="e.estado === 'atual'" [class.recusada]="e.estado === 'recusada'" [class.futura]="e.estado === 'bloqueada'"
+          [class.selecionada]="navegavel() && selecionada() === e.id" [attr.data-liga]="ultimo ? null : ligacao(n)" [attr.title]="e.titulo ?? null">
+        @if (navegavel()) {
+          <button type="button" [disabled]="e.estado === 'bloqueada'" [attr.aria-current]="e.estado === 'atual' ? 'step' : null" (click)="escolher(e)">
+            <ng-container *ngTemplateOutlet="conteudo; context: { e: e, n: n }" />
+          </button>
+        } @else {
+          <div class="passo" [attr.aria-current]="e.estado === 'atual' ? 'step' : null">
+            <ng-container *ngTemplateOutlet="conteudo; context: { e: e, n: n }" />
+          </div>
+        }
+      </li>
+    }
+  </ol>
+</nav>
+
+<ng-template #conteudo let-e="e" let-n="n">
+  <span class="bolinha-etapa" aria-hidden="true">{{ e.estado === 'concluida' ? '✓' : e.estado === 'recusada' ? '✕' : n + 1 }}</span>
+  <span class="nome-etapa"><span class="titulo-etapa">{{ n + 1 }}. {{ e.rotulo }}</span><small>{{ subtitulo(e) }}</small></span>
+</ng-template>

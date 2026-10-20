@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para controlar a tela de execução de uma competência: barra de etapas, etapa exibida e reabertura.
 
+import { TrilhaEtapasComponent, EtapaTrilha, EstadoEtapa } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -25,7 +26,7 @@ const LIMITE_CONSULTAS_EMAIL = 8;
 
 @Component({
   selector: 'app-competencia',
-  imports: [EsqueletoComponent, 
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, 
     FormsModule, RouterLink, CabecalhoModuloComponent, EtapaMedicaoComponent, EtapaAvaliacaoComponent, EtapaNotaFiscalComponent,
     EtapaCadinComponent, EtapaFinaisComponent, EtapaRetencaoComponent, ...PIPES_FORMATACAO,
   ],
@@ -51,27 +52,17 @@ export class CompetenciaComponent implements OnInit {
   protected readonly situacoes = ROTULOS_SITUACAO_COMPETENCIA;
   // Etapas mostradas na barra (sem "concluída")
   protected readonly etapasVisiveis = computed(() => (this.detalhe()?.etapas ?? []).filter((e) => e !== 'concluida'));
-  /** Quantas etapas já foram concluídas (a competência concluída conta todas). */
-  protected readonly etapasConcluidas = computed(() => {
+  /** Passos da trilha (componente comum): estado de cada etapa a partir do que a API informa. */
+  protected readonly trilha = computed<EtapaTrilha[]>(() => {
     const d = this.detalhe();
-    if (!d) return 0;
-    return d.etapa_atual === 'concluida' ? this.etapasVisiveis().length : this.etapasVisiveis().filter((e) => d.etapas_concluidas.includes(e)).length;
+    if (!d) return [];
+    return this.etapasVisiveis().map((e) => {
+      const feita = d.etapa_atual === 'concluida' || d.etapas_concluidas.includes(e);
+      const aberta = d.etapas_abertas.includes(e);
+      const estado: EstadoEtapa = feita ? 'concluida' : aberta ? 'atual' : !d.liberada ? 'bloqueada' : 'bloqueada';
+      return { id: e, rotulo: this.rotulos[e], estado };
+    });
   });
-  /** Percentual de etapas concluídas, com uma casa decimal e vírgula (ex.: 42,9). */
-  protected readonly percentualEtapas = computed(() => {
-    const total = this.etapasVisiveis().length || 1;
-    return ((100 * this.etapasConcluidas()) / total).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  });
-
-  /** Cor da linha entre uma etapa e a seguinte: verde (feito), vermelha (as duas em andamento) ou cinza. */
-  protected ligacao(atual: Etapa, proxima: Etapa): 'verde' | 'vermelha' | 'cinza' {
-    const d = this.detalhe();
-    const feita = (e: Etapa) => !!d && (d.etapa_atual === 'concluida' || d.etapas_concluidas.includes(e));
-    const aberta = (e: Etapa) => !!d && d.etapas_abertas.includes(e);
-    if (feita(atual) && (feita(proxima) || aberta(proxima))) return 'verde';
-    if (aberta(atual) && aberta(proxima)) return 'vermelha';
-    return 'cinza';
-  }
   // Janela de reabertura: etapa escolhida e justificativa
   protected readonly reabrindo = signal(false);
   protected etapaReabrir: Etapa | '' = '';

@@ -182,7 +182,9 @@ def test_pendencia_no_cadin_vira_ocorrencia_no_diario_com_a_mesma_data_e_hora(cl
     o = ocorrencias[0]
     # Mesmo instante da consulta (data e hora de registro), na competência da etapa
     assert datetime.fromisoformat(o["criado_em"]) == datetime.fromisoformat(consulta["criado_em"])
-    quando = datetime.fromisoformat(consulta["criado_em"]).astimezone(ZoneInfo("America/Sao_Paulo"))
+    instante = datetime.fromisoformat(consulta["criado_em"])
+    # O SQLite devolve instantes sem fuso (UTC); em produção vêm com fuso
+    quando = (instante if instante.tzinfo else instante.replace(tzinfo=ZoneInfo("UTC"))).astimezone(ZoneInfo("America/Sao_Paulo"))
     assert o["data_ocorrencia"] == quando.date().isoformat() and o["competencia_afetada"] == "2026-01"
     assert "Débito de ICMS em aberto" in o["descricao"] and "Pendência no CADIN" in o["descricao"]
     assert o["possui_glosa"] is False and o["impacta_avaliacao"] is False

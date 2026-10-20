@@ -61,6 +61,8 @@
 
 // Detalhe do perfil: barra lateral com os módulos + página do módulo (como o perfil do GLPI)
 .acl-perfil-corpo { display: grid; grid-template-columns: minmax(200px, 250px) 1fr; align-items: start; }
+// Perfil novo: ainda não há menu lateral, então o formulário ocupa a largura toda (e não a coluna estreita do menu)
+.acl-perfil-corpo.sem-menu { grid-template-columns: 1fr; }
 .acl-perfil-menu {
   display: flex; flex-direction: column; border-right: 1px solid var(--spi-borda);
   button {

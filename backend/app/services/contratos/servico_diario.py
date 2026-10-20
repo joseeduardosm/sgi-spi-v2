@@ -15,7 +15,7 @@ import unicodedata
 import uuid
 from collections import defaultdict
 from io import BytesIO
-from datetime import date
+from datetime import UTC, date
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -198,7 +198,8 @@ def registrar_pendencia_cadin(sessao: Session, contrato: Contrato, competencia: 
     from app.core.banco import FUSO_SAO_PAULO
 
     quando = consulta.criado_em
-    momento = quando.astimezone(FUSO_SAO_PAULO) if quando.tzinfo else quando
+    # Instante sem fuso (SQLite) é UTC, como tudo o que o sistema grava; a data da ocorrência é a de São Paulo
+    momento = (quando if quando.tzinfo else quando.replace(tzinfo=UTC)).astimezone(FUSO_SAO_PAULO)
     relato = (f"<p><strong>Pendência no CADIN</strong> registrada na etapa de CADIN da competência {competencia.competencia:%m/%Y} "
               f"em {momento:%d/%m/%Y} às {momento:%H:%M}.</p><p><strong>Pendência:</strong> {escape(consulta.pendencia)}</p>")
     ocorrencia = OcorrenciaDiario(

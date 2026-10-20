@@ -5,6 +5,7 @@
   <app-esqueleto tipo="formulario" [linhas]="5" />
 } @else {
   @if (noticia(); as n) {
+    <app-trilha-etapas [etapas]="trilha(n)" ariaLabel="Etapas da notícia" [compacta]="true" />
     <div class="faixa-situacao" [attr.data-situacao]="n.situacao">
       <span class="selo-noticia" [attr.data-situacao]="n.situacao">{{ rotulos[n.situacao] }}</span>
       @switch (n.situacao) {

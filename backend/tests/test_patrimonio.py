@@ -14,6 +14,7 @@ from app.core.banco import FabricaSessao
 from app.models.patrimonio import Bem, EventoPatrimonio, GrupoMaterial, Localizacao
 from app.models.setor import Setor
 from app.services.patrimonio import depreciacao, servico_bens
+from tests.apoio_contratos import PDF
 from tests.conftest import cabecalho, criar_usuario
 
 URL = "/api/patrimonio"
@@ -323,29 +324,40 @@ def test_lista_recusa_bem_que_nao_esta_ativo_e_extraviado_nao_se_move(cliente, e
     assert achado["situacao"] == "ativo" and achado["sala_codigo"] == "05A02"
 
 
-def test_baixa_termo_em_pdf_e_bem_baixado_fica_somente_leitura(cliente, equipe, predio):
+def test_baixa_herda_lista_aguarda_autoridade_e_conclui_com_o_pdf_do_doe(cliente, equipe, predio):
     ids, h = equipe
     _bem(cliente, h["ana"], predio["05A01"], chapa="B-1", grupo_id=predio["grupo"], valor_aquisicao="500.00", data_aquisicao="2020-01-01")
     _bem(cliente, h["ana"], predio["05A01"], chapa="B-2")
     lista = _lista(cliente, h["ana"], "inservivel", ["B-1", "B-2"])
     itens = [i["id"] for i in lista["itens"]]
     cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": itens, "categoria": "irrecuperavel", "justificativa": "Quebrado sem conserto viável"}, headers=h["ana"])
+    # A baixa só nasce de lista aprovada e exige a lista de origem
+    assert cliente.post(f"{URL}/baixas", json={"classificacao_id": lista["id"]}, headers=h["ana"]).json()["codigo"] == "lista_nao_aprovada"
+    assert cliente.post(f"{URL}/baixas", json={}, headers=h["ana"]).status_code == 422
     cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"])
     cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": itens}, headers=h["carla"])
-    # Bem ativo não entra na baixa
+    # Bem ativo não entra na baixa: ela herda os bens aprovados da lista (e não aceita inclusão avulsa)
     _bem(cliente, h["ana"], predio["05A01"], chapa="B-3")
-    baixa = cliente.post(f"{URL}/baixas", json={}, headers=h["ana"]).json()
-    assert cliente.post(f"{URL}/baixas/{baixa['id']}/bens", json={"chapa": "B-3"}, headers=h["ana"]).json()["codigo"] == "bem_invalido"
-    for chapa in ("B-1", "B-2"):
-        assert cliente.post(f"{URL}/baixas/{baixa['id']}/bens", json={"chapa": chapa}, headers=h["ana"]).status_code == 200
-    detalhe = cliente.get(f"{URL}/baixas/{baixa['id']}", headers=h["ana"]).json()
-    ids_itens = [i["id"] for i in detalhe["itens"]]
+    baixa = cliente.post(f"{URL}/baixas", json={"classificacao_id": lista["id"]}, headers=h["ana"]).json()
+    assert baixa["status"] == "rascunho" and sorted(i["chapa"] for i in baixa["itens"]) == ["B-1", "B-2"] and baixa["classificacao_origem_id"] == lista["id"]
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/bens", json={"chapa": "B-3"}, headers=h["ana"]).status_code == 409
+    # Uma baixa por lista
+    assert cliente.post(f"{URL}/baixas", json={"classificacao_id": lista["id"]}, headers=h["ana"]).status_code == 409
+    ids_itens = [i["id"] for i in baixa["itens"]]
     assert cliente.post(f"{URL}/baixas/{baixa['id']}/enviar", headers=h["ana"]).json()["codigo"] == "sem_motivo"
     assert cliente.post(f"{URL}/baixas/{baixa['id']}/motivo", json={"itens_ids": ids_itens, "motivo": "doacao", "processo": "SPI-2026/001"}, headers=h["ana"]).status_code == 200
-    assert cliente.post(f"{URL}/baixas/{baixa['id']}/enviar", headers=h["ana"]).json()["status"] == "pendente"
-    assert cliente.post(f"{URL}/baixas/{baixa['id']}/decisao", json={"aprovados_ids": ids_itens}, headers=h["ana"]).status_code == 403
-    aprovada = cliente.post(f"{URL}/baixas/{baixa['id']}/decisao", json={"aprovados_ids": ids_itens}, headers=h["edu"])
-    assert aprovada.status_code == 200 and aprovada.json()["status"] == "aprovada" and aprovada.json()["tem_termo"] is True
+    enviada = cliente.post(f"{URL}/baixas/{baixa['id']}/enviar", headers=h["ana"]).json()
+    assert enviada["status"] == "aguardando_aceite" and enviada["tem_termo"] is True and enviada["tem_conclusao"] is False
+    # Concluir: só controle total, só PDF; quem montou a baixa também pode (a decisão é externa)
+    doe = {"arquivo": ("doe.pdf", PDF, "application/pdf")}
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/conclusao", files=doe, headers=h["ana"]).status_code == 403
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/conclusao", files={"arquivo": ("doe.txt", b"x", "text/plain")}, headers=h["carla"]).status_code == 400
+    assert cliente.get(f"{URL}/baixas/{baixa['id']}/conclusao", headers=h["dora"]).status_code == 404
+    aprovada = cliente.post(f"{URL}/baixas/{baixa['id']}/conclusao", files=doe, headers=h["edu"])
+    assert aprovada.status_code == 200, aprovada.text
+    assert aprovada.json()["status"] == "concluida" and aprovada.json()["tem_conclusao"] is True and aprovada.json()["tem_termo"] is True
+    assert cliente.get(f"{URL}/baixas/{baixa['id']}/conclusao", headers=h["dora"]).content.startswith(b"%PDF")
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/conclusao", files=doe, headers=h["edu"]).status_code == 409
     termo = cliente.get(f"{URL}/baixas/{baixa['id']}/termo", headers=h["dora"])
     assert termo.status_code == 200 and termo.content.startswith(b"%PDF")
     # Baixado: sai da lista padrão e do painel, não edita nem move, mas nunca é excluído
@@ -607,9 +619,7 @@ def test_relatorio_consolidado_de_extraviados_e_da_baixa_com_fotos_e_anexos(clie
     enviada = cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"])
     assert enviada.status_code == 200, enviada.text
     assert cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": itens}, headers=h["carla"]).status_code == 200
-    baixa = cliente.post(f"{URL}/baixas", json={"id_cliente": str(uuid.uuid4())}, headers=h["ana"]).json()
-    for chapa in ("EX-0", "EX-1"):
-        assert cliente.post(f"{URL}/baixas/{baixa['id']}/bens", json={"chapa": chapa}, headers=h["ana"]).status_code == 200
+    baixa = cliente.post(f"{URL}/baixas", json={"id_cliente": str(uuid.uuid4()), "classificacao_id": lista["id"]}, headers=h["ana"]).json()
     relatorio = cliente.get(f"{URL}/baixas/{baixa['id']}/relatorio", headers=h["dora"])
     assert relatorio.status_code == 200 and relatorio.content.startswith(b"%PDF")
     assert "Boletim de ocorrencia" in " ".join(p.extract_text() for p in PdfReader(io.BytesIO(relatorio.content)).pages)
@@ -716,8 +726,8 @@ def test_busca_de_bens_por_qualquer_informacao_com_varias_palavras(cliente, equi
     assert achar("notebook 05A01 lenovo") == []
 
 
-def test_baixa_compartilhada_colaborador_faz_tudo_e_nao_aprova(cliente, equipe, predio):
-    """Como nas listas de inservíveis: quem recebe a baixa inclui bens, define motivo, envia e recebe a decisão, mas não a aprova."""
+def test_baixa_compartilhada_colaborador_faz_tudo_menos_decidir(cliente, equipe, predio):
+    """Como nas listas de inservíveis: quem recebe a baixa define motivo, envia e recebe o resultado, mas não a conclui nem a recusa."""
     ids, h = equipe
     for chapa in ("K-1", "K-2"):
         _bem(cliente, h["ana"], predio["05A01"], chapa=chapa)
@@ -726,21 +736,27 @@ def test_baixa_compartilhada_colaborador_faz_tudo_e_nao_aprova(cliente, equipe, 
     cliente.post(f"{URL}/classificacoes/{lista['id']}/justificativa", json={"itens_ids": itens, "categoria": "irrecuperavel", "justificativa": "Sem conserto e sem uso"}, headers=h["ana"])
     cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"])
     cliente.post(f"{URL}/classificacoes/{lista['id']}/decisao", json={"aprovados_ids": itens}, headers=h["carla"])
-    baixa = cliente.post(f"{URL}/baixas", json={}, headers=h["ana"]).json()
-    assert cliente.post(f"{URL}/baixas/{baixa['id']}/bens", json={"chapa": "K-1"}, headers=h["bruno"]).status_code == 403
+    baixa = cliente.post(f"{URL}/baixas", json={"classificacao_id": lista["id"]}, headers=h["ana"]).json()
+    ids_itens = [i["id"] for i in baixa["itens"]]
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/motivo", json={"itens_ids": ids_itens, "motivo": "doacao", "processo": "SPI-2026/009"}, headers=h["bruno"]).status_code == 403
     assert cliente.put(f"{URL}/baixas/{baixa['id']}/colaboradores", json={"usuarios_ids": [ids["bruno"]]}, headers=h["bruno"]).status_code == 403
     r = cliente.put(f"{URL}/baixas/{baixa['id']}/colaboradores", json={"usuarios_ids": [ids["bruno"]]}, headers=h["ana"])
     assert r.status_code == 200 and [c["id"] for c in r.json()["colaboradores"]] == [ids["bruno"]]
     assert [b["id"] for b in cliente.get(f"{URL}/baixas", params={"solicitante_id": ids["bruno"]}, headers=h["bruno"]).json()] == [baixa["id"]]
-    for chapa in ("K-1", "K-2"):
-        assert cliente.post(f"{URL}/baixas/{baixa['id']}/bens", json={"chapa": chapa}, headers=h["bruno"]).status_code == 200
-    ids_itens = [i["id"] for i in cliente.get(f"{URL}/baixas/{baixa['id']}", headers=h["bruno"]).json()["itens"]]
     assert cliente.post(f"{URL}/baixas/{baixa['id']}/motivo", json={"itens_ids": ids_itens, "motivo": "doacao", "processo": "SPI-2026/009"}, headers=h["bruno"]).status_code == 200
-    assert cliente.post(f"{URL}/baixas/{baixa['id']}/enviar", headers=h["bruno"]).json()["status"] == "pendente"
-    # Nem o solicitante nem o colaborador aprovam; outra pessoa com controle total aprova
-    assert cliente.post(f"{URL}/baixas/{baixa['id']}/decisao", json={"aprovados_ids": ids_itens}, headers=h["ana"]).status_code == 403
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/enviar", headers=h["bruno"]).json()["status"] == "aguardando_aceite"
+    # Colaborador e solicitante (MODIFICACAO) não decidem; o controle total conclui ou registra a recusa; depois de enviada, não compartilha mais
+    doe = {"arquivo": ("doe.pdf", PDF, "application/pdf")}
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/conclusao", files=doe, headers=h["ana"]).status_code == 403
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/recusa", json={"motivo": "Sem de acordo"}, headers=h["bruno"]).status_code == 403
     assert cliente.put(f"{URL}/baixas/{baixa['id']}/colaboradores", json={"usuarios_ids": []}, headers=h["ana"]).status_code == 409
-    assert cliente.post(f"{URL}/baixas/{baixa['id']}/decisao", json={"aprovados_ids": ids_itens}, headers=h["edu"]).json()["status"] == "aprovada"
+    assert cliente.post(f"{URL}/baixas/{baixa['id']}/recusa", json={"motivo": ""}, headers=h["edu"]).status_code in (400, 422)
+    recusada = cliente.post(f"{URL}/baixas/{baixa['id']}/recusa", json={"motivo": "Autoridade pediu ajustes"}, headers=h["edu"]).json()
+    assert recusada["status"] == "recusada" and recusada["motivo_recusa"] == "Autoridade pediu ajustes"
+    # A lista pode receber nova baixa depois da recusa; os bens seguem inservíveis
+    assert cliente.get(f"{URL}/bens/chapa/K-1", headers=h["dora"]).json()["situacao"] == "inservivel"
+    nova = cliente.post(f"{URL}/baixas", json={"classificacao_id": lista["id"]}, headers=h["ana"])
+    assert nova.status_code == 201 and nova.json()["id"] != baixa["id"]
 
 
 def test_categoria_do_inservivel_obrigatoria_marcador_no_bem_e_limpeza_ao_reverter(cliente, equipe, predio):
@@ -818,3 +834,24 @@ def test_justificativa_ja_gravada_pode_ser_editada_e_excluida(cliente, equipe, p
     assert cliente.post(f"{URL}/classificacoes/{lista['id']}/enviar", headers=h["ana"]).json()["status"] == "pendente"
     assert cliente.post(remover, json={"itens_ids": [m1]}, headers=h["ana"]).status_code == 409
     assert cliente.post(url, json={"itens_ids": [m1], "categoria": "ocioso", "justificativa": "Tentando editar depois de enviada"}, headers=h["ana"]).status_code == 409
+
+
+def test_importacao_sam_converte_linha_da_visao_geral():
+    """A linha da planilha do SAM vira os campos do bem: chapa com 6 dígitos, valores em reais, vida útil 8/120 e conservação na escala 1 a 5."""
+    from decimal import Decimal
+
+    from app.services.patrimonio.importacao_sam import montar_bem
+
+    linha = {
+        "Sigla": "SPI", "Chapa": "2835", "Grupo do Material": "71", "Item": "6348823", "Descrição do Item": "CADEIRA  GIRATORIA PRETA", "UGE": "390105", "UA": "10269",
+        "Responsável": "SAMMARA GOMES ROCHA", "Valor de Aquisição": "1.870,00", "Depreciação Acumulada": "112,16", "Valor Atual": "1.757,84", "Vida Útil(Meses)": "8/120",
+        "Data de Aquisição": " 18/12/2025", "Data de Incorporação": "12/02/2026", "Estado de Conservacao": "Novo", "Última Depreciação (Mes/Ref)": "202607",
+    }
+    bem = montar_bem(linha, baixado=False)
+    assert bem["chapa"] == "SPI002835" and bem["id_cliente"] == "sam:SPI002835" and bem["descricao"] == "CADEIRA GIRATORIA PRETA"
+    assert bem["valor_aquisicao"] == Decimal("1870.00") and bem["valor_atual"] == Decimal("1757.84")
+    assert (bem["meses_depreciados"], bem["vida_util_meses"]) == (8, 120)
+    assert bem["conservacao"] == 5 and bem["situacao"] == "ativo" and bem["estado_sam"] == "Novo"
+    assert str(bem["data_aquisicao"]) == "2025-12-18" and bem["ultima_depreciacao_ref"] == "202607"
+    baixado = montar_bem({**linha, "Estado de Conservacao": "Antieconômico"}, baixado=True)
+    assert baixado["situacao"] == "baixado" and baixado["conservacao"] == 1

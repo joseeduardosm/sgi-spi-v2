@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para controlar a tela de prorrogação: prazo, itens sob demanda, parecer, ciências e registro do termo.
 
+import { EtapaTrilha, TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -32,10 +33,24 @@ const CAMPOS: { campo: keyof CamposParecer; rotulo: string }[] = [
 /** Tela 4: prorrogação com prazo, itens sob demanda, parecer opcional, ciências opcionais e termo aditivo. */
 @Component({
   selector: 'app-prorrogacao',
-  imports: [EsqueletoComponent, LinkificarPipe, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './prorrogacao.component.html',
 })
 export class ProrrogacaoComponent implements OnInit {
+  /** Trilha comum: prazo → itens sob demanda (opcional) → formalização (termo assinado) → parecer (opcional) → registro. */
+  protected trilha(p: { relatorio?: unknown }): EtapaTrilha[] {
+    const prazo = !!this.meses;
+    const formalizada = prazo && !!this.assinadaEm && !!this.termo;
+    return [
+      { id: 'prazo', rotulo: 'Prazo', estado: prazo ? 'concluida' : 'atual', subtitulo: prazo ? `${this.meses} mês(es)` : undefined },
+      { id: 'itens', rotulo: 'Itens sob demanda', estado: prazo ? 'concluida' : 'aguardando', opcional: true },
+      { id: 'formalizacao', rotulo: 'Formalização', estado: formalizada ? 'concluida' : prazo ? 'atual' : 'aguardando', subtitulo: formalizada ? 'termo assinado' : prazo ? 'data e termo aditivo' : undefined },
+      { id: 'parecer', rotulo: 'Parecer e ciências', estado: p.relatorio ? 'concluida' : 'aguardando', opcional: true },
+      { id: 'registro', rotulo: 'Registro', estado: formalizada ? 'atual' : 'bloqueada', subtitulo: formalizada ? 'pronto para registrar' : undefined },
+    ];
+  }
+
+
   readonly id = input.required<string>();
 
   private readonly api = inject(AlteracoesApiService);

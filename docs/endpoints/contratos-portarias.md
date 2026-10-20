@@ -35,7 +35,7 @@ Placeholders: `#numeroportaria`, `#anoportaria`, `#numerodocontrato`, `#contrata
 | Operação | Quem |
 |---|---|
 | `GET /portarias`, evidência | LEITURA |
-| Criar, alterar nomeações, escolher a autoridade, cancelar | **Equipe vigente do contrato** ou quem tem **CONTROLE_TOTAL** em Contratos (perfil "Administrador de Contratos") ou SuperRoot; `403 acesso_negado` para os demais. `pode_criar` no painel diz se os botões aparecem |
+| Criar, alterar nomeações, escolher a autoridade, cancelar | **Equipe vigente do contrato**, o **cadastrante** (quem criou o contrato) ou quem tem **CONTROLE_TOTAL** em Contratos (perfil "Administrador de Contratos") ou SuperRoot; `403 acesso_negado` para os demais. `pode_criar` no painel diz se os botões aparecem |
 | Aceitar, devolver | Usuário vinculado à autoridade da portaria ou SuperRoot (`403 acesso_negado` para os demais) |
 | Ciência | Só o próprio nomeado (`403` para quem não foi nomeado), sem exigir ACL |
 | Publicação | Quem anexa o PDF no número do Protocolo (administração do Protocolo ou quem reservou) |

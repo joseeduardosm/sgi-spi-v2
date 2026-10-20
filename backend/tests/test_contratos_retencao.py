@@ -15,6 +15,7 @@ import pytest
 from app.services.contratos.erros import ErroRegraContrato
 from app.services.contratos.leitor_nota_xml import ler_nota
 from tests.apoio_contratos import (
+    corpo_conclusao,
     CNPJ_SPI,
     PDF,
     conferir_retencao,
@@ -119,7 +120,7 @@ def cenario(cliente, admin):
     cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=g)
     cliente.post(f"{base}/medicao/ciencia", headers=g)
     cliente.post(f"{base}/medicao/ciencia", headers=f)
-    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=g).status_code == 200
+    assert cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=g).status_code == 200
     SmtpSimulado.enviadas.clear()
     return contrato, base, g
 

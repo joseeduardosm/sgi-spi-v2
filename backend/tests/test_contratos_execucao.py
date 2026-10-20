@@ -12,7 +12,7 @@ import pytest
 from pypdf import PdfReader
 
 from app.services.contratos import calculos
-from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, juntar_nf, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, criar_contrato, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 
 # Data "de hoje" fixa nos testes: janeiro e fevereiro de 2026 já acabaram; março está em curso
@@ -195,11 +195,11 @@ def test_competencia_da_medicao_ate_a_ordem_bancaria(cliente, admin, equipe):
     r = cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     assert r.status_code == 200 and r.json()["total_medido"] == "2105.00" and r.json()["situacao"] == "em_andamento"
     # Sem nenhuma ciência, a conclusão é recusada; uma ciência já basta para avançar
-    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": ordem_notas}, headers=gestora)
+    r = cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", ordem_notas), headers=gestora)
     assert r.status_code == 400 and "uma ciência" in r.json()["detalhe"]
     assert cliente.post(f"{base}/medicao/ciencia", headers=cabecalho(cliente, "externo")).status_code == 400  # usuário fora da equipe
     assert len(cliente.post(f"{base}/medicao/ciencia", headers=gestora).json()["ciencias"]) == 1
-    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": ordem_notas}, headers=fiscal)
+    r = cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", ordem_notas), headers=fiscal)
     assert r.status_code == 200, r.text
     detalhe = r.json()
     assert detalhe["etapa_atual"] == "nota_fiscal" and detalhe["memorias"][0]["versao"] == 1
@@ -361,7 +361,7 @@ def test_avaliacao_libera_pagamento_pela_faixa(cliente, admin, equipe):
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).json()["etapa_atual"] == "avaliacao"
+    assert cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora).json()["etapa_atual"] == "avaliacao"
 
     itens = [i["id"] for g in cliente.get(base, headers=gestora).json()["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
     sem_justificativa = {"respostas": [{"item_id": itens[0], "nota": "5"}, {"item_id": itens[1], "nota": "10"}]}
@@ -430,7 +430,7 @@ def test_checklist_com_documentos_obrigatorios_e_opcionais(cliente, admin, equip
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
     assert juntar_nf(cliente, base, gestora, "2105.00").status_code == 200
     assert conferir_retencao(cliente, base, gestora).status_code == 200
     detalhe = cliente.get(base, headers=gestora).json()
@@ -579,7 +579,7 @@ def test_documento_com_validade_e_reaproveitado_na_competencia_seguinte(cliente,
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
     assert juntar_nf(cliente, base, gestora, "2105.00").status_code == 200
     assert conferir_retencao(cliente, base, gestora).status_code == 200
     detalhe = cliente.get(base, headers=gestora).json()
@@ -605,7 +605,7 @@ def test_documento_com_validade_e_reaproveitado_na_competencia_seguinte(cliente,
     medicao2 = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in seguinte["itens"]], "notas_empenho_ids": notas}
     cliente.put(f"{base2}/medicao", json=medicao2, headers=gestora)
     cliente.post(f"{base2}/medicao/ciencia", headers=gestora)
-    cliente.post(f"{base2}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base2}/medicao/concluir", json=corpo_conclusao(f"{base2}", notas), headers=gestora)
     r = juntar_nf(cliente, base2, gestora, "2105.00", numero="2")
     assert r.status_code == 200, r.text
     seguinte = cliente.get(base2, headers=gestora).json()
@@ -630,7 +630,7 @@ def test_avaliacao_toda_na_maxima_dispensa_o_gestor(cliente, admin, equipe):
     medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
-    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).json()["etapa_atual"] == "avaliacao"
+    assert cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora).json()["etapa_atual"] == "avaliacao"
 
     itens = [i["id"] for g in cliente.get(base, headers=gestora).json()["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
     maxima = {"respostas": [{"item_id": i, "nota": "10"} for i in itens]}
@@ -658,7 +658,7 @@ def _medir_ate_concluir(cliente, contrato, gestora, fiscal, concluir=True):
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     if concluir:
-        assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
+        assert cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora).status_code == 200
     return base, notas
 
 
@@ -680,7 +680,7 @@ def test_avaliacao_copia_o_formulario_ativo_ao_concluir_a_medicao(cliente, admin
     # Versão nova ativada antes de concluir a medição: é ela que a avaliação copia
     v2 = cliente.post(_url(contrato, "/formularios"), json=_formulario_com_faixa("50"), headers=gestora).json()[0]
     assert cliente.post(_url(contrato, f"/formularios/{v2['id']}/ativar"), headers=gestora).status_code == 200
-    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
+    assert cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora).status_code == 200
     depois = cliente.get(base, headers=gestora).json()
     assert depois["etapa_atual"] == "avaliacao" and depois["avaliacao"]["definicao"]["faixas"] == v2["definicao"]["faixas"]
 
@@ -708,7 +708,7 @@ def test_reabrir_medicao_descarta_a_avaliacao_e_copia_o_ativo_ao_concluir_de_nov
     reaberta = cliente.get(base, headers=gestora).json()
     assert reaberta["etapa_atual"] == "medicao" and reaberta["itens"] and reaberta["avaliacao"] is None
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
-    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
+    assert cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora).status_code == 200
     nova = cliente.get(base, headers=gestora).json()["avaliacao"]
     assert nova["respostas_iniciais"] == [] and nova["definicao"]["faixas"] == v2["definicao"]["faixas"]
 
@@ -729,7 +729,7 @@ def test_superroot_registra_ciencia_sem_integrar_a_equipe(cliente, admin, equipe
     assert cliente.post(f"{base}/medicao/ciencia", headers=admin).status_code == 200
     assert [c["papel"] for c in cliente.get(base, headers=admin).json()["ciencias"]] == ["administrador"]
     # Também avalia os serviços (inicial e do gestor), o que um usuário comum fora da equipe não faz
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=admin)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=admin)
     competencia = cliente.get(base, headers=admin).json()
     itens = [i["id"] for g in cliente.get(base, headers=gestora).json()["avaliacao"]["definicao"]["grupos"] for i in g["itens"]]
     inicial = {"respostas": [{"item_id": itens[0], "nota": "5", "justificativa": "Atrasos"}, {"item_id": itens[1], "nota": "10"}]}
@@ -750,7 +750,7 @@ def test_zerar_competencia_apaga_a_medicao_e_as_etapas(cliente, admin, equipe):
     medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["quantidade_prevista"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
     r = cliente.post(f"{base}/zerar", headers=fiscal)  # equipe, criador e SuperRoot têm os mesmos poderes
     assert r.status_code == 200, r.text
     d = r.json()
@@ -818,7 +818,7 @@ def _medir_e_concluir(cliente, base, gestora, fiscal, ordem_notas, quantidades=N
     linhas = [{"id": i["id"], "quantidade_medida": (quantidades or {}).get(i["descricao"], i["quantidade_prevista"])} for i in detalhe["itens"]]
     assert cliente.put(f"{base}/medicao", json={"itens": linhas, "notas_empenho_ids": ordem_notas}, headers=gestora).status_code == 200
     assert cliente.post(f"{base}/medicao/ciencia", headers=gestora).status_code == 200
-    return cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": ordem_notas}, headers=fiscal)
+    return cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", ordem_notas), headers=fiscal)
 
 
 def test_medicao_adicional_roda_o_rito_independente_da_competencia(cliente, admin, equipe_adicional):

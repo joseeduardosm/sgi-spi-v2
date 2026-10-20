@@ -108,42 +108,45 @@
     }
 
     @if (a.ciencias.length || a.pdf_gerado) {
-      <p class="secao-formulario">{{ a.precisa_avaliacao_gestor ? '4.' : '3.' }} Documento</p>
+      <p class="secao-formulario">{{ a.precisa_avaliacao_gestor ? '4.' : '3.' }} Enviar Medição e Avaliação</p>
       <div class="acoes-cartao esquerda">
         @if (a.pdf_gerado) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(a.pdf_gerado.anexo_id)">Baixar PDF gerado</button> }
         @if (a.pdf_assinado) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(a.pdf_assinado.anexo_id)">Baixar via assinada</button> }
       </div>
-      @if (a.pdf_gerado && editavel() && !a.concluida_em) {
-        <ol class="passos-assinatura">
-          <li>Baixe o <b>PDF gerado</b> (ele traz a Folha de autenticação, com o código de verificação e quem deu ciência).</li>
-          <li>A contratada assina o PDF no <a href="https://assinador.iti.br" target="_blank" rel="noopener">assinador do gov.br</a> (assinatura eletrônica ou com certificado digital).</li>
-          <li>Selecione a <b>via assinada</b> abaixo e envie.</li>
-        </ol>
-        <p class="dica-formulario">Para conferir se um PDF é o original gerado pelo sistema: <a routerLink="/contratos/verificar">Verificar documento</a>.</p>
-      }
       @if (editavel() && !a.concluida_em) {
-        <div class="acoes-cartao esquerda">
-          <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail." descricao="PDF aos prepostos escolhidos, pedindo a devolução assinada" />
-          <button type="button" class="acao-secundaria" (click)="exportarPdf()">Exportar novo PDF</button>
-          @if (a.pdf_gerado) {
+        <!-- Um único e-mail à contratada, com a medição e a avaliação: ciência, nota fiscal no prazo (ou contestação) e assinatura do relatório -->
+        <app-opcao-email [obrigatorio]="true" titulo="E-mail à contratada: Medição + Avaliação (obrigatório)" [(selecionados)]="prepostosMedicao" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: cadastre um na empresa para enviar." descricao="Um único e-mail à equipe e aos prepostos escolhidos (ao menos um), com os dois anexos: a medição e o relatório de avaliação. Dá ciência da medição, pede a nota fiscal no prazo (ou a contestação) e a assinatura da avaliação" />
+        <div class="grade-formulario">
+          <div><label for="avaliacao-prazo-contestacao">Prazo para a contratada emitir a nota fiscal ou contestar (dias úteis) *</label>
+            <input id="avaliacao-prazo-contestacao" type="number" min="1" max="60" inputmode="numeric" [ngModel]="prazoMedicao()" (ngModelChange)="prazoMedicao.set($event)" />
+            <small class="dica-formulario">Conta a partir do e-mail, sem sábados, domingos e feriados. Anexar a nota fiscal encerra o prazo.</small></div>
+        </div>
+        <footer class="acoes-formulario">
+          @if (!a.ciencias.length) { <span class="dica-formulario">Registre ao menos uma ciência no ateste para enviar.</span> }
+          <button type="button" class="acao-primaria" [class.carregando]="enviandoMedicao()" [disabled]="!envioValido() || enviandoMedicao()" (click)="enviarMedicaoEAvaliacao()">{{ enviandoMedicao() ? 'Enviando…' : (d.email_medicao.ok ? 'Reenviar Medição e Avaliação' : 'Enviar Medição e Avaliação') }}</button>
+        </footer>
+      }
+
+      @if (a.pdf_gerado) {
+        <p class="secao-formulario">E-mail à contratada</p>
+        @if (d.email_medicao.enviado_em === null) {
+          <p class="dica-formulario">Ainda não enviado. Escolha os prepostos, informe o prazo e clique em <b>Enviar Medição e Avaliação</b>.</p>
+        } @else if (d.email_medicao.ok) {
+          <p class="aviso-bloco informativo">Enviado em {{ d.email_medicao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_medicao.destinatarios.join(', ') }}, com a medição e o relatório de avaliação.@if (d.contestacao) { O prazo de {{ d.contestacao.prazo_dias }} dia(s) útil(eis) para a nota fiscal ou a contestação já está contando. }</p>
+        } @else {
+          <p class="aviso-bloco erro">O e-mail não foi enviado: {{ d.email_medicao.erro }}</p>
+        }
+        @if (editavel() && !a.concluida_em && d.email_medicao.ok) {
+          <ol class="passos-assinatura">
+            <li>A contratada assina o relatório de avaliação (PDF anexo ao e-mail) no <a href="https://assinador.iti.br" target="_blank" rel="noopener">assinador do gov.br</a> (assinatura eletrônica ou com certificado digital) e o devolve por e-mail.</li>
+            <li>Selecione a <b>via assinada</b> abaixo e envie para concluir a avaliação.</li>
+          </ol>
+          <p class="dica-formulario">Para conferir se um PDF é o original gerado pelo sistema: <a routerLink="/contratos/verificar">Verificar documento</a>.</p>
+          <div class="acoes-cartao esquerda">
             <app-envio-pdf rotulo="Selecionar via assinada" (selecionado)="escolherAssinada($event)" />
             <button type="button" class="acao-primaria" [disabled]="!temAssinada()" (click)="enviarAssinada()">Enviar relatório assinado pela contratada</button>
-          }
-        </div>
-      }
-    }
-
-    @if (a.pdf_gerado) {
-      <p class="secao-formulario">E-mail à contratada</p>
-      @if (a.email.enviado_em === null) {
-        <p class="dica-formulario">Enviando o relatório aos prepostos, com o pedido de devolução assinada…</p>
-      } @else if (a.email.ok) {
-        <p class="aviso-bloco informativo">Enviado em {{ a.email.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ a.email.destinatarios.join(', ') }}, com o relatório de avaliação para assinatura do preposto e devolução.</p>
-      } @else {
-        <p class="aviso-bloco erro">O e-mail não foi enviado: {{ a.email.erro }}</p>
-      }
-      @if (d.pode_editar && a.email.enviado_em !== null && !a.concluida_em) {
-        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Reenviando…' : 'Reenviar e-mail' }}</button>
+          </div>
+        }
       }
     }
 

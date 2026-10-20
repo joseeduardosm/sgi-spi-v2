@@ -16,7 +16,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import BinaryIO
 
@@ -47,6 +47,7 @@ from app.models.contratos import (
 from app.models.contratos.execucao import ETAPAS_PARALELAS, DocumentoMensal
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
+    Contestacao,
     ConferenciaNota,
     DescontoReajuste,
     DetalheCompetencia,
@@ -77,7 +78,7 @@ from app.schemas.contratos.execucao import (
     RespostaAvaliacao,
     ResumoCompetencia,
 )
-from app.services import servico_acl, servico_anexos
+from app.services import calendario_util, servico_acl, servico_anexos
 from app.services.contratos import avisos, calculos, despacho_documento, documentos_execucao, leitor_nota_xml, servico_autenticacao, servico_diario, servico_retencao, valores
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_configuracao_execucao import (
@@ -255,10 +256,35 @@ PRAZO_NOTA_FISCAL_HORAS = 48
 
 
 def prazo_nota_fiscal(competencia: Competencia) -> datetime | None:
-    """Limite de 48 h para a NF: conclusão da medição + 48 h, só enquanto a NF não foi juntada."""
+    """Limite para a NF, só enquanto ela não foi juntada (juntar a nota encerra o prazo).
+
+    Com o prazo de contestação definido (comunicação única), é o fim do último dia útil dele. Competências enviadas antes dessa regra
+    seguem com conclusão da medição + 48 h."""
     if competencia.medicao_concluida_em is None or competencia.nf_concluida_em is not None:
         return None
+    if competencia.contestacao_limite_em is not None:
+        return _com_fuso(competencia.contestacao_limite_em)
     return competencia.medicao_concluida_em + timedelta(hours=PRAZO_NOTA_FISCAL_HORAS)
+
+
+def pacote_da_medicao_pronto(competencia: Competencia) -> bool:
+    """Medição concluída e, quando há avaliação de qualidade, avaliação finalizada pela equipe (relatório gerado com a ciência do ateste).
+
+    Só então o valor a faturar está definido e o e-mail único pode sair. A via assinada pela contratada volta depois e só conclui a etapa."""
+    if competencia.medicao_concluida_em is None:
+        return False
+    return not tem_avaliacao(competencia) or (competencia.avaliacao is not None and competencia.avaliacao.pdf_gerado_anexo_id is not None)
+
+
+def fim_do_dia(dia: date) -> datetime:
+    """Último instante do dia no horário de Brasília (o prazo de contestação vale até o fim do último dia útil)."""
+    return datetime.combine(dia, time(23, 59, 59), tzinfo=documentos_execucao.FUSO_SAO_PAULO)
+
+
+def calcular_limite_contestacao(sessao: Session, inicio: datetime, dias_uteis: int) -> datetime:
+    """Fim do N-ésimo dia útil depois do dia do e-mail (fins de semana e feriados do RH não contam)."""
+    base = inicio.astimezone(documentos_execucao.FUSO_SAO_PAULO).date()
+    return fim_do_dia(calendario_util.somar_uteis(base, dias_uteis, calendario_util.feriados_cadastrados(sessao)))
 
 
 def total_bruto_notas(competencia: Competencia) -> Decimal:
@@ -444,6 +470,42 @@ def _papel_do_usuario(contrato: Contrato, usuario: Usuario) -> str | None:
 def _nome(usuario: Usuario) -> str:
     """Nome de exibição do usuário."""
     return usuario.nome_completo or usuario.login
+
+
+def pode_reemitir_medicao(competencia: Competencia) -> bool:
+    """Reemissão (contestação aceita) ou repetição de um envio que falhou: só com o pacote pronto, o e-mail já tentado e a nota fiscal ainda não juntada."""
+    return (
+        pacote_da_medicao_pronto(competencia) and competencia.email_medicao_enviado_em is not None
+        and competencia.nf_concluida_em is None and competencia.etapa_atual != "concluida"
+    )
+
+
+def _com_fuso(momento: datetime) -> datetime:
+    """O SQLite (testes) devolve datas sem fuso, que são UTC; o PostgreSQL já devolve com fuso."""
+    return momento if momento.tzinfo else momento.replace(tzinfo=timezone.utc)
+
+
+def _contestacao(sessao: Session, competencia: Competencia) -> Contestacao | None:
+    """Prazo de contestação em andamento, vencido ou encerrado pela nota fiscal (nulo antes do e-mail único ou quando o envio falhou)."""
+    if competencia.contestacao_limite_em is None or competencia.contestacao_inicio_em is None or not competencia.prazo_contestacao_dias:
+        return None
+    fuso = documentos_execucao.FUSO_SAO_PAULO
+    feriados = calendario_util.feriados_cadastrados(sessao)
+    inicio = _com_fuso(competencia.contestacao_inicio_em).astimezone(fuso).date()
+    total = competencia.prazo_contestacao_dias
+    encerrada = _com_fuso(competencia.nf_concluida_em) if competencia.nf_concluida_em else None
+    referencia = (encerrada or agora_utc()).astimezone(fuso).date()
+    decorridos = min(total, calendario_util.uteis_entre(inicio, referencia, feriados))
+    vencido = encerrada is None and agora_utc() > _com_fuso(competencia.contestacao_limite_em)
+    situacao = "encerrado" if encerrada else "vencido" if vencido else "aberto"
+    if situacao == "vencido":
+        decorridos = total
+    return Contestacao(
+        prazo_dias=total, inicio_em=_com_fuso(competencia.contestacao_inicio_em), limite_em=_com_fuso(competencia.contestacao_limite_em), situacao=situacao,
+        encerrada_em=encerrada, dias_uteis_decorridos=decorridos, dias_uteis_restantes=0 if situacao != "aberto" else max(0, total - decorridos),
+        percentual=round(100 * decorridos / total), documento_executivo=_arquivo(competencia.documento_executivo_anexo),
+        documento_executivo_versao=competencia.documento_executivo_versao,
+    )
 
 
 def _arquivo(anexo: Anexo | None) -> LeituraArquivo | None:
@@ -865,6 +927,11 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
             enviado_em=competencia.email_medicao_enviado_em, ok=competencia.email_medicao_ok,
             destinatarios=competencia.email_medicao_destinatarios or [], erro=competencia.email_medicao_erro,
         ),
+        contestacao=_contestacao(sessao, competencia),
+        prazo_contestacao_dias=competencia.prazo_contestacao_dias,
+        email_medicao_pendente=(competencia.medicao_concluida_em is not None and competencia.email_medicao_enviado_em is None
+                                 and (competencia.medicao_envio_solicitado or competencia.avaliacao is not None)),
+        pode_reemitir_medicao=pode_reemitir_medicao(competencia),
         notas_fiscais=_notas_fiscais(contrato, competencia),
         nf_recebida_em=competencia.nf_recebida_em, prazo_pagamento_dias=competencia.prazo_pagamento_dias,
         vencimento_pagamento=vencimento, origem_valor_nf=competencia.origem_valor_nf, nf_concluida_em=competencia.nf_concluida_em,
@@ -892,7 +959,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
 
 def _ids_anexos(competencia: Competencia) -> set[uuid.UUID]:
     """Todos os anexos da competência (usados no detalhe e para autorizar downloads)."""
-    ids = {competencia.consolidado_anexo_id, competencia.ob_anexo_id, competencia.retencao_pdf_anexo_id, competencia.adicional_anexo_id}
+    ids = {competencia.consolidado_anexo_id, competencia.ob_anexo_id, competencia.retencao_pdf_anexo_id, competencia.adicional_anexo_id, competencia.documento_executivo_anexo_id}
     ids |= {n.anexo_id for n in competencia.notas_fiscais} | {n.xml_anexo_id for n in competencia.notas_fiscais}
     ids |= {d.anexo_id for d in competencia.despesas_variaveis} | {m.anexo_despesas_id for m in competencia.memorias}
     # Recusas da nota fiscal: o PDF da recusa e os arquivos das notas recusadas
@@ -1116,8 +1183,26 @@ def _hash_medicao(contrato: Contrato, competencia: Competencia) -> str:
     return hashlib.sha256(json.dumps(origem, sort_keys=True).encode()).hexdigest()
 
 
-def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, notas_ids: list[uuid.UUID], autor: Usuario) -> None:
-    """Etapa 1: conclui a medição, gera a memória de cálculo e avança para a próxima etapa."""
+def _exigir_envio(contrato: Contrato, prepostos_ids: list[uuid.UUID] | None, prazo_dias: int | None) -> None:
+    """Envio obrigatório do e-mail único: ao menos um preposto ativo, com e-mail, da empresa contratada e o prazo de contestação (dias úteis)."""
+    if prazo_dias is None or prazo_dias < 1:
+        raise ErroRegraContrato("Informe o prazo de contestação da contratada, em dias úteis (mínimo 1).")
+    aptos = {p.id for p in contrato.empresa.prepostos if p.ativo and p.email}
+    if not prepostos_ids or any(i not in aptos for i in prepostos_ids):
+        raise ErroRegraContrato(
+            "Escolha ao menos um preposto ativo, com e-mail, da empresa contratada para receber a medição. "
+            "Se não houver nenhum, cadastre o preposto na empresa antes de concluir.")
+
+
+def concluir_medicao(
+    sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, notas_ids: list[uuid.UUID], autor: Usuario,
+    prepostos_ids: list[uuid.UUID] | None = None, prazo_contestacao_dias: int | None = None,
+) -> None:
+    """Etapa 1: conclui a medição, gera a memória de cálculo e avança para a próxima etapa.
+
+    O e-mail único à contratada é obrigatório: um ou mais prepostos e o prazo de contestação (dias úteis). Sem avaliação de qualidade, o fiscal
+    os informa aqui e o e-mail sai logo em seguida. Com avaliação, eles são informados ao concluí-la (`enviar_avaliacao_assinada`) e o e-mail
+    só sai depois, para a contratada receber o valor a faturar já com os descontos e as glosas."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
@@ -1125,6 +1210,9 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     sincronizar_se_defasada(contrato, competencia)
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
+    # Com avaliação, a escolha dos prepostos e o prazo ficam para o fim da avaliação; sem ela, são exigidos agora
+    if not tem_avaliacao(competencia) or prepostos_ids is not None or prazo_contestacao_dias is not None:
+        _exigir_envio(contrato, prepostos_ids, prazo_contestacao_dias)
     exigir_saldo_para_medir(sessao, contrato)
     if competencia.tipo == "adicional" and not any(i.quantidade_medida > 0 for i in competencia.itens):
         raise ErroRegraContrato("Informe a quantidade de ao menos um item para concluir a medição adicional.")
@@ -1144,6 +1232,10 @@ def concluir_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uu
     # Gera o PDF, marca a conclusão, avança a etapa e atualiza o executado dos itens do contrato
     gerar_memoria(sessao, contrato, competencia, autor)
     competencia.medicao_concluida_em = agora_utc()
+    if prepostos_ids is not None:
+        competencia.medicao_envio_solicitado = True
+        competencia.medicao_envio_prepostos = [str(i) for i in prepostos_ids]
+        competencia.prazo_contestacao_dias = prazo_contestacao_dias
     # A avaliação começa agora: copia o formulário ativo neste momento
     puxar_avaliacao(sessao, contrato, competencia)
     competencia.etapa_atual = proxima_etapa(competencia, "medicao")
@@ -1567,11 +1659,33 @@ def gerar_pdf_avaliacao(sessao: Session, contrato_id, competencia_id, autor: Usu
     sessao.commit()
 
 
+def enviar_medicao_e_avaliacao(
+    sessao: Session, contrato_id, competencia_id, prepostos_ids: list[uuid.UUID] | None, prazo_contestacao_dias: int | None, autor: Usuario,
+) -> bool:
+    """Etapa 2: finaliza a avaliação da equipe — gera o PDF do relatório (nova versão) e prepara o e-mail único da medição à contratada.
+
+    Exige os prepostos (ao menos um) e o prazo de contestação, a menos que já tenham sido guardados (medição sem avaliação, reemissão).
+    Devolve `True` quando o e-mail já tinha saído antes (então é uma reemissão, com nova versão do documento executivo)."""
+    contrato, competencia, avaliacao = _avaliacao_aberta(sessao, contrato_id, competencia_id, autor, exigir_equipe=False)
+    guardados = [uuid.UUID(i) for i in competencia.medicao_envio_prepostos or []]
+    escolhidos = prepostos_ids if prepostos_ids is not None else guardados
+    prazo = prazo_contestacao_dias if prazo_contestacao_dias is not None else competencia.prazo_contestacao_dias
+    _exigir_envio(contrato, escolhidos, prazo)
+    competencia.medicao_envio_solicitado = True
+    competencia.medicao_envio_prepostos = [str(i) for i in escolhidos]
+    competencia.prazo_contestacao_dias = prazo
+    ja_enviado = competencia.email_medicao_ok is True
+    gerar_pdf_avaliacao(sessao, contrato_id, competencia_id, autor)  # valida as ciências do ateste e grava tudo (commit)
+    return ja_enviado
+
+
 def enviar_avaliacao_assinada(sessao: Session, contrato_id, competencia_id, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
-    """Etapa 2: recebe a via assinada pela contratada e conclui a avaliação."""
+    """Etapa 2: recebe a via assinada pela contratada e conclui a avaliação (o e-mail único já saiu em `enviar_medicao_e_avaliacao`)."""
     contrato, competencia, avaliacao = _avaliacao_aberta(sessao, contrato_id, competencia_id, autor, exigir_equipe=False)
     if avaliacao.pdf_gerado_anexo_id is None:
         raise ErroRegraContrato("Exporte o PDF da avaliação antes de enviar a via assinada pela contratada.")
+    if not competencia.medicao_envio_solicitado:
+        raise ErroRegraContrato("Envie antes a Medição e a Avaliação à contratada (com os prepostos e o prazo de contestação): o relatório assinado é a resposta a esse envio.")
     anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-execucao-avaliacao-assinada", autor.id, contrato_id=contrato.id)
     sessao.flush()
     avaliacao.pdf_assinado_anexo_id, avaliacao.concluida_em = anexo.id, agora_utc()
@@ -2181,6 +2295,7 @@ def _anexos_para_descartar(sessao: Session, competencia: Competencia) -> list[An
 
     for m in competencia.memorias:
         juntar(m.anexo), juntar(m.anexo_despesas)
+    juntar(competencia.documento_executivo_anexo)
     a = competencia.avaliacao
     if a is not None:
         juntar(a.pdf_gerado_anexo), juntar(a.pdf_assinado_anexo), juntar(a.reconsideracao_anexo)
@@ -2235,6 +2350,9 @@ def zerar(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
     competencia.medicao_iniciada_em = None
     competencia.email_medicao_enviado_em = competencia.email_medicao_ok = competencia.email_medicao_erro = None
     competencia.email_medicao_destinatarios = []
+    competencia.medicao_envio_solicitado, competencia.medicao_envio_prepostos = False, None
+    competencia.prazo_contestacao_dias = competencia.contestacao_inicio_em = competencia.contestacao_limite_em = None
+    competencia.documento_executivo_anexo_id, competencia.documento_executivo_versao = None, 0
     atualizar_executado(contrato)
     _auditar(sessao, autor, "contrato.execucao.zerar", contrato, competencia, arquivos_descartados=[a.nome_original for a in arquivos])
     sessao.commit()

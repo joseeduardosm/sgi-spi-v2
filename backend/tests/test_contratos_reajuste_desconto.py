@@ -11,7 +11,7 @@ import pytest
 
 from app.core.banco import FabricaSessao
 from app.models.contratos import AbatimentoReajuste
-from tests.apoio_contratos import PDF, criar_contrato, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, PDF, criar_contrato, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -51,7 +51,7 @@ def _medir(cliente, contrato, h, notas, identificador, quantidades=None):
              "notas_empenho_ids": notas}
     assert cliente.put(f"{base}/medicao", json=corpo, headers=h).status_code == 200
     cliente.post(f"{base}/medicao/ciencia", headers=h)
-    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=h)
+    r = cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=h)
     assert r.status_code == 200, r.text
     return r.json()
 

@@ -39,6 +39,12 @@
   <!-- Trilha de etapas: o caminho até a Ordem Bancária, com o que já foi feito e o que está aberto -->
   <app-trilha-etapas [etapas]="trilha()" ariaLabel="Etapas da competência" [navegavel]="true" [selecionada]="selecionada()" (escolheu)="selecionada.set($any($event))" />
 
+  <!-- Prazo de contestação da contratada (dias úteis a contar do e-mail único); anexar a nota fiscal o encerra -->
+  @if (d.contestacao; as c) {
+    <app-barra-prazo titulo="Prazo para contestação e emissão da nota fiscal" [prazoDias]="c.prazo_dias" [decorridos]="c.dias_uteis_decorridos" [restantes]="c.dias_uteis_restantes"
+                     [percentual]="c.percentual" [situacao]="c.situacao" [limite]="c.limite_em" [encerradaEm]="c.encerrada_em" entrega="nota fiscal anexada" />
+  }
+
   @switch (selecionada()) {
     @case ('medicao') { <app-etapa-medicao [detalhe]="d" [editavel]="editavel('medicao')" (atualizado)="aplicar($event)" /> }
     @case ('avaliacao') { <app-etapa-avaliacao [detalhe]="d" [editavel]="editavel('avaliacao')" (atualizado)="aplicar($event)" /> }

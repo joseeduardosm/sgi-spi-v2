@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from tests.apoio_contratos import criar_contrato, juntar_nf
+from tests.apoio_contratos import corpo_conclusao, criar_contrato, juntar_nf
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 from tests.test_contratos_retencao import _ambiente  # noqa: F401 — fixture (data fixa e SMTP simulado)
@@ -28,7 +28,7 @@ def medido(cliente, admin):
     assert cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=g).status_code == 200
     cliente.post(f"{base}/medicao/ciencia", headers=g)
     cliente.post(f"{base}/medicao/ciencia", headers=f)
-    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=g)
+    r = cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=g)
     assert r.status_code == 200, r.text
     return base, r.json(), g
 
@@ -77,7 +77,7 @@ def test_sem_item_marcado_nao_aceita_documentos_de_despesa(cliente, admin):
     cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=g)
     cliente.post(f"{base}/medicao/ciencia", headers=g)
     cliente.post(f"{base}/medicao/ciencia", headers=f)
-    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=g).status_code == 200
+    assert cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=g).status_code == 200
     assert juntar_nf(cliente, base, g, "2105.00", "123", despesas=(("recibo", "10.00"),)).status_code == 400
     r = juntar_nf(cliente, base, g, "2105.00", "123")
     assert r.status_code == 200 and r.json()["tem_despesas_variaveis"] is False and r.json()["despesas_variaveis"] == []

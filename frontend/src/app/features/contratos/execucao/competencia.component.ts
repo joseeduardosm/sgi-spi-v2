@@ -2,6 +2,7 @@
 // Este arquivo serve para controlar a tela de execução de uma competência: barra de etapas, etapa exibida e reabertura.
 
 import { TrilhaEtapasComponent, EtapaTrilha, EstadoEtapa } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
+import { BarraPrazoComponent } from '../../../shared/componentes/barra-prazo/barra-prazo.component';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -26,7 +27,7 @@ const LIMITE_CONSULTAS_EMAIL = 8;
 
 @Component({
   selector: 'app-competencia',
-  imports: [TrilhaEtapasComponent, EsqueletoComponent, 
+  imports: [TrilhaEtapasComponent, BarraPrazoComponent, EsqueletoComponent, 
     FormsModule, RouterLink, CabecalhoModuloComponent, EtapaMedicaoComponent, EtapaAvaliacaoComponent, EtapaNotaFiscalComponent,
     EtapaCadinComponent, EtapaFinaisComponent, EtapaRetencaoComponent, ...PIPES_FORMATACAO,
   ],

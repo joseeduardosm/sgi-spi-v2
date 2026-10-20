@@ -30,11 +30,16 @@ export interface GrupoDestinatarios {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="opcao-email-bloco">
-      <label class="opcao-email">
-        <input type="checkbox" [checked]="marcado()" (change)="marcado.set($any($event.target).checked)" />
-        <span>Enviar por e-mail@if (descricao()) { <small>{{ descricao() }}</small> }</span>
-      </label>
-      @if (marcado() && fonte()) {
+      @if (obrigatorio()) {
+        <!-- Envio obrigatório: sem caixa para desligar, só a escolha de quem recebe -->
+        <div class="opcao-email"><span><b>{{ titulo() }}</b>@if (descricao()) { <small>{{ descricao() }}</small> }</span></div>
+      } @else {
+        <label class="opcao-email">
+          <input type="checkbox" [checked]="marcado()" (change)="marcado.set($any($event.target).checked)" />
+          <span>Enviar por e-mail@if (descricao()) { <small>{{ descricao() }}</small> }</span>
+        </label>
+      }
+      @if ((marcado() || obrigatorio()) && fonte()) {
         <div class="seletor-destinatarios" role="group" [attr.aria-label]="rotuloLista()">
           <div class="cabecalho-seletor">
             <label><input type="checkbox" [checked]="todos()" [indeterminate]="alguns()" (change)="alternarTodos($any($event.target).checked)" /> <b>Selecionar todos</b></label>
@@ -78,6 +83,10 @@ export class OpcaoEmailComponent {
   /** Marcada = envia o e-mail (mão dupla). */
   readonly marcado = model(false);
   readonly descricao = input('');
+  /** Envio obrigatório: não há caixa para desligar; a lista de destinatários aparece sempre e o pai exige ao menos um escolhido. */
+  readonly obrigatorio = input(false);
+  /** Título mostrado no lugar da caixa quando `obrigatorio`. */
+  readonly titulo = input('Enviar por e-mail');
   /** Carrega os destinatários possíveis (chamada na primeira vez que a caixa é marcada). Sem ela, só a caixa aparece. */
   readonly fonte = input<(() => Observable<GrupoDestinatarios[]>) | null>(null);
   readonly rotuloLista = input('Destinatários');
@@ -98,7 +107,7 @@ export class OpcaoEmailComponent {
     // Ao marcar pela primeira vez, carrega a lista e marca todos
     effect(() => {
       const fonte = this.fonte();
-      if (this.marcado() && fonte && !this.carregado) {
+      if ((this.marcado() || this.obrigatorio()) && fonte && !this.carregado) {
         this.carregado = true;
         this.carregando.set(true);
         fonte().subscribe({

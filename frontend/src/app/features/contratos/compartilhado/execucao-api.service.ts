@@ -216,8 +216,10 @@ export class ExecucaoApiService {
   }
 
   /** Etapa 1: conclui a medição (as NEs precisam ser as mesmas da última gravação). */
-  concluirMedicao(id: string, c: string, notas: string[], enviarEmail = false, prepostosIds: string[] | null = null): Observable<DetalheCompetencia> {
-    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/medicao/concluir'), { notas_empenho_ids: notas, enviar_email: enviarEmail, prepostos_ids: enviarEmail ? prepostosIds : null });
+  concluirMedicao(id: string, c: string, notas: string[], prepostosIds: string[] | null, prazoContestacaoDias: number | null): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/medicao/concluir'), {
+      notas_empenho_ids: notas, prepostos_ids: prepostosIds, prazo_contestacao_dias: prazoContestacaoDias,
+    });
   }
 
   /** Etapa 2: notas da avaliação inicial. */
@@ -239,6 +241,11 @@ export class ExecucaoApiService {
   /** Etapa 2: envia a via assinada ou o pedido de reconsideração. */
   enviarAvaliacao(id: string, c: string, tipo: 'assinada' | 'reconsideracao', arquivo: File): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/avaliacao/${tipo}`), this.formulario({ arquivo }));
+  }
+
+  /** Etapa 2: gera o relatório de avaliação e envia o e-mail único (medição + avaliação) aos prepostos escolhidos, com o prazo de contestação. */
+  enviarMedicaoEAvaliacao(id: string, c: string, prepostosIds: string[], prazoContestacaoDias: number): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/avaliacao/enviar'), { prepostos_ids: prepostosIds, prazo_contestacao_dias: prazoContestacaoDias });
   }
 
   /**
@@ -354,9 +361,9 @@ export class ExecucaoApiService {
     return this.http.delete<void>(this.competencia(id, competenciaId, ''));
   }
 
-  /** Reenvia o e-mail da medição concluída à equipe e ao preposto. */
-  reenviarEmailMedicao(id: string, competenciaId: string): Observable<DetalheCompetencia> {
-    return this.http.post<DetalheCompetencia>(this.competencia(id, competenciaId, '/reenviar-email-medicao'), null);
+  /** Reemite o documento executivo e o e-mail único da medição (contestação aceita ou envio que falhou), reiniciando o prazo. */
+  reemitirMedicao(id: string, competenciaId: string, prazoContestacaoDias: number | null = null): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, competenciaId, '/medicao/reemitir'), { prazo_contestacao_dias: prazoContestacaoDias });
   }
 
   /** Reenvia o relatório de avaliação aos prepostos (cópia para a equipe), pedindo a devolução assinada. */

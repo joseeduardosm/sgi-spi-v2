@@ -89,7 +89,7 @@ def _eventos_do_contrato(contrato: Contrato, referencia: date) -> list[EventoCal
         limite = prazo_nota_fiscal(competencia) if competencia.etapa_atual == "nota_fiscal" else None
         if limite is not None:
             momento = _local(limite)
-            novo(momento.date(), "prazo_nf_48h", f"Prazo de 48 h da nota fiscal ({rotulo})", rota, "alta" if momento.date() < referencia else "media", competencia, momento.time().replace(microsecond=0))
+            novo(momento.date(), "prazo_nf_48h", f"Prazo de contestação e nota fiscal ({rotulo})" if competencia.contestacao_limite_em else f"Prazo de 48 h da nota fiscal ({rotulo})", rota, "alta" if momento.date() < referencia else "media", competencia, momento.time().replace(microsecond=0))
         if competencia.tipo == "regular" and competencia.medicao_concluida_em is None and (referencia - competencia.periodo_fim).days > DIAS_ATRASO:
             atraso = (referencia - competencia.periodo_fim).days
             novo(competencia.periodo_fim + timedelta(days=DIAS_ATRASO), "medicao_atrasada", f"Medição da competência {rotulo} atrasada", rota,

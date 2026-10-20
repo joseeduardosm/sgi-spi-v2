@@ -36,8 +36,8 @@ def painel(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usua
 
 
 @roteador.post("/contratos/{contrato_id}/portarias", response_model=PainelPortarias, status_code=status.HTTP_201_CREATED, tags=TAGS,
-               summary="Criar portaria (nomeações)", description="Abre a portaria com de 1 a 6 nomeações (função + usuário; o gestor é obrigatório). Quem cria: a equipe do contrato "
-               "ou quem tem controle total em Contratos (perfil Administrador de Contratos). Cada nomeado precisa ter RS/PV, RG/CIN e cargo preenchidos: enquanto faltar, a nomeação "
+               summary="Criar portaria (nomeações)", description="Abre a portaria com de 1 a 6 nomeações (função + usuário; o gestor é obrigatório). Quem cria: a equipe do contrato, "
+               "quem cadastrou o contrato ou quem tem controle total em Contratos (perfil Administrador de Contratos). Cada nomeado precisa ter RS/PV, RG/CIN e cargo preenchidos: enquanto faltar, a nomeação "
                "fica pendente e o RH é avisado. Com os dados completos, cada um recebe o pedido de ciência. Uma portaria em andamento por contrato (409).", responses=ESCRITA)
 def criar(contrato_id: uuid.UUID, dados: GravacaoNomeacoes, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     with traduzir_erros(sessao):

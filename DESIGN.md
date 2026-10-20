@@ -215,6 +215,9 @@ Todo fluxo com **3 ou mais passos sequenciais** (portaria de designação, féri
 - **Completa** (com barra de progresso) no topo da tela de detalhe; **`compacta`** (bolinhas menores, sem barra) em cartões, listas e modais. `navegavel` só quando cada passo mostra uma tela própria (competência).
 - **Passos opcionais** levam `opcional: true`. No celular a trilha rola de lado e para em cada passo (`scroll-snap`); o texto do estado fica sempre visível (não depender só de cor).
 
+### Barra de prazo (`app-barra-prazo`)
+Prazo em **dias úteis** com data limite (ex.: contestação da contratada na medição) usa `shared/componentes/barra-prazo`, no mesmo desenho da barra "X de N etapas" da trilha: título, texto do estado (restam N dias úteis até dd/mm, prazo vencido, ou prazo encerrado por uma entrega) e a barra de 10px. A cor segue o consumo (`--spi-sucesso` até 49%, `--spi-alerta` de 50%, `--spi-perigo` de 80% ou vencido), mas o texto diz o mesmo. **Não monte barra de prazo à mão.** Encerrado = verde, congelado no ponto em que a entrega aconteceu.
+
 ### Selo de status (classes `.selo-*`, já existem)
 Hoje há vários selos com estilos próprios (`.selo-situacao`, `.selo-status`, `.selo-origem`, `.selo-nivel`, `.selo-risco`, `.selo-prioridade-tarefa`…), todos com raio 10px e texto de 10px. **Não criar classe nova**: unificar o visual desses selos no padrão abaixo, mantendo os nomes e os modificadores que já existem (`.a_vencer`, `.inativo` etc.).
 Raio 999px, padding 3px × 10px, 12px peso 600, fundo `--spi-*-suave`, texto `--spi-*`, bolinha de 6px da mesma cor antes do texto (opcional). Sem borda. Um status por selo.

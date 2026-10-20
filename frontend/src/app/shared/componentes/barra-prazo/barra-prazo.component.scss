@@ -1,0 +1,18 @@
+// Barra de prazo: mesmo desenho da barra de progresso da trilha de etapas. Só variáveis --spi-*.
+:host { display: block; }
+
+.barra-prazo {
+  margin: 0 0 18px; padding: 14px 20px 16px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-gg); background: var(--spi-superficie);
+  --tom: var(--spi-sucesso); --tom-suave: var(--spi-sucesso-suave);
+  &.alerta { --tom: var(--spi-alerta); --tom-suave: var(--spi-alerta-suave); }
+  &.perigo { --tom: var(--spi-perigo); --tom-suave: var(--spi-perigo-suave); }
+}
+.cabeca-prazo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 10px; color: var(--spi-texto); }
+.titulo-prazo { font-size: var(--spi-texto-destaque); font-weight: 600; }
+.estado-prazo { flex: 1 1 200px; color: var(--tom); font-size: var(--spi-texto-compacto); font-weight: 600; }
+.contagem-prazo { font-size: var(--spi-texto-compacto); font-weight: 600; font-variant-numeric: tabular-nums; }
+.trilho-prazo {
+  height: 10px; overflow: hidden; border-radius: var(--spi-raio-pilula); background: var(--spi-borda);
+  i { display: block; height: 100%; border-radius: var(--spi-raio-pilula); background: var(--tom); transition: width 300ms ease-out; }
+}
+@media (prefers-reduced-motion: reduce) { .trilho-prazo i { transition: none; } }

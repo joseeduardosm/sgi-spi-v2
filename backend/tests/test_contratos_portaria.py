@@ -251,6 +251,20 @@ def test_quem_cria_portaria_e_a_equipe_ou_o_administrador_de_contratos(cliente, 
     assert cliente.post(_url(cenario), json=_nomeacoes(cenario), headers=cabecalho(cliente, "admcontratos")).status_code == 201
 
 
+def test_cadastrante_do_contrato_tambem_cria_a_portaria(cliente, admin):
+    """Quem cadastrou o contrato cria e conduz a portaria mesmo sem estar na equipe; outro usuário com o mesmo nível de ACL não."""
+    cadastrante = criar_usuario("cadastrante", nome_completo="Cadastrante")
+    outro = criar_usuario("outro-cad", nome_completo="Outro")
+    gestor = criar_usuario("g-cad", nome_completo="G Cad")
+    restringir_contratos(cliente, admin, {cadastrante: "MODIFICACAO", outro: "MODIFICACAO"})
+    contrato = criar_contrato(cliente, cabecalho(cliente, "cadastrante"), equipe={"gestor": gestor})
+    url = f"/api/contratos/{contrato['id']}/portarias"
+    assert cliente.get(url, headers=cabecalho(cliente, "cadastrante")).json()["pode_criar"] is True
+    assert cliente.get(url, headers=cabecalho(cliente, "outro-cad")).json()["pode_criar"] is False
+    assert cliente.post(url, json={"nomeacoes": [{"papel": "gestor", "usuario_id": gestor}]}, headers=cabecalho(cliente, "outro-cad")).status_code == 403
+    assert cliente.post(url, json={"nomeacoes": [{"papel": "gestor", "usuario_id": gestor}]}, headers=cabecalho(cliente, "cadastrante")).status_code == 201
+
+
 def test_equipe_so_muda_por_portaria(cliente, admin, cenario):
     """O botão Editar não troca mais a equipe (só o SuperRoot); mexer em outros campos com a mesma equipe continua valendo."""
     administrador = criar_usuario("admc", nome_completo="Adm C")

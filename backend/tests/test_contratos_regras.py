@@ -17,7 +17,7 @@ from types import SimpleNamespace
 from app.models.contratos import Competencia, Contrato
 from app.services.contratos import calculos
 from app.services.contratos.servico_competencias import maximo_de_notas_minimas_por_grupo, nota_final, percentual_da_nota
-from tests.apoio_contratos import PDF, conferir_retencao, juntar_nf
+from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, juntar_nf
 from tests.test_contratos_execucao import _hoje, _preparar_execucao, _url, equipe  # noqa: F401 (fixtures)
 
 # --- 30/360 -----------------------------------------------------------------------------------------
@@ -133,7 +133,7 @@ def _medir_e_concluir(cliente, contrato, gestora, fiscal, identificador, notas, 
     assert r.status_code == 200, r.text
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    return base, cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    return base, cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
 
 
 def test_ob_debita_nf_e_nf_adicional_e_saldo_fica_comprometido(cliente, admin, equipe):  # noqa: F811

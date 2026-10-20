@@ -3,7 +3,7 @@
 """Portaria de designação de gestão e fiscalização do contrato (único caminho para mudar a equipe, além do SuperRoot).
 
 Ciclo:
-1. **Nomeações** (1 a 6 funções, gestor obrigatório; quem cria é a equipe do contrato ou quem tem controle total em Contratos). Cada nomeado precisa ter
+1. **Nomeações** (1 a 6 funções, gestor obrigatório; quem cria é a equipe do contrato, o cadastrante (quem criou o contrato) ou quem tem controle total em Contratos). Cada nomeado precisa ter
    RS/PV, RG/CIN e cargo preenchidos (o RH atualiza); enquanto faltar, a nomeação fica com o marcador de pendência e o RH é avisado.
 2. **Ciência**: com os dados completos, cada nomeado vê um modal e confirma que está ciente.
 3. **Autoridade**: com todos cientes, escolhe-se a autoridade competente. Só aqui o texto é gerado (HTML da máscara, para copiar) e o número é
@@ -280,13 +280,13 @@ def listar(sessao: Session, contrato_id: uuid.UUID) -> list[PortariaContrato]:
 
 
 def pode_criar_portaria(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
-    """Quem cria e conduz a portaria: integrante vigente da equipe do contrato, ou quem tem controle total em Contratos (perfil "Administrador de Contratos") e o SuperRoot."""
-    return eh_administrador(sessao, usuario) or integra_equipe(contrato, usuario)
+    """Quem cria e conduz a portaria: integrante vigente da equipe do contrato, o cadastrante (quem criou o contrato), ou quem tem controle total em Contratos (perfil "Administrador de Contratos") e o SuperRoot."""
+    return eh_administrador(sessao, usuario) or contrato.criador_id == usuario.id or integra_equipe(contrato, usuario)
 
 
 def exigir_criacao(sessao: Session, contrato: Contrato, usuario: Usuario) -> None:
     if not pode_criar_portaria(sessao, contrato, usuario):
-        raise SemPermissaoContrato("Somente a equipe do contrato ou quem tem controle total em Contratos (Administrador de Contratos) cria e conduz a portaria de designação.")
+        raise SemPermissaoContrato("Somente a equipe do contrato, quem cadastrou o contrato ou quem tem controle total em Contratos (Administrador de Contratos) cria e conduz a portaria de designação.")
 
 
 def pode_decidir(sessao: Session, portaria: PortariaContrato, usuario: Usuario) -> bool:

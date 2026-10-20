@@ -1,0 +1,15 @@
+<div class="barra-prazo" [class]="'barra-prazo ' + tom()">
+  <div class="cabeca-prazo">
+    <b class="titulo-prazo">{{ titulo() }}</b>
+    <span class="estado-prazo">
+      @switch (situacao()) {
+        @case ('encerrado') { Prazo encerrado: {{ entrega() }} em {{ encerradaEm() | date: 'dd/MM/yyyy' }} }
+        @case ('vencido') { Prazo vencido em {{ limite() | date: 'dd/MM/yyyy' }} sem a {{ entrega() }} }
+        @default { {{ rotuloRestante() }} · até {{ limite() | date: 'dd/MM/yyyy' }} }
+      }
+    </span>
+    <b class="contagem-prazo">{{ decorridos() }} de {{ prazoDias() }} dias úteis</b>
+  </div>
+  <div class="trilho-prazo" role="progressbar" [attr.aria-label]="titulo()" [attr.aria-valuenow]="decorridos()" aria-valuemin="0" [attr.aria-valuemax]="prazoDias()"
+       [attr.aria-valuetext]="decorridos() + ' de ' + prazoDias() + ' dias úteis'"><i [style.width.%]="percentual()"></i></div>
+</div>

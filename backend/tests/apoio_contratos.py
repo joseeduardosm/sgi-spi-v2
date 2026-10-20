@@ -170,3 +170,28 @@ def trocar_equipe_pela_portaria(contrato_id: str, equipe: dict[str, int]) -> Non
         if mudancas:
             auditar(sessao, "teste", "contrato.equipe.alterar", f"Contrato {contrato.numero}", alvo_tipo="contrato", alvo_id=contrato.id, dados={"campos": mudancas})
         sessao.commit()
+
+
+def corpo_conclusao(base: str, notas: list[str], prazo: int = 3) -> dict:
+    """Corpo do `POST /medicao/concluir`: o e-mail à contratada é obrigatório, então leva todos os prepostos ativos com e-mail da empresa.
+
+    Sem nenhum preposto, cadastra um direto no banco (os testes de outras etapas não se importam com quem recebe)."""
+    import uuid
+
+    from sqlalchemy import select
+
+    from app.core.banco import FabricaSessao
+    from app.models.contratos import Contrato
+    from app.models.contratos.empresa import PrepostoEmpresa
+
+    contrato_id = uuid.UUID(base.split("/competencias/")[0].rsplit("/", 1)[1])
+    with FabricaSessao() as sessao:
+        empresa_id = sessao.get(Contrato, contrato_id).empresa_id
+        prepostos = list(sessao.scalars(select(PrepostoEmpresa).where(PrepostoEmpresa.empresa_id == empresa_id, PrepostoEmpresa.ativo.is_(True), PrepostoEmpresa.email != "")))
+        if not prepostos:
+            novo = PrepostoEmpresa(empresa_id=empresa_id, nome="Preposto Padrão", email="preposto.padrao@acme.com", ativo=True)
+            sessao.add(novo)
+            sessao.commit()
+            prepostos = [novo]
+        ids = [str(p.id) for p in prepostos]
+    return {"notas_empenho_ids": notas, "prepostos_ids": ids, "prazo_contestacao_dias": prazo}

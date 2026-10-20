@@ -8,7 +8,7 @@ from io import BytesIO
 import pytest
 from pypdf import PdfReader
 
-from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, criar_empresa, juntar_nf, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, criar_contrato, criar_empresa, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 
 HOJE = date(2026, 3, 15)
@@ -46,7 +46,7 @@ def _ate_o_checklist(cliente, contrato, gestora, fiscal, itens=ITENS) -> str:
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
     r = juntar_nf(cliente, base, gestora, "2105.00", numero=str(int(contrato["numero"][:3])))  # a chave da NF é única por empresa
     assert r.status_code == 200, r.text
     assert conferir_retencao(cliente, base, gestora).status_code == 200

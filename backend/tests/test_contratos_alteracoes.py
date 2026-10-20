@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, criar_empresa, item, juntar_nf, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, criar_contrato, criar_empresa, item, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -110,7 +110,7 @@ def test_reajuste_de_5_por_cento_mantem_competencias_medidas(cliente, admin, equ
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
 
     painel = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": "2026-01-01"}, headers=gestora).json()
     reajuste = painel["em_andamento"]
@@ -186,7 +186,7 @@ def test_supressao_abaixo_do_executado_e_bloqueada(cliente, admin, equipe):
     cliente.put(f"{base}/medicao", json=medicao, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
 
     url, itens = _alteracao(cliente, contrato, gestora, "supressao", {"Material": "5"})
     r = cliente.put(f"{url}/quantitativos", json={"itens": itens}, headers=gestora)
@@ -310,7 +310,7 @@ def test_aditamento_apos_reajuste_soma_ao_valor_global_e_contrato_completo_pode_
                                          "notas_empenho_ids": notas}, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
     assert juntar_nf(cliente, base, gestora, "2105.00", recebida_em="2026-02-01").status_code == 200
     assert conferir_retencao(cliente, base, gestora).status_code == 200
     for documento in cliente.get(base, headers=gestora).json()["documentos"]:

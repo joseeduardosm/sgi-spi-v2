@@ -126,6 +126,44 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
     return documento.gerar()
 
 
+def documento_executivo(contrato: Contrato, competencia: Competencia, versao: int, prazo_dias: int, limite, autor: str) -> bytes:
+    """Documento executivo da medição: o valor que a contratada deve faturar, já com os descontos da avaliação e as glosas, e o prazo para contestar."""
+    # Importação local: servico_competencias também importa este módulo
+    from app.services.contratos.servico_competencias import (
+        desconto_reajuste, nota_final, percentual_liberado, saldos_da_medicao, subtotal_item, total_medido, valor_autorizado,
+    )
+
+    documento = DocumentoPdf(
+        "Documento executivo da medição", f"Contrato {contrato.numero} · Competência {competencia.numero_competencia} · versão {versao}", autor=autor,
+    )
+    _cabecalho_contrato(documento, contrato, competencia)
+    medido, percentual, reajuste, a_faturar = total_medido(competencia), percentual_liberado(competencia), desconto_reajuste(competencia), valor_autorizado(competencia)
+    linhas = [("Total medido", moeda(medido))]
+    if competencia.avaliacao is not None:
+        nota = nota_final(competencia.avaliacao)
+        linhas += [("Nota da avaliação de qualidade", str(nota) if nota is not None else "—"), ("Pagamento liberado pela avaliação", f"{quantidade(percentual)}%")]
+    if reajuste:
+        linhas.append(("Desconto de reajuste", moeda(reajuste)))
+    documento.secao("Valor a faturar").campos(linhas, colunas=1)
+    documento.espaco(2).paragrafo(f"<b>Valor líquido a faturar: {moeda(a_faturar)}</b>")
+    saldos = saldos_da_medicao(contrato, competencia)
+    documento.secao("Itens medidos (com as glosas do período)").tabela(
+        ["Item", "Medido", "Glosa no período", "Subtotal"],
+        [[i.descricao_completa, quantidade(i.quantidade_medida), quantidade(saldos[i.id].glosas), moeda(subtotal_item(i))] for i in competencia.itens],
+        larguras=[6, 1.5, 1.8, 2], alinhar_direita=[1, 2, 3], rodape=["Total medido", "", "", moeda(medido)],
+    )
+    documento.secao("Emissão da nota fiscal").paragrafo(
+        f"A contratada deve emitir a nota fiscal exatamente no valor líquido indicado acima ({moeda(a_faturar)}). "
+        "Nota emitida antes da comunicação ou em valor diferente é devolvida para cancelamento e reemissão."
+    )
+    documento.secao("Prazo para contestação").paragrafo(
+        f"A contratada tem {prazo_dias} dia(s) útil(eis), a contar do e-mail que encaminha este documento, para se manifestar sobre as glosas e os descontos, "
+        f"até {data_hora(limite)}. Sem manifestação, deve emitir a nota no valor indicado. A juntada da nota fiscal encerra o prazo. "
+        "Havendo contestação aceita, a fiscalização reemite este documento antes da nota."
+    )
+    return documento.gerar()
+
+
 def moeda_acerto(acerto: Decimal | None) -> str:
     """Acerto com sinal explícito (+R$ 0,01 / -R$ 0,02); sem acerto, um traço."""
     if not acerto:

@@ -134,7 +134,16 @@
 
     @if (editavel()) {
       <p class="secao-formulario">Ao concluir</p>
-      <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Memória e diário de bordo à equipe e aos prepostos escolhidos, pedindo a NF em 48 h" />
+      @if (!temAvaliacao()) {
+        <app-opcao-email [obrigatorio]="true" titulo="E-mail à contratada (obrigatório)" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: cadastre um na empresa para poder concluir a medição." descricao="Um único e-mail à equipe e aos prepostos escolhidos (ao menos um), com a medição anexa: dá ciência, pede a nota fiscal no prazo (ou a contestação)." />
+        <div class="grade-formulario">
+          <div><label for="medicao-prazo-contestacao">Prazo para a contratada contestar (dias úteis) *</label>
+            <input id="medicao-prazo-contestacao" type="number" min="1" max="60" inputmode="numeric" [ngModel]="prazoContestacao()" (ngModelChange)="prazoContestacao.set($event)" />
+            <small class="dica-formulario">Conta a partir do e-mail, sem sábados, domingos e feriados. Anexar a nota fiscal encerra o prazo.</small></div>
+        </div>
+      } @else {
+        <p class="dica-formulario">Este contrato tem avaliação de qualidade: o <b>e-mail único à contratada</b>, com a medição e a avaliação anexas, sai só quando você finalizar a avaliação (botão <b>Enviar Medição e Avaliação</b>). Os prepostos que recebem e o prazo são escolhidos lá.</p>
+      }
 
       <!-- Barra de ações fixa: o que falta e os três passos, na ordem (salvar, ciência, concluir) -->
       <div class="barra-envio-nf barra-medicao">
@@ -148,25 +157,37 @@
           @if (d.integra_equipe && !jaRegistrei() && !alterado() && (d.medicao_concluida_em || d.itens.length)) {
             <button type="button" class="acao-secundaria" (click)="ciencia()">Registrar minha ciência</button>
           }
-          <button type="button" class="acao-primaria" [disabled]="alterado() || d.ciencias.length < d.ciencias_minimas" (click)="concluir()">Concluir medição e gerar relatório</button>
+          <button type="button" class="acao-primaria" [disabled]="alterado() || d.ciencias.length < d.ciencias_minimas || !envioValido()" (click)="concluir()">Concluir medição e gerar relatório</button>
         </div>
       </div>
     }
 
     @if (d.medicao_concluida_em) {
-      <p class="secao-formulario">E-mail à equipe e ao preposto</p>
+      <p class="secao-formulario">E-mail único à contratada</p>
       @if (d.email_medicao.enviado_em === null) {
-        <p class="dica-formulario">Enviando a memória e o diário de bordo, com o pedido de nota fiscal em até 48 horas…</p>
+        @if (d.email_medicao_pendente) {
+          <p class="dica-formulario">O e-mail só será enviado depois de concluída a avaliação de qualidade, para a contratada receber o valor a faturar já com os descontos e as glosas.</p>
+        } @else {
+          <p class="dica-formulario">Esta medição foi concluída antes do envio obrigatório, então não tem e-mail único nem prazo de contestação.</p>
+        }
       } @else if (d.email_medicao.ok) {
         <details class="email-recusa">
-          <summary>Enviado em {{ d.email_medicao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_medicao.destinatarios.length }} destinatário(s), com a memória de cálculo e o diário de bordo, pedindo a nota fiscal em até 48 horas</summary>
+          <summary>Enviado em {{ d.email_medicao.enviado_em | date: 'dd/MM/yyyy HH:mm' }} a {{ d.email_medicao.destinatarios.length }} destinatário(s), com a medição@if (d.avaliacao) { e a avaliação }@if (d.contestacao) { · prazo de {{ d.contestacao.prazo_dias }} dia(s) útil(eis) para contestar }</summary>
           <p>{{ d.email_medicao.destinatarios.join(', ') }}</p>
         </details>
+        @if (d.contestacao?.documento_executivo; as doc) {
+          <p><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(doc.anexo_id)">Baixar o documento executivo (versão {{ d.contestacao?.documento_executivo_versao }})</button></p>
+        }
       } @else {
         <p class="aviso-bloco erro">O e-mail não foi enviado: {{ d.email_medicao.erro }}</p>
       }
-      @if (d.pode_editar && d.email_medicao.enviado_em !== null) {
-        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando()" (click)="reenviarEmail()">{{ reenviando() ? 'Reenviando…' : 'Reenviar e-mail' }}</button>
+      @if (d.pode_editar && d.pode_reemitir_medicao) {
+        <p class="dica-formulario">{{ d.email_medicao.ok ? 'Contestação aceita? Reemita o documento executivo antes da nota fiscal: o sistema gera nova versão, reenvia o e-mail e reinicia o prazo.' : 'Repita o envio do e-mail.' }}</p>
+        <div class="grade-formulario">
+          <div><label for="medicao-prazo-reemissao">Novo prazo (dias úteis)</label>
+            <input id="medicao-prazo-reemissao" type="number" min="1" max="60" inputmode="numeric" [ngModel]="prazoReemissao()" (ngModelChange)="prazoReemissao.set($event)" placeholder="Igual ao anterior" /></div>
+        </div>
+        <button type="button" class="acao-secundaria acao-pequena" [class.carregando]="reenviando()" [disabled]="reenviando()" (click)="reemitir()">{{ reenviando() ? 'Reemitindo…' : (d.email_medicao.ok ? 'Reemitir após contestação aceita' : 'Repetir o envio') }}</button>
       }
     }
 

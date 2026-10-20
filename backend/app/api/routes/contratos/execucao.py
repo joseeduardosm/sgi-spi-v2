@@ -27,6 +27,7 @@ from app.api.respostas import INVALIDO, RESPOSTAS_AUTENTICADAS, resposta_nao_enc
 from app.api.routes.contratos.comum import ARQUIVO_RECUSADO, SEM_VINCULO, arquivo_pdf, pode_ler, pode_lancar_ob, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
+from app.models.contratos import Competencia
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
     AlteracaoPedirEnvio,
@@ -36,6 +37,8 @@ from app.schemas.contratos.execucao import (
     ItemDespesaVariavel,
     ItemNotaFiscal,
     ConclusaoMedicao,
+    EnvioMedicaoAvaliacao,
+    ReemissaoMedicao,
     GravacaoRecusa,
     GravacaoRetencao,
     DetalheCompetencia,
@@ -332,28 +335,45 @@ def financeiro_do_email(contrato_id: uuid.UUID, sessao: Session = Depends(obter_
 @roteador.post("/competencias/{competencia_id}/medicao/concluir", response_model=DetalheCompetencia, summary="Concluir medição e gerar memória",
                description="Exige ao menos uma ciência de integrante da equipe, a mesma seleção de NEs salva e nenhum item acima do saldo "
                "líquido. Gera a memória de cálculo (nova versão só se os dados mudaram), soma o executado nos itens e avança a etapa. "
-               "Com `enviar_email = true` (padrão `false`), envia em segundo plano à equipe e aos prepostos o e-mail com a memória e o diário de bordo "
-               "do período em PDF, pedindo a nota fiscal em até 48 horas; sem ele, o e-mail pode ser enviado depois pelo reenvio.", responses={**NAO_ENCONTRADA, **ESCRITA})
+               "O e-mail à contratada é **obrigatório**: com ou sem avaliação, o contrato precisa de `prepostos_ids` (um ou mais prepostos ativos com e-mail da empresa; `422` se vazio, `400` se algum "
+               "não for apto) e `prazo_contestacao_dias` (dias úteis, 1 a 60). **Sem avaliação de qualidade** eles vêm neste corpo; **com avaliação** podem ser omitidos aqui e informados ao finalizar a avaliação (`POST /avaliacao/enviar`). O sistema envia **um único e-mail** à equipe e aos prepostos escolhidos, só depois de concluídas a medição e a avaliação de qualidade (quando houver): "
+               "sem avaliação, logo em seguida (segundo plano); com avaliação, ao concluí-la. O e-mail leva a memória de cálculo, o documento executivo "
+               "com o valor líquido a faturar, o relatório de avaliação (quando houver) e o diário de bordo do período, e abre o prazo de contestação da "
+               "contratada (`contestacao` no detalhe). Juntar a nota fiscal encerra o prazo.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def concluir_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: ConclusaoMedicao, tarefas: BackgroundTasks,
                      sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
-    """Etapa 1: conclui a medição, gera a memória de cálculo em PDF, libera a etapa seguinte e avisa equipe e preposto."""
+    """Etapa 1: conclui a medição, gera a memória de cálculo em PDF, libera a etapa seguinte e, com o pacote pronto, envia o e-mail único."""
     with traduzir_erros(sessao):
-        competencias.concluir_medicao(sessao, contrato_id, competencia_id, dados.notas_empenho_ids, autor)
-        if dados.enviar_email:
-            tarefas.add_task(servico_notificacoes.notificar_medicao, competencia_id, dados.prepostos_ids)
+        competencias.concluir_medicao(
+            sessao, contrato_id, competencia_id, dados.notas_empenho_ids, autor, dados.prepostos_ids, dados.prazo_contestacao_dias,
+        )
+        _enviar_pacote_se_pronto(sessao, tarefas, competencia_id)
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
-@roteador.post("/competencias/{competencia_id}/reenviar-email-medicao", response_model=DetalheCompetencia,
-               summary="Reenviar o e-mail da medição",
-               description="Envia de novo à equipe e aos prepostos o e-mail da medição concluída (memória + diário do período). "
-               "Só depois de concluída a medição. Mesma permissão de edição do contrato.", responses={**NAO_ENCONTRADA, **ESCRITA})
-def reenviar_email_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
-                           autor: Usuario = Depends(pode_modificar)):
-    """Reenvio síncrono (a tela mostra o resultado na hora)."""
+def _enviar_pacote_se_pronto(sessao: Session, tarefas: BackgroundTasks, competencia_id: uuid.UUID) -> None:
+    """Agenda o e-mail único quando o envio foi solicitado e medição e avaliação já estão concluídas (rodada nova após reabertura = reemissão)."""
+    competencia = sessao.get(Competencia, competencia_id)
+    if competencia is None or not competencia.medicao_envio_solicitado or not competencias.pacote_da_medicao_pronto(competencia):
+        return
+    # Já enviado com sucesso na rodada anterior (medição reaberta): é uma nova comunicação, com nova versão do documento executivo
+    reemissao = competencia.email_medicao_enviado_em is not None
+    if reemissao and competencia.email_medicao_ok is None:
+        reemissao = False
+    tarefas.add_task(servico_notificacoes.notificar_medicao, competencia_id, None, reemissao)
+
+
+@roteador.post("/competencias/{competencia_id}/medicao/reemitir", response_model=DetalheCompetencia, summary="Reemitir a comunicação da medição",
+               description="Depois de uma contestação aceita (ou para repetir um envio que falhou): regenera o documento executivo (nova versão), reenvia o e-mail "
+               "único à equipe e aos prepostos e reinicia o prazo de contestação, com `prazo_contestacao_dias` e `prepostos_ids` novos (opcionais; sem eles valem os anteriores). "
+               "Só com a medição e a avaliação concluídas, o e-mail já enviado e a nota fiscal ainda não juntada (`400`). Mesma permissão de edição do contrato. "
+               "Substitui o antigo reenvio livre do e-mail da medição.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def reemitir_medicao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: ReemissaoMedicao, sessao: Session = Depends(obter_sessao),
+                     autor: Usuario = Depends(pode_modificar)):
+    """Reemissão síncrona (a tela mostra o resultado na hora)."""
     with traduzir_erros(sessao):
-        servico_notificacoes.exigir_reenvio_medicao(sessao, contrato_id, competencia_id, autor)
-        servico_notificacoes.notificar_medicao(competencia_id)
+        servico_notificacoes.exigir_reemissao_medicao(sessao, contrato_id, competencia_id, autor, dados.prepostos_ids)
+        servico_notificacoes.notificar_medicao(competencia_id, dados.prepostos_ids, True, dados.prazo_contestacao_dias)
         sessao.expire_all()
         return _depois(sessao, contrato_id, competencia_id, autor)
 
@@ -421,11 +441,27 @@ def reenviar_email_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, 
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
+@roteador.post("/competencias/{competencia_id}/avaliacao/enviar", response_model=DetalheCompetencia, summary="Enviar a Medição e a Avaliação à contratada",
+               description="Finaliza a avaliação da equipe: exige ao menos uma ciência no ateste, gera o PDF do relatório (nova versão) e, em segundo plano, envia **um único e-mail** "
+               "à equipe e aos prepostos escolhidos com a memória de cálculo, o relatório de avaliação (para assinatura e devolução), o documento executivo com o valor a faturar e o diário "
+               "de bordo. O corpo traz `prepostos_ids` (ao menos um preposto ativo com e-mail) e `prazo_contestacao_dias` (dias úteis, 1 a 60); sem eles valem os já guardados (`400` se não houver). "
+               "O prazo de contestação começa a contar a partir do e-mail. Se o e-mail já saiu, é uma reemissão (nova versão do documento executivo e novo prazo). Mesma permissão de edição do contrato.",
+               responses={**NAO_ENCONTRADA, **ESCRITA})
+def enviar_medicao_e_avaliacao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: EnvioMedicaoAvaliacao, tarefas: BackgroundTasks,
+                               sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 2: gera o relatório de avaliação e envia o e-mail único da medição."""
+    with traduzir_erros(sessao):
+        reemissao = competencias.enviar_medicao_e_avaliacao(sessao, contrato_id, competencia_id, dados.prepostos_ids, dados.prazo_contestacao_dias, autor)
+        tarefas.add_task(servico_notificacoes.notificar_medicao, competencia_id, None, reemissao)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
 @roteador.post("/competencias/{competencia_id}/avaliacao/assinada", response_model=DetalheCompetencia,
-               summary="Enviar relatório assinado pela contratada", description="`multipart/form-data` (`arquivo`, PDF). Conclui a etapa.",
+               summary="Enviar relatório assinado pela contratada",
+               description="`multipart/form-data` (`arquivo`, PDF). Conclui a etapa. Só depois do envio da Medição e da Avaliação (`POST /avaliacao/enviar`): sem o e-mail enviado, `400`.",
                responses={**NAO_ENCONTRADA, **ARQUIVO_RECUSADO, **SEM_VINCULO})
-def avaliacao_assinada(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
-                       autor: Usuario = Depends(pode_modificar)):
+def avaliacao_assinada(contrato_id: uuid.UUID, competencia_id: uuid.UUID, arquivo: UploadFile = File(...),
+                       sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Etapa 2: recebe o relatório assinado pela contratada e conclui a etapa."""
     with traduzir_erros(sessao):
         competencias.enviar_avaliacao_assinada(sessao, contrato_id, competencia_id, *arquivo_pdf(arquivo), autor)

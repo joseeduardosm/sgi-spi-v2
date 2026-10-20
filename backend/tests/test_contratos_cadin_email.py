@@ -11,7 +11,7 @@ import pytest
 from pypdf import PdfReader
 
 from app.services.contratos import email_cadin_mascara, email_ob_mascara
-from tests.apoio_contratos import PDF, conferir_retencao, criar_contrato, gerar_cpf, juntar_nf, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, criar_contrato, gerar_cpf, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import HOJE, _preparar_execucao, _url
 from tests.test_smtp import SmtpSimulado, SmtpSslSimulado, dados_servidor
@@ -50,7 +50,7 @@ def cenario(cliente, admin):
     cliente.put(f"{base}/medicao", json=medicao, headers=h)
     cliente.post(f"{base}/medicao/ciencia", headers=h)
     cliente.post(f"{base}/medicao/ciencia", headers=cabecalho(cliente, "fiscal"))
-    cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=h)
+    cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=h)
     assert juntar_nf(cliente, base, h, "2105.00").status_code == 200
     assert conferir_retencao(cliente, base, h).status_code == 200
     for documento in cliente.get(base, headers=h).json()["documentos"]:

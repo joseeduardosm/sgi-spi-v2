@@ -79,8 +79,10 @@ export class EtapaAvaliacaoComponent implements OnChanges {
   });
   protected readonly reenviando = signal(false);
   // "Enviar por e-mail" começa desmarcado: só envia quem marcar
-  protected readonly enviarEmail = signal(false);
-  protected readonly prepostosIds = signal<(string | number)[] | null>(null);
+  // E-mail único da medição (sai ao concluir a avaliação): prepostos escolhidos e prazo de contestação em dias úteis
+  protected readonly prepostosMedicao = signal<(string | number)[] | null>(null);
+  protected readonly prazoMedicao = signal<number | null>(3);
+  protected readonly enviandoMedicao = signal(false);
   protected readonly fontePrepostos = () => this.api.gruposPrepostos(this.detalhe().contrato_id);
   // O usuário logado já registrou ciência no ateste?
   protected readonly jaRegistrei = computed(() => this.avaliacao().ciencias.some((c) => c.usuario_id === this.autenticacao.usuario()?.id));
@@ -238,10 +240,21 @@ export class EtapaAvaliacaoComponent implements OnChanges {
     this.emitir(this.api.acaoAvaliacao(d.contrato_id, d.id, 'ciencia'), 'Não foi possível registrar a ciência');
   }
 
-  /** Gera o PDF do relatório de avaliação. */
-  protected exportarPdf(): void {
+  /** Finaliza a avaliação da equipe e envia o e-mail único (medição + avaliação) à contratada, com os prepostos escolhidos e o prazo. */
+  protected async enviarMedicaoEAvaliacao(): Promise<void> {
     const d = this.detalhe();
-    this.emitir(this.api.acaoAvaliacao(d.contrato_id, d.id, 'pdf', this.enviarEmail(), this.prepostosIds() as string[] | null), 'Não foi possível gerar o PDF', 'Gerando o relatório de avaliação…');
+    const reenvio = d.email_medicao.ok === true;
+    const ok = await this.dialogos.confirmar({
+      titulo: reenvio ? 'Reenviar Medição e Avaliação?' : 'Enviar Medição e Avaliação?',
+      mensagem: `Será gerado o relatório de avaliação e enviado UM e-mail à equipe e a ${this.prepostosMedicao()?.length} preposto(s), com a medição e a avaliação anexas: dá ciência da medição, pede a nota fiscal no valor líquido em até ${this.prazoMedicao()} dia(s) útil(eis) (ou a contestação nesse prazo) e a assinatura do relatório de avaliação.${reenvio ? ' É um novo envio: o prazo recomeça a contar.' : ''}`,
+      rotuloConfirmar: reenvio ? 'Reenviar' : 'Enviar',
+    });
+    if (!ok) return;
+    this.enviandoMedicao.set(true);
+    this.api.enviarMedicaoEAvaliacao(d.contrato_id, d.id, this.prepostosMedicao() as string[], Number(this.prazoMedicao())).subscribe({
+      next: (novo) => { this.enviandoMedicao.set(false); this.atualizado.emit(novo); },
+      error: (e) => { this.enviandoMedicao.set(false); this.dialogos.mostrarErro(e, 'Não foi possível enviar a Medição e a Avaliação'); },
+    });
   }
 
   // Guardam os PDFs escolhidos nos campos de envio
@@ -260,6 +273,12 @@ export class EtapaAvaliacaoComponent implements OnChanges {
 
   protected temJustificativa(): boolean {
     return !!this.justificativa;
+  }
+
+  /** Envio obrigatório: ao menos uma ciência no ateste, um preposto escolhido e o prazo entre 1 e 60 dias úteis. */
+  protected envioValido(): boolean {
+    const prazo = Number(this.prazoMedicao());
+    return this.avaliacao().ciencias.length > 0 && !!this.prepostosMedicao()?.length && Number.isInteger(prazo) && prazo >= 1 && prazo <= 60;
   }
 
   /** Envia a via assinada pela contratada (conclui a etapa). */

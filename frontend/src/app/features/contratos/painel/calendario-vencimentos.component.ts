@@ -18,7 +18,7 @@ export const TIPOS_VENCIMENTO: { tipo: TipoEventoCalendario; rotulo: string }[] 
   { tipo: 'vigencia_maxima', rotulo: 'Vigência máxima' },
   { tipo: 'reajuste', rotulo: 'Reajuste' },
   { tipo: 'pagamento_nf', rotulo: 'Pagamento da NF' },
-  { tipo: 'prazo_nf_48h', rotulo: 'Prazo de 48 h da NF' },
+  { tipo: 'prazo_nf_48h', rotulo: 'Prazo da NF (contestação)' },
   { tipo: 'validade_documento', rotulo: 'Validade de documentos' },
   { tipo: 'medicao_atrasada', rotulo: 'Medição atrasada' },
   { tipo: 'empenho_insuficiente', rotulo: 'Empenho insuficiente' },

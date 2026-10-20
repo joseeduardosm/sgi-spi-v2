@@ -105,5 +105,5 @@ class PainelPortarias(BaseModel):
     portarias: list[LeituraPortaria]
     autoridades: list[LeituraAutoridade]
     em_andamento: bool
-    pode_criar: bool = Field(..., description="O usuário é da equipe do contrato ou tem controle total em Contratos.")
+    pode_criar: bool = Field(..., description="O usuário é da equipe do contrato, cadastrou o contrato ou tem controle total em Contratos.")
     equipe_vigente: list[NomeacaoEntrada]

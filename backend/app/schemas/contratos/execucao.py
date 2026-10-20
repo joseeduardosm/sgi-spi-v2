@@ -298,6 +298,21 @@ class LeituraArquivo(BaseModel):
     enviado_em: datetime
 
 
+class Contestacao(BaseModel):
+    """Prazo de contestação da contratada (dias úteis a contar do e-mail único da medição); juntar a nota fiscal o encerra."""
+    prazo_dias: int = Field(..., description="Dias úteis informados pelo fiscal.")
+    inicio_em: datetime = Field(..., description="Quando o e-mail único foi enviado (abre o prazo).")
+    limite_em: datetime = Field(..., description="Fim do último dia útil do prazo (horário de Brasília).")
+    situacao: Literal["aberto", "vencido", "encerrado"] = Field(
+        ..., description="`aberto` (dentro do prazo), `vencido` (passou do limite sem a nota fiscal) ou `encerrado` (nota fiscal juntada).")
+    encerrada_em: datetime | None = Field(None, description="Quando a nota fiscal foi juntada (só em `encerrado`).")
+    dias_uteis_decorridos: int = Field(..., description="Dias úteis já consumidos (até a nota fiscal, se encerrado).")
+    dias_uteis_restantes: int = Field(..., description="Dias úteis que faltam (0 quando vencido ou encerrado).")
+    percentual: int = Field(..., ge=0, le=100, description="Parte do prazo consumida, para a barra de progresso.")
+    documento_executivo: LeituraArquivo | None = Field(None, description="PDF com o valor a faturar enviado no e-mail (última versão).")
+    documento_executivo_versao: int = Field(0, description="Sobe a cada reemissão após contestação aceita.")
+
+
 class LeituraMemoria(BaseModel):
     """Uma versão da memória de cálculo da medição."""
     versao: int
@@ -569,7 +584,11 @@ class DetalheCompetencia(ResumoCompetencia):
     )
     avisos: list[str] = Field(default_factory=list, description="Alertas da medição (ex.: item medido acima do saldo líquido).")
     glosas_periodo: list[GlosaDoPeriodo] = Field(default_factory=list, description="Glosas do diário de bordo que valem nesta competência.")
-    email_medicao: EmailMedicao = Field(default_factory=EmailMedicao, description="Resultado do e-mail da medição concluída.")
+    email_medicao: EmailMedicao = Field(default_factory=EmailMedicao, description="Resultado do e-mail único da medição (medição + avaliação concluídas).")
+    contestacao: Contestacao | None = Field(None, description="Prazo de contestação da contratada; nulo enquanto o e-mail único não foi enviado com sucesso.")
+    prazo_contestacao_dias: int | None = Field(None, description="Prazo (dias úteis) informado pelo fiscal ao concluir a medição.")
+    email_medicao_pendente: bool = Field(False, description="Envio solicitado, aguardando a conclusão da avaliação para o e-mail único sair.")
+    pode_reemitir_medicao: bool = Field(False, description="Verdadeiro quando é possível reemitir o pacote (após contestação aceita) ou repetir um envio que falhou.")
     email_nf: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail ao Financeiro (cópia à equipe) com a NF juntada.")
     email_ob: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail aos prepostos avisando que a competência foi paga (enviado ao lançar a Ordem Bancária, pela máscara \"E-mail de pagamento\").")
     email_retencao: EmailMedicao = Field(default_factory=EmailMedicao, description="E-mail à equipe com as retenções conferidas.")
@@ -630,10 +649,29 @@ class GrupoFinanceiro(BaseModel):
 
 
 class ConclusaoMedicao(BaseModel):
-    """Corpo do `POST /medicao/concluir`; a seleção de NEs precisa bater com a salva."""
+    """Corpo do `POST /medicao/concluir`; a seleção de NEs precisa bater com a salva.
+
+    O e-mail único à contratada é obrigatório. Sem avaliação de qualidade no contrato, `prepostos_ids` e `prazo_contestacao_dias` são exigidos aqui
+    (o e-mail sai logo em seguida). Com avaliação, podem ser omitidos: são informados ao concluir a avaliação (`POST /avaliacao/assinada`)."""
     notas_empenho_ids: list[uuid.UUID] = Field(..., min_length=1, description="Deve ser igual à seleção salva.")
-    enviar_email: bool = Field(False, description="Envia o e-mail desta etapa (equipe, prepostos ou Financeiro). Padrão `false`: só envia quem marcar.")
-    prepostos_ids: list[uuid.UUID] | None = Field(None, description="Prepostos que recebem o e-mail (só com `enviar_email`). `null` = todos os ativos; lista vazia = nenhum (só a equipe).")
+    prepostos_ids: list[uuid.UUID] | None = Field(
+        None, min_length=1, description="Prepostos da contratada que recebem o e-mail único (um ou mais, ativos e com e-mail). A equipe vigente também recebe. "
+        "Obrigatório quando o contrato não tem avaliação de qualidade.")
+    prazo_contestacao_dias: int | None = Field(
+        None, ge=1, le=60, description="Prazo, em dias úteis a contar do e-mail, para a contratada contestar glosas e descontos. Obrigatório quando o contrato não tem avaliação de qualidade.")
+
+
+class EnvioMedicaoAvaliacao(BaseModel):
+    """Corpo do `POST /avaliacao/enviar`: quem recebe o e-mail único da medição e o prazo para a contratada contestar."""
+    prepostos_ids: list[uuid.UUID] | None = Field(
+        None, min_length=1, description="Prepostos da contratada que recebem (um ou mais, ativos e com e-mail). Sem eles valem os escolhidos antes (reenvio).")
+    prazo_contestacao_dias: int | None = Field(None, ge=1, le=60, description="Prazo em dias úteis a contar do e-mail. Sem ele vale o anterior (reenvio).")
+
+
+class ReemissaoMedicao(BaseModel):
+    """Corpo do `POST /medicao/reemitir`: nova comunicação após contestação aceita (ou repetição de um envio que falhou)."""
+    prazo_contestacao_dias: int | None = Field(None, ge=1, le=60, description="Novo prazo em dias úteis; sem ele, vale o anterior.")
+    prepostos_ids: list[uuid.UUID] | None = Field(None, min_length=1, description="Prepostos que recebem a reemissão (ao menos um); sem eles, valem os escolhidos ao concluir a medição.")
 
 
 class GravacaoAvaliacaoInicial(BaseModel):

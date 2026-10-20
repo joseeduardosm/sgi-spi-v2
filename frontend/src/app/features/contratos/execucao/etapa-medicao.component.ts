@@ -57,9 +57,10 @@ export class EtapaMedicaoComponent implements OnChanges {
   // Houve alteração não salva (mostra o aviso para salvar)
   protected readonly alterado = signal(false);
   protected readonly reenviando = signal(false);
-  // "Enviar por e-mail" começa desmarcado: só envia quem marcar
-  protected readonly enviarEmail = signal(false);
   protected readonly prepostosIds = signal<(string | number)[] | null>(null);
+  // Prazo de contestação da contratada (dias úteis), obrigatório com o e-mail; na reemissão, vazio = igual ao anterior
+  protected readonly prazoContestacao = signal<number | null>(3);
+  protected readonly prazoReemissao = signal<number | null>(null);
   protected readonly fontePrepostos = () => this.api.gruposPrepostos(this.detalhe().contrato_id);
 
   /** Sempre que a competência muda (entrada nova), recarrega os campos a partir dela. */
@@ -267,23 +268,50 @@ export class EtapaMedicaoComponent implements OnChanges {
     if (!this.notas().length) falta.push('Selecione ao menos uma NE');
     if (this.excedentes().length) falta.push('Há item medido acima do saldo líquido');
     if (this.acertosInvalidos()) falta.push('Há acerto de centavos inválido');
+    if (!this.temAvaliacao() && !this.prepostosIds()?.length) falta.push('Escolha ao menos um preposto para receber a medição');
+    if (!this.temAvaliacao() && !this.prazoValido(this.prazoContestacao())) falta.push('Informe o prazo de contestação (1 a 60 dias úteis)');
     if (this.alterado()) falta.push('Salve a medição antes de registrar ciência ou concluir');
     else if (d.ciencias.length < d.ciencias_minimas) falta.push('Falta ao menos uma ciência');
     return falta;
   }
 
-  /** Reenvia o e-mail da medição concluída. */
-  protected reenviarEmail(): void {
+  /** Envio obrigatório: ao menos um preposto escolhido e o prazo de contestação válido. */
+  protected envioValido(): boolean {
+    return this.temAvaliacao() || (!!this.prepostosIds()?.length && this.prazoValido(this.prazoContestacao()));
+  }
+
+  /** Prazo em dias úteis: inteiro de 1 a 60. */
+  private prazoValido(prazo: number | null): boolean {
+    return prazo !== null && Number.isInteger(Number(prazo)) && Number(prazo) >= 1 && Number(prazo) <= 60;
+  }
+
+  /** Reemite o documento executivo e o e-mail único (contestação aceita) e reinicia o prazo. */
+  protected async reemitir(): Promise<void> {
     const d = this.detalhe();
+    const novoPrazo = this.prazoReemissao();
+    if (novoPrazo !== null && !this.prazoValido(novoPrazo)) {
+      this.dialogos.avisar('Prazo inválido', 'Informe de 1 a 60 dias úteis, ou deixe vazio para manter o prazo anterior.');
+      return;
+    }
+    const refazer = !!d.email_medicao.ok;
+    const ok = await this.dialogos.confirmar({
+      titulo: refazer ? 'Reemitir a comunicação?' : 'Repetir o envio?',
+      mensagem: refazer
+        ? 'O sistema gera uma nova versão do documento executivo com o valor atual, reenvia o e-mail único à equipe e aos prepostos e reinicia o prazo de contestação.'
+        : 'O e-mail anterior não foi entregue. O sistema envia de novo o pacote e abre o prazo de contestação.',
+      rotuloConfirmar: refazer ? 'Reemitir' : 'Enviar de novo',
+    });
+    if (!ok) return;
     this.reenviando.set(true);
-    this.api.reenviarEmailMedicao(d.contrato_id, d.id).subscribe({
+    this.api.reemitirMedicao(d.contrato_id, d.id, novoPrazo === null ? null : Number(novoPrazo)).subscribe({
       next: (novo) => {
         this.reenviando.set(false);
+        this.prazoReemissao.set(null);
         this.atualizado.emit(novo);
       },
       error: (e) => {
         this.reenviando.set(false);
-        this.dialogos.mostrarErro(e, 'Não foi possível reenviar o e-mail');
+        this.dialogos.mostrarErro(e, 'Não foi possível reemitir a comunicação');
       },
     });
   }
@@ -325,17 +353,33 @@ export class EtapaMedicaoComponent implements OnChanges {
     this.api.cienciaMedicao(d.contrato_id, d.id).subscribe({ next: (novo) => this.atualizado.emit(novo), error: (e) => this.dialogos.mostrarErro(e) });
   }
 
+  /** Com avaliação de qualidade, os prepostos e o prazo do e-mail único são escolhidos ao concluir a avaliação, não aqui. */
+  protected temAvaliacao(): boolean {
+    return this.detalhe().etapas.includes('avaliacao');
+  }
+
+  /** Explica, na confirmação, quando o e-mail único sai: com avaliação de qualidade, só depois de concluí-la; sem ela, logo em seguida. */
+  private avisoDoEnvio(): string {
+    const prepostos = this.prepostosIds()?.length ?? 0;
+    const quem = `à equipe e a ${prepostos} preposto(s) escolhido(s)`;
+    const prazo = `abre o prazo de ${this.prazoContestacao()} dia(s) útil(eis) para a contratada contestar`;
+    if (this.detalhe().etapas.includes('avaliacao')) {
+      return 'O e-mail único à contratada NÃO sai agora: ele só é enviado quando você finalizar a avaliação de qualidade, clicando em "Enviar Medição e Avaliação" na etapa de avaliação: um e-mail só, com a medição e a avaliação anexas. Lá você escolherá os prepostos que recebem e o prazo.';
+    }
+    return `Como este contrato não tem avaliação de qualidade, o e-mail único sai logo em seguida ${quem} (com a medição anexa) e ${prazo}.`;
+  }
+
   /** Conclui a medição (gera a memória de cálculo em PDF). */
   protected async concluir(): Promise<void> {
     const d = this.detalhe();
     const ok = await this.dialogos.confirmar({
       titulo: 'Concluir a medição?',
-      mensagem: 'A medição fica somente leitura, a quantidade medida soma no executado dos itens e a memória de cálculo em PDF é gerada. ' + (this.enviarEmail() ? 'Em seguida, a memória e o diário de bordo do período são enviados por e-mail à equipe e ao preposto, pedindo a nota fiscal em até 48 horas.' : 'Nenhum e-mail será enviado agora (você pode reenviar depois).'),
+      mensagem: 'A medição fica somente leitura, a quantidade medida soma no executado dos itens e a memória de cálculo em PDF é gerada. ' + this.avisoDoEnvio(),
       rotuloConfirmar: 'Concluir medição',
       segundos: 5,
     });
     if (!ok) return;
-    this.dialogos.executar(this.api.concluirMedicao(d.contrato_id, d.id, d.notas_selecionadas.map((n) => n.id), this.enviarEmail(), this.prepostosIds() as string[] | null), 'Gerando a memória de cálculo…').subscribe({
+    this.dialogos.executar(this.api.concluirMedicao(d.contrato_id, d.id, d.notas_selecionadas.map((n) => n.id), this.temAvaliacao() ? null : (this.prepostosIds() as string[]), this.temAvaliacao() ? null : Number(this.prazoContestacao())), 'Gerando a memória de cálculo…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível concluir a medição'),
     });

@@ -569,6 +569,12 @@ export interface GlosaDoPeriodo {
 }
 
 /** Resultado do e-mail enviado à equipe e ao preposto. */
+export interface Contestacao {
+  prazo_dias: number; inicio_em: string; limite_em: string; situacao: 'aberto' | 'vencido' | 'encerrado'; encerrada_em: string | null;
+  dias_uteis_decorridos: number; dias_uteis_restantes: number; percentual: number;
+  documento_executivo: { anexo_id: string; nome: string; tamanho: number; enviado_em: string } | null; documento_executivo_versao: number;
+}
+
 export interface EnvioEmail {
   enviado_em: string | null;
   ok: boolean | null;
@@ -799,6 +805,14 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   reaberturas_permitidas: boolean;
   glosas_periodo: GlosaDoPeriodo[];
   email_medicao: EnvioEmail;
+  /** Prazo de contestação da contratada (dias úteis a contar do e-mail único); nulo antes do envio. Juntar a nota fiscal o encerra. */
+  contestacao?: Contestacao | null;
+  /** Prazo (dias úteis) informado pelo fiscal ao concluir a medição. */
+  prazo_contestacao_dias?: number | null;
+  /** Envio solicitado, aguardando a avaliação ser concluída para o e-mail único sair. */
+  email_medicao_pendente?: boolean;
+  /** Pode reemitir o pacote (contestação aceita) ou repetir um envio que falhou. */
+  pode_reemitir_medicao?: boolean;
   email_nf: EnvioEmail;
   /** E-mail aos prepostos avisando que a competência foi paga (enviado ao lançar a OB). */
   email_ob?: EnvioEmail;

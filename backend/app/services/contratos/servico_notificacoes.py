@@ -12,7 +12,6 @@ Os envios rodam em segundo plano (depois da resposta da API), com sessão própr
 """
 
 import uuid
-from datetime import timedelta
 from decimal import Decimal
 from html import escape
 
@@ -32,7 +31,6 @@ from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrad
 from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, obter_contrato
 from app.services.servico_smtp import SemServidorAtivo
 
-PRAZO_NOTA_FISCAL = timedelta(hours=48)
 
 
 import re as _re
@@ -408,31 +406,45 @@ def notificar_ocorrencia(ocorrencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID
 
 # --- Medição concluída ---------------------------------------------------------------------------
 
-def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -> tuple[str, str, str]:
-    """Assunto, texto e HTML do e-mail da medição concluída (pede a NF em PDF e XML em até 48 h)."""
+def mensagem_medicao(contrato: Contrato, competencia: Competencia, prazo_dias: int, limite, versao: int = 1) -> tuple[str, str, str]:
+    """Assunto, texto e HTML do e-mail único da medição.
+
+    Leva só a medição (e o relatório de avaliação, quando há) e faz três coisas: dá ciência da medição, pede a nota fiscal (PDF e XML) no valor líquido
+    dentro do prazo em dias úteis ou a contestação nesse mesmo prazo e, havendo avaliação de qualidade, pede a assinatura do relatório."""
     from app.services.contratos.servico_competencias import (
-        saldos_da_medicao, subtotal_despesas_variaveis, subtotal_item, subtotal_medicao, tem_despesas_variaveis, total_medido,
+        saldos_da_medicao, subtotal_despesas_variaveis, subtotal_item, subtotal_medicao, tem_despesas_variaveis, total_medido, valor_autorizado,
     )
 
     rotulo = competencia.numero_competencia
-    limite = enviado_em + PRAZO_NOTA_FISCAL
     total = total_medido(competencia)
+    a_faturar = valor_autorizado(competencia)
     saldos = saldos_da_medicao(contrato, competencia)
     itens = [
         [i.descricao_completa, quantidade(i.quantidade_medida), quantidade(saldos[i.id].glosas), moeda(subtotal_item(i))]
         for i in competencia.itens
     ]
-    assunto = f"Contrato {contrato.numero} — medição {rotulo} concluída: emitir nota fiscal"
+    com_avaliacao = competencia.avaliacao is not None
+    assunto = (f"Contrato {contrato.numero} — medição {rotulo} concluída: emitir nota fiscal" + (" e assinar a avaliação" if com_avaliacao else "")
+               + (f" (reemissão, versão {versao})" if versao > 1 else ""))
     # Documentos do checklist ativo marcados "Pedir para enviar": pedidos à empresa no mesmo e-mail, com a observação de cada um
     from app.services.contratos.servico_configuracao_execucao import _ordem_checklist, checklist_ativo
 
     checklist = checklist_ativo(contrato)
     documentos = [[d.nome, d.observacao or "—"] for d in sorted(checklist.itens, key=_ordem_checklist) if d.pedir_envio] if checklist else []
-    pedido = (
-        f"Solicitamos à {contrato.empresa.razao_social} a emissão da nota fiscal com base nesta medição, "
-        f"no valor de {moeda(total)}, em até 48 horas (até {data_hora(limite)}). "
-        "Envie a nota fiscal nos dois formatos: o PDF e o arquivo XML."
+    ciencia = (
+        f"Encaminhamos, para ciência da {contrato.empresa.razao_social}, a medição da competência {rotulo} do contrato {contrato.numero} "
+        "(anexo), já com as glosas do período."
     )
+    pedido = (
+        f"Estando de acordo com a medição, solicitamos a emissão da nota fiscal no valor líquido de {moeda(a_faturar)}, nos dois formatos (PDF e arquivo XML), "
+        f"em até {prazo_dias} dia(s) útil(eis) a contar deste e-mail (até {data_hora(limite)}). Caso discorde da medição, a contestação deve ser apresentada, "
+        "por resposta a este e-mail, dentro do mesmo prazo. Sem manifestação, deve emitir a nota no valor indicado; nota emitida em valor diferente é devolvida "
+        "para cancelamento e reemissão."
+    )
+    pedido_avaliacao = (
+        "Solicitamos também que o preposto assine o relatório de avaliação da qualidade dos serviços (anexo) e o devolva respondendo a este e-mail."
+    ) if com_avaliacao else ""
+    anexos_txt = "Anexos: medição (memória de cálculo) e relatório de avaliação da qualidade (PDF)." if com_avaliacao else "Anexo: medição (memória de cálculo, PDF)."
     # Itens de despesas variáveis: além da nota fiscal, nota de débito, recibo ou outro documento da despesa
     variaveis = tem_despesas_variaveis(competencia)
     pedido_despesas = (
@@ -444,15 +456,20 @@ def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -
         f"Contratada: {contrato.empresa.razao_social}",
         f"Competência: {rotulo} (período {competencia.periodo_inicio:%d/%m/%Y} a {competencia.periodo_fim:%d/%m/%Y})",
         f"Total medido: {moeda(total)}",
+        f"Valor líquido a faturar: {moeda(a_faturar)}",
+        "",
+        ciencia,
         "",
         pedido,
+        *(["", pedido_avaliacao] if com_avaliacao else []),
         *(["", pedido_despesas] if variaveis else []),
         "",
         "Itens medidos (quantidade medida · glosa no período · subtotal):",
         *[f"  - {d}: {m} · glosa {g} · {s}" for d, m, g, s in itens],
         *(["", "Solicitamos também o envio dos documentos abaixo (documento — observação):", *[f"  - {n} — {o}" for n, o in documentos]] if documentos else []),
         "",
-        "Anexos: memória de cálculo da medição e diário de bordo do período (PDF).",
+        "",
+        anexos_txt,
     ])
     html = _html(f"Medição {rotulo} concluída — contrato {contrato.numero}", [
         _tabela_html(["Campo", "Valor"], [
@@ -460,18 +477,21 @@ def mensagem_medicao(contrato: Contrato, competencia: Competencia, enviado_em) -
             ["Contratada", contrato.empresa.razao_social],
             ["Competência", f"{rotulo} ({competencia.periodo_inicio:%d/%m/%Y} a {competencia.periodo_fim:%d/%m/%Y})"],
             ["Total medido", moeda(total)],
+            ["Valor líquido a faturar", moeda(a_faturar)],
         ]),
+        f"<p>{escape(ciencia)}</p>",
         f"<p style=\"background:#fff8e6;border-left:3px solid #e0a526;padding:10px 12px\"><b>{escape(pedido)}</b></p>",
+        *([f"<p style=\"background:#fff8e6;border-left:3px solid #e0a526;padding:10px 12px\"><b>{escape(pedido_avaliacao)}</b></p>"] if com_avaliacao else []),
         *([f"<p style=\"background:#fff8e6;border-left:3px solid #e0a526;padding:10px 12px\"><b>{escape(pedido_despesas)}</b></p>"] if variaveis else []),
         _tabela_html(["Item", "Medido", "Glosa no período", "Subtotal"], itens),
         *([f"<p><b>Solicitamos também o envio dos documentos abaixo:</b></p>", _tabela_html(["Documento", "Observação"], documentos)] if documentos else []),
-        "<p>Anexos: memória de cálculo da medição e diário de bordo do período (PDF).</p>",
+        f"<p>{escape(anexos_txt)}</p>",
     ])
     return assunto, texto, html
 
 
 def anexos_medicao(contrato: Contrato, competencia: Competencia) -> list[AnexoEmail]:
-    """Memória de cálculo (última versão) e diário de bordo do período da competência."""
+    """Só a medição (memória de cálculo, última versão; o PDF das despesas variáveis é a outra metade dela) e o relatório de avaliação, quando há."""
     anexos = []
     if competencia.memorias:
         memoria = competencia.memorias[-1]
@@ -480,20 +500,28 @@ def anexos_medicao(contrato: Contrato, competencia: Competencia) -> list[AnexoEm
         if memoria.anexo_despesas is not None:
             anexos.append(AnexoEmail(f"medicao_despesas_variaveis_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf",
                                      servico_anexos.caminho(memoria.anexo_despesas).read_bytes()))
-    diario = servico_diario.gerar_pdf(contrato, competencia.periodo_inicio, competencia.periodo_fim)
-    anexos.append(AnexoEmail(f"diario_de_bordo_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf", diario))
+    avaliacao = competencia.avaliacao
+    if avaliacao is not None and avaliacao.pdf_gerado_anexo is not None:
+        anexos.append(AnexoEmail(f"avaliacao_{contrato.numero.replace('/', '_')}_{competencia.identificador}.pdf", servico_anexos.caminho(avaliacao.pdf_gerado_anexo).read_bytes()))
     return anexos
 
 
-def exigir_reenvio_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, autor: Usuario) -> None:
-    """Reenvio: quem pode editar o contrato, e só com a medição concluída."""
+def exigir_reemissao_medicao(
+    sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, autor: Usuario, prepostos_ids: list[uuid.UUID] | None = None,
+) -> None:
+    """Reemissão do pacote (contestação aceita) ou repetição de um envio que falhou: quem pode editar o contrato, com o e-mail já tentado e a NF ainda não juntada."""
+    from app.services.contratos.servico_competencias import pode_reemitir_medicao
+
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     competencia = next((c for c in contrato.competencias if c.id == competencia_id), None)
     if competencia is None:
         raise RegistroNaoEncontrado("Competência")
-    if competencia.medicao_concluida_em is None:
-        raise ErroRegraContrato("O e-mail da medição só é enviado depois de concluída a medição.")
+    if not pode_reemitir_medicao(competencia):
+        raise ErroRegraContrato("A reemissão só é possível depois do envio do e-mail da medição e enquanto a nota fiscal não foi juntada.")
+    aptos = {p.id for p in contrato.empresa.prepostos if p.ativo and p.email}
+    if prepostos_ids is not None and any(i not in aptos for i in prepostos_ids):
+        raise ErroRegraContrato("Escolha apenas prepostos ativos, com e-mail, da empresa contratada.")
 
 
 def exigir_reenvio_ocorrencia(sessao: Session, contrato_id: uuid.UUID, ocorrencia_id: uuid.UUID, autor: Usuario) -> None:
@@ -503,16 +531,49 @@ def exigir_reenvio_ocorrencia(sessao: Session, contrato_id: uuid.UUID, ocorrenci
     servico_diario.obter_ocorrencia(contrato, ocorrencia_id)
 
 
-def notificar_medicao(competencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID] | None = None) -> None:
-    """Envia o e-mail da medição concluída e grava o resultado (segundo plano, sessão própria)."""
+def notificar_medicao(
+    competencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID] | None = None, reemissao: bool = False, prazo_dias: int | None = None,
+    usar_escolha_salva: bool = True,
+) -> None:
+    """Envia o e-mail único da medição e grava o resultado (segundo plano, sessão própria).
+
+    Só sai com o pacote pronto (medição e, havendo, avaliação concluídas) e uma única vez: depois de enviado com sucesso, só a reemissão
+    (contestação aceita) ou a repetição de um envio que falhou chegam aqui. O envio abre o prazo de contestação em dias úteis e
+    leva o documento executivo com o valor a faturar; juntar a nota fiscal encerra o prazo."""
+    from app.services.contratos import documentos_execucao
+    from app.services.contratos.servico_competencias import calcular_limite_contestacao, pacote_da_medicao_pronto
+
     with FabricaSessao() as sessao:
         competencia = sessao.get(Competencia, competencia_id)
-        if competencia is None or competencia.medicao_concluida_em is None:
+        if competencia is None or not pacote_da_medicao_pronto(competencia):
+            return
+        if not reemissao and competencia.email_medicao_ok:
             return
         contrato = obter_contrato(sessao, competencia.contrato_id)
         competencia = next(c for c in contrato.competencias if c.id == competencia_id)
+        # Sem escolha explícita, vale a feita ao concluir a medição (o e-mail pode sair só quando a avaliação terminar)
+        if usar_escolha_salva and prepostos_ids is None and competencia.medicao_envio_prepostos is not None:
+            prepostos_ids = [uuid.UUID(i) for i in competencia.medicao_envio_prepostos]
+        if reemissao and prepostos_ids is not None:
+            competencia.medicao_envio_prepostos = [str(i) for i in prepostos_ids]  # a escolha da reemissão passa a valer
+        prazo = prazo_dias or competencia.prazo_contestacao_dias
         agora = agora_utc()
-        assunto, texto, html = mensagem_medicao(contrato, competencia, agora)
+        if not prazo:
+            competencia.email_medicao_enviado_em, competencia.email_medicao_ok = agora, False
+            competencia.email_medicao_destinatarios, competencia.email_medicao_erro = [], "Prazo de contestação não informado."
+            sessao.commit()
+            return
+        # Nova versão do documento executivo só na reemissão após um envio bem-sucedido; repetir um envio que falhou mantém a versão
+        refaz_versao = reemissao and bool(competencia.email_medicao_ok)
+        versao = max(1, competencia.documento_executivo_versao + (1 if refaz_versao else 0))
+        limite = calcular_limite_contestacao(sessao, agora, prazo)
+        executivo = documentos_execucao.documento_executivo(contrato, competencia, versao, prazo, limite, "Sistema")
+        anexo_executivo = servico_anexos.guardar_pdf_gerado(
+            sessao, executivo, f"documento-executivo-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}-v{versao}.pdf",
+            "contrato-execucao-documento-executivo", None, contrato.id,
+        )
+        sessao.flush()
+        assunto, texto, html = mensagem_medicao(contrato, competencia, prazo, limite, versao)
         try:
             anexos = anexos_medicao(contrato, competencia)
         except OSError as erro:
@@ -524,6 +585,11 @@ def notificar_medicao(competencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID] 
         competencia.email_medicao_ok = resultado.sucesso
         competencia.email_medicao_destinatarios = para
         competencia.email_medicao_erro = None if resultado.sucesso else resultado.mensagem
+        competencia.documento_executivo_anexo_id, competencia.documento_executivo_versao = anexo_executivo.id, versao
+        competencia.prazo_contestacao_dias = prazo
+        if resultado.sucesso:
+            # O prazo só começa a contar quando a contratada de fato recebeu o e-mail
+            competencia.contestacao_inicio_em, competencia.contestacao_limite_em = agora, limite
         sessao.commit()
 
 

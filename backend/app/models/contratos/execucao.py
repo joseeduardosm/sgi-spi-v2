@@ -229,6 +229,16 @@ class Competencia(Base):
     email_medicao_ok: Mapped[bool | None] = mapped_column(Boolean)
     email_medicao_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list, server_default=text("'[]'"))
     email_medicao_erro: Mapped[str | None] = mapped_column(Text)
+    # Comunicação única à contratada: o e-mail sai só depois da medição e da avaliação (quando há) e abre o prazo de contestação, em dias úteis.
+    # `medicao_envio_solicitado` guarda a escolha feita ao concluir a medição (o e-mail pode sair só quando a avaliação terminar)
+    medicao_envio_solicitado: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    medicao_envio_prepostos: Mapped[list[Any] | None] = mapped_column(TipoJson)  # None = todos os prepostos ativos
+    prazo_contestacao_dias: Mapped[int | None] = mapped_column(Integer)  # informado pelo fiscal; dias úteis a contar do e-mail
+    contestacao_inicio_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    contestacao_limite_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # fim do último dia útil do prazo
+    # Documento executivo (valor a faturar) enviado no e-mail; a versão sobe a cada reemissão após contestação aceita
+    documento_executivo_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    documento_executivo_versao: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
@@ -269,6 +279,7 @@ class Competencia(Base):
     )
     # Os anexos têm várias FKs para a mesma tabela `anexos`; `foreign_keys` diz qual coluna usar em cada uma
     retencao_pdf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[retencao_pdf_anexo_id])
+    documento_executivo_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[documento_executivo_anexo_id])
     consolidado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[consolidado_anexo_id])
     ob_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[ob_anexo_id])
     adicional_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[adicional_anexo_id])

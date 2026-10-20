@@ -7,11 +7,13 @@ O envio usa o servidor SMTP simulado de `tests/test_smtp.py` (sem rede).
 """
 
 import smtplib
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
-from tests.apoio_contratos import criar_contrato, gerar_cpf, restringir_contratos
+from app.services.calendario_util import somar_uteis
+from app.services.documentos.pdf import FUSO_SAO_PAULO
+from tests.apoio_contratos import corpo_conclusao, criar_contrato, gerar_cpf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 from tests.test_smtp import SmtpSimulado, SmtpSslSimulado, dados_servidor
@@ -219,7 +221,7 @@ def test_glosas_do_periodo_limitam_a_medicao(cliente, admin, cenario):
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
     _ocorrencia(cliente, contrato, gestora, data_ocorrencia="2026-01-20", possui_glosa=True, glosas=[{"item_id": limpeza, "quantidade": "0.25"}])
-    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas, "enviar_email": True}, headers=gestora)
+    r = cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
     assert r.status_code == 400 and "saldo líquido" in r.json()["detalhe"]
 
 
@@ -245,8 +247,8 @@ def test_competencia_afetada_pode_ser_diferente_da_data_da_ocorrencia(cliente, a
     assert linha["glosas"] == "0.5000"
 
 
-def test_medicao_concluida_envia_memoria_e_diario_pedindo_nf_em_48h(cliente, admin, cenario):
-    """Ao concluir a medição, o e-mail leva a memória e o diário do período em PDF e pede a NF em até 48 h."""
+def test_medicao_concluida_envia_so_a_medicao_com_ciencia_e_prazo_de_contestacao(cliente, admin, cenario):
+    """Sem avaliação, ao concluir a medição sai o e-mail único: memória, documento executivo (valor a faturar) e diário, abrindo o prazo de contestação em dias úteis."""
     contrato, gestora, fiscal = cenario
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
@@ -259,7 +261,7 @@ def test_medicao_concluida_envia_memoria_e_diario_pedindo_nf_em_48h(cliente, adm
     assert cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=gestora).status_code == 200
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas, "enviar_email": True}, headers=gestora)
+    r = cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
     assert r.status_code == 200, r.text
 
     detalhe = cliente.get(base, headers=gestora).json()
@@ -268,43 +270,42 @@ def test_medicao_concluida_envia_memoria_e_diario_pedindo_nf_em_48h(cliente, adm
     assert "medição 01/2026 concluída: emitir nota fiscal" in mensagem["Subject"]
     assert mensagem["Reply-To"] == "gestora@sp.gov.br, fiscal@sp.gov.br"
     texto = mensagem.get_body(("plain",)).get_content()
-    assert "em até 48 horas" in texto and "ACME" in texto
+    assert "dia(s) útil(eis)" in texto and "Valor líquido a faturar" in texto and "ACME" in texto
+    assert "para ciência" in texto and "Estando de acordo com a medição" in texto and "contestação" in texto and "assine" not in texto
     html = mensagem.get_body(("html",)).get_content()
-    assert "o PDF e o arquivo XML" in texto and "o PDF e o arquivo XML" in html
+    assert "PDF e arquivo XML" in texto and "PDF e arquivo XML" in html
     anexos = {a.get_filename(): a.get_content() for a in mensagem.iter_attachments()}
-    assert set(anexos) == {"memoria_medicao_001_2026_2026-01.pdf", "diario_de_bordo_001_2026_2026-01.pdf"}
+    assert set(anexos) == {"memoria_medicao_001_2026_2026-01.pdf"}  # só a medição: sem diário nem documento executivo no e-mail
     assert all(conteudo[:5] == b"%PDF-" for conteudo in anexos.values())
 
-    # Reenvio manual
-    r = cliente.post(f"{base}/reenviar-email-medicao", headers=gestora)
-    assert r.status_code == 200 and len(SmtpSimulado.enviadas) == 2
+    # O envio abriu o prazo de contestação: 3 dias úteis, aberto, com o documento executivo disponível
+    contestacao = detalhe["contestacao"]
+    assert contestacao["prazo_dias"] == 3 and contestacao["situacao"] == "aberto" and contestacao["documento_executivo_versao"] == 1
+    assert contestacao["documento_executivo"]["nome"].startswith("documento-executivo-") and detalhe["pode_reemitir_medicao"] is True
+    baixado = cliente.get(f"{base}/arquivos/{contestacao['documento_executivo']['anexo_id']}", headers=gestora)
+    assert baixado.status_code == 200 and baixado.content[:5] == b"%PDF-"
+    inicio = datetime.fromisoformat(contestacao["inicio_em"]).astimezone(FUSO_SAO_PAULO).date()
+    limite = datetime.fromisoformat(contestacao["limite_em"]).astimezone(FUSO_SAO_PAULO)
+    assert limite.date() == somar_uteis(inicio, 3, set())  # o teste não tem feriados cadastrados
+    assert limite.weekday() < 5  # o prazo termina sempre num dia útil
 
-
-def test_sem_marcar_enviar_email_nenhuma_etapa_dispara_smtp(cliente, admin, cenario):
-    """O padrão é não enviar: ocorrência e conclusão da medição só mandam e-mail com `enviar_email = true`."""
-    contrato, gestora, fiscal = cenario
-    _preparar_execucao(cliente, contrato, gestora)
-    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
-    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
-    SmtpSimulado.enviadas.clear()
-    assert _ocorrencia(cliente, contrato, gestora, enviar_email=False).status_code == 201
-    competencia = _competencia(cliente, contrato, gestora)
-    base = _url(contrato, f"/competencias/{competencia['id']}")
-    itens = [{"id": i["id"], "quantidade_medida": i["saldo_liquido"]} for i in competencia["itens"]]
-    cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=gestora)
-    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
-    cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
-    assert SmtpSimulado.enviadas == []
-    # O reenvio manual continua disponível
-    assert cliente.post(f"{base}/reenviar-email-medicao", headers=gestora).status_code == 200 and len(SmtpSimulado.enviadas) == 1
+    # Não há mais reenvio livre; a reemissão (contestação aceita) gera nova versão e reinicia o prazo
+    assert cliente.post(f"{base}/reenviar-email-medicao", headers=gestora).status_code in (404, 405)
+    r = cliente.post(f"{base}/medicao/reemitir", json={"prazo_contestacao_dias": 5}, headers=gestora)
+    assert r.status_code == 200, r.text
+    assert len(SmtpSimulado.enviadas) == 2 and "reemissão, versão 2" in SmtpSimulado.enviadas[1][0]["Subject"]
+    nova = r.json()["contestacao"]
+    assert nova["prazo_dias"] == 5 and nova["documento_executivo_versao"] == 2 and nova["situacao"] == "aberto"
 
 
 def test_escolha_dos_prepostos_que_recebem_o_email_da_medicao(cliente, admin, cenario):
-    """O seletor lista só prepostos ativos com e-mail; `prepostos_ids` limita quem recebe (vazio = só a equipe)."""
+    """O seletor lista só prepostos ativos com e-mail; o fiscal escolhe um ou mais, e a reemissão pode trocar a escolha."""
     contrato, gestora, fiscal = cenario
+    r = cliente.post(f"/api/contratos/empresas/{contrato['empresa']['id']}/prepostos", json={"cpf": gerar_cpf("777888999"), "nome": "Bruno Preposto", "email": "bruno@acme.com"}, headers=admin)
+    assert r.status_code == 201, r.text
     lista = cliente.get(_url(contrato, "/prepostos"), headers=gestora).json()
-    assert [p["nome"] for p in lista] == ["Paulo Preposto"]  # Ana Antiga está inativa
+    assert sorted(p["nome"] for p in lista) == ["Bruno Preposto", "Paulo Preposto"]  # Ana Antiga está inativa
+    ids = {p["nome"]: p["id"] for p in lista}
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
     notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
@@ -315,14 +316,15 @@ def test_escolha_dos_prepostos_que_recebem_o_email_da_medicao(cliente, admin, ce
     cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
-    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas, "enviar_email": True, "prepostos_ids": []}, headers=gestora)
-    assert r.status_code == 200, r.text
+    corpo = {**corpo_conclusao(f"{base}", notas), "prepostos_ids": [ids["Bruno Preposto"]]}
+    assert cliente.post(f"{base}/medicao/concluir", json=corpo, headers=gestora).status_code == 200
     destinatarios = cliente.get(base, headers=gestora).json()["email_medicao"]["destinatarios"]
-    assert "paulo@acme.com" not in destinatarios and "gestora@sp.gov.br" in destinatarios
-    # Reenvio manual (sem escolha): todos os prepostos ativos
-    SmtpSimulado.enviadas.clear()
-    assert cliente.post(f"{base}/reenviar-email-medicao", headers=gestora).status_code == 200
-    assert "paulo@acme.com" in cliente.get(base, headers=gestora).json()["email_medicao"]["destinatarios"]
+    assert "bruno@acme.com" in destinatarios and "paulo@acme.com" not in destinatarios and "gestora@sp.gov.br" in destinatarios
+    # Reemissão sem escolha nova: vale a feita ao concluir; com escolha nova (dois prepostos), ela passa a valer
+    assert cliente.post(f"{base}/medicao/reemitir", json={}, headers=gestora).status_code == 200
+    assert "paulo@acme.com" not in cliente.get(base, headers=gestora).json()["email_medicao"]["destinatarios"]
+    r = cliente.post(f"{base}/medicao/reemitir", json={"prepostos_ids": list(ids.values())}, headers=gestora)
+    assert r.status_code == 200 and {"bruno@acme.com", "paulo@acme.com"} <= set(r.json()["email_medicao"]["destinatarios"])
 
 
 def test_documento_marcado_para_enviar_vai_no_email_da_medicao_com_a_observacao(cliente, admin, cenario):
@@ -348,7 +350,7 @@ def test_documento_marcado_para_enviar_vai_no_email_da_medicao_com_a_observacao(
     itens = [{"id": i["id"], "quantidade_medida": i["saldo_liquido"]} for i in competencia["itens"]]
     cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=gestora)
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
-    r = cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas, "enviar_email": True}, headers=gestora)
+    r = cliente.post(f"{base}/medicao/concluir", json=corpo_conclusao(f"{base}", notas), headers=gestora)
     assert r.status_code == 200, r.text
     corpo = SmtpSimulado.enviadas[0][0].get_body(("html",)).get_content()
     assert "Solicitamos também o envio dos documentos abaixo" in corpo and "FGTS" in corpo and "Folha de pagamento" not in corpo
@@ -400,7 +402,8 @@ def test_anexos_e_impacto_na_avaliacao_e_email_do_relatorio(cliente, admin, cena
     medicao = {"itens": [{"id": i["id"], "quantidade_medida": i["saldo_liquido"]} for i in competencia["itens"]], "notas_empenho_ids": notas}
     assert cliente.put(f"{base}/medicao", json=medicao, headers=gestora).status_code == 200
     cliente.post(f"{base}/medicao/ciencia", headers=gestora)
-    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas, "enviar_email": True}, headers=gestora).status_code == 200
+    # Com avaliação de qualidade, os prepostos e o prazo ficam para o fim da avaliação: a medição conclui sem eles
+    assert cliente.post(f"{base}/medicao/concluir", json={"notas_empenho_ids": notas}, headers=gestora).status_code == 200
     detalhe = cliente.get(base, headers=gestora).json()
     itens = {i["nome"]: i["id"] for g in detalhe["avaliacao"]["definicao"]["grupos"] for i in g["itens"]}
     assert [o["itens"] for o in detalhe["avaliacao"]["ocorrencias"]] == [[itens["Limpeza"]]]
@@ -410,19 +413,71 @@ def test_anexos_e_impacto_na_avaliacao_e_email_do_relatorio(cliente, admin, cena
     toda_maxima["respostas"][1]["justificativa"] = "Ocorrência pontual, resolvida no mesmo dia."
     assert cliente.put(f"{base}/avaliacao/inicial", json=toda_maxima, headers=fiscal).status_code == 200
 
-    # PDF: seção das ocorrências e e-mail aos prepostos com cópia para a equipe
+    # Ao finalizar a avaliação sai o e-mail único da medição. Antes disso nada foi enviado e o envio consta como pendente
     cliente.post(f"{base}/avaliacao/ciencia", headers=gestora)
+    detalhe = cliente.get(base, headers=gestora).json()
+    assert detalhe["email_medicao_pendente"] is True and detalhe["email_medicao"]["enviado_em"] is None and detalhe["contestacao"] is None
     SmtpSimulado.enviadas.clear()
-    r = cliente.post(f"{base}/avaliacao/pdf", params={"enviar_email": "true"}, headers=gestora)
-    assert r.status_code == 200
-    email = cliente.get(base, headers=gestora).json()["avaliacao"]["email"]
-    assert email["ok"] is True and "paulo@acme.com" in email["destinatarios"] and "gestora@sp.gov.br" in email["destinatarios"]
-    mensagem, _, _, _ = SmtpSimulado.enviadas[0]
-    assert "avaliação dos serviços 01/2026: assinar e devolver" in mensagem["Subject"] and mensagem["To"] == "paulo@acme.com"
-    pdf = next(a.get_content() for a in mensagem.iter_attachments())
-    texto_pdf = " ".join(p.extract_text() for p in PdfReader(io.BytesIO(pdf)).pages)
+    # A via assinada só vale depois do envio da Medição e da Avaliação
+    assert cliente.post(f"{base}/avaliacao/assinada", files={"arquivo": ("assinada.pdf", PDF)}, headers=gestora).status_code == 400
+    # Sem os prepostos e o prazo, o envio não sai (e valores fora da faixa são recusados)
+    assert cliente.post(f"{base}/avaliacao/enviar", json={}, headers=gestora).status_code == 400
+    assert cliente.post(f"{base}/avaliacao/enviar", json={"prepostos_ids": [], "prazo_contestacao_dias": 3}, headers=gestora).status_code == 422
+    assert SmtpSimulado.enviadas == []
+    preposto = cliente.get(_url(contrato, "/prepostos"), headers=gestora).json()[0]["id"]
+    r = cliente.post(f"{base}/avaliacao/enviar", json={"prepostos_ids": [preposto], "prazo_contestacao_dias": 3}, headers=gestora)
+    assert r.status_code == 200, r.text
+    detalhe = cliente.get(base, headers=gestora).json()
+    assert detalhe["avaliacao"]["pdf_gerado"] is not None
+    assert detalhe["email_medicao"]["ok"] is True and "paulo@acme.com" in detalhe["email_medicao"]["destinatarios"] and detalhe["email_medicao_pendente"] is False
+    assert detalhe["contestacao"]["situacao"] == "aberto" and detalhe["contestacao"]["prazo_dias"] == 3
+    mensagem = SmtpSimulado.enviadas[0][0]
+    anexos = {a.get_filename(): a.get_content() for a in mensagem.iter_attachments()}
+    assert set(anexos) == {"avaliacao_001_2026_2026-01.pdf", "memoria_medicao_001_2026_2026-01.pdf"}  # um e-mail só, com os dois anexos
+    assert "assine o relatório de avaliação" in mensagem.get_body(("plain",)).get_content() and "assinar a avaliação" in mensagem["Subject"]
+    texto_pdf = " ".join(p.extract_text() for p in PdfReader(io.BytesIO(anexos["avaliacao_001_2026_2026-01.pdf"])).pages)
     assert "Ocorrências do diário de bordo consideradas" in texto_pdf
-    # Reenvio
+    # A contratada devolve o relatório assinado: conclui a avaliação, sem novo e-mail
     SmtpSimulado.enviadas.clear()
-    assert cliente.post(f"{base}/reenviar-email-avaliacao", headers=gestora).status_code == 200
-    assert len(SmtpSimulado.enviadas) == 1
+    r = cliente.post(f"{base}/avaliacao/assinada", files={"arquivo": ("assinada.pdf", PDF)}, headers=gestora)
+    assert r.status_code == 200, r.text
+    assert SmtpSimulado.enviadas == []
+    detalhe = cliente.get(base, headers=gestora).json()
+
+    # Juntar a nota fiscal encerra o prazo de contestação
+    from tests.apoio_contratos import juntar_nf
+
+    assert juntar_nf(cliente, base, gestora, detalhe["valor_autorizado"]).status_code in (200, 201)
+    encerrada = cliente.get(base, headers=gestora).json()
+    assert encerrada["contestacao"]["situacao"] == "encerrado" and encerrada["contestacao"]["encerrada_em"] is not None
+    assert encerrada["pode_reemitir_medicao"] is False
+    assert cliente.post(f"{base}/medicao/reemitir", json={}, headers=gestora).status_code == 400
+
+
+def test_conclusao_da_medicao_exige_ao_menos_um_preposto_e_o_prazo(cliente, admin, cenario):
+    """O e-mail à contratada é obrigatório: ao menos um preposto ativo com e-mail da empresa e o prazo (1 a 60 dias úteis)."""
+    contrato, gestora, fiscal = cenario
+    _preparar_execucao(cliente, contrato, gestora)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    notas = [n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()]
+    competencia = _competencia(cliente, contrato, gestora)
+    base = _url(contrato, f"/competencias/{competencia['id']}")
+    itens = [{"id": i["id"], "quantidade_medida": i["saldo_liquido"]} for i in competencia["itens"]]
+    cliente.put(f"{base}/medicao", json={"itens": itens, "notas_empenho_ids": notas}, headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=gestora)
+    cliente.post(f"{base}/medicao/ciencia", headers=fiscal)
+    ok = corpo_conclusao(f"{base}", notas)
+    sem_prepostos = {k: v for k, v in ok.items() if k != "prepostos_ids"}
+    sem_prazo = {k: v for k, v in ok.items() if k != "prazo_contestacao_dias"}
+    # Sem avaliação no contrato, faltar um dos dois barra a conclusão (400); valores fora da faixa nem chegam à regra (422)
+    for corpo in (sem_prepostos, sem_prazo):
+        r = cliente.post(f"{base}/medicao/concluir", json=corpo, headers=gestora)
+        assert r.status_code == 400, r.text
+    for corpo in ({**ok, "prepostos_ids": []}, {**ok, "prazo_contestacao_dias": 0}, {**ok, "prazo_contestacao_dias": 61}):
+        assert cliente.post(f"{base}/medicao/concluir", json=corpo, headers=gestora).status_code == 422
+    # Preposto inativo (Ana Antiga) não vale
+    todos = cliente.get(f"/api/contratos/empresas/{contrato['empresa']['id']}", headers=gestora).json()["prepostos"]
+    inativo = next(p["id"] for p in todos if not p["ativo"])
+    r = cliente.post(f"{base}/medicao/concluir", json={**ok, "prepostos_ids": [inativo]}, headers=gestora)
+    assert r.status_code == 400 and "ao menos um preposto ativo" in r.json()["detalhe"]
+    assert cliente.post(f"{base}/medicao/concluir", json=ok, headers=gestora).status_code == 200

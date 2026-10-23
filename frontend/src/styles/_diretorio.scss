@@ -163,3 +163,6 @@ body:has(app-ramais) .portal-conteudo.portal-conteudo { width: min(100%, 3200px)
   .selo-ferias { background: color-mix(in srgb, #ff6b78 20%, var(--cor-ffffff)); color: #ffb3b9; }
   .barra-diretorio .ficha.ativa { color: #fff; }
 }
+
+// Bio liberada no cartão de contato: respeita as quebras de linha digitadas
+.bio-detalhe { margin: 0 0 12px; white-space: pre-line; color: var(--spi-texto); }

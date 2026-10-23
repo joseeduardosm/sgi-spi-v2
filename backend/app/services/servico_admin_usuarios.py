@@ -6,12 +6,15 @@ Regras de proteção: a conta administrativa principal (definida no .env) não p
 desativada, excluída nem perder o SuperRoot, e ninguém pode desativar ou excluir a própria conta.
 """
 
-from sqlalchemy import Select, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, String, and_, case, func, literal, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.configuracao import obter_configuracao
 from app.core.seguranca import gerar_hash_senha
 from app.models.diretorio_ldap import DiretorioLdap
+from app.models.rh import DadosFuncionais
+from app.models.rh_cargos import Cargo, Ocupacao, TipoCargo
+from app.models.rh_pre_cadastro import PreCadastro
 from app.models.setor import MembroSetor, Setor
 from app.models.usuario import OrigemUsuario, Usuario
 from app.schemas.usuarios import AlteracaoUsuario, CriacaoUsuario, DadosPerfil, DetalheUsuario, OpcaoUsuario, PerfilLeitura
@@ -44,20 +47,75 @@ def eh_admin_principal(usuario: Usuario) -> bool:
     return usuario.login.lower() == obter_configuracao().login_admin.lower()
 
 
-def _aplicar_busca(consulta: Select, busca: str | None) -> Select:
-    """Acrescenta à consulta o filtro de busca livre (qualquer campo de `CAMPOS_BUSCA` contendo o texto)."""
-    if busca and busca.strip():
-        termo = f"%{busca.strip().lower()}%"
-        # `or_` combina as condições: basta um dos campos conter o termo
-        consulta = consulta.where(or_(*[func.lower(getattr(Usuario, c)).like(termo) for c in CAMPOS_BUSCA]))
+def _aplicar_busca(consulta: Select, busca: str | None, *, dados_rh: bool = False, dados_ficha: bool = False, completa: bool = True) -> Select:
+    """Acrescenta à consulta o filtro de busca livre.
+
+    O texto se divide em palavras e **todas** precisam aparecer (cada uma em qualquer campo): "assessor silva" acha quem é Assessor e se chama Silva. Procura nos
+    campos do perfil (`CAMPOS_BUSCA`), no cargo ocupado (denominação, tipo, nível), no setor e na hierarquia (setor, setor pai e avô: a **chefia imediata e mediata**,
+    pelo líder de cada um, além do superior do cadastro) e, só com `dados_rh` (quem tem acesso ao módulo RH), nos dados funcionais (RS/PV e RG/CIN).
+
+    `completa=False` (seletores de pessoa, como o das notificações) procura só na própria pessoa: perfil, cargo e setor. Sem isso, digitar o nome de um chefe traria os liderados
+    dele e o próprio chefe sumiria do limite de resultados.
+    """
+    if not (busca and busca.strip()):
+        return consulta
+    for palavra in busca.strip().lower().split():
+        termo = f"%{palavra}%"
+        condicoes = [func.lower(func.coalesce(getattr(Usuario, c), "")).like(termo) for c in CAMPOS_BUSCA]
+        # Cargo vigente: denominação, tipo e classificação ("FCESP 2.16"), e o setor do cargo
+        setor, pai, avo = aliased(Setor), aliased(Setor), aliased(Setor)
+        cargo_setor = (
+            select(Ocupacao.usuario_id).join(Cargo, Cargo.id == Ocupacao.cargo_id).join(TipoCargo, TipoCargo.id == Cargo.tipo_id).join(setor, setor.id == Cargo.setor_id)
+            .where(Ocupacao.fim.is_(None))
+        )
+        classificacao = func.lower(TipoCargo.codigo + " " + func.coalesce(func.cast(Cargo.grupo, String), "") + "." + func.coalesce(func.cast(Cargo.nivel, String), ""))
+        condicoes.append(Usuario.id.in_(cargo_setor.where(or_(
+            func.lower(Cargo.denominacao).like(termo), classificacao.like(termo), func.lower(setor.nome).like(termo), func.lower(func.coalesce(setor.sigla, "")).like(termo)))))
+        if not completa:
+            consulta = consulta.where(or_(*condicoes))
+            continue
+        # Chefia: líder do setor do cargo (nível 0), do setor pai (1) e do avô (2), menos a própria pessoa
+        for profundidade in range(3):
+            setores = [aliased(Setor) for _ in range(profundidade + 1)]
+            chefe = aliased(Usuario)
+            consulta_chefia = select(Ocupacao.usuario_id).join(Cargo, Cargo.id == Ocupacao.cargo_id).join(setores[0], setores[0].id == Cargo.setor_id)
+            for acima, abaixo in zip(setores, setores[1:]):
+                consulta_chefia = consulta_chefia.join(abaixo, abaixo.id == acima.setor_pai_id)
+            consulta_chefia = consulta_chefia.join(chefe, chefe.id == setores[-1].lider_id).where(
+                Ocupacao.fim.is_(None), chefe.id != Ocupacao.usuario_id,
+                or_(func.lower(func.coalesce(chefe.nome_completo, "")).like(termo), func.lower(chefe.login).like(termo)))
+            condicoes.append(Usuario.id.in_(consulta_chefia))
+        superior = aliased(Usuario)
+        condicoes.append(Usuario.gestor_id.in_(select(superior.id).where(or_(func.lower(func.coalesce(superior.nome_completo, "")).like(termo), func.lower(superior.login).like(termo)))))
+        # Bio: só entra na busca quando a pessoa liberou
+        condicoes.append(and_(Usuario.bio_visivel.is_(True), func.lower(func.coalesce(Usuario.bio_texto, "")).like(termo)))
+        if dados_rh:
+            condicoes.append(Usuario.id.in_(select(DadosFuncionais.usuario_id).where(or_(
+                func.lower(func.coalesce(DadosFuncionais.rs_pv, "")).like(termo), func.lower(func.coalesce(DadosFuncionais.rg_cin, "")).like(termo)))))
+        if dados_ficha:
+            # Ficha de pré-cadastro (dados pessoais sensíveis): só para o RH com controle total
+            colunas = (PreCadastro.nome_social, PreCadastro.nome_mae, PreCadastro.nome_pai, PreCadastro.cpf, PreCadastro.rg_numero, PreCadastro.cin, PreCadastro.pis_pasep,
+                       PreCadastro.email_pessoal, PreCadastro.celular, PreCadastro.cidade, PreCadastro.bairro, PreCadastro.vinculo_tipo, PreCadastro.orgao_origem,
+                       PreCadastro.cargo_origem, PreCadastro.rs_pv)
+            condicoes.append(Usuario.id.in_(select(PreCadastro.usuario_id).where(PreCadastro.usuario_id.is_not(None), or_(*[func.lower(func.coalesce(c, "")).like(termo) for c in colunas]))))
+        consulta = consulta.where(or_(*condicoes))
     return consulta
 
 
+def _proprio_primeiro(busca: str | None):
+    """Ordem da lista com busca: quem tem **o nome ou o login** pesquisado (todas as palavras) vem antes de quem só casou por cargo, setor ou chefia."""
+    palavras = (busca or "").strip().lower().split()
+    if not palavras:
+        return literal(0)
+    proprio = and_(*[or_(func.lower(func.coalesce(Usuario.nome_completo, "")).like(f"%{p}%"), func.lower(Usuario.login).like(f"%{p}%")) for p in palavras])
+    return case((proprio, 0), else_=1)
+
+
 def listar_usuarios(
-    sessao: Session, busca: str | None, situacao: str, origem: str | None, pagina: int, tamanho_pagina: int
+    sessao: Session, busca: str | None, situacao: str, origem: str | None, pagina: int, tamanho_pagina: int, *, dados_rh: bool = False, dados_ficha: bool = False
 ) -> tuple[list[DetalheUsuario], int]:
-    """Lista paginada de usuários e o total (para a paginação da tela)."""
-    consulta = _aplicar_busca(select(Usuario), busca)
+    """Lista paginada de usuários e o total (para a paginação da tela). `dados_rh` inclui os dados funcionais na busca (só para o RH)."""
+    consulta = _aplicar_busca(select(Usuario), busca, dados_rh=dados_rh, dados_ficha=dados_ficha)
     if situacao == "ativos":
         consulta = consulta.where(Usuario.ativo.is_(True))
     elif situacao == "inativos":
@@ -69,7 +127,7 @@ def listar_usuarios(
     usuarios = list(
         sessao.scalars(
             # Ordena pelo nome (ou pelo login, quando o nome está vazio) e recorta a página pedida
-            consulta.order_by(func.lower(func.coalesce(func.nullif(Usuario.nome_completo, ""), Usuario.login)))
+            consulta.order_by(_proprio_primeiro(busca), func.lower(func.coalesce(func.nullif(Usuario.nome_completo, ""), Usuario.login)))
             .offset((pagina - 1) * tamanho_pagina)
             .limit(tamanho_pagina)
         )
@@ -79,7 +137,7 @@ def listar_usuarios(
 
 def opcoes(sessao: Session, busca: str | None, limite: int = 20, incluir_inativos: bool = False) -> list[OpcaoUsuario]:
     """Busca curta para campos de seleção (sem paginação, com limite)."""
-    consulta = _aplicar_busca(select(Usuario), busca)
+    consulta = _aplicar_busca(select(Usuario), busca, completa=False)
     if not incluir_inativos:
         consulta = consulta.where(Usuario.ativo.is_(True))
     usuarios = sessao.scalars(consulta.order_by(func.lower(Usuario.nome_completo), Usuario.login).limit(limite))

@@ -17,6 +17,9 @@ interface ConfiguracaoGlpi {
   url_base: string;
   possui_app_token: boolean;
   possui_user_token: boolean;
+  usuario_web: string;
+  possui_senha_web: boolean;
+  formulario_nomeacao_id: number;
   configurada: boolean;
   prefixo_titulo: string;
   grupo_atribuido_id: number | null;
@@ -68,6 +71,22 @@ interface ResultadoTeste {
             <label for="glpi-user">user_token da conta de serviço {{ c.possui_user_token ? '(gravado)' : '*' }}</label>
             <input id="glpi-user" name="user" type="password" class="form-control" autocomplete="new-password" maxlength="200" [(ngModel)]="userToken"
                    [placeholder]="c.possui_user_token ? 'Em branco mantém o atual' : ''" />
+          </div>
+          <p class="secao-formulario ocupa-duas">Formulário de nomeações do RH (envio pela tela web do GLPI)</p>
+          <div>
+            <label for="glpi-usuario-web">Usuário web da conta de serviço</label>
+            <input id="glpi-usuario-web" name="usuarioweb" class="form-control" autocomplete="off" maxlength="150" [(ngModel)]="usuarioWeb" />
+            <small class="dica-formulario">O envio de formulários só funciona pela tela web (o token da API não serve).</small>
+          </div>
+          <div>
+            <label for="glpi-senha-web">Senha web {{ c.possui_senha_web ? '(gravada)' : '' }}</label>
+            <input id="glpi-senha-web" name="senhaweb" type="password" class="form-control" autocomplete="new-password" maxlength="200" [(ngModel)]="senhaWeb"
+                   [placeholder]="c.possui_senha_web ? 'Em branco mantém a atual' : ''" />
+            <small class="dica-formulario">Fica cifrada e nunca volta pela tela.</small>
+          </div>
+          <div>
+            <label for="glpi-formulario">Id do formulário "CGP - Nomeações"</label>
+            <input id="glpi-formulario" name="formulario" type="number" min="1" class="form-control" [(ngModel)]="formularioNomeacao" />
           </div>
           <p class="secao-formulario ocupa-duas">Como o chamado é montado (formulário "Informática" do GLPI)</p>
           <div><label for="glpi-prefixo">Prefixo do título</label>
@@ -123,6 +142,9 @@ export class IntegracaoGlpiComponent implements OnInit {
   protected slaAtendimento = 0;
   protected slaSolucao = 0;
   protected modelo = 0;
+  protected usuarioWeb = '';
+  protected senhaWeb = '';
+  protected formularioNomeacao = 8;
 
   ngOnInit(): void {
     this.http.get<ConfiguracaoGlpi>(this.base).subscribe({ next: (c) => this.preencher(c), error: (e) => this.avisar(erroExibivel(e).mensagem, true) });
@@ -137,7 +159,9 @@ export class IntegracaoGlpiComponent implements OnInit {
     this.slaAtendimento = c.sla_atendimento_id ?? 0;
     this.slaSolucao = c.sla_solucao_id ?? 0;
     this.modelo = c.template_id ?? 0;
-    this.appToken = this.userToken = '';
+    this.usuarioWeb = c.usuario_web;
+    this.formularioNomeacao = c.formulario_nomeacao_id;
+    this.appToken = this.userToken = this.senhaWeb = '';
   }
 
   private avisar(texto: string, erro = false): void {
@@ -149,7 +173,8 @@ export class IntegracaoGlpiComponent implements OnInit {
     this.ocupado.set(true);
     this.teste.set(null);
     const corpo = { ativo: this.ativo, url_base: this.url.trim(), app_token: this.appToken || null, user_token: this.userToken || null,
-      prefixo_titulo: this.prefixo.trim() || null, grupo_atribuido_id: this.grupo ?? 0, sla_atendimento_id: this.slaAtendimento ?? 0, sla_solucao_id: this.slaSolucao ?? 0, template_id: this.modelo ?? 0 };
+      prefixo_titulo: this.prefixo.trim() || null, grupo_atribuido_id: this.grupo ?? 0, sla_atendimento_id: this.slaAtendimento ?? 0, sla_solucao_id: this.slaSolucao ?? 0, template_id: this.modelo ?? 0,
+      usuario_web: this.usuarioWeb.trim(), senha_web: this.senhaWeb || null, formulario_nomeacao_id: this.formularioNomeacao || 8 };
     this.http.put<ConfiguracaoGlpi>(this.base, corpo).subscribe({
       next: (c) => {
         this.ocupado.set(false);

@@ -6,6 +6,24 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-23
+
+Migrações novas (aplicar com `alembic upgrade head`; cabeça `a4b0f6c2e8d1`): `d5a1c7e3b9f2` (recurso ACL `rh`), `e6b2d8f4a1c3` (cargos, ocupações e histórico), `a8d4f0b6c2e5` (pré-cadastro), `b9e5a1c7d3f6` (admissão), `c0f6b2d8e4a7` (checklist por classificação), `d1a7c3e9b5f8` (login web e formulário do GLPI), `e2f8d4a0c6b9`, `f3a9e5b1d7c0`, `f7c3e9a5b2d4` e `a4b0f6c2e8d1` (ajustes da admissão, foto, setor de apoio e erro de e-mail).
+
+### Adicionado
+- **RH reestruturado em quatro frentes**, com manual publicado no BookStack (capítulo "Módulo RH", 9 páginas e 60 prints).
+- **Estrutura**: recurso de ACL `rh` (Leitura consulta, Modificação gere setores e cargos, Controle total é o RH); setores passam a ser geridos no RH (sigla e tipo de unidade); **cargos como vagas** (CCESP/FCESP/OUTRO, grupo 1/2, nível) com ocupações e histórico; **organograma** em árvore com zoom, foto e card da pessoa (vagas visíveis só ao RH e à liderança em cadeia); **histórico funcional** de cada pessoa (livro-razão) e **busca de usuários** por palavras (chefia, cargo, setor, bio liberada, dados do RH).
+- **Pré-cadastro**: ficha completa (identificação, documentos, contato, endereço, vínculo, formações, experiências), CPF único, login proposto conferido no SGI, nas outras fichas e no AD, vínculo automático com a conta quando ela aparece, e **ficha por planilha** (XLSX de uma pessoa, protegido, com listas e validações; prévia e importação tudo-ou-nada).
+- **Admissão em 7 etapas** com trilha: formulário no GLPI (envio pela tela web, com foto), documentos por checklist de classificação, resolução com botão de copiar para o SEI, número no Protocolo, publicação (e-mail de nomeação automático), posse e entrada no SGI. **Modelos editáveis** e checklists por tipo e nível.
+- **Da ficha ao usuário**: boas-vindas no primeiro acesso, bio opcional com opção de exibir, "Meu cadastro" (legados preenchem e o RH valida) e foto levada ao GLPI e ao Diretório.
+- Endpoints novos em `docs/endpoints/rh-cargos.md` e `rh-admissao.md`; scripts `scripts/migrar-cargos-legados.py` e `scripts/carga-historico-rh.py` (simulação por padrão, `--aplicar`) e scripts de manutenção em `backend/scripts_manutencao/`.
+
+### Alterado
+- Cargo e departamento do usuário viram espelho do cargo ocupado (mudança passa a ser do RH). Escrita em `/setores` exige ACL `rh`.
+
+### Corrigido
+- Organograma ficava fechado a quem não tinha ACL do RH; busca de usuários não listava pessoas ao digitar o nome.
+
 ## 2026-10-20
 
 Migrações novas (aplicar com `alembic upgrade head`; cabeça `c4f9a2d7e1b8`): `a2d7b9e1c5f3` (baixa herda a lista aprovada), `f1c6a8d2e4b7` (recurso ACL da Reserva de Espaços), `b3e8d1f6a9c4` (dados do SAM no bem) e `c4f9a2d7e1b8` (prazo de contestação e envio da medição).

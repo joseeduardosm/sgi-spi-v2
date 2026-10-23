@@ -1,0 +1,48 @@
+<p>Nada do que a admissão usa está fixo no sistema: os <strong>textos</strong> (resolução, e-mail, termo de posse e boas-vindas), os <strong>checklists de documentos</strong> e os <strong>parâmetros</strong> do módulo são editados pelo RH, em <strong>RH › Modelos</strong> e <strong>RH › Parâmetros</strong>. Exigem <strong>controle total</strong> no RH.</p>
+<h2>Os textos</h2>
+[[m01-modelos-textos]]
+<table>
+<thead><tr><th>Modelo</th><th>Onde é usado</th></tr></thead>
+<tbody>
+<tr><td><strong>Resolução de nomeação</strong></td><td>Etapa 3 da admissão (texto da resolução e o PDF)</td></tr>
+<tr><td><strong>E-mail: sua nomeação foi publicada</strong></td><td>E-mail automático da etapa 5, com o assunto editável</td></tr>
+<tr><td><strong>Termo de posse</strong></td><td>Etapa 6 da admissão</td></tr>
+<tr><td><strong>Boas-vindas ao SGI SPI</strong></td><td>Aviso do primeiro acesso e o e-mail de boas-vindas</td></tr>
+</tbody>
+</table>
+<p>Cada modelo nasce com um texto padrão. <strong>Editar</strong> abre o editor, com negrito, listas, tabelas e cores:</p>
+[[m02-editor-modelo]]
+<ul>
+<li><strong>Salvar</strong> vale para as próximas admissões. Uma admissão que já copiou o texto da resolução ou do termo continua com o dela, editável só nela.</li>
+<li><strong>Restaurar o texto padrão</strong> volta ao texto original do sistema.</li>
+<li>O HTML do editor é limpo ao salvar (scripts e estilos estranhos são removidos).</li>
+</ul>
+<h3>Placeholders</h3>
+<p>Os textos usam <strong>placeholders</strong>, palavras começadas por <strong>#</strong> que são trocadas pelos dados da pessoa na hora de gerar o PDF ou o e-mail. A lista é <strong>fechada</strong>: qualquer outro <strong>#</strong> é recusado ao salvar, com a indicação do trecho.</p>
+[[m02b-placeholders]]
+<ul>
+<li>Se o dado não existir ainda (por exemplo, #numeroresolucao antes da reserva), o texto mostra um traço longo (—) e nunca "#nome".</li>
+<li>Os valores são sempre escapados: nada digitado numa ficha vira código no PDF ou no e-mail.</li>
+</ul>
+<h2>Checklists de documentos</h2>
+<p>Cada checklist é uma lista de documentos que vale para uma ou várias <strong>classificações de cargo</strong> (grupo e nível, como 1.15 ou 2.10).</p>
+[[m03-checklists]]
+<p><strong>Novo checklist</strong> (ou <strong>Editar</strong>):</p>
+[[m04-checklist-classificacoes]]
+<ul>
+<li>Em <strong>Vale para as classificações</strong>, clique nos <strong>níveis</strong> de cada grupo. O Grupo 1 é direção e chefia; o Grupo 2, assessoria. <strong>Todos</strong> e <strong>Nenhum</strong> marcam ou desmarcam o grupo inteiro. É possível marcar várias classificações (1.15, 1.16, 1.17...) no mesmo checklist.</li>
+<li><strong>Também vale para cargos sem classificação (Outros)</strong> cobre os cargos do tipo Outros.</li>
+<li>É preciso marcar ao menos uma classificação ou "Outros" para salvar.</li>
+<li>Cada <strong>documento</strong> pode ser obrigatório ou opcional. Só os obrigatórios travam a conclusão da etapa de documentos.</li>
+<li>Ao iniciar uma admissão, os itens de todos os checklists <strong>ativos</strong> que valem para a classificação do cargo são <strong>copiados</strong> para ela, sem repetir descrições. Alterar ou excluir o checklist depois <strong>não muda</strong> as admissões em andamento.</li>
+</ul>
+<h2>Parâmetros: setor de apoio administrativo</h2>
+<p>Em <strong>RH › Parâmetros</strong> ganhou um campo novo: o <strong>Serviço de Apoio Administrativo (SAA)</strong>, o setor que dá andamento nos números reservados do Protocolo. Antes ele era procurado pelo nome do setor no código; agora é <strong>escolhido na lista</strong>. Em branco, vale o setor de nome igual ao configurado no sistema.</p>
+[[p13-parametros-setor-apoio]]
+<p>As demais regras da tela (férias, licença-prêmio, avisos) estão na página "Para a CGP".</p>
+<h2>Para quem administra a integração com o GLPI</h2>
+<ul>
+<li>O envio do formulário de nomeação usa a <strong>tela web</strong> do GLPI (a API não envia formulários). Por isso, em <strong>Administração › Integração GLPI</strong>, há, além dos tokens, o <strong>usuário e a senha web</strong> da conta de serviço e o <strong>id do formulário "CGP - Nomeações"</strong> (padrão 8). A senha fica cifrada e nunca volta pela tela.</li>
+<li>A conta de serviço precisa estar na lista de quem pode usar o formulário, em "Controles de acesso" do formulário no GLPI.</li>
+<li>O formulário é lido pelo <strong>título das perguntas</strong>: se alguém renomear ou remover uma pergunta no GLPI, o SGI avisa qual pergunta mudou antes de enviar.</li>
+</ul>

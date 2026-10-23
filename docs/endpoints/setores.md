@@ -26,8 +26,9 @@ Detalhes:
 ## Regras gerais
 
 - **Autorização:**
-  - **Leitura:** ACL `setores` ≥ `LEITURA`.
-  - **Escrita:** papel **SuperRoot**, ou **CONTROLE_TOTAL** na ACL `setores` (hoje, os membros do setor "Coordenadoria de Gestão de Pessoas", pela migração `b2e4f6a8c0d1`). Recurso sem regras não libera gravação.
+  - **Leitura:** ACL `setores` ≥ `LEITURA` ou qualquer nível na ACL `rh`.
+  - **Escrita:** papel **SuperRoot**, ou **MODIFICAÇÃO** na ACL `rh` ("Gerir setores e cargos"; ver [rh-cargos.md](rh-cargos.md)). A migração `d5a1c7e3b9f2` deu esse nível a quem tinha Controle total em `setores`. Recurso sem regras não libera gravação.
+  - **Sigla e tipo da unidade** (`sigla`, `tipo_unidade`: secretaria, subsecretaria, diretoria, coordenadoria, serviço, assessoria, colegiado, vinculada, outro): opcionais, rotulam o organograma. A tela fica em RH > Setores.
   - **Grupos sistêmicos** (criar, alterar, excluir, ou marcar um setor como sistêmico): só o SuperRoot (`403 acesso_negado`), porque dão acessos no sistema.
 - **Nome** único, sem diferenciar maiúsculas.
 - **Hierarquia:** o setor pai não pode ser o próprio setor nem um subordinado dele (sem ciclos).
@@ -46,6 +47,8 @@ Detalhes:
 | `lider_id` | integer \| null | não | Usuário líder |
 | `sistemico` | boolean | não (`false`) | Grupo sistêmico, não institucional (ex.: "Auditores") |
 | `ativo` | boolean | não (`true`) | |
+| `sigla` | string \| null | não | Até 30 caracteres (ex.: CGP) |
+| `tipo_unidade` | string \| null | não | Até 30 caracteres; ver lista acima |
 | `membros_ids` | integer[] | não (`[]`) | **Substitui** a lista de membros |
 
 ### `LeituraSetor` (resposta)

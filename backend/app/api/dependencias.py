@@ -160,6 +160,21 @@ def exigir_gestao(recurso: str) -> Callable[..., Usuario]:
     return verificar
 
 
+def exigir_rh(nivel_minimo: str = NivelAcl.MODIFICACAO) -> Callable[..., Usuario]:
+    """Exige pelo menos `nivel_minimo` no módulo RH (ACL `rh`; SuperRoot sempre).
+
+    Estrito como `exigir_gestao`: nunca "aberto a todos". Enquanto o recurso `rh` não tem regras, vale o setor `setor_cgp` (veja `services/rh/papeis.py`)."""
+    from app.services.rh import papeis
+
+    def verificar(usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)) -> Usuario:
+        if not papeis.tem_nivel_rh(sessao, usuario, nivel_minimo):
+            raise ErroApi(status.HTTP_403_FORBIDDEN, f"Esta operação exige {nivel_minimo} no módulo RH (Controle de acesso > RH).", "acl_negado",
+                          recurso="rh", nivel_exigido=nivel_minimo)
+        return usuario
+
+    return verificar
+
+
 def exigir_acl(recurso: str, nivel_minimo: str = NivelAcl.LEITURA) -> Callable[..., Usuario]:
     """Exige nível de ACL mínimo no recurso (slug) antes de executar o endpoint.
 

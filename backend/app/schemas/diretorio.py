@@ -36,6 +36,7 @@ class ContatoDetalhe(Contato):
     """Cartão completo: acrescenta a chefia imediata e a equipe."""
     chefia: ContatoResumo | None = None
     equipe: list[ContatoResumo] = []
+    bio: str | None = Field(None, description="Bio da pessoa; só aparece quando ela liberou (`bio_visivel`).")
 
 
 class PaginaContatos(BaseModel):

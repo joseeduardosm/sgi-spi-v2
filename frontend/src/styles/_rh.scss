@@ -146,3 +146,136 @@
     .atualizacao { color: var(--cor-7c8998); font-size: 12px; b { color: var(--cor-4b5663); } }
   }
 }
+
+// Organograma do RH: árvore clássica (conectores) no desktop; abaixo de 900px vira lista vertical com linha-guia.
+// Cada unidade é um cartão compacto; os cargos abrem no modal da unidade.
+.organograma-palco { position: relative; height: calc(100dvh - 190px); min-height: 420px; overflow: hidden; cursor: grab; touch-action: none; user-select: none;
+  &:active { cursor: grabbing; } }
+.organograma-lona { position: absolute; top: 0; left: 0; transform-origin: 0 0; width: max-content; }
+.organograma-barra { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; cursor: default; pointer-events: none;
+  > * { pointer-events: auto; }
+  .organograma-resumo { padding: 6px 12px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-pilula); background: var(--spi-superficie); color: var(--spi-apagado); font-size: var(--spi-texto-legenda); }
+  .organograma-zoom { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--spi-superficie); } }
+.organograma { display: flex; justify-content: center; align-items: flex-start; margin: 0; padding: 0; list-style: none; width: max-content; }
+.org-filhos { position: relative; padding-top: 24px; align-items: flex-start;
+  // haste do pai até a barra dos filhos
+  &::before { content: ''; position: absolute; top: 0; left: 50%; height: 24px; border-left: 1px solid var(--spi-borda-campo); }
+}
+.no-org { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; padding: 0 8px; }
+.org-filhos > .no-org { padding-top: 24px; margin-top: 0;
+  &::before, &::after { content: ''; position: absolute; top: 0; width: 50%; height: 24px; border-top: 1px solid var(--spi-borda-campo); }
+  &::before { right: 50%; }
+  &::after { left: 50%; border-left: 1px solid var(--spi-borda-campo); }
+  &:only-child { padding-top: 0; &::before, &::after { display: none; } }
+  &:first-child::before, &:last-child::after { border: 0; }
+  &:last-child::before { border-right: 1px solid var(--spi-borda-campo); border-radius: 0 var(--spi-raio-p) 0 0; }
+  &:first-child::after { border-radius: var(--spi-raio-p) 0 0 0; }
+}
+.org-filhos:has(> .no-org:only-child) { padding-top: 24px; }
+.caixa-org { position: relative; width: 220px; background: var(--spi-superficie); border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m);
+  .titulo-org { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 12px; text-align: left; background: transparent; border: 0; border-radius: var(--spi-raio-m); color: var(--spi-texto);
+    strong { font-size: 0.9rem; font-weight: 700; } small { color: var(--spi-apagado); }
+    .tipo-org { font-size: var(--spi-texto-legenda); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--spi-apagado); }
+    .lider-org { font-size: var(--spi-texto-legenda); font-weight: 600; text-transform: uppercase; color: var(--spi-texto); }
+    &:hover { background: var(--spi-superficie-alt); }
+    &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); } }
+  .recolher-org { position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); min-width: 24px; height: 24px; padding: 0 6px; border-radius: var(--spi-raio-pilula);
+    border: 1px solid var(--spi-borda-campo); background: var(--spi-superficie); color: var(--spi-texto); font-size: var(--spi-texto-legenda); font-weight: 600; line-height: 1; z-index: 1;
+    &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); } }
+}
+.no-org:has(> .org-filhos) > .caixa-org { margin-bottom: 12px; }
+.posicoes-org { display: flex; flex-direction: column; margin: 0; padding: 4px 0; list-style: none; max-height: 60vh; overflow-y: auto;
+  li { display: flex; align-items: center; gap: 10px; padding: 8px 16px; text-align: left; }
+  li + li { border-top: 1px solid var(--spi-borda); }
+  span { display: flex; flex-direction: column; min-width: 0; strong { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; overflow-wrap: anywhere; } small { color: var(--spi-apagado); } }
+  .avatar-diretorio, .avatar-vago { width: 34px; height: 34px; flex: none; font-size: 0.7rem; }
+  .avatar-vago { display: grid; place-items: center; border-radius: var(--spi-raio-pilula); border: 1px dashed var(--spi-borda-campo); color: var(--spi-apagado); font-weight: 700; }
+  li.vago strong { color: var(--spi-apagado); font-weight: 400; text-transform: none; }
+  // Pessoa clicável: o botão ocupa a linha inteira e abre o cartão de contato
+  .pessoa-org { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left;
+    &:hover strong { color: var(--spi-vermelho); }
+    &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); border-radius: var(--spi-raio-p); } }
+}
+
+@mixin organograma-vertical {
+  .organograma-palco { display: flex; flex-direction: column; height: auto; overflow: visible; cursor: auto; touch-action: auto; user-select: auto; padding-bottom: 24px; }
+  .organograma-lona { position: static; transform: none !important; width: auto; }
+  .organograma-barra { position: static; order: -1; margin: 0 0 20px; padding: 0; .organograma-zoom { display: none; } }
+  .organograma { display: block; width: auto; }
+  .no-org { align-items: stretch; padding: 0; }
+  .org-filhos { padding: 0; margin: 12px 0 0 12px; padding-left: 16px; border-left: 1px solid var(--spi-borda-campo);
+    &::before { display: none; } }
+  .org-filhos > .no-org { padding-top: 0; margin-bottom: 12px;
+    &::before, &::after { display: none; } }
+  .caixa-org { width: 100%; }
+  // O botão de recolher sai 12px para fora do cartão: reserva o espaço para não encostar na unidade de baixo
+  .caixa-org:has(> .recolher-org) { margin-bottom: 20px; }
+  .org-filhos { margin-top: 20px; }
+}
+@media (max-width: 900px) { @include organograma-vertical; }
+.organograma-vertical-ativo { @include organograma-vertical; max-width: 760px; margin: 0 auto; }
+
+// Telas de gestão do RH: botões da linha com respiro e filtros rápidos com o recuo do cartão (o `.chips-filtro` de Tarefas zera o padding global)
+.painel-gestao > .chips-filtro { padding: 12px 24px; border-bottom: 1px solid var(--spi-borda); }
+.tabela-gestao .coluna-acoes .acoes-linha { gap: 8px; padding: 2px 0; }
+.tabela-gestao .coluna-acoes .acoes-linha button { padding: 6px 12px; text-decoration: none; }
+
+// Rótulos de seção no detalhe da unidade (líder e cargos): a pessoa usa as mesmas linhas de `.posicoes-org`
+.rotulo-lider { margin: 0; padding: 10px 16px 4px; font-size: var(--spi-texto-micro); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--spi-apagado); }
+.lider-lista { max-height: none; overflow: visible; }
+
+// Formulários longos do RH (ficha de pré-cadastro): fieldset sem borda e itens repetidos com divisória
+.parametros-rh .sem-borda { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.parametros-rh .item-repetido { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--spi-borda); }
+.parametros-rh .campo textarea { width: 100%; }
+
+// Admissão: etapas ainda não liberadas ficam apagadas (e sem ação); listas simples dentro dos cartões
+.parametros-rh .cartao-dados.etapa-bloqueada { opacity: 0.55; }
+.parametros-rh .lista-simples { margin: 0 0 8px; padding-left: 18px; color: var(--spi-texto); }
+
+// Itens do checklist no modal: descrição, obrigatório e remover na mesma linha
+.item-checklist { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+@media (max-width: 600px) { .item-checklist { grid-template-columns: 1fr; } }
+
+// Itens repetidos da ficha (formações e experiências): campos em duas colunas, campo largo ocupa a linha e o rodapé do item leva o remover
+.parametros-rh .item-repetido .campo-largo { grid-column: 1 / -1; }
+.parametros-rh .item-repetido .campo textarea { min-height: 84px; resize: vertical; }
+.parametros-rh .rodape-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.parametros-rh .rodape-item:has(> button:only-child) { justify-content: flex-end; }
+
+// Ficha de pré-cadastro: grade de 12 colunas; cada campo declara a largura em `--col`. Em telas médias vira 2 por linha e, no celular, 1.
+.parametros-rh .grade-ficha { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px 22px;
+  > .campo { grid-column: span var(--col, 4); }
+  .campo textarea { width: 100%; min-height: 84px; resize: vertical; }
+  @media (max-width: 1100px) { > .campo { grid-column: span 6; } }
+  @media (max-width: 640px) { > .campo { grid-column: 1 / -1; } } }
+
+// Checklist por classificação: um bloco por grupo com chips de nível (1.07, 1.08...) e atalhos Todos/Nenhum
+.bloco-classificacao { margin: 6px 0 12px; padding: 12px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--spi-superficie-alt); }
+.cabeca-classificacao { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
+  small { color: var(--spi-apagado); }
+  .atalhos-classificacao { margin-left: auto; display: flex; gap: 12px; } }
+.chips-classificacao { padding: 0 !important; border: 0 !important; gap: 6px; }
+.chips-classificacao button { padding: 4px 10px; font-size: var(--spi-texto-compacto); }
+
+// Admissão: respiro entre o editor, a lista de placeholders e as ações (nada sobreposto)
+.parametros-rh .cartao-dados .editor-rico { margin-bottom: 16px; }
+.parametros-rh .cartao-dados .corpo > .dica-formulario { margin: 0 0 16px; line-height: 1.6; }
+.parametros-rh .cartao-dados .corpo > .acoes-formulario { margin-top: 4px; padding-top: 4px; }
+
+// Comprovante da admissão: botão padrão de escolher arquivo e o nome do arquivo ao lado
+.parametros-rh .escolha-comprovante { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+.parametros-rh .escolha-comprovante small { overflow-wrap: anywhere; }
+
+// Foto da admissão (etapa 1): miniatura redonda como a do Diretório e as ações ao lado
+.parametros-rh .bloco-foto { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; padding: 14px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--spi-superficie-alt); }
+.parametros-rh .foto-admissao { flex: none; width: 88px; height: 88px; border-radius: var(--spi-raio-pilula); object-fit: cover; border: 1px solid var(--spi-borda); background: var(--spi-superficie); }
+.parametros-rh .foto-admissao.vazia { display: grid; place-items: center; color: var(--spi-apagado); font-size: var(--spi-texto-legenda); text-align: center; }
+.parametros-rh .acoes-foto { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+// Resultado do formulário de nomeação (etapa 1 concluída): resumo em uma linha e tabela serviço × chamado
+.parametros-rh .resumo-chamado { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 14px; color: var(--spi-texto); }
+
+// Aviso do e-mail automático de nomeação, dentro do cartão da publicação
+.parametros-rh .aviso-email { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--spi-superficie-alt); font-size: var(--spi-texto-compacto); }
+.parametros-rh .aviso-email.com-erro { border-color: var(--spi-perigo); background: var(--spi-perigo-suave); }

@@ -134,6 +134,20 @@ def testar_diretorio(sessao: Session, diretorio_id: uuid.UUID, senha_bind: str |
     return resultado
 
 
+def situacao_do_login(sessao: Session, login: str) -> tuple[str, str]:
+    """Situação de um login no AD ativo, só leitura: ("encontrado" | "livre" | "sem_diretorio" | "indisponivel", mensagem)."""
+    diretorio = obter_diretorio_ativo(sessao)
+    if diretorio is None:
+        return "sem_diretorio", "Nenhum diretório LDAP ativo: o login não foi conferido no AD."
+    try:
+        identidade = cliente_ldap.consultar_login(ParametrosDiretorio.do_modelo(diretorio), login)
+    except cliente_ldap.ErroLdapIndisponivel as erro:
+        return "indisponivel", f"Não foi possível consultar o AD: {erro}"
+    if identidade is None:
+        return "livre", "Login livre no AD."
+    return "encontrado", f"Já existe no AD (conta de {identidade.nome_completo or identidade.login})."
+
+
 def sincronizar(sessao: Session, diretorio_id: uuid.UUID, autor: str) -> ResumoSincronizacao:
     """Lê todas as identidades do diretório e aplica a fotografia. Lança ErroLdapIndisponivel.
 
@@ -194,6 +208,10 @@ def aplicar_fotografia(sessao: Session, diretorio: DiretorioLdap, identidades: l
             if identidade.foto:
                 servico_diretorio.importar_foto_ldap(sessao, usuario, identidade.foto)
             por_login[usuario.login.lower()] = usuario
+            # Se o RH já tinha a ficha com este login proposto, liga ficha e conta
+            from app.services.rh import servico_pre_cadastro
+
+            servico_pre_cadastro.vincular_conta(sessao, usuario)
             criados += 1
         else:
             # Conta existente: atualiza os dados; a situação só acompanha o AD em contas exclusivamente LDAP

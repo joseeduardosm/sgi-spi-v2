@@ -140,7 +140,7 @@ def test_dados_funcionais_so_para_cgp(cliente, pessoas):
     # Os campos da CGP não aparecem no perfil do usuário
     perfil = cliente.get(PERFIL, headers=h["ana"]).json()
     assert "saldo_ferias_dias" not in perfil and "autorizador_id" not in perfil
-    assert cliente.get("/api/rh/papeis", headers=h["chefe"]).json() == {"cgp": False, "autorizador": True}
+    assert cliente.get("/api/rh/papeis", headers=h["chefe"]).json() == {"cgp": False, "autorizador": True, "nivel_rh": None}
     assert cliente.get("/api/rh/papeis", headers=h["rh"]).json()["cgp"] is True
 
 

@@ -16,6 +16,7 @@ StatusAfastamento = Literal["pendente", "aprovado", "recusado", "cancelado", "go
 class PapeisRh(BaseModel):
     cgp: bool = Field(..., description="Coordenadoria de Gestão de Pessoas (ou SuperRoot): acesso total ao RH.")
     autorizador: bool = Field(..., description="Autoriza férias/LP de alguém (ou é substituto de um autorizador).")
+    nivel_rh: str | None = Field(None, description="Acesso ao módulo RH: `LEITURA` (consulta setores, cargos e organograma), `MODIFICACAO` (gere setores e cargos) ou `CONTROLE_TOTAL` (é o RH); vazio = sem acesso.")
 
 
 # --- Cadastro -----------------------------------------------------------------------------------
@@ -383,7 +384,8 @@ class ParametrosLeitura(BaseModel):
     abertura_agendamento_ferias: date | None = Field(
         None, description="Data em que abre o agendamento das férias do ano seguinte (ano da data + 1): a partir dela, qualquer servidor "
         "agenda até `dias_ferias_por_periodo` dias para esse exercício, mesmo sem saldo. Nulo: sem a regra.")
-    membros_cgp: int | None = Field(None, description="Pessoas no setor da CGP (0 = ninguém recebe os avisos destinados à CGP). Só leitura.")
+    membros_cgp: int | None = Field(None, description="Pessoas que são o RH (Controle total no módulo RH; 0 = ninguém recebe os avisos destinados ao RH). Só leitura.")
+    setor_apoio_administrativo_id: int | None = Field(None, description="Setor do Serviço de Apoio Administrativo (SAA), que dá andamento nos números reservados do Protocolo. Vazio = o setor pelo nome da configuração.")
     atualizado_por_nome: str | None = None
     atualizado_em: datetime | None = None
 
@@ -410,6 +412,7 @@ class GravacaoParametros(BaseModel):
         if any(d < 0 or d > 6 for d in valor):
             raise ValueError("use 0 (segunda) a 6 (domingo)")
         return sorted(set(valor))
+    setor_apoio_administrativo_id: int | None = Field(None, description="Setor do Serviço de Apoio Administrativo (SAA); vazio = pelo nome da configuração.")
 
 
 MeusAfastamentos.model_rebuild()

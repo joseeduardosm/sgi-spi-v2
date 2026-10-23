@@ -9,7 +9,7 @@ Ciclo:
 3. **Autoridade**: com todos cientes, escolhe-se a autoridade competente. Só aqui o texto é gerado (HTML da máscara, para copiar) e o número é
    **reservado** no Protocolo ("Portaria SPI SSGC"), ainda pendente.
 4. **Aceite** da autoridade (que pode **devolver**, liberando o número). Ao aceitar sai o **PDF de evidência** (ciências e aceite) para o SEI.
-5. **Publicação**: quando o Protocolo anexa o PDF do D.O.E. ao número reservado, a portaria vira publicada, a nova equipe passa a valer (as funções que
+5. **Publicação**: quando o PDF do D.O.E. é anexado ao número reservado (pelo Protocolo ou, para quem só tem o Contratos, pela própria aba Equipe), a portaria vira publicada, a nova equipe passa a valer (as funções que
    a portaria não cita ficam sem designado, pois ela revoga a anterior) e o documento entra em "Documentos Importantes" (tipo 16).
 **Cancelar** libera o número reservado. Há uma portaria em andamento por contrato.
 
@@ -23,14 +23,18 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.banco import agora_utc, hoje_sao_paulo
+from xml.sax.saxutils import escape
+
+from app.core.banco import FabricaSessao, agora_utc, hoje_sao_paulo
+from app.core.configuracao import obter_configuracao
 from app.models.contratos import PAPEIS_EQUIPE, Contrato, DesignacaoEquipe, DocumentoContrato
 from app.models.contratos.execucao import ModeloGlobal
 from app.models.contratos.portaria import AutoridadePortaria, NomeacaoPortaria, PortariaContrato
 from app.models.protocolo import NumeroProtocolo, SequenciaProtocolo, TipoProtocolo
 from app.models.rh import DadosFuncionais
 from app.models.usuario import Usuario
-from app.services import servico_anexos, notificacoes, servico_protocolo
+from app.services import modelo_email, notificacoes, servico_anexos, servico_protocolo, servico_smtp
+from app.services.cliente_smtp import AnexoEmail, Mensagem
 from app.services.contratos import portaria_documento, portaria_mascara, setor_equipes
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.schemas.contratos.portaria import (LeituraAutoridade, LeituraCienciaPendente, LeituraNomeacao, LeituraPortaria, NomeacaoEntrada, PainelPortarias)
@@ -502,6 +506,62 @@ def escolher_autoridade(sessao: Session, contrato_id: uuid.UUID, portaria_id: uu
     return portaria
 
 
+def montar_email_autoridade(sessao: Session, portaria: PortariaContrato, contrato: Contrato) -> tuple[str, str, str, list[AnexoEmail]]:
+    """E-mail que avisa a autoridade da portaria aguardando o aceite: contrato, equipe (nome, cargo e ciência), minuta em PDF e o pedido para entrar no sistema."""
+    identificacao = _identificacao(contrato)
+    linhas = []
+    for n in portaria.nomeacoes:
+        usuario = sessao.get(Usuario, n.usuario_id) if n.usuario_id else None
+        cargo = (usuario.cargo or "").strip() if usuario else ""
+        ciente = n.ciente_em.astimezone(FUSO_SAO_PAULO).strftime("%d/%m/%y %H:%M") if n.ciente_em else "—"
+        linhas.append((portaria_documento.ROTULOS_PAPEL.get(n.papel, n.papel), n.nome_usuario, cargo or "—", ciente))
+    rotulo = _rotulo(portaria)
+    assunto = f"Portaria aguardando seu aceite — contrato {identificacao}"
+    link = f"{obter_configuracao().url_publica.rstrip('/')}/contratos/{contrato.id}?aba=equipe"
+    abertura = (f"Existe uma portaria de designação do contrato {identificacao} aguardando o seu aceite ({rotulo}). "
+                "Os designados abaixo já deram ciência.")
+    pedido = ("Entre no sistema, confira o texto da portaria na aba Equipe do contrato e dê a sua ciência e o seu aceite (ou devolva a portaria com o motivo). "
+              "A minuta segue em anexo, em PDF com a marca d'água MINUTA: ela não substitui o aceite no sistema.")
+    texto = "\n".join([abertura, "", "Equipe designada (função — nome — cargo — ciente em):",
+                       *[f"  - {f} — {nome} — {cargo} — {ciente}" for f, nome, cargo, ciente in linhas], "", pedido, "", f"Acessar: {link}"])
+    tabela = ('<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13px">'
+              '<tr style="background:#f1f2f4;text-align:left"><th style="padding:8px">Função</th><th style="padding:8px">Nome</th><th style="padding:8px">Cargo</th>'
+              '<th style="padding:8px">Ciente em</th></tr>'
+              + "".join(f'<tr style="border-top:1px solid #e2e5e8"><td style="padding:8px">{escape(f)}</td><td style="padding:8px">{escape(nome)}</td>'
+                        f'<td style="padding:8px">{escape(cargo)}</td><td style="padding:8px;white-space:nowrap">{escape(ciente)}</td></tr>' for f, nome, cargo, ciente in linhas)
+              + "</table>")
+    html = modelo_email.pagina(assunto, modelo_email.paragrafos([abertura]) + tabela + modelo_email.paragrafos([pedido]), link_url=link, rotulo_link="Abrir a portaria no SGI SPI",
+                               sobretitulo="Portaria de designação")
+    pdf = portaria_documento.gerar_minuta(portaria.dados, f"Contrato {identificacao}", "Sistema")
+    nome_arquivo = f"minuta-portaria-{portaria.numero:03d}-{portaria.exercicio}.pdf" if portaria.numero is not None else "minuta-portaria.pdf"
+    return assunto, texto, html, [AnexoEmail(nome_arquivo, pdf)]
+
+
+def notificar_autoridade_por_email(portaria_id: uuid.UUID) -> None:
+    """Segundo plano: manda à autoridade escolhida o e-mail com a equipe, a minuta (PDF com marca d'água) e o pedido para dar a ciência e o aceite no sistema.
+
+    Não falha a operação: o resultado (enviado ou erro) vai para a auditoria."""
+    with FabricaSessao() as sessao:
+        portaria = sessao.get(PortariaContrato, portaria_id)
+        if portaria is None or portaria.status != "aguardando_aceite" or portaria.autoridade_id is None:
+            return
+        contrato = obter_contrato(sessao, portaria.contrato_id)
+        autoridade = _autoridade(sessao, portaria.autoridade_id)
+        destino = sessao.get(Usuario, autoridade.usuario_id) if autoridade.usuario_id else None
+        if destino is None or not (destino.email or "").strip():
+            resultado = "A autoridade não tem e-mail cadastrado no perfil."
+        else:
+            assunto, texto, html, anexos = montar_email_autoridade(sessao, portaria, contrato)
+            try:
+                envio = servico_smtp.enviar_email(sessao, Mensagem(para=[destino.email.strip()], assunto=assunto, texto=texto, html=html, anexos=anexos,
+                                                                  responder_para=[e for e in [(sessao.get(Usuario, portaria.solicitada_por_id).email if portaria.solicitada_por_id else "")] if e]))
+                resultado = "enviado" if envio.sucesso else f"falhou: {envio.mensagem}"
+            except servico_smtp.SemServidorAtivo as erro:
+                resultado = f"falhou: {erro}"
+        auditar(sessao, "Sistema", "portaria.email_autoridade", _rotulo(portaria), alvo_tipo="contrato", alvo_id=contrato.id, dados={"portaria_id": str(portaria.id), "resultado": resultado})
+        sessao.commit()
+
+
 def aceitar(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, autor: Usuario) -> PortariaContrato:
     """Aceite da autoridade signatária: atualiza o texto, gera o PDF de evidência (ciências e aceite) e espera a publicação no D.O.E."""
     portaria = _portaria(sessao, contrato_id, portaria_id)
@@ -526,7 +586,7 @@ def aceitar(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, aut
     notificacoes.encerrar(sessao, prefixo=f"portaria:{portaria.id}:")
     auditar(sessao, autor.login, "portaria.aceitar", _rotulo(portaria), autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato_id, dados={"portaria_id": str(portaria.id)})
     _avisar(sessao, portaria, [portaria.solicitada_por_id], f"Portaria aceita — {_rotulo(portaria)}",
-            "A autoridade aceitou a portaria. Baixe o PDF de evidência e junte ao SEI para a publicação no D.O.E.; a nova equipe vale quando o Protocolo anexar o PDF publicado.", autor)
+            "A autoridade aceitou a portaria. Baixe o PDF de evidência e junte ao SEI para a publicação no D.O.E.; a nova equipe vale quando o PDF publicado (D.O.E.) for anexado, na aba Equipe do contrato ou pelo Protocolo.", autor)
     sessao.commit()
     return portaria
 
@@ -586,6 +646,26 @@ def cancelar(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, mo
         notificacoes.encerrar(sessao, prefixo=f"portaria-nomeacao:{n.id}")
     auditar(sessao, autor.login, "portaria.cancelar", rotulo, autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato_id, dados={"motivo": motivo})
     sessao.commit()
+    return portaria
+
+
+def publicar(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, origem, nome_arquivo: str, autor: Usuario) -> PortariaContrato:
+    """Publica a portaria pelo próprio módulo Contratos: anexa o PDF do D.O.E. ao número reservado no Protocolo, sem exigir acesso ao módulo Protocolo.
+
+    É o mesmo ato do Protocolo (o PDF fica no número, a portaria vira publicada, a equipe é aplicada e o documento entra em Documentos Importantes);
+    a permissão é a de quem conduz a portaria (equipe vigente, cadastrante ou controle total). Só depois do aceite da autoridade."""
+    portaria = _portaria(sessao, contrato_id, portaria_id)
+    exigir_criacao(sessao, obter_contrato(sessao, contrato_id), autor)
+    if portaria.status != "aceita":
+        raise ErroRegraContrato("Só é possível anexar o D.O.E. depois do aceite da autoridade e enquanto a portaria não foi publicada.", conflito=True)
+    if portaria.numero_protocolo_id is None:
+        raise ErroRegraContrato("Esta portaria não tem número reservado no Protocolo.", conflito=True)
+    try:
+        servico_protocolo.anexar(sessao, portaria.numero_protocolo_id, origem, nome_arquivo, autor, ignorar_dono=True)
+    except servico_protocolo.ErroProtocolo as erro:
+        sessao.rollback()
+        raise ErroRegraContrato(str(erro), conflito=erro.status == 409) from erro
+    sessao.refresh(portaria)
     return portaria
 
 
@@ -687,6 +767,7 @@ def _leitura(sessao: Session, portaria: PortariaContrato, usuario: Usuario, pode
         aviso_reserva=aviso, tem_evidencia=portaria.evidencia_anexo_id is not None,
         pode_decidir=portaria.status == "aguardando_aceite" and pode_decidir(sessao, portaria, usuario),
         pode_alterar=pode_criar and em_aberto,
+        pode_publicar=pode_criar and portaria.status == "aceita",
     )
 
 

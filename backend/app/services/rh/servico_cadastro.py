@@ -23,6 +23,8 @@ from app.models.rh import AlteracaoCadastral, DadosFuncionais
 from app.models.usuario import Usuario
 from app.schemas.usuarios import DadosPerfil
 from app.services import notificacoes
+from app.models.rh_cargos import Ocupacao
+from app.services.rh import servico_historico
 from app.services.rh.papeis import SemPermissaoRh, dados_funcionais, eh_cgp, exigir_cgp, usuarios_cgp
 from app.services.servico_auditoria import auditar
 
@@ -141,6 +143,14 @@ def _registrar(sessao: Session, usuario: Usuario, campo: str, novo, autor: Usuar
     return alteracao
 
 
+def _historico_cadastro(sessao: Session, alteracao: AlteracaoCadastral, autor: Usuario) -> None:
+    """Alteração cadastral em vigor (validada ou direta): vai para o histórico funcional com quem registrou e quando."""
+    rotulo = ROTULOS.get(alteracao.campo, alteracao.campo)
+    servico_historico.registrar(
+        sessao, alteracao.usuario_id, "cadastro", f"Cadastro: {rotulo} alterado", f"De “{alteracao.valor_anterior or '—'}” para “{alteracao.valor_proposto or '—'}”", autor,
+        origem=("alteracao_cadastral", str(alteracao.id)))
+
+
 def _aplicar_campo(sessao: Session, usuario: Usuario, campo: str, valor) -> None:
     """Grava o valor em vigor do campo; o Departamento também ajusta a participação nos setores (ACL)."""
     if campo == "departamento":
@@ -164,7 +174,11 @@ def revisar_perfil(sessao: Session, usuario: Usuario, dados: DadosPerfil) -> Usu
     validar_superior(sessao, usuario.id, dados.gestor_id, superior_obrigatorio(sessao, usuario))
     direto = eh_cgp(sessao, usuario)
     novas: list[AlteracaoCadastral] = []
+    # Quem ocupa um cargo cadastrado tem cargo e departamento definidos pelo RH (pelo cargo e pelo setor dele): o perfil não os altera
+    do_cargo = sessao.scalar(select(Ocupacao.id).where(Ocupacao.usuario_id == usuario.id, Ocupacao.fim.is_(None))) is not None
     for campo in CAMPOS:
+        if do_cargo and campo in ("cargo", "departamento"):
+            continue
         novo = getattr(dados, campo)
         atual = getattr(usuario, campo)
         if para_texto(campo, novo) == para_texto(campo, atual):
@@ -177,9 +191,11 @@ def revisar_perfil(sessao: Session, usuario: Usuario, dados: DadosPerfil) -> Usu
         # Mesma proposta que já está pendente: nada muda
         if not direto and any(a.campo == campo and a.valor_proposto == para_texto(campo, novo) for a in pendentes_do_usuario(sessao, usuario.id)):
             continue
-        novas.append(_registrar(sessao, usuario, campo, novo, usuario, "validada" if direto else "pendente"))
+        nova = _registrar(sessao, usuario, campo, novo, usuario, "validada" if direto else "pendente")
+        novas.append(nova)
         if direto:
             _aplicar_campo(sessao, usuario, campo, novo)
+            _historico_cadastro(sessao, nova, usuario)
     # LinkedIn é divulgação voluntária do próprio usuário: vale na hora, sem validação da CGP
     usuario.linkedin = dados.linkedin
     usuario.perfil_revisado_em = agora_utc()
@@ -294,6 +310,7 @@ def _aplicar_validacao(sessao: Session, alteracao_id: uuid.UUID, autor: Usuario)
     alteracao.status, alteracao.analisada_por_id, alteracao.analisada_por_nome, alteracao.analisada_em = "validada", autor.id, _nome(autor), agora_utc()
     auditar(sessao, autor.login, "rh.cadastro.validar", usuario.login, autor_id=autor.id, alvo_tipo="usuario", alvo_id=str(usuario.id),
             dados={"campo": alteracao.campo, "valor": alteracao.valor_proposto})
+    _historico_cadastro(sessao, alteracao, autor)
     _encerrar_aviso_se_concluido(sessao, usuario.id)
     _reavaliar_portarias(sessao, usuario.id)
     return alteracao

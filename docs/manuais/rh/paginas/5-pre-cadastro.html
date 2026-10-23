@@ -1,0 +1,46 @@
+<p>A <strong>ficha de pré-cadastro</strong> (RH › Pré-cadastro) é o ponto de partida de quem vai chegar: reúne os dados da pessoa <strong>antes</strong> de ela ter conta no sistema. Ela guarda dados pessoais sensíveis, por isso só o <strong>RH com controle total</strong> a vê, além da própria pessoa (em "Meu cadastro").</p>
+<h2>A lista de fichas</h2>
+[[p01-lista-fichas]]
+<table>
+<thead><tr><th>Situação</th><th>O que significa</th></tr></thead>
+<tbody>
+<tr><td><strong>Rascunho</strong></td><td>O RH ainda está preenchendo</td></tr>
+<tr><td><strong>Aguardando a conta</strong></td><td>A ficha está pronta e o login proposto já foi escolhido. Falta a TI criar a conta no AD</td></tr>
+<tr><td><strong>Vinculada</strong></td><td>A conta apareceu e a ficha foi ligada ao usuário (ou é a ficha de quem já tinha conta)</td></tr>
+<tr><td><strong>Cancelada</strong></td><td>Foi cancelada; o login proposto e o CPF ficam livres</td></tr>
+<tr><td><strong>Aguardando validação</strong> (filtro)</td><td>Fichas que a própria pessoa enviou em "Meu cadastro" e o RH ainda não validou</td></tr>
+</tbody>
+</table>
+<p>A busca procura por nome, login proposto, CPF, documentos e RS/PV.</p>
+<h2>Preencher a ficha</h2>
+<p><strong>Nova ficha</strong> abre o formulário, dividido em cartões. Só o <strong>nome completo</strong> e o <strong>CPF</strong> são obrigatórios; o resto pode ser completado depois.</p>
+[[p02-ficha-identificacao]]
+<ul>
+<li><strong>Identificação:</strong> nome, nome social, nascimento (dd/mm/aaaa), sexo, estado civil, nacionalidade, naturalidade e filiação.</li>
+<li><strong>Documentos, contato e endereço:</strong> o que a pessoa tem de CPF, RG ou CIN, PIS/PASEP, título de eleitor, CTPS e CNH; e-mail pessoal, telefones e contato de emergência; endereço com CEP.</li>
+</ul>
+[[p03-ficha-documentos]]
+<ul>
+<li>O <strong>CPF</strong> e o <strong>PIS/PASEP</strong> têm os dígitos verificadores conferidos ao salvar, o <strong>CEP</strong> precisa ter 8 números e as <strong>UFs</strong>, 2 letras.</li>
+<li>O <strong>mesmo CPF não pode estar em duas fichas</strong> ativas: o sistema avisa quem já o tem.</li>
+</ul>
+<h3>Vínculo e a vaga pretendida</h3>
+<p>Informe o tipo de vínculo, o órgão e o cargo de origem, o RS/PV e o início previsto. Para a <strong>vaga pretendida</strong> escolha primeiro o <strong>setor</strong>; o campo seguinte lista só as <strong>vagas livres daquele setor</strong>. Trocar o setor limpa o cargo escolhido.</p>
+[[p04-ficha-vinculo]]
+<h3>Formação e experiências</h3>
+<p>Acrescente quantas formações e experiências anteriores forem necessárias, com <strong>+ Formação</strong> e <strong>+ Experiência</strong>.</p>
+[[p05-formacao]]
+[[p05b-experiencia]]
+<h2>O login proposto</h2>
+<p>É o login que o RH sugere para a TI criar no AD. O sistema o confere <strong>na hora</strong>, enquanto você digita: ele não pode existir como usuário do SGI, em outra ficha ativa nem no AD. O login deve ter de 3 a 30 caracteres, com letras minúsculas, números, ponto, hífen ou sublinhado, começando por letra.</p>
+[[p06-login-ocupado]]
+<p>Com o login livre, a ficha pode seguir. Marcar <strong>Ficha pronta: aguardando a criação da conta</strong> exige o login e deixa a ficha esperando a conta. Desmarcada, ela fica como rascunho.</p>
+[[p07-login-livre]]
+<p class="callout warn">Se o AD não estiver configurado ou não responder, o sistema avisa "o AD não foi conferido": o login pode estar livre no SGI, mas é preciso confirmar com a TI.</p>
+<h2>Depois de salva</h2>
+<ul>
+<li>Uma ficha <strong>vinculada a uma conta</strong> ou <strong>cancelada</strong> não é mais alterada pelo RH aqui (a vinculada, de quem já tinha conta, o RH ainda pode corrigir antes de validar).</li>
+<li><strong>Cancelar ficha</strong> libera o login proposto para outra ficha.</li>
+<li><strong>Iniciar admissão</strong> (na própria ficha, quando ela tem login e cargo pretendido) abre a trilha da admissão.</li>
+<li>Quando a conta aparece no AD, a ficha se liga a ela sozinha (veja "Da ficha ao usuário").</li>
+</ul>

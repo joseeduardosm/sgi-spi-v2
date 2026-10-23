@@ -1,0 +1,37 @@
+<p>Em vez de digitar tudo, o RH pode <strong>mandar um formulário em Excel</strong> para a própria pessoa preencher e depois importar o que ela devolver. <strong>Cada arquivo é a ficha de uma única pessoa.</strong> O botão <strong>Ficha por planilha</strong> está na lista de fichas, e o <strong>Preencher por planilha</strong>, na ficha nova.</p>
+[[p08-janela-planilha]]
+<h2>1. Baixar e enviar o formulário</h2>
+<p><strong>Baixar formulário (XLSX)</strong> gera o arquivo. Ele é pensado para quem vai preencher, mesmo sem experiência:</p>
+[[p09-formulario-excel]]
+<ul>
+<li>As <strong>instruções</strong> estão no topo da própria planilha (aba "Ficha", a única).</li>
+<li>As células <strong>cinzas</strong> (os rótulos) estão <strong>bloqueadas</strong>: a pessoa não consegue alterar o formulário. Só as células <strong>brancas</strong> aceitam resposta; os campos com <strong>*</strong> são obrigatórios.</li>
+<li>Onde há <strong>opções fixas</strong> (sexo, estado civil, UF, tipo de vínculo, nível de formação, Sim/Não), a célula tem uma <strong>lista</strong> (seta ▼).</li>
+<li>Seções: identificação, documentos, contato, endereço, vínculo com o serviço público, <strong>formação</strong> e <strong>experiências anteriores</strong> (até 5 linhas cada).</li>
+</ul>
+[[p10b-formacao-excel]]
+<h3>Avisos de preenchimento</h3>
+<p>Se a pessoa digitar algo fora do padrão, o Excel <strong>bloqueia e explica como corrigir</strong>. Ao selecionar uma célula, uma dica mostra o que escrever.</p>
+[[p10-aviso-excel]]
+<table>
+<thead><tr><th>Campo</th><th>O que o aviso exige</th></tr></thead>
+<tbody>
+<tr><td>CPF, PIS/PASEP, CEP</td><td>11, 11 e 8 números (com ou sem a pontuação de costume)</td></tr>
+<tr><td>E-mail</td><td>Um e-mail completo, sem espaços</td></tr>
+<tr><td>Datas</td><td>dd/mm/aaaa, válidas e que não sejam futuras</td></tr>
+<tr><td>Ano de conclusão</td><td>Quatro números, entre 1950 e 2100</td></tr>
+<tr><td>Telefone e textos</td><td>Dentro do limite de caracteres</td></tr>
+<tr><td>Listas</td><td>Uma das opções da lista</td></tr>
+</tbody>
+</table>
+<p class="callout info">A pessoa <strong>não preenche</strong> o setor e o cargo pretendidos, o login proposto nem o início previsto: isso fica com o RH, na ficha criada. Ela deve apenas <strong>salvar</strong> o arquivo (.xlsx) e devolver, sem renomear a aba nem desproteger a planilha.</p>
+<h2>2. Importar o arquivo preenchido</h2>
+<p>Ao devolver o arquivo, o RH o escolhe na mesma janela. O sistema <strong>confere tudo na hora</strong>, sem gravar. Se estiver certo, a prévia mostra "ficha sem erros, pronta para importar":</p>
+[[p11-previa-ok]]
+<p>Se houver erro, a prévia diz o que corrigir e a importação fica bloqueada (nada é gravado):</p>
+[[p12-previa-erro]]
+<ul>
+<li>As mesmas regras da ficha na tela valem aqui: nome e CPF obrigatórios, CPF e PIS válidos, CEP, UF, datas, fim de experiência não anterior ao início e <strong>CPF ainda não cadastrado</strong> em outra ficha.</li>
+<li><strong>Importar a ficha</strong> cria a ficha como <strong>rascunho</strong>, com as formações e experiências do arquivo. Use <strong>Abrir a ficha</strong> para completar o setor e o cargo pretendidos, o login proposto e o início previsto.</li>
+<li>Um arquivo que não seja o formulário (outra planilha qualquer) é recusado com a orientação de baixar o modelo.</li>
+</ul>

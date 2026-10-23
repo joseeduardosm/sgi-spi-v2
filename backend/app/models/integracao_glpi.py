@@ -34,6 +34,10 @@ class IntegracaoGlpi(Base):
     sla_atendimento_id: Mapped[int | None] = mapped_column(Integer, default=2)
     sla_solucao_id: Mapped[int | None] = mapped_column(Integer, default=1)
     template_id: Mapped[int | None] = mapped_column(Integer, default=1)
+    # Login da conta de serviço na tela web do GLPI (a API não envia formulários): usuário e senha (cifrada) e o id do formulário "CGP - Nomeações"
+    usuario_web: Mapped[str] = mapped_column(String(150), default="")
+    senha_web_cifrada: Mapped[str] = mapped_column(String(600), default="")
+    formulario_nomeacao_id: Mapped[int] = mapped_column(Integer, default=8)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
     atualizado_por: Mapped[str] = mapped_column(String(150), default="")
 

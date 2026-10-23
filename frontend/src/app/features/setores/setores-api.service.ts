@@ -18,6 +18,8 @@ export interface Setor {
   lider_nome: string | null;
   sistemico: boolean;
   ativo: boolean;
+  sigla: string | null;
+  tipo_unidade: string | null;
   total_membros: number;
   total_subordinados: number;
   criado_em: string;
@@ -29,6 +31,12 @@ export interface DetalheSetor extends Setor {
   membros: OpcaoUsuario[];
 }
 
+/** Tipos de unidade do organograma (valor da API → rótulo). */
+export const TIPOS_UNIDADE: Record<string, string> = {
+  secretaria: 'Secretaria', subsecretaria: 'Subsecretaria', diretoria: 'Diretoria', coordenadoria: 'Coordenadoria', servico: 'Serviço',
+  assessoria: 'Assessoria', colegiado: 'Colegiado', vinculada: 'Entidade vinculada', outro: 'Outro',
+};
+
 /** Corpo para criar ou alterar um setor (a lista de membros substitui a atual). */
 export interface GravacaoSetor {
   nome: string;
@@ -36,6 +44,8 @@ export interface GravacaoSetor {
   lider_id: number | null;
   sistemico: boolean;
   ativo: boolean;
+  sigla?: string | null;
+  tipo_unidade?: string | null;
   membros_ids: number[];
 }
 

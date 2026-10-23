@@ -7,6 +7,8 @@ export type StatusAfastamento = 'pendente' | 'aprovado' | 'recusado' | 'cancelad
 export interface PapeisRh {
   cgp: boolean;
   autorizador: boolean;
+  /** Acesso ao módulo RH: LEITURA (consulta), MODIFICACAO (gere setores e cargos) ou CONTROLE_TOTAL (é o RH); null = sem acesso. */
+  nivel_rh: 'LEITURA' | 'MODIFICACAO' | 'CONTROLE_TOTAL' | null;
 }
 
 export interface AlteracaoCadastral {
@@ -143,6 +145,8 @@ export interface ParametrosRh {
   abertura_agendamento_ferias: string | null;
   /** Só leitura: pessoas no setor da CGP (0 = ninguém recebe os avisos da CGP). */
   membros_cgp?: number | null;
+  /** Setor do Serviço de Apoio Administrativo (dá andamento nos números reservados do Protocolo); vazio = pelo nome da configuração. */
+  setor_apoio_administrativo_id?: number | null;
   atualizado_por_nome?: string | null;
   atualizado_em?: string | null;
 }

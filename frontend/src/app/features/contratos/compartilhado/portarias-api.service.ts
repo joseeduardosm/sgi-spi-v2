@@ -46,6 +46,13 @@ export class PortariasApiService {
     return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/cancelamento`, { motivo });
   }
 
+  /** Publica a portaria anexando o PDF do D.O.E. ao número reservado (sem precisar do módulo Protocolo): aplica a nova equipe. */
+  publicar(contratoId: string, portariaId: string, arquivo: File): Observable<PainelPortarias> {
+    const corpo = new FormData();
+    corpo.append('arquivo', arquivo);
+    return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/publicacao`, corpo);
+  }
+
   /** Baixa o PDF de evidência (ciências e aceite), para juntar ao SEI. */
   baixarEvidencia(contratoId: string, portariaId: string) {
     return baixarArquivo(this.http, `${this.base}/${contratoId}/portarias/${portariaId}/evidencia`, 'evidencia-portaria.pdf');

@@ -109,13 +109,8 @@ export const rotas: Routes = [
         data: { acl: 'usuarios' },
         loadComponent: () => import('./features/usuarios/usuario-edicao.component').then((m) => m.UsuarioEdicaoComponent),
       },
-      {
-        path: 'setores',
-        title: 'Setores | SGI SPI',
-        canActivate: [guardaAcl],
-        data: { acl: 'setores' },
-        loadComponent: () => import('./features/setores/setores.component').then((m) => m.SetoresComponent),
-      },
+      // Setores passaram para o RH; o endereço antigo continua valendo
+      { path: 'setores', redirectTo: 'rh/setores', pathMatch: 'full' },
       {
         // Assinatura de e-mail institucional: todo usuário autenticado (os dados vêm do perfil em vigor)
         path: 'assinatura-email',

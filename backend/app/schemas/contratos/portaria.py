@@ -98,6 +98,7 @@ class LeituraPortaria(BaseModel):
     tem_evidencia: bool = Field(..., description="O PDF de evidência (ciências e aceite) já foi gerado.")
     pode_decidir: bool = Field(..., description="O usuário é a autoridade signatária (ou SuperRoot) e a portaria aguarda aceite.")
     pode_alterar: bool = Field(..., description="O usuário pode alterar nomeações, escolher a autoridade e cancelar.")
+    pode_publicar: bool = Field(False, description="O usuário pode anexar o PDF do D.O.E. pela aba Equipe: portaria aceita e usuário que conduz a portaria (equipe, cadastrante ou controle total).")
 
 
 class PainelPortarias(BaseModel):

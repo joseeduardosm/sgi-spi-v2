@@ -3,17 +3,17 @@
 """Rotas das portarias contratuais.
 
 - `/contratos/{contrato_id}/portarias`: painel, criação (nomeações), escolha da autoridade (reserva o número no Protocolo), aceite, devolução, cancelamento
-  e PDF de evidência. A publicação é feita pelo Protocolo, ao anexar o PDF do D.O.E. ao número reservado.
+  e PDF de evidência. A publicação é feita ao anexar o PDF do D.O.E. ao número reservado: pelo Protocolo ou, para quem só tem o Contratos, em `/publicacao`.
 - `/portarias/ciencias` e `/portarias/{id}/ciencia`: ciência de quem foi nomeado (qualquer usuário autenticado).
 - `/portarias/autoridades`: cadastro das autoridades signatárias (escrita: SuperRoot, controle total em Contratos ou gestor/suplente de um contrato).
 """
 
 import uuid
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.respostas import RESPOSTAS_AUTENTICADAS, resposta_nao_encontrado
-from app.api.routes.contratos.comum import SEM_VINCULO, pode_ler, pode_modificar, traduzir_erros
+from app.api.routes.contratos.comum import ARQUIVO_RECUSADO, SEM_VINCULO, arquivo_pdf, pode_ler, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.models.usuario import Usuario
 from app.api.dependencias import obter_usuario_autenticado
@@ -55,10 +55,14 @@ def alterar_nomeacoes(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: Gra
 
 @roteador.post("/contratos/{contrato_id}/portarias/{portaria_id}/autoridade", response_model=PainelPortarias, tags=TAGS, summary="Escolher a autoridade e gerar a portaria",
                description="Com todos os nomeados cientes: escolhe a autoridade competente, gera o texto (para copiar) e **reserva** o número em \"Portaria SPI SSGC\" no Protocolo, ainda pendente. "
-               "409 se faltar ciência; 400 sem máscara ativa, sem faixa de numeração do ano ou sem processo SEI/objeto no contrato.", responses=ESCRITA)
-def escolher_autoridade(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: EscolhaAutoridade, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+               "409 se faltar ciência; 400 sem máscara ativa, sem faixa de numeração do ano ou sem processo SEI/objeto no contrato. Além do aviso no sistema, a autoridade recebe **por e-mail** (em segundo plano) a equipe com cargo e data da ciência, "
+               "a **minuta** em PDF com marca d'água MINUTA e o pedido para entrar no sistema e dar a ciência e o aceite.", responses=ESCRITA)
+def escolher_autoridade(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: EscolhaAutoridade, tarefas: BackgroundTasks, sessao: Session = Depends(obter_sessao),
+                        autor: Usuario = Depends(pode_modificar)):
     with traduzir_erros(sessao):
         servico_portaria.escolher_autoridade(sessao, contrato_id, portaria_id, dados.autoridade_id, autor)
+        # Além do aviso no sistema, a autoridade recebe e-mail com a equipe, a minuta (PDF com marca d'água) e o pedido para dar a ciência e o aceite
+        tarefas.add_task(servico_portaria.notificar_autoridade_por_email, portaria_id)
         return servico_portaria.painel(sessao, contrato_id, autor)
 
 
@@ -84,6 +88,17 @@ def devolver(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: MotivoPortar
 def cancelar(contrato_id: uuid.UUID, portaria_id: uuid.UUID, dados: MotivoPortaria, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     with traduzir_erros(sessao):
         servico_portaria.cancelar(sessao, contrato_id, portaria_id, dados.motivo, autor)
+        return servico_portaria.painel(sessao, contrato_id, autor)
+
+
+@roteador.post("/contratos/{contrato_id}/portarias/{portaria_id}/publicacao", response_model=PainelPortarias, tags=TAGS, summary="Publicar a portaria (anexar o D.O.E.)",
+               description="`multipart/form-data` (`arquivo`, PDF do Diário Oficial). Para quem conduz a portaria e só tem acesso ao Contratos: anexa o PDF ao número reservado no Protocolo, "
+               "que é o mesmo ato do Protocolo. A portaria vira publicada, a nova equipe passa a valer (funções não citadas ficam sem designado) e o PDF entra em Documentos Importantes. "
+               "Quem pode: a equipe vigente, o cadastrante ou o controle total em Contratos (`403` para os demais). Só com a portaria aceita pela autoridade (`409`) e PDF válido (`400`).",
+               responses={**ESCRITA, **ARQUIVO_RECUSADO})
+def publicar(contrato_id: uuid.UUID, portaria_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    with traduzir_erros(sessao):
+        servico_portaria.publicar(sessao, contrato_id, portaria_id, *arquivo_pdf(arquivo), autor)
         return servico_portaria.painel(sessao, contrato_id, autor)
 
 

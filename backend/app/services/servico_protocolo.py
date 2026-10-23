@@ -398,6 +398,13 @@ def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo
         servico_portaria.validar_anexo_no_numero(sessao, numero.id, nome_arquivo)
     except ErroRegraContrato as erro:
         raise ErroProtocolo(str(erro), 409, "conflito") from erro
+    # Número da resolução de uma admissão do RH: só PDF (a publicação no D.O.E.)
+    from app.services.rh import servico_admissao
+
+    try:
+        servico_admissao.validar_anexo_no_numero(sessao, numero.id, nome_arquivo)
+    except servico_admissao.ErroAdmissao as erro:
+        raise ErroProtocolo(str(erro), 409, "conflito") from erro
     try:
         anexo = servico_anexos.guardar_arquivo(sessao, origem, nome_arquivo, "protocolo-documento", autor.id)
     except servico_anexos.ErroAnexo as erro:
@@ -409,6 +416,8 @@ def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo
     auditar(sessao, autor.login, "protocolo.anexar", rotulo, autor_id=autor.id, alvo_tipo="protocolo_numero", alvo_id=numero.id)
     # Se o número é de uma portaria aceita, o D.O.E. anexado a publica e aplica a nova equipe (na mesma transação)
     servico_portaria.publicar_pelo_protocolo(sessao, numero, autor)
+    # Se é o número da resolução de uma admissão do RH, o PDF anexado registra a publicação
+    servico_admissao.publicar_pelo_protocolo(sessao, numero, autor)
     sessao.commit()
     return numero
 

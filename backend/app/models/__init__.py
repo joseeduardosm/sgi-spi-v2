@@ -21,6 +21,9 @@ from app.models.contratos import (
     ItemContrato,
     PrepostoEmpresa,
 )
+from app.models.rh_cargos import Cargo, HistoricoRh, Ocupacao, TipoCargo
+from app.models.rh_admissao import Admissao, AdmissaoDocumento, ChecklistClassificacao, ChecklistRh, ItemChecklistRh, ModeloRh
+from app.models.rh_pre_cadastro import FichaExperiencia, FichaFormacao, PreCadastro
 from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
 from app.models.atalho_fixo import AtalhoFixo, CategoriaAtalho
 from app.models.sla import SlaPolitica
@@ -51,6 +54,8 @@ from app.models.usuario import OrigemUsuario, Papel, Usuario
 
 # Nomes exportados por `from app.models import *`
 __all__ = [
+    "Admissao", "AdmissaoDocumento", "ChecklistClassificacao", "ChecklistRh", "ItemChecklistRh", "ModeloRh",
+    "FichaExperiencia", "FichaFormacao", "PreCadastro",
     "Baixa", "Bem", "Classificacao", "ColaboradorBaixa", "ColaboradorClassificacao", "EventoPatrimonio", "FotoBem", "GrupoMaterial", "PrefixoChapa", "ItemBaixa", "ItemClassificacao", "ItemMovimentacao",
     "Localizacao", "Movimentacao", "ParametroPatrimonio",
     "ConfiguracaoReservaEspacos",

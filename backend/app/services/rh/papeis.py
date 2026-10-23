@@ -2,8 +2,9 @@
 # Este arquivo serve para identificar os papéis do Módulo RH (CGP, autorizador e substituto) e o setor de cada usuário.
 """Papéis do Módulo RH.
 
-- **CGP** (Coordenadoria de Gestão de Pessoas): SuperRoot, membro do setor `SETOR_CGP` ou de um setor filho,
-  ou com um deles como Departamento (o valor em vigor, isto é, validado).
+- **RH** (a antiga "CGP"): quem a **ACL do recurso `rh`** contempla (CONTROLE_TOTAL = é o RH; MODIFICACAO = gere setores e cargos), por regra direta, por
+  setor ou por perfil: **parametrizável** em Controle de acesso, não embutido no código. SuperRoot sempre. Enquanto o recurso `rh` não tiver regras nem perfis
+  (instalação nova ou ainda não migrada), vale o setor configurado em `setor_cgp` (membros, filhos e quem o tem como Departamento), só para o sistema nunca ficar sem RH.
 - **Autorizador** de um usuário: `DadosFuncionais.autorizador_id`, definido pela CGP.
 - **Substituto**: definido pela CGP nos dados do autorizador; aprova enquanto o autorizador estiver afastado
   (afastamento aprovado ou gozado cobrindo hoje). Sem substituto, só a CGP aprova.
@@ -15,9 +16,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.configuracao import obter_configuracao
+from app.models.acl import NivelAcl
 from app.models.rh import Afastamento, DadosFuncionais
 from app.models.setor import MembroSetor, Setor
 from app.models.usuario import Usuario
+from app.services import servico_acl
 
 
 class SemPermissaoRh(Exception):
@@ -45,6 +48,11 @@ def setores_cgp(sessao: Session) -> list[Setor]:
 
 def setores_apoio_administrativo(sessao: Session) -> list[Setor]:
     """Setor do Serviço de Apoio Administrativo (SAA) e seus descendentes; vazio se o setor não existir."""
+    from app.models.rh import ParametrosRh
+
+    parametros = sessao.get(ParametrosRh, 1)
+    if parametros is not None and parametros.setor_apoio_administrativo_id is not None:
+        return setor_com_descendentes(sessao, [parametros.setor_apoio_administrativo_id])
     nome = obter_configuracao().setor_apoio_administrativo.strip().lower()
     raizes = [s.id for s in sessao.scalars(select(Setor)) if s.nome.strip().lower() == nome]
     return setor_com_descendentes(sessao, raizes)
@@ -62,13 +70,34 @@ def usuarios_dos_setores(sessao: Session, setores: list[Setor]) -> list[Usuario]
     ))
 
 
+SLUG_RH = "rh"
+
+
+def rh_configurado(sessao: Session) -> bool:
+    """O recurso `rh` já tem regras ou perfis (a ACL define quem é o RH)?"""
+    return servico_acl.possui_regras(sessao, SLUG_RH)
+
+
 def usuarios_cgp(sessao: Session) -> list[Usuario]:
-    """Usuários ativos da CGP (sem os SuperRoot que não são do setor)."""
-    return usuarios_dos_setores(sessao, setores_cgp(sessao))
+    """Usuários ativos que são o RH (CONTROLE_TOTAL em `rh`; sem ACL configurada, o setor `setor_cgp`). Não inclui SuperRoot que não esteja contemplado."""
+    if not rh_configurado(sessao):
+        return usuarios_dos_setores(sessao, setores_cgp(sessao))
+    ids = servico_acl.usuarios_com_nivel(sessao, SLUG_RH, NivelAcl.CONTROLE_TOTAL)
+    return list(sessao.scalars(select(Usuario).where(Usuario.id.in_(ids), Usuario.ativo.is_(True)))) if ids else []
+
+
+def tem_nivel_rh(sessao: Session, usuario: Usuario, nivel: str = NivelAcl.CONTROLE_TOTAL) -> bool:
+    """O usuário tem pelo menos `nivel` no RH? SuperRoot sempre; com a ACL configurada vale ela; antes disso, o setor `setor_cgp` tem todos os poderes."""
+    if usuario.superusuario:
+        return True
+    if rh_configurado(sessao):
+        return servico_acl.pode_porta(sessao, usuario, SLUG_RH, nivel)
+    return any(u.id == usuario.id for u in usuarios_dos_setores(sessao, setores_cgp(sessao)))
 
 
 def eh_cgp(sessao: Session, usuario: Usuario) -> bool:
-    return usuario.superusuario or any(u.id == usuario.id for u in usuarios_cgp(sessao))
+    """É o RH (CONTROLE_TOTAL em `rh`)."""
+    return tem_nivel_rh(sessao, usuario, NivelAcl.CONTROLE_TOTAL)
 
 
 def eh_apoio_administrativo(sessao: Session, usuario: Usuario) -> bool:
@@ -78,7 +107,13 @@ def eh_apoio_administrativo(sessao: Session, usuario: Usuario) -> bool:
 
 def exigir_cgp(sessao: Session, usuario: Usuario) -> None:
     if not eh_cgp(sessao, usuario):
-        raise SemPermissaoRh("Somente a Coordenadoria de Gestão de Pessoas (CGP) pode fazer esta operação.")
+        raise SemPermissaoRh("Somente o RH (acesso de Controle total no módulo RH) pode fazer esta operação.")
+
+
+def exigir_nivel_rh(sessao: Session, usuario: Usuario, nivel: str = NivelAcl.MODIFICACAO) -> None:
+    """Exige pelo menos `nivel` no RH (gerir setores e cargos = MODIFICACAO)."""
+    if not tem_nivel_rh(sessao, usuario, nivel):
+        raise SemPermissaoRh("Esta operação exige acesso ao módulo RH (Controle de acesso > RH).")
 
 
 def dados_funcionais(sessao: Session, usuario_id: int) -> DadosFuncionais | None:

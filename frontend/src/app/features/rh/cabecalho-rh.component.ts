@@ -8,7 +8,7 @@ import { ItemTrilha, TrilhaComponent } from '../../shared/componentes/trilha/tri
 import { RhApiService } from './rh-api.service';
 import { PapeisRh } from './rh.models';
 
-/** Cabeçalho do RH: atalhos Férias e LP e Feriados (todos), Painel (CGP e autorizadores), Validações e Parâmetros (CGP). */
+/** Cabeçalho do RH: atalhos Férias e LP e Feriados (todos), Painel (RH e autorizadores), Setores, Cargos e Organograma (quem tem acesso ao módulo), Validações e Parâmetros (o RH). */
 @Component({
   selector: 'app-cabecalho-rh',
   imports: [RouterLink, RouterLinkActive, TrilhaComponent],
@@ -24,8 +24,17 @@ import { PapeisRh } from './rh.models';
       <nav aria-label="Atalhos do Módulo RH">
         <a class="acao-secundaria" routerLink="/rh/ferias" routerLinkActive="ativo">Férias e LP</a>
         <a class="acao-secundaria" routerLink="/rh/feriados" routerLinkActive="ativo">Feriados</a>
+        <a class="acao-secundaria" routerLink="/rh/organograma" routerLinkActive="ativo">Organograma</a>
+        <a class="acao-secundaria" routerLink="/rh/meu-cadastro" routerLinkActive="ativo">Meu cadastro</a>
         @if (papeis()?.cgp || papeis()?.autorizador) { <a class="acao-secundaria" routerLink="/rh/painel-afastamentos" routerLinkActive="ativo">Painel</a> }
+        @if (papeis()?.nivel_rh) {
+          <a class="acao-secundaria" routerLink="/rh/setores" routerLinkActive="ativo">Setores</a>
+          <a class="acao-secundaria" routerLink="/rh/cargos" routerLinkActive="ativo">Cargos</a>
+        }
         @if (papeis()?.cgp) {
+          <a class="acao-secundaria" routerLink="/rh/pre-cadastros" routerLinkActive="ativo">Pré-cadastro</a>
+          <a class="acao-secundaria" routerLink="/rh/admissoes" routerLinkActive="ativo">Admissões</a>
+          <a class="acao-secundaria" routerLink="/rh/modelos" routerLinkActive="ativo">Modelos</a>
           <a class="acao-secundaria" routerLink="/rh/validacoes" routerLinkActive="ativo">Validações</a>
           <a class="acao-secundaria" routerLink="/rh/parametros" routerLinkActive="ativo">Parâmetros</a>
         }

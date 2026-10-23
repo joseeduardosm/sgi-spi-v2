@@ -1,0 +1,290 @@
+{
+ "e01-equipe-nova-portaria": [
+  {
+   "n": 1,
+   "texto": "A equipe atual do contrato (só leitura nesta tela)"
+  },
+  {
+   "n": 2,
+   "texto": "Nova portaria: o único caminho para trocar gestor e fiscais"
+  }
+ ],
+ "e02-nomeacoes-formulario": [
+  {
+   "n": 1,
+   "texto": "Gestor é obrigatório; o formulário já vem com a equipe atual"
+  },
+  {
+   "n": 2,
+   "texto": "Indique de 1 a 6 funções: pesquise o nome e escolha o usuário"
+  },
+  {
+   "n": 3,
+   "texto": "Criar portaria: o sistema confere o cadastro de cada nomeado no RH"
+  }
+ ],
+ "e03-situacao-dados-pendentes": [
+  {
+   "n": 1,
+   "texto": "Clique no título de uma coluna para ordenar a tabela"
+  },
+  {
+   "n": 2,
+   "texto": "Dados pendentes no RH: o RH recebe o aviso para atualizar RS/PV, RG/CIN e cargo"
+  },
+  {
+   "n": 3,
+   "texto": "Cadastro completo; falta a ciência do nomeado"
+  }
+ ],
+ "e04-janela-de-ciencia": [
+  {
+   "n": 1,
+   "texto": "Sim, estou ciente: registra a data e a hora da sua ciência"
+  },
+  {
+   "n": 2,
+   "texto": "Ainda não: fecha a janela, mas o aviso continua no sino até você dar a ciência"
+  }
+ ],
+ "e05-aviso-no-sino": [
+  {
+   "n": 1,
+   "texto": "O aviso fica no sino e também chega por e-mail; abrir o aviso reabre o pedido de ciência"
+  }
+ ],
+ "e06-escolher-autoridade": [
+  {
+   "n": 1,
+   "texto": "A autoridade só é escolhida com cadastro completo e ciência de todos"
+  },
+  {
+   "n": 2,
+   "texto": "Gera o texto da portaria e reserva o número no Protocolo"
+  },
+  {
+   "n": 3,
+   "texto": "Cada nomeado com \"Dados completos\" e \"Ciência ok\" e a data e hora"
+  }
+ ],
+ "e07-texto-da-portaria": [
+  {
+   "n": 1,
+   "texto": "O número foi reservado e fica pendente até o Protocolo anexar o D.O.E."
+  },
+  {
+   "n": 2,
+   "texto": "Copiar portaria: copia o texto formatado para colar no SEI"
+  },
+  {
+   "n": 3,
+   "texto": "Texto gerado a partir do modelo cadastrado em Contratos › Modelos"
+  }
+ ],
+ "e08-aceite-da-autoridade": [
+  {
+   "n": 1,
+   "texto": "Aceitar: gera o PDF de evidência com as ciências e o seu aceite"
+  },
+  {
+   "n": 2,
+   "texto": "Devolver: informe o motivo; o número volta ao Protocolo"
+  }
+ ],
+ "e09-pdf-de-evidencia": [
+  {
+   "n": 1,
+   "texto": "Baixe o PDF de evidência e junte ao processo no SEI"
+  },
+  {
+   "n": 2,
+   "texto": "Depois da publicação no D.O.E., o Protocolo anexa o PDF ao número reservado"
+  }
+ ],
+ "p01-numero-da-portaria": [
+  {
+   "n": 1,
+   "texto": "O número da portaria aparece como Reservado, em nome do contrato. Quando o D.O.E. sair, clique em Anexar documento e envie o PDF"
+  }
+ ],
+ "p02-doe-anexado": [
+  {
+   "n": 1,
+   "texto": "Com o PDF do D.O.E. anexado, o número passa a Utilizado e a portaria é publicada no sistema: a nova equipe passa a valer"
+  }
+ ],
+ "e10-portaria-publicada": [
+  {
+   "n": 1,
+   "texto": "A nova equipe passa a valer assim que o Protocolo anexa o D.O.E. (a função que a portaria não cita fica sem responsável)"
+  },
+  {
+   "n": 2,
+   "texto": "A portaria fica no histórico da própria aba Equipe, como Publicada"
+  }
+ ],
+ "g01-pagamentos": [
+  {
+   "n": 1,
+   "texto": "Cada competência paga vira um item Pagamento MM/AAAA"
+  },
+  {
+   "n": 2,
+   "texto": "O documento consolidado da competência"
+  },
+  {
+   "n": 3,
+   "texto": "A OB/PD juntada na última etapa; a data da juntada fica na última coluna"
+  }
+ ],
+ "g02-editar-sem-equipe": [
+  {
+   "n": 1,
+   "texto": "No Editar não há mais campos de equipe: gestor e fiscais só mudam por portaria, na aba Equipe"
+  }
+ ],
+ "g03-trilha-etapas": [
+  {
+   "n": 1,
+   "texto": "O CADIN agora é a última etapa antes do download: só abre quando todas as anteriores estiverem concluídas"
+  }
+ ],
+ "d00-diario-baixar-pdf": [
+  {
+   "n": 1,
+   "texto": "Baixar PDF: gera o diário, uma página por dia com ocorrência, com os anexos no fim"
+  }
+ ],
+ "e11-pdf-evidencia": [
+  {
+   "n": 1,
+   "texto": "Data e hora da ciência de cada nomeado"
+  },
+  {
+   "n": 2,
+   "texto": "Aceite da autoridade competente, com data e hora"
+  },
+  {
+   "n": 3,
+   "texto": "Orientação para juntar o PDF ao processo no SEI"
+  }
+ ],
+ "d01-diario-pagina-do-dia": [
+  {
+   "n": 1,
+   "texto": "Uma página por dia que teve ocorrência"
+  },
+  {
+   "n": 2,
+   "texto": "Todas as ocorrências do dia, com quem registrou e quando"
+  }
+ ],
+ "d02-diario-lista-de-anexos": [
+  {
+   "n": 1,
+   "texto": "Lista de anexos no fim do diário"
+  },
+  {
+   "n": 2,
+   "texto": "Cada arquivo vem logo depois, precedido de uma folha de rosto e na página indicada"
+  }
+ ],
+ "i01-listas-de-inserviveis": [
+  {
+   "n": 1,
+   "texto": "Cada cartão é uma lista, com o status (Rascunho, Pendente, Aprovada…) e quantos bens tem"
+  }
+ ],
+ "i02-lista-selecao": [
+  {
+   "n": 1,
+   "texto": "Compartilhar: inclui colaboradores com os mesmos poderes de quem montou a lista"
+  },
+  {
+   "n": 2,
+   "texto": "Selecionar todos os bens da lista"
+  },
+  {
+   "n": 3,
+   "texto": "Pesquisa dentro da lista: chapa, série, descrição, marca, modelo, sala…"
+  },
+  {
+   "n": 4,
+   "texto": "Criar justificativa para todos os bens marcados"
+  }
+ ],
+ "i03-justificativa-categoria": [
+  {
+   "n": 1,
+   "texto": "Categoria do inservível (obrigatória): Ocioso, Recuperável, Antieconômico ou Irrecuperável"
+  },
+  {
+   "n": 2,
+   "texto": "Justificativa em texto formatado, de 10 a 2000 caracteres"
+  },
+  {
+   "n": 3,
+   "texto": "Aplica a categoria e a justificativa a todos os bens marcados"
+  }
+ ],
+ "i04-compartilhar-lista": [
+  {
+   "n": 1,
+   "texto": "Pesquise e escolha as pessoas que vão colaborar na lista"
+  },
+  {
+   "n": 2,
+   "texto": "Salvar: os colaboradores passam a ver e editar a lista e são avisados"
+  }
+ ],
+ "i05-lista-justificada": [
+  {
+   "n": 1,
+   "texto": "A justificativa já dada pode ser editada ou excluída enquanto a lista é rascunho"
+  },
+  {
+   "n": 2,
+   "texto": "Com todos os bens justificados, envie para aprovação"
+  }
+ ],
+ "a01-perfil-modulos": [
+  {
+   "n": 1,
+   "texto": "Cada perfil tem, por módulo, ações independentes (caixas de marcação)"
+  },
+  {
+   "n": 2,
+   "texto": "Aba Usuários: pessoas, setores e grupos que recebem o perfil"
+  }
+ ],
+ "a02-perfil-setores": [
+  {
+   "n": 1,
+   "texto": "Pesquise setores e grupos sistêmicos"
+  },
+  {
+   "n": 2,
+   "texto": "Marcar o setor pai marca também todos os setores abaixo dele"
+  },
+  {
+   "n": 3,
+   "texto": "Cada setor abaixo ainda pode ser desmarcado, de forma independente"
+  },
+  {
+   "n": 4,
+   "texto": "Salvar: quem é membro dos setores marcados recebe o perfil"
+  }
+ ],
+ "c01-importar-xlsx": [
+  {
+   "n": 1,
+   "texto": "Importar XLSX: contratos, checklists e formulários de avaliação por planilha. Faz parte de Editar contratos: não há permissão separada"
+  }
+ ],
+ "i06-relatorio-pdf": [
+  {
+   "n": 1,
+   "texto": "O relatório em PDF tem as mesmas colunas do Excel; a justificativa tem coluna própria e continua na página seguinte se for longa"
+  }
+ ]
+}

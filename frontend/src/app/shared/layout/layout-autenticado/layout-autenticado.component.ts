@@ -13,6 +13,7 @@ import { CaixaNotificacoesService } from '../../../core/notificacoes/caixa-notif
 import { JanelaCienciaNomeacaoComponent } from '../../../features/contratos/compartilhado/janela-ciencia-nomeacao.component';
 import { JanelaNotificacaoComponent } from '../../../features/notificacoes/janela-notificacao.component';
 import { FolhaPontoDialogoComponent } from '../../../features/rh/folha-ponto-dialogo.component';
+import { JanelaBoasVindasComponent } from '../../../features/rh/janela-boas-vindas.component';
 import { DialogosComponent } from '../../componentes/dialogos/dialogos.component';
 import { IconeComponent } from '../../componentes/icone/icone.component';
 import { BotaoMelhoriasComponent } from '../../componentes/botao-melhorias/botao-melhorias.component';
@@ -29,7 +30,7 @@ import { LayoutService } from '../layout.service';
 @Component({
   selector: 'app-layout-autenticado',
   imports: [
-    RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaNotificacaoComponent, JanelaCienciaNomeacaoComponent, FolhaPontoDialogoComponent,
+    RouterOutlet, RouterLink, BarraLateralComponent, IconeComponent, DialogosComponent, JanelaNotificacaoComponent, JanelaCienciaNomeacaoComponent, JanelaBoasVindasComponent, FolhaPontoDialogoComponent,
     BotaoMelhoriasComponent, BuscaGlobalComponent, AbrirChamadoComponent, PaletaComandosComponent, AvisoNotificacoesNavegadorComponent, BarraProgressoComponent,
   ],
   templateUrl: './layout-autenticado.component.html',

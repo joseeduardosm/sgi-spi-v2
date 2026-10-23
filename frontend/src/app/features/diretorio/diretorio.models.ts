@@ -27,6 +27,8 @@ export interface Contato extends ContatoResumo {
 export interface ContatoDetalhe extends Contato {
   chefia: ContatoResumo | null;
   equipe: ContatoResumo[];
+  /** Bio liberada pela pessoa (vazia quando ela não liberou). */
+  bio: string | null;
 }
 
 export interface PaginaContatos {

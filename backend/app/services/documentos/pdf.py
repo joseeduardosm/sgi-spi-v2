@@ -78,6 +78,8 @@ class DocumentoPdf:
     autor: str = ""
     # Blocos empilhados na ordem em que serão desenhados
     blocos: list[Flowable] = field(default_factory=list)
+    # Texto grande, em cinza claro e na diagonal, atrás do conteúdo de todas as páginas (ex.: "MINUTA"); vazio = sem marca
+    marca_dagua: str = ""
 
     def secao(self, titulo: str) -> "DocumentoPdf":
         """Título de seção em vermelho. Os métodos devolvem o próprio documento para encadear chamadas."""
@@ -182,6 +184,15 @@ class DocumentoPdf:
         # O ReportLab desenha a partir do canto inferior esquerdo: `topo` é medido a partir da base
         largura, altura = self._tamanho()
         tela.saveState()
+        if self.marca_dagua:
+            # A moldura é desenhada antes do conteúdo da página, então a marca fica ao fundo
+            tela.saveState()
+            tela.setFillColor(colors.HexColor("#e9ebee"))
+            tela.setFont("Helvetica-Bold", 120)
+            tela.translate(largura / 2, altura / 2)
+            tela.rotate(45)
+            tela.drawCentredString(0, -40, self.marca_dagua)
+            tela.restoreState()
         topo = altura - 12 * mm
         if CAMINHO_BRASAO.is_file():
             # Proporção original do brasão: 1921 x 1081

@@ -96,6 +96,10 @@ def obter(sessao: Session, usuario_id: int, inicio: date, fim: date, criar: bool
                                     origem="automatico", criado_em=agora_utc())
         sessao.add(periodo)
         sessao.flush()
+        from app.services.rh import servico_historico
+
+        servico_historico.registrar(sessao, usuario_id, "periodo_ferias", f"Período aquisitivo de férias {inicio:%d/%m/%Y} a {fim:%d/%m/%Y}: {periodo.dias_creditados} dia(s) creditado(s)", "", None,
+                                    origem=("periodo_aquisitivo", str(periodo.id)), autor_nome="Sistema")
     return periodo
 
 

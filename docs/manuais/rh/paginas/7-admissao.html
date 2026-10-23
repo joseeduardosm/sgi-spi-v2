@@ -1,0 +1,76 @@
+<p>A <strong>admissão</strong> (RH › Admissões) é a trilha que leva uma ficha de pré-cadastro até a posse, em <strong>7 etapas</strong>. Cada etapa só abre depois da anterior; as que já passaram ficam resumidas e as seguintes ficam apagadas. Só o <strong>RH com controle total</strong> acessa.</p>
+[[a01-lista-admissoes]]
+<h2>Começar uma admissão</h2>
+<p><strong>Nova admissão</strong> pede a ficha. Só aparecem fichas com <strong>login proposto</strong>, <strong>cargo pretendido</strong> (uma vaga livre) e sem admissão iniciada. Uma vaga só pode ter uma admissão em andamento.</p>
+[[a02-nova-admissao]]
+<p>Ao iniciar, os <strong>documentos do checklist</strong> do cargo (pela classificação, como 2.16) são copiados para a admissão.</p>
+[[a03-trilha]]
+<ul>
+<li>No topo: a <strong>trilha</strong> com o andamento, <strong>Ver ficha</strong> (abre a ficha de pré-cadastro) e <strong>Cancelar admissão</strong>.</li>
+<li>Cancelar devolve ao Protocolo o número ainda sem documento. Uma admissão concluída não se cancela.</li>
+</ul>
+<h2>Etapa 1: formulário de nomeação no GLPI</h2>
+<p>O SGI <strong>preenche o formulário "CGP - Nomeações" do GLPI</strong> com os dados da ficha. O próprio formulário abre os chamados e dispara os e-mails para a TI: nenhum chamado à parte é criado.</p>
+[[a03b-etapa1]]
+<ul>
+<li><strong>Foto da pessoa (opcional):</strong> PNG ou JPG de até 5 MB. Ela vai no formulário do GLPI e, quando a conta da pessoa existir, vira a <strong>foto dela no Diretório</strong> (a intranet). Trocar a foto depois do envio atualiza só a intranet.</li>
+<li><strong>Serviços:</strong> marque o que a TI deve providenciar: usuário de rede, e-mail corporativo, acesso ao SEI, acesso ao Compras SP, equipamento de trabalho, preparo da estação, crachá, telefone e mobiliário. Desmarcado vale "Não".</li>
+<li><strong>Usuário espelho</strong> (opcional): o login de quem tem o acesso que serve de modelo.</li>
+<li><strong>Observações</strong> para a TI. O <strong>login proposto</strong> e o <strong>e-mail pessoal</strong> da ficha já vão junto, na mesma pergunta de observações.</li>
+<li>O formulário exige nome, CPF, RG ou CIN e a data de início: se algo faltar, o sistema avisa antes de enviar.</li>
+</ul>
+<p>Depois do envio, a etapa mostra um resumo e uma tabela com <strong>um chamado por serviço pedido</strong>:</p>
+[[a04-etapa1-enviado]]
+<p class="callout warn">O envio cria chamados e e-mails <strong>de verdade</strong> no GLPI e não dá para desfazer pelo SGI: quem cancelar a admissão precisa pedir à TI para fechar os chamados. Se o GLPI estiver fora do ar ou recusar, a tela mostra o motivo e nada é registrado.</p>
+<h2>Etapa 2: documentos</h2>
+<p>O checklist depende da classificação do cargo (veja "Modelos, checklists e parâmetros"). O <strong>envio ao Portal de Indicações</strong> é feito no próprio portal, que é um sistema externo do governo. Aqui o RH <strong>registra</strong> o envio: a data, uma observação e, se quiser, o <strong>comprovante</strong>.</p>
+[[a05-documentos]]
+<ul>
+<li><strong>Registrar envio</strong> abre a linha do documento. O comprovante aceita PDF, imagens e arquivos do Office.</li>
+<li><strong>Desfazer</strong> tira o registro (enquanto a etapa não estiver concluída).</li>
+</ul>
+[[a06-documentos-prontos]]
+<p><strong>Concluir documentos</strong> exige todos os documentos <strong>obrigatórios</strong> registrados; os opcionais não travam. O envio fica registrado, com quem fez, e vai para o histórico funcional da pessoa quando a admissão termina.</p>
+<h2>Etapa 3: resolução</h2>
+<p><strong>Gerar o texto da resolução</strong> copia o modelo "Resolução de nomeação" (RH › Modelos) para esta admissão. O texto pode ser editado <strong>só para esta admissão</strong>.</p>
+[[a07-resolucao]]
+<ul>
+<li>O texto guarda os <strong>placeholders</strong> (#nome, #cargo, #numeroresolucao...). Número, datas e nomes entram na hora de gerar o PDF.</li>
+<li><strong>Baixar PDF</strong>: a minuta, com a marca d'água <strong>MINUTA</strong> até a publicação ser registrada; depois, sem marca.</li>
+<li><strong>Copiar para o SEI</strong> copia o texto <strong>já preenchido e formatado</strong> (negrito, listas, tabelas) para a área de transferência, para colar direto no SEI. Se você editou e ainda não salvou, o sistema salva antes de copiar.</li>
+<li>Depois da publicação, a resolução não pode mais ser alterada.</li>
+</ul>
+<h2>Etapa 4: número no Protocolo</h2>
+<p>Escolha o <strong>tipo de Resolução</strong> do Protocolo (os tipos cujo nome começa com "Resolu") e reserve o número. Ele sai da faixa do <strong>ano atual</strong>; se o tipo não tiver faixa no ano, o sistema avisa para pedir à administração do Protocolo que a cadastre.</p>
+[[a08-protocolo]]
+<p>O número reservado aparece na etapa e passa a ser usado no texto e no PDF da resolução.</p>
+<h2>Etapa 5: publicação no D.O.E. e o e-mail de nomeação</h2>
+<p>Informe a <strong>data da publicação</strong> e anexe o <strong>PDF do D.O.E.</strong> (clique, arraste e solte, ou cole com Ctrl+V). O PDF fica anexado ao número do Protocolo.</p>
+[[a09-publicacao]]
+<ul>
+<li>Se o <strong>Protocolo</strong> anexar o PDF direto no número, a publicação também fica registrada na admissão (a data nasce como a do dia do anexo e pode ser corrigida).</li>
+<li>Ao registrar a publicação, o <strong>e-mail "Sua nomeação foi publicada"</strong> <strong>sai sozinho</strong>, para o <strong>e-mail pessoal</strong> da ficha, com o <strong>PDF da publicação</strong> em anexo. O texto vem do modelo e é editável em RH › Modelos.</li>
+</ul>
+[[a10-publicada-e-email]]
+<ul>
+<li>O aviso mostra quando e para qual e-mail o envio foi feito.</li>
+<li>Se o envio falhar (servidor de e-mail fora do ar, ficha sem e-mail pessoal), a <strong>publicação não é desfeita</strong>: o aviso fica vermelho com o <strong>motivo</strong> e o botão <strong>Reenviar</strong> tenta de novo.</li>
+<li><strong>Salvar a data</strong> corrige a data da publicação.</li>
+</ul>
+<h2>Etapa 6: posse</h2>
+<p>Informe a <strong>data da posse</strong>, que não pode ser anterior à publicação.</p>
+[[a11-posse]]
+<p>O texto do <strong>termo de posse</strong> vem do modelo, é editável só para esta admissão e sai em PDF.</p>
+[[a12-termo-de-posse]]
+<h2>Etapa 7: entrada no SGI</h2>
+<p>Esta etapa só conclui quando a <strong>conta da pessoa já existe</strong> e está ligada à ficha. Até lá, o botão fica desabilitado e a tela explica:</p>
+[[a13-aguardando-conta]]
+<p>Veja o restante na página "Da ficha ao usuário": a conta aparece, a ficha se liga sozinha e a admissão pode ser concluída.</p>
+<h2>Dúvidas comuns</h2>
+<ul>
+<li><strong>"Não aparece a ficha para iniciar a admissão."</strong> Confira se ela tem login proposto e cargo pretendido (uma vaga livre) e se não está cancelada nem já tem admissão.</li>
+<li><strong>"O sistema diz que falta algo na ficha."</strong> O formulário do GLPI exige nome, CPF, RG ou CIN e data prevista de início.</li>
+<li><strong>"A integração com o GLPI não está ativa."</strong> A administração precisa ativar a integração e informar o usuário e a senha web da conta de serviço (Administração › Integração GLPI).</li>
+<li><strong>"Quero corrigir um serviço marcado errado depois do envio."</strong> O formulário já foi enviado: peça o ajuste direto à TI, no chamado.</li>
+<li><strong>"O número do Protocolo foi reservado e a admissão foi cancelada."</strong> Se ainda não havia documento, o número volta para a fila automaticamente.</li>
+</ul>

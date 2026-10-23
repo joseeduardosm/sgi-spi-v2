@@ -10,8 +10,8 @@ import { AutenticacaoService } from '../../core/autenticacao/autenticacao.servic
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { SeletorUsuariosComponent } from '../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
 import { UsuariosApiService } from '../usuarios/usuarios-api.service';
-import { Setor, SetoresApiService } from './setores-api.service';
-import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
+import { Setor, SetoresApiService, TIPOS_UNIDADE } from './setores-api.service';
+import { CabecalhoRhComponent } from '../rh/cabecalho-rh.component';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 /** Setores institucionais e grupos sistêmicos, usados como grupos de acesso na ACL. */
@@ -20,7 +20,7 @@ type ColunaOrdem = 'nome' | 'tipo' | 'setor_pai' | 'lider' | 'membros' | 'situac
 
 @Component({
   selector: 'app-setores',
-  imports: [EsqueletoComponent, FormsModule, ReactiveFormsModule, SeletorUsuariosComponent, TrilhaComponent],
+  imports: [EsqueletoComponent, FormsModule, ReactiveFormsModule, SeletorUsuariosComponent, CabecalhoRhComponent],
   templateUrl: './setores.component.html',
   host: { '(document:keydown.escape)': 'fecharFormulario()' },
 })
@@ -31,8 +31,10 @@ export class SetoresComponent implements OnInit {
   protected readonly usuarios = inject(UsuariosApiService);
 
   protected readonly ehSuperRoot = computed(() => this.autenticacao.possuiPapel('SuperRoot'));
-  /** Grava quem é SuperRoot ou tem CONTROLE_TOTAL na ACL `setores` (ex.: a CGP); grupos sistêmicos só o SuperRoot. */
-  protected readonly ehAdministrador = computed(() => this.acesso.pode('setores', 'CONTROLE_TOTAL'));
+  /** Os setores são do RH: grava quem é SuperRoot ou tem "Gerir setores e cargos" (MODIFICACAO no módulo RH); grupos sistêmicos só o SuperRoot. */
+  protected readonly ehAdministrador = computed(() => this.acesso.pode('rh', 'MODIFICACAO'));
+  protected readonly tiposUnidade = Object.entries(TIPOS_UNIDADE);
+  protected readonly rotuloTipo = (valor: string | null): string => (valor ? TIPOS_UNIDADE[valor] ?? valor : '');
   // A pesquisa é feita no navegador, sobre a lista já carregada (a quantidade de setores é pequena)
   protected busca = '';
   private readonly termo = signal('');
@@ -43,7 +45,7 @@ export class SetoresComponent implements OnInit {
   protected readonly filtrados = computed(() => {
     const termo = this.termo().toLowerCase();
     const lista = termo
-      ? this.setores().filter((s) => `${s.nome} ${s.setor_pai_nome ?? ''} ${s.lider_nome ?? ''}`.toLowerCase().includes(termo))
+      ? this.setores().filter((s) => `${s.nome} ${s.sigla ?? ''} ${s.setor_pai_nome ?? ''} ${s.lider_nome ?? ''}`.toLowerCase().includes(termo))
       : this.setores();
     const coluna = this.ordenarPor();
     const sinal = this.direcao() === 'asc' ? 1 : -1;
@@ -93,6 +95,8 @@ export class SetoresComponent implements OnInit {
   protected readonly formulario = inject(NonNullableFormBuilder).group({
     nome: ['', [Validators.required, Validators.maxLength(150)]],
     setor_pai_id: [0],
+    sigla: ['', [Validators.maxLength(30)]],
+    tipo_unidade: [''],
     sistemico: [false],
     ativo: [true],
   });
@@ -128,7 +132,7 @@ export class SetoresComponent implements OnInit {
   protected abrirFormulario(setor?: Setor): void {
     this.emEdicao.set(setor ?? null);
     this.erroFormulario.set(null);
-    this.formulario.reset({ nome: setor?.nome ?? '', setor_pai_id: setor?.setor_pai_id ?? 0, sistemico: setor?.sistemico ?? false, ativo: setor?.ativo ?? true });
+    this.formulario.reset({ nome: setor?.nome ?? '', setor_pai_id: setor?.setor_pai_id ?? 0, sigla: setor?.sigla ?? '', tipo_unidade: setor?.tipo_unidade ?? '', sistemico: setor?.sistemico ?? false, ativo: setor?.ativo ?? true });
     // O líder vira uma opção do seletor; os membros são buscados no detalhe do setor
     this.lider.set(setor?.lider_id ? [{ id: setor.lider_id, nome_completo: setor.lider_nome ?? '', login: '', cargo: '', ativo: true }] : []);
     this.membros.set([]);
@@ -154,6 +158,8 @@ export class SetoresComponent implements OnInit {
       nome: valores.nome.trim(),
       setor_pai_id: Number(valores.setor_pai_id) || null,
       lider_id: this.lider()[0]?.id ?? null,
+      sigla: valores.sigla.trim() || null,
+      tipo_unidade: valores.tipo_unidade || null,
       sistemico: valores.sistemico,
       ativo: valores.ativo,
       membros_ids: this.membros().map((m) => m.id),

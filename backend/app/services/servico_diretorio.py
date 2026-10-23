@@ -177,7 +177,7 @@ def detalhe_contato(sessao: Session, usuario: Usuario, contato_id: int, hoje: da
     equipe = sessao.scalars(select(Usuario).where(Usuario.gestor_id == alvo.id, Usuario.ativo.is_(True)))
     return ContatoDetalhe(
         **base.model_dump(), chefia=_resumo(chefe) if chefe and chefe.ativo else None,
-        equipe=sorted((_resumo(p) for p in equipe), key=lambda r: normalizar(r.nome)),
+        equipe=sorted((_resumo(p) for p in equipe), key=lambda r: normalizar(r.nome)), bio=(alvo.bio_texto or None) if alvo.bio_visivel else None,
     )
 
 

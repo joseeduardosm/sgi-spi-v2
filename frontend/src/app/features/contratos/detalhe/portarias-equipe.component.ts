@@ -9,6 +9,7 @@ import { EtapaTrilha, EstadoEtapa, TrilhaEtapasComponent } from '../../../shared
 import { OpcaoUsuario } from '../../../core/modelos/usuario.model';
 import { BotaoCopiarComponent } from '../../../shared/componentes/botao-copiar/botao-copiar.component';
 import { SeletorUsuariosComponent } from '../../../shared/componentes/seletor-usuarios/seletor-usuarios.component';
+import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { HtmlConfiavelPipe } from '../../contratacoes/html-confiavel.pipe';
@@ -22,12 +23,12 @@ const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', s
 /** Portaria de designação na aba Equipe: a equipe só muda por aqui (nomeações → ciência → autoridade → aceite → D.O.E. no Protocolo). */
 @Component({
   selector: 'app-portarias-equipe',
-  imports: [FormsModule, DatePipe, TrilhaEtapasComponent, BotaoCopiarComponent, SeletorUsuariosComponent, HtmlConfiavelPipe, ...PIPES_FORMATACAO],
+  imports: [FormsModule, DatePipe, EnvioPdfComponent, TrilhaEtapasComponent, BotaoCopiarComponent, SeletorUsuariosComponent, HtmlConfiavelPipe, ...PIPES_FORMATACAO],
   template: `
     <section class="cartao-dados" aria-labelledby="titulo-portaria">
       <header>
         <div><h2 id="titulo-portaria">Portarias de designação</h2>
-          <small>A equipe só muda por portaria: nomeações, ciência dos nomeados, autoridade e aceite. A nova equipe vale quando o Protocolo anexa o D.O.E.</small></div>
+          <small>A equipe só muda por portaria: nomeações, ciência dos nomeados, autoridade e aceite. A nova equipe vale quando o PDF do D.O.E. é anexado (aqui mesmo, depois do aceite, ou pelo Protocolo).</small></div>
         @if (painel()?.pode_criar && !painel()?.em_andamento && !formularioAberto()) {
           <button type="button" class="acao-primaria" (click)="abrirNova()">Nova portaria</button>
         }
@@ -100,6 +101,19 @@ const AUTORIDADE_VAZIA: GravacaoAutoridade = { sigla: '', nome: '', cargo: '', s
               <p class="dica-formulario">A autoridade só é escolhida quando todas as nomeações estiverem com o cadastro completo e com a ciência de cada nomeado.</p>
             }
             @if (portaria.pendencias.length) { <p role="alert"><strong>Pendências para o aceite:</strong> {{ portaria.pendencias.join('; ') }}.</p> }
+            @if (portaria.pode_publicar) {
+              <!-- Publicação sem sair do Contratos: anexa o D.O.E. ao número reservado no Protocolo -->
+              <section class="cartao-dados" aria-label="Publicar a portaria">
+                <header><h3>Publicar a portaria (D.O.E.)</h3></header>
+                <div class="corpo">
+                  <p class="dica-formulario">Depois de publicada no Diário Oficial, anexe o <strong>PDF do D.O.E.</strong>. Ele fica no número reservado no Protocolo, entra em Documentos Importantes e a nova equipe passa a valer.</p>
+                  <div class="acoes-linha">
+                    <app-envio-pdf rotulo="Selecionar o PDF do D.O.E." (selecionado)="escolherDoe($event)" />
+                    <button type="button" class="acao-primaria" [class.carregando]="salvando()" [disabled]="!doe || salvando()" (click)="publicar(portaria)">Publicar com o PDF do D.O.E.</button>
+                  </div>
+                </div>
+              </section>
+            }
             @if (portaria.status === 'aceita' && portaria.tem_evidencia) {
               <p class="aviso-reserva" role="status">Ciências e aceite concluídos: baixe o <strong>PDF de evidência</strong> abaixo e junte-o ao processo no SEI, para seguir com a publicação no D.O.E.</p>
             }
@@ -222,6 +236,8 @@ export class PortariasEquipeComponent implements OnInit {
   protected readonly formularioAberto = signal(false);
   protected readonly editandoId = signal<string | null>(null);
   protected readonly salvando = signal(false);
+  // PDF do D.O.E. escolhido para publicar a portaria
+  protected doe: File | null = null;
   /** Usuário escolhido em cada função do formulário de nomeações. */
   protected escolhas: Record<Papel, OpcaoUsuario[]> = this.escolhasVazias();
   protected autoridadeId = '';
@@ -253,7 +269,7 @@ export class PortariasEquipeComponent implements OnInit {
       { id: 'autoridade', rotulo: 'Autoridade e texto', subtitulo: (e) => (e === 'atual' ? 'escolher a autoridade' : undefined) },
       { id: 'aceite', rotulo: 'Aceite da autoridade', subtitulo: (e) => (e === 'atual' ? 'aguardando o aceite' : undefined) },
       { id: 'evidencia', rotulo: 'PDF de evidência', subtitulo: (e) => (e === 'concluida' ? 'gerado no aceite' : undefined) },
-      { id: 'doe', rotulo: 'Publicação (D.O.E.)', subtitulo: (e) => (e === 'atual' ? 'Protocolo anexa o D.O.E.' : undefined) },
+      { id: 'doe', rotulo: 'Publicação (D.O.E.)', subtitulo: (e) => (e === 'atual' ? 'anexar o D.O.E.' : undefined) },
     ];
     return passos.map((passo, i) => {
       const estado: EstadoEtapa = i < posicao ? 'concluida' : i === posicao && p.status !== 'publicada' ? 'atual' : p.status === 'publicada' ? 'concluida' : 'bloqueada';
@@ -370,6 +386,26 @@ export class PortariasEquipeComponent implements OnInit {
   protected cancelar(p: Portaria): void {
     const motivo = window.prompt(`Motivo do cancelamento da ${p.titulo} (o número, se reservado, volta a ficar livre no Protocolo):`);
     if (motivo?.trim()) this.tratar(this.api.cancelar(this.contratoId(), p.id, motivo.trim()), 'Não foi possível cancelar a portaria');
+  }
+
+  protected escolherDoe(arquivo: File | null): void {
+    this.doe = arquivo;
+  }
+
+  /** Anexa o PDF do D.O.E. ao número reservado e publica a portaria (a nova equipe passa a valer). */
+  protected async publicar(p: Portaria): Promise<void> {
+    if (!this.doe) return;
+    const ok = await this.dialogos.confirmar({
+      titulo: `Publicar a ${p.titulo}?`,
+      mensagem: 'O PDF do D.O.E. é anexado ao número reservado, a portaria vira publicada e a nova equipe passa a valer no contrato (as funções que ela não cita ficam sem responsável).',
+      rotuloConfirmar: 'Publicar',
+    });
+    if (!ok) return;
+    this.salvando.set(true);
+    this.dialogos.executar(this.api.publicar(this.contratoId(), p.id, this.doe), 'Publicando a portaria e aplicando a nova equipe…').subscribe({
+      next: (painel) => { this.salvando.set(false); this.painel.set(painel); this.doe = null; },
+      error: (e) => { this.salvando.set(false); this.dialogos.mostrarErro(e, 'Não foi possível publicar a portaria'); },
+    });
   }
 
   protected baixarEvidencia(p: Portaria): void {

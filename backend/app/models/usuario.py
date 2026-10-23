@@ -10,7 +10,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Uuid, false, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.banco import Base, agora_utc
@@ -75,6 +75,13 @@ class Usuario(Base):
     ocultar_aniversario: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Data da última revalidação do perfil; vazia ou antiga demais = perfil pendente
     perfil_revisado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Boas-vindas do primeiro acesso: vazio = ainda não viu o aviso (a migração marcou quem já usava o sistema); o e-mail sai uma única vez
+    boas_vindas_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    boas_vindas_email_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Bio opcional (idade, formação, experiências...): só entra na busca e no cartão quando a pessoa libera (`bio_visivel`)
+    bio_texto: Mapped[str] = mapped_column(Text, default="", server_default="")
+    bio_visivel: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     ultimo_acesso_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)

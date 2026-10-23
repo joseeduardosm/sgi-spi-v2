@@ -1,0 +1,52 @@
+<p>Tudo no RH começa pela estrutura: os <strong>setores</strong> (as unidades da SPI) e os <strong>cargos</strong> (as vagas de cada setor). Quem ocupa um cargo passa a fazer parte do setor dele, e o cargo e o setor aparecem no cadastro da pessoa.</p>
+<h2>Setores</h2>
+<p>Os setores ficam agora dentro do RH (<strong>RH › Setores</strong>). O item "Setores" saiu da barra lateral, e o endereço antigo continua funcionando. Para criar, alterar ou excluir setores é preciso <strong>Modificação</strong> (ou mais) no RH.</p>
+[[s01-setores-lista]]
+<p>Cada setor tem, além do nome, do setor pai, do líder e dos membros, dois campos novos que servem para rotular o organograma:</p>
+[[s02-setor-formulario]]
+<ul>
+<li><strong>Tipo da unidade:</strong> secretaria, subsecretaria, diretoria, coordenadoria, serviço, assessoria, colegiado, vinculada ou outro.</li>
+<li><strong>Sigla:</strong> como SGC ou CGP, mostrada no cartão da unidade.</li>
+<li><strong>Setor pai:</strong> define a hierarquia. Um setor não pode ser filho de si mesmo nem de um subordinado dele.</li>
+<li><strong>Líder:</strong> é quem aparece como líder da unidade no organograma e quem enxerga as <strong>vagas</strong> do setor (veja "Organograma e quem vê as vagas").</li>
+</ul>
+<p class="callout info">Grupos sistêmicos (como "Auditores"), criados só para dar acesso, continuam sendo criados e alterados apenas pelo SuperRoot. Um setor só pode ser excluído se não tiver membros nem subordinados.</p>
+<h2>Cargos: cada linha é uma vaga</h2>
+<p>Em <strong>RH › Cargos</strong>, cada linha é <strong>uma posição de um setor</strong>, ocupada ou livre. Um cargo se descreve assim:</p>
+<table>
+<thead><tr><th>Campo</th><th>Como preencher</th></tr></thead>
+<tbody>
+<tr><td><strong>Tipo</strong></td><td>CCESP (cargo em comissão), FCESP (função de confiança) ou Outros (cargos que não seguem o quadro)</td></tr>
+<tr><td><strong>Grupo</strong></td><td>1 (direção e chefia) ou 2 (assessoria)</td></tr>
+<tr><td><strong>Nível</strong></td><td>De 1 a 18. O grupo e o nível formam a <strong>classificação</strong>: 1.15 é Diretor; 2.16 é Assessor Especial IV</td></tr>
+<tr><td><strong>Denominação</strong></td><td>O nome do cargo, como Assessor Especial IV</td></tr>
+</tbody>
+</table>
+<p>O cargo aparece completo assim: <strong>FCESP 2.16 – Assessor Especial IV</strong>. CCESP e FCESP exigem grupo e nível juntos; o tipo Outros fica sem classificação.</p>
+[[c01-cargos-lista]]
+<h3>Criar cargos (inclusive em lote)</h3>
+<p>Em <strong>Novo cargo</strong>, informe o setor, o tipo, o grupo, o nível e a denominação. O campo <strong>Quantidade de vagas</strong> cria várias vagas iguais de uma vez (por exemplo, 2 vagas de Assessor II).</p>
+[[c02-novo-cargo]]
+<h3>Alocar uma pessoa numa vaga</h3>
+<p>Na vaga livre, <strong>Alocar</strong> pede a pessoa, a data da posse e o ato (a resolução ou portaria da nomeação).</p>
+[[c03-alocar]]
+<ul>
+<li>Se a pessoa já ocupa outro cargo, o anterior é encerrado como <strong>troca</strong>, e ela passa a fazer parte do setor do novo cargo.</li>
+<li>O <strong>cargo</strong> e o <strong>departamento</strong> do cadastro da pessoa passam a refletir o cargo ocupado e o setor dele. Por isso o perfil deixa de pedir alteração desses dois campos de quem ocupa um cargo: a mudança agora é feita pelo RH, aqui.</li>
+<li>O fato (posse, troca) vai para o <strong>histórico funcional</strong> da pessoa, com o ato.</li>
+</ul>
+<h3>Vagar: troca, exoneração e dispensa</h3>
+<p>Para tirar alguém do cargo, use <strong>Vagar</strong> e informe o motivo, a data de saída e o ato.</p>
+[[c04-vagar]]
+<ul>
+<li><strong>Troca de cargo</strong>, <strong>Exoneração</strong>, <strong>Dispensa</strong> ou <strong>Outro motivo</strong>. Com Exoneração, o botão fica vermelho e o histórico da pessoa registra a exoneração.</li>
+<li>A vaga volta a ficar <strong>livre</strong>, e a pessoa deixa de fazer parte do setor por aquele cargo.</li>
+<li><strong>Editar</strong> altera setor, tipo, grupo, nível e denominação (o setor de uma vaga ocupada não muda). <strong>Excluir</strong> só vale para vagas que nunca tiveram ocupante.</li>
+</ul>
+<h3>A reconciliar: os cargos antigos</h3>
+<p>Antes do RH ter cargos cadastrados, o cargo de cada pessoa era um <strong>texto livre</strong>. O sistema leu esses textos, criou os cargos e os vinculou, mas o que não seguia o padrão do quadro fica na aba <strong>A reconciliar</strong>.</p>
+[[c05-a-reconciliar]]
+<ul>
+<li>A coluna <strong>Será criado</strong> mostra como o sistema interpretou o texto (tipo, grupo, nível e denominação). Texto fora do padrão entra como tipo <strong>Outros</strong>.</li>
+<li><strong>Criar cargo e vincular</strong> cria a vaga no setor da pessoa e já a aloca. Se o setor não foi reconhecido, escolha-o na lista da linha.</li>
+</ul>

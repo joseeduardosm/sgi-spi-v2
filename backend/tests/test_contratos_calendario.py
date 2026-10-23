@@ -33,13 +33,13 @@ def test_fim_da_vigencia_e_prazo_de_48h_da_nf(cliente, cenario):
     # Vigência de 12 meses a partir de 01/01/2026: termina em 31/12/2026
     vigencia = _eventos(cliente, gestora, de="2026-12-01", ate="2026-12-31", tipos="vigencia_fim")
     assert [e["data"] for e in vigencia] == ["2026-12-31"] and vigencia[0]["contrato_numero"] == contrato["numero"]
-    # O prazo de 48 h conta da conclusão da medição (agora, no teste): cai hoje ou nos próximos dias
+    # O prazo da NF conta de agora (a medição é concluída no teste): 3 dias úteis de contestação, ou 48 h se o e-mail não saiu. Cai nos próximos dias
     agora = datetime.now(timezone.utc).date()
-    prazos = _eventos(cliente, gestora, de=str(agora - timedelta(days=1)), ate=str(agora + timedelta(days=4)), tipos="prazo_nf_48h")
+    prazos = _eventos(cliente, gestora, de=str(agora - timedelta(days=1)), ate=str(agora + timedelta(days=10)), tipos="prazo_nf_48h")
     assert len(prazos) == 1 and prazos[0]["hora"] is not None and prazos[0]["rota"].endswith("/execucao/2026-01")
     # Depois de juntar a NF o prazo de 48 h some
     assert juntar_nf(cliente, base, gestora, "2105.00", "123", recebida_em="2026-02-05", prazo="30").status_code == 200
-    assert _eventos(cliente, gestora, de=str(agora - timedelta(days=1)), ate=str(agora + timedelta(days=4)), tipos="prazo_nf_48h") == []
+    assert _eventos(cliente, gestora, de=str(agora - timedelta(days=1)), ate=str(agora + timedelta(days=10)), tipos="prazo_nf_48h") == []
 
 
 def test_pagamento_da_nf_vira_evento_com_gravidade_pelo_atraso(cliente, cenario):

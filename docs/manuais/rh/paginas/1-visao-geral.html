@@ -1,0 +1,51 @@
+<p>O <strong>Módulo RH</strong> do SGI SPI passou a acompanhar a <strong>vida funcional completa</strong> de uma pessoa: a estrutura onde ela vai trabalhar (setores, cargos e organograma), o <strong>pré-cadastro</strong> de quem vai chegar, a <strong>admissão</strong> (do formulário no GLPI à posse), o momento em que a ficha <strong>vira o usuário do sistema</strong>, o primeiro acesso e o <strong>histórico funcional</strong> de tudo o que acontece depois.</p>
+<p class="callout info">Todos os exemplos deste manual usam <strong>dados fictícios</strong> (pessoas, setores, cargos, CPFs e documentos inventados) e foram feitos numa cópia do sistema, nunca em produção. As férias, a licença-prêmio, os feriados e a folha de ponto continuam como estão e têm as suas próprias páginas neste capítulo.</p>
+<h2>A história, do começo ao fim</h2>
+<ol>
+<li><strong>A estrutura</strong> (RH › Setores, Cargos e Organograma): o RH cadastra os setores e cada cargo como uma <strong>vaga</strong>. Quem ocupa um cargo passa a fazer parte do setor dele.</li>
+<li><strong>O pré-cadastro</strong> (RH › Pré-cadastro): quando surge alguém a contratar, o RH abre a <strong>ficha</strong>: dados pessoais, documentos, contato, vínculo, formações e experiências, a vaga pretendida e o <strong>login proposto</strong>. A ficha também pode ser preenchida pela própria pessoa, num <strong>formulário em Excel</strong>.</li>
+<li><strong>A admissão</strong> (RH › Admissões): uma trilha de <strong>7 etapas</strong>: formulário de nomeação no GLPI, documentos, resolução, número no Protocolo, publicação no D.O.E. (com o e-mail de nomeação automático), posse e entrada no SGI.</li>
+<li><strong>A conta aparece:</strong> a TI cria o login no AD a partir do chamado. No instante em que ele aparece, o SGI <strong>liga a ficha ao usuário</strong> sozinho e aproveita os dados dela.</li>
+<li><strong>O primeiro acesso:</strong> a pessoa vê as <strong>boas-vindas</strong> e é levada a completar o cadastro. Em <strong>Meu cadastro</strong> ela pode escrever uma <strong>bio</strong> e, se já estava no sistema antes, enviar a própria ficha para o RH validar.</li>
+<li><strong>A vida funcional:</strong> cargos, setores, férias, licença-prêmio e a exoneração, se vier, ficam no <strong>histórico funcional</strong>, sempre com quem registrou e quando.</li>
+</ol>
+<h2>Os atalhos do módulo</h2>
+<p>No topo de todas as telas do RH há uma fileira de atalhos. Quais aparecem depende do seu acesso:</p>
+[[h01-atalhos]]
+<table>
+<thead><tr><th>Atalho</th><th>Para que serve</th><th>Quem vê</th></tr></thead>
+<tbody>
+<tr><td><strong>Férias e LP</strong>, <strong>Feriados</strong></td><td>Férias, licença-prêmio e calendário de feriados (páginas "Para todos os servidores", "Para autorizadores" e "Para a CGP")</td><td>Todos</td></tr>
+<tr><td><strong>Organograma</strong></td><td>A estrutura da SPI em árvore ou em lista, com as pessoas de cada unidade</td><td>Todos (as vagas, só o RH e a liderança)</td></tr>
+<tr><td><strong>Meu cadastro</strong></td><td>Bio e ficha cadastral da própria pessoa</td><td>Todos</td></tr>
+<tr><td><strong>Painel</strong></td><td>Painel de afastamentos</td><td>RH e autorizadores</td></tr>
+<tr><td><strong>Setores</strong>, <strong>Cargos</strong></td><td>Estrutura: setores e vagas</td><td>Quem tem acesso ao RH</td></tr>
+<tr><td><strong>Pré-cadastro</strong>, <strong>Admissões</strong>, <strong>Modelos</strong></td><td>Fichas de quem vai chegar, a trilha de admissão e os textos e checklists editáveis</td><td>O RH (controle total)</td></tr>
+<tr><td><strong>Validações</strong>, <strong>Parâmetros</strong></td><td>Alterações de cadastro a validar e regras do módulo</td><td>O RH (controle total)</td></tr>
+</tbody>
+</table>
+<h2>Quem é o RH</h2>
+<p>Antes, o RH era "quem está no setor da CGP", escrito no código. Agora o RH é definido no <strong>Controle de acesso</strong>, no recurso <strong>RH</strong> (Administração › Controle de acesso › Recursos): por regra direta para uma pessoa, por <strong>setor</strong> ou por <strong>perfil de acesso</strong>.</p>
+[[h02-acesso-rh]]
+<table>
+<thead><tr><th>Nível</th><th>O que libera</th></tr></thead>
+<tbody>
+<tr><td><strong>Leitura</strong> (Consultar a estrutura do RH)</td><td>Ver setores, cargos, vagas, ocupantes e o organograma completo, com as vagas. Não altera nada.</td></tr>
+<tr><td><strong>Modificação</strong> (Gerir setores e cargos)</td><td>O de leitura, mais criar, alterar e excluir setores, cargos e vagas, alocar e retirar pessoas dos cargos e registrar exonerações. Não valida cadastros nem mexe nos parâmetros.</td></tr>
+<tr><td><strong>Controle total</strong> (Ser o RH do sistema)</td><td>O de modificação, mais validar alterações cadastrais, decidir férias e licenças, importar dados funcionais, gerir feriados, parâmetros e modelos, manter as <strong>fichas de pré-cadastro</strong> e as <strong>admissões</strong> (dados pessoais sensíveis) e receber os avisos do RH.</td></tr>
+</tbody>
+</table>
+<ul>
+<li>O <strong>SuperRoot</strong> sempre tem acesso pleno.</li>
+<li>Enquanto o recurso RH <strong>não tiver nenhuma regra nem perfil</strong>, vale o setor configurado como CGP, só para o sistema nunca ficar sem RH. Assim que a primeira regra é criada, vale só o que está no Controle de acesso.</li>
+<li>Diferente de outros módulos, o RH <strong>nunca fica aberto a todos</strong> por falta de regras: quem não está nas regras só vê o que é público (organograma, férias, Meu cadastro).</li>
+</ul>
+<h2>Por onde continuar</h2>
+<ul>
+<li><strong>Setores e cargos</strong> e <strong>Organograma e quem vê as vagas</strong>: a estrutura.</li>
+<li><strong>Histórico funcional e busca de pessoas</strong>.</li>
+<li><strong>Pré-cadastro: a ficha</strong> e <strong>Ficha por planilha</strong>.</li>
+<li><strong>Admissão: da nomeação à posse</strong>.</li>
+<li><strong>Da ficha ao usuário</strong>: conta, boas-vindas e Meu cadastro.</li>
+<li><strong>Modelos, checklists e parâmetros</strong>.</li>
+</ul>

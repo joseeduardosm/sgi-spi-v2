@@ -1,0 +1,27 @@
+PORTARIA = '''
+<p>Desde outubro, <strong>a equipe de gestão e fiscalização de um contrato só muda por portaria de designação</strong>. O botão Editar do contrato não altera mais gestor e fiscais; a designação segue o rito formal, do pedido à publicação, e o sistema conduz cada passo. Tudo acontece na aba <strong>Equipe</strong> do contrato.</p>
+<p class="callout info"><strong>Quem pode criar a portaria:</strong> a equipe vigente do contrato e quem tem controle total em Contratos (perfil <em>Administrador de Contratos</em>). <strong>Quem aceita:</strong> a autoridade signatária escolhida. <strong>Quem publica:</strong> o Protocolo, ao anexar o Diário Oficial.</p>
+<h2>1. Nomeações</h2>
+<p>Na aba <strong>Equipe</strong>, clique em <strong>Nova portaria</strong>. O formulário já vem com a equipe atual. Indique de 1 a 6 funções com o nome de cada pessoa: <strong>Gestor</strong> (obrigatório), Gestor suplente, Fiscal técnico, Fiscal técnico suplente, Fiscal administrativo e Fiscal administrativo suplente. A portaria define a equipe inteira: função sem nomeado fica sem responsável quando a portaria for publicada. Só pode haver uma portaria em andamento por contrato.</p>
+<h2>2. Conferência do cadastro (RH)</h2>
+<p>O sistema confere, para cada nomeado, <strong>RS/PV</strong>, <strong>RG/CIN</strong> (dados do RH) e <strong>cargo</strong>. O que faltar aparece na coluna <em>Situação</em> como <em>Dados pendentes no RH</em>, e o RH recebe o aviso <em>“RH precisa atualizar os dados de fulano para que ele seja nomeado como [função] no contrato [nº – apelido]”</em>. Quando o RH atualiza, a portaria segue sozinha.</p>
+<h2>3. Ciência dos nomeados</h2>
+<p>Com todos os cadastros completos, cada nomeado recebe o pedido de ciência por <strong>três caminhos</strong>: uma janela ao entrar no sistema (“Você está sendo nomeado por … como … do contrato …. Você está ciente?”), um aviso no <strong>sino</strong> e um <strong>e-mail</strong> com o botão para abrir o sistema. Clique em <strong>Sim, estou ciente</strong>. “Ainda não” só adia: o aviso continua no sino até a ciência. A tabela mostra, por pessoa, <em>Ciência pendente</em> ou <em>Ciência ok</em> com a data e a hora.</p>
+<h2>4. Autoridade e texto da portaria</h2>
+<p>Só quando <strong>todas as nomeações estão com cadastro completo e ciência dada</strong> aparece o campo para escolher a <strong>autoridade competente</strong>. Ao escolher, o sistema <strong>gera o texto da portaria</strong>, pronto para copiar com o botão <strong>Copiar portaria</strong>, e <strong>reserva o número</strong> no Protocolo (ainda pendente). A tela avisa: <em>“A portaria xx/20xx foi reservada. Os novos usuários ganharão acesso ao contrato neste sistema quando o Protocolo subir o PDF do D.O.E. comprovando a sua publicação.”</em></p>
+<h2>5. Aceite e PDF de evidência</h2>
+<p>A autoridade abre a aba Equipe do contrato e clica em <strong>Aceitar</strong> (verde) ou <strong>Devolver</strong> (vermelho, com o motivo; devolvendo, o número volta ao Protocolo). Ao aceitar, o sistema gera o <strong>PDF de evidência</strong>: função, nomeado e data e hora da ciência de cada um, mais o aceite da autoridade. Baixe o PDF pelo botão <strong>PDF de evidência (ciências e aceite)</strong> e <strong>junte-o ao processo no SEI</strong>, junto com o texto da portaria, para providenciar a publicação no Diário Oficial.</p>
+<h2>6. Publicação e efeito no sistema</h2>
+<p>Quando o <strong>Protocolo anexa o PDF do D.O.E.</strong> ao número da portaria, ela passa a <em>Publicada</em>: a nova equipe vale no contrato, os nomeados ganham acesso e o PDF entra em <strong>Documentos Importantes</strong>. O histórico de todas as portarias do contrato fica na própria aba Equipe.</p>
+<p class="callout warning">Para cancelar uma portaria antes da publicação, use <strong>Cancelar</strong> na aba Equipe: o número reservado volta sozinho ao Protocolo. Se você é <strong>RH</strong>, mantenha atualizados RS/PV, RG/CIN e cargo de quem pode ser nomeado: é o que mais atrasa o rito.</p>
+'''
+ACESSO = '''
+<p>Esta página é para quem administra o sistema (SuperRoot). Em <strong>Administração › Controle de acesso</strong>, as permissões agora são organizadas em <strong>perfis</strong>: conjuntos de ações que podem ser dados a pessoas, a setores ou a grupos sistêmicos.</p>
+<h2>Perfis e ações</h2>
+<p>Cada perfil tem, por módulo, <strong>ações independentes</strong> (marcadas em caixas, como no GLPI): por exemplo, <em>Leitura</em>, <em>Modificação</em>, <em>Controle total</em> ou ações próprias do módulo, como <em>Lançar ordem bancária</em> em Contratos. Há “marcar todos” por linha e por coluna.</p>
+<h2>Quem recebe o perfil</h2>
+<p>Na aba <strong>Usuários</strong> do perfil, você escolhe pessoas e também <strong>setores e grupos</strong>. Marcar um setor pai <strong>marca todos os setores abaixo dele</strong>, e cada um ainda pode ser desmarcado depois. Quem é membro de um setor marcado recebe o perfil; na ficha da pessoa aparece “recebe pelo setor X”.</p>
+<h2>Perfil ativo e personificar</h2>
+<p>Quem tem mais de um perfil escolhe o perfil ativo no menu do usuário. O SuperRoot pode <strong>personificar</strong> outro usuário, para testar o que ele enxerga; todas as ações ficam registradas na auditoria com o nome de quem personificou.</p>
+<p class="callout info">As <strong>importações por planilha XLSX</strong> (contratos, checklists e formulários) deixaram de ter permissão própria: fazem parte de <em>Contratos › Editar contratos e conduzir a execução</em>.</p>
+'''

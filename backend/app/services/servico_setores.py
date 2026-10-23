@@ -64,6 +64,8 @@ def listar_setores(sessao: Session, busca: str | None = None) -> list[LeituraSet
             lider_nome=(nome_lider or login_lider) if s.lider_id else None,
             sistemico=s.sistemico,
             ativo=s.ativo,
+            sigla=s.sigla,
+            tipo_unidade=s.tipo_unidade,
             total_membros=membros,
             total_subordinados=subordinados,
             criado_em=s.criado_em,
@@ -166,7 +168,8 @@ def _definir_membros(sessao: Session, setor_id: int, membros_ids: list[int]) -> 
 def criar_setor(sessao: Session, dados: GravacaoSetor, autor: str) -> Setor:
     """Cria o setor, define os membros e registra na auditoria."""
     _validar(sessao, dados, None)
-    setor = Setor(nome=dados.nome, setor_pai_id=dados.setor_pai_id, lider_id=dados.lider_id, sistemico=dados.sistemico, ativo=dados.ativo)
+    setor = Setor(nome=dados.nome, setor_pai_id=dados.setor_pai_id, lider_id=dados.lider_id, sistemico=dados.sistemico, ativo=dados.ativo,
+                  sigla=(dados.sigla or "").strip() or None, tipo_unidade=(dados.tipo_unidade or "").strip() or None)
     sessao.add(setor)
     # flush envia o INSERT para obter o id do setor antes de inserir os membros
     sessao.flush()
@@ -183,6 +186,7 @@ def alterar_setor(sessao: Session, setor_id: int, dados: GravacaoSetor, autor: s
     nome_anterior = setor.nome
     for campo in ("nome", "setor_pai_id", "lider_id", "sistemico", "ativo"):
         setattr(setor, campo, getattr(dados, campo))
+    setor.sigla, setor.tipo_unidade = (dados.sigla or "").strip() or None, (dados.tipo_unidade or "").strip() or None
     # O Departamento dos usuários guarda o nome do setor: renomear o setor acompanha o perfil deles
     if nome_anterior.strip().lower() != dados.nome.strip().lower() and not setor.sistemico:
         for usuario in sessao.scalars(select(Usuario).where(func.lower(func.trim(Usuario.departamento)) == nome_anterior.strip().lower())):

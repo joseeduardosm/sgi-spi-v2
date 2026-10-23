@@ -1,0 +1,872 @@
+{
+ "h01-atalhos": [
+  {
+   "n": 1,
+   "texto": "Os atalhos do módulo RH. Setores, Cargos, Pré-cadastro, Admissões e Modelos aparecem para quem tem acesso ao RH; Organograma e Meu cadastro, para todos."
+  }
+ ],
+ "s01-setores-lista": [
+  {
+   "n": 1,
+   "texto": "Cria um setor novo"
+  },
+  {
+   "n": 2,
+   "texto": "Origem do setor: institucional (estrutura da SPI) ou grupo sistêmico (só para dar acesso)"
+  },
+  {
+   "n": 3,
+   "texto": "Sigla e tipo da unidade, para rotular o organograma"
+  },
+  {
+   "n": 4,
+   "texto": "Edita o setor: nome, setor pai, líder, sigla, tipo e membros"
+  }
+ ],
+ "s02-setor-formulario": [
+  {
+   "n": 1,
+   "texto": "Nome do setor (único)"
+  },
+  {
+   "n": 2,
+   "texto": "Setor pai: define onde ele fica na hierarquia (sem ciclos)"
+  },
+  {
+   "n": 3,
+   "texto": "Tipo da unidade: secretaria, subsecretaria, diretoria, coordenadoria, serviço, assessoria, colegiado, vinculada ou outro"
+  },
+  {
+   "n": 4,
+   "texto": "Sigla (ex.: SGC), usada no organograma"
+  }
+ ],
+ "c01-cargos-lista": [
+  {
+   "n": 1,
+   "texto": "Duas abas: Cargos e vagas, e A reconciliar (quem ainda tem o cargo escrito à mão)"
+  },
+  {
+   "n": 2,
+   "texto": "Filtros por setor, tipo e busca por cargo, setor ou pessoa"
+  },
+  {
+   "n": 3,
+   "texto": "Todos, só Vagos ou só Ocupados"
+  },
+  {
+   "n": 4,
+   "texto": "Quem ocupa o cargo (o nome abre o histórico funcional) ou o selo Vago"
+  },
+  {
+   "n": 5,
+   "texto": "Cria cargos novos, até em lote"
+  }
+ ],
+ "c02-novo-cargo": [
+  {
+   "n": 1,
+   "texto": "Setor onde a vaga fica"
+  },
+  {
+   "n": 2,
+   "texto": "Tipo: CCESP (cargo em comissão), FCESP (função de confiança) ou Outros"
+  },
+  {
+   "n": 3,
+   "texto": "Grupo 1 (direção e chefia) ou 2 (assessoria)"
+  },
+  {
+   "n": 4,
+   "texto": "Nível de 1 a 18: grupo e nível formam a classificação (ex.: 2.16)"
+  },
+  {
+   "n": 5,
+   "texto": "Quantas vagas iguais criar de uma vez"
+  },
+  {
+   "n": 6,
+   "texto": "Denominação, como Assessor Especial IV"
+  }
+ ],
+ "c03-alocar": [
+  {
+   "n": 1,
+   "texto": "Pessoa que assume a vaga. Se já ocupa outro cargo, aquele é encerrado como troca e ela passa a fazer parte do setor do novo cargo"
+  },
+  {
+   "n": 2,
+   "texto": "Data da posse"
+  },
+  {
+   "n": 3,
+   "texto": "Ato: resolução ou portaria da nomeação"
+  }
+ ],
+ "c04-vagar": [
+  {
+   "n": 1,
+   "texto": "Motivo da saída: troca, exoneração, dispensa ou outro"
+  },
+  {
+   "n": 2,
+   "texto": "Data de saída"
+  },
+  {
+   "n": 3,
+   "texto": "Ato da exoneração (publicado)"
+  },
+  {
+   "n": 4,
+   "texto": "Com Exoneração o botão fica vermelho: a vaga volta a ficar livre e o histórico da pessoa registra a exoneração"
+  }
+ ],
+ "c05-a-reconciliar": [
+  {
+   "n": 1,
+   "texto": "Cargo como estava escrito no cadastro antigo"
+  },
+  {
+   "n": 2,
+   "texto": "O que o sistema vai criar ao interpretar o texto (tipo, grupo, nível e denominação)"
+  },
+  {
+   "n": 3,
+   "texto": "Cria o cargo no setor da pessoa e já a aloca nele"
+  }
+ ],
+ "o01-arvore": [
+  {
+   "n": 1,
+   "texto": "Vagas, Recolher e Expandir: mostra ou esconde as vagas e as unidades subordinadas"
+  },
+  {
+   "n": 2,
+   "texto": "Zoom: − e + (ou o scroll do mouse); a porcentagem volta a 100% e Ajustar mostra tudo; arraste para mover"
+  },
+  {
+   "n": 3,
+   "texto": "Cada cartão é uma unidade: tipo, nome, líder e quantos cargos estão ocupados; clique para ver as pessoas"
+  },
+  {
+   "n": 4,
+   "texto": "Recolhe ou expande as unidades abaixo desta"
+  }
+ ],
+ "o02-vertical": [
+  {
+   "n": 1,
+   "texto": "Árvore ou Vertical: a vertical é a melhor no celular e fica como padrão"
+  },
+  {
+   "n": 2,
+   "texto": "As unidades subordinadas ficam recuadas sob a linha-guia"
+  }
+ ],
+ "o03-unidade": [
+  {
+   "n": 1,
+   "texto": "O líder da unidade (campo líder do setor)"
+  },
+  {
+   "n": 2,
+   "texto": "Foto, nome e cargo; clique para abrir o cartão de contato"
+  },
+  {
+   "n": 3,
+   "texto": "Cargos da unidade: quem ocupa (com foto) e, para o RH e a liderança, as vagas"
+  }
+ ],
+ "o04-cartao": [
+  {
+   "n": 1,
+   "texto": "O cartão de contato da pessoa (o mesmo do Diretório): foto, cargo, setor, ramal, chefia e equipe"
+  }
+ ],
+ "o05-vagas-rh": [
+  {
+   "n": 1,
+   "texto": "Para o RH, a contagem inclui as vagas (ex.: 2/4 ocupadas: 2 vagas livres)"
+  }
+ ],
+ "o06-vagas-comum": [
+  {
+   "n": 1,
+   "texto": "Para quem não é do RH nem lidera o setor, as vagas não aparecem: as contagens trazem só os cargos ocupados"
+  },
+  {
+   "n": 2,
+   "texto": "Os atalhos de gestão (Setores, Cargos, Pré-cadastro...) também não aparecem"
+  }
+ ],
+ "hf01-historico": [
+  {
+   "n": 1,
+   "texto": "Exporta o histórico em PDF, com os mesmos filtros da tela"
+  },
+  {
+   "n": 2,
+   "texto": "Filtros por tipo de fato (cadastro, cargo, setor, férias, licença-prêmio, exoneração...) e por período"
+  },
+  {
+   "n": 3,
+   "texto": "Cargos e setores por onde a pessoa passou, com início, fim e o ato"
+  },
+  {
+   "n": 4,
+   "texto": "Linha do tempo: cada fato mostra quando aconteceu e quem o registrou (nome e data e hora)"
+  }
+ ],
+ "hf02-busca-usuarios": [
+  {
+   "n": 1,
+   "texto": "A busca procura em várias informações: nome, login, cargo, setor, chefia imediata e mediata, e a bio liberada"
+  },
+  {
+   "n": 2,
+   "texto": "Quem tem o nome pesquisado vem primeiro"
+  },
+  {
+   "n": 3,
+   "texto": "Depois vêm as pessoas que casaram pela chefia (aqui, quem tem a Sofia como líder do setor)"
+  }
+ ],
+ "p01-lista-fichas": [
+  {
+   "n": 1,
+   "texto": "Preenche uma ficha por planilha: baixa o formulário em Excel e importa o que a pessoa devolveu"
+  },
+  {
+   "n": 2,
+   "texto": "Abre a ficha em branco para o RH preencher na tela"
+  },
+  {
+   "n": 3,
+   "texto": "Filtra por situação: rascunho, aguardando a conta, vinculada, cancelada ou aguardando validação (fichas que a própria pessoa enviou)"
+  },
+  {
+   "n": 4,
+   "texto": "Situação da ficha"
+  },
+  {
+   "n": 5,
+   "texto": "Abre a ficha"
+  }
+ ],
+ "p02-ficha-identificacao": [
+  {
+   "n": 1,
+   "texto": "Alternativa: gerar o formulário em Excel e deixar a pessoa preencher"
+  },
+  {
+   "n": 2,
+   "texto": "Só o nome completo e o CPF são obrigatórios; o resto pode ser completado depois"
+  },
+  {
+   "n": 3,
+   "texto": "Datas no formato dd/mm/aaaa"
+  }
+ ],
+ "p03-ficha-documentos": [
+  {
+   "n": 1,
+   "texto": "CPF: os dígitos verificadores são conferidos ao salvar, e o mesmo CPF não pode estar em duas fichas"
+  },
+  {
+   "n": 2,
+   "texto": "PIS/PASEP: também conferido"
+  },
+  {
+   "n": 3,
+   "texto": "UF, listas de opções e demais documentos (RG, CIN, título, CTPS, CNH)"
+  }
+ ],
+ "p04-ficha-vinculo": [
+  {
+   "n": 1,
+   "texto": "Tipo de vínculo: servidor cedido, comissionado sem vínculo, empregado público ou outro"
+  },
+  {
+   "n": 2,
+   "texto": "Setor pretendido: só aparecem setores com vaga livre"
+  },
+  {
+   "n": 3,
+   "texto": "Cargo pretendido: as vagas livres do setor escolhido. Trocar o setor limpa o cargo"
+  }
+ ],
+ "p05-formacao-experiencia": [
+  {
+   "n": 1,
+   "texto": "Nível da formação (lista)"
+  },
+  {
+   "n": 2,
+   "texto": "Acrescenta outra formação; Remover tira a linha"
+  },
+  {
+   "n": 3,
+   "texto": "Experiência anterior: órgão ou empresa, cargo, início, fim e descrição"
+  },
+  {
+   "n": 4,
+   "texto": "Acrescenta outra experiência"
+  }
+ ],
+ "p06-login-ocupado": [
+  {
+   "n": 1,
+   "texto": "Login que o RH propõe para a TI criar no AD (letras minúsculas, números, ponto, hífen e sublinhado)"
+  },
+  {
+   "n": 2,
+   "texto": "O sistema confere na hora no SGI, nas outras fichas e no AD. Aqui o login já existe, e a ficha não deixa salvar"
+  }
+ ],
+ "p07-login-livre": [
+  {
+   "n": 1,
+   "texto": "Login livre: pode seguir"
+  },
+  {
+   "n": 2,
+   "texto": "Ficha pronta: aguardando a criação da conta. Marcada, exige o login e a ficha fica esperando a conta aparecer. Desmarcada, é um rascunho"
+  }
+ ],
+ "p08-janela-planilha": [
+  {
+   "n": 1,
+   "texto": "Baixe o formulário (XLSX) e envie à pessoa"
+  },
+  {
+   "n": 2,
+   "texto": "Quando ela devolver o arquivo preenchido, escolha-o aqui; cada arquivo é a ficha de uma pessoa"
+  },
+  {
+   "n": 3,
+   "texto": "Confira a prévia e importe: a ficha entra como rascunho, e o RH completa o setor e o cargo pretendidos, o login proposto e o início previsto"
+  }
+ ],
+ "p09-formulario-excel": [
+  {
+   "n": 1,
+   "texto": "Cabeçalho da ficha"
+  },
+  {
+   "n": 2,
+   "texto": "Instruções de preenchimento, no topo da própria planilha"
+  },
+  {
+   "n": 3,
+   "texto": "Células cinzas: o formulário, bloqueadas (não dá para alterar)"
+  },
+  {
+   "n": 4,
+   "texto": "Células brancas: onde a pessoa preenche; com * são obrigatórias"
+  },
+  {
+   "n": 5,
+   "texto": "Células com a seta ▼ têm lista de opções: é só escolher"
+  }
+ ],
+ "p10-formacao-excel": [
+  {
+   "n": 1,
+   "texto": "Formação: até 5 linhas; deixe em branco as que sobrarem"
+  },
+  {
+   "n": 2,
+   "texto": "Experiências anteriores: até 5 linhas; a descrição das atividades ocupa duas colunas"
+  }
+ ],
+ "p11-previa-ok": [
+  {
+   "n": 1,
+   "texto": "A prévia confere tudo sem gravar: aqui a ficha está sem erros"
+  },
+  {
+   "n": 2,
+   "texto": "Importar cria a ficha como rascunho (com as formações e experiências do arquivo)"
+  }
+ ],
+ "p12-previa-erro": [
+  {
+   "n": 1,
+   "texto": "Com erro, a importação fica bloqueada e nada é gravado"
+  },
+  {
+   "n": 2,
+   "texto": "Cada erro diz o que corrigir na planilha (CPF inválido, PIS inválido, e-mail, datas, CPF já cadastrado...)"
+  }
+ ],
+ "p05-formacao": [
+  {
+   "n": 1,
+   "texto": "Nível da formação (lista) e, ao lado, curso, instituição e ano de conclusão"
+  },
+  {
+   "n": 2,
+   "texto": "Remove a linha"
+  },
+  {
+   "n": 3,
+   "texto": "Acrescenta outra formação (quantas forem necessárias)"
+  }
+ ],
+ "p05b-experiencia": [
+  {
+   "n": 1,
+   "texto": "Órgão ou empresa, cargo, início e fim"
+  },
+  {
+   "n": 2,
+   "texto": "Descrição das atividades"
+  },
+  {
+   "n": 3,
+   "texto": "Acrescenta outra experiência"
+  }
+ ],
+ "p10-aviso-excel": [
+  {
+   "n": 1,
+   "texto": "Se o que foi digitado fugir do padrão, o Excel bloqueia e explica como preencher certo (aqui, o CPF com a quantidade errada de números). O mesmo vale para PIS, CEP, e-mail, datas, ano e textos longos demais"
+  },
+  {
+   "n": 2,
+   "texto": "A célula não aceita o valor até ser corrigido (Repetir) ou desfeito (Cancelar). Ao selecionar uma célula, uma dica mostra o que escrever"
+  }
+ ],
+ "p10b-formacao-excel": [
+  {
+   "n": 1,
+   "texto": "Formação: até 5 linhas; deixe em branco as que sobrarem"
+  },
+  {
+   "n": 2,
+   "texto": "Experiências anteriores: até 5 linhas; a descrição das atividades ocupa duas colunas"
+  }
+ ],
+ "a02-nova-admissao": [
+  {
+   "n": 1,
+   "texto": "A ficha de quem vai entrar. Só aparecem fichas com login proposto e cargo pretendido (uma vaga livre) e sem admissão iniciada"
+  },
+  {
+   "n": 2,
+   "texto": "Inicia a trilha. Os documentos do checklist do cargo são copiados para a admissão"
+  }
+ ],
+ "a03-trilha-e-etapa1": [
+  {
+   "n": 1,
+   "texto": "A trilha de 7 etapas. Cada etapa só abre depois da anterior; a atual fica em vermelho"
+  },
+  {
+   "n": 2,
+   "texto": "Foto da pessoa (opcional): vai no formulário do GLPI e, quando a conta existir, vira a foto dela na intranet"
+  },
+  {
+   "n": 3,
+   "texto": "Os serviços que a TI deve providenciar: rede, e-mail, SEI, Compras SP, equipamento, estação, crachá, telefone e mobiliário. Desmarcado vale Não"
+  },
+  {
+   "n": 4,
+   "texto": "Usuário espelho (opcional): quem tem o acesso que serve de modelo"
+  },
+  {
+   "n": 5,
+   "texto": "Observações para a TI. O login proposto e o e-mail pessoal da ficha já vão junto"
+  },
+  {
+   "n": 6,
+   "texto": "Envia o formulário \"CGP - Nomeações\" ao GLPI com os dados da ficha. O próprio GLPI abre os chamados e dispara os e-mails"
+  }
+ ],
+ "a04-etapa1-enviado": [
+  {
+   "n": 1,
+   "texto": "Resumo: quando foi enviado, quantos chamados o GLPI abriu e o login proposto"
+  },
+  {
+   "n": 2,
+   "texto": "Um chamado por serviço pedido, com o número; os serviços marcados Não ficam sem chamado"
+  },
+  {
+   "n": 3,
+   "texto": "O número abre o chamado no GLPI em outra aba"
+  }
+ ],
+ "a05-documentos": [
+  {
+   "n": 1,
+   "texto": "Cada documento do checklist do cargo. O envio ao Portal de Indicações (sistema do governo) é feito lá"
+  },
+  {
+   "n": 2,
+   "texto": "Data em que o documento foi enviado ao Portal"
+  },
+  {
+   "n": 3,
+   "texto": "Comprovante do envio (opcional)"
+  },
+  {
+   "n": 4,
+   "texto": "Registra o envio. Dá para desfazer até concluir a etapa"
+  }
+ ],
+ "a06-documentos-prontos": [
+  {
+   "n": 1,
+   "texto": "Documento enviado: data, quem registrou e observação"
+  },
+  {
+   "n": 2,
+   "texto": "Baixa o comprovante guardado"
+  },
+  {
+   "n": 3,
+   "texto": "Conclui a etapa. Só é possível com todos os documentos obrigatórios registrados"
+  }
+ ],
+ "a07-resolucao": [
+  {
+   "n": 1,
+   "texto": "Texto da resolução, vindo do modelo (RH › Modelos), editável só para esta admissão"
+  },
+  {
+   "n": 2,
+   "texto": "Placeholders como #nome, #cargo e #numeroresolucao: o número, as datas e os nomes entram na hora de gerar o PDF"
+  },
+  {
+   "n": 3,
+   "texto": "Copia o texto já preenchido e formatado, para colar direto no SEI"
+  },
+  {
+   "n": 4,
+   "texto": "PDF da resolução, com a marca d'água MINUTA até a publicação"
+  },
+  {
+   "n": 5,
+   "texto": "Salva a edição do texto"
+  }
+ ],
+ "a08-protocolo": [
+  {
+   "n": 1,
+   "texto": "Tipo de Resolução do Protocolo (tipos cujo nome começa com Resolu). Só vale o que tem faixa de numeração no ano"
+  },
+  {
+   "n": 2,
+   "texto": "Reserva o próximo número livre. Se a admissão for cancelada antes do documento, o número volta para a fila"
+  }
+ ],
+ "a09-publicacao": [
+  {
+   "n": 1,
+   "texto": "O número reservado no Protocolo"
+  },
+  {
+   "n": 2,
+   "texto": "Data da publicação no D.O.E."
+  },
+  {
+   "n": 3,
+   "texto": "PDF da publicação: clique, arraste e solte ou cole (Ctrl+V). Fica anexado ao número do Protocolo (se o Protocolo anexar direto, também vale)"
+  },
+  {
+   "n": 4,
+   "texto": "Registra a publicação e envia sozinho o e-mail \"Sua nomeação foi publicada\" para a pessoa, com o PDF"
+  }
+ ],
+ "a10-publicada-e-email": [
+  {
+   "n": 1,
+   "texto": "O e-mail de nomeação saiu sozinho: mostra quando e para qual e-mail pessoal. Se falhar, o aviso fica vermelho com o motivo e o botão Reenviar"
+  },
+  {
+   "n": 2,
+   "texto": "Baixa o PDF da publicação"
+  },
+  {
+   "n": 3,
+   "texto": "Corrige a data da publicação, se preciso (por exemplo, quando o Protocolo anexou o PDF direto)"
+  }
+ ],
+ "a11-posse": [
+  {
+   "n": 1,
+   "texto": "Data da posse (não pode ser anterior à publicação)"
+  },
+  {
+   "n": 2,
+   "texto": "Registra a posse e prepara o termo de posse a partir do modelo"
+  }
+ ],
+ "a12-termo-de-posse": [
+  {
+   "n": 1,
+   "texto": "Texto do termo, editável só para esta admissão"
+  },
+  {
+   "n": 2,
+   "texto": "PDF do termo de posse"
+  }
+ ],
+ "a13-aguardando-conta": [
+  {
+   "n": 1,
+   "texto": "A conta do login proposto ainda não apareceu no AD. A TI cria o login a partir do chamado; quando ele aparecer, a ficha se liga sozinha"
+  },
+  {
+   "n": 2,
+   "texto": "Fica desabilitado até a conta existir"
+  }
+ ],
+ "a14-conta-ligada": [
+  {
+   "n": 1,
+   "texto": "A conta apareceu e foi ligada à ficha automaticamente (nascimento, celular, RS/PV, RG ou CIN e a foto já foram para o cadastro)"
+  },
+  {
+   "n": 2,
+   "texto": "Conclui: a pessoa assume o cargo na data da posse e o histórico funcional registra a admissão"
+  }
+ ],
+ "a15-concluida": [
+  {
+   "n": 1,
+   "texto": "Todas as etapas concluídas"
+  },
+  {
+   "n": 2,
+   "texto": "Admissão concluída: o cargo e o setor da pessoa já estão certos"
+  }
+ ],
+ "a01-lista-admissoes": [
+  {
+   "n": 1,
+   "texto": "Inicia a admissão de uma ficha"
+  },
+  {
+   "n": 2,
+   "texto": "Filtros: em andamento, concluídas e canceladas"
+  },
+  {
+   "n": 3,
+   "texto": "Etapa em que cada pessoa está"
+  },
+  {
+   "n": 4,
+   "texto": "Abre a trilha da admissão"
+  }
+ ],
+ "a03-trilha": [
+  {
+   "n": 1,
+   "texto": "A trilha de 7 etapas: formulário no GLPI, documentos, resolução, número no Protocolo, publicação, posse e entrada no SGI. Cada etapa só abre depois da anterior; a atual fica em vermelho"
+  },
+  {
+   "n": 2,
+   "texto": "Abre a ficha de pré-cadastro desta pessoa"
+  },
+  {
+   "n": 3,
+   "texto": "Cancela a admissão (o número do Protocolo ainda sem documento volta para a fila)"
+  }
+ ],
+ "a03b-etapa1": [
+  {
+   "n": 1,
+   "texto": "Foto da pessoa (opcional): vai no formulário do GLPI e, quando a conta existir, vira a foto dela na intranet"
+  },
+  {
+   "n": 2,
+   "texto": "Os serviços que a TI deve providenciar: rede, e-mail, SEI, Compras SP, equipamento, estação, crachá, telefone e mobiliário. Desmarcado vale Não"
+  },
+  {
+   "n": 3,
+   "texto": "Usuário espelho (opcional): quem tem o acesso que serve de modelo"
+  },
+  {
+   "n": 4,
+   "texto": "Observações para a TI. O login proposto e o e-mail pessoal da ficha já vão junto"
+  },
+  {
+   "n": 5,
+   "texto": "Envia o formulário \"CGP - Nomeações\" ao GLPI com os dados da ficha. O próprio GLPI abre os chamados e dispara os e-mails"
+  }
+ ],
+ "h02-acesso-rh": [
+  {
+   "n": 1,
+   "texto": "O recurso RH no Controle de acesso: quem é o RH deixou de ser \"quem está num setor\" e passou a ser definido aqui, por regra direta, por setor ou por perfil"
+  },
+  {
+   "n": 2,
+   "texto": "O que cada nível libera: Consultar a estrutura (leitura), Gerir setores e cargos (modificação) e Ser o RH do sistema (controle total: valida cadastros, fichas, admissões, modelos e parâmetros)"
+  }
+ ],
+ "m01-modelos-textos": [
+  {
+   "n": 1,
+   "texto": "Duas abas: os textos e os checklists de documentos"
+  },
+  {
+   "n": 2,
+   "texto": "Quatro textos editáveis: resolução de nomeação, e-mail \"Sua nomeação foi publicada\", termo de posse e boas-vindas. Cada um nasce com um texto padrão"
+  },
+  {
+   "n": 3,
+   "texto": "Abre o editor do texto"
+  }
+ ],
+ "m02-editor-modelo": [
+  {
+   "n": 1,
+   "texto": "Assunto do e-mail (só nos modelos de e-mail)"
+  },
+  {
+   "n": 2,
+   "texto": "Texto no editor, com negrito, listas, tabelas e cores"
+  },
+  {
+   "n": 3,
+   "texto": "Lista dos placeholders permitidos (clique para abrir)"
+  },
+  {
+   "n": 4,
+   "texto": "Volta ao texto padrão do sistema"
+  },
+  {
+   "n": 5,
+   "texto": "Salva: vale para as próximas admissões"
+  }
+ ],
+ "m03-checklists": [
+  {
+   "n": 1,
+   "texto": "Cria um checklist de documentos"
+  },
+  {
+   "n": 2,
+   "texto": "A quais classificações de cargo o checklist vale (ex.: 1.15–1.18 ou 2.04–2.17)"
+  },
+  {
+   "n": 3,
+   "texto": "Edita o checklist"
+  }
+ ],
+ "m04-checklist-classificacoes": [
+  {
+   "n": 1,
+   "texto": "Nome do checklist"
+  },
+  {
+   "n": 2,
+   "texto": "Grupo 1 (direção e chefia) e Grupo 2 (assessoria): clique nos níveis a que ele vale. Cada chip é uma classificação, como 1.15 ou 2.10"
+  },
+  {
+   "n": 3,
+   "texto": "Marca ou desmarca todos os níveis do grupo"
+  },
+  {
+   "n": 4,
+   "texto": "Também vale para cargos sem classificação (tipo Outros)"
+  },
+  {
+   "n": 5,
+   "texto": "Documentos exigidos: obrigatórios ou opcionais; a admissão copia os do cargo da pessoa"
+  }
+ ],
+ "u01-boas-vindas": [
+  {
+   "n": 1,
+   "texto": "O aviso aparece só no primeiro acesso de quem acabou de ganhar a conta (quem já usava o sistema nunca o vê). O mesmo texto também vai por e-mail"
+  },
+  {
+   "n": 2,
+   "texto": "Texto do modelo \"Boas-vindas\" (RH › Modelos), com o nome, o cargo e o setor da pessoa"
+  },
+  {
+   "n": 3,
+   "texto": "Leva ao cadastro (Meu perfil) para a pessoa conferir os dados"
+  }
+ ],
+ "u02-meu-cadastro-bio": [
+  {
+   "n": 1,
+   "texto": "Bio opcional: idade, formação, experiências, o que quiser contar"
+  },
+  {
+   "n": 2,
+   "texto": "Só se esta caixa estiver marcada a bio aparece para os colegas, na busca de usuários e no cartão de contato. Sem marcar, só a própria pessoa a vê"
+  },
+  {
+   "n": 3,
+   "texto": "Salva a bio"
+  },
+  {
+   "n": 4,
+   "texto": "Quem entrou pela admissão tem a ficha cadastrada pelo RH: ela aparece abaixo só para consulta"
+  }
+ ],
+ "u03-ficha-do-legado": [
+  {
+   "n": 1,
+   "texto": "Para quem já tinha conta antes do pré-cadastro: a pessoa mesma preenche a ficha, e o RH confere e valida. Só a pessoa e o RH veem estes dados"
+  }
+ ],
+ "u04-aguardando-validacao": [
+  {
+   "n": 1,
+   "texto": "As fichas que as próprias pessoas enviaram e o RH ainda não validou"
+  },
+  {
+   "n": 2,
+   "texto": "Abra a ficha para conferir os dados"
+  }
+ ],
+ "u05-validar-ficha": [
+  {
+   "n": 1,
+   "texto": "Aviso: a própria pessoa enviou esta ficha e falta o RH validar. O RH pode corrigir algum dado antes"
+  },
+  {
+   "n": 2,
+   "texto": "Valida a ficha e registra no histórico funcional da pessoa"
+  }
+ ],
+ "u06-cartao-com-bio": [
+  {
+   "n": 1,
+   "texto": "A foto enviada na admissão já é a foto da pessoa na intranet (Diretório)"
+  },
+  {
+   "n": 2,
+   "texto": "A bio aparece no cartão de contato só porque a pessoa liberou"
+  }
+ ],
+ "u03b-ficha-do-legado-campos": [
+  {
+   "n": 1,
+   "texto": "Mesmos campos da ficha (identificação, documentos, contato, endereço, formação e experiências). CPF e PIS são conferidos"
+  },
+  {
+   "n": 2,
+   "texto": "Envia a ficha para o RH validar. Cada novo envio pede nova validação"
+  }
+ ],
+ "m02b-placeholders": [
+  {
+   "n": 1,
+   "texto": "Os placeholders são trocados pelos dados da pessoa na hora de gerar o PDF ou o e-mail: #nome, #cpf, #rg, #cargo, #setor, #datainicio, #dataposse, #numeroresolucao, #anoresolucao, #datapublicacao, #hoje e outros. Qualquer outro # é recusado ao salvar"
+  }
+ ],
+ "p13-parametros-setor-apoio": [
+  {
+   "n": 1,
+   "texto": "Setor de apoio administrativo (SAA): quem dá andamento nos números reservados do Protocolo. Antes era procurado pelo nome do setor no código; agora é escolhido aqui"
+  }
+ ]
+}

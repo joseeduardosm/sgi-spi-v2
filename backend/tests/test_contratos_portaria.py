@@ -211,6 +211,65 @@ def test_publicar_pelo_protocolo_aplica_a_equipe_e_proxima_cita_a_anterior(clien
     assert "Fica revogada a Portaria SPI SSGC nº 001, de" in nova["texto_html"]
 
 
+def test_publicar_pelo_proprio_contratos_anexando_o_doe_na_aba_equipe(cliente, admin, cenario):
+    """Quem conduz a portaria e só tem o Contratos anexa o PDF do D.O.E. pela aba Equipe: mesmo efeito de anexar no Protocolo."""
+    intruso_id = criar_usuario("intruso-doe", nome_completo="Intruso")
+    restringir_contratos(cliente, admin, {intruso_id: "MODIFICACAO", cenario["gestor"]: "MODIFICACAO", cenario["chefe_id"]: "LEITURA"})
+    portaria = _escolher(cliente, admin, cenario, _ate_a_autoridade(cliente, admin, cenario))
+    gestora, intruso = cabecalho(cliente, "gestora"), cabecalho(cliente, "intruso-doe")
+    url = _url(cenario, portaria["id"], "publicacao")
+    doe = {"arquivo": ("doe.pdf", PDF, "application/pdf")}
+    # Antes do aceite não publica e o botão não aparece
+    assert cliente.get(_url(cenario), headers=gestora).json()["portarias"][0]["pode_publicar"] is False
+    assert cliente.post(url, files=doe, headers=gestora).status_code == 409
+    assert cliente.post(_url(cenario, portaria["id"], "aceite"), headers=cenario["chefe"]).status_code == 200
+    # Só PDF, e só quem conduz a portaria
+    assert cliente.post(url, files={"arquivo": ("doe.txt", b"x", "text/plain")}, headers=gestora).status_code == 409
+    assert cliente.post(url, files=doe, headers=intruso).status_code == 403
+    assert cliente.get(_url(cenario), headers=intruso).json()["portarias"][0]["pode_publicar"] is False
+    assert cliente.get(_url(cenario), headers=gestora).json()["portarias"][0]["pode_publicar"] is True
+    r = cliente.post(url, files=doe, headers=gestora)
+    assert r.status_code == 200, r.text
+    publicada = r.json()["portarias"][0]
+    assert publicada["status"] == "publicada" and publicada["publicada_em"] and publicada["pode_publicar"] is False
+    equipe = cliente.get(f"/api/contratos/{cenario['contrato']['id']}", headers=admin).json()["equipe"]
+    assert {e["nome"] for e in equipe} == {"Gabriela Gestora", "Nelson Novo"}
+    documentos = cliente.get(f"/api/contratos/{cenario['contrato']['id']}/documentos", headers=admin).json()
+    assert next(d for d in documentos if d["codigo"] == 16)["anexado"] is True
+    # O número do Protocolo ficou utilizado: não aceita um segundo documento
+    assert cliente.post(f"{PROTOCOLO}/numeros/{portaria['numero_protocolo_id']}/anexo", files=doe, headers=admin).status_code == 409
+    assert cliente.post(url, files=doe, headers=gestora).status_code == 409
+
+
+def test_escolher_a_autoridade_envia_email_com_a_equipe_e_a_minuta(cliente, admin, cenario, monkeypatch):
+    """Além do aviso no sistema, a autoridade recebe e-mail: equipe com cargo e ciência, minuta em PDF com marca d'água e o pedido para dar a ciência e o aceite."""
+    import io
+
+    from pypdf import PdfReader
+
+    from tests.test_smtp import SmtpSimulado, dados_servidor
+
+    monkeypatch.setattr("smtplib.SMTP", SmtpSimulado)
+    SmtpSimulado.enviadas.clear()
+    assert cliente.post("/api/smtp/servidores", json=dados_servidor(), headers=admin).status_code == 201
+    SmtpSimulado.enviadas.clear()
+    portaria = _ate_a_autoridade(cliente, admin, cenario)
+    _escolher(cliente, admin, cenario, portaria)
+    enviadas = [m for m, *_ in SmtpSimulado.enviadas if "aguardando seu aceite" in m["Subject"]]
+    assert len(enviadas) == 1, [m["Subject"] for m, *_ in SmtpSimulado.enviadas]
+    mensagem = enviadas[0]
+    texto = mensagem.get_body(("plain",)).get_content()
+    assert "contrato" in texto and "Gabriela Gestora" in texto and "Nelson Novo" in texto and "Ciente em" in mensagem.get_body(("html",)).get_content()
+    assert "ciência" in texto and "aceite" in texto and "?aba=equipe" in texto
+    # Data da ciência no formato dd/mm/aa hh:mm
+    import re
+    assert re.search(r"\d{2}/\d{2}/\d{2} \d{2}:\d{2}", texto)
+    anexos = list(mensagem.iter_attachments())
+    assert len(anexos) == 1 and anexos[0].get_filename().startswith("minuta-portaria-") and anexos[0].get_filename().endswith(".pdf")
+    pagina = PdfReader(io.BytesIO(anexos[0].get_content())).pages[0].extract_text()
+    assert "MINUTA" in pagina
+
+
 def _ate_a_autoridade_de_novo(cliente, admin, cenario):
     """Segunda portaria do mesmo contrato (o gestor segue e o fiscal volta a ser o antigo)."""
     corpo = {"nomeacoes": [{"papel": "gestor", "usuario_id": cenario["gestor"]}, {"papel": "fiscal_tecnico", "usuario_id": cenario["fiscal"]}]}

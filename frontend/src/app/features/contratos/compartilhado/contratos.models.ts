@@ -1449,6 +1449,8 @@ export interface Portaria {
   tem_evidencia: boolean;
   pode_decidir: boolean;
   pode_alterar: boolean;
+  /** Pode anexar o PDF do D.O.E. pela aba Equipe (portaria aceita; quem conduz a portaria). */
+  pode_publicar: boolean;
 }
 
 export interface PainelPortarias {

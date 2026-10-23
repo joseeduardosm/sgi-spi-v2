@@ -416,6 +416,8 @@ def lancar(sessao: Session, autor: Usuario, usuario_id: int, tipo: str, inicio: 
         _evento(a, "aprovado", "gozado", autor)
     sessao.add(a)
     sessao.flush()
+    if situacao == "gozado":
+        _historico_gozado(sessao, a, autor)
     _avisar_usuario(sessao, usuario.id, a, f"{ROTULOS_TIPO[a.tipo]} lançada pela CGP",
                     f"A CGP lançou {_descricao(a)} no seu registro ({ROTULOS_STATUS[situacao].lower()}).\n\nMotivo: {justificativa}")
     auditar(sessao, autor.login, "rh.afastamento.lancar", _descricao(a), autor_id=autor.id, alvo_tipo="afastamento", alvo_id=a.id,
@@ -568,6 +570,16 @@ def decidir(sessao: Session, autor: Usuario, afastamento_id: uuid.UUID, aprovar:
     return a
 
 
+def _historico_gozado(sessao: Session, a: Afastamento, autor: Usuario | None) -> None:
+    """Férias ou licença-prêmio gozada: fato do histórico funcional (quem decidiu, ou o Sistema quando a tarefa diária marca)."""
+    from app.services.rh import servico_historico
+
+    tipo = "ferias" if a.tipo == "ferias" else "licenca_premio"
+    rotulo = "Férias" if a.tipo == "ferias" else "Licença-prêmio"
+    servico_historico.registrar(sessao, a.usuario_id, tipo, f"{rotulo} gozada de {a.inicio:%d/%m/%Y} a {a.fim:%d/%m/%Y} ({a.dias} dia(s))", "", autor,
+                                origem=("afastamento", str(a.id)), autor_nome=None if autor else (a.decidido_por_nome or "Sistema"))
+
+
 def marcar_gozados(sessao: Session, dia: date | None = None) -> int:
     """Aprovados que já terminaram passam a `gozado` (tarefa diária)."""
     dia = dia or hoje()
@@ -575,6 +587,7 @@ def marcar_gozados(sessao: Session, dia: date | None = None) -> int:
     for a in gozados:
         a.status = "gozado"
         _evento(a, "aprovado", "gozado", None)
+        _historico_gozado(sessao, a, None)
         _avisar_usuario(sessao, a.usuario_id, a, f"{ROTULOS_TIPO[a.tipo].capitalize()} gozada(s)", f"Período registrado como gozado: {_descricao(a)}.")
     sessao.commit()
     return len(gozados)
@@ -746,8 +759,13 @@ def aprovacoes(sessao: Session, autor: Usuario) -> list[tuple[Afastamento, Usuar
     return [(a, usuarios[a.usuario_id]) for a in pendentes if a.usuario_id in usuarios and (pode_decidir(sessao, autor, a, cgp) or pode_dar_ciencia(sessao, autor, a, usuarios[a.usuario_id]))]
 
 
-def papeis(sessao: Session, usuario: Usuario) -> dict[str, bool]:
-    return {"cgp": eh_cgp(sessao, usuario), "autorizador": eh_autorizador(sessao, usuario)}
+def papeis(sessao: Session, usuario: Usuario) -> dict:
+    """Papéis do usuário no RH: `cgp` (é o RH), `autorizador` e `nivel_rh` (o maior nível de acesso ao módulo)."""
+    from app.models.acl import NivelAcl
+    from app.services.rh.papeis import tem_nivel_rh
+
+    nivel = next((n for n in reversed(NivelAcl.TODOS) if tem_nivel_rh(sessao, usuario, n)), None)
+    return {"cgp": eh_cgp(sessao, usuario), "autorizador": eh_autorizador(sessao, usuario), "nivel_rh": nivel}
 
 
 # --- Exportação ---------------------------------------------------------------------------------

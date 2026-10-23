@@ -56,6 +56,10 @@ Navegador
 | `rh_alteracoes_cadastrais`, `rh_dados_funcionais` | Módulo RH: alterações de cadastro pendentes de validação da CGP (histórico) e dados funcionais (autorizador, substituto, início do período aquisitivo, saldo de LP, jornada, horários, RG/CIN e RS/PV) |
 | `rh_periodos_aquisitivos` | Módulo RH: períodos aquisitivos de férias (12 meses), dias creditados, ajuste da CGP e expiração |
 | `rh_feriados` | Módulo RH: feriados e pontos facultativos (um por data), usados no calendário, no painel, na regra de início e na folha de ponto |
+| `rh_admissoes`, `rh_admissao_documentos`, `rh_checklists`, `rh_checklist_itens`, `rh_checklist_tipos`, `rh_modelos` | Módulo RH: trilha de admissão, checklists de documentos por tipo de cargo e modelos editáveis (resolução, e-mail, termo de posse, boas-vindas) |
+| `rh_pre_cadastros`, `rh_ficha_formacoes`, `rh_ficha_experiencias` | Módulo RH: ficha de pré-cadastro (dados pessoais, login proposto, vínculo com a conta), formações e experiências |
+| `rh_pre_cadastros`, `rh_ficha_formacoes`, `rh_ficha_experiencias` | Módulo RH: ficha de pré-cadastro (dados pessoais, login proposto, vínculo com a conta), formações e experiências |
+| `rh_tipos_cargo`, `rh_cargos`, `rh_ocupacoes`, `rh_historico` | Módulo RH: cargos como vagas por setor, ocupações (histórico) e livro-razão do histórico funcional |
 | `rh_afastamentos`, `rh_afastamentos_eventos`, `rh_parametros` | Módulo RH: férias e licença-prêmio, histórico de status e regras de agendamento |
 | `notificacoes`, `notificacoes_entregas` | Notificações: mensagens (avulsas e automáticas, com o `evento` do catálogo) e a entrega a cada destinatário (lida, ciência, encerrada, canais e resultado do e-mail e do navegador) |
 | `notificacoes_preferencias`, `notificacoes_config_usuario`, `notificacoes_inscricoes_navegador`, `notificacoes_silenciados`, `notificacoes_obrigatorias` | Preferências de notificação: canais ligados por evento, frequência do e-mail e não perturbe, navegadores inscritos (Web Push), contratos e tarefas silenciados e eventos obrigatórios por setor ou usuário |
@@ -149,11 +153,11 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `POST` | `/api/usuarios` | SuperRoot ou ACL `usuarios` = CONTROLE_TOTAL | Cria conta local | [usuarios.md](endpoints/usuarios.md#post-apiusuarios) |
 | `PUT` | `/api/usuarios/{usuario_id}` | SuperRoot ou ACL `usuarios` = CONTROLE_TOTAL | Altera usuário | [usuarios.md](endpoints/usuarios.md#put-apiusuariosusuario_id) |
 | `DELETE` | `/api/usuarios/{usuario_id}` | SuperRoot ou ACL `usuarios` = CONTROLE_TOTAL | Exclui usuário | [usuarios.md](endpoints/usuarios.md#delete-apiusuariosusuario_id) |
-| `GET` | `/api/setores` | ACL `setores` ≥ LEITURA | Lista setores | [setores.md](endpoints/setores.md#get-apisetores) |
+| `GET` | `/api/setores` | ACL `setores` ≥ LEITURA ou qualquer nível em `rh` | Lista setores | [setores.md](endpoints/setores.md#get-apisetores) |
 | `GET` | `/api/setores/{setor_id}` | ACL `setores` ≥ LEITURA | Consulta setor com membros | [setores.md](endpoints/setores.md#get-apisetoressetor_id) |
-| `POST` | `/api/setores` | SuperRoot ou ACL `setores` = CONTROLE_TOTAL | Cria setor | [setores.md](endpoints/setores.md#post-apisetores) |
-| `PUT` | `/api/setores/{setor_id}` | SuperRoot ou ACL `setores` = CONTROLE_TOTAL | Altera setor | [setores.md](endpoints/setores.md#put-apisetoressetor_id) |
-| `DELETE` | `/api/setores/{setor_id}` | SuperRoot ou ACL `setores` = CONTROLE_TOTAL | Exclui setor | [setores.md](endpoints/setores.md#delete-apisetoressetor_id) |
+| `POST` | `/api/setores` | SuperRoot ou ACL `rh` ≥ MODIFICACAO | Cria setor | [setores.md](endpoints/setores.md#post-apisetores) |
+| `PUT` | `/api/setores/{setor_id}` | SuperRoot ou ACL `rh` ≥ MODIFICACAO | Altera setor | [setores.md](endpoints/setores.md#put-apisetoressetor_id) |
+| `DELETE` | `/api/setores/{setor_id}` | SuperRoot ou ACL `rh` ≥ MODIFICACAO | Exclui setor | [setores.md](endpoints/setores.md#delete-apisetoressetor_id) |
 | `GET` | `/api/acl/meus-acessos` | Bearer | Meus acessos efetivos | [acl.md](endpoints/acl.md#get-apiaclmeus-acessos) |
 | `GET` | `/api/acl/efetivo/{usuario_id}` | SuperRoot | Acesso efetivo de um usuário | [acl.md](endpoints/acl.md#get-apiaclefetivousuario_id) |
 | `GET` `POST` | `/api/acl/recursos` | SuperRoot | Lista / cadastra recursos | [acl.md](endpoints/acl.md#recursos) |
@@ -181,6 +185,10 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` `POST` `PUT` | `/api/rh/cadastro/…` | CGP | Pendências, cadastro, validar/recusar alteração, dados funcionais, ajuste do período aquisitivo vigente | [rh-cadastro.md](endpoints/rh-cadastro.md) |
 | `GET` `POST` `PUT` | `/api/rh/afastamentos[/…]` | Autenticado (por papel) | Férias e licença-prêmio: meus, agendar, alterar, cancelar, aprovar/recusar, aprovações, painel, exportar | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` `POST` `PUT` `DELETE` | `/api/rh/feriados[/{feriado_id}]` | Leitura: autenticado; gravação: CGP | Feriados e pontos facultativos | [rh-afastamentos.md](endpoints/rh-afastamentos.md#feriados-e-pontos-facultativos-apirhferiados) |
+| `GET` `POST` `PUT` `DELETE` | `/api/rh/admissoes[/…]`, `/api/rh/modelos[/…]`, `/api/rh/checklists[/…]` | ACL `rh` = Controle total | Trilha de admissão (chamado no GLPI, documentos, resolução, Protocolo, publicação, e-mail, posse), modelos editáveis e checklists | [rh-admissao.md](endpoints/rh-admissao.md) |
+| `GET` `POST` `PUT` | `/api/rh/boas-vindas[/confirmar]`, `/api/rh/minha-bio`, `/api/rh/minha-ficha` | Autenticado (só sobre si) | Boas-vindas do primeiro acesso, bio opcional e ficha cadastral dos legados | [rh-admissao.md](endpoints/rh-admissao.md#boas-vindas-bio-e-ficha-da-própria-pessoa) |
+| `GET` `POST` `PUT` `DELETE` | `/api/rh/pre-cadastros[/…]` | ACL `rh` = Controle total | Fichas de pré-cadastro, checagem do login proposto no SGI e no AD e ficha por planilha XLSX, um formulário por pessoa (`importacao/modelo`, `importacao/previa`, `importacao`) | [rh-cargos.md](endpoints/rh-cargos.md) |
+| `GET` `POST` `PUT` `DELETE` | `/api/rh/{tipos-cargo,cargos,cargos-a-reconciliar,organograma}` (organograma: qualquer usuário, vagas só RH e liderança) e `/api/rh/usuarios/{id}/historico[.pdf]` | ACL `rh` (Leitura, Modificação, Controle total) | Cargos como vagas por setor, ocupações, organograma e histórico funcional | [rh-cargos.md](endpoints/rh-cargos.md) |
 | `POST` | `/api/rh/afastamentos/lancamento` | CGP | Lançar afastamento em nome do servidor | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` | `/api/rh/relatorios/saldos` | CGP | Relatório de saldos (XLSX/PDF) | [rh-afastamentos.md](endpoints/rh-afastamentos.md) |
 | `GET` `POST` | `/api/rh/cadastro/funcionais/importacao[/modelo\|/previa]` | CGP | Carga em lote dos dados funcionais por planilha | [rh-cadastro.md](endpoints/rh-cadastro.md) |
@@ -275,7 +283,7 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | vários | `/api/contratos/{contrato_id}/prorrogacao*`, `/prorrogacoes/*` | LEITURA / pode editar (2) | Prorrogação | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#prorrogação) |
 | vários | `/api/contratos/{contrato_id}/reajustes/*` | LEITURA / pode editar (2) | Reajuste | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#reajuste) |
 | vários | `/api/contratos/{contrato_id}/alteracoes/*` | LEITURA / pode editar (2) | Aditamento e supressão | [contratos-alteracoes.md](endpoints/contratos-alteracoes.md#aditamento--supressão) |
-| vários | `/api/contratos/{contrato_id}/portarias*`, `/api/portarias/ciencias`, `/api/portarias/{portaria_id}/ciencia`, `/api/portarias/autoridades*` | LEITURA / equipe ou CONTROLE_TOTAL (criar) / autoridade signatária / nomeado (ciência) / CONTROLE_TOTAL (autoridades) | Portaria de designação (nomeações, ciência, autoridade, aceite; publicada pelo Protocolo), único caminho para mudar a equipe | [contratos-portarias.md](endpoints/contratos-portarias.md) |
+| vários | `/api/contratos/{contrato_id}/portarias*`, `/api/portarias/ciencias`, `/api/portarias/{portaria_id}/ciencia`, `/api/portarias/autoridades*` | LEITURA / equipe ou CONTROLE_TOTAL (criar) / autoridade signatária / nomeado (ciência) / CONTROLE_TOTAL (autoridades) | Portaria de designação (nomeações, ciência, autoridade, aceite; publicada ao anexar o D.O.E., pelo Protocolo ou pela aba Equipe), único caminho para mudar a equipe | [contratos-portarias.md](endpoints/contratos-portarias.md) |
 | `GET` | `/api/contratos/{contrato_id}/pagamentos` | LEITURA | "Pagamento MM/AAAA" em Documentos Importantes: consolidado e OB/PD da competência, com a data da juntada | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 (1) Funciona mesmo com o perfil institucional pendente. Todos os demais endpoints autenticados exigem perfil em dia, exceto para o SuperRoot.
 

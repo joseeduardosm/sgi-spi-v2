@@ -23,6 +23,8 @@ class GravacaoSetor(BaseModel):
     lider_id: int | None = Field(None, description="Usuário líder do setor.")
     sistemico: bool = Field(False, description="Grupo sistêmico (não institucional), ex.: Auditores.")
     ativo: bool = True
+    sigla: str | None = Field(None, max_length=30, description="Sigla da unidade (ex.: SGC), usada no organograma.")
+    tipo_unidade: str | None = Field(None, max_length=30, description="Tipo da unidade: secretaria, subsecretaria, diretoria, coordenadoria, servico, assessoria, colegiado, vinculada ou outro.")
     membros_ids: list[int] = Field(default_factory=list, description="Usuários membros. Substitui a lista atual.")
 
     @field_validator("nome")
@@ -45,6 +47,8 @@ class LeituraSetor(BaseModel):
     lider_nome: str | None
     sistemico: bool
     ativo: bool
+    sigla: str | None = None
+    tipo_unidade: str | None = None
     total_membros: int
     total_subordinados: int
     criado_em: datetime

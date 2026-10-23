@@ -329,6 +329,19 @@ def diagnosticar_login(parametros: ParametrosDiretorio, login: str) -> Diagnosti
     )
 
 
+def consultar_login(parametros: ParametrosDiretorio, login: str) -> IdentidadeLdap | None:
+    """Procura o login no AD só para leitura (conta técnica): a identidade se existir, `None` se não existir. Falha de conexão vira `ErroLdapIndisponivel`."""
+    try:
+        conexao = _conexao_tecnica(parametros)
+        try:
+            entradas = _buscar_login(conexao, parametros.base_dn, login)
+        finally:
+            conexao.unbind()
+    except excecoes_ldap.LDAPException as erro:
+        raise ErroLdapIndisponivel(descrever_erro(erro, parametros)) from erro
+    return _identidade(entradas[0], _atributo(entradas[0], "sAMAccountName") or login) if entradas else None
+
+
 def _tentar_bind(parametros: ParametrosDiretorio, identidade: str, senha: str) -> bool:
     """Tenta autenticar com a identidade e a senha; True se o bind der certo."""
     try:

@@ -52,8 +52,8 @@ Dados do cadastro que vão no chamado: `nome`, `setor`, `superior_imediato`, `em
 Últimos 20 chamados que o usuário abriu pelo SGI (`glpi_id`, `assunto`, `url`, `aberto_em`).
 
 ## `GET`/`PUT /api/integracao-glpi` e `POST /api/integracao-glpi/testar` (SuperRoot)
-- `GET`: `ativo`, `url_base`, `possui_app_token`, `possui_user_token`, `configurada`, `atualizado_em`, `atualizado_por`. **Os tokens nunca são devolvidos.**
-- `PUT`: `{"ativo", "url_base", "app_token"?, "user_token"?, "prefixo_titulo"?, "grupo_atribuido_id"?, "sla_atendimento_id"?, "sla_solucao_id"?, "template_id"?}`. Token vazio ou ausente **preserva** o gravado; nos ids, `0` = nenhum e nulo mantém. O `GET` também devolve esses cinco campos. Os tokens ficam **cifrados** no banco (`app/core/criptografia.py`, a mesma chave da senha de bind do LDAP).
+- `GET`: `ativo`, `url_base`, `possui_app_token`, `possui_user_token`, `configurada`, `usuario_web`, `possui_senha_web`, `login_web_configurado`, `formulario_nomeacao_id`, `atualizado_em`, `atualizado_por`. **Os tokens e a senha web nunca são devolvidos.**
+- `PUT`: `{"ativo", "url_base", "app_token"?, "user_token"?, "prefixo_titulo"?, "grupo_atribuido_id"?, "sla_atendimento_id"?, "sla_solucao_id"?, "template_id"?, "usuario_web"?, "senha_web"?, "formulario_nomeacao_id"?}`. Token vazio ou ausente **preserva** o gravado; nos ids, `0` = nenhum e nulo mantém. O `GET` também devolve esses cinco campos. Os tokens e a `senha_web` ficam **cifrados** no banco (`app/core/criptografia.py`, a mesma chave da senha de bind do LDAP).
 - `POST /testar`: abre e encerra uma sessão no GLPI com o que está gravado; sempre responde `200` com `{sucesso, mensagem, latencia_ms}`.
 - Tela: **Administração › Integração GLPI** (`/admin/glpi`).
 
@@ -69,3 +69,14 @@ Testes feitos: sessão aberta e encerrada na API, busca de usuário por login e 
 ## Detalhes da API do GLPI 11 que importam
 - O login não casa com `equals` na busca de usuário; o SGI busca por `contains` e só aceita o resultado **idêntico** (sem diferenciar maiúsculas).
 - O GLPI usa a CA interna do órgão: o cliente do SGI confere o certificado com o repositório **do sistema** (não com o pacote `certifi`).
+
+
+## Formulário de nomeações do RH (envio pela tela web)
+
+A admissão do RH (etapa "Chamado no GLPI") deve **preencher o formulário nativo "CGP - Nomeações" (id 8)** do GLPI 11, que já dispara os chamados e e-mails dos seus destinos (rede, e-mail, SEI, Compras SP, equipamento, estação, crachá, telefone e mobiliário). O SGI não cria chamados à parte para isso.
+
+O GLPI 11 **não tem rota de API** para enviar formulários: o envio é `POST /Form/SubmitAnswers` (campos `forms_id` e `answers_<id da pergunta>`), com sessão web autenticada e token CSRF. O `user_token` da API **não serve** (não é um identificador de sessão web). Por isso a configuração da integração guarda também o **usuário e a senha web** da conta de serviço (`sgi.integracao`, perfil SGI INTEGRAÇÃO, que precisa estar na lista de quem pode usar o formulário em "Controles de acesso" do formulário no GLPI) e o id do formulário. A senha web fica cifrada e é digitada em Administração > Integração GLPI. Implementação: `services/glpi/cliente_formulario.py` (login pela tela web, leitura das perguntas, envio).
+
+Arquivos (a foto) sobem antes, para `/ajax/fileupload.php` (campo `_uploader_answers_<id>[]`, com o token CSRF), e vão no envio como `_answers_<id>[i]`, `_prefix_answers_<id>[i]` e `_tag_answers_<id>[i]`, como o navegador faz.
+
+Diagnóstico somente leitura: `cd backend && .venv/bin/python scripts_manutencao/glpi_formulario.py` (entra no GLPI, lista as perguntas do formulário e confere o que o SGI preenche; não envia nada; com `--testar-upload` sobe uma imagem de 1 pixel à área temporária do GLPI para conferir o upload).

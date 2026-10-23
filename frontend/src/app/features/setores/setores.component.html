@@ -1,10 +1,4 @@
-<div class="cabecalho-pagina">
-  <div>
-    <app-trilha [itens]="[{ rotulo: 'Setores' }]" />
-    <h1>Setores</h1>
-    <small>Estrutura institucional e grupos sistêmicos. Setores funcionam como grupos de acesso na ACL.</small>
-  </div>
-</div>
+<app-cabecalho-rh titulo="Setores" [trilha]="['Setores']" descricao="Estrutura institucional e grupos sistêmicos. Setores funcionam como grupos de acesso na ACL." />
 
 <section class="painel-gestao" aria-labelledby="titulo-setores">
   <div class="barra-ferramentas">
@@ -42,7 +36,7 @@
       <tbody>
         @for (s of filtrados(); track s.id) {
           <tr>
-            <td><strong>{{ s.nome }}</strong><small>ID {{ s.id }}{{ s.total_subordinados ? ' · ' + s.total_subordinados + ' subordinado(s)' : '' }}</small></td>
+            <td><strong>{{ s.nome }}</strong>@if (s.sigla || s.tipo_unidade) { <small>{{ s.sigla }}{{ s.sigla && s.tipo_unidade ? ' · ' : '' }}{{ rotuloTipo(s.tipo_unidade) }}</small> }<small>ID {{ s.id }}{{ s.total_subordinados ? ' · ' + s.total_subordinados + ' subordinado(s)' : '' }}</small></td>
             <td><span class="selo-origem" [class.sistemico]="s.sistemico">{{ s.sistemico ? 'Sistêmico' : 'Institucional' }}</span></td>
             <td>{{ s.setor_pai_nome || 'Raiz' }}</td>
             <td>{{ s.lider_nome || 'Não definido' }}</td>
@@ -91,6 +85,17 @@
             <option [ngValue]="0">Nenhum (raiz)</option>
             @for (p of opcoesPai(); track p.id) { <option [ngValue]="p.id">{{ p.nome }}</option> }
           </select>
+        </div>
+        <div>
+          <label for="setor-tipo">Tipo da unidade</label>
+          <select id="setor-tipo" formControlName="tipo_unidade">
+            <option value="">Não informado</option>
+            @for (t of tiposUnidade; track t[0]) { <option [value]="t[0]">{{ t[1] }}</option> }
+          </select>
+        </div>
+        <div>
+          <label for="setor-sigla">Sigla</label>
+          <input id="setor-sigla" formControlName="sigla" maxlength="30" placeholder="Ex.: SGC" />
         </div>
         <div>
           <label for="setor-lider">Líder</label>

@@ -53,7 +53,6 @@ export const NAVEGACAO: SecaoNavegacao[] = [
       // Abrir Chamado: abre o modal que cria o chamado no GLPI (ACL `abrir-chamado`, sem regras: todos os usuários)
       { id: 'abrir-chamado', rotulo: 'Abrir Chamado', icone: 'ajuda', acao: 'abrir-chamado', acl: 'abrir-chamado' },
       { id: 'usuarios', rotulo: 'Usuários', icone: 'usuarios', rota: '/usuarios', acl: 'usuarios' },
-      { id: 'setores', rotulo: 'Setores', icone: 'organograma', rota: '/setores', acl: 'setores' },
       // Documentação interativa da API (nova aba): visível a quem tem o recurso de ACL `documentacao-api` (nasce fechado)
       {
         id: 'api',

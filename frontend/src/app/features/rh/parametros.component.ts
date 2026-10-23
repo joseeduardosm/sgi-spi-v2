@@ -6,6 +6,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
+import { Setor, SetoresApiService } from '../setores/setores-api.service';
 import { CabecalhoRhComponent } from './cabecalho-rh.component';
 import { RhApiService } from './rh-api.service';
 import { DIAS_SEMANA, ParametrosRh } from './rh.models';
@@ -20,7 +21,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
     @if (p(); as x) {
       @if (x.membros_cgp === 0) {
         <p class="aviso-bloco erro">Ninguém está no setor da CGP (Coordenadoria de Gestão de Pessoas): os avisos destinados à CGP
-          (alterações de cadastro, pedidos, folha de ponto bloqueada) não chegam a ninguém. Inclua as pessoas da CGP em Setores.</p>
+          (alterações de cadastro, pedidos, folha de ponto bloqueada) não chegam a ninguém. Dê o acesso de Controle total ao módulo RH em Controle de acesso.</p>
       }
       <form class="parametros-rh" (ngSubmit)="salvar(x)">
         <section class="cartao-dados" aria-labelledby="titulo-regras">
@@ -43,6 +44,16 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
               <div class="campo"><span class="rotulo">Licença-prêmio</span>
                 <div class="dias-semana-parametros">@for (d of dias; track $index) {
                   <label class="dia" [class.marcado]="x.inicio_vedado_lp.includes($index)"><input type="checkbox" [checked]="x.inicio_vedado_lp.includes($index)" (change)="alternar(x.inicio_vedado_lp, $index)" />{{ d }}</label> }</div></div>
+            </div>
+
+            <h3 class="subtitulo-parametros">Setor de apoio administrativo</h3>
+            <div class="grade-parametros">
+              <div class="campo"><label for="p-saa">Serviço de Apoio Administrativo (Protocolo)</label>
+                <select id="p-saa" name="setor_apoio" [(ngModel)]="x.setor_apoio_administrativo_id">
+                  <option [ngValue]="null">Pelo nome da configuração</option>
+                  @for (s of setores(); track s.id) { <option [ngValue]="s.id">{{ s.nome }}</option> }
+                </select>
+                <small class="ajuda">Quem dá andamento nos números reservados do Protocolo.</small></div>
             </div>
 
             <h3 class="subtitulo-parametros">Outras regras</h3>
@@ -98,10 +109,13 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
 export class ParametrosComponent implements OnInit {
   private readonly api = inject(RhApiService);
   private readonly dialogos = inject(DialogosService);
+  private readonly setoresApi = inject(SetoresApiService);
+  protected readonly setores = signal<Setor[]>([]);
   protected readonly p = signal<ParametrosRh | null>(null);
   protected readonly dias = DIAS_SEMANA;
 
   ngOnInit(): void {
+    this.setoresApi.listar().subscribe((l) => this.setores.set(l.filter((x) => !x.sistemico && x.ativo)));
     this.api.parametros().subscribe({ next: (x) => this.p.set(x), error: (e) => this.dialogos.mostrarErro(e) });
   }
 

@@ -4,13 +4,13 @@
 
 Setores representam a estrutura institucional (com setor pai e líder) e também "grupos
 sistêmicos". Eles servem de grupos de acesso na ACL: uma regra dada a um setor vale para todos
-os membros. Consultar exige ACL `setores` ≥ LEITURA; alterar é exclusivo do SuperRoot.
+os membros. Consultar exige ACL `setores` ≥ LEITURA (ou acesso ao RH); criar, alterar e excluir exigem **Gerir setores e cargos** (MODIFICACAO em `rh`) ou SuperRoot; grupos sistêmicos só o SuperRoot.
 """
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import exigir_acl, exigir_gestao
+from app.api.dependencias import exigir_acl, exigir_rh, obter_usuario_atual
 from app.models.setor import Setor
 from app.core.erros import ErroApi
 from app.api.respostas import CONFLITO, INVALIDO, RESPOSTAS_AUTENTICADAS, erro_regra, nao_encontrado, resposta_nao_encontrado
@@ -24,8 +24,18 @@ from app.services.servico_setores import ErroRegraSetor, SetorNaoEncontrado
 roteador = APIRouter(prefix="/setores", tags=["Setores"], responses=RESPOSTAS_AUTENTICADAS)
 
 # Dependências de acesso reutilizadas nas rotas abaixo
-pode_ler = exigir_acl("setores", NivelAcl.LEITURA)
-pode_gerir = exigir_gestao("setores")
+pode_ler_setores = exigir_acl("setores", NivelAcl.LEITURA)
+# Os setores são do RH: quem tem Gerir setores e cargos (MODIFICACAO em `rh`) cria, altera e exclui; o SuperRoot sempre
+pode_gerir = exigir_rh(NivelAcl.MODIFICACAO)
+
+
+def pode_ler(usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)) -> Usuario:
+    """Consulta: ACL `setores` ≥ LEITURA **ou** qualquer acesso ao RH (quem gere os setores precisa vê-los)."""
+    from app.services.rh import papeis
+
+    if papeis.tem_nivel_rh(sessao, usuario, NivelAcl.LEITURA):
+        return usuario
+    return pode_ler_setores(usuario=usuario, sessao=sessao)
 
 
 def _restricoes_nao_superroot(sessao: Session, autor: Usuario, dados: GravacaoSetor | None = None, setor_id: int | None = None) -> None:
@@ -61,7 +71,7 @@ def consultar_setor(setor_id: int, sessao: Session = Depends(obter_sessao), _: U
     response_model=DetalheSetor,
     status_code=status.HTTP_201_CREATED,
     summary="Criar setor",
-    description="SuperRoot, ou CONTROLE_TOTAL na ACL `setores` (grupos sistêmicos: só SuperRoot).",
+    description="SuperRoot ou **Gerir setores e cargos** (MODIFICACAO no módulo RH); grupos sistêmicos: só SuperRoot.",
     responses={**CONFLITO, **INVALIDO},
 )
 def criar_setor(dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)) -> DetalheSetor:
@@ -79,7 +89,7 @@ def criar_setor(dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), a
     "/{setor_id}",
     response_model=DetalheSetor,
     summary="Alterar setor",
-    description="`membros_ids` substitui a lista de membros. SuperRoot, ou CONTROLE_TOTAL na ACL `setores` (grupos sistêmicos: só SuperRoot).",
+    description="`membros_ids` substitui a lista de membros. SuperRoot ou **Gerir setores e cargos** (MODIFICACAO no módulo RH); grupos sistêmicos: só SuperRoot.",
     responses={**NAO_ENCONTRADO, **CONFLITO, **INVALIDO},
 )
 def alterar_setor(setor_id: int, dados: GravacaoSetor, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)) -> DetalheSetor:
@@ -99,7 +109,7 @@ def alterar_setor(setor_id: int, dados: GravacaoSetor, sessao: Session = Depends
     "/{setor_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Excluir setor",
-    description="Somente setores sem membros e sem subordinados. SuperRoot, ou CONTROLE_TOTAL na ACL `setores` (grupos sistêmicos: só SuperRoot).",
+    description="Somente setores sem membros e sem subordinados. SuperRoot ou **Gerir setores e cargos** (MODIFICACAO no módulo RH); grupos sistêmicos: só SuperRoot.",
     responses={**NAO_ENCONTRADO, **INVALIDO},
 )
 def excluir_setor(setor_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_gerir)) -> Response:

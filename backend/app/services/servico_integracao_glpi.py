@@ -25,6 +25,9 @@ class AlteracaoIntegracaoGlpi(BaseModel):
     sla_atendimento_id: int | None = Field(None, ge=0, description="Id do SLA de atendimento (0 = nenhum). Nulo mantém o atual.")
     sla_solucao_id: int | None = Field(None, ge=0, description="Id do SLA de solução (0 = nenhum). Nulo mantém o atual.")
     template_id: int | None = Field(None, ge=0, description="Id do modelo de chamado (0 = o padrão). Nulo mantém o atual.")
+    usuario_web: str | None = Field(None, max_length=150, description="Login da conta de serviço na tela web do GLPI (usada para enviar o formulário de nomeações). Nulo mantém o atual.")
+    senha_web: str | None = Field(None, max_length=200, description="Senha web da conta de serviço. Vazio preserva a atual; nunca volta pela API.")
+    formulario_nomeacao_id: int | None = Field(None, ge=1, description="Id do formulário \"CGP - Nomeações\" no GLPI (padrão 8). Nulo mantém o atual.")
 
 
 class LeituraIntegracaoGlpi(BaseModel):
@@ -40,6 +43,10 @@ class LeituraIntegracaoGlpi(BaseModel):
     sla_atendimento_id: int | None
     sla_solucao_id: int | None
     template_id: int | None
+    usuario_web: str
+    possui_senha_web: bool
+    formulario_nomeacao_id: int
+    login_web_configurado: bool = Field(..., description="Há usuário e senha web: dá para enviar o formulário de nomeações.")
     atualizado_em: datetime
     atualizado_por: str
 
@@ -67,7 +74,8 @@ def leitura(config: IntegracaoGlpi) -> LeituraIntegracaoGlpi:
         ativo=config.ativo, url_base=config.url_base, possui_app_token=bool(config.app_token_cifrado), possui_user_token=bool(config.user_token_cifrado),
         configurada=bool(config.url_base and config.user_token_cifrado), prefixo_titulo=config.prefixo_titulo,
         grupo_atribuido_id=config.grupo_atribuido_id, sla_atendimento_id=config.sla_atendimento_id, sla_solucao_id=config.sla_solucao_id,
-        template_id=config.template_id, atualizado_em=config.atualizado_em, atualizado_por=config.atualizado_por,
+        template_id=config.template_id, usuario_web=config.usuario_web, possui_senha_web=bool(config.senha_web_cifrada), formulario_nomeacao_id=config.formulario_nomeacao_id,
+        login_web_configurado=bool(config.usuario_web and config.senha_web_cifrada), atualizado_em=config.atualizado_em, atualizado_por=config.atualizado_por,
     )
 
 
@@ -86,8 +94,14 @@ def salvar(sessao: Session, dados: AlteracaoIntegracaoGlpi, autor: str) -> Integ
         valor = getattr(dados, campo)
         if valor is not None:
             setattr(config, campo, valor or None)
+    if dados.usuario_web is not None:
+        config.usuario_web = dados.usuario_web.strip()
+    if dados.senha_web:
+        config.senha_web_cifrada = cifrar_segredo(dados.senha_web)
+    if dados.formulario_nomeacao_id is not None:
+        config.formulario_nomeacao_id = dados.formulario_nomeacao_id
     auditar(sessao, autor, "integracao_glpi.salvar", "Integração GLPI",
-            f"ativo={config.ativo} url={config.url_base} token_novo={bool(dados.user_token)} app_token_novo={bool(dados.app_token)}")
+            f"ativo={config.ativo} url={config.url_base} token_novo={bool(dados.user_token)} app_token_novo={bool(dados.app_token)} senha_web_nova={bool(dados.senha_web)}")
     sessao.commit()
     return config
 
@@ -99,6 +113,16 @@ def tokens(config: IntegracaoGlpi) -> tuple[str, str]:
                 decifrar_segredo(config.user_token_cifrado) if config.user_token_cifrado else "")
     except ErroDecifrarSegredo as erro:
         raise ErroGlpi("Os tokens gravados não puderam ser lidos. Informe-os de novo na configuração.") from erro
+
+
+def credencial_web(config: IntegracaoGlpi) -> tuple[str, str]:
+    """(usuário, senha) da conta de serviço na tela web do GLPI; `ErroGlpi` se faltar ou se a cifra não abre."""
+    if not (config.usuario_web and config.senha_web_cifrada):
+        raise ErroGlpi("Informe o usuário e a senha web da conta de serviço em Administração > Integração GLPI.")
+    try:
+        return config.usuario_web, decifrar_segredo(config.senha_web_cifrada)
+    except ErroDecifrarSegredo as erro:
+        raise ErroGlpi("A senha web gravada não pôde ser lida. Informe-a de novo na configuração.") from erro
 
 
 def testar(config: IntegracaoGlpi) -> ResultadoTesteGlpi:

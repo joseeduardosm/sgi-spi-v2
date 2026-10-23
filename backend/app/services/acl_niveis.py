@@ -114,6 +114,11 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
         "MODIFICACAO": _n("Alterar as políticas de SLA", "Tudo isso e também altera as metas de resposta e resolução."),
         "CONTROLE_TOTAL": _n("Alterar as políticas de SLA", "Igual a Modificação: o módulo não diferencia."),
     },
+    "rh": {
+        "LEITURA": _n("Consultar a estrutura do RH", "Vê setores, cargos, vagas, ocupantes e o organograma. Só leitura: não altera nada."),
+        "MODIFICACAO": _n("Gerir setores e cargos", "Cria, altera e exclui setores, cargos e vagas, aloca e retira pessoas dos cargos e registra exonerações. Não valida o cadastro das pessoas nem mexe nos parâmetros."),
+        "CONTROLE_TOTAL": _n("Ser o RH do sistema", "É o RH: valida alterações cadastrais, decide férias e licenças, importa dados funcionais, gere feriados, parâmetros e modelos, mantém as fichas de pré-cadastro e as admissões (dados pessoais sensíveis) e recebe os avisos do RH. Inclui Gerir setores e cargos."),
+    },
     "reserva-espacos": {
         "LEITURA": _n("Solicitar reservas", "Vê a agenda, solicita reservas e altera ou cancela as próprias. Só isso: não aprova nada."),
         "MODIFICACAO": _n("Aprovar reservas", "Vê a fila, defere, indefere e cancela reservas de qualquer pessoa. Só isso: para também solicitar, marque \"Solicitar reservas\" junto."),

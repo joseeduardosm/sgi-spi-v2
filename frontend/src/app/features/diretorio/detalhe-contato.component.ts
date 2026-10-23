@@ -37,6 +37,10 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
             @if (c.linkedin) { <div><dt>LinkedIn</dt><dd><a [href]="c.linkedin" target="_blank" rel="noopener noreferrer">Ver perfil</a></dd></div> }
             @if (c.local) { <div><dt>Localização</dt><dd>{{ c.local }}</dd></div> }
           </dl>
+          @if (c.bio) {
+            <h4>Sobre</h4>
+            <p class="bio-detalhe">{{ c.bio }}</p>
+          }
           @if (c.chefia) {
             <h4>Chefia imediata</h4>
             <div class="pessoas-detalhe"><button type="button" (click)="abrirOutro.emit(c.chefia.id)">

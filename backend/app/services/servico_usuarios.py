@@ -72,6 +72,7 @@ def registrar_login_ldap(sessao: Session, diretorio: DiretorioLdap, identidade: 
     """
     # Já existe uma conta ligada a esta identidade? Se não, verifica se há uma conta local com o mesmo login
     usuario = buscar_vinculado(sessao, diretorio, identidade)
+    conta_nova = False
     if usuario is None:
         homonimo = buscar_por_login(sessao, identidade.login)
         if homonimo is not None:
@@ -85,9 +86,15 @@ def registrar_login_ldap(sessao: Session, diretorio: DiretorioLdap, identidade: 
             # Primeira entrada dessa pessoa: cria a conta corporativa
             usuario = Usuario(login=identidade.login, origem=OrigemUsuario.LDAP, diretorio_id=diretorio.id)
             sessao.add(usuario)
+            conta_nova = True
     aplicar_identidade(usuario, identidade)
     # A situação (ativa/desativada) acompanha a do AD
     usuario.ativo = identidade.ativo
     usuario.ultimo_acesso_em = agora_utc()
+    if conta_nova:
+        # Se o RH já tinha a ficha com este login proposto, liga ficha e conta
+        from app.services.rh import servico_pre_cadastro
+
+        servico_pre_cadastro.vincular_conta(sessao, usuario)
     sessao.commit()
     return usuario

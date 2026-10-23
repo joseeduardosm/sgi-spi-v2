@@ -23,6 +23,9 @@ class Setor(Base):
     # Sistêmico: grupo de acesso sem correspondência na estrutura institucional (ex.: "Auditores")
     sistemico: Mapped[bool] = mapped_column(Boolean, default=False)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Estrutura do RH: sigla e tipo da unidade (secretaria, subsecretaria, diretoria, coordenadoria...), só para rotular o organograma
+    sigla: Mapped[str | None] = mapped_column(String(30))
+    tipo_unidade: Mapped[str | None] = mapped_column(String(30))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 

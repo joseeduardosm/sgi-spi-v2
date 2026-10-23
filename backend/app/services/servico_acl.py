@@ -232,3 +232,31 @@ def acessos_detalhados(sessao: Session, usuario: Usuario, perfil_id: int | None 
 def acessos_efetivos(sessao: Session, usuario: Usuario) -> list[tuple[RecursoAcl, str | None]]:
     """Nível efetivo do usuário em cada recurso ativo (None = sem acesso)."""
     return [(r, nivel) for r, nivel, _ in acessos_detalhados(sessao, usuario)]
+
+
+def usuarios_com_nivel(sessao: Session, slug: str, nivel: str) -> set[int]:
+    """Ids dos usuários **ativos** com pelo menos `nivel` no recurso por regra direta, por regra de setor ou por perfil que abre a porta (qualquer perfil atribuído).
+
+    Serve para avisos ("quem é o RH?"): não considera qual perfil está ativo em cada sessão. SuperRoot não entra (só quem a ACL contempla). Recurso inexistente
+    ou sem regras e sem perfis devolve conjunto vazio (o chamador decide o que fazer nesse caso)."""
+    recurso = sessao.scalar(select(RecursoAcl).where(func.lower(RecursoAcl.slug) == slug.lower(), RecursoAcl.ativo.is_(True)))
+    if recurso is None:
+        return set()
+    ids: set[int] = set()
+    regras = [r for r in sessao.scalars(select(RegraAcl).where(RegraAcl.recurso_id == recurso.id)) if NivelAcl.posicao(r.nivel) >= NivelAcl.posicao(nivel)]
+    for regra in regras:
+        ids |= {u.id for u in regra.usuarios}
+        setores = [s.id for s in regra.setores if s.ativo]
+        if setores:
+            ids |= set(sessao.scalars(select(MembroSetor.usuario_id).where(MembroSetor.setor_id.in_(setores))))
+    acao = acao_da_porta(slug, nivel)
+    if acao is not None:
+        perfis = select(PerfilDireito.perfil_id).join(PerfilAcl, PerfilAcl.id == PerfilDireito.perfil_id).where(
+            PerfilDireito.recurso_id == recurso.id, PerfilDireito.nivel == acao, PerfilAcl.ativo.is_(True))
+        diretos = select(UsuarioPerfil.usuario_id).where(UsuarioPerfil.perfil_id.in_(perfis))
+        por_setor = select(MembroSetor.usuario_id).join(PerfilSetor, PerfilSetor.setor_id == MembroSetor.setor_id).join(Setor, Setor.id == MembroSetor.setor_id).where(
+            PerfilSetor.perfil_id.in_(perfis), Setor.ativo.is_(True))
+        ids |= set(sessao.scalars(diretos)) | set(sessao.scalars(por_setor))
+    if not ids:
+        return set()
+    return set(sessao.scalars(select(Usuario.id).where(Usuario.id.in_(ids), Usuario.ativo.is_(True))))

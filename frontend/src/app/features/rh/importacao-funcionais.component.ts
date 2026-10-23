@@ -37,13 +37,21 @@ const ROTULOS: Record<string, string> = {
         <div class="corpo-importacao-rh">
           <app-trilha-etapas [etapas]="trilha()" ariaLabel="Etapas da importação" [compacta]="true" />
           <ol class="passos-importacao">
-            <li>Baixe o modelo: ele já traz todos os servidores ativos e os valores atuais.
-              <button type="button" class="acao-secundaria acao-pequena" (click)="baixarModelo()">Baixar modelo</button></li>
-            <li>Preencha as colunas. <b>Célula vazia mantém o valor atual.</b> "Dias disponíveis no período vigente" corrige o saldo de férias de quem já gozou parte do período.</li>
-            <li>Envie a planilha e confira a prévia. A importação só grava se não houver nenhum erro.
-              <label class="acao-secundaria acao-pequena seletor-arquivo">Escolher planilha (.xlsx)
-                <input type="file" accept=".xlsx" (change)="escolher($any($event.target))" /></label>
-              @if (arquivo(); as a) { <small>{{ a.name }}</small> }</li>
+            <li>
+              <span class="texto-passo">Baixe o modelo: ele já traz todos os servidores ativos e os valores atuais.</span>
+              <span class="acao-passo"><button type="button" class="acao-secundaria acao-pequena" (click)="baixarModelo()">Baixar modelo</button></span>
+            </li>
+            <li>
+              <span class="texto-passo">Preencha as colunas. <b>Célula vazia mantém o valor atual.</b> "Dias disponíveis no período vigente" corrige o saldo de férias de quem já gozou parte do período.</span>
+            </li>
+            <li>
+              <span class="texto-passo">Envie a planilha e confira a prévia. A importação só grava se não houver nenhum erro.</span>
+              <span class="acao-passo">
+                <label class="acao-secundaria acao-pequena seletor-arquivo">Escolher planilha (.xlsx)
+                  <input type="file" accept=".xlsx" (change)="escolher($any($event.target))" /></label>
+                @if (arquivo(); as a) { <small>{{ a.name }}</small> }
+              </span>
+            </li>
           </ol>
 
           @if (resultado(); as r) {

@@ -51,7 +51,9 @@ NAO_ENCONTRADO = resposta_nao_encontrado("Usuário")
     "",
     response_model=PaginaUsuarios,
     summary="Listar usuários",
-    description="Pesquisa em login, nome, e-mail, ramal, celular, cargo, departamento e prédio. Exige ACL `usuarios` ≥ LEITURA.",
+    description="Pesquisa em login, nome, e-mail, ramal, celular, cargo, departamento e prédio e também no cargo ocupado (denominação, tipo e nível), no setor e na chefia imediata e mediata "
+                "(líder do setor, do setor pai e do avô, e o superior do cadastro). O texto se divide em palavras e todas precisam aparecer. Quem tem acesso ao módulo RH também pesquisa nos dados funcionais "
+                "(RS/PV e RG/CIN). Exige ACL `usuarios` ≥ LEITURA.",
 )
 def listar_usuarios(
     busca: str | None = Query(None, max_length=100, description="Texto de pesquisa."),
@@ -60,10 +62,13 @@ def listar_usuarios(
     pagina: int = Query(1, ge=1),
     tamanho_pagina: int = Query(50, ge=1, le=200),
     sessao: Session = Depends(obter_sessao),
-    _: Usuario = Depends(pode_ler),
+    quem: Usuario = Depends(pode_ler),
 ) -> PaginaUsuarios:
     """Lista paginada no servidor: o serviço devolve a página pedida e o total para a paginação da tela."""
-    itens, total = servico.listar_usuarios(sessao, busca, situacao, origem, pagina, tamanho_pagina)
+    from app.models.acl import NivelAcl
+    from app.services.rh.papeis import tem_nivel_rh
+
+    itens, total = servico.listar_usuarios(sessao, busca, situacao, origem, pagina, tamanho_pagina, dados_rh=tem_nivel_rh(sessao, quem, NivelAcl.LEITURA), dados_ficha=tem_nivel_rh(sessao, quem, NivelAcl.CONTROLE_TOTAL))
     return PaginaUsuarios(itens=itens, total=total, pagina=pagina, tamanho_pagina=tamanho_pagina)
 
 

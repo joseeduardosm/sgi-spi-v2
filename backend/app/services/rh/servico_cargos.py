@@ -194,11 +194,25 @@ def alterar(sessao: Session, cargo_id: int, dados: GravacaoCargo, autor: Usuario
 
 
 def excluir(sessao: Session, cargo_id: int, autor: Usuario) -> None:
-    """Só exclui vaga que nunca foi ocupada (senão, desative: o histórico precisa do cargo)."""
+    """Exclui a vaga, mesmo que já tenha tido ocupantes: o histórico de ocupações dela e as admissões canceladas saem junto (ficam na auditoria).
+
+    Não exclui vaga ocupada agora (vague antes) nem com admissão em andamento ou concluída. Os eventos do histórico das pessoas (`rh_historico`) continuam."""
+    from app.models.rh_admissao import Admissao
+
     cargo = obter(sessao, cargo_id)
-    if cargo.ocupacoes:
-        raise ErroRegraCargo("Este cargo já teve ocupante: desative-o em vez de excluir (o histórico mantém o cargo).", conflito=True)
-    auditar(sessao, autor.login, "rh.cargo.excluir", cargo.rotulo, autor_id=autor.id)
+    if cargo.vigente is not None:
+        raise ErroRegraCargo("O cargo está ocupado: vague-o antes de excluir.", conflito=True)
+    admissoes = list(sessao.scalars(select(Admissao).where(Admissao.cargo_id == cargo.id)))
+    if any(a.status != "cancelada" for a in admissoes):
+        raise ErroRegraCargo("Este cargo tem uma admissão em andamento ou concluída: cancele a admissão ou desative o cargo em vez de excluir.", conflito=True)
+    usuarios = {u.id: u.nome_completo or u.login for u in sessao.scalars(select(Usuario).where(Usuario.id.in_({o.usuario_id for o in cargo.ocupacoes})))} if cargo.ocupacoes else {}
+    apagadas = [{"pessoa": usuarios.get(o.usuario_id, str(o.usuario_id)), "inicio": str(o.inicio) if o.inicio else None, "fim": str(o.fim) if o.fim else None, "ato": o.ato} for o in cargo.ocupacoes]
+    auditar(sessao, autor.login, "rh.cargo.excluir", cargo.rotulo, autor_id=autor.id, dados={"ocupacoes_removidas": apagadas, "admissoes_canceladas_removidas": [a.id for a in admissoes]})
+    for admissao in admissoes:
+        sessao.delete(admissao)
+    for ocupacao in list(cargo.ocupacoes):
+        sessao.delete(ocupacao)
+    sessao.flush()
     sessao.delete(cargo)
     sessao.commit()
 
@@ -216,15 +230,17 @@ def _espelhar(sessao: Session, usuario: Usuario | None, cargo: Cargo) -> None:
     sessao.flush()
 
 
-def ocupar(sessao: Session, cargo_id: int, usuario_id: int, autor: Usuario | None, *, inicio: date | None = None, ato: str = "") -> Ocupacao:
-    """A pessoa assume o cargo (sem commit). Se já ocupa outro, aquela ocupação é encerrada como troca; o setor antigo deixa de contá-la como membro."""
+def ocupar(sessao: Session, cargo_id: int, usuario_id: int, autor: Usuario | None, *, inicio: date | None = None, ato: str = "", sem_data: bool = False) -> Ocupacao:
+    """A pessoa assume o cargo (sem commit). Se já ocupa outro, aquela ocupação é encerrada como troca; o setor antigo deixa de contá-la como membro.
+
+    `sem_data=True` (vínculos automáticos) grava a ocupação sem data de posse."""
     cargo = obter(sessao, cargo_id)
     usuario = sessao.get(Usuario, usuario_id)
     if usuario is None or not usuario.ativo:
         raise CargoNaoEncontrado("Pessoa")
     if not cargo.ativo:
         raise ErroRegraCargo("Este cargo está desativado.", conflito=True)
-    inicio = inicio or hoje_sao_paulo()
+    inicio = None if sem_data else (inicio or hoje_sao_paulo())
     atual = cargo.vigente
     if atual is not None:
         if atual.usuario_id == usuario_id:
@@ -234,10 +250,10 @@ def ocupar(sessao: Session, cargo_id: int, usuario_id: int, autor: Usuario | Non
     setor = _setor(sessao, cargo.setor_id)
     setor_anterior: Setor | None = None
     if anterior is not None:
-        if anterior.inicio > inicio:
+        if anterior.inicio is not None and inicio is not None and anterior.inicio > inicio:
             raise ErroRegraCargo("A posse é anterior ao início da ocupação atual da pessoa.")
         setor_anterior = _setor(sessao, anterior.cargo.setor_id)
-        _encerrar(sessao, anterior, inicio, "troca", "", autor, registrar_historico=False)
+        _encerrar(sessao, anterior, inicio or hoje_sao_paulo(), "troca", "", autor, registrar_historico=False)
         if setor_anterior.id != setor.id:
             sessao.execute(MembroSetor.__table__.delete().where(MembroSetor.setor_id == setor_anterior.id, MembroSetor.usuario_id == usuario_id))
     ocupacao = Ocupacao(cargo_id=cargo.id, usuario_id=usuario_id, inicio=inicio, ato=(ato or "").strip(), registrado_por_id=autor.id if autor else None,
@@ -260,7 +276,7 @@ def ocupar(sessao: Session, cargo_id: int, usuario_id: int, autor: Usuario | Non
 def _encerrar(sessao: Session, ocupacao: Ocupacao, fim: date, motivo: str, ato: str, autor: Usuario | None, *, registrar_historico: bool = True) -> None:
     if motivo not in MOTIVOS_FIM:
         raise ErroRegraCargo("Motivo inválido.")
-    if fim < ocupacao.inicio:
+    if ocupacao.inicio is not None and fim < ocupacao.inicio:
         raise ErroRegraCargo("A data de saída é anterior à posse.")
     ocupacao.fim, ocupacao.motivo_fim, ocupacao.ato_fim = fim, motivo, (ato or "").strip()
     if registrar_historico:
@@ -340,9 +356,8 @@ def vincular_legado(sessao: Session, usuario_id: int, autor: Usuario | None, *, 
         if setor is None:
             raise ErroRegraCargo("Informe o setor do cargo: o departamento da pessoa não corresponde a um setor cadastrado.")
         cargo = cargo_do_texto(sessao, usuario.cargo, setor, autor=autor)
-    # A posse legada começa na criação do cadastro (a data real da nomeação o RH ajusta depois, se quiser)
-    inicio = usuario.criado_em.date() if getattr(usuario, "criado_em", None) else hoje_sao_paulo()
-    return ocupar(sessao, cargo.id, usuario_id, autor, inicio=min(inicio, hoje_sao_paulo()), ato="Vínculo do cadastro anterior")
+    # Vínculo automático: sem data de posse (não há uma data real), para o RH realocar a pessoa no cargo correto
+    return ocupar(sessao, cargo.id, usuario_id, autor, ato="Vínculo do cadastro anterior", sem_data=True)
 
 
 # --- Organograma ---------------------------------------------------------------------------------

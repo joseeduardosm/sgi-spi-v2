@@ -10,13 +10,14 @@ from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile,
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencias import exigir_rh
+from app.api.dependencias import exigir_rh, obter_usuario_atual
 from app.api.respostas import CONFLITO, INVALIDO, RESPOSTAS_AUTENTICADAS, erro_regra, nao_encontrado, resposta_nao_encontrado
 from app.core.banco import obter_sessao
+from app.core.erros import ErroApi
 from app.models.acl import NivelAcl
 from app.models.usuario import Usuario
 from app.schemas.rh_admissao import (
-    SOLICITACOES, EntradaChamado, EntradaDataPublicacao, EntradaPosse, EntradaProtocolo, EntradaTexto, GravacaoChecklist, GravacaoModelo, IniciarAdmissao, LeituraAdmissao,
+    SOLICITACOES, EntradaChamado, EntradaDataPublicacao, EntradaMotivo, EntradaPosse, EntradaProtocolo, EntradaTexto, GravacaoChecklist, GravacaoModelo, IniciarAdmissao, LeituraAdmissao,
     LeituraChecklist, LeituraModelo, ResumoAdmissao, TextoParaCopiar, TipoProtocoloResolucao,
 )
 from app.services import servico_anexos
@@ -42,6 +43,8 @@ def _traduzir(sessao: Session):
         raise nao_encontrado("Checklist" if isinstance(erro, ChecklistNaoEncontrado) else "Admissão") from erro
     except ErroAdmissao as erro:
         sessao.rollback()
+        if erro.proibido:
+            raise ErroApi(status.HTTP_403_FORBIDDEN, str(erro), "sem_permissao") from erro
         raise erro_regra(str(erro), erro.conflito) from erro
     except (ErroModelo, ErroChecklist) as erro:
         sessao.rollback()
@@ -116,9 +119,9 @@ def solicitacoes(_: Usuario = Depends(rh)):
 
 
 @roteador.get("/admissoes/tipos-protocolo", response_model=list[TipoProtocoloResolucao], summary="Tipos de Resolução do Protocolo",
-              description="Tipos do Protocolo cujo nome começa com \"Resolu\", e se já têm faixa de numeração para o ano.")
-def tipos_protocolo(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(rh)):
-    return servico_admissao.tipos_de_resolucao(sessao)
+              description="Tipos do Protocolo cujo nome começa com \"Resolu\", e se já têm faixa de numeração para o ano. Com um tipo definido nos Parâmetros do RH, só ele é devolvido, a não ser com `todos=true` (tela de Parâmetros).")
+def tipos_protocolo(todos: bool = False, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(rh)):
+    return servico_admissao.tipos_de_resolucao(sessao, todos)
 
 
 @roteador.get("/admissoes", response_model=list[ResumoAdmissao], summary="Listar admissões",
@@ -245,10 +248,19 @@ def resolucao_para_copiar(admissao_id: int, sessao: Session = Depends(obter_sess
 
 
 @roteador.post("/admissoes/{admissao_id}/protocolo", response_model=LeituraAdmissao, summary="Reservar o número da resolução no Protocolo",
-               description="Reserva o próximo número livre do tipo de Resolução escolhido, na faixa do ano atual.", responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
+               description="Reserva o próximo número livre do tipo de Resolução definido nos Parâmetros do RH (`tipo_protocolo_id` só vale se os Parâmetros não definirem um), na faixa do ano atual. `409` se a admissão é de resolução sem número.", responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
 def reservar_numero(admissao_id: int, dados: EntradaProtocolo, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(rh)):
     with _traduzir(sessao):
         return servico_admissao.reservar_numero(sessao, admissao_id, dados.tipo_protocolo_id, autor)
+
+
+@roteador.post("/admissoes/{admissao_id}/protocolo/liberar", response_model=LeituraAdmissao, summary="Liberar o número da resolução no Protocolo",
+               description="Devolve o número ao Protocolo (livre de novo), **mesmo com o PDF da publicação já subido**: o PDF é excluído logicamente, a publicação deixa de estar registrada e a trilha volta à etapa do número. "
+                           "Quem reservou o número, o Serviço de Apoio Administrativo (parâmetro do RH) e o SuperRoot (`403 sem_permissao` nos demais). `motivo` obrigatório; `409` sem número reservado ou depois da posse. O e-mail de nomeação já enviado não é desfeito.",
+               responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO, status.HTTP_403_FORBIDDEN: {"description": "Não reservou o número nem é do Serviço de Apoio Administrativo."}})
+def liberar_numero(admissao_id: int, dados: EntradaMotivo, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(obter_usuario_atual)):
+    with _traduzir(sessao):
+        return servico_admissao.liberar_numero(sessao, admissao_id, dados.motivo, autor)
 
 
 @roteador.post("/admissoes/{admissao_id}/publicacao", response_model=LeituraAdmissao, summary="Registrar a publicação no D.O.E.",

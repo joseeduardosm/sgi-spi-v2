@@ -25,7 +25,7 @@ def upgrade() -> None:
     from app.core.configuracao import obter_configuracao
 
     conexao = op.get_bind()
-    nome = obter_configuracao().setor_apoio_administrativo.strip().lower()
+    nome = "serviço de apoio administrativo"
     setor_id = next((i for i, n in conexao.execute(sa.text("SELECT id, nome FROM setores")).all() if (n or "").strip().lower() == nome), None)
     if setor_id is not None:
         conexao.execute(sa.text("UPDATE rh_parametros SET setor_apoio_administrativo_id = :s"), {"s": setor_id})

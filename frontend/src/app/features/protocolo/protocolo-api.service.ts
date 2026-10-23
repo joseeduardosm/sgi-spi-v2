@@ -22,8 +22,8 @@ export class ProtocoloApiService {
   }
 
   /** Cria o tipo e, com `sequencia`, a faixa do primeiro exercício na mesma chamada. */
-  criarTipo(nome: string, sequencia?: DadosSequencia): Observable<TipoProtocolo> {
-    return this.http.post<TipoProtocolo>(`${this.base}/tipos`, sequencia ? { nome, sequencia } : { nome });
+  criarTipo(nome: string, sequencia?: DadosSequencia, setorId?: number | null): Observable<TipoProtocolo> {
+    return this.http.post<TipoProtocolo>(`${this.base}/tipos`, { nome, ...(sequencia ? { sequencia } : {}), ...(setorId ? { setor_id: setorId } : {}) });
   }
 
   renomearTipo(id: string, nome: string): Observable<TipoProtocolo> {
@@ -64,6 +64,10 @@ export class ProtocoloApiService {
 
   liberar(numeroId: string, motivo: string): Observable<NumeroProtocolo> {
     return this.http.post<NumeroProtocolo>(`${this.base}/numeros/${numeroId}/liberar`, { motivo });
+  }
+
+  concluirSemDocumento(numeroId: string, motivo: string): Observable<NumeroProtocolo> {
+    return this.http.post<NumeroProtocolo>(`${this.base}/numeros/${numeroId}/concluir-sem-documento`, { motivo });
   }
 
   anular(numeroId: string, motivo: string): Observable<NumeroProtocolo> {

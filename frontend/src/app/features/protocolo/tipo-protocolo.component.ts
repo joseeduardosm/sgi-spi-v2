@@ -8,14 +8,15 @@ import { Observable } from 'rxjs';
 
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CabecalhoProtocoloComponent } from './cabecalho-protocolo.component';
+import { Setor, SetoresApiService } from '../setores/setores-api.service';
 import { ProtocoloApiService } from './protocolo-api.service';
 
 const MAXIMO_NUMEROS = 10000;
 
 /**
  * Cria o tipo com a faixa do primeiro exercício (`/protocolo/administracao/tipos/novo`) ou acrescenta um exercício a um tipo existente
- * (`/protocolo/administracao/tipos/:tipoId/exercicio`). Do início da faixa até "Liberar a partir de" os números ficam **Reservado SAA**:
- * só o Serviço de Apoio Administrativo dá andamento neles; os demais usuários passam a reservar a partir desse número.
+ * (`/protocolo/administracao/tipos/:tipoId/exercicio`). Do início da faixa até "Liberar a partir de" os números ficam **Reservado CGI**:
+ * só a Coordenadoria de Gestão e Infraestrutura dá andamento neles; os demais usuários passam a reservar a partir desse número.
  */
 @Component({
   selector: 'app-tipo-protocolo',
@@ -28,12 +29,19 @@ const MAXIMO_NUMEROS = 10000;
           <div class="ocupa-duas"><label for="tp-nome">Nome do tipo de documento *</label>
             <input id="tp-nome" name="nome" maxlength="200" placeholder="Ex.: Portaria SPI SSGC" [ngModel]="nome()" (ngModelChange)="nome.set($event)" [readonly]="!!tipoId()" required /></div>
           <div><label for="tp-exercicio">Exercício *</label><input id="tp-exercicio" name="exercicio" type="number" min="2000" max="2200" [ngModel]="exercicio()" (ngModelChange)="exercicio.set($event)" required /></div>
-          <div></div>
+          @if (!tipoId()) {
+            <div class="ocupa-duas"><label for="tp-setor">Setor que pode consumir os números</label>
+              <select id="tp-setor" name="setor" [ngModel]="setorId()" (ngModelChange)="setorId.set($event)">
+                <option [ngValue]="null">Todos podem consumir</option>
+                @for (s of setores(); track s.id) { <option [ngValue]="s.id">{{ s.nome }}</option> }
+              </select>
+              <small class="dica">Com um setor, só ele e a administração reservam números, e só eles e o Serviço de Apoio Administrativo veem este tipo no Protocolo. Em branco, todos consomem.</small></div>
+          }
           <div><label for="tp-inicio">Início da faixa *</label><input id="tp-inicio" name="inicio" type="number" min="0" [ngModel]="inicio()" (ngModelChange)="inicio.set($event)" required /></div>
           <div><label for="tp-fim">Fim da faixa *</label><input id="tp-fim" name="fim" type="number" min="0" [ngModel]="fim()" (ngModelChange)="fim.set($event)" required /></div>
           <div class="ocupa-duas"><label for="tp-liberar">Liberar a partir de</label>
             <input id="tp-liberar" name="liberar" type="number" min="0" placeholder="Em branco: toda a faixa liberada desde o início" [ngModel]="liberar()" (ngModelChange)="liberar.set($event === '' ? null : $event)" />
-            <small class="dica">Do início da faixa até o número anterior a este fica <b>Reservado SAA</b>: só quem está no setor Serviço de Apoio Administrativo reserva e sobe documento. A partir dele, todos os usuários reservam.</small></div>
+            <small class="dica">Do início da faixa até o número anterior a este fica <b>Reservado CGI</b>: só quem está no setor Coordenadoria de Gestão e Infraestrutura reserva e sobe documento. A partir dele, todos os usuários reservam.</small></div>
         </div>
         <p class="previa-faixa" [class.erro]="!!erro()" role="status">{{ erro() || previa() }}</p>
       </section>
@@ -58,6 +66,7 @@ export class TipoProtocoloComponent implements OnInit {
   private readonly api = inject(ProtocoloApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
+  private readonly setoresApi = inject(SetoresApiService);
 
   protected readonly salvando = signal(false);
   protected readonly nome = signal('');
@@ -65,6 +74,8 @@ export class TipoProtocoloComponent implements OnInit {
   protected readonly inicio = signal<number | null>(1);
   protected readonly fim = signal<number | null>(100);
   protected readonly liberar = signal<number | null>(null);
+  protected readonly setorId = signal<number | null>(null);
+  protected readonly setores = signal<Setor[]>([]);
 
   /** Mensagem do primeiro problema da faixa (espelha a validação da API); vazia quando está tudo certo. */
   protected readonly erro = computed(() => this.validar());
@@ -74,11 +85,12 @@ export class TipoProtocoloComponent implements OnInit {
     if (i === null || f === null || !(f >= i)) return 'Informe a faixa de números.';
     const total = f - i + 1;
     if (l === null || l <= i) return `${total} número(s), de ${i} a ${f}, liberados para todos desde o início.`;
-    if (l > f) return `${total} número(s), de ${i} a ${f}: a faixa inteira fica Reservado SAA.`;
-    return `Reservado SAA: ${i} a ${l - 1} (${l - i} número(s)) · liberado para todos: ${l} a ${f} (${f - l + 1} número(s)).`;
+    if (l > f) return `${total} número(s), de ${i} a ${f}: a faixa inteira fica Reservado CGI.`;
+    return `Reservado CGI: ${i} a ${l - 1} (${l - i} número(s)) · liberado para todos: ${l} a ${f} (${f - l + 1} número(s)).`;
   });
 
   ngOnInit(): void {
+    if (!this.tipoId()) this.setoresApi.listar().subscribe((l) => this.setores.set(l.filter((x) => !x.sistemico && x.ativo)));
     if (this.tipoId()) {
       this.api.tipos().subscribe({
         next: (r) => {
@@ -108,7 +120,7 @@ export class TipoProtocoloComponent implements OnInit {
     if (this.validar()) return;
     this.salvando.set(true);
     const dados = { exercicio: this.exercicio(), inicio: this.inicio()!, fim: this.fim()!, liberar_a_partir_de: this.liberar() };
-    const chamada: Observable<unknown> = this.tipoId() ? this.api.criarSequencia(this.tipoId()!, dados) : this.api.criarTipo(this.nome().trim(), dados);
+    const chamada: Observable<unknown> = this.tipoId() ? this.api.criarSequencia(this.tipoId()!, dados) : this.api.criarTipo(this.nome().trim(), dados, this.setorId());
     chamada.subscribe({
       next: () => void this.roteador.navigate(['/protocolo/administracao']),
       error: (e) => { this.salvando.set(false); this.dialogos.mostrarErro(e, 'Não foi possível salvar'); },

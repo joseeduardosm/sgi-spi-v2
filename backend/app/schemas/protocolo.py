@@ -8,13 +8,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-EstadoNumero = Literal["livre", "reservado_saa", "reservado", "utilizado", "anulado"]
-TipoEvento = Literal["reservou", "lancou", "anexou", "liberou", "anulou", "sigilo", "vinculou", "ampliou"]
+EstadoNumero = Literal["livre", "reservado_cgi", "reservado", "utilizado", "anulado"]
+TipoEvento = Literal["reservou", "lancou", "anexou", "concluiu", "liberou", "anulou", "sigilo", "vinculou", "ampliou"]
 
 
 class GravacaoTipo(BaseModel):
     nome: str = Field(..., min_length=1, max_length=200, description="Nome do documento (Ofício, Portaria…); único sem diferenciar maiúsculas.")
     sequencia: "GravacaoSequencia | None" = Field(None, description="Opcional: cria, na mesma transação, a faixa do primeiro exercício (tela de novo tipo).")
+    setor_id: int | None = Field(None, description="Opcional, só na criação: restringe o consumo dos números do tipo a esse setor (e seus filhos). Sem setor, todos podem consumir.")
 
 
 class SequenciaLeitura(BaseModel):
@@ -22,12 +23,15 @@ class SequenciaLeitura(BaseModel):
     exercicio: int
     inicio: int
     fim: int
-    liberar_a_partir_de: int | None = Field(None, description="Números do início até este (exclusive) ficam \"Reservado SAA\"; nulo = nada reservado.")
+    liberar_a_partir_de: int | None = Field(None, description="Números do início até este (exclusive) ficam \"Reservado CGI\"; nulo = nada reservado.")
 
 
 class TipoLeitura(BaseModel):
     id: uuid.UUID
     nome: str
+    setor_id: int | None = Field(None, description="Setor que pode consumir os números do tipo; nulo = todos.")
+    setor_nome: str | None = None
+    pode_consumir: bool = Field(True, description="O usuário pode reservar números deste tipo (sem restrição de setor, é do setor, ou administra o Protocolo).")
     sequencias: list[SequenciaLeitura] = Field(default_factory=list, description="Uma por exercício, do mais recente ao mais antigo.")
 
 
@@ -40,13 +44,13 @@ class GravacaoSequencia(BaseModel):
     exercicio: int = Field(..., ge=2000, le=2200)
     inicio: int = Field(..., ge=0)
     fim: int = Field(..., ge=0)
-    liberar_a_partir_de: int | None = Field(None, ge=0, description="Opcional, entre `inicio` e `fim + 1`: do início da faixa até este número (exclusive) fica \"Reservado SAA\".")
+    liberar_a_partir_de: int | None = Field(None, ge=0, description="Opcional, entre `inicio` e `fim + 1`: do início da faixa até este número (exclusive) fica \"Reservado CGI\".")
 
 
 class GravacaoFaixa(BaseModel):
     inicio: int = Field(..., ge=0, description="Menor que o atual amplia para trás; maior só se os números removidos estiverem livres e sem histórico.")
     fim: int = Field(..., ge=0, description="Maior que o atual amplia para frente.")
-    liberar_a_partir_de: int | None = Field(None, ge=0, description="Novo ponto de liberação (nulo remove a reserva). Elevá-lo só vale se os números que passam a ser do SAA não estiverem reservados (`409`).")
+    liberar_a_partir_de: int | None = Field(None, ge=0, description="Novo ponto de liberação (nulo remove a reserva). Elevá-lo só vale se os números que passam a ser da CGI não estiverem reservados (`409`).")
 
 
 class ReservaProximo(BaseModel):
@@ -106,8 +110,9 @@ class NumeroLeitura(BaseModel):
     arquivo: ArquivoLeitura | None
     pode_anexar: bool
     pode_liberar: bool
+    pode_concluir_sem_documento: bool = Field(False, description="Reservado e sem documento, e o usuário reservou o número ou administra: pode concluir sem subir o arquivo (`POST /numeros/{id}/concluir-sem-documento`).")
     pode_alterar_sigilo: bool
-    pode_reservar: bool = Field(False, description="Livre e o usuário pode escolher este número (administração; o SAA, nos \"Reservado SAA\").")
+    pode_reservar: bool = Field(False, description="Livre e o usuário pode escolher este número (administração; a CGI, nos \"Reservado CGI\").")
     eventos: list[EventoLeitura] = Field(default_factory=list, description="Linha do tempo (só no detalhe de um número).")
 
 
@@ -115,11 +120,12 @@ class ListaNumeros(BaseModel):
     sequencia: SequenciaLeitura
     tipo_id: uuid.UUID
     tipo_nome: str
+    pode_consumir: bool = Field(True, description="O usuário pode reservar números deste tipo (tipo sem restrição de setor, usuário do setor, ou administração do Protocolo).")
     pode_administrar: bool
     usuario_id: int
     livres: int
-    reservados_saa: int = Field(0, description="Números ainda \"Reservado SAA\" (livres dentro da faixa do Serviço de Apoio Administrativo).")
-    pode_usar_reserva_saa: bool = Field(False, description="O usuário é do SAA (ou administra o Protocolo) e pode dar andamento na faixa reservada.")
+    reservados_cgi: int = Field(0, description="Números ainda \"Reservado CGI\" (livres dentro da faixa da Coordenadoria de Gestão e Infraestrutura).")
+    pode_usar_reserva_cgi: bool = Field(False, description="O usuário é da CGI (ou administra o Protocolo) e pode dar andamento na faixa reservada.")
     itens: list[NumeroLeitura]
 
 

@@ -53,11 +53,11 @@ def _sequencia(s) -> SequenciaLeitura:
     return SequenciaLeitura(id=s.id, exercicio=s.exercicio, inicio=s.inicio, fim=s.fim, liberar_a_partir_de=s.liberar_a_partir_de)
 
 
-def _tipo(t: TipoProtocolo) -> TipoLeitura:
-    return TipoLeitura(id=t.id, nome=t.nome, sequencias=[_sequencia(s) for s in t.sequencias])
+def _tipo(t: TipoProtocolo, pode_consumir: bool = True) -> TipoLeitura:
+    return TipoLeitura(id=t.id, nome=t.nome, setor_id=t.setor_id, setor_nome=t.setor.nome if t.setor else None, pode_consumir=pode_consumir, sequencias=[_sequencia(s) for s in t.sequencias])
 
 
-def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, eventos: bool = False, contratos: dict | None = None, saa: bool = False) -> NumeroLeitura:
+def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, eventos: bool = False, contratos: dict | None = None, cgi: bool = False) -> NumeroLeitura:
     arquivo = None
     if n.anexo is not None and n.anexo.excluido_em is None:
         arquivo = ArquivoLeitura(id=n.anexo.id, nome=n.anexo.nome_original, tamanho=n.anexo.tamanho, pode_baixar=servico.pode_ver_documento(n, usuario))
@@ -74,8 +74,9 @@ def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, 
         sigiloso=n.sigiloso, anulado_em=n.anulado_em, motivo_anulacao=n.motivo_anulacao, arquivo=arquivo,
         pode_anexar=ativo and n.reservado_em is not None and n.anexo_id is None and (dono or admin),
         pode_liberar=n.estado == "reservado" and (dono or admin),
+        pode_concluir_sem_documento=n.estado == "reservado" and (dono or admin),
         pode_alterar_sigilo=ativo and n.reservado_em is not None and (dono or usuario.superusuario),
-        pode_reservar=n.estado in ("livre", "reservado_saa") and (admin or (n.estado == "reservado_saa" and saa)),
+        pode_reservar=n.estado in ("livre", "reservado_cgi") and (admin or (n.estado == "reservado_cgi" and cgi)),
         eventos=[EventoLeitura(tipo=e.tipo, autor_nome=e.autor_nome, texto=e.texto, ocorrido_em=e.ocorrido_em) for e in n.eventos] if eventos else [],
     )
 
@@ -83,17 +84,17 @@ def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, 
 # --- Tipos e sequências ---------------------------------------------------------------------
 
 @roteador.get("/tipos", response_model=ListaTipos, summary="Tipos de documento e suas sequências",
-              description="Todos os tipos com a sequência de cada exercício. `pode_administrar` indica CONTROLE_TOTAL (ou SuperRoot).")
+              description="Os tipos que o usuário pode ver, com a sequência de cada exercício (tipo restrito a um setor só aparece para o setor, para a administração e para o Serviço de Apoio Administrativo). `pode_administrar` indica CONTROLE_TOTAL (ou SuperRoot).")
 def listar_tipos(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> ListaTipos:
-    return ListaTipos(pode_administrar=servico.controle_total(sessao, usuario), itens=[_tipo(t) for t in servico.listar_tipos(sessao)])
+    return ListaTipos(pode_administrar=servico.controle_total(sessao, usuario), itens=[_tipo(t, servico.pode_consumir_tipo(sessao, t, usuario)) for t in servico.listar_tipos(sessao) if servico.pode_ver_tipo(sessao, t, usuario)])
 
 
 @roteador.post("/tipos", response_model=TipoLeitura, status_code=status.HTTP_201_CREATED, summary="Criar tipo de documento",
-               description="Só CONTROLE_TOTAL. Nome único (sem diferenciar maiúsculas): `409` se já existir. Com `sequencia`, cria também a faixa do primeiro exercício (com \"liberar a partir de\") na mesma transação.", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO})
+               description="Só CONTROLE_TOTAL. Nome único (sem diferenciar maiúsculas): `409` se já existir. Com `sequencia`, cria também a faixa do primeiro exercício (com \"liberar a partir de\") na mesma transação. Com `setor_id`, só esse setor (e seus filhos) e a administração reservam números do tipo (`403` nos demais); sem setor, todos reservam.", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO})
 def criar_tipo(dados: GravacaoTipo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> TipoLeitura:
     with _traduzir(sessao):
         sequencia = dados.sequencia.model_dump() if dados.sequencia else None
-        return _tipo(servico.criar_tipo(sessao, dados.nome, usuario, sequencia))
+        return _tipo(servico.criar_tipo(sessao, dados.nome, usuario, sequencia, dados.setor_id))
 
 
 @roteador.put("/tipos/{tipo_id}", response_model=TipoLeitura, summary="Renomear tipo de documento", responses={**SEM_ADMIN, **CONFLITO, **resposta_nao_encontrado("Tipo")})
@@ -111,7 +112,7 @@ def excluir_tipo(tipo_id: uuid.UUID, sessao: Session = Depends(obter_sessao), us
 
 
 @roteador.post("/tipos/{tipo_id}/sequencias", response_model=SequenciaLeitura, status_code=status.HTTP_201_CREATED, summary="Criar a sequência de um exercício",
-               description="Só CONTROLE_TOTAL. Cria os números da faixa (até 10.000); `liberar_a_partir_de` opcional reserva ao SAA o início da faixa. Uma sequência por tipo e exercício (`409`).",
+               description="Só CONTROLE_TOTAL. Cria os números da faixa (até 10.000); `liberar_a_partir_de` opcional reserva à CGI o início da faixa. Uma sequência por tipo e exercício (`409`).",
                responses={**SEM_ADMIN, **CONFLITO, **INVALIDO, **resposta_nao_encontrado("Tipo")})
 def criar_sequencia(tipo_id: uuid.UUID, dados: GravacaoSequencia, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> SequenciaLeitura:
     with _traduzir(sessao):
@@ -141,42 +142,52 @@ def excluir_sequencia(sequencia_id: uuid.UUID, sessao: Session = Depends(obter_s
               description="A grade de números do tipo e exercício, com o estado de cada um e o que o usuário pode fazer.", responses=resposta_nao_encontrado("Sequência"))
 def numeros(sequencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> ListaNumeros:
     with _traduzir():
-        sequencia, itens = servico.numeros_da_sequencia(sessao, sequencia_id)
+        sequencia, itens = servico.numeros_da_sequencia(sessao, sequencia_id, usuario)
     admin = servico.controle_total(sessao, usuario)
-    saa = servico.pode_usar_reserva_saa(sessao, usuario)
+    cgi = servico.pode_usar_reserva_cgi(sessao, usuario)
     contratos = {c.id: c.numero for c in sessao.query(Contrato).filter(Contrato.id.in_({n.contrato_id for n in itens if n.contrato_id}))} if any(n.contrato_id for n in itens) else {}
     for n in itens:
         n.sequencia = sequencia
-    return ListaNumeros(sequencia=_sequencia(sequencia), tipo_id=sequencia.tipo_id, tipo_nome=sequencia.tipo.nome, pode_administrar=admin, usuario_id=usuario.id,
-                        livres=sum(1 for n in itens if n.estado == "livre"), reservados_saa=sum(1 for n in itens if n.estado == "reservado_saa"), pode_usar_reserva_saa=saa,
-                        itens=[_numero(sessao, n, usuario, admin, contratos=contratos, saa=saa) for n in itens])
+    return ListaNumeros(sequencia=_sequencia(sequencia), tipo_id=sequencia.tipo_id, tipo_nome=sequencia.tipo.nome, pode_consumir=servico.pode_consumir_tipo(sessao, sequencia.tipo, usuario), pode_administrar=admin, usuario_id=usuario.id,
+                        livres=sum(1 for n in itens if n.estado == "livre"), reservados_cgi=sum(1 for n in itens if n.estado == "reservado_cgi"), pode_usar_reserva_cgi=cgi,
+                        itens=[_numero(sessao, n, usuario, admin, contratos=contratos, cgi=cgi) for n in itens])
 
 
 @roteador.post("/sequencias/{sequencia_id}/proximo", response_model=NumeroLeitura, status_code=status.HTTP_201_CREATED, summary="Reservar o próximo número",
                description="Reserva o **menor número livre** da sequência, com a finalidade (e o contrato, se houver). Atômico: duas pessoas nunca recebem o mesmo. "
-               "A faixa \"Reservado SAA\" só entra para quem é do Serviço de Apoio Administrativo, que começa por ela; os demais (inclusive a administração) recebem a partir do ponto de liberação. "
+               "A faixa \"Reservado CGI\" só entra para quem é da Coordenadoria de Gestão e Infraestrutura, que começa por ela; os demais (inclusive a administração) recebem a partir do ponto de liberação. "
                "`409 sequencia_esgotada` quando não há mais livres.", responses={**CONFLITO, **INVALIDO, **resposta_nao_encontrado("Sequência")})
 def reservar_proximo(sequencia_id: uuid.UUID, dados: ReservaProximo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> NumeroLeitura:
     with _traduzir(sessao):
         n = servico.proximo(sessao, sequencia_id, dados.finalidade, dados.contrato_id, usuario)
-    return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True, saa=servico.pode_usar_reserva_saa(sessao, usuario))
+    return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True, cgi=servico.pode_usar_reserva_cgi(sessao, usuario))
 
 
 @roteador.get("/numeros/{numero_id}", response_model=NumeroLeitura, summary="Detalhe de um número, com a linha do tempo",
               description="Dados do número e a **linha do tempo** (visível mesmo se o documento for sigiloso).", responses=NUMERO_NAO_ENCONTRADO)
 def detalhe(numero_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> NumeroLeitura:
     with _traduzir():
-        n = servico.obter(sessao, numero_id)
+        n = servico.obter(sessao, numero_id, usuario)
     return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True)
 
 
 @roteador.post("/numeros/{numero_id}/reservar", response_model=NumeroLeitura, summary="Lançar um número específico",
-               description="CONTROLE_TOTAL escolhe qualquer número livre; o Serviço de Apoio Administrativo escolhe só entre os \"Reservado SAA\" (`403` nos demais casos). `409` se já foi reservado ou anulado.",
+               description="CONTROLE_TOTAL escolhe qualquer número livre; a Coordenadoria de Gestão e Infraestrutura escolhe só entre os \"Reservado CGI\" (`403` nos demais casos). `409` se já foi reservado ou anulado.",
                responses={**CONFLITO, **INVALIDO, **NUMERO_NAO_ENCONTRADO, status.HTTP_403_FORBIDDEN: {"description": "Sem permissão para escolher este número (`sem_permissao`)."}})
 def lancar(numero_id: uuid.UUID, dados: ReservaNumero, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> NumeroLeitura:
     with _traduzir(sessao):
         n = servico.lancar(sessao, numero_id, dados.finalidade, dados.contrato_id, usuario)
-    return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True, saa=True)
+    return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True, cgi=True)
+
+
+@roteador.post("/numeros/{numero_id}/concluir-sem-documento", response_model=NumeroLeitura, summary="Concluir a reserva sem subir o documento",
+               description="Quem reservou ou a administração. Para documentos que não podem ser subidos (sigilosos, por exemplo): o número reservado passa a `utilizado` sem arquivo, com o motivo na linha do tempo (evento `concluiu`). "
+                           "A justificativa (`motivo`) é obrigatória. `409` se o número já tem documento, não está reservado ou é de portaria de designação/admissão (exigem o PDF do D.O.E.). O documento ainda pode ser anexado depois.",
+               responses={**CONFLITO, **INVALIDO, **NUMERO_NAO_ENCONTRADO, status.HTTP_403_FORBIDDEN: {"description": "Não é quem reservou nem a administração."}})
+def concluir_sem_documento(numero_id: uuid.UUID, dados: Motivo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(operar)) -> NumeroLeitura:
+    with _traduzir(sessao):
+        n = servico.concluir_sem_documento(sessao, numero_id, dados.motivo, usuario)
+    return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True)
 
 
 @roteador.post("/numeros/{numero_id}/liberar", response_model=NumeroLeitura, summary="Liberar uma reserva sem documento",
@@ -211,7 +222,7 @@ def anexar(numero_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Sessio
               responses={**NUMERO_NAO_ENCONTRADO, status.HTTP_403_FORBIDDEN: {"description": "Documento sigiloso (`documento_sigiloso`)."}})
 def baixar(numero_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)):
     with _traduzir():
-        n = servico.obter(sessao, numero_id)
+        n = servico.obter(sessao, numero_id, usuario)
     if n.anexo is None or n.anexo.excluido_em is not None:
         raise ErroApi(status.HTTP_404_NOT_FOUND, "Este número não tem documento anexado.", "nao_encontrado")
     if not servico.pode_ver_documento(n, usuario):
@@ -244,16 +255,16 @@ def contrato(numero_id: uuid.UUID, dados: GravacaoContrato, sessao: Session = De
               description="Números vinculados ao contrato (do mais recente ao mais antigo), para a ficha do contrato.")
 def do_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> list[NumeroLeitura]:
     admin = servico.controle_total(sessao, usuario)
-    return [_numero(sessao, n, usuario, admin) for n in servico.numeros_do_contrato(sessao, contrato_id)]
+    return [_numero(sessao, n, usuario, admin) for n in servico.numeros_do_contrato(sessao, contrato_id, usuario)]
 
 
 # --- Painel e exportação -----------------------------------------------------------------
 
 @roteador.get("/painel", response_model=PainelProtocolo, summary="Painel do Protocolo",
               description="Reservas e utilizações por mês, top 10 pessoas e reservados sem documento, de um tipo e exercício.", responses={**INVALIDO, **resposta_nao_encontrado("Tipo")})
-def painel(tipo_id: uuid.UUID = Query(...), ano: int = Query(..., ge=2000, le=2200), sessao: Session = Depends(obter_sessao), _: Usuario = Depends(ver)) -> PainelProtocolo:
+def painel(tipo_id: uuid.UUID = Query(...), ano: int = Query(..., ge=2000, le=2200), sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> PainelProtocolo:
     with _traduzir():
-        d = servico.painel(sessao, tipo_id, ano)
+        d = servico.painel(sessao, tipo_id, ano, usuario)
     return PainelProtocolo(
         tipo_id=d["tipo"].id, tipo_nome=d["tipo"].nome, ano=ano, meses=[MesPainel(**m) for m in d["meses"]],
         mais_reservaram=[PessoaPainel(usuario_id=p.usuario_id, nome=p.nome, quantidade=p.quantidade) for p in d["mais_reservaram"]],

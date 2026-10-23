@@ -28,6 +28,7 @@ from app.core.configuracao import obter_configuracao
 from app.models.acl import NivelAcl
 from app.models.contratos import Contrato
 from app.models.protocolo import EventoProtocolo, NumeroProtocolo, SequenciaProtocolo, TipoProtocolo
+from app.models.setor import Setor
 from app.models.usuario import Usuario
 from app.services import servico_acl, servico_anexos, notificacoes
 from app.services.documentos.pdf import FUSO_SAO_PAULO, DocumentoPdf
@@ -36,7 +37,7 @@ from app.services.servico_auditoria import auditar
 
 RECURSO = "protocolo"
 MAXIMO_NUMEROS_POR_SEQUENCIA = 10000
-ROTULOS_ESTADO = {"livre": "Livre", "reservado_saa": "Reservado SAA", "reservado": "Reservado", "utilizado": "Utilizado", "anulado": "Anulado"}
+ROTULOS_ESTADO = {"livre": "Livre", "reservado_cgi": "Reservado CGI", "reservado": "Reservado", "utilizado": "Utilizado", "anulado": "Anulado"}
 
 
 class ErroProtocolo(Exception):
@@ -70,11 +71,11 @@ def controle_total(sessao: Session, usuario: Usuario) -> bool:
     return usuario.superusuario or servico_acl.resolver_acesso(sessao, usuario, RECURSO) == NivelAcl.CONTROLE_TOTAL
 
 
-def pode_usar_reserva_saa(sessao: Session, usuario: Usuario) -> bool:
-    """Quem dá andamento nos números "Reservado SAA": o Serviço de Apoio Administrativo, o SuperRoot e quem administra o Protocolo."""
-    from app.services.rh.papeis import eh_apoio_administrativo
+def pode_usar_reserva_cgi(sessao: Session, usuario: Usuario) -> bool:
+    """Quem dá andamento nos números "Reservado CGI": a Coordenadoria de Gestão e Infraestrutura, o SuperRoot e quem administra o Protocolo."""
+    from app.services.rh.papeis import eh_da_reserva_protocolo
 
-    return controle_total(sessao, usuario) or eh_apoio_administrativo(sessao, usuario)
+    return controle_total(sessao, usuario) or eh_da_reserva_protocolo(sessao, usuario)
 
 
 def pode_ver_documento(numero: NumeroProtocolo, usuario: Usuario) -> bool:
@@ -114,13 +115,45 @@ def _validar_nome(sessao: Session, nome: str, ignorar: uuid.UUID | None = None) 
     return nome
 
 
-def criar_tipo(sessao: Session, nome: str, autor: Usuario, sequencia: dict | None = None) -> TipoProtocolo:
-    """Cria o tipo e, se informada, a faixa do primeiro exercício (`{exercicio, inicio, fim, liberar_a_partir_de}`) na mesma transação."""
+def pode_consumir_tipo(sessao: Session, tipo: TipoProtocolo, usuario: Usuario) -> bool:
+    """Tipo sem setor: todos consomem. Tipo restrito a um setor: só quem é dele (ou de um setor filho) e a administração do Protocolo."""
+    if tipo.setor_id is None or controle_total(sessao, usuario):
+        return True
+    from app.services.rh.papeis import setor_com_descendentes, usuarios_dos_setores
+
+    return any(u.id == usuario.id for u in usuarios_dos_setores(sessao, setor_com_descendentes(sessao, [tipo.setor_id])))
+
+
+def pode_ver_tipo(sessao: Session, tipo: TipoProtocolo, usuario: Usuario) -> bool:
+    """Tipo restrito a um setor: só quem consome (o setor e a administração) e o Serviço de Apoio Administrativo (parametrizável no RH) o veem."""
+    if pode_consumir_tipo(sessao, tipo, usuario):
+        return True
+    from app.services.rh.papeis import eh_apoio_administrativo
+
+    return eh_apoio_administrativo(sessao, usuario)
+
+
+def _exigir_visibilidade(sessao: Session, tipo: TipoProtocolo, usuario: Usuario | None) -> None:
+    if usuario is not None and not pode_ver_tipo(sessao, tipo, usuario):
+        raise ErroProtocolo("Tipo de documento não encontrado.", 404, "nao_encontrado")
+
+
+def _exigir_consumo(sessao: Session, tipo: TipoProtocolo, usuario: Usuario) -> None:
+    if not pode_consumir_tipo(sessao, tipo, usuario):
+        raise ErroProtocolo(f"Os números de {tipo.nome} são restritos ao setor {tipo.setor.nome}.", 403, "sem_permissao")
+
+
+def criar_tipo(sessao: Session, nome: str, autor: Usuario, sequencia: dict | None = None, setor_id: int | None = None) -> TipoProtocolo:
+    """Cria o tipo e, se informada, a faixa do primeiro exercício (`{exercicio, inicio, fim, liberar_a_partir_de}`) na mesma transação.
+
+    `setor_id` (opcional) restringe o consumo dos números a esse setor; sem ele, todos consomem."""
     nome = _validar_nome(sessao, nome)
-    tipo = TipoProtocolo(nome=nome, nome_chave=nome.lower())
+    if setor_id is not None and sessao.get(Setor, setor_id) is None:
+        raise ErroProtocolo("Setor não encontrado.", 404, "nao_encontrado")
+    tipo = TipoProtocolo(nome=nome, nome_chave=nome.lower(), setor_id=setor_id)
     sessao.add(tipo)
     sessao.flush()
-    auditar(sessao, autor.login, "protocolo.tipo.criar", nome, autor_id=autor.id, alvo_tipo="protocolo_tipo", alvo_id=tipo.id)
+    auditar(sessao, autor.login, "protocolo.tipo.criar", nome, autor_id=autor.id, alvo_tipo="protocolo_tipo", alvo_id=tipo.id, dados={"setor_id": setor_id})
     if sequencia is not None:
         _nova_sequencia(sessao, tipo, sequencia["exercicio"], sequencia["inicio"], sequencia["fim"], sequencia.get("liberar_a_partir_de"), autor)
     sessao.commit()
@@ -182,7 +215,7 @@ def _nova_sequencia(sessao: Session, tipo: TipoProtocolo, exercicio: int, inicio
     sequencia.numeros = [NumeroProtocolo(numero=n) for n in range(inicio, fim + 1)]
     sessao.add(sequencia)
     sessao.flush()
-    reserva = f", reservado SAA até {liberar - 1}" if sequencia.liberar_a_partir_de else ""
+    reserva = f", reservado CGI até {liberar - 1}" if sequencia.liberar_a_partir_de else ""
     auditar(sessao, autor.login, "protocolo.sequencia.criar", f"{tipo.nome} {exercicio}: {inicio} a {fim}{reserva}", autor_id=autor.id,
             alvo_tipo="protocolo_sequencia", alvo_id=sequencia.id)
     return sequencia
@@ -204,7 +237,7 @@ def alterar_faixa(sessao: Session, sequencia_id: uuid.UUID, inicio: int, fim: in
     _validar_liberar(inicio, fim, liberar_a_partir_de)
     novo_liberar = liberar_a_partir_de if liberar_a_partir_de and liberar_a_partir_de > inicio else None
     existentes = {n.numero: n for n in sequencia.numeros}
-    # Elevar o ponto de liberação reserva ao SAA números que eram de todos: só se ainda estiverem sem reserva
+    # Elevar o ponto de liberação reserva à CGI números que eram de todos: só se ainda estiverem sem reserva
     if novo_liberar is not None:
         antigo = sequencia.liberar_a_partir_de if sequencia.liberar_a_partir_de is not None else sequencia.inicio
         ocupados = [n.numero for n in existentes.values() if antigo <= n.numero < novo_liberar and n.reservado_em is not None]
@@ -279,16 +312,18 @@ def _reservar(sessao: Session, candidato_id: uuid.UUID, finalidade: str, contrat
 def proximo(sessao: Session, sequencia_id: uuid.UUID, finalidade: str, contrato_id: uuid.UUID | None, autor: Usuario, *, fora_da_reserva: bool = False) -> NumeroProtocolo:
     """Reserva o **menor número livre** da sequência. Concorrência: se outra pessoa pegar o mesmo candidato no meio, tenta o seguinte.
 
-    A faixa "Reservado SAA" (do início até `liberar_a_partir_de`) só é usada por quem é do Serviço de Apoio Administrativo, que começa por ela;
+    A faixa "Reservado CGI" (do início até `liberar_a_partir_de`) só é usada por quem é da Coordenadoria de Gestão e Infraestrutura, que começa por ela;
     os demais (inclusive a administração, que escolhe o número à mão) e quem pede `fora_da_reserva` (módulos como Contratos) recebem números
     a partir do ponto de liberação.
     """
     sequencia = _sequencia(sessao, sequencia_id)
+    if not fora_da_reserva:
+        _exigir_consumo(sessao, sequencia.tipo, autor)
     finalidade = _finalidade(finalidade)
     _validar_contrato(sessao, autor, contrato_id)
-    from app.services.rh.papeis import eh_apoio_administrativo
+    from app.services.rh.papeis import eh_da_reserva_protocolo
 
-    usa_reserva = not fora_da_reserva and eh_apoio_administrativo(sessao, autor)
+    usa_reserva = not fora_da_reserva and eh_da_reserva_protocolo(sessao, autor)
     for _ in range(8):
         filtros = [NumeroProtocolo.sequencia_id == sequencia.id, NumeroProtocolo.reservado_em.is_(None), NumeroProtocolo.anulado_em.is_(None)]
         if sequencia.liberar_a_partir_de is not None and not usa_reserva:
@@ -304,13 +339,14 @@ def proximo(sessao: Session, sequencia_id: uuid.UUID, finalidade: str, contrato_
 
 
 def lancar(sessao: Session, numero_id: uuid.UUID, finalidade: str, contrato_id: uuid.UUID | None, autor: Usuario) -> NumeroProtocolo:
-    """Reserva um número específico: a administração (CONTROLE_TOTAL) escolhe qualquer um; o SAA, só os "Reservado SAA"."""
+    """Reserva um número específico: a administração (CONTROLE_TOTAL) escolhe qualquer um; a CGI, só os "Reservado CGI"."""
     numero = _numero(sessao, numero_id)
+    _exigir_consumo(sessao, numero.sequencia.tipo, autor)
     if not controle_total(sessao, autor):
-        from app.services.rh.papeis import eh_apoio_administrativo
+        from app.services.rh.papeis import eh_da_reserva_protocolo
 
-        if not (numero.na_reserva_saa and eh_apoio_administrativo(sessao, autor)):
-            raise ErroProtocolo("Só a administração do Protocolo escolhe o número; o Serviço de Apoio Administrativo escolhe entre os \"Reservado SAA\".", 403, "sem_permissao")
+        if not (numero.na_reserva_cgi and eh_da_reserva_protocolo(sessao, autor)):
+            raise ErroProtocolo("Só a administração do Protocolo escolhe o número; a Coordenadoria de Gestão e Infraestrutura escolhe entre os \"Reservado CGI\".", 403, "sem_permissao")
     if numero.anulado_em is not None:
         raise ErroProtocolo("Este número foi anulado e não pode ser reservado.", 409, "conflito")
     finalidade = _finalidade(finalidade)
@@ -338,12 +374,13 @@ def _dono_ou_admin(sessao: Session, numero: NumeroProtocolo, usuario: Usuario) -
     return numero.reservado_por_id == usuario.id or controle_total(sessao, usuario)
 
 
-def liberar(sessao: Session, numero_id: uuid.UUID, motivo: str, autor: Usuario, *, ignorar_dono: bool = False) -> NumeroProtocolo:
+def liberar(sessao: Session, numero_id: uuid.UUID, motivo: str, autor: Usuario, *, ignorar_dono: bool = False, com_documento: bool = False) -> NumeroProtocolo:
     """Desfaz uma reserva ainda sem documento: o número volta a livre (o histórico fica).
 
-    `ignorar_dono=True` é para as portarias dos contratos, que reservam o número por trás de um fluxo próprio e já conferiram a permissão."""
+    `ignorar_dono=True` é para módulos que reservam o número por trás de um fluxo próprio (portarias dos contratos, admissão do RH) e já conferiram a permissão.
+    `com_documento=True` (também só para esses módulos) aceita liberar um número já utilizado: o documento é excluído logicamente (o arquivo continua em disco para a auditoria)."""
     numero = _numero(sessao, numero_id)
-    if numero.estado != "reservado":
+    if numero.estado != "reservado" and not (com_documento and numero.estado == "utilizado"):
         raise ErroProtocolo("Só é possível liberar um número reservado e sem documento.", 409, "conflito")
     if not ignorar_dono and not _dono_ou_admin(sessao, numero, autor):
         raise ErroProtocolo("Só quem reservou o número ou a administração do Protocolo pode liberá-lo.", 403, "sem_permissao")
@@ -351,7 +388,11 @@ def liberar(sessao: Session, numero_id: uuid.UUID, motivo: str, autor: Usuario, 
     if not motivo:
         raise ErroProtocolo("Informe o motivo da liberação.")
     rotulo = f"{numero.sequencia.tipo.nome} {formatar_numero(numero.numero, numero.sequencia.exercicio)}"
-    _evento(numero, "liberou", autor, motivo, {"reservado_por": numero.reservado_por_nome, "finalidade": numero.finalidade})
+    _evento(numero, "liberou", autor, motivo, {"reservado_por": numero.reservado_por_nome, "finalidade": numero.finalidade,
+                                                "documento": numero.anexo.nome_original if numero.anexo is not None else None})
+    if numero.anexo is not None:
+        servico_anexos.descartar(numero.anexo)
+    numero.anexo_id, numero.usado_em = None, None
     numero.finalidade, numero.reservado_por_id, numero.reservado_por_nome, numero.reservado_em = "", None, "", None
     numero.contrato_id, numero.sigiloso = None, False
     notificacoes.encerrar(sessao, prefixo=f"protocolo:{numero.id}:")
@@ -422,6 +463,33 @@ def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo
     return numero
 
 
+def concluir_sem_documento(sessao: Session, numero_id: uuid.UUID, motivo: str, autor: Usuario) -> NumeroProtocolo:
+    """Conclui a reserva sem subir o PDF (documento sigiloso, por exemplo): o número passa a utilizado e o motivo fica na linha do tempo.
+
+    Só quem reservou ou a administração. Números de portaria de designação ou de admissão do RH dependem do PDF do D.O.E. e não podem ser concluídos assim.
+    O documento ainda pode ser anexado depois."""
+    numero = _numero(sessao, numero_id)
+    if numero.estado != "reservado":
+        raise ErroProtocolo("Só é possível concluir sem documento um número reservado e ainda sem documento.", 409, "conflito")
+    if not _dono_ou_admin(sessao, numero, autor):
+        raise ErroProtocolo("Só quem reservou o número ou a administração do Protocolo pode concluí-lo.", 403, "sem_permissao")
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise ErroProtocolo("Informe a justificativa para concluir sem subir o documento.")
+    from app.services.contratos import servico_portaria
+    from app.services.rh import servico_admissao
+
+    if servico_portaria.portaria_do_numero(sessao, numero.id) is not None or servico_admissao.numero_e_de_admissao(sessao, numero.id):
+        raise ErroProtocolo("Este número pertence a uma portaria de designação ou a uma admissão, que exigem o PDF do D.O.E.: anexe o documento.", 409, "conflito")
+    numero.usado_em = agora_utc()
+    _evento(numero, "concluiu", autor, motivo)
+    notificacoes.encerrar(sessao, prefixo=f"protocolo:{numero.id}:")
+    rotulo = f"{numero.sequencia.tipo.nome} {formatar_numero(numero.numero, numero.sequencia.exercicio)}"
+    auditar(sessao, autor.login, "protocolo.concluir_sem_documento", rotulo, autor_id=autor.id, alvo_tipo="protocolo_numero", alvo_id=numero.id, dados={"motivo": motivo, "sigiloso": numero.sigiloso})
+    sessao.commit()
+    return numero
+
+
 def definir_sigilo(sessao: Session, numero_id: uuid.UUID, sigiloso: bool, autor: Usuario) -> NumeroProtocolo:
     """Marca ou desmarca o sigilo do documento (quem reservou ou o SuperRoot)."""
     numero = _numero(sessao, numero_id)
@@ -455,20 +523,24 @@ def vincular_contrato(sessao: Session, numero_id: uuid.UUID, contrato_id: uuid.U
     return numero
 
 
-def obter(sessao: Session, numero_id: uuid.UUID) -> NumeroProtocolo:
-    return _numero(sessao, numero_id)
+def obter(sessao: Session, numero_id: uuid.UUID, usuario: Usuario | None = None) -> NumeroProtocolo:
+    numero = _numero(sessao, numero_id)
+    _exigir_visibilidade(sessao, numero.sequencia.tipo, usuario)
+    return numero
 
 
-def numeros_do_contrato(sessao: Session, contrato_id: uuid.UUID) -> list[NumeroProtocolo]:
-    return list(sessao.scalars(select(NumeroProtocolo).where(NumeroProtocolo.contrato_id == contrato_id).options(
+def numeros_do_contrato(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario | None = None) -> list[NumeroProtocolo]:
+    numeros = list(sessao.scalars(select(NumeroProtocolo).where(NumeroProtocolo.contrato_id == contrato_id).options(
         selectinload(NumeroProtocolo.sequencia).selectinload(SequenciaProtocolo.tipo), selectinload(NumeroProtocolo.anexo),
     ).order_by(NumeroProtocolo.reservado_em.desc())))
+    return [n for n in numeros if usuario is None or pode_ver_tipo(sessao, n.sequencia.tipo, usuario)]
 
 
-def numeros_da_sequencia(sessao: Session, sequencia_id: uuid.UUID) -> tuple[SequenciaProtocolo, list[NumeroProtocolo]]:
+def numeros_da_sequencia(sessao: Session, sequencia_id: uuid.UUID, usuario: Usuario | None = None) -> tuple[SequenciaProtocolo, list[NumeroProtocolo]]:
     sequencia = sessao.scalar(select(SequenciaProtocolo).where(SequenciaProtocolo.id == sequencia_id).options(selectinload(SequenciaProtocolo.tipo)))
     if sequencia is None:
         raise ErroProtocolo("Sequência não encontrada.", 404, "nao_encontrado")
+    _exigir_visibilidade(sessao, sequencia.tipo, usuario)
     numeros = list(sessao.scalars(select(NumeroProtocolo).where(NumeroProtocolo.sequencia_id == sequencia.id).options(selectinload(NumeroProtocolo.anexo))
                                   .order_by(NumeroProtocolo.numero)))
     return sequencia, numeros
@@ -483,9 +555,10 @@ class PessoaContagem:
     quantidade: int
 
 
-def painel(sessao: Session, tipo_id: uuid.UUID, ano: int) -> dict:
+def painel(sessao: Session, tipo_id: uuid.UUID, ano: int, usuario: Usuario | None = None) -> dict:
     """Reservas e utilizações por mês, top 10 pessoas e reservados sem documento (do tipo, em todas as sequências)."""
     tipo = _tipo(sessao, tipo_id)
+    _exigir_visibilidade(sessao, tipo, usuario)
     if not 2000 <= ano <= 2200:
         raise ErroProtocolo("Exercício inválido.")
     linhas = list(sessao.scalars(select(NumeroProtocolo).join(SequenciaProtocolo).where(
@@ -494,7 +567,7 @@ def painel(sessao: Session, tipo_id: uuid.UUID, ano: int) -> dict:
     def ano_de(valor: datetime | None) -> tuple[int, int] | None:
         return (valor.year, valor.month) if valor else None
 
-    meses = [{"mes": m, "reservados": sum(1 for n in linhas if ano_de(n.reservado_em) == (ano, m) and n.anexo_id is None),
+    meses = [{"mes": m, "reservados": sum(1 for n in linhas if ano_de(n.reservado_em) == (ano, m) and n.usado_em is None),
               "utilizados": sum(1 for n in linhas if ano_de(n.usado_em) == (ano, m))} for m in range(1, 13)]
 
     def ranking(filtro) -> list[PessoaContagem]:
@@ -506,7 +579,7 @@ def painel(sessao: Session, tipo_id: uuid.UUID, ano: int) -> dict:
         ordenado = sorted(contagem.items(), key=lambda item: (-item[1], item[0][1]))
         return [PessoaContagem(usuario_id=k[0], nome=k[1], quantidade=v) for k, v in ordenado[:10]]
 
-    sem_documento = sorted((n for n in linhas if n.anexo_id is None and n.anulado_em is None), key=lambda n: n.reservado_em)
+    sem_documento = sorted((n for n in linhas if n.usado_em is None and n.anulado_em is None), key=lambda n: n.reservado_em)
     return {
         "tipo": tipo, "ano": ano, "meses": meses,
         "mais_reservaram": ranking(lambda n: n.reservado_em.year == ano),
@@ -524,13 +597,15 @@ def exportar(sessao: Session, tipo_id: uuid.UUID | None, exercicio: int | None, 
     descricao = []
     if tipo_id:
         consulta = consulta.where(SequenciaProtocolo.tipo_id == tipo_id)
+        _exigir_visibilidade(sessao, _tipo(sessao, tipo_id), autor)
         descricao.append(_tipo(sessao, tipo_id).nome)
     if exercicio:
         consulta = consulta.where(SequenciaProtocolo.exercicio == exercicio)
         descricao.append(str(exercicio))
     # Só números com movimento: a faixa inteira (centenas de livres) não interessa no controle
     consulta = consulta.where((NumeroProtocolo.reservado_em.is_not(None)) | (NumeroProtocolo.anulado_em.is_not(None)))
-    numeros = list(sessao.scalars(consulta.order_by(func.lower(TipoProtocolo.nome), SequenciaProtocolo.exercicio, NumeroProtocolo.numero)))
+    numeros = [n for n in sessao.scalars(consulta.order_by(func.lower(TipoProtocolo.nome), SequenciaProtocolo.exercicio, NumeroProtocolo.numero))
+               if pode_ver_tipo(sessao, n.sequencia.tipo, autor)]
     contratos = {c.id: c.numero for c in sessao.scalars(select(Contrato).where(Contrato.id.in_({n.contrato_id for n in numeros if n.contrato_id})))} if numeros else {}
     titulo = "Controle do Protocolo" + (f" — {' · '.join(descricao)}" if descricao else "")
     linhas = [[n.sequencia.tipo.nome, n.sequencia.exercicio, formatar_numero(n.numero, n.sequencia.exercicio), ROTULOS_ESTADO[n.estado], n.finalidade,
@@ -561,7 +636,7 @@ def lembrar_reservas(sessao: Session, dia: date | None = None) -> int:
     agora = agora_utc()
     avisados = 0
     for n in sessao.scalars(select(NumeroProtocolo).where(
-        NumeroProtocolo.reservado_em.is_not(None), NumeroProtocolo.anexo_id.is_(None), NumeroProtocolo.anulado_em.is_(None),
+        NumeroProtocolo.reservado_em.is_not(None), NumeroProtocolo.usado_em.is_(None), NumeroProtocolo.anulado_em.is_(None),
         NumeroProtocolo.reservado_por_id.is_not(None)).options(selectinload(NumeroProtocolo.sequencia).selectinload(SequenciaProtocolo.tipo))):
         reservado = n.reservado_em if n.reservado_em.tzinfo else n.reservado_em.replace(tzinfo=agora.tzinfo)
         idade = (agora - reservado).days

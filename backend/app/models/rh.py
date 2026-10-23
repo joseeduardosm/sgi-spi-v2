@@ -199,8 +199,12 @@ class ParametrosRh(Base):
     inicio_vedado_feriado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Data em que abre o agendamento das férias do ano seguinte (nulo = sem a regra); ver `servico_afastamentos.agendamento_antecipado`
     abertura_agendamento_ferias: Mapped[date | None] = mapped_column(Date)
-    # Setor do Serviço de Apoio Administrativo (SAA); vazio = o setor de nome igual a `setor_apoio_administrativo` da configuração
+    # Setor da Coordenadoria de Gestão e Infraestrutura (CGI); vazio = o setor de nome igual a `setor_reserva_protocolo` da configuração
+    setor_reserva_protocolo_id: Mapped[int | None] = mapped_column(ForeignKey("setores.id", ondelete="SET NULL"))
+    # Setor do Serviço de Apoio Administrativo (SAA): vê os tipos do Protocolo restritos a um setor; vazio = o setor de nome igual a `setor_apoio_administrativo` da configuração
     setor_apoio_administrativo_id: Mapped[int | None] = mapped_column(ForeignKey("setores.id", ondelete="SET NULL"))
+    # Tipo de documento do Protocolo que a resolução de nomeação consome; vazio = resolução sem número (a etapa do Protocolo não existe)
+    tipo_resolucao_protocolo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("protocolo_tipos.id", ondelete="SET NULL"))
     atualizado_por_nome: Mapped[str | None] = mapped_column(String(200))
     atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

@@ -15,7 +15,7 @@ import { SequenciaProtocolo, TipoProtocolo } from './protocolo.models';
   selector: 'app-administracao-protocolo',
   imports: [FormsModule, RouterLink, CabecalhoProtocoloComponent],
   template: `
-    <app-cabecalho-protocolo titulo="Administração do Protocolo" descricao="Tipos de documento, sequências por exercício, faixa reservada ao SAA e ampliação das faixas." />
+    <app-cabecalho-protocolo titulo="Administração do Protocolo" descricao="Tipos de documento, sequências por exercício, faixa reservada à CGI e ampliação das faixas." />
     <section class="painel-gestao protocolo">
       <div class="barra-protocolo">
         <div class="campo busca"><label for="busca-tipo">Pesquisar</label>

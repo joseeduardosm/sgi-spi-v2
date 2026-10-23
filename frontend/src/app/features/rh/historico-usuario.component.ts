@@ -125,7 +125,7 @@ export class HistoricoUsuarioComponent implements OnInit {
     });
   }
 
-  protected dataBr(iso: string): string {
+  protected dataBr(iso: string | null): string {
     return iso ? iso.split('-').reverse().join('/') : '';
   }
 

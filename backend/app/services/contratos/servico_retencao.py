@@ -2,9 +2,8 @@
 # Este arquivo serve para aplicar as regras da etapa "Retenção de Tributos": Financeiro, conferências e gravação.
 """Etapa 4 da competência: retenção de tributos.
 
-Depois que a equipe junta a nota fiscal (PDF + XML), o Financeiro — usuários do setor `SETOR_FINANCEIRO`
-("Diretoria de Orçamento e Finanças") e dos setores filhos, por participação no setor ou pelo Departamento do
-perfil — confere a nota lida do XML, confirma as retenções (IR, INSS, ISS, PIS, COFINS e CSLL) e registra a
+Depois que a equipe junta a nota fiscal (PDF + XML), o Financeiro — quem tem MODIFICAÇÃO ou mais no recurso `financeiro` da ACL (sem regras, vale o setor
+`SETOR_FINANCEIRO`, "Diretoria de Orçamento e Finanças", e os filhos) — confere a nota lida do XML, confirma as retenções (IR, INSS, ISS, PIS, COFINS e CSLL) e registra a
 conferência. A equipe do contrato e o SuperRoot também podem fazer a etapa.
 
 Conferências automáticas (✓/⚠) ajudam o Financeiro: emitente = contratada do contrato, tomador = SPI, nota
@@ -25,7 +24,8 @@ from app.core.configuracao import obter_configuracao
 from app.models.contratos import Competencia, Contrato
 from app.models.setor import MembroSetor, Setor
 from app.models.usuario import Usuario
-from app.services import servico_anexos
+from app.models.acl import NivelAcl
+from app.services import servico_acl, servico_anexos
 from app.services.contratos import documentos_execucao
 from app.services.contratos.erros import ErroRegraContrato, SemPermissaoContrato
 from app.services.contratos.servico_contratos import obter_contrato, pode_editar
@@ -47,7 +47,7 @@ class Conferencia:
 # --- Financeiro ----------------------------------------------------------------------------------
 
 def setores_financeiro(sessao: Session) -> list[Setor]:
-    """O setor do Financeiro (pelo nome configurado) e todos os seus descendentes."""
+    """O setor do Financeiro (pelo nome em `setor_financeiro`) e seus descendentes: vale só até a ACL `financeiro` ter regras."""
     nome = obter_configuracao().setor_financeiro.strip().lower()
     todos = list(sessao.scalars(select(Setor)))
     raiz = [s for s in todos if s.nome.strip().lower() == nome]
@@ -60,8 +60,23 @@ def setores_financeiro(sessao: Session) -> list[Setor]:
     return resultado
 
 
+SLUG_FINANCEIRO = "financeiro"
+
+
+def financeiro_configurado(sessao: Session) -> bool:
+    """O recurso `financeiro` já tem regras ou perfis (a ACL define quem é o Financeiro)?"""
+    return servico_acl.possui_regras(sessao, SLUG_FINANCEIRO)
+
+
 def usuarios_financeiro(sessao: Session) -> list[Usuario]:
-    """Usuários ativos do Financeiro: membros dos setores ou com um deles como Departamento do perfil."""
+    """Usuários ativos do Financeiro: quem tem MODIFICAÇÃO ou mais no recurso `financeiro` da ACL (por regra direta, setor ou perfil).
+
+    Enquanto o recurso não tiver regras (instalação nova ou ainda não migrada) vale o setor `setor_financeiro` e seus descendentes
+    (membros ou Departamento do perfil), só para a etapa nunca ficar sem Financeiro. SuperRoot só entra se a ACL o contemplar.
+    """
+    if financeiro_configurado(sessao):
+        ids = servico_acl.usuarios_com_nivel(sessao, SLUG_FINANCEIRO, NivelAcl.MODIFICACAO)
+        return list(sessao.scalars(select(Usuario).where(Usuario.id.in_(ids), Usuario.ativo.is_(True)))) if ids else []
     setores = setores_financeiro(sessao)
     if not setores:
         return []
@@ -74,25 +89,26 @@ def usuarios_financeiro(sessao: Session) -> list[Usuario]:
 
 
 def grupos_financeiro(sessao: Session) -> list[dict]:
-    """Usuários ativos com e-mail do Financeiro, agrupados por setor (raiz e subsetores), com o caminho `DOF › Subsetor`."""
-    setores = setores_financeiro(sessao)
-    por_id = {s.id: s for s in setores}
+    """Usuários ativos com e-mail do Financeiro, agrupados pelo setor de cada um (`DOF › Subsetor`); quem não é de nenhum setor vai em "Financeiro"."""
+    usuarios = [u for u in usuarios_financeiro(sessao) if u.email]
+    setores = {s.id: s for s in sessao.scalars(select(Setor))}
 
     def caminho(setor: Setor) -> str:
         partes, atual = [setor.nome], setor
-        while atual.setor_pai_id in por_id:
-            atual = por_id[atual.setor_pai_id]
+        while atual.setor_pai_id in setores:
+            atual = setores[atual.setor_pai_id]
             partes.append(atual.nome)
         return " › ".join(reversed(partes))
 
+    por_setor: dict[int | None, list[Usuario]] = {}
+    for u in usuarios:
+        setor_id = sessao.scalar(select(MembroSetor.setor_id).where(MembroSetor.usuario_id == u.id).order_by(MembroSetor.setor_id))
+        por_setor.setdefault(setor_id if setor_id in setores else None, []).append(u)
     grupos = []
-    for setor in setores:
-        membros = select(MembroSetor.usuario_id).where(MembroSetor.setor_id == setor.id)
-        usuarios = sessao.scalars(select(Usuario).where(Usuario.ativo.is_(True), Usuario.email != "",
-                                                        Usuario.id.in_(membros) | (func.lower(func.trim(Usuario.departamento)) == setor.nome.strip().lower())).order_by(Usuario.nome_completo))
-        lista = [{"id": u.id, "nome": u.nome_completo or u.login, "email": u.email, "cargo": u.cargo or ""} for u in usuarios]
-        if lista:
-            grupos.append({"setor_id": setor.id, "setor": caminho(setor), "usuarios": lista})
+    for setor_id, lista in por_setor.items():
+        grupos.append({"setor_id": setor_id, "setor": caminho(setores[setor_id]) if setor_id else "Financeiro",
+                       "usuarios": [{"id": u.id, "nome": u.nome_completo or u.login, "email": u.email, "cargo": u.cargo or ""}
+                                    for u in sorted(lista, key=lambda x: (x.nome_completo or x.login).lower())]})
     return sorted(grupos, key=lambda g: g["setor"])
 
 

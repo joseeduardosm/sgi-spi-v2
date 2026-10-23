@@ -2,7 +2,7 @@
 # Este arquivo serve para autenticar os PDFs gerados (Folha de autenticação com código e hash) e para verificar a autenticidade depois.
 """Autenticação de PDFs gerados pelo sistema.
 
-Cada PDF autenticado ganha, no fim, uma **Folha de autenticação** com: o código de verificação (início do SHA-256 do conteúdo, sem a folha), o
+Só o **documento consolidado** da competência ganha, no fim, uma **Folha de autenticação** (as emissões intermediárias, como memória de cálculo e avaliação, não levam) com: o código de verificação (início do SHA-256 do conteúdo, sem a folha), o
 SHA-256 completo, quem gerou e quando, a lista de quem deu ciência e como conferir. O arquivo completo (com a folha) é registrado em
 `contratos_documentos_autenticados` com o seu próprio SHA-256: enviar o PDF para verificação confere se ele é exatamente o gerado pelo sistema, e
 digitar o código mostra os dados do registro. **Não é assinatura digital**: prova a origem e a integridade do arquivo gerado, não a identidade de
@@ -18,10 +18,8 @@ from pypdf import PdfReader, PdfWriter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.banco import agora_utc
 from app.models.anexo import Anexo
 from app.models.contratos import Competencia, Contrato, DocumentoAutenticado
-from app.services import servico_anexos
 from app.services.documentos.pdf import DocumentoPdf
 
 FUSO = ZoneInfo("America/Sao_Paulo")
@@ -43,24 +41,24 @@ def _hora(momento: datetime) -> str:
     return momento.astimezone(FUSO).strftime("%d/%m/%Y %H:%M")
 
 
-def _folha(tipo: str, contrato: Contrato, competencia: Competencia | None, autor: str, gerado_em: datetime, sha256: str, ciencias: list[dict]) -> bytes:
-    """Página de autenticação, na mesma orientação dos demais documentos do sistema."""
-    documento = DocumentoPdf("Folha de autenticação", f"Contrato {contrato.numero}" + (f" · Competência {competencia.competencia:%m/%Y}" if competencia else ""), autor=autor)
-    documento.secao("Documento").campos([
-        ("Documento", TIPOS.get(tipo, tipo)), ("Contrato", f"{contrato.numero} — {contrato.apelido}" if contrato.apelido else contrato.numero),
-        ("Competência", competencia.numero_competencia if competencia else "—"), ("Gerado por", autor),
-        ("Gerado em", _hora(gerado_em)), ("Código de verificação", _codigo(sha256)),
-    ])
-    documento.secao("Impressão digital (SHA-256 do conteúdo)").paragrafo(sha256)
-    documento.secao("Ciências registradas")
-    if ciencias:
-        documento.tabela(["Nome", "Papel", "Ciência em"], [[c["nome"], c["papel"], c["em"]] for c in ciencias], larguras=[4, 3, 2])
-    else:
-        documento.paragrafo("Nenhuma ciência registrada até a geração deste documento.")
-    documento.secao("Como conferir").paragrafo(
-        "Acesse o SGI SPI, em Contratos › Verificar documento, e informe o código de verificação ou envie este PDF. O sistema confirma se o arquivo é "
-        "exatamente o que foi gerado, quando e por quem. Esta folha não é uma assinatura digital: a assinatura da contratada é feita à parte, no gov.br.")
-    return documento.gerar()
+def sem_folha_de_autenticacao(conteudo: bytes) -> bytes:
+    """Tira a(s) última(s) página(s) de Folha de autenticação de um PDF gerado pelo sistema (a do próprio documento).
+
+    O consolidado leva uma única folha, a dele, que lista o SHA-256 de cada arquivo; sem isto cada documento gerado traria a sua e o consolidado ficaria cheio delas.
+    Sem folha no fim, devolve o PDF como veio."""
+    leitor = PdfReader(BytesIO(conteudo))
+    total = len(leitor.pages)
+    fim = total
+    while fim > 1 and "Folha de autenticação" in (leitor.pages[fim - 1].extract_text() or ""):
+        fim -= 1
+    if fim == total:
+        return conteudo
+    escritor = PdfWriter()
+    for pagina in leitor.pages[:fim]:
+        escritor.add_page(pagina)
+    saida = BytesIO()
+    escritor.write(saida)
+    return saida.getvalue()
 
 
 def hash_composicao(componentes: list[tuple[str, str]]) -> str:
@@ -117,30 +115,6 @@ def registrar(sessao: Session, anexo: Anexo, sha_conteudo: str, tipo: str, contr
     )
     sessao.add(registro)
     return registro
-
-
-def guardar_autenticado(
-    sessao: Session, conteudo: bytes, nome: str, categoria: str, tipo: str, contrato: Contrato, competencia: Competencia | None, autor_id: int | None,
-    autor_nome: str, ciencias: list[dict],
-) -> Anexo:
-    """Acrescenta a Folha de autenticação ao PDF, guarda o arquivo completo e registra a autenticação. Devolve o anexo gravado.
-
-    `ciencias`: [{"nome", "papel", "em"}] com `em` já formatado (texto) ou datetime."""
-    gerado_em = agora_utc()
-    sha_conteudo = hashlib.sha256(conteudo).hexdigest()
-    retrato = retrato_ciencias(ciencias)
-    folha = _folha(tipo, contrato, competencia, autor_nome, gerado_em, sha_conteudo, retrato)
-    escritor = PdfWriter()
-    for parte in (conteudo, folha):
-        for pagina in PdfReader(BytesIO(parte)).pages:
-            escritor.add_page(pagina)
-    saida = BytesIO()
-    escritor.write(saida)
-    final = saida.getvalue()
-    anexo = servico_anexos.guardar_pdf_gerado(sessao, final, nome, categoria, autor_id, contrato_id=contrato.id)
-    sessao.flush()
-    registrar(sessao, anexo, sha_conteudo, tipo, contrato, competencia, autor_nome, gerado_em, retrato)
-    return anexo
 
 
 def verificar(sessao: Session, codigo: str | None = None, conteudo: bytes | None = None) -> dict:

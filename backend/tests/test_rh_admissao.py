@@ -17,6 +17,17 @@ RH = "/api/rh"
 CPF_OK = "529.982.247-25"
 
 
+def _definir_tipo_da_resolucao(tipo_id) -> None:
+    """Parâmetro do RH: tipo do Protocolo que a resolução consome (None = resolução sem número)."""
+    import uuid
+
+    from app.services.rh import servico_afastamentos
+
+    with FabricaSessao() as sessao:
+        servico_afastamentos.parametros(sessao).tipo_resolucao_protocolo_id = uuid.UUID(str(tipo_id)) if tipo_id else None
+        sessao.commit()
+
+
 @pytest.fixture
 def ambiente(cliente, admin, monkeypatch):
     """O RH, um cargo vago, um checklist para FCESP, uma faixa de Resolução no Protocolo e GLPI e SMTP simulados."""
@@ -28,6 +39,7 @@ def ambiente(cliente, admin, monkeypatch):
     cliente.post(f"{RH}/checklists", json={"nome": "Documentos de FCESP", "classificacoes": [{"grupo": 2, "nivel": 16}, {"grupo": 2, "nivel": 15}], "itens": [{"descricao": "RG", "obrigatorio": True}, {"descricao": "Foto 3x4", "obrigatorio": False}]}, headers=h)
     tipo = cliente.post("/api/protocolo/tipos", json={"nome": "Resoluções SPI 1"}, headers=admin).json()
     cliente.post(f"/api/protocolo/tipos/{tipo['id']}/sequencias", json={"exercicio": hoje_sao_paulo().year, "inicio": 1, "fim": 20}, headers=admin)
+    _definir_tipo_da_resolucao(tipo["id"])  # padrão dos testes: a resolução consome um número do Protocolo
     enviados = []
     monkeypatch.setattr("app.services.rh.servico_admissao._cliente_formulario", lambda sessao: (_FormularioFalso(enviados), 8))
     emails = []
@@ -268,3 +280,68 @@ def test_pdf_anexado_direto_no_protocolo_tambem_envia_o_email(cliente, ambiente)
     assert r.status_code == 200, r.text
     adm = cliente.get(f"{RH}/admissoes/{aid}", headers=h).json()
     assert adm["tem_publicacao"] is True and adm["email_enviado_em"] is not None and len(amb["emails"]) == 1 and amb["emails"][0].para == ["joana@exemplo.com"]
+
+
+def test_resolucao_sem_numero_quando_os_parametros_nao_tem_tipo(cliente, ambiente):
+    amb, h = ambiente, ambiente["h"]
+    _definir_tipo_da_resolucao(None)
+    aid = cliente.post(f"{RH}/admissoes", json={"ficha_id": _ficha(cliente, amb)["id"]}, headers=h).json()["id"]
+    cliente.post(f"{RH}/admissoes/{aid}/chamado", json={"solicitacoes": {}}, headers=h)
+    rg = cliente.get(f"{RH}/admissoes/{aid}", headers=h).json()["documentos"][0]["id"]
+    cliente.post(f"{RH}/admissoes/{aid}/documentos/{rg}", data={"enviado_em": "2026-10-20"}, headers=h)
+    cliente.post(f"{RH}/admissoes/{aid}/documentos/concluir", headers=h)
+    r = cliente.post(f"{RH}/admissoes/{aid}/resolucao", headers=h)
+    # A etapa do Protocolo é dada como feita e a trilha segue direto para a publicação
+    assert r.status_code == 200 and r.json()["sem_numero"] is True and r.json()["etapa"] == "publicacao"
+    assert r.json()["numero_protocolo"] is None
+    assert cliente.post(f"{RH}/admissoes/{aid}/protocolo", json={"tipo_protocolo_id": amb["tipo_protocolo"]}, headers=h).status_code == 409
+    # Publicação: o PDF do D.O.E. fica na própria admissão e o e-mail sai com ele
+    assert cliente.post(f"{RH}/admissoes/{aid}/publicacao", data={"publicado_em": "2026-10-21"}, files={"arquivo": ("doe.txt", io.BytesIO(b"x"), "text/plain")}, headers=h).status_code == 409
+    r = cliente.post(f"{RH}/admissoes/{aid}/publicacao", data={"publicado_em": "2026-10-21"}, files={"arquivo": ("doe.pdf", io.BytesIO(PDF), "application/pdf")}, headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["tem_publicacao"] is True and r.json()["etapa"] == "posse" and r.json()["email_enviado_em"] is not None
+    assert cliente.get(f"{RH}/admissoes/{aid}/publicacao.pdf", headers=h).content.startswith(b"%PDF")
+    assert len(amb["emails"]) == 1 and len(amb["emails"][0].anexos) == 1
+    # A resolução (PDF) sai sem o número
+    assert "#numeroresolucao" not in cliente.get(f"{RH}/admissoes/{aid}/resolucao/copia", headers=h).json()["texto"]
+
+
+def test_parametro_do_tipo_da_resolucao(cliente, ambiente):
+    amb, h = ambiente, ambiente["h"]
+    comum = cliente.post("/api/protocolo/tipos", json={"nome": "Ofício"}, headers=amb["admin"]).json()
+    atual = cliente.get(f"{RH}/parametros", headers=h).json()
+    assert atual["tipo_resolucao_protocolo_id"] == amb["tipo_protocolo"]
+    corpo = {k: v for k, v in atual.items() if k not in ("membros_cgp", "atualizado_por_nome", "atualizado_em")}
+    # Só tipos de Resolução; em branco volta a ser sem número
+    assert cliente.put(f"{RH}/parametros", json={**corpo, "tipo_resolucao_protocolo_id": comum["id"]}, headers=h).status_code == 400
+    r = cliente.put(f"{RH}/parametros", json={**corpo, "tipo_resolucao_protocolo_id": None}, headers=h)
+    assert r.status_code == 200 and r.json()["tipo_resolucao_protocolo_id"] is None
+
+
+def test_liberar_numero_da_resolucao_mesmo_com_o_documento_subido(cliente, ambiente):
+    amb, h = ambiente, ambiente["h"]
+    aid = _avancar_ate_a_publicacao(cliente, amb)
+    r = cliente.post(f"{RH}/admissoes/{aid}/publicacao", data={"publicado_em": "2026-10-21"}, files={"arquivo": ("doe.pdf", io.BytesIO(PDF), "application/pdf")}, headers=h)
+    numero = r.json()["numero_protocolo"]
+    assert r.json()["tem_publicacao"] is True and numero.startswith("001/")
+    # Quem não reservou nem é do apoio administrativo não libera; motivo é obrigatório
+    criar_usuario("outro-rh", nome_completo="Outro RH")
+    assert cliente.post(f"{RH}/admissoes/{aid}/protocolo/liberar", json={"motivo": "x"}, headers=cabecalho(cliente, "outro-rh")).status_code == 403
+    assert cliente.post(f"{RH}/admissoes/{aid}/protocolo/liberar", json={"motivo": ""}, headers=h).status_code == 422
+    r = cliente.post(f"{RH}/admissoes/{aid}/protocolo/liberar", json={"motivo": "Número errado"}, headers=h)
+    assert r.status_code == 200, r.text
+    # O número volta ao Protocolo, o PDF sai e a trilha volta à etapa do número
+    assert r.json()["numero_protocolo"] is None and r.json()["tem_publicacao"] is False and r.json()["etapa"] == "protocolo" and r.json()["publicado_em"] is None
+    r = cliente.post(f"{RH}/admissoes/{aid}/protocolo", json={"tipo_protocolo_id": amb["tipo_protocolo"]}, headers=h)
+    assert r.status_code == 200 and r.json()["numero_protocolo"] == numero  # o mesmo número livre é reservado de novo
+    assert cliente.post(f"{RH}/admissoes/{aid}/protocolo/liberar", json={"motivo": "ok"}, headers=h).status_code == 200
+
+
+def test_placeholder_nivel_e_o_grupo_ponto_nivel_do_cargo(cliente, ambiente):
+    amb, h = ambiente, ambiente["h"]
+    aid = _avancar_ate_a_publicacao(cliente, amb)
+    r = cliente.put(f"{RH}/admissoes/{aid}/resolucao", json={"html": "<p>Cargo #classificacao, nível #nivel.</p>"}, headers=h)
+    assert r.status_code == 200, r.text
+    texto = cliente.get(f"{RH}/admissoes/{aid}/resolucao/copia", headers=h).json()["texto"]
+    assert "nível 2.16" in texto
+    assert "nivel" in cliente.get(f"{RH}/modelos/placeholders", headers=h).text

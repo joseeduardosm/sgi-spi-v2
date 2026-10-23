@@ -234,7 +234,7 @@ Gerados na mesma transação do evento, com uma **chave** que impede repetir o a
 | Pessoa incluída na equipe de um contrato (cadastro ou edição) | A pessoa designada | `equipe:{contrato}:{papel}:{usuario}:{momento}` | **Janela**: "Você foi cadastrado como <papel> no contrato <número>"; categoria `atribuicao`, prioridade alta, **e-mail** |
 | Ocorrência no diário de bordo | Equipe vigente | `diario:{ocorrencia}` | Prioridade alta se houver glosa |
 | Medição concluída | Equipe vigente | `medicao:{competencia}:{momento}` | Encerra o aviso de atraso da competência |
-| Nota fiscal juntada | Financeiro (setor `SETOR_FINANCEIRO`) | `retencao:{competencia}` | Pendência, **encerrada** ao salvar a retenção |
+| Nota fiscal juntada | Financeiro (ACL `financeiro`, Modificação ou mais) | `retencao:{competencia}` | Pendência, **encerrada** ao salvar a retenção |
 | Retenção conferida | Equipe vigente | `finais:{competencia}` | Pendência (CADIN/checklist/consolidado), **encerrada** ao gerar o consolidado |
 | Prorrogação registrada, reajuste concluído, aditamento/supressão concluídos | Equipe vigente | `prorrogacao:{id}`, `reajuste:{id}`, `alteracao:{id}` | Informativos; a prorrogação encerra os avisos de vencimento |
 

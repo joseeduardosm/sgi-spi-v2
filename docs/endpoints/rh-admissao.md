@@ -13,7 +13,7 @@ Uma admissão por ficha de pré-cadastro. As etapas se abrem na ordem (a que est
 | 1 | `chamado` | **Preenche e envia o formulário "CGP - Nomeações" (id 8) do GLPI** com os dados da ficha e os serviços marcados (rede, e-mail, SEI, Compras SP, equipamento, estação, crachá, telefone, mobiliário); o próprio formulário abre os chamados e dispara os e-mails dos seus destinos. Nenhum chamado à parte é criado. As perguntas são achadas pelo **título** (os ids não são fixos). O login proposto e o e-mail pessoal vão nas observações; `usuario_espelho` é opcional. Os links dos itens criados ficam em `chamado_links`. A **foto** da pessoa (opcional, `PUT /foto`) sobe à área temporária do GLPI (`/ajax/fileupload.php`) e vai junto no envio (pergunta "Foto") |
 | 2 | `documentos` | Checklist da classificação do cargo (grupo + nível, ex.: 1.15). O envio ao **Portal de Indicações** (sistema externo) é só **registrado** aqui: data, observação e comprovante opcional. Conclui com todos os obrigatórios registrados |
 | 3 | `resolucao` | Texto da resolução a partir do modelo (editável); guarda os placeholders, que entram na hora do PDF. PDF com marca d'água **MINUTA** até a publicação |
-| 4 | `protocolo` | Reserva o próximo número no tipo de Resolução do Protocolo (nome começa com "Resolu"), na faixa do ano |
+| 4 | `protocolo` | Reserva o próximo número no tipo de Resolução do Protocolo definido nos **Parâmetros do RH** (`tipo_resolucao_protocolo_id`; nome começa com "Resolu"), na faixa do ano. **Sem tipo nos Parâmetros a resolução é sem número** (veja abaixo) |
 | 5 | `publicacao` | PDF do D.O.E. anexado ao número do Protocolo (pelo RH aqui, ou pelo próprio Protocolo: a publicação fica registrada nos dois casos) e data da publicação. **O e-mail "Sua nomeação foi publicada" sai sozinho** nesse momento, para o e-mail pessoal da ficha, a partir do modelo, com o PDF em anexo. Falha de e-mail nunca desfaz a publicação: o motivo fica em `email_erro` e o RH reenvia |
 | 6 | `posse` | Data da posse (não anterior à publicação) e termo de posse em PDF, a partir do modelo |
 | 7 | `concluida` | Exige a conta da pessoa já ligada à ficha (a TI cria o login no AD). A pessoa assume o cargo na data da posse, o ato é "Resolução SPI nº X/AAAA" e o histórico funcional registra a admissão |
@@ -22,7 +22,7 @@ Uma admissão por ficha de pré-cadastro. As etapas se abrem na ordem (a que est
 |---|---|---|
 | `GET` | `/api/rh/admissoes?status=&busca=` | Lista (andamento, concluida, cancelada) |
 | `GET` | `/api/rh/admissoes/solicitacoes` | Serviços que o chamado pode pedir (chave → rótulo) |
-| `GET` | `/api/rh/admissoes/tipos-protocolo` | Tipos de Resolução do Protocolo e se têm faixa no ano |
+| `GET` | `/api/rh/admissoes/tipos-protocolo` | Tipos de Resolução do Protocolo e se têm faixa no ano (só o tipo dos Parâmetros, se definido; `?todos=true` lista todos, para a tela de Parâmetros) |
 | `POST` | `/api/rh/admissoes` | Inicia a admissão de uma ficha (`ficha_id`): exige login proposto e cargo pretendido vago (201) |
 | `GET` | `/api/rh/admissoes/{id}` | Trilha completa: etapas (`feita`/`atual`/`pendente`), documentos, número, datas |
 | `POST` | `/api/rh/admissoes/{id}/cancelar` | Cancela; número sem documento volta para a fila |
@@ -35,7 +35,8 @@ Uma admissão por ficha de pré-cadastro. As etapas se abrem na ordem (a que est
 | `POST` `PUT` | `/api/rh/admissoes/{id}/resolucao` | Gera o texto do modelo / grava o texto editado (`html`) |
 | `GET` | `/api/rh/admissoes/{id}/resolucao.pdf` | PDF (MINUTA até a publicação) |
 | `GET` | `/api/rh/admissoes/{id}/resolucao/copia` | Texto da resolução com os placeholders já trocados, em `html` (formatado) e `texto` (simples), para colar no SEI |
-| `POST` | `/api/rh/admissoes/{id}/protocolo` | Reserva o número (`tipo_protocolo_id`) |
+| `POST` | `/api/rh/admissoes/{id}/protocolo` | Reserva o número do tipo dos Parâmetros (`tipo_protocolo_id` só vale se os Parâmetros não definirem um); `409` se a admissão é de resolução sem número |
+| `POST` | `/api/rh/admissoes/{id}/protocolo/liberar` | `{ motivo }` (obrigatório): devolve o número ao Protocolo **mesmo com o PDF da publicação já subido** (o PDF é excluído logicamente, a publicação deixa de estar registrada e a trilha volta à etapa do número). Quem reservou o número, o Serviço de Apoio Administrativo (parâmetro do RH) e o SuperRoot; `403 sem_permissao` nos demais; `409` sem número ou depois da posse. O e-mail de nomeação já enviado não é desfeito |
 | `POST` `PUT` | `/api/rh/admissoes/{id}/publicacao` | Anexa o PDF do D.O.E. (`multipart`: `arquivo`, `publicado_em`) / ajusta a data |
 | `GET` | `/api/rh/admissoes/{id}/publicacao.pdf` | Baixa o PDF da publicação |
 | `POST` | `/api/rh/admissoes/{id}/email` | **Reenvia** o e-mail de nomeação quando o envio automático falhou (`email_erro`); 400 se falhar de novo, 409 se já foi enviado |
@@ -50,7 +51,7 @@ Erros no formato `{"detalhe", "codigo"}`: 400 `invalido`, 404 `nao_encontrado`, 
 
 Quatro textos editáveis, cada um com texto padrão criado na primeira consulta: `resolucao_nomeacao`, `email_nomeacao_publicada` (com assunto), `termo_posse` e `boas_vindas`.
 
-Os textos são HTML do editor rico com **placeholders de lista fechada** (`GET /api/rh/modelos/placeholders`): `#nome`, `#login`, `#cpf`, `#rg`, `#rs`, `#cargo`, `#denominacao`, `#classificacao`, `#setor`, `#siglasetor`, `#datainicio`, `#dataposse`, `#numeroresolucao`, `#anoresolucao`, `#datapublicacao`, `#hoje`, `#linksistema`. Qualquer outro `#` barra o salvamento (400). Valor ausente sai como `—`; os valores são escapados.
+Os textos são HTML do editor rico com **placeholders de lista fechada** (`GET /api/rh/modelos/placeholders`): `#nome`, `#login`, `#cpf`, `#rg`, `#rs`, `#cargo`, `#denominacao`, `#classificacao`, `#nivel` (grupo.nível do cargo, ex.: `2.16`), `#setor`, `#siglasetor`, `#datainicio`, `#dataposse`, `#numeroresolucao`, `#anoresolucao`, `#datapublicacao`, `#hoje`, `#linksistema`. Qualquer outro `#` barra o salvamento (400). Valor ausente sai como `—`; os valores são escapados.
 
 | Método | Rota | Descrição |
 |---|---|---|
@@ -80,3 +81,12 @@ Ao iniciar a admissão, os itens dos checklists ativos que valem para a classifi
 | `POST` | `/api/rh/pre-cadastros/{id}/validar` | O RH confere e valida a ficha enviada (409 se não foi enviada). `GET /api/rh/pre-cadastros?pendentes_de_validacao=true` lista as pendentes |
 
 A busca de usuários (`GET /api/usuarios?busca=`) passa a procurar também na bio liberada, para todos.
+
+
+## Resolução sem número (Parâmetros do RH)
+
+`GET`/`PUT /api/rh/parametros` trazem `tipo_resolucao_protocolo_id` (migração `e8f4a0b6c2d5`): o tipo de documento do Protocolo que a resolução de nomeação consome (só tipos "Resolu…"; `400` para outro). **Em branco, a resolução é sem número.**
+
+- A escolha é gravada na admissão ao iniciá-la (`sem_numero` em `LeituraAdmissao`); mudar o parâmetro vale só para as admissões iniciadas depois. As já em andamento seguem como estavam.
+- Sem número: ao gerar o texto da resolução, a etapa `protocolo` é dada como feita sozinha e a trilha vai direto à `publicacao`; `numero_protocolo` fica nulo e os placeholders `#numeroresolucao`/`#anoresolucao` saem vazios; `POST /admissoes/{id}/protocolo` responde `409`.
+- A publicação (`POST /admissoes/{id}/publicacao`, só PDF) guarda o PDF do D.O.E. na própria admissão (`publicacao_anexo_id`), registra a publicação e envia o e-mail de nomeação com o PDF; `GET /publicacao.pdf` baixa esse arquivo.

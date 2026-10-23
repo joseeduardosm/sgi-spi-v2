@@ -19,6 +19,7 @@ PLACEHOLDERS: dict[str, str] = {
     "cargo": "Cargo completo (ex.: FCESP 2.16 – Assessor Especial IV)",
     "denominacao": "Denominação do cargo (ex.: Assessor Especial IV)",
     "classificacao": "Classificação do cargo (ex.: FCESP 2.16)",
+    "nivel": "Grupo.nível do cargo (ex.: 2.16)",
     "setor": "Unidade (setor) do cargo",
     "siglasetor": "Sigla da unidade",
     "datainicio": "Data prevista de início (dd/mm/aaaa)",

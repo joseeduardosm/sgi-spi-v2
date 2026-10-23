@@ -156,8 +156,8 @@ def notificar_nf(competencia_id: uuid.UUID) -> None:
         assunto, texto, html = mensagem_nf(contrato, competencia)
         if not financeiro:
             para, resultado = emails_da_equipe(sessao, contrato), ResultadoSmtp(
-                False, 0, f"Nenhum usuário do Financeiro com e-mail (setor \"{obter_configuracao().setor_financeiro}\" e filhos): "
-                "inclua os membros em Setores ou ajuste o Departamento no perfil.")
+                False, 0, "Nenhum usuário do Financeiro com e-mail: dê Modificação no recurso Financeiro (Controle de acesso) a quem confere a retenção, "
+                "ou cadastre o e-mail no perfil.")
         else:
             para, resultado = _enviar(sessao, contrato, assunto, texto, html, para=financeiro, cc=emails_da_equipe(sessao, contrato))
         _gravar_email(competencia, "email_nf", para, resultado)

@@ -33,7 +33,7 @@ Resposta `Painel`:
 
 ## `GET` e `POST /api/contratos/verificar-documento`
 
-Verificação de autenticidade dos **PDFs autenticados pelo sistema**: o relatório de avaliação, a memória de cálculo da medição e o documento consolidado levam, no fim, uma **Folha de autenticação** com o código de verificação (16 caracteres do SHA-256 do conteúdo, em grupos de 4), o SHA-256 completo, quem gerou e quando, e a lista de quem tinha dado ciência. Cada documento é registrado em `contratos_documentos_autenticados` (migração `c5e8a2b6d9f1`) com o SHA-256 do arquivo completo.
+Verificação de autenticidade do **documento consolidado** da competência. Só ele leva, no fim, uma **Folha de autenticação** (memória de cálculo, relatório de avaliação e demais emissões intermediárias **não** levam; os registros antigos dessas emissões continuam verificáveis) com o código de verificação (16 caracteres do SHA-256 do conteúdo, em grupos de 4), o SHA-256 completo, quem gerou e quando, e a lista de quem tinha dado ciência. Cada documento é registrado em `contratos_documentos_autenticados` (migração `c5e8a2b6d9f1`) com o SHA-256 do arquivo completo.
 
 - `GET …?codigo=` (ACL `contratos` ≥ LEITURA): mostra o registro (tipo, contrato, competência, quem gerou, quando, ciências). Aceita o código com ou sem hífens e em qualquer caixa. O código sozinho não prova que o arquivo é o original.
 - `POST …` (`multipart/form-data`, `arquivo` PDF): válido só se o SHA-256 do arquivo for exatamente o de um documento gerado pelo sistema; arquivo alterado devolve `valido=false`.

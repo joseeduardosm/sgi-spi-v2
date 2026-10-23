@@ -385,7 +385,9 @@ class ParametrosLeitura(BaseModel):
         None, description="Data em que abre o agendamento das férias do ano seguinte (ano da data + 1): a partir dela, qualquer servidor "
         "agenda até `dias_ferias_por_periodo` dias para esse exercício, mesmo sem saldo. Nulo: sem a regra.")
     membros_cgp: int | None = Field(None, description="Pessoas que são o RH (Controle total no módulo RH; 0 = ninguém recebe os avisos destinados ao RH). Só leitura.")
-    setor_apoio_administrativo_id: int | None = Field(None, description="Setor do Serviço de Apoio Administrativo (SAA), que dá andamento nos números reservados do Protocolo. Vazio = o setor pelo nome da configuração.")
+    setor_reserva_protocolo_id: int | None = Field(None, description="Setor da Coordenadoria de Gestão e Infraestrutura (CGI), que dá andamento nos números reservados do Protocolo. Vazio = o setor pelo nome da configuração.")
+    setor_apoio_administrativo_id: int | None = Field(None, description="Setor do Serviço de Apoio Administrativo (SAA), que vê os tipos do Protocolo restritos a um setor. Vazio = o setor pelo nome da configuração.")
+    tipo_resolucao_protocolo_id: uuid.UUID | None = Field(None, description="Tipo de documento do Protocolo que a resolução de nomeação consome. Vazio = resolução sem número (sem a etapa do Protocolo), valendo para as admissões iniciadas depois.")
     atualizado_por_nome: str | None = None
     atualizado_em: datetime | None = None
 
@@ -412,7 +414,9 @@ class GravacaoParametros(BaseModel):
         if any(d < 0 or d > 6 for d in valor):
             raise ValueError("use 0 (segunda) a 6 (domingo)")
         return sorted(set(valor))
-    setor_apoio_administrativo_id: int | None = Field(None, description="Setor do Serviço de Apoio Administrativo (SAA); vazio = pelo nome da configuração.")
+    setor_reserva_protocolo_id: int | None = Field(None, description="Setor da Coordenadoria de Gestão e Infraestrutura (CGI); vazio = pelo nome da configuração.")
+    setor_apoio_administrativo_id: int | None = Field(None, description="Setor do Serviço de Apoio Administrativo (SAA), que vê os tipos do Protocolo restritos a um setor. Vazio = o setor pelo nome da configuração.")
+    tipo_resolucao_protocolo_id: uuid.UUID | None = Field(None, description="Tipo de documento do Protocolo que a resolução de nomeação consome. Vazio = resolução sem número (sem a etapa do Protocolo), valendo para as admissões iniciadas depois.")
 
 
 MeusAfastamentos.model_rebuild()

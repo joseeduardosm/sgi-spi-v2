@@ -145,8 +145,12 @@ export interface ParametrosRh {
   abertura_agendamento_ferias: string | null;
   /** Só leitura: pessoas no setor da CGP (0 = ninguém recebe os avisos da CGP). */
   membros_cgp?: number | null;
-  /** Setor do Serviço de Apoio Administrativo (dá andamento nos números reservados do Protocolo); vazio = pelo nome da configuração. */
+  /** Setor da Coordenadoria de Gestão e Infraestrutura (CGI), que dá andamento nos números reservados do Protocolo); vazio = pelo nome da configuração. */
+  setor_reserva_protocolo_id?: number | null;
+  /** Setor do Serviço de Apoio Administrativo (vê os tipos do Protocolo restritos a um setor); vazio = pelo nome da configuração. */
   setor_apoio_administrativo_id?: number | null;
+  /** Tipo do Protocolo que a resolução de nomeação consome; vazio = resolução sem número. */
+  tipo_resolucao_protocolo_id?: string | null;
   atualizado_por_nome?: string | null;
   atualizado_em?: string | null;
 }

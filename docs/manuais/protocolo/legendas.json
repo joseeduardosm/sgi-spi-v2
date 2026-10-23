@@ -30,11 +30,11 @@
   },
   {
    "n": 3,
-   "texto": "Liberar a partir de: do início até o número anterior fica Reservado SAA"
+   "texto": "Liberar a partir de: do início até o número anterior fica Reservado CGI"
   },
   {
    "n": 4,
-   "texto": "Prévia: quantos números ficam com o SAA e quantos ficam livres para todos"
+   "texto": "Prévia: quantos números ficam com a CGI e quantos ficam livres para todos"
   }
  ],
  "a03-cartao-criado": [
@@ -50,7 +50,7 @@
   },
   {
    "n": 2,
-   "texto": "Liberar a partir de: aumentar reserva mais números ao SAA; esvaziar libera tudo"
+   "texto": "Liberar a partir de: aumentar reserva mais números à CGI; esvaziar libera tudo"
   },
   {
    "n": 3,
@@ -68,13 +68,13 @@
  "a05-novo-exercicio": [
   {
    "n": 1,
-   "texto": "Ano do novo exercício; a faixa e a reserva ao SAA seguem as mesmas regras"
+   "texto": "Ano do novo exercício; a faixa e a reserva à CGI seguem as mesmas regras"
   }
  ],
  "r02-grade": [
   {
    "n": 1,
-   "texto": "Resumo: números livres, reservados ao SAA e a faixa"
+   "texto": "Resumo: números livres, reservados à CGI e a faixa"
   },
   {
    "n": 2,
@@ -82,19 +82,19 @@
   },
   {
    "n": 3,
-   "texto": "Reservado SAA (roxo, tracejado): só o Serviço de Apoio Administrativo dá andamento"
+   "texto": "Reservado CGI (roxo, tracejado): só a Coordenadoria de Gestão e Infraestrutura dá andamento"
   }
  ],
  "r06-numero-reservado-comum": [
   {
    "n": 1,
-   "texto": "Quem não é do SAA recebe o primeiro número livre depois da faixa reservada"
+   "texto": "Quem não é da CGI recebe o primeiro número livre depois da faixa reservada"
   }
  ],
  "r07-numero-reservado-saa": [
   {
    "n": 1,
-   "texto": "Quem é do SAA começa pela faixa reservada"
+   "texto": "Quem é da CGI começa pela faixa reservada"
   }
  ]
 }

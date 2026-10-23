@@ -206,6 +206,23 @@ def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, ce
     assert "?etapa=checklist" in mensagem.get_body(("plain",)).get_content()
 
 
+def test_com_o_recurso_financeiro_configurado_a_acl_define_quem_e_o_financeiro(cliente, admin, cenario):
+    """O setor do Financeiro deixa de valer: só quem tem Modificação no recurso `financeiro` confere a retenção e recebe o aviso."""
+    contrato, base, gestora = cenario
+    novo = criar_usuario("outro-fin", nome_completo="Fin pela ACL", email="finacl@sp.gov.br")
+    contratos = next(r["id"] for r in cliente.get("/api/acl/recursos", headers=admin).json() if r["slug"] == "contratos")
+    cliente.post("/api/acl/regras", json={"recurso_id": contratos, "nivel": "LEITURA", "usuarios_ids": [novo], "setores_ids": []}, headers=admin)
+    recurso = cliente.post("/api/acl/recursos", json={"nome": "Financeiro", "slug": "financeiro"}, headers=admin).json()["id"]
+    r = cliente.post("/api/acl/regras", json={"recurso_id": recurso, "nivel": "MODIFICACAO", "usuarios_ids": [novo], "setores_ids": []}, headers=admin)
+    assert r.status_code == 201, r.text
+    SmtpSimulado.enviadas.clear()
+    juntar_nf(cliente, base, gestora, "2105.00", "123")
+    assert [m[2] for m in SmtpSimulado.enviadas][0].count("finacl@sp.gov.br") == 1
+    assert "fin1@sp.gov.br" not in SmtpSimulado.enviadas[0][2]
+    assert conferir_retencao(cliente, base, cabecalho(cliente, "financeiro1"), {"ir": "31.58"}).status_code == 403
+    assert conferir_retencao(cliente, base, cabecalho(cliente, "outro-fin"), {"ir": "31.58"}).status_code == 200
+
+
 def test_sem_financeiro_cadastrado_o_erro_fica_registrado(cliente, admin, cenario):
     contrato, base, gestora = cenario
     for setor in cliente.get("/api/setores", headers=admin).json():

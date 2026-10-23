@@ -59,6 +59,13 @@ class Cargo(Base):
         return f"{self.tipo.codigo} {self.grupo}.{self.nivel:02d}" if self.grupo else f"{self.tipo.codigo} {self.nivel}"
 
     @property
+    def grupo_nivel(self) -> str:
+        """"2.16" ou "1.07" (grupo.nível); vazio nos cargos sem nível."""
+        if self.nivel is None:
+            return ""
+        return f"{self.grupo}.{self.nivel:02d}" if self.grupo else str(self.nivel)
+
+    @property
     def rotulo(self) -> str:
         """Texto exibido ao lado do nome da pessoa (e guardado em `Usuario.cargo`): "FCESP 2.16 – Assessor Especial IV"."""
         return self.denominacao if self.nivel is None and self.tipo.codigo == "OUTRO" else f"{self.classificacao} – {self.denominacao}"
@@ -80,7 +87,8 @@ class Ocupacao(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     cargo_id: Mapped[int] = mapped_column(ForeignKey("rh_cargos.id", ondelete="RESTRICT"))
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"))
-    inicio: Mapped[date] = mapped_column(Date)
+    # Data da posse; vazia nos vínculos automáticos (cadastro anterior), para o RH realocar a pessoa sem uma data inventada
+    inicio: Mapped[date | None] = mapped_column(Date)
     fim: Mapped[date | None] = mapped_column(Date)
     # Ato que nomeou ou designou (resolução, portaria, decreto...) e o que encerrou a ocupação
     ato: Mapped[str] = mapped_column(String(200), default="")

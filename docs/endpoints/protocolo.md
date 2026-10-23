@@ -23,20 +23,31 @@ Atenção: um recurso ACL **sem nenhuma regra fica aberto a todos**; por isso o 
 | `MODIFICACAO` | Reservar o **próximo** número, anexar o documento do que reservou, liberar a própria reserva, marcar sigilo e vincular a um contrato |
 | `CONTROLE_TOTAL` (ou SuperRoot) | Cadastrar tipos, criar sequências, **ampliar a faixa** para trás e para frente, **lançar um número específico**, anular e atuar em qualquer reserva |
 
-## Faixa reservada ao SAA ("Liberar a partir de")
+## Faixa reservada à CGI ("Liberar a partir de")
 
-Cada sequência pode ter `liberar_a_partir_de` (entre `inicio` e `fim + 1`; nulo ou igual a `inicio` = nada reservado; migração `f8b3c5d7e9a1`). Os números do início da faixa até o anterior a esse ponto, **enquanto livres**, têm o estado derivado **`reservado_saa`** ("Reservado SAA"): só quem é do **Serviço de Apoio Administrativo** dá andamento neles (reservar e subir o documento). O SuperRoot e quem administra o Protocolo (CONTROLE_TOTAL) também usam a faixa. Os demais usuários reservam a partir do ponto de liberação.
-- **SAA** = membro do setor (ou com ele como Departamento) cujo nome está em `setor_apoio_administrativo` (padrão "Serviço de Apoio Administrativo", inclui os setores filhos). Se o setor não existir, só SuperRoot e administração usam a faixa.
-- `POST /sequencias/{id}/proximo`: só o SAA começa pela faixa reservada; os demais, **inclusive a administração**, recebem a partir do ponto de liberação (a administração ainda escolhe à mão qualquer número, inclusive os `reservado_saa`). `POST /numeros/{id}/reservar` agora aceita o SAA **só nos `reservado_saa`** (`403 sem_permissao` nos outros casos); a administração continua escolhendo qualquer número.
-- Reservado e depois **liberado**, o número volta a `reservado_saa` (o estado é derivado).
-- Elevar `liberar_a_partir_de` (`PUT /sequencias/{id}/faixa`) só vale se nenhum número que passa a ser do SAA estiver reservado (`409`).
-- `ListaNumeros` traz `reservados_saa` e `pode_usar_reserva_saa`; cada número traz `pode_reservar`; `SequenciaLeitura` traz `liberar_a_partir_de`.
+Cada sequência pode ter `liberar_a_partir_de` (entre `inicio` e `fim + 1`; nulo ou igual a `inicio` = nada reservado; migração `f8b3c5d7e9a1`; a faixa era do SAA e passou à CGI na migração `b5c1d7e3f9a2`, que também renomeou o parâmetro do RH para `setor_reserva_protocolo_id`). Os números do início da faixa até o anterior a esse ponto, **enquanto livres**, têm o estado derivado **`reservado_cgi`** ("Reservado CGI"): só quem é do **Coordenadoria de Gestão e Infraestrutura** dá andamento neles (reservar e subir o documento). O SuperRoot e quem administra o Protocolo (CONTROLE_TOTAL) também usam a faixa. Os demais usuários reservam a partir do ponto de liberação.
+- **CGI** = membro do setor (ou com ele como Departamento) cujo nome está em `setor_reserva_protocolo` (padrão "Coordenadoria de Gestão e Infraestrutura", inclui os setores filhos). Se o setor não existir, só SuperRoot e administração usam a faixa.
+- `POST /sequencias/{id}/proximo`: só a CGI começa pela faixa reservada; os demais, **inclusive a administração**, recebem a partir do ponto de liberação (a administração ainda escolhe à mão qualquer número, inclusive os `reservado_cgi`). `POST /numeros/{id}/reservar` agora aceita a CGI **só nos `reservado_cgi`** (`403 sem_permissao` nos outros casos); a administração continua escolhendo qualquer número.
+- Reservado e depois **liberado**, o número volta a `reservado_cgi` (o estado é derivado).
+- Elevar `liberar_a_partir_de` (`PUT /sequencias/{id}/faixa`) só vale se nenhum número que passa a ser da CGI estiver reservado (`409`).
+- `ListaNumeros` traz `reservados_cgi` e `pode_usar_reserva_cgi`; cada número traz `pode_reservar`; `SequenciaLeitura` traz `liberar_a_partir_de`.
 - **Tela dedicada** de novo tipo (`/protocolo/administracao/tipos/novo`) e de novo exercício (`/protocolo/administracao/tipos/{tipoId}/exercicio`): nome, exercício, início, fim e "Liberar a partir de", com prévia da faixa. `POST /tipos` aceita `sequencia` opcional e cria tipo e faixa **na mesma transação**.
-- O módulo **Contratos** usa o tipo **"Portaria SPI SSGC"** e reserva sempre **fora da faixa do SAA** (`proximo(..., fora_da_reserva=True)`).
+- O módulo **Contratos** usa o tipo **"Portaria SPI SSGC"** e reserva sempre **fora da faixa da CGI** (`proximo(..., fora_da_reserva=True)`).
+
+## Tipo restrito a um setor
+
+`POST /tipos` aceita `setor_id` (opcional, só na criação; `404` se o setor não existir; migração `c6d2e8f4a0b3`). Sem setor, **todos** os usuários do Protocolo consomem o tipo. Com setor:
+- **Consumir** (`proximo`, `reservar`): só quem é do setor (membro ou com ele como Departamento, incluindo os setores filhos) e a administração (CONTROLE_TOTAL/SuperRoot); os demais recebem `403 sem_permissao`. As reservas feitas por outros módulos (portarias dos contratos, admissão do RH) não passam por essa regra.
+- **Ver** (`GET /tipos`, `/sequencias/{id}/numeros`, `/numeros/{id}`, anexo, `/contratos/{id}`, `/painel`, `/exportar`): o setor, a administração e o **Serviço de Apoio Administrativo** (parâmetro `setor_apoio_administrativo_id` do RH, com padrão pelo nome `setor_apoio_administrativo`; migração `d7e3f9a5b1c4`). Os demais não veem o tipo na lista e recebem `404` nos demais endpoints; o apoio administrativo vê, mas não consome (`pode_consumir: false`).
+- `TipoLeitura` traz `setor_id`, `setor_nome` e `pode_consumir`; `ListaNumeros` traz `pode_consumir` (a tela desabilita "Reservar próximo número").
+
+## Concluir sem documento
+
+`POST /numeros/{id}/concluir-sem-documento` com `{ motivo }` (a justificativa é obrigatória; `400` se vazia) conclui a reserva sem PDF, por exemplo para documentos sigilosos: o número passa a `utilizado` sem `arquivo`, com o evento `concluiu` na linha do tempo e a auditoria `protocolo.concluir_sem_documento`.
 
 ## Estados do número
 
-`livre` (ou `reservado_saa`, dentro da faixa do SAA) → `reservado` (finalidade, responsável, data) → `utilizado` (tem documento). `anulado` prevalece sobre os demais. **Liberar** uma reserva sem documento devolve o número a `livre`; a **linha do tempo** (reservou, lançou, anexou, liberou, anulou, sigilo, vinculou) permanece.
+`livre` (ou `reservado_cgi`, dentro da faixa da CGI) → `reservado` (finalidade, responsável, data) → `utilizado` (tem documento, ou foi concluído sem documento por `concluir-sem-documento`). `anulado` prevalece sobre os demais. **Liberar** uma reserva sem documento devolve o número a `livre`; a **linha do tempo** (reservou, lançou, anexou, liberou, anulou, sigilo, vinculou) permanece.
 
 ## Endpoints
 
@@ -51,6 +62,7 @@ Cada sequência pode ter `liberar_a_partir_de` (entre `inicio` e `fim + 1`; nulo
 | `POST /sequencias/{id}/proximo` | MODIFICACAO | `{ finalidade, contrato_id? }` → `201 NumeroLeitura`: reserva o **menor livre**, de forma atômica. `409 sequencia_esgotada` sem livres |
 | `POST /numeros/{id}/reservar` | CONTROLE_TOTAL | `{ finalidade, contrato_id? }`: lança um número específico (`409` se já reservado ou anulado) |
 | `GET /numeros/{id}` | LEITURA | Detalhe com a **linha do tempo** (visível mesmo com documento sigiloso) |
+| `POST /numeros/{id}/concluir-sem-documento` | Dono ou administração (MODIFICACAO+) | `{ motivo }`: conclui a reserva sem subir o PDF (documento sigiloso, por exemplo); o número vira `utilizado` com `arquivo: null` e o evento `concluiu`. `409` se não está reservado, já tem documento ou é de portaria de designação/admissão (exigem o D.O.E.); `403` para quem não reservou. O documento ainda pode ser anexado depois |
 | `POST /numeros/{id}/liberar` | Dono ou administração (MODIFICACAO+) | `{ motivo }`: só reservado e sem documento; volta a livre |
 | `POST /numeros/{id}/anular` | CONTROLE_TOTAL | `{ motivo }`: tira o número de uso para sempre (o documento anexado fica guardado) |
 | `POST /numeros/{id}/anexo` | Dono ou administração | `multipart` `arquivo` (PDF, Office/LibreOffice, TXT, CSV, PNG, JPG); o número vira `utilizado`; um documento por número (`409`). **Número de portaria de designação de contrato**: só depois do aceite da autoridade e só PDF (`409`); o anexo é o D.O.E. e **publica a portaria**, aplicando a nova equipe do contrato (ver [contratos-portarias.md](contratos-portarias.md)) |
@@ -61,7 +73,7 @@ Cada sequência pode ter `liberar_a_partir_de` (entre `inicio` e `fim + 1`; nulo
 | `GET /painel?tipo_id=&ano=` | LEITURA | Reservas e utilizações por mês, top 10 pessoas e reservados sem documento |
 | `GET /exportar?formato=xlsx\|pdf&tipo_id=&exercicio=` | LEITURA | Controle dos números com movimento (sem o conteúdo dos documentos) |
 
-**`NumeroLeitura`:** `id`, `tipo_nome`, `exercicio`, `numero`, `numero_formatado` (`005/2026`), `estado`, `finalidade`, `reservado_por_nome`, `reservado_em`, `usado_em`, `contrato_id`/`contrato_numero`, `sigiloso`, `anulado_em`, `motivo_anulacao`, `arquivo` (`id`, `nome`, `tamanho`, `pode_baixar`), `pode_anexar`, `pode_liberar`, `pode_alterar_sigilo` e `eventos[]`.
+**`NumeroLeitura`:** `id`, `tipo_nome`, `exercicio`, `numero`, `numero_formatado` (`005/2026`), `estado`, `finalidade`, `reservado_por_nome`, `reservado_em`, `usado_em`, `contrato_id`/`contrato_numero`, `sigiloso`, `anulado_em`, `motivo_anulacao`, `arquivo` (`id`, `nome`, `tamanho`, `pode_baixar`), `pode_anexar`, `pode_liberar`, `pode_concluir_sem_documento`, `pode_alterar_sigilo` e `eventos[]`.
 
 ### Erros
 

@@ -16,6 +16,7 @@ from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, Small
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.banco import Base, agora_utc
+from app.models.anexo import Anexo
 
 TIPOS_MODELO = ("resolucao_nomeacao", "email_nomeacao_publicada", "termo_posse", "boas_vindas")
 # Etapas da trilha, na ordem; `concluida` fecha a admissão
@@ -95,7 +96,11 @@ class Admissao(Base):
     resolucao_gerada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     numero_protocolo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("protocolo_numeros.id", ondelete="SET NULL"))
     protocolo_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Publicação no D.O.E. (o PDF fica anexado ao número do Protocolo)
+    # Resolução sem número (Parâmetros do RH sem tipo do Protocolo na hora de iniciar): a etapa do Protocolo não existe e o PDF do D.O.E. fica na própria admissão
+    sem_numero: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    publicacao_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="SET NULL"))
+    publicacao_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[publicacao_anexo_id])
+    # Publicação no D.O.E. (o PDF fica anexado ao número do Protocolo, ou à admissão quando a resolução é sem número)
     publicado_em: Mapped[date | None] = mapped_column(Date)
     publicacao_registrada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # E-mail "Sua nomeação foi publicada"

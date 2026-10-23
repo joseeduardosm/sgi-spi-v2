@@ -19,7 +19,7 @@ import { ListaNumeros, NumeroProtocolo, ROTULOS_ESTADO, ROTULOS_EVENTO, Sequenci
 import { EtapaTrilha, TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 type Janela = null | 'reservar' | 'detalhe';
-type AcaoMotivo = 'liberar' | 'anular';
+type AcaoMotivo = 'liberar' | 'anular' | 'concluir';
 
 /**
  * Numeração do Protocolo. Quem tem acesso reserva o **próximo número** da sequência; só CONTROLE_TOTAL clica num número livre para
@@ -48,18 +48,18 @@ type AcaoMotivo = 'liberar' | 'anular';
               @empty { <option value="">sem sequência</option> }
             </select></div>
           @if (lista(); as l) {
-            <div class="resumo-protocolo"><strong>{{ l.livres }}</strong> livre(s)@if (l.reservados_saa) { · <strong>{{ l.reservados_saa }}</strong> reservado(s) SAA }  · faixa {{ l.sequencia.inicio }} a {{ l.sequencia.fim }}</div>
-            <button type="button" class="acao-primaria" [disabled]="l.livres === 0 && !(l.pode_usar_reserva_saa && l.reservados_saa > 0)" (click)="abrirReserva(null)">Reservar próximo número</button>
+            <div class="resumo-protocolo"><strong>{{ l.livres }}</strong> livre(s)@if (l.reservados_cgi) { · <strong>{{ l.reservados_cgi }}</strong> reservado(s) CGI }  · faixa {{ l.sequencia.inicio }} a {{ l.sequencia.fim }}</div>
+            <button type="button" class="acao-primaria" [disabled]="!l.pode_consumir || (l.livres === 0 && !(l.pode_usar_reserva_cgi && l.reservados_cgi > 0))" [title]="l.pode_consumir ? '' : 'Este tipo é restrito a outro setor'" (click)="abrirReserva(null)">Reservar próximo número</button>
           }
         </div>
 
         @if (lista(); as l) {
           <div class="legenda-protocolo" aria-label="Legenda">
-            <span class="livre">Livre</span><span class="reservado_saa">Reservado SAA</span><span class="reservado">Reservado, sem documento</span><span class="utilizado">Utilizado, com documento</span><span class="anulado">Anulado</span>
+            <span class="livre">Livre</span><span class="reservado_cgi">Reservado CGI</span><span class="reservado">Reservado, sem documento</span><span class="utilizado">Utilizado, com documento</span><span class="anulado">Anulado</span>
           </div>
           <div class="grade-numeros">
             @for (n of l.itens; track n.id) {
-              <button type="button" [class]="'numero ' + n.estado" [title]="n.estado === 'livre' ? 'Número livre' : n.estado === 'reservado_saa' ? 'Reservado ao Serviço de Apoio Administrativo' : n.finalidade" (click)="clicarNumero(n)">
+              <button type="button" [class]="'numero ' + n.estado" [title]="n.estado === 'livre' ? 'Número livre' : n.estado === 'reservado_cgi' ? 'Reservado a Coordenadoria de Gestão e Infraestrutura' : n.finalidade" (click)="clicarNumero(n)">
                 <strong>{{ n.numero }}</strong>
                 <small>{{ rotulos[n.estado] }}@if (n.sigiloso) { <span aria-label="Documento sigiloso" title="Documento sigiloso"> 🔒</span> }</small>
               </button>
@@ -133,6 +133,7 @@ type AcaoMotivo = 'liberar' | 'anular';
             @if (n.pode_alterar_sigilo) {
               <label class="opcao-sigilo"><input type="checkbox" [checked]="n.sigiloso" (change)="alternarSigilo(n)" /> Documento sigiloso (só eu e o SuperRoot abrimos o arquivo)</label>
             }
+            @if (n.pode_concluir_sem_documento) { <button type="button" class="acao-secundaria" (click)="abrirMotivo('concluir')">Concluir sem documento</button> }
             @if (n.pode_liberar) { <button type="button" class="acao-secundaria" (click)="abrirMotivo('liberar')">Liberar reserva</button> }
             @if (administra() && n.estado !== 'anulado') { <button type="button" class="acao-recusar" (click)="abrirMotivo('anular')">Anular número</button> }
           </div>
@@ -140,10 +141,10 @@ type AcaoMotivo = 'liberar' | 'anular';
           @if (motivoAcao(); as acao) {
             <form class="form-motivo" (ngSubmit)="confirmarMotivo(n)">
               <div class="grade-formulario uma-coluna">
-                <div><label for="pm-motivo">{{ acao === 'liberar' ? 'Motivo da liberação *' : 'Motivo da anulação *' }}</label>
+                <div><label for="pm-motivo">{{ acao === 'liberar' ? 'Motivo da liberação *' : acao === 'concluir' ? 'Justificativa para concluir sem documento (ex.: documento sigiloso) *' : 'Motivo da anulação *' }}</label>
                   <input id="pm-motivo" name="motivo" maxlength="2000" [(ngModel)]="motivo" /></div>
               </div>
-              <button type="submit" [class]="acao === 'anular' ? 'acao-recusar' : 'acao-primaria'" [disabled]="!motivo.trim() || ocupado()">{{ acao === 'liberar' ? 'Liberar' : 'Anular' }}</button>
+              <button type="submit" [class]="acao === 'anular' ? 'acao-recusar' : acao === 'concluir' ? 'acao-positiva' : 'acao-primaria'" [disabled]="!motivo.trim() || ocupado()">{{ acao === 'liberar' ? 'Liberar' : acao === 'concluir' ? 'Concluir' : 'Anular' }}</button>
               <button type="button" class="acao-secundaria" (click)="motivoAcao.set(null)">Cancelar</button>
             </form>
           }
@@ -244,10 +245,10 @@ export class NumeracaoComponent implements OnInit {
   }
 
   protected clicarNumero(n: NumeroProtocolo): void {
-    // Livre: só a administração escolhe o número (os demais usam "Reservar próximo número"); nos "Reservado SAA", o SAA também escolhe
-    if (n.estado === 'livre' || n.estado === 'reservado_saa') {
+    // Livre: só a administração escolhe o número (os demais usam "Reservar próximo número"); nos "Reservado CGI", a CGI também escolhe
+    if (n.estado === 'livre' || n.estado === 'reservado_cgi') {
       if (n.pode_reservar) this.abrirReserva(n);
-      else if (n.estado === 'reservado_saa') this.dialogos.avisar('Reservado ao SAA', `Este número está reservado ao Serviço de Apoio Administrativo até o número ${(this.lista()?.sequencia.liberar_a_partir_de ?? 1) - 1}; os demais usuários passam a reservar a partir de ${this.lista()?.sequencia.liberar_a_partir_de}.`);
+      else if (n.estado === 'reservado_cgi') this.dialogos.avisar('Reservado à CGI', `Este número está reservado a Coordenadoria de Gestão e Infraestrutura até o número ${(this.lista()?.sequencia.liberar_a_partir_de ?? 1) - 1}; os demais usuários passam a reservar a partir de ${this.lista()?.sequencia.liberar_a_partir_de}.`);
       else this.dialogos.avisar('Reserva sequencial', 'Para manter a sequência, use "Reservar próximo número": o sistema entrega o menor número livre.');
       return;
     }
@@ -326,8 +327,10 @@ export class NumeracaoComponent implements OnInit {
     const acao = this.motivoAcao();
     if (!acao || !this.motivo.trim()) return;
     this.ocupado.set(true);
-    const chamada = acao === 'liberar' ? this.api.liberar(n.id, this.motivo.trim()) : this.api.anular(n.id, this.motivo.trim());
-    chamada.subscribe({ next: (r) => this.atualizado(r), error: (e) => this.falha(e, acao === 'liberar' ? 'Não foi possível liberar' : 'Não foi possível anular') });
+    const motivo = this.motivo.trim();
+    const chamada = acao === 'liberar' ? this.api.liberar(n.id, motivo) : acao === 'concluir' ? this.api.concluirSemDocumento(n.id, motivo) : this.api.anular(n.id, motivo);
+    const erro = acao === 'liberar' ? 'Não foi possível liberar' : acao === 'concluir' ? 'Não foi possível concluir' : 'Não foi possível anular';
+    chamada.subscribe({ next: (r) => this.atualizado(r), error: (e) => this.falha(e, erro) });
   }
 
   protected anexar(n: NumeroProtocolo, evento: Event): void {

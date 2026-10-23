@@ -57,7 +57,7 @@ def registrar(
 
 def _ocupacoes(sessao: Session, usuario_id: int) -> list[LeituraOcupacao]:
     resultado = []
-    for o in sessao.scalars(select(Ocupacao).where(Ocupacao.usuario_id == usuario_id).order_by(Ocupacao.inicio.desc(), Ocupacao.id.desc())):
+    for o in sessao.scalars(select(Ocupacao).where(Ocupacao.usuario_id == usuario_id).order_by(Ocupacao.inicio.desc().nulls_last(), Ocupacao.id.desc())):
         resultado.append(LeituraOcupacao(
             id=o.id, cargo_id=o.cargo_id, cargo_rotulo=o.cargo.rotulo, setor_id=o.cargo.setor_id, setor_nome=_nome_setor(sessao, o.cargo.setor_id), inicio=o.inicio,
             fim=o.fim, ato=o.ato, motivo_fim=o.motivo_fim, ato_fim=o.ato_fim, registrado_por_nome=o.registrado_por_nome, registrado_em=o.registrado_em))

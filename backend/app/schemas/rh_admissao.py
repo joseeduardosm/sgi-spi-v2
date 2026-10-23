@@ -92,8 +92,12 @@ class EntradaTexto(BaseModel):
     html: str = Field(..., min_length=1, max_length=60000)
 
 
+class EntradaMotivo(BaseModel):
+    motivo: str = Field(..., min_length=1, max_length=2000, description="Justificativa da liberação do número.")
+
+
 class EntradaProtocolo(BaseModel):
-    tipo_protocolo_id: uuid.UUID
+    tipo_protocolo_id: uuid.UUID | None = Field(None, description="Opcional: vale o tipo dos Parâmetros do RH; só é usado (tipo de Resolução) se os Parâmetros não definirem um.")
 
 
 class EntradaPosse(BaseModel):
@@ -132,6 +136,7 @@ class LeituraAdmissao(ResumoAdmissao):
     tem_foto: bool
     documentos: list[DocumentoAdmissao]
     resolucao_html: str | None
+    sem_numero: bool = Field(False, description="Resolução sem número: não há etapa do Protocolo e o PDF do D.O.E. fica na própria admissão.")
     numero_protocolo_id: uuid.UUID | None
     numero_protocolo: str | None
     publicado_em: date | None

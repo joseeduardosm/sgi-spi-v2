@@ -8,7 +8,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ## 2026-10-23
 
-Migrações novas (aplicar com `alembic upgrade head`; cabeça `a4b0f6c2e8d1`): `d5a1c7e3b9f2` (recurso ACL `rh`), `e6b2d8f4a1c3` (cargos, ocupações e histórico), `a8d4f0b6c2e5` (pré-cadastro), `b9e5a1c7d3f6` (admissão), `c0f6b2d8e4a7` (checklist por classificação), `d1a7c3e9b5f8` (login web e formulário do GLPI), `e2f8d4a0c6b9`, `f3a9e5b1d7c0`, `f7c3e9a5b2d4` e `a4b0f6c2e8d1` (ajustes da admissão, foto, setor de apoio e erro de e-mail).
+Migrações novas (aplicar com `alembic upgrade head`; cabeça `f9a5b1c7d3e6`): `a1c5e9b3d7f4` (recurso ACL `financeiro`), `b5c1d7e3f9a2` (faixa reservada do Protocolo passa a ser da CGI), `c6d2e8f4a0b3` (setor que consome os números do tipo), `d7e3f9a5b1c4` (setor de apoio como parâmetro do RH), `e8f4a0b6c2d5` (tipo do Protocolo da resolução e resolução sem número), `f9a5b1c7d3e6` (ocupação sem data de posse), `d5a1c7e3b9f2` (recurso ACL `rh`), `e6b2d8f4a1c3` (cargos, ocupações e histórico), `a8d4f0b6c2e5` (pré-cadastro), `b9e5a1c7d3f6` (admissão), `c0f6b2d8e4a7` (checklist por classificação), `d1a7c3e9b5f8` (login web e formulário do GLPI), `e2f8d4a0c6b9`, `f3a9e5b1d7c0`, `f7c3e9a5b2d4` e `a4b0f6c2e8d1` (ajustes da admissão, foto, setor de apoio e erro de e-mail).
 
 ### Adicionado
 - **RH reestruturado em quatro frentes**, com manual publicado no BookStack (capítulo "Módulo RH", 9 páginas e 60 prints).
@@ -18,7 +18,10 @@ Migrações novas (aplicar com `alembic upgrade head`; cabeça `a4b0f6c2e8d1`): 
 - **Da ficha ao usuário**: boas-vindas no primeiro acesso, bio opcional com opção de exibir, "Meu cadastro" (legados preenchem e o RH valida) e foto levada ao GLPI e ao Diretório.
 - Endpoints novos em `docs/endpoints/rh-cargos.md` e `rh-admissao.md`; scripts `scripts/migrar-cargos-legados.py` e `scripts/carga-historico-rh.py` (simulação por padrão, `--aplicar`) e scripts de manutenção em `backend/scripts_manutencao/`.
 
+- **Contratos: quem é o Financeiro vira parametrizável.** Novo recurso de ACL `financeiro`: quem tem Modificação ou mais confere a retenção de tributos, recebe o aviso da nota fiscal e a pendência da retenção. A migração já cria a regra com o setor "Diretoria de Orçamento e Finanças", seus filhos e quem o tem como Departamento. Sem regras, vale `SETOR_FINANCEIRO`. `GET /contratos/{id}/financeiro` agrupa pelo setor de cada pessoa (`setor_id` pode ser nulo).
+
 ### Alterado
+- **Protocolo**: a faixa reservada passa a ser da Coordenadoria de Gestão e Infraestrutura (CGI), cada tipo tem o setor que pode consumir os números, e a resolução do RH pode ficar sem número.
 - Cargo e departamento do usuário viram espelho do cargo ocupado (mudança passa a ser do RH). Escrita em `/setores` exige ACL `rh`.
 
 ### Corrigido

@@ -28,7 +28,7 @@ class OcupanteCargo(BaseModel):
     usuario_id: int
     nome: str
     login: str
-    inicio: date
+    inicio: date | None = Field(None, description="Data da posse; nula nos vínculos automáticos (cadastro anterior).")
     ato: str = ""
     tem_foto: bool = False
     foto_url: str | None = Field(None, description="Caminho da foto do Diretório (exige o token de acesso); nulo quando não há foto.")
@@ -79,7 +79,7 @@ class LeituraOcupacao(BaseModel):
     cargo_rotulo: str
     setor_id: int
     setor_nome: str
-    inicio: date
+    inicio: date | None = Field(None, description="Data da posse; nula nos vínculos automáticos (cadastro anterior).")
     fim: date | None
     ato: str
     motivo_fim: str | None

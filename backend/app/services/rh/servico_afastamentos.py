@@ -91,12 +91,20 @@ def parametros(sessao: Session) -> ParametrosRh:
 def salvar_parametros(sessao: Session, dados: dict, autor: Usuario) -> ParametrosRh:
     exigir_cgp(sessao, autor)
     registro = parametros(sessao)
+    tipo_id = dados.get("tipo_resolucao_protocolo_id")
+    if tipo_id is not None:
+        from app.models.protocolo import TipoProtocolo
+
+        tipo = sessao.get(TipoProtocolo, tipo_id)
+        if tipo is None or not tipo.nome_chave.startswith("resolu"):
+            raise ErroAfastamento("Escolha um tipo de Resolução do Protocolo (ou deixe em branco para resolução sem número).")
     antes = {c: getattr(registro, c) for c in dados}
     for campo, valor in dados.items():
         setattr(registro, campo, sorted(set(valor)) if isinstance(valor, list) else valor)
     registro.atualizado_por_nome, registro.atualizado_em = _nome(autor), agora_utc()
     auditar(sessao, autor.login, "rh.parametros", "Parâmetros de férias e licença-prêmio", autor_id=autor.id,
-            dados={"campos": {c: {"de": antes[c], "para": dados[c]} for c in dados if antes[c] != dados[c]}})
+            dados={"campos": {c: {"de": str(antes[c]) if isinstance(antes[c], uuid.UUID) else antes[c], "para": str(dados[c]) if isinstance(dados[c], uuid.UUID) else dados[c]}
+                              for c in dados if antes[c] != dados[c]}})
     sessao.commit()
     return registro
 

@@ -46,6 +46,18 @@ def setores_cgp(sessao: Session) -> list[Setor]:
     return setor_com_descendentes(sessao, raizes)
 
 
+def setores_reserva_protocolo(sessao: Session) -> list[Setor]:
+    """Setor da Coordenadoria de Gestão e Infraestrutura (CGI) e seus descendentes; vazio se o setor não existir."""
+    from app.models.rh import ParametrosRh
+
+    parametros = sessao.get(ParametrosRh, 1)
+    if parametros is not None and parametros.setor_reserva_protocolo_id is not None:
+        return setor_com_descendentes(sessao, [parametros.setor_reserva_protocolo_id])
+    nome = obter_configuracao().setor_reserva_protocolo.strip().lower()
+    raizes = [s.id for s in sessao.scalars(select(Setor)) if s.nome.strip().lower() == nome]
+    return setor_com_descendentes(sessao, raizes)
+
+
 def setores_apoio_administrativo(sessao: Session) -> list[Setor]:
     """Setor do Serviço de Apoio Administrativo (SAA) e seus descendentes; vazio se o setor não existir."""
     from app.models.rh import ParametrosRh
@@ -98,6 +110,11 @@ def tem_nivel_rh(sessao: Session, usuario: Usuario, nivel: str = NivelAcl.CONTRO
 def eh_cgp(sessao: Session, usuario: Usuario) -> bool:
     """É o RH (CONTROLE_TOTAL em `rh`)."""
     return tem_nivel_rh(sessao, usuario, NivelAcl.CONTROLE_TOTAL)
+
+
+def eh_da_reserva_protocolo(sessao: Session, usuario: Usuario) -> bool:
+    """Usuário alocado na Coordenadoria de Gestão e Infraestrutura (membro do setor ou com o setor como Departamento). O SuperRoot não entra por aqui."""
+    return any(u.id == usuario.id for u in usuarios_dos_setores(sessao, setores_reserva_protocolo(sessao)))
 
 
 def eh_apoio_administrativo(sessao: Session, usuario: Usuario) -> bool:

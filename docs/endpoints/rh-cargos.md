@@ -38,7 +38,7 @@ O organograma mostra **só pessoas do LDAP** (contas `ldap` e `local_ldap`): car
 | `GET` | `/api/rh/cargos` | Leitura | Lista cargos; filtros `setor_id`, `tipo_id`, `situacao` (`vago`/`ocupado`), `busca`, `incluir_inativos` |
 | `POST` | `/api/rh/cargos` | Modificação | Cria `quantidade` vagas iguais (201). 422 se CCESP/FCESP sem grupo e nível |
 | `PUT` | `/api/rh/cargos/{cargo_id}` | Modificação | Altera o cargo |
-| `DELETE` | `/api/rh/cargos/{cargo_id}` | Modificação | Exclui vaga que nunca teve ocupante (204); 409 caso contrário |
+| `DELETE` | `/api/rh/cargos/{cargo_id}` | Modificação | Exclui a vaga, **mesmo que já tenha tido ocupantes**: o histórico de ocupações dela e as admissões canceladas saem junto (ficam na auditoria `rh.cargo.excluir`; os eventos do histórico das pessoas continuam). `409` se o cargo está ocupado agora (vague antes) ou tem admissão em andamento/concluída (cancele-a ou desative o cargo). 204 em sucesso |
 | `POST` | `/api/rh/cargos/{cargo_id}/ocupacao` | Modificação | Aloca a pessoa (`usuario_id`, `inicio`, `ato`). Se ela ocupa outro cargo, aquele termina como troca. 409 se o cargo está ocupado |
 | `POST` | `/api/rh/cargos/{cargo_id}/vacancia` | Modificação | Encerra a ocupação (`fim`, `motivo`: `troca`, `exoneracao`, `dispensa`, `outro`; `ato`). Exoneração tem tipo próprio no histórico |
 | `GET` | `/api/rh/cargos-a-reconciliar` | Leitura | Pessoas com cargo em texto livre ainda sem vínculo, com a sugestão interpretada |
@@ -65,7 +65,7 @@ Carga retroativa: `backend/scripts_manutencao/carga-historico-rh.py` (simula por
 
 ## Setor de apoio administrativo
 
-`GET`/`PUT /api/rh/parametros` passam a trazer `setor_apoio_administrativo_id` (vazio = pelo nome da configuração).
+`GET`/`PUT /api/rh/parametros` passam a trazer `setor_reserva_protocolo_id` (setor da CGI, que dá andamento nos números "Reservado CGI"; vazio = pelo nome da configuração `setor_reserva_protocolo`) e `tipo_resolucao_protocolo_id` (tipo do Protocolo da resolução de admissão; vazio = resolução sem número; veja rh-admissao.md) e `setor_apoio_administrativo_id` (Serviço de Apoio Administrativo, que vê os tipos do Protocolo restritos a um setor; vazio = pelo nome da configuração `setor_apoio_administrativo`; migração `d7e3f9a5b1c4`).
 
 ---
 
@@ -111,3 +111,8 @@ Status: `rascunho`, `aguardando_conta` (pronta, esperando a conta no AD), `vincu
 **Ficha dos legados:** quem já tinha conta preenche a própria ficha (`PUT /api/rh/minha-ficha`) e o RH valida (`POST /api/rh/pre-cadastros/{id}/validar`; `?pendentes_de_validacao=true` na lista). O RH pode corrigir a ficha antes de validar. Ver [rh-admissao.md](rh-admissao.md).
 
 **Busca de usuários:** com Controle total no RH, `GET /api/usuarios?busca=` também procura nos dados da ficha vinculada (nome da mãe e do pai, CPF, RG/CIN, PIS, e-mail pessoal, cidade, órgão e cargo de origem...).
+
+
+## Posse sem data (vínculos automáticos)
+
+`ocupante.inicio` (cargos) e `inicio` das ocupações do histórico podem ser **nulos**: os vínculos automáticos do cadastro anterior (`POST /cargos-a-reconciliar/{usuario_id}`, ato "Vínculo do cadastro anterior") ficam **sem data de posse**, em vez de uma data inventada (migração `f9a5b1c7d3e6` também limpou a data dos 100 vínculos já criados). Sem data, alocar a pessoa em outro cargo (`POST /cargos/{id}/ocupacao`) funciona com qualquer data de posse e encerra o vínculo como troca. A tela mostra a posse em branco.

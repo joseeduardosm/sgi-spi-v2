@@ -27,7 +27,7 @@ export class RhAdmissaoApiService {
   iniciar(fichaId: number): Observable<LeituraAdmissao> { return this.http.post<LeituraAdmissao>(this.adm, { ficha_id: fichaId }); }
   cancelar(id: number): Observable<LeituraAdmissao> { return this.http.post<LeituraAdmissao>(`${this.adm}/${id}/cancelar`, {}); }
   solicitacoes(): Observable<Record<string, string>> { return this.http.get<Record<string, string>>(`${this.adm}/solicitacoes`); }
-  tiposProtocolo(): Observable<TipoProtocoloResolucao[]> { return this.http.get<TipoProtocoloResolucao[]>(`${this.adm}/tipos-protocolo`); }
+  tiposProtocolo(todos = false): Observable<TipoProtocoloResolucao[]> { return this.http.get<TipoProtocoloResolucao[]>(`${this.adm}/tipos-protocolo`, { params: todos ? { todos: true } : {} }); }
 
   /** Foto da pessoa (PNG ou JPG): vai no formulário do GLPI e, com a conta criada, para o Diretório (intranet). */
   enviarFoto(id: number, arquivo: File): Observable<LeituraAdmissao> {
@@ -56,6 +56,7 @@ export class RhAdmissaoApiService {
   salvarResolucao(id: number, html: string): Observable<LeituraAdmissao> { return this.http.put<LeituraAdmissao>(`${this.adm}/${id}/resolucao`, { html }); }
   baixarResolucao(id: number) { return baixarArquivo(this.http, `${this.adm}/${id}/resolucao.pdf`, 'resolucao.pdf'); }
   resolucaoParaCopiar(id: number): Observable<TextoParaCopiar> { return this.http.get<TextoParaCopiar>(`${this.adm}/${id}/resolucao/copia`); }
+  liberarNumero(id: number, motivo: string): Observable<LeituraAdmissao> { return this.http.post<LeituraAdmissao>(`${this.adm}/${id}/protocolo/liberar`, { motivo }); }
   reservarNumero(id: number, tipoId: string): Observable<LeituraAdmissao> { return this.http.post<LeituraAdmissao>(`${this.adm}/${id}/protocolo`, { tipo_protocolo_id: tipoId }); }
   registrarPublicacao(id: number, arquivo: File, publicadoEm: string): Observable<LeituraAdmissao> {
     const corpo = new FormData();

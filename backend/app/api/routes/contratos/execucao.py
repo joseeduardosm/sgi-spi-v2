@@ -324,7 +324,7 @@ def prepostos_do_email(contrato_id: uuid.UUID, sessao: Session = Depends(obter_s
 
 
 @roteador.get("/financeiro", response_model=list[GrupoFinanceiro], summary="Usuários do Financeiro por subsetor",
-              description="Usuários ativos **com e-mail** do setor do Financeiro (`SETOR_FINANCEIRO`) e dos subsetores, agrupados por setor, para escolher quem recebe o aviso da nota fiscal. "
+              description="Usuários ativos **com e-mail** do Financeiro (recurso ACL `financeiro`, Modificação ou mais), agrupados pelo setor de cada um (`setor_id` nulo = sem setor), para escolher quem recebe o aviso da nota fiscal. "
               "Exige ACL `contratos` ≥ LEITURA.", responses=NAO_ENCONTRADA)
 def financeiro_do_email(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
     with traduzir_erros():
@@ -540,8 +540,8 @@ def reenviar_email_nf(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao:
 
 @roteador.put("/competencias/{competencia_id}/retencao", response_model=DetalheCompetencia, summary="Salvar retenção de tributos",
               description="Retenções conferidas (IR, INSS, ISS, PIS, COFINS e CSLL; ≥ 0 e soma ≤ bruto) de cada nota fiscal, "
-              "e a confirmação de que a discriminação é compatível com o objeto. Permitido ao Financeiro (setor configurado em "
-              "`SETOR_FINANCEIRO` e filhos), à equipe do contrato e ao SuperRoot. Gera o PDF da conferência, avança para o CADIN e "
+              "e a confirmação de que a discriminação é compatível com o objeto. Permitido ao Financeiro (Modificação ou mais no recurso ACL "
+              "`financeiro`), à equipe do contrato e ao SuperRoot. Gera o PDF da conferência, avança para o CADIN e "
               "envia, em segundo plano e **só com `enviar_email = true`** (padrão `false`), o e-mail à equipe.", responses={**NAO_ENCONTRADA, **ESCRITA})
 def salvar_retencao(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: GravacaoRetencao, tarefas: BackgroundTasks,
                     sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):

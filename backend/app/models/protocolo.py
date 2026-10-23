@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.banco import Base, agora_utc
 from app.models.anexo import Anexo
 from app.models.auditoria import TipoJson
+from app.models.setor import Setor
 
 TIPOS_EVENTO = ("reservou", "lancou", "anexou", "liberou", "anulou", "sigilo", "vinculou", "ampliou")
 
@@ -33,9 +34,12 @@ class TipoProtocolo(Base):
     nome_chave: Mapped[str] = mapped_column(String(200), unique=True)
     # Origem no SGI SPI antigo (recarga idempotente da migração)
     origem_sgi_id: Mapped[str | None] = mapped_column(String(40), unique=True)
+    # Setor que pode consumir os números do tipo (com os setores filhos); nulo = todos os usuários do Protocolo
+    setor_id: Mapped[int | None] = mapped_column(ForeignKey("setores.id", ondelete="SET NULL"), index=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
+    setor: Mapped[Setor | None] = relationship(foreign_keys=[setor_id])
     sequencias: Mapped[list["SequenciaProtocolo"]] = relationship(back_populates="tipo", cascade="all, delete-orphan", order_by="SequenciaProtocolo.exercicio.desc()")
 
 
@@ -49,7 +53,7 @@ class SequenciaProtocolo(Base):
     exercicio: Mapped[int] = mapped_column(Integer)
     inicio: Mapped[int] = mapped_column(Integer)
     fim: Mapped[int] = mapped_column(Integer)
-    # Números de `inicio` até `liberar_a_partir_de - 1` ficam "Reservado SAA" (só o Serviço de Apoio Administrativo dá andamento); nulo = nada reservado
+    # Números de `inicio` até `liberar_a_partir_de - 1` ficam "Reservado CGI" (só a Coordenadoria de Gestão e Infraestrutura dá andamento); nulo = nada reservado
     liberar_a_partir_de: Mapped[int | None] = mapped_column(Integer)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
@@ -58,7 +62,7 @@ class SequenciaProtocolo(Base):
 
 
 class NumeroProtocolo(Base):
-    """Um número da sequência: livre, reservado SAA (livre dentro da faixa do SAA), reservado, utilizado (com documento) ou anulado."""
+    """Um número da sequência: livre, reservado CGI (livre dentro da faixa da CGI), reservado, utilizado (com documento) ou anulado."""
     __tablename__ = "protocolo_numeros"
     __table_args__ = (
         UniqueConstraint("sequencia_id", "numero", name="uq_protocolo_numeros_sequencia_numero"),
@@ -89,18 +93,18 @@ class NumeroProtocolo(Base):
 
     @property
     def estado(self) -> str:
-        """`anulado` prevalece; depois `utilizado` (tem documento), `reservado` e `livre`."""
+        """`anulado` prevalece; depois `utilizado` (tem documento ou foi concluído sem documento), `reservado` e `livre`."""
         if self.anulado_em is not None:
             return "anulado"
-        if self.anexo_id is not None:
+        if self.anexo_id is not None or self.usado_em is not None:
             return "utilizado"
         if self.reservado_em is not None:
             return "reservado"
-        return "reservado_saa" if self.na_reserva_saa else "livre"
+        return "reservado_cgi" if self.na_reserva_cgi else "livre"
 
     @property
-    def na_reserva_saa(self) -> bool:
-        """O número está dentro da faixa reservada ao SAA (do início da faixa até `liberar_a_partir_de`, exclusive)."""
+    def na_reserva_cgi(self) -> bool:
+        """O número está dentro da faixa reservada à CGI (do início da faixa até `liberar_a_partir_de`, exclusive)."""
         liberar = self.sequencia.liberar_a_partir_de if self.sequencia is not None else None
         return liberar is not None and self.numero < liberar
 

@@ -19,7 +19,7 @@ import { Cargo, GravacaoCargo, MotivoFim, PendenciaCargo, ROTULOS_MOTIVO_FIM, Ti
 type Aba = 'cargos' | 'reconciliar';
 
 /** Formulário de vagas (novo ou edição). */
-interface EdicaoCargo { id?: number; setor_id: number; tipo_id: number; grupo: number | null; nivel: number | null; denominacao: string; quantidade: number; ativo: boolean }
+interface EdicaoCargo { id?: number; setor_id: number; tipo_id: number; grupo: number | null; nivel: string; denominacao: string; quantidade: number; ativo: boolean }
 
 /**
  * Cargos do RH. Cada linha é **uma posição (vaga)** de um setor; quem a ocupa passa a fazer parte do setor pelo cargo. O RH cria vagas (em lote), aloca pessoas,
@@ -158,7 +158,8 @@ interface EdicaoCargo { id?: number; setor_id: number; tipo_id: number; grupo: n
                 <option [ngValue]="null">—</option><option [ngValue]="1">1 (direção e chefia)</option><option [ngValue]="2">2 (assessoria)</option>
               </select></div>
             <div><label for="cargo-nivel">Nível</label>
-              <input id="cargo-nivel" name="nivel" type="number" min="1" max="18" inputmode="numeric" placeholder="Ex.: 16" [(ngModel)]="e.nivel" /></div>
+              <input id="cargo-nivel" name="nivel" maxlength="5" inputmode="decimal" placeholder="Ex.: 16 ou 2.16" [(ngModel)]="e.nivel" />
+              <small class="dica-formulario">Pode digitar só o nível (16) ou o grupo e o nível juntos (2.16).</small></div>
             @if (!e.id) { <div><label for="cargo-quantidade">Quantidade de vagas</label><input id="cargo-quantidade" name="quantidade" type="number" min="1" max="50" [(ngModel)]="e.quantidade" /></div> }
             <div class="ocupa-duas"><label for="cargo-denominacao">Denominação *</label>
               <input id="cargo-denominacao" name="denominacao" maxlength="200" placeholder="Ex.: Assessor Especial IV" [(ngModel)]="e.denominacao" /></div>
@@ -280,7 +281,7 @@ export class CargosComponent implements OnInit {
     this.carregar();
   }
 
-  protected dataBr(iso: string): string {
+  protected dataBr(iso: string | null): string {
     return iso ? iso.split('-').reverse().join('/') : '';
   }
 
@@ -288,18 +289,33 @@ export class CargosComponent implements OnInit {
   protected novo(): void {
     const tipo = this.tipos().find((t) => t.codigo === 'FCESP') ?? this.tipos()[0];
     this.cargoAberto.set(null);
-    this.edicao.set({ setor_id: this.filtroSetor || 0, tipo_id: tipo?.id ?? 0, grupo: null, nivel: null, denominacao: '', quantidade: 1, ativo: true });
+    this.edicao.set({ setor_id: this.filtroSetor || 0, tipo_id: tipo?.id ?? 0, grupo: null, nivel: '', denominacao: '', quantidade: 1, ativo: true });
   }
 
   protected editar(c: Cargo): void {
     this.cargoAberto.set(c);
-    this.edicao.set({ id: c.id, setor_id: c.setor_id, tipo_id: c.tipo_id, grupo: c.grupo, nivel: c.nivel, denominacao: c.denominacao, quantidade: 1, ativo: c.ativo });
+    this.edicao.set({ id: c.id, setor_id: c.setor_id, tipo_id: c.tipo_id, grupo: c.grupo, nivel: c.nivel === null ? '' : String(c.nivel), denominacao: c.denominacao, quantidade: 1, ativo: c.ativo });
+  }
+
+  /** Nível digitado: "16" ou "2.16" (grupo e nível juntos, aceita vírgula). Devolve `null` em `nivel` quando vazio e `invalido` quando não dá para entender. */
+  private lerNivel(texto: string, grupo: number | null): { grupo: number | null; nivel: number | null; invalido?: string } {
+    const t = (texto ?? '').toString().trim();
+    if (!t) return { grupo, nivel: null };
+    const m = /^(?:([12])[.,])?(\d{1,2})$/.exec(t);
+    if (!m) return { grupo, nivel: null, invalido: 'Nível inválido: use um número de 1 a 18 (ex.: 16) ou grupo e nível juntos (ex.: 2.16).' };
+    const nivel = Number(m[2]);
+    if (nivel < 1 || nivel > 18) return { grupo, nivel: null, invalido: 'O nível deve estar entre 1 e 18.' };
+    return { grupo: m[1] ? Number(m[1]) : grupo, nivel };
   }
 
   protected salvar(e: EdicaoCargo): void {
+    const lido = this.lerNivel(e.nivel, e.grupo);
+    if (lido.invalido) { this.dialogos.avisar('Nível inválido', lido.invalido); return; }
+    const quantidade = Number(e.quantidade) || 1;
+    if (quantidade < 1 || quantidade > 50) { this.dialogos.avisar('Quantidade inválida', 'Informe de 1 a 50 vagas.'); return; }
     const dados: GravacaoCargo = {
-      setor_id: e.setor_id, tipo_id: e.tipo_id, grupo: (e.grupo as 1 | 2 | null) ?? null, nivel: e.nivel ? Number(e.nivel) : null, denominacao: e.denominacao.trim(),
-      quantidade: Number(e.quantidade) || 1, ativo: e.ativo,
+      setor_id: e.setor_id, tipo_id: e.tipo_id, grupo: (lido.grupo as 1 | 2 | null) ?? null, nivel: lido.nivel, denominacao: e.denominacao.trim(),
+      quantidade, ativo: e.ativo,
     };
     const chamada = e.id ? this.api.alterar(e.id, dados) : this.api.criar(dados);
     (chamada as unknown as { subscribe: (o: object) => void }).subscribe({
@@ -309,7 +325,7 @@ export class CargosComponent implements OnInit {
   }
 
   protected async excluir(c: Cargo): Promise<void> {
-    if (!(await this.dialogos.confirmar({ titulo: `Excluir a vaga "${c.rotulo}"?`, mensagem: 'Só vagas que nunca tiveram ocupante podem ser excluídas.', rotuloConfirmar: 'Excluir' }))) return;
+    if (!(await this.dialogos.confirmar({ titulo: `Excluir a vaga "${c.rotulo}"?`, mensagem: 'A vaga e o histórico de ocupações dela serão removidos. Não vale para vaga ocupada nem com admissão em andamento.', rotuloConfirmar: 'Excluir' }))) return;
     this.api.excluir(c.id).subscribe({ next: () => this.carregar(), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível excluir o cargo') });
   }
 

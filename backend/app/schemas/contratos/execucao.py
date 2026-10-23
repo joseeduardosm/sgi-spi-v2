@@ -642,8 +642,8 @@ class UsuarioFinanceiro(BaseModel):
 
 
 class GrupoFinanceiro(BaseModel):
-    """Um setor do Financeiro (raiz ou subsetor) com os usuários ativos que têm e-mail."""
-    setor_id: int
+    """Um setor do Financeiro com os usuários ativos que têm e-mail (`setor_id` nulo = quem não é de nenhum setor)."""
+    setor_id: int | None = None
     setor: str = Field(..., description="Caminho do setor, ex.: `DOF › Contabilidade`.")
     usuarios: list[UsuarioFinanceiro]
 

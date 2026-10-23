@@ -1256,10 +1256,8 @@ def gerar_memoria(sessao: Session, contrato: Contrato, competencia: Competencia,
     notas = {n.id: n for n in contrato.notas_empenho}
     conteudo = documentos_execucao.memoria_medicao(contrato, competencia, [notas[n.nota_id] for n in competencia.notas], versao, _nome(autor))
     nome = f"memoria-medicao-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}-v{versao}.pdf"
-    anexo = servico_autenticacao.guardar_autenticado(
-        sessao, conteudo, nome, "contrato-execucao-memoria", "memoria_medicao", contrato, competencia, autor.id, _nome(autor),
-        [{"nome": c.nome, "papel": c.papel, "em": c.registrada_em} for c in competencia.ciencias],
-    )
+    # Documento intermediário: sem Folha de autenticação (só o consolidado final a leva)
+    anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-memoria", autor.id, contrato_id=contrato.id)
     # Com despesas variáveis, a medição delas sai em outro PDF (no consolidado vem depois da nota fiscal)
     anexo_despesas = None
     if tem_despesas_variaveis(competencia):
@@ -1648,11 +1646,8 @@ def gerar_pdf_avaliacao(sessao: Session, contrato_id, competencia_id, autor: Usu
         raise ErroRegraContrato("Registre ao menos uma ciência da equipe no ateste antes de exportar o PDF.")
     conteudo = documentos_execucao.relatorio_avaliacao(contrato, competencia, nota_final(avaliacao), percentual_liberado(competencia), _nome(autor))
     nome = f"avaliacao-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf"
-    # O PDF leva a Folha de autenticação (código, hash e quem deu ciência no ateste); a via assinada pela contratada continua sendo enviada à parte
-    anexo = servico_autenticacao.guardar_autenticado(
-        sessao, conteudo, nome, "contrato-execucao-avaliacao", "avaliacao", contrato, competencia, autor.id, _nome(autor),
-        [{"nome": c["nome"], "papel": c["papel"], "em": c["ciencia_em"]} for c in ciencias_ateste(avaliacao)],
-    )
+    # Documento intermediário: sem Folha de autenticação (só o consolidado final a leva); a via assinada pela contratada é enviada à parte
+    anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-avaliacao", autor.id, contrato_id=contrato.id)
     sessao.flush()
     avaliacao.pdf_gerado_anexo_id = anexo.id
     _auditar(sessao, autor, "contrato.execucao.avaliacao.pdf", contrato, competencia)

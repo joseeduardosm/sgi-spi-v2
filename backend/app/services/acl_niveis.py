@@ -119,6 +119,11 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
         "MODIFICACAO": _n("Gerir setores e cargos", "Cria, altera e exclui setores, cargos e vagas, aloca e retira pessoas dos cargos e registra exonerações. Não valida o cadastro das pessoas nem mexe nos parâmetros."),
         "CONTROLE_TOTAL": _n("Ser o RH do sistema", "É o RH: valida alterações cadastrais, decide férias e licenças, importa dados funcionais, gere feriados, parâmetros e modelos, mantém as fichas de pré-cadastro e as admissões (dados pessoais sensíveis) e recebe os avisos do RH. Inclui Gerir setores e cargos."),
     },
+    "financeiro": {
+        "LEITURA": _n("Consultar o Financeiro", "Reservado: por ora o módulo não oferece telas só de leitura. Para ser o Financeiro marque Modificação."),
+        "MODIFICACAO": _n("Ser o Financeiro dos contratos", "Confere e salva a retenção de tributos das notas fiscais de qualquer contrato, recebe o aviso da nota fiscal por e-mail e a pendência da retenção e vê essas pendências no painel de Contratos."),
+        "CONTROLE_TOTAL": _n("Ser o Financeiro dos contratos", "Igual a Modificação: o módulo ainda não tem parâmetros próprios."),
+    },
     "reserva-espacos": {
         "LEITURA": _n("Solicitar reservas", "Vê a agenda, solicita reservas e altera ou cancela as próprias. Só isso: não aprova nada."),
         "MODIFICACAO": _n("Aprovar reservas", "Vê a fila, defere, indefere e cancela reservas de qualquer pessoa. Só isso: para também solicitar, marque \"Solicitar reservas\" junto."),

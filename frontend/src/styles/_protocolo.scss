@@ -64,7 +64,7 @@ $anulado: #9aa4af;
       background: $livre;
     }
 
-    .reservado_saa::before { background: #8b6fc0; }
+    .reservado_cgi::before { background: #8b6fc0; }
     .reservado::before { background: $reservado; }
     .utilizado::before { background: $utilizado; }
     .anulado::before { background: $anulado; }
@@ -93,7 +93,7 @@ $anulado: #9aa4af;
       &:hover { transform: translateY(-1px); border-color: var(--spi-borda-campo); }
 
       &.livre { background: var(--cor-ffffff); border-style: dashed; }
-      &.reservado_saa { background: #f1ecfb; border-color: #8b6fc0; border-style: dashed; }
+      &.reservado_cgi { background: #f1ecfb; border-color: #8b6fc0; border-style: dashed; }
       &.reservado { background: var(--cor-fff7e0); border-color: $reservado; }
       &.utilizado { background: var(--cor-e8f6ee); border-color: $utilizado; }
       &.anulado { color: #8a949f; background: var(--cor-f1f2f4); border-color: $anulado; text-decoration: line-through; }

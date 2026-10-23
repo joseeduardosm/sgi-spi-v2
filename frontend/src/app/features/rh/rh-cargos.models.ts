@@ -4,7 +4,7 @@
 /** Tipo de cargo (CCESP, FCESP, OUTRO...). */
 export interface TipoCargo { id: number; codigo: string; nome: string; ordem: number; ativo: boolean }
 
-export interface OcupanteCargo { usuario_id: number; nome: string; login: string; inicio: string; ato: string; tem_foto: boolean; foto_url: string | null }
+export interface OcupanteCargo { usuario_id: number; nome: string; login: string; inicio: string | null; ato: string; tem_foto: boolean; foto_url: string | null }
 
 /** Uma posição (vaga) de um setor, com o ocupante vigente. */
 export interface Cargo {
@@ -33,7 +33,7 @@ export interface NoOrganograma {
 }
 
 export interface OcupacaoHistorico {
-  id: number; cargo_id: number; cargo_rotulo: string; setor_id: number; setor_nome: string; inicio: string; fim: string | null; ato: string; motivo_fim: string | null;
+  id: number; cargo_id: number; cargo_rotulo: string; setor_id: number; setor_nome: string; inicio: string | null; fim: string | null; ato: string; motivo_fim: string | null;
   ato_fim: string; registrado_por_nome: string; registrado_em: string;
 }
 

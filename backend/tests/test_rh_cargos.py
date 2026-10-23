@@ -107,8 +107,9 @@ def test_trocar_de_cargo_e_exoneracao(cliente, ambiente):
     h = cliente.get(f"{RH}/usuarios/{amb['pessoa']}/historico", headers=amb["h"]).json()
     assert [e["tipo"] for e in h["eventos"] if e["tipo"] == "exoneracao"] == ["exoneracao"]
     assert [o["motivo_fim"] for o in h["ocupacoes"]] == ["exoneracao", "troca"]
-    # Cargo que já teve ocupante não se exclui
-    assert cliente.delete(f"{RH}/cargos/{b['id']}", headers=amb["h"]).status_code == 409
+    # Cargo que já teve ocupante (e está vago) pode ser excluído; o histórico de ocupações dele sai junto
+    assert cliente.delete(f"{RH}/cargos/{b['id']}", headers=amb["h"]).status_code == 204
+    assert [o["motivo_fim"] for o in cliente.get(f"{RH}/usuarios/{amb['pessoa']}/historico", headers=amb["h"]).json()["ocupacoes"]] == ["troca"]
     vazia = _criar(cliente, amb, amb["a"], denominacao="Vaga nunca ocupada")[0]
     assert cliente.delete(f"{RH}/cargos/{vazia['id']}", headers=amb["h"]).status_code == 204
 
@@ -245,3 +246,48 @@ def test_busca_pelo_nome_do_chefe_traz_ele_primeiro_e_o_seletor_so_ele(cliente, 
     # Seletor (ex.: notificações): só a própria pessoa, nunca os liderados
     seletor = cliente.get("/api/usuarios/opcoes", params={"busca": "zélia"}, headers=amb["h"]).json()
     assert [u["login"] for u in seletor] == ["zz-chefe"]
+
+
+def test_vinculo_automatico_fica_sem_data_de_posse_e_permite_realocar(cliente, ambiente):
+    amb = ambiente
+    antigo = criar_usuario("antigo2", nome_completo="Antigo Cadastro", cargo="FCESP 2.16 - Assessor Especial IV", departamento="Subsecretaria de Gestão Corporativa")
+    r = cliente.post(f"{RH}/cargos-a-reconciliar/{antigo}", json={}, headers=amb["h"])
+    assert r.status_code == 200 and r.json()["ocupante"]["login"] == "antigo2"
+    assert r.json()["ocupante"]["inicio"] is None and r.json()["ocupante"]["ato"] == "Vínculo do cadastro anterior"
+    historico = cliente.get(f"{RH}/usuarios/{antigo}/historico", headers=amb["h"]).json()
+    assert historico["ocupacoes"][0]["inicio"] is None
+    # Realocar: ocupar outro cargo, com qualquer data de posse, encerra o vínculo automático como troca
+    novo = _criar(cliente, amb, amb["b"], tipo="CCESP", grupo=1, nivel=15, denominacao="Diretor")[0]
+    r = cliente.post(f"{RH}/cargos/{novo['id']}/ocupacao", json={"usuario_id": antigo, "inicio": "2020-01-10"}, headers=amb["h"])
+    assert r.status_code == 201, r.text
+    historico = cliente.get(f"{RH}/usuarios/{antigo}/historico", headers=amb["h"]).json()
+    assert [(o["inicio"], o["motivo_fim"]) for o in historico["ocupacoes"]] == [("2020-01-10", None), (None, "troca")]
+
+
+def test_excluir_cargo_ocupado_ou_com_admissao_ativa_responde_409(cliente, ambiente):
+    amb = ambiente
+    ocupada = _criar(cliente, amb, amb["a"], denominacao="Vaga ocupada")[0]
+    assert cliente.post(f"{RH}/cargos/{ocupada['id']}/ocupacao", json={"usuario_id": amb["pessoa"], "inicio": "2026-01-10"}, headers=amb["h"]).status_code == 201
+    assert cliente.delete(f"{RH}/cargos/{ocupada['id']}", headers=amb["h"]).status_code == 409  # ocupado agora: vague antes
+    from app.core.banco import FabricaSessao
+    from app.models.rh_admissao import Admissao
+    from app.models.rh_pre_cadastro import PreCadastro
+
+    vaga = _criar(cliente, amb, amb["a"], denominacao="Vaga com admissão")[0]
+    with FabricaSessao() as sessao:
+        ficha = PreCadastro(nome_completo="Pessoa Teste", cpf="52998224725", status="rascunho")
+        sessao.add(ficha)
+        sessao.flush()
+        admissao = Admissao(pre_cadastro_id=ficha.id, cargo_id=vaga["id"], status="andamento")
+        sessao.add(admissao)
+        sessao.commit()
+        admissao_id = admissao.id
+    r = cliente.delete(f"{RH}/cargos/{vaga['id']}", headers=amb["h"])
+    assert r.status_code == 409 and "admissão" in r.json()["detalhe"]
+    # Admissão cancelada não impede: sai junto com a vaga
+    with FabricaSessao() as sessao:
+        sessao.get(Admissao, admissao_id).status = "cancelada"
+        sessao.commit()
+    assert cliente.delete(f"{RH}/cargos/{vaga['id']}", headers=amb["h"]).status_code == 204
+    with FabricaSessao() as sessao:
+        assert sessao.get(Admissao, admissao_id) is None

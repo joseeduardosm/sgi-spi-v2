@@ -17,31 +17,39 @@ def _memoria(cliente, base, h) -> bytes:
     return cliente.get(f"{base}/arquivos/{detalhe['memorias'][-1]['arquivo']['anexo_id']}", headers=h).content
 
 
-def test_memoria_tem_folha_de_autenticacao_com_codigo_hash_e_ciencias(cliente, cenario):
+def test_memoria_e_documento_intermediario_sem_folha_de_autenticacao(cliente, cenario):
     contrato, base, gestora = cenario
     pdf = _memoria(cliente, base, gestora)
-    paginas = PdfReader(BytesIO(pdf)).pages
-    folha = " ".join(paginas[-1].extract_text().split())
-    assert "Folha de autenticação" in folha and "Memória de cálculo da medição" in folha and "Ciências registradas" in folha
-    assert "Gestora Silva" in folha and re.search(r"Código de verificação [0-9A-F]{4}(-[0-9A-F]{4}){3}", folha)
-    assert re.search(r"[0-9a-f]{64}", folha)  # impressão digital do conteúdo
+    textos = " ".join(" ".join(p.extract_text().split()) for p in PdfReader(BytesIO(pdf)).pages)
+    assert "Folha de autenticação" not in textos and "Código de verificação" not in textos
 
 
-def test_verificar_por_arquivo_e_por_codigo(cliente, cenario):
+def test_verificar_so_reconhece_o_consolidado(cliente, cenario):
     contrato, base, gestora = cenario
     pdf = _memoria(cliente, base, gestora)
-    # Arquivo idêntico ao gerado: válido, com os dados do registro
+    # A memória (intermediária) não é autenticada: só o consolidado final tem folha e registro (ver test_contratos_execucao)
     r = cliente.post(URL, files={"arquivo": ("memoria.pdf", pdf, "application/pdf")}, headers=gestora)
-    assert r.status_code == 200, r.text
-    corpo = r.json()
-    assert corpo["valido"] is True and corpo["documento"]["tipo"] == "Memória de cálculo da medição" and corpo["documento"]["contrato_numero"] == contrato["numero"]
-    assert sorted(c["nome"] for c in corpo["documento"]["ciencias"]) == ["Fiscal Souza", "Gestora Silva"]
-    # Arquivo alterado: inválido
-    adulterado = cliente.post(URL, files={"arquivo": ("memoria.pdf", pdf + b"\n%alterado", "application/pdf")}, headers=gestora).json()
-    assert adulterado["valido"] is False and adulterado["documento"] is None
-    # Código (com ou sem hífens e em minúsculas): mostra o registro
-    codigo = corpo["documento"]["codigo"]
-    for variante in (codigo, codigo.replace("-", "").lower()):
-        achado = cliente.get(URL, params={"codigo": variante}, headers=gestora).json()
-        assert achado["valido"] is True and achado["documento"]["codigo"] == codigo
+    assert r.status_code == 200 and r.json()["valido"] is False and r.json()["documento"] is None
     assert cliente.get(URL, params={"codigo": "0000-0000-0000-0000"}, headers=gestora).json()["valido"] is False
+
+
+def test_sem_folha_de_autenticacao_tira_so_a_folha_do_fim():
+    from io import BytesIO
+
+    from pypdf import PdfReader, PdfWriter
+
+    from app.services.contratos import servico_autenticacao
+    from app.services.documentos.pdf import DocumentoPdf
+
+    corpo = DocumentoPdf("Memória de cálculo", "Contrato 1").secao("Itens").paragrafo("conteúdo").gerar()
+    folha = DocumentoPdf("Folha de autenticação", "Contrato 1").secao("Documento").paragrafo("Código de verificação").gerar()
+    escritor = PdfWriter()
+    for parte in (corpo, folha):
+        for pagina in PdfReader(BytesIO(parte)).pages:
+            escritor.add_page(pagina)
+    saida = BytesIO()
+    escritor.write(saida)
+    completo = saida.getvalue()
+    assert len(PdfReader(BytesIO(completo)).pages) == len(PdfReader(BytesIO(corpo)).pages) + len(PdfReader(BytesIO(folha)).pages)
+    assert len(PdfReader(BytesIO(servico_autenticacao.sem_folha_de_autenticacao(completo))).pages) == len(PdfReader(BytesIO(corpo)).pages)
+    assert servico_autenticacao.sem_folha_de_autenticacao(corpo) == corpo

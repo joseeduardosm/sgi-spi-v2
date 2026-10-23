@@ -16,7 +16,7 @@ export interface ResumoAdmissao {
 
 export interface LeituraAdmissao extends ResumoAdmissao {
   etapas: EtapaAdmissao[]; solicitacoes: Record<string, boolean>; chamado_glpi_id: number | null; chamado_url: string | null; chamado_links: { url: string; texto: string }[]; tem_foto: boolean; documentos: DocumentoAdmissao[];
-  resolucao_html: string | null; numero_protocolo_id: string | null; numero_protocolo: string | null; publicado_em: string | null; tem_publicacao: boolean;
+  resolucao_html: string | null; sem_numero: boolean; numero_protocolo_id: string | null; numero_protocolo: string | null; publicado_em: string | null; tem_publicacao: boolean;
   email_enviado_em: string | null; email_erro: string | null; email_destino: string | null; posse_em: string | null; termo_html: string | null; concluida_em: string | null;
   conta_vinculada: boolean; usuario_id: number | null;
 }

@@ -36,7 +36,7 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
               <div><label for="dt-inicio">Início da faixa</label><input id="dt-inicio" name="inicio" type="number" min="0" [(ngModel)]="inicio" /></div>
               <div><label for="dt-fim">Fim da faixa</label><input id="dt-fim" name="fim" type="number" min="0" [(ngModel)]="fim" /></div>
               <div class="ocupa-duas"><label for="dt-liberar">Liberar a partir de</label><input id="dt-liberar" name="liberar" type="number" min="0" placeholder="—" [(ngModel)]="liberar" />
-                <small class="dica">Atual: {{ s.inicio }} a {{ s.fim }}@if (s.liberar_a_partir_de) { · <b>Reservado SAA</b>: {{ s.inicio }} a {{ s.liberar_a_partir_de - 1 }} }. Diminuir o início ou aumentar o fim <b>amplia</b> a faixa.</small></div>
+                <small class="dica">Atual: {{ s.inicio }} a {{ s.fim }}@if (s.liberar_a_partir_de) { · <b>Reservado CGI</b>: {{ s.inicio }} a {{ s.liberar_a_partir_de - 1 }} }. Diminuir o início ou aumentar o fim <b>amplia</b> a faixa.</small></div>
             </div>
             <div class="acoes-formulario"><button type="button" class="acao-recusar" (click)="excluirExercicio(s)">Excluir exercício {{ s.exercicio }}</button><button type="button" class="acao-primaria" [disabled]="!mudou()" (click)="salvarFaixa(s)">Salvar faixa</button></div>
           } @else { <p class="estado-vazio">Este tipo ainda não tem sequência.</p> }

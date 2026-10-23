@@ -93,7 +93,9 @@ class Configuracao(BaseSettings):
     setor_financeiro: str = "Diretoria de Orçamento e Finanças"
     # Setor da CGP (Coordenadoria de Gestão de Pessoas): administra o Módulo RH (inclui os setores filhos)
     setor_cgp: str = "Coordenadoria de Gestão de Pessoas"
-    # Setor do Serviço de Apoio Administrativo (SAA): dá andamento nos números "Reservado SAA" do Protocolo (inclui os setores filhos)
+    # Setor da Coordenadoria de Gestão e Infraestrutura (CGI): dá andamento nos números "Reservado CGI" do Protocolo (inclui os setores filhos)
+    setor_reserva_protocolo: str = "Coordenadoria de Gestão e Infraestrutura"
+    # Serviço de Apoio Administrativo (SAA): vê os tipos de documento do Protocolo restritos a um setor (inclui os setores filhos)
     setor_apoio_administrativo: str = "Serviço de Apoio Administrativo"
 
     # Contratações (ETP e TR): versões guardadas por documento, minutos sem edição que abrem uma "sessão" nova (a versão automática

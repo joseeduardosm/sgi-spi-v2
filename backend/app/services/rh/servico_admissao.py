@@ -59,9 +59,9 @@ class AdmissaoNaoEncontrada(Exception):
 class ErroAdmissao(Exception):
     """Regra da admissão violada; `conflito` indica 409 em vez de 400."""
 
-    def __init__(self, mensagem: str, conflito: bool = False):
+    def __init__(self, mensagem: str, conflito: bool = False, proibido: bool = False):
         super().__init__(mensagem)
-        self.conflito = conflito
+        self.conflito, self.proibido = conflito, proibido
 
 
 # --- Apoio -----------------------------------------------------------------------------------------------
@@ -83,6 +83,21 @@ def _numero(sessao: Session, admissao: Admissao) -> NumeroProtocolo | None:
 
 def _rotulo_numero(numero: NumeroProtocolo | None) -> str | None:
     return servico_protocolo.formatar_numero(numero.numero, numero.sequencia.exercicio) if numero else None
+
+
+def _anexo_da_publicacao(admissao: Admissao, numero: NumeroProtocolo | None) -> Anexo | None:
+    """PDF do D.O.E.: o anexo da admissão (resolução sem número) ou o do número do Protocolo."""
+    if admissao.sem_numero:
+        return admissao.publicacao_anexo if admissao.publicacao_anexo and admissao.publicacao_anexo.excluido_em is None else None
+    return numero.anexo if numero is not None and numero.anexo is not None else None
+
+
+def _tipo_da_resolucao(sessao: Session) -> uuid.UUID | None:
+    """Tipo do Protocolo definido nos Parâmetros do RH; nulo = resolução sem número."""
+    from app.models.rh import ParametrosRh
+
+    parametros = sessao.get(ParametrosRh, 1)
+    return parametros.tipo_resolucao_protocolo_id if parametros is not None else None
 
 
 def etapa_atual(admissao: Admissao) -> str:
@@ -136,7 +151,7 @@ def valores(sessao: Session, admissao: Admissao) -> dict[str, str]:
     numero = _numero(sessao, admissao)
     return {
         "nome": ficha.nome_completo, "login": ficha.login_proposto or "", "cpf": _cpf_formatado(ficha.cpf), "rg": ficha.rg_numero or ficha.cin, "rs": ficha.rs_pv,
-        "cargo": cargo.rotulo, "denominacao": cargo.denominacao, "classificacao": cargo.classificacao, "setor": setor.nome, "siglasetor": setor.sigla or "",
+        "cargo": cargo.rotulo, "denominacao": cargo.denominacao, "classificacao": cargo.classificacao, "nivel": cargo.grupo_nivel, "setor": setor.nome, "siglasetor": setor.sigla or "",
         "datainicio": _br(ficha.inicio_previsto), "dataposse": _br(admissao.posse_em),
         "numeroresolucao": f"{numero.numero:03d}" if numero else "", "anoresolucao": str(numero.sequencia.exercicio) if numero else "",
         "datapublicacao": _br(admissao.publicado_em), "hoje": data_extenso(hoje_sao_paulo()), "linksistema": obter_configuracao().url_publica,
@@ -172,8 +187,8 @@ def leitura(sessao: Session, admissao: Admissao) -> LeituraAdmissao:
     return LeituraAdmissao(
         **_resumo(sessao, admissao), etapas=etapas, solicitacoes={k: bool((admissao.solicitacoes or {}).get(k)) for k in SOLICITACOES},
         chamado_glpi_id=admissao.chamado_glpi_id, chamado_url=admissao.chamado_url, chamado_links=[LinkChamado(**l) for l in (admissao.chamado_links or [])], tem_foto=admissao.foto_anexo_id is not None, documentos=[_documento(d) for d in admissao.documentos],
-        resolucao_html=admissao.resolucao_html, numero_protocolo_id=admissao.numero_protocolo_id, numero_protocolo=_rotulo_numero(numero), publicado_em=admissao.publicado_em,
-        tem_publicacao=bool(numero and numero.anexo_id), email_enviado_em=admissao.email_enviado_em, email_erro=admissao.email_erro, email_destino=ficha.email_pessoal or None,
+        resolucao_html=admissao.resolucao_html, sem_numero=admissao.sem_numero, numero_protocolo_id=admissao.numero_protocolo_id, numero_protocolo=_rotulo_numero(numero), publicado_em=admissao.publicado_em,
+        tem_publicacao=_anexo_da_publicacao(admissao, numero) is not None, email_enviado_em=admissao.email_enviado_em, email_erro=admissao.email_erro, email_destino=ficha.email_pessoal or None,
         posse_em=admissao.posse_em, termo_html=admissao.termo_html, concluida_em=admissao.concluida_em, conta_vinculada=ficha.usuario_id is not None, usuario_id=ficha.usuario_id,
     )
 
@@ -222,7 +237,7 @@ def iniciar(sessao: Session, ficha_id: int, autor: Usuario) -> LeituraAdmissao:
         raise ErroAdmissao("Já existe uma admissão em andamento para este cargo.", conflito=True)
     if sessao.scalar(select(Admissao.id).where(Admissao.pre_cadastro_id == ficha.id)) is not None:
         raise ErroAdmissao("Esta ficha já tem uma admissão.", conflito=True)
-    admissao = Admissao(pre_cadastro_id=ficha.id, cargo_id=cargo.id, criado_por_id=autor.id)
+    admissao = Admissao(pre_cadastro_id=ficha.id, cargo_id=cargo.id, criado_por_id=autor.id, sem_numero=_tipo_da_resolucao(sessao) is None)
     for ordem, (descricao, obrigatorio) in enumerate(_checklist_do_cargo(sessao, cargo)):
         admissao.documentos.append(AdmissaoDocumento(descricao=descricao, obrigatorio=obrigatorio, ordem=ordem))
     if not admissao.documentos:
@@ -530,10 +545,12 @@ def gerar_resolucao(sessao: Session, admissao_id: int, autor: Usuario, html: str
     ruins = rh_mascara.invalidos(html)
     if ruins:
         raise ErroAdmissao("Placeholders não permitidos: " + ", ".join(ruins) + ".")
-    if admissao.numero_protocolo_id is not None and admissao.publicacao_registrada_em is not None:
+    if (admissao.numero_protocolo_id is not None or admissao.sem_numero) and admissao.publicacao_registrada_em is not None:
         raise ErroAdmissao("A resolução já foi publicada e não pode mais ser alterada.", conflito=True)
     admissao.resolucao_html = html
     admissao.resolucao_gerada_em = admissao.resolucao_gerada_em or agora_utc()
+    if admissao.sem_numero and admissao.protocolo_em is None:
+        admissao.protocolo_em = agora_utc()  # resolução sem número: a etapa do Protocolo não se aplica e é dada como feita
     auditar(sessao, autor.login, "rh.admissao.resolucao", _ficha(sessao, admissao).nome_completo, autor_id=autor.id, dados={"admissao_id": admissao.id})
     sessao.commit()
     return leitura(sessao, admissao)
@@ -568,11 +585,15 @@ def resolucao_para_copiar(sessao: Session, admissao_id: int) -> tuple[str, str]:
 
 # --- 4. Número no Protocolo ----------------------------------------------------------------------------------
 
-def tipos_de_resolucao(sessao: Session) -> list[TipoProtocoloResolucao]:
-    """Tipos do Protocolo cujo nome começa com "Resolu" (ex.: "Resoluções SPI 1")."""
+def tipos_de_resolucao(sessao: Session, todos: bool = False) -> list[TipoProtocoloResolucao]:
+    """Tipos do Protocolo cujo nome começa com "Resolu" (ex.: "Resoluções SPI 1"); com tipo definido nos Parâmetros, só ele (a não ser que `todos`, usado na tela de Parâmetros)."""
     ano = hoje_sao_paulo().year
     saida = []
-    for tipo in sessao.scalars(select(TipoProtocolo).where(TipoProtocolo.nome_chave.like("resolu%")).order_by(TipoProtocolo.nome_chave)):
+    consulta = select(TipoProtocolo).where(TipoProtocolo.nome_chave.like("resolu%")).order_by(TipoProtocolo.nome_chave)
+    definido = _tipo_da_resolucao(sessao)
+    if definido is not None and not todos:
+        consulta = consulta.where(TipoProtocolo.id == definido)
+    for tipo in sessao.scalars(consulta):
         saida.append(TipoProtocoloResolucao(id=tipo.id, nome=tipo.nome, tem_faixa_no_ano=any(s.exercicio == ano for s in tipo.sequencias)))
     return saida
 
@@ -580,11 +601,13 @@ def tipos_de_resolucao(sessao: Session) -> list[TipoProtocoloResolucao]:
 def reservar_numero(sessao: Session, admissao_id: int, tipo_id: uuid.UUID, autor: Usuario) -> LeituraAdmissao:
     admissao = _obter(sessao, admissao_id)
     _exigir_etapa(admissao, "protocolo")
+    if admissao.sem_numero:
+        raise ErroAdmissao("Esta resolução é sem número: não há número a reservar no Protocolo.", conflito=True)
     if admissao.numero_protocolo_id is not None:
         raise ErroAdmissao("O número já foi reservado.", conflito=True)
     ano = hoje_sao_paulo().year
-    tipo = sessao.get(TipoProtocolo, tipo_id)
-    if tipo is None or not tipo.nome_chave.startswith("resolu"):
+    tipo = sessao.get(TipoProtocolo, _tipo_da_resolucao(sessao) or tipo_id)
+    if tipo is None:
         raise ErroAdmissao("Escolha um tipo de Resolução do Protocolo.")
     sequencia = sessao.scalar(select(SequenciaProtocolo).where(SequenciaProtocolo.tipo_id == tipo.id, SequenciaProtocolo.exercicio == ano))
     if sequencia is None:
@@ -600,6 +623,36 @@ def reservar_numero(sessao: Session, admissao_id: int, tipo_id: uuid.UUID, autor
     return leitura(sessao, admissao)
 
 
+def liberar_numero(sessao: Session, admissao_id: int, motivo: str, autor: Usuario) -> LeituraAdmissao:
+    """Devolve o número da resolução ao Protocolo, mesmo com o PDF da publicação já subido (o PDF é excluído e a trilha volta à etapa do número).
+
+    Quem pode: quem reservou o número, o Serviço de Apoio Administrativo (parametrizado) e o SuperRoot. Não vale depois da posse."""
+    from app.services.rh.papeis import eh_apoio_administrativo
+
+    admissao = _obter(sessao, admissao_id)
+    _exigir_em_andamento(admissao)
+    numero = _numero(sessao, admissao)
+    if numero is None:
+        raise ErroAdmissao("Esta admissão não tem número reservado no Protocolo.", conflito=True)
+    if not (numero.reservado_por_id == autor.id or autor.superusuario or eh_apoio_administrativo(sessao, autor)):
+        raise ErroAdmissao("Só quem reservou o número, o Serviço de Apoio Administrativo e o SuperRoot podem liberá-lo.", proibido=True)
+    if admissao.posse_em is not None:
+        raise ErroAdmissao("A posse já foi registrada: o número não pode mais ser liberado.", conflito=True)
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise ErroAdmissao("Informe o motivo da liberação do número.")
+    rotulo = _rotulo_numero(numero)
+    try:
+        servico_protocolo.liberar(sessao, numero.id, motivo, autor, ignorar_dono=True, com_documento=True)
+    except servico_protocolo.ErroProtocolo as erro:
+        raise ErroAdmissao(str(erro), conflito=erro.status == 409) from erro
+    admissao.numero_protocolo_id, admissao.protocolo_em = None, None
+    admissao.publicacao_registrada_em, admissao.publicado_em = None, None
+    auditar(sessao, autor.login, "rh.admissao.liberar_numero", _ficha(sessao, admissao).nome_completo, rotulo, autor_id=autor.id, dados={"admissao_id": admissao.id, "motivo": motivo})
+    sessao.commit()
+    return leitura(sessao, admissao)
+
+
 # --- 5. Publicação -------------------------------------------------------------------------------------------
 
 def validar_anexo_no_numero(sessao: Session, numero_id: uuid.UUID, nome_arquivo: str) -> None:
@@ -607,6 +660,11 @@ def validar_anexo_no_numero(sessao: Session, numero_id: uuid.UUID, nome_arquivo:
     admissao = sessao.scalar(select(Admissao).where(Admissao.numero_protocolo_id == numero_id, Admissao.status == "andamento"))
     if admissao is not None and not (nome_arquivo or "").lower().endswith(".pdf"):
         raise ErroAdmissao("A publicação da resolução deve ser enviada em PDF.", conflito=True)
+
+
+def numero_e_de_admissao(sessao: Session, numero_id: uuid.UUID) -> bool:
+    """O número do Protocolo é a resolução de uma admissão em andamento (que exige o PDF do D.O.E.)."""
+    return sessao.scalar(select(Admissao.id).where(Admissao.numero_protocolo_id == numero_id, Admissao.status == "andamento")) is not None
 
 
 def publicar_pelo_protocolo(sessao: Session, numero: NumeroProtocolo, autor: Usuario) -> None:
@@ -625,10 +683,12 @@ def registrar_publicacao(sessao: Session, admissao_id: int, origem: BytesIO, nom
     admissao = _obter(sessao, admissao_id)
     _exigir_etapa(admissao, "publicacao")
     numero = _numero(sessao, admissao)
-    if numero is None:
+    if numero is None and not admissao.sem_numero:
         raise ErroAdmissao("Reserve o número no Protocolo antes de registrar a publicação.")
     if publicado_em > hoje_sao_paulo():
         raise ErroAdmissao("A data da publicação não pode ser futura.")
+    if admissao.sem_numero:
+        return _registrar_publicacao_sem_numero(sessao, admissao, origem, nome_arquivo, publicado_em, autor)
     admissao.publicado_em = publicado_em  # antes do anexo: o gancho do Protocolo registra a publicação e envia o e-mail já com esta data
     try:
         servico_protocolo.anexar(sessao, numero.id, origem, nome_arquivo, autor, ignorar_dono=True)
@@ -637,6 +697,23 @@ def registrar_publicacao(sessao: Session, admissao_id: int, origem: BytesIO, nom
         raise ErroAdmissao(str(erro), conflito=erro.status == 409) from erro
     admissao = _obter(sessao, admissao_id)
     admissao.publicado_em = publicado_em
+    sessao.commit()
+    return leitura(sessao, admissao)
+
+
+def _registrar_publicacao_sem_numero(sessao: Session, admissao: Admissao, origem: BytesIO, nome_arquivo: str, publicado_em: date, autor: Usuario) -> LeituraAdmissao:
+    """Resolução sem número: o PDF do D.O.E. fica na própria admissão e o e-mail de nomeação sai com ele."""
+    if admissao.publicacao_registrada_em is not None:
+        raise ErroAdmissao("A publicação já foi registrada.", conflito=True)
+    if not (nome_arquivo or "").lower().endswith(".pdf"):
+        raise ErroAdmissao("A publicação da resolução deve ser enviada em PDF.", conflito=True)
+    try:
+        anexo = servico_anexos.guardar_arquivo(sessao, origem, nome_arquivo, "rh-admissao-publicacao", autor.id)
+    except servico_anexos.ErroAnexo as erro:
+        raise ErroAdmissao(str(erro)) from erro
+    admissao.publicacao_anexo, admissao.publicado_em, admissao.publicacao_registrada_em = anexo, publicado_em, agora_utc()
+    auditar(sessao, autor.login, "rh.admissao.publicacao", _ficha(sessao, admissao).nome_completo, "sem número", autor_id=autor.id, dados={"admissao_id": admissao.id})
+    _tentar_email(sessao, admissao)
     sessao.commit()
     return leitura(sessao, admissao)
 
@@ -655,10 +732,11 @@ def ajustar_data_publicacao(sessao: Session, admissao_id: int, publicado_em: dat
 
 
 def anexo_publicacao(sessao: Session, admissao_id: int):
-    numero = _numero(sessao, _obter(sessao, admissao_id))
-    if numero is None or numero.anexo is None:
+    admissao = _obter(sessao, admissao_id)
+    anexo = _anexo_da_publicacao(admissao, _numero(sessao, admissao))
+    if anexo is None:
         raise AdmissaoNaoEncontrada()
-    return numero.anexo
+    return anexo
 
 
 # --- E-mail "Sua nomeação foi publicada" (automático ao registrar a publicação) -------------------------------------
@@ -674,9 +752,10 @@ def _enviar_email_nomeacao(sessao: Session, admissao: Admissao) -> None:
     assunto = rh_mascara.preencher(modelo.assunto or "Sua nomeação foi publicada", dados).replace("&amp;", "&")
     html = modelo_email.pagina(assunto, corpo, sobretitulo="Coordenadoria de Gestão de Pessoas")
     anexos = []
-    if numero is not None and numero.anexo is not None:
-        anexos.append(AnexoEmail(nome=f"nomeacao-{servico_protocolo.formatar_numero(numero.numero, numero.sequencia.exercicio).replace('/', '-')}.pdf",
-                                 conteudo=servico_anexos.caminho(numero.anexo).read_bytes()))
+    pdf = _anexo_da_publicacao(admissao, numero)
+    if pdf is not None:
+        nome_pdf = f"nomeacao-{servico_protocolo.formatar_numero(numero.numero, numero.sequencia.exercicio).replace('/', '-')}.pdf" if numero is not None else "nomeacao.pdf"
+        anexos.append(AnexoEmail(nome=nome_pdf, conteudo=servico_anexos.caminho(pdf).read_bytes()))
     try:
         resultado = servico_smtp.enviar_email(sessao, Mensagem(para=[ficha.email_pessoal], assunto=assunto, texto=html_blocos_texto(corpo), html=html, anexos=anexos))
     except SemServidorAtivo as erro:

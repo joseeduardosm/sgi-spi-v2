@@ -8,6 +8,8 @@ import { FormsModule } from '@angular/forms';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { Setor, SetoresApiService } from '../setores/setores-api.service';
 import { CabecalhoRhComponent } from './cabecalho-rh.component';
+import { RhAdmissaoApiService } from './rh-admissao-api.service';
+import { TipoProtocoloResolucao } from './rh-admissao.models';
 import { RhApiService } from './rh-api.service';
 import { DIAS_SEMANA, ParametrosRh } from './rh.models';
 
@@ -46,14 +48,26 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
                   <label class="dia" [class.marcado]="x.inicio_vedado_lp.includes($index)"><input type="checkbox" [checked]="x.inicio_vedado_lp.includes($index)" (change)="alternar(x.inicio_vedado_lp, $index)" />{{ d }}</label> }</div></div>
             </div>
 
-            <h3 class="subtitulo-parametros">Setor de apoio administrativo</h3>
+            <h3 class="subtitulo-parametros">Setores do Protocolo</h3>
             <div class="grade-parametros">
-              <div class="campo"><label for="p-saa">Serviço de Apoio Administrativo (Protocolo)</label>
-                <select id="p-saa" name="setor_apoio" [(ngModel)]="x.setor_apoio_administrativo_id">
+              <div class="campo"><label for="p-reserva">Coordenadoria de Gestão e Infraestrutura (Protocolo)</label>
+                <select id="p-reserva" name="setor_reserva" [(ngModel)]="x.setor_reserva_protocolo_id">
                   <option [ngValue]="null">Pelo nome da configuração</option>
                   @for (s of setores(); track s.id) { <option [ngValue]="s.id">{{ s.nome }}</option> }
                 </select>
                 <small class="ajuda">Quem dá andamento nos números reservados do Protocolo.</small></div>
+              <div class="campo"><label for="p-apoio">Serviço de Apoio Administrativo (Protocolo)</label>
+                <select id="p-apoio" name="setor_apoio" [(ngModel)]="x.setor_apoio_administrativo_id">
+                  <option [ngValue]="null">Pelo nome da configuração</option>
+                  @for (s of setores(); track s.id) { <option [ngValue]="s.id">{{ s.nome }}</option> }
+                </select>
+                <small class="ajuda">Além do setor do tipo, vê os tipos de documento restritos a um setor.</small></div>
+              <div class="campo"><label for="p-resolucao">Tipo de documento do Protocolo da resolução</label>
+                <select id="p-resolucao" name="tipo_resolucao" [(ngModel)]="x.tipo_resolucao_protocolo_id">
+                  <option [ngValue]="null">Nenhum (resolução sem número)</option>
+                  @for (t of tiposResolucao(); track t.id) { <option [ngValue]="t.id">{{ t.nome }}</option> }
+                </select>
+                <small class="ajuda">Em branco, a resolução é corrida: sem número e sem a etapa do Protocolo. Vale para as admissões iniciadas depois.</small></div>
             </div>
 
             <h3 class="subtitulo-parametros">Outras regras</h3>
@@ -110,11 +124,14 @@ export class ParametrosComponent implements OnInit {
   private readonly api = inject(RhApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly setoresApi = inject(SetoresApiService);
+  private readonly admissaoApi = inject(RhAdmissaoApiService);
+  protected readonly tiposResolucao = signal<TipoProtocoloResolucao[]>([]);
   protected readonly setores = signal<Setor[]>([]);
   protected readonly p = signal<ParametrosRh | null>(null);
   protected readonly dias = DIAS_SEMANA;
 
   ngOnInit(): void {
+    this.admissaoApi.tiposProtocolo(true).subscribe({ next: (t) => this.tiposResolucao.set(t), error: () => this.tiposResolucao.set([]) });
     this.setoresApi.listar().subscribe((l) => this.setores.set(l.filter((x) => !x.sistemico && x.ativo)));
     this.api.parametros().subscribe({ next: (x) => this.p.set(x), error: (e) => this.dialogos.mostrarErro(e) });
   }

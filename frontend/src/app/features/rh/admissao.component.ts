@@ -165,7 +165,7 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
                   <div class="acoes-formulario"><button type="button" class="acao-primaria" (click)="executar(api.gerarResolucao(x.id))">Gerar o texto da resolução</button></div>
                 } @else {
                   @defer (on idle) { <app-editor-rico [(html)]="resolucaoHtml" rotulo="Texto da resolução" [somenteLeitura]="!!x.numero_protocolo_id && x.etapas[4].estado === 'feita'" /> } @placeholder { <app-esqueleto tipo="formulario" [linhas]="4" /> }
-                  <p class="dica-formulario">Placeholders: <span class="texto-codigo">#nome #cpf #rg #cargo #setor #datainicio #numeroresolucao #anoresolucao #datapublicacao #hoje</span> (lista completa em RH &gt; Modelos).</p>
+                  <p class="dica-formulario">Placeholders: <span class="texto-codigo">#nome #cpf #rg #cargo #nivel #setor #datainicio #numeroresolucao #anoresolucao #datapublicacao #hoje</span> (lista completa em RH &gt; Modelos).</p>
                   <div class="acoes-formulario">
                     <button type="button" class="acao-secundaria" title="Copia o texto com a formatação, para colar no SEI" (click)="copiarResolucao()">Copiar para o SEI</button>
                     <button type="button" class="acao-secundaria" (click)="baixar(api.baixarResolucao(x.id))">Baixar PDF</button>
@@ -180,8 +180,23 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
           <section class="cartao-dados" [class.etapa-bloqueada]="bloqueada('protocolo')" aria-labelledby="et-protocolo">
             <header><div><h2 id="et-protocolo">4. Número no Protocolo</h2><small>Reserva o próximo número do tipo de Resolução, na faixa do ano.</small></div></header>
             <div class="corpo">
-              @if (x.numero_protocolo) {
+              @if (x.sem_numero) {
+                <p>Resolução <strong>sem número</strong>, conforme os Parâmetros do RH. Não há reserva no Protocolo.</p>
+              } @else if (x.numero_protocolo) {
                 <p>Número reservado: <strong class="texto-codigo">{{ x.numero_protocolo }}</strong></p>
+                @if (x.status === 'andamento' && !x.posse_em) {
+                  @if (liberandoNumero()) {
+                    <div class="grade-parametros"><div class="campo"><label for="lib-motivo">Motivo da liberação do número *</label>
+                      <input id="lib-motivo" name="motivoLiberacao" maxlength="2000" [(ngModel)]="motivoLiberacao" />
+                      <small class="ajuda">O número volta ao Protocolo{{ x.tem_publicacao ? ' e o PDF da publicação é excluído' : '' }}. Só quem reservou o número ou o Serviço de Apoio Administrativo pode liberar.</small></div></div>
+                    <div class="acoes-formulario" style="margin-top: 12px">
+                      <button type="button" class="acao-recusar" [disabled]="!motivoLiberacao.trim()" (click)="liberarNumero(x.id)">Liberar número</button>
+                      <button type="button" class="acao-secundaria" (click)="liberandoNumero.set(false)">Cancelar</button>
+                    </div>
+                  } @else {
+                    <div class="acoes-formulario" style="margin-top: 12px"><button type="button" class="acao-secundaria" (click)="abrirLiberacao()">Liberar número</button></div>
+                  }
+                }
               } @else if (!bloqueada('protocolo')) {
                 <div class="grade-parametros">
                   <div class="campo"><label for="tipo-protocolo">Tipo de Resolução</label>
@@ -197,7 +212,7 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
 
           <!-- 5. Publicação -->
           <section class="cartao-dados" [class.etapa-bloqueada]="bloqueada('publicacao')" aria-labelledby="et-publicacao">
-            <header><div><h2 id="et-publicacao">5. Publicação no D.O.E.</h2><small>O PDF da publicação fica anexado ao número do Protocolo (se o Protocolo anexar direto, também vale). Ao registrar, o e-mail "Sua nomeação foi publicada" sai sozinho para a pessoa, com o PDF.</small></div></header>
+            <header><div><h2 id="et-publicacao">5. Publicação no D.O.E.</h2><small>O PDF da publicação fica anexado ao número do Protocolo (se o Protocolo anexar direto, também vale) ou, na resolução sem número, à própria admissão. Ao registrar, o e-mail "Sua nomeação foi publicada" sai sozinho para a pessoa, com o PDF.</small></div></header>
             <div class="corpo">
               @if (x.tem_publicacao) {
                 <p>Publicada em <strong>{{ dataBr(x.publicado_em) }}</strong>. <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(api.baixarPublicacao(x.id))">Baixar PDF</button></p>
@@ -281,6 +296,8 @@ export class AdmissaoComponent implements OnInit {
   protected docArquivo: File | null = null;
   protected resolucaoHtml = '';
   protected tipoProtocolo = '';
+  protected readonly liberandoNumero = signal(false);
+  protected motivoLiberacao = '';
   protected publicadoEm = '';
   protected pubArquivo: File | null = null;
   protected termoHtml = '';
@@ -326,6 +343,18 @@ export class AdmissaoComponent implements OnInit {
       next: (x) => { this.ocupado.set(false); this.atualizar(x); },
       error: (e) => { this.ocupado.set(false); this.dialogos.mostrarErro(e, 'Não foi possível concluir a operação'); },
     });
+  }
+
+  protected abrirLiberacao(): void {
+    this.motivoLiberacao = '';
+    this.liberandoNumero.set(true);
+  }
+
+  protected liberarNumero(id: number): void {
+    const motivo = this.motivoLiberacao.trim();
+    if (!motivo) return;
+    this.liberandoNumero.set(false);
+    this.executar(this.api.liberarNumero(id, motivo));
   }
 
   protected baixar(chamada: Observable<unknown>): void {

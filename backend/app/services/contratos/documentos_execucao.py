@@ -449,7 +449,7 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
     [com despesas variáveis: medição dos itens de despesas variáveis → nota(s) de débito/recibo/outros] →
     4 retenção de tributos → 5 CADIN → 6 checklist → 7 folha de autenticação → 8 resumo executivo (por último).
     Antes do resumo executivo vem a **Folha de autenticação** (código, SHA-256 da composição e de cada documento incluído, e quem deu ciência). Devolve `(PDF, SHA-256 da composição)`.
-    Cada documento enviado pela equipe é precedido de uma contracapa na identidade do sistema; os
+    Só o consolidado leva Folha de autenticação; as memórias e avaliações já guardadas com folha própria (versões antigas) chegam sem ela. Cada documento enviado pela equipe é precedido de uma contracapa na identidade do sistema; os
     documentos gerados pelo sistema já trazem título próprio. Os arquivos enviados entram como
     foram enviados (orientação e layout preservados), só com o selo do número da página.
     `enviados_por` traz {id do usuário: nome completo}, para a contracapa dizer quem enviou o arquivo.
@@ -541,8 +541,10 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             partes.append((capa, True))
             pagina += contar_paginas(capa)
         if legivel:
-            partes.append((caminho, gerado))
-            pagina += contar_paginas(caminho)
+            # Documento gerado pelo sistema já termina com a sua Folha de autenticação: no consolidado fica só a folha única dele
+            parte = servico_autenticacao.sem_folha_de_autenticacao(caminho.read_bytes()) if gerado else caminho
+            partes.append((parte, gerado))
+            pagina += contar_paginas(parte)
         relativas.append((str(posicao), etapa, titulo, inicio, pagina - 1))
     # A Folha de autenticação vem antes do resumo executivo, que continua sendo o último documento
     relativas.append((str(total_documentos - 1), "Autenticação", "Folha de autenticação", pagina, pagina + paginas_folha - 1))

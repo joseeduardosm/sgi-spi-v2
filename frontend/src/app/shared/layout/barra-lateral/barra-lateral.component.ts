@@ -8,8 +8,8 @@ import { filter } from 'rxjs';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
 import { ChamadoService } from '../../../core/chamados/chamado.service';
-import { AtalhosFixosService } from '../../../core/navegacao/atalhos-fixos.service';
 import { AtalhosService } from '../../../core/navegacao/atalhos.service';
+import { MenuConfigService } from '../../../core/navegacao/menu-config.service';
 import { ItemNavegacao } from '../../../core/navegacao/navegacao.model';
 import { NavegacaoService } from '../../../core/navegacao/navegacao.service';
 import { IconeComponent } from '../../componentes/icone/icone.component';
@@ -39,7 +39,7 @@ export class BarraLateralComponent {
   protected readonly atalhos = inject(AtalhosService);
   /** Seção "Recentes" da barra: desativada temporariamente (os favoritos continuam). */
   protected readonly mostrarRecentes = false;
-  protected readonly atalhosFixos = inject(AtalhosFixosService);
+  private readonly menuConfig = inject(MenuConfigService);
   private readonly chamado = inject(ChamadoService);
   private readonly roteador = inject(Router);
 
@@ -50,8 +50,8 @@ export class BarraLateralComponent {
   private readonly gruposFechados = signal<ReadonlySet<string>>(new Set());
 
   constructor() {
-    // Atalhos fixos (iguais para todos) para o grupo "Atalhos"
-    this.atalhosFixos.carregar();
+    // Configuração do menu escolhida pelo administrador (ordem, grupos, links e itens ocultos)
+    this.menuConfig.carregar();
     // Garante que o grupo da página atual esteja aberto após cada navegação
     this.roteador.events
       .pipe(
@@ -64,8 +64,13 @@ export class BarraLateralComponent {
       });
   }
 
+  /** Caminho de destino do item, sem a consulta (links criados pelo administrador podem ter `?q=…`). */
+  protected caminho(item: ItemNavegacao): string {
+    return (item.destino ?? item.rota ?? '/').split('?')[0];
+  }
+
   /** Parâmetros de query de uma rota guardada (`/ramais?q=Maria` → `{ q: 'Maria' }`), para o link do menu. */
-  protected parametros(rota: string): Record<string, string> {
+  protected parametros(rota = ''): Record<string, string> {
     const consulta = rota.split('?')[1];
     return consulta ? Object.fromEntries(new URLSearchParams(consulta)) : {};
   }

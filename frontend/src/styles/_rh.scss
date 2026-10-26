@@ -279,3 +279,64 @@
 // Aviso do e-mail automático de nomeação, dentro do cartão da publicação
 .parametros-rh .aviso-email { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--spi-superficie-alt); font-size: var(--spi-texto-compacto); }
 .parametros-rh .aviso-email.com-erro { border-color: var(--spi-perigo); background: var(--spi-perigo-suave); }
+
+/* Painel de entrada do RH (`/rh`): um cartão por grupo de telas, com número nas sequências reais; e a sub-navegação do cabeçalho. */
+.rh-grupos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.rh-grupo {
+  padding: 20px 24px 8px;
+  border: 1px solid var(--spi-borda);
+  border-radius: var(--spi-raio-g);
+  background: var(--spi-superficie);
+
+  h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; }
+
+  .rh-grupo-descricao { margin: 0 0 12px; color: var(--spi-apagado); font-size: 13px; line-height: 1.45; }
+
+  ul { margin: 0; padding: 0; list-style: none; }
+
+  li + li { border-top: 1px solid var(--spi-borda); }
+
+  a {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 0;
+    color: inherit;
+    text-decoration: none;
+
+    &:hover strong, &:focus-visible strong { color: var(--spi-vermelho); }
+    &:focus-visible { outline: 0; box-shadow: var(--spi-anel-foco); border-radius: var(--spi-raio-p); }
+  }
+
+  .rh-grupo-numero {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--spi-borda-campo);
+    border-radius: var(--spi-raio-pilula);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .rh-grupo-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .rh-grupo-texto strong { font-size: 14px; font-weight: 600; }
+  .rh-grupo-texto small { color: var(--spi-apagado); font-size: 12.5px; }
+}
+
+/* Sub-navegação do cabeçalho: o rótulo do grupo e as telas irmãs (b = número da sequência) */
+.cabecalho-modulo nav {
+  .rh-subnav-grupo { align-self: center; padding: 0 4px; color: var(--spi-apagado); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  a b { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 6px; border: 1px solid currentColor; border-radius: var(--spi-raio-pilula); font-size: 11px; line-height: 1; }
+}
+
+@media (max-width: 767px) {
+  .cabecalho-modulo nav { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 4px; a, .rh-subnav-grupo { flex: none; } }
+}

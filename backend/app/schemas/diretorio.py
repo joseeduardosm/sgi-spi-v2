@@ -37,6 +37,10 @@ class ContatoDetalhe(Contato):
     chefia: ContatoResumo | None = None
     equipe: list[ContatoResumo] = []
     bio: str | None = Field(None, description="Bio da pessoa; só aparece quando ela liberou (`bio_visivel`).")
+    curtidas: int = Field(0, description="Quantas pessoas curtiram o cartão (visível a todos).")
+    curtido: bool = Field(False, description="Se o usuário logado curtiu este cartão.")
+    pode_curtir: bool = Field(True, description="Falso no próprio cartão (ninguém curte a si mesmo).")
+    curtido_por: list[ContatoResumo] | None = Field(None, description="Quem curtiu. **Só vem preenchido para o dono do cartão**; para os demais é nulo.")
 
 
 class PaginaContatos(BaseModel):

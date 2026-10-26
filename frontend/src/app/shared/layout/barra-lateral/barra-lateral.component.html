@@ -37,39 +37,6 @@
       }
     }
 
-    <!-- Atalhos fixos para todos: grupo dobrável, com categorias também dobráveis -->
-    @if (atalhosFixos.categorias().length) {
-      <button class="nav-item nav-grupo" type="button" (click)="alternarGrupo('atalhos-fixos')"
-              [attr.aria-expanded]="estaAberto('atalhos-fixos')" aria-controls="submenu-atalhos-fixos" title="Atalhos">
-        <app-icone nome="alfinete" /><span>Atalhos</span><b [class.aberto]="estaAberto('atalhos-fixos')">⌄</b>
-      </button>
-      @if (estaAberto('atalhos-fixos') && layout.barraExpandida()) {
-        <div class="nav-submenu" id="submenu-atalhos-fixos">
-          @for (cat of atalhosFixos.categorias(); track cat.id) {
-            <button class="nav-categoria" type="button" (click)="alternarGrupo('atalhos-cat-' + cat.id)"
-                    [attr.aria-expanded]="estaAberto('atalhos-cat-' + cat.id)">
-              <span>{{ cat.nome }}</span><b [class.aberto]="estaAberto('atalhos-cat-' + cat.id)">⌄</b>
-            </button>
-            @if (estaAberto('atalhos-cat-' + cat.id)) {
-              <div class="nav-categoria-itens">
-                @for (a of cat.atalhos; track a.id) {
-                  @if (a.externo) {
-                    <a [href]="a.url" [attr.target]="a.nova_aba ? '_blank' : null" [attr.rel]="a.nova_aba ? 'noopener noreferrer' : null">
-                      {{ a.titulo }} @if (a.nova_aba) { <span aria-label="abre em nova aba">↗</span> }
-                    </a>
-                  } @else if (a.nova_aba) {
-                    <a [href]="a.url" target="_blank" rel="noopener">{{ a.titulo }} <span aria-label="abre em nova aba">↗</span></a>
-                  } @else {
-                    <a [routerLink]="a.url.split('?')[0]" [queryParams]="parametros(a.url)" (click)="layout.menuCelularAberto.set(false)">{{ a.titulo }}</a>
-                  }
-                }
-              </div>
-            }
-          }
-        </div>
-      }
-    }
-
     @for (secao of navegacao.secoes(); track secao.legenda) {
       <p class="nav-legenda" [class.nav-legenda-secundaria]="!$first">{{ secao.legenda }}</p>
 
@@ -84,7 +51,7 @@
               @for (filho of item.filhos; track filho.id) {
                 @if (filho.rota) {
                   <!-- O link leva a `destino` (se houver), mas o destaque segue `rota`: o módulo fica ativo em todas as suas telas -->
-                  <a [routerLink]="filho.destino ?? filho.rota" [class.ativo]="filhoAtivo(filho)"
+                  <a [routerLink]="caminho(filho)" [queryParams]="parametros(filho.destino ?? filho.rota)" [class.ativo]="filhoAtivo(filho)"
                      [attr.aria-current]="filhoAtivo(filho) ? 'page' : null">{{ filho.rotulo }}</a>
                 } @else {
                   <a [href]="filho.href" [attr.target]="filho.novaAba ? '_blank' : null" [attr.rel]="filho.novaAba ? 'noopener' : null">
@@ -102,7 +69,7 @@
             <app-icone [nome]="item.icone ?? 'arquivo'" /><span>{{ item.rotulo }}</span>
           </button>
         } @else if (item.rota) {
-          <a class="nav-item" [routerLink]="item.rota" routerLinkActive="ativo" ariaCurrentWhenActive="page"
+          <a class="nav-item" [routerLink]="caminho(item)" [queryParams]="parametros(item.destino ?? item.rota)" routerLinkActive="ativo" ariaCurrentWhenActive="page"
              [routerLinkActiveOptions]="{ exact: !!item.exata }" [title]="item.rotulo">
             <app-icone [nome]="item.icone ?? 'arquivo'" /><span>{{ item.rotulo }}</span>
           </a>

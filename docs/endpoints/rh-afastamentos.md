@@ -125,8 +125,8 @@ Cadastro manual da CGP (tabela `rh_feriados`, migração `9c5e7a1b3d4f`; serviç
 | `POST /api/rh/afastamentos/{id}/aprovar` | Autorizador, substituto ou CGP | Aprova (`409 aguarda_ciencia` antes do ciente, exceto CGP) |
 | `POST /api/rh/afastamentos/{id}/recusar` | Autorizador, substituto ou CGP; na etapa 1, também o superior imediato | `{ "justificativa" }` obrigatória (`400` sem ela) |
 | `GET /api/rh/afastamentos/aprovacoes` | Todos | Pendentes que o usuário pode decidir ou aos quais pode dar o ciente (`pode_dar_ciencia`); CGP: todos |
-| `GET /api/rh/afastamentos/painel` | Todos (escopo abaixo) | `visao=mensal\|anual`, `ano`, `mes`, `pessoa_id`, `setor_id`, `tipo` |
-| `GET /api/rh/afastamentos/painel/exportar` | Todos (escopo abaixo) | Mesmos filtros + `formato=pdf\|xlsx` |
+| `GET /api/rh/afastamentos/painel` | RH (recurso ACL `rh`, qualquer nível) ou autorizador (escopo abaixo); `403` para os demais | `visao=mensal\|anual`, `ano`, `mes`, `pessoa_id`, `setor_id`, `tipo` |
+| `GET /api/rh/afastamentos/painel/exportar` | RH (recurso ACL `rh`, qualquer nível) ou autorizador (escopo abaixo); `403` para os demais | Mesmos filtros + `formato=pdf\|xlsx` |
 | `GET /api/rh/parametros` | Todos | Regras em vigor |
 | `PUT /api/rh/parametros` | CGP | Grava as regras (`GravacaoParametros`); auditado como `rh.parametros` |
 
@@ -184,7 +184,7 @@ Quem ainda não tem o início do período aquisitivo aparece como "não informad
   - calendário mês a mês do exercício: clicar no primeiro e no último dia abre "Deseja agendar férias ou licença-prêmio?", com o saldo de cada tipo (férias: o do período em que a seleção começa);
   - dias com afastamento em amarelo (aguardando) ou verde (aprovado), com a etiqueta F/LP;
   - lista dos pedidos com Alterar e Cancelar.
-- **`/rh/painel-afastamentos` (CGP e autorizadores):**
+- **`/rh/painel-afastamentos` (quem está definido no recurso ACL `rh`, em qualquer nível, e os autorizadores, que aprovam por aqui; os demais recebem `403` e o painel não aparece no menu):**
   - fila "Aguardando sua aprovação" (Aprovar; Recusar com justificativa);
   - filtros e alertas de setor;
   - uma linha por período, "[F]/[LP] Nome – Setor", com faixa amarela (pendente) ou verde (aprovado), em visão mensal ou anual. **Cada faixa é clicável** e abre o detalhe (setor, período, situação, decisão, justificativa); se o usuário pode decidir o pedido, a janela traz **Aprovar** (verde) e **Recusar** (abre a justificativa);

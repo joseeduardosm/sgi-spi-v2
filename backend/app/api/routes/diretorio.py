@@ -102,6 +102,22 @@ def desfavoritar(contato_id: int, sessao: Session = Depends(obter_sessao), usuar
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@roteador.put("/ramais/{contato_id}/curtida", status_code=status.HTTP_204_NO_CONTENT, summary="Curtir o cartão de um colega", responses={**NAO_ENCONTRADO, **INVALIDO})
+def curtir(contato_id: int, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> Response:
+    """Idempotente. `400` no próprio cartão. Na primeira curtida de cada pessoa o dono do cartão recebe uma janela e uma notificação (só o dono vê quem curtiu)."""
+    with _traduzir(sessao):
+        servico.alternar_curtida(sessao, usuario, contato_id, True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@roteador.delete("/ramais/{contato_id}/curtida", status_code=status.HTTP_204_NO_CONTENT, summary="Descurtir o cartão de um colega", responses={**NAO_ENCONTRADO, **INVALIDO})
+def descurtir(contato_id: int, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> Response:
+    """Idempotente. Não avisa o dono."""
+    with _traduzir(sessao):
+        servico.alternar_curtida(sessao, usuario, contato_id, False)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @roteador.get("/aniversariantes", response_model=list[Aniversariante], summary="Listar aniversariantes")
 def aniversariantes(
     periodo: str = Query("semana", pattern="^(dia|semana|mes)$", description="`dia` (hoje), `semana` (hoje + 6 dias) ou `mes`."),

@@ -27,6 +27,9 @@ Todas as rotas exigem login (perfil em dia). Não há ACL própria: qualquer usu
 - **Parabéns automático:** uma vez por dia, depois da hora `HORA_PARABENS_ANIVERSARIO` (padrão 8; `-1` desativa), cada aniversariante recebe a mensagem institucional "Feliz aniversário! 🎉" ("A Secretaria de Parcerias em Investimentos deseja a você um novo ciclo repleto de saúde, alegrias e realizações…") na caixa de Notificações, em um **modal** que abre na próxima vez que usa o sistema (`abrir_em_janela`) e **por e-mail sempre**, sem depender dos canais que a pessoa ligou em Preferências (`forcar_email` em `notificacoes.notificar`). Quem oculta o aniversário no perfil não recebe. A chave `aniversario:<usuário>:<data>` e um advisory lock do PostgreSQL impedem repetição entre workers e reinícios.
 - **Foto:** `PUT /foto` aceita PNG ou JPG (conferidos pelo conteúdo, até 5 MB); a imagem é recortada em quadrado e reduzida a 400 × 400 em JPEG. Na sincronização do LDAP, a `thumbnailPhoto` do AD é importada **só** para quem não enviou nem removeu a própria foto (`foto_origem = upload` nunca é sobrescrito) e não é regravada se não mudou. As fotos são servidas só a quem está logado.
 
+- **Curtidas:** todos veem o total (`curtidas`) e se eles mesmos curtiram (`curtido`); **só o dono do cartão recebe `curtido_por`** (a lista de quem curtiu, nula para os demais). Ninguém curte o próprio cartão (`pode_curtir = false`).
+- **Equipe no cartão:** contas locais (de sistema, como "TV TI") não entram na lista, como no organograma. A lista vem em ordem alfabética.
+
 ## Rotas
 
 | Método | Rota | Descrição | Respostas |
@@ -34,6 +37,8 @@ Todas as rotas exigem login (perfil em dia). Não há ACL própria: qualquer usu
 | `GET` | `/api/diretorio/ramais` | Lista paginada de cartões (`PaginaContatos`) | 200, 401, 403, 422 |
 | `GET` | `/api/diretorio/filtros` | Setores, andares e prédios existentes (`OpcoesFiltro`) | 200 |
 | `GET` | `/api/diretorio/ramais/{contato_id}` | Cartão completo com chefia e equipe (`ContatoDetalhe`) | 200, 404 |
+| `PUT` | `/api/diretorio/ramais/{contato_id}/curtida` | Curtir o cartão de um colega (idempotente). O dono recebe uma janela e uma notificação no sino (evento `diretorio.curtida_cartao`) **só na primeira curtida de cada pessoa**; descurtir e curtir de novo não avisa outra vez | 204, 400 (próprio cartão), 404 |
+| `DELETE` | `/api/diretorio/ramais/{contato_id}/curtida` | Descurtir (idempotente, sem aviso) | 204, 404 |
 | `GET` | `/api/diretorio/ramais/{contato_id}/vcard` | Arquivo `.vcf` (vCard 3.0) | 200, 404 |
 | `GET` | `/api/diretorio/ramais/{contato_id}/qrcode` | PNG de um QR Code com o vCard | 200, 404 |
 | `PUT` `DELETE` | `/api/diretorio/favoritos/{contato_id}` | Fixa / solta um contato (idempotente) | 204, 404 |

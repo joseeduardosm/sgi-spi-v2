@@ -5,6 +5,8 @@ Tag no OpenAPI: **Atalhos fixos**. Implementação:
 - `backend/app/models/atalho_fixo.py` (tabelas `atalhos_categorias` e `atalhos_fixos`, migração `b5d9f3a7c1e2`);
 - frontend: `core/navegacao/atalhos-fixos.service.ts`, grupo "Atalhos" em `shared/layout/barra-lateral` e tela `features/administracao/atalhos` (rota `/admin/atalhos`).
 
+> **Atenção:** a barra lateral agora é montada pela configuração do menu ([menu.md](menu.md)); a migração `b2d6f0a4c8e1` levou estes atalhos para lá e o grupo "Atalhos" próprio saiu da barra. Estes endpoints seguem disponíveis, mas não alimentam mais o menu.
+
 Links fixos, iguais para todos os usuários (internos e externos), organizados em **categorias**. Na barra lateral aparece o grupo dobrável **Atalhos**; dentro dele, cada categoria também é dobrável. Atalho **interno** é uma rota do SGI (`/ramais`, `/contratos?...`); **externo** é um endereço `http://` ou `https://`.
 
 ## Acesso

@@ -2,13 +2,16 @@
 // Este arquivo serve para exibir o cabeçalho comum das telas do Módulo RH (trilha, título e atalhos por papel).
 
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { filter, map, startWith } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
 
 import { ItemTrilha, TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
+import { grupoDaRota, gruposVisiveis } from './menu-rh';
 import { RhApiService } from './rh-api.service';
 import { PapeisRh } from './rh.models';
 
-/** Cabeçalho do RH: atalhos Férias e LP e Feriados (todos), Painel (RH e autorizadores), Setores, Cargos e Organograma (quem tem acesso ao módulo), Validações e Parâmetros (o RH). */
+/** Cabeçalho do RH: "Voltar ao RH" (painel de entrada) e as telas irmãs do grupo da página atual, numeradas nas sequências reais (ver `menu-rh.ts`). */
 @Component({
   selector: 'app-cabecalho-rh',
   imports: [RouterLink, RouterLinkActive, TrilhaComponent],
@@ -21,22 +24,13 @@ import { PapeisRh } from './rh.models';
           @if (descricao()) { <small>{{ descricao() }}</small> }
         </div>
       </div>
-      <nav aria-label="Atalhos do Módulo RH">
-        <a class="acao-secundaria" routerLink="/rh/ferias" routerLinkActive="ativo">Férias e LP</a>
-        <a class="acao-secundaria" routerLink="/rh/feriados" routerLinkActive="ativo">Feriados</a>
-        <a class="acao-secundaria" routerLink="/rh/organograma" routerLinkActive="ativo">Organograma</a>
-        <a class="acao-secundaria" routerLink="/rh/meu-cadastro" routerLinkActive="ativo">Meu cadastro</a>
-        @if (papeis()?.cgp || papeis()?.autorizador) { <a class="acao-secundaria" routerLink="/rh/painel-afastamentos" routerLinkActive="ativo">Painel</a> }
-        @if (papeis()?.nivel_rh) {
-          <a class="acao-secundaria" routerLink="/rh/setores" routerLinkActive="ativo">Setores</a>
-          <a class="acao-secundaria" routerLink="/rh/cargos" routerLinkActive="ativo">Cargos</a>
-        }
-        @if (papeis()?.cgp) {
-          <a class="acao-secundaria" routerLink="/rh/pre-cadastros" routerLinkActive="ativo">Pré-cadastro</a>
-          <a class="acao-secundaria" routerLink="/rh/admissoes" routerLinkActive="ativo">Admissões</a>
-          <a class="acao-secundaria" routerLink="/rh/modelos" routerLinkActive="ativo">Modelos</a>
-          <a class="acao-secundaria" routerLink="/rh/validacoes" routerLinkActive="ativo">Validações</a>
-          <a class="acao-secundaria" routerLink="/rh/parametros" routerLinkActive="ativo">Parâmetros</a>
+      <nav aria-label="Telas do Módulo RH">
+        <a class="acao-secundaria" routerLink="/rh">← Voltar ao RH</a>
+        @if (grupo(); as g) {
+          <span class="rh-subnav-grupo">{{ g.titulo }}</span>
+          @for (t of g.telas; track t.rota; let i = $index) {
+            <a class="acao-secundaria" [routerLink]="t.rota" routerLinkActive="ativo" ariaCurrentWhenActive="page">@if (g.numerado) { <b>{{ i + 1 }}</b> }{{ t.rotulo }}</a>
+          }
         }
       </nav>
     </div>
@@ -47,9 +41,17 @@ export class CabecalhoRhComponent implements OnInit {
   readonly trilha = input<string[]>([]);
   readonly descricao = input('');
   private readonly api = inject(RhApiService);
+  private readonly roteador = inject(Router);
+  private readonly url = toSignal(this.roteador.events.pipe(filter((e) => e instanceof NavigationEnd), map(() => this.roteador.url), startWith(this.roteador.url)), { initialValue: this.roteador.url });
   protected readonly papeis = signal<PapeisRh | null>(null);
-  /** "Início / RH / Página": RH leva às férias (entrada do módulo); a página, a ela mesma. */
-  protected readonly passos = computed<ItemTrilha[]>(() => [{ rotulo: 'RH', rota: '/rh/ferias' }, ...this.trilha().map((rotulo) => ({ rotulo }))]);
+  /** Grupo da página atual, só com as telas que a pessoa vê (fora dos grupos, como o histórico, sobra só o "Voltar ao RH"). */
+  protected readonly grupo = computed(() => {
+    const atual = grupoDaRota(this.url());
+    const p = this.papeis();
+    return atual && p ? gruposVisiveis(p).find((g) => g.id === atual.id) : undefined;
+  });
+  /** "Início / RH / Página": RH leva ao painel de entrada; a página, a ela mesma. */
+  protected readonly passos = computed<ItemTrilha[]>(() => [{ rotulo: 'RH', rota: '/rh' }, ...this.trilha().map((rotulo) => ({ rotulo }))]);
 
   ngOnInit(): void {
     this.api.papeis().subscribe({ next: (p) => this.papeis.set(p), error: () => undefined });

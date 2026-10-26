@@ -21,9 +21,9 @@ from sqlalchemy.orm import Session
 
 from app.core.banco import hoje_sao_paulo
 from app.models.anexo import Anexo
-from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
+from app.models.diretorio import CurtidaContato, FavoritoDiretorio, ParabensAniversario
 from app.models.rh import Afastamento
-from app.models.usuario import Usuario
+from app.models.usuario import OrigemUsuario, Usuario
 from app.schemas.diretorio import Aniversariante, Contato, ContatoDetalhe, ContatoResumo, OpcoesFiltro, PaginaContatos, Parabens
 from app.services import servico_anexos, notificacoes
 
@@ -174,11 +174,40 @@ def detalhe_contato(sessao: Session, usuario: Usuario, contato_id: int, hoje: da
     alvo = obter_contato(sessao, usuario, contato_id)
     base = _contato(alvo, _favoritos(sessao, usuario), _ferias_hoje(sessao, [alvo.id], hoje))
     chefe = sessao.get(Usuario, alvo.gestor_id) if alvo.gestor_id else None
-    equipe = sessao.scalars(select(Usuario).where(Usuario.gestor_id == alvo.id, Usuario.ativo.is_(True)))
+    # Contas locais (de sistema, como "TV TI") não são pessoas da equipe: ficam fora, como no organograma
+    equipe = sessao.scalars(select(Usuario).where(Usuario.gestor_id == alvo.id, Usuario.ativo.is_(True), Usuario.origem != OrigemUsuario.LOCAL))
     return ContatoDetalhe(
         **base.model_dump(), chefia=_resumo(chefe) if chefe and chefe.ativo else None,
         equipe=sorted((_resumo(p) for p in equipe), key=lambda r: normalizar(r.nome)), bio=(alvo.bio_texto or None) if alvo.bio_visivel else None,
+        **_curtidas(sessao, usuario, alvo),
     )
+
+
+def _curtidas(sessao: Session, usuario: Usuario, alvo: Usuario) -> dict:
+    """Total, se o usuário curtiu e, **só para o dono do cartão**, quem curtiu."""
+    autores = list(sessao.scalars(select(Usuario).join(CurtidaContato, CurtidaContato.autor_id == Usuario.id).where(CurtidaContato.contato_id == alvo.id)))
+    dono = usuario.id == alvo.id
+    return {
+        "curtidas": len(autores), "curtido": any(a.id == usuario.id for a in autores), "pode_curtir": not dono,
+        "curtido_por": sorted((_resumo(a) for a in autores), key=lambda r: normalizar(r.nome)) if dono else None,
+    }
+
+
+def alternar_curtida(sessao: Session, usuario: Usuario, contato_id: int, curtir: bool) -> None:
+    """Curtir ou descurtir o cartão de um colega (idempotente). O dono recebe aviso em janela e no sino só na primeira curtida de cada pessoa."""
+    alvo = obter_contato(sessao, usuario, contato_id)
+    if alvo.id == usuario.id:
+        raise ErroDiretorio("Você não pode curtir o seu próprio cartão.", 400, "invalido")
+    existe = sessao.get(CurtidaContato, (alvo.id, usuario.id))
+    if curtir and existe is None:
+        sessao.add(CurtidaContato(contato_id=alvo.id, autor_id=usuario.id))
+        # A chave é por pessoa: descurtir e curtir de novo não avisa outra vez
+        notificacoes.notificar(
+            sessao, [alvo.id], f"{_nome(usuario)} curtiu o seu cartão de contato", f"{_nome(usuario)} curtiu o seu cartão no Diretório de ramais.",
+            chave=f"curtida-cartao:{alvo.id}:{usuario.id}", link="/ramais", abrir_em_janela=True, autor=None, evento="diretorio.curtida_cartao")
+    elif not curtir and existe is not None:
+        sessao.delete(existe)
+    sessao.commit()
 
 
 def alternar_favorito(sessao: Session, usuario: Usuario, contato_id: int, favoritar: bool) -> None:

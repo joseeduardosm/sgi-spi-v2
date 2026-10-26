@@ -3,6 +3,7 @@
 """Diretório de ramais e aniversariantes.
 
 - `FavoritoDiretorio`: contatos que cada usuário fixou no topo da própria lista de ramais.
+- `CurtidaContato`: "curtir" no cartão de contato de um colega (uma por autor e por contato); só o dono do cartão vê quem curtiu.
 - `ParabensAniversario`: recado deixado por um colega no mural de parabéns de um aniversariante (um por autor e por ano).
 """
 
@@ -21,6 +22,15 @@ class FavoritoDiretorio(Base):
 
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True)
     favorito_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+
+class CurtidaContato(Base):
+    """Par (contato curtido, quem curtiu)."""
+    __tablename__ = "diretorio_curtidas"
+
+    contato_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True)
+    autor_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
 

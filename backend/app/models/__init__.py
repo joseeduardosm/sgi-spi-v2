@@ -24,9 +24,10 @@ from app.models.contratos import (
 from app.models.rh_cargos import Cargo, HistoricoRh, Ocupacao, TipoCargo
 from app.models.rh_admissao import Admissao, AdmissaoDocumento, ChecklistClassificacao, ChecklistRh, ItemChecklistRh, ModeloRh
 from app.models.rh_pre_cadastro import FichaExperiencia, FichaFormacao, PreCadastro
-from app.models.diretorio import FavoritoDiretorio, ParabensAniversario
+from app.models.diretorio import CurtidaContato, FavoritoDiretorio, ParabensAniversario
 from app.models.atalho_fixo import AtalhoFixo, CategoriaAtalho
 from app.models.sla import SlaPolitica
+from app.models.menu import MenuConfiguracao
 from app.models.favorito_menu import FavoritoMenu
 from app.models.preferencia_colunas import PreferenciaColunas
 from app.models.integracao_bookstack import IntegracaoBookstack

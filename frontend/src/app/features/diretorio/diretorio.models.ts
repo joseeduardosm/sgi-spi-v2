@@ -29,6 +29,13 @@ export interface ContatoDetalhe extends Contato {
   equipe: ContatoResumo[];
   /** Bio liberada pela pessoa (vazia quando ela não liberou). */
   bio: string | null;
+  /** Quantas pessoas curtiram o cartão (todos veem). */
+  curtidas: number;
+  curtido: boolean;
+  /** Falso no próprio cartão. */
+  pode_curtir: boolean;
+  /** Quem curtiu: só vem para o dono do cartão (nulo para os demais). */
+  curtido_por: ContatoResumo[] | null;
 }
 
 export interface PaginaContatos {

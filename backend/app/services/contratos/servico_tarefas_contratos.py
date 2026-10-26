@@ -3,9 +3,9 @@
 """Tarefas das competências de contratos (para medir o trabalho da execução mensal).
 
 Na virada de cada competência (dia seguinte ao fim do período) nascem, na equipe **Contratos**, as tarefas de cada etapa (medição, avaliação,
-nota fiscal, retenção, CADIN, checklist, consolidado, subir no SEI, despachar e juntar a OB). As tarefas de etapa são **controladas pelo módulo
+nota fiscal, retenção, CADIN, checklist, consolidado e juntar a OB). As tarefas de etapa são **controladas pelo módulo
 Contratos**: elas andam sozinhas (a fazer → em andamento → concluída) conforme a etapa evolui, e o histórico de quem fez o quê fica na linha do tempo.
-"Subir no SEI" e "Despachar" não existem no módulo Contratos: são tarefas manuais, movidas por quem as faz.
+(Subir no SEI e Despachar deixaram de ser tarefas das competências; as que já existiam foram removidas pelo script `remover_tarefas_sei_despacho.py`.)
 
 Tudo passa por um motor único e idempotente, `sincronizar_competencia`: ele compara o estado real da competência com as tarefas e corrige o que
 diverge (cria o que falta, move o que mudou, volta o que foi reaberto). É chamado (1) depois de cada ação de escrita em `servico_competencias`,
@@ -46,7 +46,7 @@ RODAPE = (
 )
 # Cor (paleta de marcadores) de cada etapa
 MARCADORES_ETAPA = {
-    "Medição": 4, "Avaliação": 5, "Nota fiscal": 3, "Retenção": 1, "CADIN": 2, "Checklist": 10, "Consolidado": 7, "SEI": 8, "Despacho": 9, "Ordem bancária": 6,
+    "Medição": 4, "Avaliação": 5, "Nota fiscal": 3, "Retenção": 1, "CADIN": 2, "Checklist": 10, "Consolidado": 7, "Ordem bancária": 6,
 }
 PAPEIS_ORDEM = ("gestor", "gestor_suplente", "fiscal_administrativo", "fiscal_administrativo_suplente", "fiscal_tecnico", "fiscal_tecnico_suplente")
 
@@ -59,7 +59,7 @@ class Alvo:
     etapa: str
     prazo: datetime
     controlada: bool = True
-    responsaveis: str = "equipe"  # equipe | financeiro | sei
+    responsaveis: str = "equipe"  # equipe | financeiro
     inicio: datetime | None = None
     fim: datetime | None = None
     autor_fim: int | None = None
@@ -211,10 +211,6 @@ def catalogo(competencia: Competencia, feriados: set[date]) -> list[Alvo]:
                       detalhe=f"{len(enviados)} de {len(c.documentos)} documento(s) enviados" if c.checklist_concluido_em else ""))
     alvos.append(Alvo("consolidado", "Gerar o documento consolidado", "Consolidado", util(6), inicio=_utc(c.consolidado_em), fim=_utc(c.consolidado_em)))
 
-    # Manuais: o módulo Contratos não as conhece
-    alvos.append(Alvo("sei", "Subir no SEI", "SEI", util(7), controlada=False, responsaveis="sei"))
-    alvos.append(Alvo("despachar", "Despachar", "Despacho", util(7), controlada=False, responsaveis="sei"))
-
     # Juntar a ordem bancária: vence no pagamento (data da NF + prazo do contrato); até a NF entrar, n + 30 dias
     from app.services.contratos.servico_competencias import vencimento_pagamento
 
@@ -315,7 +311,7 @@ def _ativos(sessao: Session, ids: list[int]) -> list[int]:
 
 
 def responsaveis(sessao: Session, contrato: Contrato, tipo: str, dono: Usuario) -> list[int]:
-    """Quem responde pela tarefa: a equipe vigente do contrato (gestor primeiro); Financeiro + gestor na retenção; gestor e fiscal administrativo no SEI."""
+    """Quem responde pela tarefa: a equipe vigente do contrato (gestor primeiro); Financeiro + gestor na retenção."""
     from app.services.contratos import servico_retencao
     from app.services.contratos.servico_contratos import designacoes_vigentes
 
@@ -323,8 +319,6 @@ def responsaveis(sessao: Session, contrato: Contrato, tipo: str, dono: Usuario) 
     gestores = [d.usuario_id for d in vigentes if d.papel == "gestor"] or [d.usuario_id for d in vigentes[:1]]
     if tipo == "financeiro":
         ids = gestores + [u.id for u in servico_retencao.usuarios_financeiro(sessao)]
-    elif tipo == "sei":
-        ids = gestores + [d.usuario_id for d in vigentes if d.papel == "fiscal_administrativo"]
     else:
         ids = [d.usuario_id for d in vigentes]
     return _ativos(sessao, ids) or [dono.id]

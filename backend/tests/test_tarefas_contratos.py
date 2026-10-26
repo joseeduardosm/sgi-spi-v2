@@ -61,16 +61,16 @@ def _estados() -> dict[str, str]:
 
 def test_virada_cria_as_tarefas_de_cada_etapa_e_espelha_a_medicao_concluida(cliente, cenario):
     r = _sincronizar()
-    assert r.erros == [] and set(_tarefas()) == {"medicao", "nf:1", "retencao:1:1", "cadin", "checklist", "consolidado", "sei", "despachar", "ob"}
+    assert r.erros == [] and set(_tarefas()) == {"medicao", "nf:1", "retencao:1:1", "cadin", "checklist", "consolidado", "ob"}
     estados = _estados()
-    # Medição já concluída em Contratos: nasce concluída; as demais nascem a fazer (SEI e despacho são manuais)
+    # Medição já concluída em Contratos: nasce concluída; as demais nascem a fazer (SEI e despacho não geram mais tarefas)
     assert estados["medicao"] == "concluida"
-    assert {estados[k] for k in ("nf:1", "retencao:1:1", "cadin", "checklist", "consolidado", "sei", "despachar", "ob")} == {"a_fazer"}
+    assert {estados[k] for k in ("nf:1", "retencao:1:1", "cadin", "checklist", "consolidado", "ob")} == {"a_fazer"}
     tarefas = _tarefas()
     medicao = tarefas["medicao"]
     assert medicao.controlada_externamente and medicao.titulo.startswith("Medição — ") and medicao.titulo.endswith("001/2026 — 01/2026") and medicao.equipe.nome == "Contratos"
     assert "Tarefa criada pelo módulo Contratos somente para dimensionamento e monitoramento do trabalho" in medicao.descricao
-    assert not tarefas["sei"].controlada_externamente and "Tarefa criada pelo módulo Contratos" not in tarefas["sei"].descricao
+    assert "sei" not in tarefas and "despachar" not in tarefas  # Subir no SEI e Despachar não são mais tarefas
     # Responsáveis = equipe vigente do contrato (gestora primeiro); o conjunto de marcadores traz o contrato e a etapa
     assert {m.nome for m in medicao.marcadores} == {"001/2026", "Medição"}
     assert medicao.responsavel_id is not None
@@ -105,7 +105,7 @@ def test_prazos_em_dias_uteis_contados_da_virada(cliente, cenario):
         return stc._data_local(t[chave].prazo)
 
     # n = 01/02/2026 (domingo): n+2 = terça 03/02; n+4 = quinta 05/02; n+5 = sexta 06/02; n+6 = segunda 09/02; n+7 = terça 10/02
-    assert [dia(c) for c in ("medicao", "nf:1", "retencao:1:1", "cadin", "sei")] == [date(2026, 2, 3), date(2026, 2, 5), date(2026, 2, 6), date(2026, 2, 9), date(2026, 2, 10)]
+    assert [dia(c) for c in ("medicao", "nf:1", "retencao:1:1", "cadin", "consolidado")] == [date(2026, 2, 3), date(2026, 2, 5), date(2026, 2, 6), date(2026, 2, 9), date(2026, 2, 9)]
     # Juntar a OB: sem NF, n + 30 dias corridos
     assert dia("ob") == date(2026, 3, 3)
     # 06/02 é feriado: depois de quinta 05/02, o 1º dia útil é segunda 09/02 e o 2º é terça 10/02
@@ -114,12 +114,12 @@ def test_prazos_em_dias_uteis_contados_da_virada(cliente, cenario):
 
 def test_idempotente_e_ensaio_nao_grava(cliente, cenario):
     antes = _sincronizar(ensaio=True)
-    assert antes.criadas == 18 and _tarefas() == {}  # janeiro e fevereiro, 9 tarefas cada
+    assert antes.criadas == 14 and _tarefas() == {}  # janeiro e fevereiro, 7 tarefas cada
     primeiro = _sincronizar()
     segundo = _sincronizar()
-    assert primeiro.criadas == 18 and segundo.criadas == 0 and segundo.atualizadas == 0
+    assert primeiro.criadas == 14 and segundo.criadas == 0 and segundo.atualizadas == 0
     with FabricaSessao() as s:
-        assert len(list(s.scalars(select(Tarefa).where(Tarefa.origem_tipo == stc.ORIGEM)))) == 18
+        assert len(list(s.scalars(select(Tarefa).where(Tarefa.origem_tipo == stc.ORIGEM)))) == 14
 
 
 def test_liberar_todas_as_competencias_fica_de_fora(cliente, cenario):
@@ -204,9 +204,6 @@ def test_tarefa_controlada_nao_se_move_pelo_usuario_mas_aceita_comentario(client
     assert cliente.put(f"/api/tarefas/{numero}", json={"titulo": "outro", "descricao": "x", "prioridade": "normal", "responsaveis_ids": [t["responsavel"]["id"]], "marcadores_ids": []},
                        headers=admin).status_code == 403
     assert cliente.post(f"/api/tarefas/{numero}/comentarios", data={"texto": "Aguardando a certidão."}, headers=admin).status_code == 201
-    # Já a tarefa manual (SEI) anda normalmente
-    sei = _tarefas()["sei"].numero
-    assert cliente.post(f"/api/tarefas/{sei}/mover", json={"acao": "iniciar"}, headers=admin).status_code == 200
 
 
 def test_tarefas_de_contrato_nao_pesam_na_carga(cliente, admin, cenario):
@@ -222,7 +219,7 @@ def test_endpoint_de_sincronizacao_so_para_superroot_e_com_ensaio(cliente, admin
     r = cliente.post("/api/tarefas/contratos/sincronizar", headers=cabecalho(cliente, "gestora"))
     assert r.status_code == 403
     r = cliente.post("/api/tarefas/contratos/sincronizar", headers=admin)
-    assert r.status_code == 200 and r.json()["ensaio"] is True and r.json()["criadas"] == 18 and _tarefas() == {}
+    assert r.status_code == 200 and r.json()["ensaio"] is True and r.json()["criadas"] == 14 and _tarefas() == {}
     r = cliente.post("/api/tarefas/contratos/sincronizar", params={"ensaio": "false"}, headers=admin)
     assert r.status_code == 200 and r.json()["ensaio"] is False and _tarefas() != {}
 

@@ -95,9 +95,9 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
         "CONTROLE_TOTAL": _n("Abrir chamados no GLPI", "Igual a Leitura: o módulo não diferencia."),
     },
     "atalhos": {
-        "LEITURA": _n("Sem efeito", "Os atalhos fixos aparecem para todos; este nível não libera nada."),
-        "MODIFICACAO": _n("Gerenciar atalhos fixos", "Cria, altera e exclui categorias e atalhos da barra lateral."),
-        "CONTROLE_TOTAL": _n("Gerenciar atalhos fixos", "Igual a Modificação: o módulo não diferencia."),
+        "LEITURA": _n("Sem efeito", "O menu e os atalhos fixos aparecem para todos; este nível não libera nada."),
+        "MODIFICACAO": _n("Gerenciar o menu e os atalhos", "Ordena, agrupa, renomeia e oculta os módulos do menu lateral e cria grupos e links (atalhos fixos) para todos."),
+        "CONTROLE_TOTAL": _n("Gerenciar o menu e os atalhos", "Igual a Modificação: o módulo não diferencia."),
     },
     "documentacao-api": {
         "LEITURA": _n("Ver a documentação da API", "Abre a documentação técnica (Swagger e ReDoc) e baixa a especificação."),

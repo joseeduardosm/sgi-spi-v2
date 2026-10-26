@@ -46,6 +46,11 @@ export class DiretorioApiService {
     return favorito ? this.http.put<void>(url, null) : this.http.delete<void>(url);
   }
 
+  curtir(id: number, curtir: boolean): Observable<void> {
+    const url = `${this.base}/ramais/${id}/curtida`;
+    return curtir ? this.http.put<void>(url, null) : this.http.delete<void>(url);
+  }
+
   aniversariantes(periodo: PeriodoAniversario): Observable<Aniversariante[]> {
     return this.http.get<Aniversariante[]>(`${this.base}/aniversariantes`, { params: { periodo } });
   }

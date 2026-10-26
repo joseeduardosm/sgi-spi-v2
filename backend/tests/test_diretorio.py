@@ -45,6 +45,7 @@ def equipe(cliente):
         from app.models.usuario import Usuario
         for login in ("bia", "davi"):
             s.get(Usuario, ids[login]).gestor_id = ids["celia"]
+            s.get(Usuario, ids[login]).origem = "ldap"  # pessoas de verdade; contas locais (de sistema) não entram na equipe
         s.commit()
     return ids, {login: cabecalho(cliente, login) for login in ids}
 
@@ -250,3 +251,38 @@ def test_linkedin_no_perfil_normaliza_e_aparece_no_cartao(cliente, equipe):
     card = cliente.get(f"{URL}/ramais", params={"q": "bia"}, headers=h["davi"]).json()["itens"][0]
     assert card["linkedin"] == "https://www.linkedin.com/in/bia-souza"
     assert cliente.get(f"{URL}/ramais", params={"q": "davi"}, headers=h["bia"]).json()["itens"][0]["linkedin"] == ""
+
+
+def test_curtir_cartao_so_o_dono_ve_quem_curtiu_e_avisa_so_na_primeira_vez(cliente, equipe):
+    ids, h = equipe[0], equipe[1] if isinstance(equipe, tuple) else None
+    h = {login: cabecalho(cliente, login) for login in ("celia", "bia", "davi")}
+    # Bia curte o cartão da Célia (idempotente); o dono recebe a janela e o item no sino
+    assert cliente.put(f"{URL}/ramais/{ids['celia']}/curtida", headers=h["bia"]).status_code == 204
+    assert cliente.put(f"{URL}/ramais/{ids['celia']}/curtida", headers=h["bia"]).status_code == 204
+    resumo = cliente.get("/api/notificacoes/resumo", headers=h["celia"]).json()
+    assert resumo["janela"]["assunto"] == "Bia Souza curtiu o seu cartão de contato" and resumo["nao_lidas"] == 1
+    # A Bia vê o total e que curtiu, mas não quem curtiu; o dono vê a lista; ninguém curte o próprio cartão
+    pela_bia = cliente.get(f"{URL}/ramais/{ids['celia']}", headers=h["bia"]).json()
+    assert pela_bia["curtidas"] == 1 and pela_bia["curtido"] is True and pela_bia["pode_curtir"] is True and pela_bia["curtido_por"] is None
+    pelo_davi = cliente.get(f"{URL}/ramais/{ids['celia']}", headers=h["davi"]).json()
+    assert pelo_davi["curtidas"] == 1 and pelo_davi["curtido"] is False and pelo_davi["curtido_por"] is None
+    dona = cliente.get(f"{URL}/ramais/{ids['celia']}", headers=h["celia"]).json()
+    assert dona["pode_curtir"] is False and [p["nome"] for p in dona["curtido_por"]] == ["Bia Souza"]
+    assert cliente.put(f"{URL}/ramais/{ids['celia']}/curtida", headers=h["celia"]).status_code == 400
+    # Descurtir e curtir de novo não gera outro aviso
+    assert cliente.delete(f"{URL}/ramais/{ids['celia']}/curtida", headers=h["bia"]).status_code == 204
+    assert cliente.get(f"{URL}/ramais/{ids['celia']}", headers=h["celia"]).json()["curtidas"] == 0
+    assert cliente.put(f"{URL}/ramais/{ids['celia']}/curtida", headers=h["bia"]).status_code == 204
+    with FabricaSessao() as sessao:
+        assert len(list(sessao.scalars(select(Notificacao).where(Notificacao.chave == f"curtida-cartao:{ids['celia']}:{ids['bia']}")))) == 1
+
+
+def test_conta_local_de_sistema_nao_aparece_na_equipe(cliente, equipe):
+    ids, h = equipe
+    sistema = criar_usuario("tv-ti", nome_completo="TV TI", email="tv@sp.gov.br", ramal="999")
+    with FabricaSessao() as s:
+        from app.models.usuario import Usuario
+        s.get(Usuario, sistema).gestor_id = ids["celia"]
+        s.commit()
+    chefe = cliente.get(f"{URL}/ramais/{ids['celia']}", headers=h["bia"]).json()
+    assert [e["nome"] for e in chefe["equipe"]] == ["Bia Souza", "Davi Lima"]

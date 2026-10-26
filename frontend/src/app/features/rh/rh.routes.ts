@@ -7,7 +7,12 @@ import { guardaAcl } from '../../core/acesso/acesso.guards';
 
 /** Telas do RH. As de CGP e autorizador conferem o papel na API (403 para quem não tem). */
 export const ROTAS_RH: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'ferias' },
+  {
+    path: '',
+    pathMatch: 'full',
+    title: 'RH | SGI SPI',
+    loadComponent: () => import('./inicio-rh.component').then((m) => m.InicioRhComponent),
+  },
   {
     path: 'ferias',
     title: 'Férias e licença-prêmio | SGI SPI',
@@ -16,6 +21,7 @@ export const ROTAS_RH: Routes = [
   {
     path: 'painel-afastamentos',
     title: 'Painel de afastamentos | SGI SPI',
+    // Quem não é do RH nem autorizador recebe 403 da API (e não vê o item no menu)
     loadComponent: () => import('./painel-afastamentos.component').then((m) => m.PainelAfastamentosComponent),
   },
   {

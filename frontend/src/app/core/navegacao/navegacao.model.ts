@@ -33,6 +33,8 @@ export interface ItemNavegacao {
   /** Só quem pode ver o Painel Executivo (a API decide; sem regras na ACL, apenas o SuperRoot). */
   painelExecutivo?: boolean;
   filhos?: ItemNavegacao[];
+  /** Só no editor do menu: o administrador ocultou o item (no menu real ele nem chega a existir). */
+  oculto?: boolean;
   /** Texto exibido quando o grupo não possui filhos visíveis. */
   textoVazio?: string;
 }
@@ -41,5 +43,7 @@ export interface ItemNavegacao {
 export interface SecaoNavegacao {
   legenda: string;
   papeis?: Papel[];
+  /** O administrador pode reordenar, agrupar e ocultar os itens desta seção (Administração > Menu). */
+  configuravel?: boolean;
   itens: ItemNavegacao[];
 }

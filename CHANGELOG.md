@@ -6,6 +6,22 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-25
+
+Migrações novas (aplicar com `alembic upgrade head`; cabeça `c3e7a1f5b9d2`): `b2d6f0a4c8e1` (configuração do menu lateral) e `c3e7a1f5b9d2` (curtidas nos cartões do Diretório).
+
+### Adicionado
+- **Menu lateral configurável pelo administrador** (Administração › Gerenciar menu, `/admin/menu`): ordenar, agrupar, renomear e ocultar módulos, e criar grupos e links para todos. Ocultar tira o item do menu e da busca global, sem mudar o acesso (ACL e rota seguem valendo). Os atalhos fixos viraram grupos e links do mesmo menu; `/admin/atalhos` redireciona. Endpoints `GET/PUT/DELETE /api/menu` (gravar exige ACL `atalhos` ≥ Modificação). Migração `b2d6f0a4c8e1`.
+- **RH com painel de entrada** (`/rh`): as telas agrupadas por finalidade (Estrutura, Entrada de pessoas, Vida funcional, Configuração), com numeração só nas sequências reais (Setores → Cargos → Organograma; Pré-cadastro → Admissões). As telas internas ganharam "Voltar ao RH" e a sub-navegação do grupo no lugar dos 12 botões soltos.
+- **Curtir o cartão de contato** no Diretório de ramais: botão de polegar, uma curtida por pessoa, com o total visível a todos. **Só o dono do cartão vê quem curtiu.** O dono recebe janela e notificação no sino na primeira curtida de cada pessoa (novo evento `diretorio.curtida_cartao`, nas Preferências). `PUT/DELETE /api/diretorio/ramais/{id}/curtida`. Migração `c3e7a1f5b9d2`.
+- **LinkedIn e WhatsApp como botões** no cartão: o LinkedIn abre o perfil quando preenchido e fica apagado e sem clique quando não; o WhatsApp aparece ao lado do celular (que deixou de ser link).
+
+### Alterado
+- **Cartão de contato redesenhado**: janela mais larga em duas colunas (pessoa, contatos e QR Code à esquerda; sobre, chefia e equipe em grade, em ordem alfabética, à direita). Contas locais de sistema (ex.: "TV TI") não aparecem mais na equipe.
+- **Painel de afastamentos** (`/rh/painel-afastamentos` e exportação): só para quem está no recurso ACL `rh` (qualquer nível) e para os autorizadores (que aprovam por ele); os demais recebem `403`.
+- **Tarefas de contratos**: as competências deixaram de gerar "Subir no SEI" e "Despachar" (7 tarefas por competência em vez de 9). As 70 já existentes foram removidas (`scripts_manutencao/remover_tarefas_sei_despacho.py`).
+- **Contratos: quem é o Financeiro** agora vem da ACL (recurso `financeiro`, Modificação ou mais); a migração já criou a regra com o setor atual (migração `a1c5e9b3d7f4`, já descrita em 2026-10-23).
+
 ## 2026-10-23
 
 Migrações novas (aplicar com `alembic upgrade head`; cabeça `f9a5b1c7d3e6`): `a1c5e9b3d7f4` (recurso ACL `financeiro`), `b5c1d7e3f9a2` (faixa reservada do Protocolo passa a ser da CGI), `c6d2e8f4a0b3` (setor que consome os números do tipo), `d7e3f9a5b1c4` (setor de apoio como parâmetro do RH), `e8f4a0b6c2d5` (tipo do Protocolo da resolução e resolução sem número), `f9a5b1c7d3e6` (ocupação sem data de posse), `d5a1c7e3b9f2` (recurso ACL `rh`), `e6b2d8f4a1c3` (cargos, ocupações e histórico), `a8d4f0b6c2e5` (pré-cadastro), `b9e5a1c7d3f6` (admissão), `c0f6b2d8e4a7` (checklist por classificação), `d1a7c3e9b5f8` (login web e formulário do GLPI), `e2f8d4a0c6b9`, `f3a9e5b1d7c0`, `f7c3e9a5b2d4` e `a4b0f6c2e8d1` (ajustes da admissão, foto, setor de apoio e erro de e-mail).

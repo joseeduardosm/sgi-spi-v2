@@ -7,6 +7,7 @@ import { TestBed } from '@angular/core/testing';
 import { AcessoService } from '../acesso/acesso.service';
 import { AutenticacaoService } from '../autenticacao/autenticacao.service';
 import { Papel, Usuario } from '../modelos/usuario.model';
+import { MenuConfigService } from './menu-config.service';
 import { NavegacaoService } from './navegacao.service';
 
 describe('NavegacaoService', () => {
@@ -29,6 +30,7 @@ describe('NavegacaoService', () => {
       providers: [
         { provide: AutenticacaoService, useValue: autenticacaoSimulada },
         { provide: AcessoService, useValue: acessoSimulado },
+        { provide: MenuConfigService, useValue: { nos: signal([]) } },
       ],
     });
   });

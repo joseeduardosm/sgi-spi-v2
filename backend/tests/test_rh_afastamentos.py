@@ -136,11 +136,11 @@ def test_painel_escopo_setor_alerta_e_exportacao(cliente, equipe):
         cliente.post(f"{URL}/{pedido['id']}/aprovar", headers=h["chefe"])
     _pedir(cliente, h["chefe"], "2026-11-10", "2026-11-16")
     params = {"visao": "mensal", "ano": 2026, "mes": 11}
-    # CGP vê todos; o chefe vê os autorizados e a si mesmo; a Ana só a si
+    # CGP vê todos; o chefe vê os autorizados e a si mesmo; a Ana (sem ser do RH nem autorizadora) não acessa o painel
     assert len(cliente.get(f"{URL}/painel", params=params, headers=h["rh"]).json()["periodos"]) == 3
     chefe = cliente.get(f"{URL}/painel", params=params, headers=h["chefe"]).json()
     assert {p["nome"] for p in chefe["periodos"]} == {"Ana Souza", "Bia Lima", "Chefe Silva"}
-    assert {p["nome"] for p in cliente.get(f"{URL}/painel", params=params, headers=h["ana"]).json()["periodos"]} == {"Ana Souza"}
+    assert cliente.get(f"{URL}/painel", params=params, headers=h["ana"]).status_code == 403
     # Setor com filhos: Diretoria A inclui a Coordenadoria A1 (Bia)
     filtro = cliente.get(f"{URL}/painel", params={**params, "setor_id": diretoria, "tipo": "ferias"}, headers=h["rh"]).json()
     assert {p["nome"] for p in filtro["periodos"]} == {"Ana Souza", "Bia Lima", "Chefe Silva"}
@@ -363,3 +363,13 @@ def test_boas_vindas_no_dia_seguinte_ao_fim_das_ferias(cliente, equipe):
         assert servico_afastamentos.dar_boas_vindas(sessao, date(2026, 11, 23)) == 1
         texto = servico_afastamentos._boas_vindas("Ana Souza", sessao.scalar(select(Afastamento).where(Afastamento.usuario_id == ids["ana"])))
         assert texto.startswith("Olá, Ana!") and "03/11/2026 a 12/11/2026" in texto
+
+
+def test_painel_e_so_do_rh_e_dos_autorizadores(cliente, equipe):
+    """Quem não é do RH (recurso `rh`) nem autorizador de ninguém recebe 403 no painel e na exportação."""
+    ids, h, diretoria = equipe
+    params = {"visao": "mensal", "ano": 2026, "mes": 11}
+    assert cliente.get(f"{URL}/painel", params=params, headers=h["ana"]).status_code == 403
+    assert cliente.get(f"{URL}/painel/exportar", params={**params, "formato": "pdf"}, headers=h["ana"]).status_code == 403
+    assert cliente.get(f"{URL}/painel", params=params, headers=h["chefe"]).status_code == 200
+    assert cliente.get(f"{URL}/painel", params=params, headers=h["rh"]).status_code == 200

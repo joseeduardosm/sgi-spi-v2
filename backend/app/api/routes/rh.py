@@ -61,6 +61,7 @@ from app.schemas.rh import (
     UsuarioPendente,
 )
 from app.services import servico_setores
+from app.models.acl import NivelAcl
 from app.services.rh import servico_afastamentos as afastamentos
 from app.services.rh import servico_cadastro as cadastro
 from app.services.rh import folha_ponto, importacao_funcionais, relatorio_saldos, servico_feriados, servico_periodos
@@ -523,12 +524,20 @@ def listar_aprovacoes(sessao: Session = Depends(obter_sessao), autor: Usuario = 
 Visao = Literal["mensal", "anual"]
 
 
+def _exigir_painel(sessao: Session, autor: Usuario) -> None:
+    """O painel é de quem está no recurso ACL `rh` (qualquer nível) ou é autorizador de alguém (a fila de aprovações mora nele); os demais recebem 403."""
+    papeis = afastamentos.papeis(sessao, autor)
+    if not (papeis["cgp"] or papeis["autorizador"] or papeis["nivel_rh"]):
+        raise ErroApi(status.HTTP_403_FORBIDDEN, "O painel de afastamentos é do RH e dos autorizadores.", "sem_permissao")
+
+
 @roteador.get("/afastamentos/painel", response_model=PainelAfastamentos, summary="Painel de férias e licenças-prêmio",
               description="Pendentes, aprovados e gozados na janela (mês ou ano), com filtros por pessoa, setor (inclui os filhos) e tipo, e "
-              "alertas de setor. Escopo: CGP vê todos; autorizador vê os autorizados e a si mesmo; os demais, só a si.")
+              "alertas de setor. **Só para quem está no recurso ACL `rh` (qualquer nível) ou é autorizador de alguém**; 403 para os demais. Escopo: CGP vê todos; autorizador vê os autorizados e a si mesmo.")
 def painel(visao: Visao = "mensal", ano: int = Query(..., ge=2000, le=2100), mes: int | None = Query(None, ge=1, le=12),
            pessoa_id: int | None = None, setor_id: int | None = None, tipo: Literal["ferias", "licenca_premio"] | None = None,
            sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(obter_usuario_atual)) -> PainelAfastamentos:
+    _exigir_painel(sessao, autor)
     dados = afastamentos.painel(sessao, autor, visao, ano, mes, pessoa_id, setor_id, tipo)
     return PainelAfastamentos(
         visao=visao, inicio=dados["inicio"], fim=dados["fim"], cgp=dados["cgp"],
@@ -553,11 +562,12 @@ def _ferias_a_vencer(sessao: Session, autor: Usuario) -> list[FeriasAVencer]:
 
 
 @roteador.get("/afastamentos/painel/exportar", response_class=Response, summary="Exportar o painel (PDF ou XLSX)",
-              description="Mesmos filtros do painel. XLSX: lista de períodos e grade por dia; PDF: lista e alertas de setor.",
+              description="Mesmos filtros e a mesma exigência do painel. XLSX: lista de períodos e grade por dia; PDF: lista e alertas de setor.",
               responses={200: {"content": {"application/pdf": {}, XLSX: {}}}})
 def exportar(formato: Literal["pdf", "xlsx"] = "pdf", visao: Visao = "mensal", ano: int = Query(..., ge=2000, le=2100),
              mes: int | None = Query(None, ge=1, le=12), pessoa_id: int | None = None, setor_id: int | None = None,
              tipo: Literal["ferias", "licenca_premio"] | None = None, sessao: Session = Depends(obter_sessao),
              autor: Usuario = Depends(obter_usuario_atual)) -> Response:
+    _exigir_painel(sessao, autor)
     conteudo, nome, midia = afastamentos.exportar(sessao, autor, formato, visao, ano, mes, pessoa_id, setor_id, tipo)
     return Response(conteudo, media_type=midia, headers={"Content-Disposition": f'attachment; filename="{nome}"'})

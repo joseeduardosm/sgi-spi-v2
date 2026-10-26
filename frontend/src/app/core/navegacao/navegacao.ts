@@ -14,6 +14,7 @@ import { SecaoNavegacao } from './navegacao.model';
 export const NAVEGACAO: SecaoNavegacao[] = [
   {
     legenda: 'Navegação',
+    configuravel: true,
     itens: [
       { id: 'inicio', rotulo: 'Início', icone: 'inicio', rota: '/', exata: true },
       {
@@ -25,7 +26,7 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           // O clique abre o painel do módulo; o item fica ativo em qualquer tela sob /contratos
           { id: 'contratos', rotulo: 'Contratos', rota: '/contratos', destino: '/contratos/painel', acl: 'contratos' },
           // RH: férias e licença-prêmio para todos; painel, validações e parâmetros conforme o papel
-          { id: 'rh', rotulo: 'RH', rota: '/rh', destino: '/rh/ferias' },
+          { id: 'rh', rotulo: 'RH', rota: '/rh' },
           // Tarefas: minhas tarefas, equipes e liderança
           // Notícias: gestão editorial do portal (a página inicial é o próprio portal)
           { id: 'noticias', rotulo: 'Notícias', rota: '/noticias/gestao', acl: 'noticias' },
@@ -64,8 +65,8 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           { id: 'api-redoc', rotulo: 'ReDoc', href: '/api/redoc', novaAba: true },
         ],
       },
-      // Gerenciar atalhos fixos da barra lateral (ACL `atalhos`, recurso fechado: só quem o SuperRoot liberar)
-      { id: 'gerenciar-atalhos', rotulo: 'Gerenciar atalhos', icone: 'alfinete', rota: '/admin/atalhos', acl: 'atalhos' },
+      // Gerenciar o menu e os atalhos (ACL `atalhos`, recurso fechado: só quem o SuperRoot liberar)
+      { id: 'gerenciar-menu', rotulo: 'Gerenciar menu', icone: 'alfinete', rota: '/admin/menu', acl: 'atalhos' },
       { id: 'sla-prazos', rotulo: 'SLA de prazos', icone: 'alfinete', rota: '/admin/sla', acl: 'sla' },
     ],
   },

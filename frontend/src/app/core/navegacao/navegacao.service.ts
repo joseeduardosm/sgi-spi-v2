@@ -6,6 +6,8 @@ import { computed, inject, Injectable } from '@angular/core';
 import { AcessoService } from '../acesso/acesso.service';
 import { AutenticacaoService } from '../autenticacao/autenticacao.service';
 import { Papel } from '../modelos/usuario.model';
+import { aplicarConfiguracao } from './menu-config';
+import { MenuConfigService } from './menu-config.service';
 import { NAVEGACAO, NAVEGACAO_RESTRITA } from './navegacao';
 import { ItemNavegacao, SecaoNavegacao } from './navegacao.model';
 
@@ -14,6 +16,7 @@ import { ItemNavegacao, SecaoNavegacao } from './navegacao.model';
 export class NavegacaoService {
   private readonly autenticacao = inject(AutenticacaoService);
   private readonly acesso = inject(AcessoService);
+  private readonly menuConfig = inject(MenuConfigService);
 
   // Lista de seções já filtrada; `computed` recalcula quando o usuário ou os acessos mudam
   readonly secoes = computed<SecaoNavegacao[]>(() => {
@@ -21,8 +24,10 @@ export class NavegacaoService {
     if (usuario?.perfil_restrito) return NAVEGACAO_RESTRITA;
     this.acesso.carregado(); // e quando os acessos efetivos chegam
     // Remove seções sem permissão, filtra os itens de cada uma e descarta as que ficaram vazias
+    const configuracao = this.menuConfig.nos(); // e quando o administrador muda o menu
+    // A configuração do administrador (ordem, grupos, links, ocultos) vale depois do filtro: ocultar nunca concede nem tira acesso
     return NAVEGACAO.filter((s) => this.permitido(s.papeis))
-      .map((s) => ({ ...s, itens: this.filtrarItens(s.itens) }))
+      .map((s) => ({ ...s, itens: s.configuravel ? aplicarConfiguracao(this.filtrarItens(s.itens), configuracao) : this.filtrarItens(s.itens) }))
       .filter((s) => s.itens.length > 0);
   });
 

@@ -225,23 +225,15 @@ export const rotas: Routes = [
         loadComponent: () => import('./features/administracao/sla/gestao-sla.component').then((m) => m.GestaoSlaComponent),
       },
       {
-        // Atalhos fixos da barra lateral: quem tem MODIFICACAO no recurso `atalhos`
-        path: 'admin/atalhos',
-        title: 'Atalhos | SGI SPI',
+        // Menu lateral configurável (ordem, grupos, links, itens ocultos): quem tem MODIFICACAO no recurso `atalhos`
+        path: 'admin/menu',
+        title: 'Menu | SGI SPI',
         canActivate: [guardaAcl],
         data: { acl: 'atalhos', nivelAcl: 'MODIFICACAO' },
-        loadComponent: () =>
-          import('./features/administracao/atalhos/gestao-atalhos.component').then((m) => m.GestaoAtalhosComponent),
+        loadComponent: () => import('./features/administracao/menu/gestao-menu.component').then((m) => m.GestaoMenuComponent),
       },
-      {
-        // Atalhos fixos da barra lateral: quem tem MODIFICACAO no recurso `atalhos`
-        path: 'admin/atalhos',
-        title: 'Atalhos | SGI SPI',
-        canActivate: [guardaAcl],
-        data: { acl: 'atalhos', nivelAcl: 'MODIFICACAO' },
-        loadComponent: () =>
-          import('./features/administracao/atalhos/gestao-atalhos.component').then((m) => m.GestaoAtalhosComponent),
-      },
+      // Endereço antigo da tela de atalhos fixos (favoritos e marcadores salvos continuam funcionando)
+      { path: 'admin/atalhos', redirectTo: 'admin/menu', pathMatch: 'full' },
       {
         // Notificações do sistema (e-mail de changelog): exclusiva da conta root
         path: 'admin/notificacoes-sistema',

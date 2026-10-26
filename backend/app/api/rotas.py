@@ -8,7 +8,7 @@ caminhos podem coincidir (ver comentário abaixo).
 
 from fastapi import APIRouter
 
-from app.api.routes import acl, assinatura_email, autenticacao, atalhos, busca, chamados, contratacoes, documentacao, diretorio, favoritos, integracao_bookstack, integracao_glpi, ldap, manuais, melhorias, sla, painel_executivo, notificacoes, notificacoes_changelog, notificacoes_cliente_windows, notificacoes_preferencias, noticias, patrimonio, preferencias, protocolo, reserva_espacos, rh, rh_admissao, rh_cargos, rh_pessoal, rh_pre_cadastro, tarefas, saude, setores, smtp, usuarios
+from app.api.routes import acl, assinatura_email, autenticacao, atalhos, menu, busca, chamados, contratacoes, documentacao, diretorio, favoritos, integracao_bookstack, integracao_glpi, ldap, manuais, melhorias, sla, painel_executivo, notificacoes, notificacoes_changelog, notificacoes_cliente_windows, notificacoes_preferencias, noticias, patrimonio, preferencias, protocolo, reserva_espacos, rh, rh_admissao, rh_cargos, rh_pessoal, rh_pre_cadastro, tarefas, saude, setores, smtp, usuarios
 from app.api.routes.contratos import alteracoes, portarias, contratos, correcoes, diario, empresas, execucao, exportacao, importacao, importacao_modelos, migracao, modelos, orcamento, rascunhos, relatorios
 
 roteador_api = APIRouter()
@@ -54,6 +54,7 @@ roteador_api.include_router(busca.roteador)
 roteador_api.include_router(favoritos.roteador)
 roteador_api.include_router(chamados.roteador)
 roteador_api.include_router(atalhos.roteador)
+roteador_api.include_router(menu.roteador)
 roteador_api.include_router(integracao_glpi.roteador)
 roteador_api.include_router(integracao_bookstack.roteador)
 roteador_api.include_router(manuais.roteador)

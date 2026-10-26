@@ -125,6 +125,7 @@ _MODULOS: list[tuple[str, str, list[tuple]]] = [
     ]),
     ("diretorio", "Diretório", [
         ("recado_aniversario", "Recado de aniversário", "Você recebe quando um colega deixa um recado no seu aniversário."),
+        ("curtida_cartao", "Curtida no seu cartão", "Você recebe quando um colega curte o seu cartão de contato no Diretório de ramais."),
         ("feliz_aniversario", "Feliz aniversário", "Você recebe a mensagem automática no dia do seu aniversário."),
     ]),
 ]

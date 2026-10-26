@@ -68,7 +68,7 @@ Navegador
 | `tarefas`, `tarefas_equipes` (+ `_membros`, `_lideres`), `tarefas_participantes`, `tarefas_eventos` (+ `_anexos`), `tarefas_marcadores` (+ `_vinculos`), `tarefas_checklist` | Módulo Tarefas: tarefas com pipeline de validação, equipes, envolvidos, linha do tempo, marcadores e checklist |
 | `melhorias_sugestoes`, `melhorias_anexos`, `melhorias_eventos` | Módulo Melhorias: sugestões dos usuários (com a tela de origem), prints anexados e histórico da triagem |
 | `usuarios_preferencias_colunas` | Colunas que cada usuário escolheu mostrar nas listagens, por tela (lista ordenada de ids) |
-| `diretorio_favoritos`, `diretorio_parabens` | Módulo Diretório: contatos favoritos por usuário e mural de parabéns (foto e opt-out de aniversário ficam em colunas de `usuarios`) |
+| `diretorio_favoritos`, `diretorio_parabens`, `diretorio_curtidas` | Módulo Diretório: contatos favoritos por usuário, mural de parabéns e curtidas nos cartões (foto e opt-out de aniversário ficam em colunas de `usuarios`) |
 | `notificacoes_envios_changelog` | Notificações: e-mails de changelog enviados pela conta root (texto, destino, até que data do CHANGELOG e resultado) |
 | `setores`, `membros_setor` | Setores e seus membros |
 | `acl_recursos`, `acl_regras`, `acl_regras_usuarios`, `acl_regras_setores`, `acl_perfis`, `acl_perfis_direitos`, `usuarios_perfis` | Controle de acesso (regras e perfis) |
@@ -137,7 +137,8 @@ Detalhes em [autenticacao.md](autenticacao.md).
 | `GET` | `/api/documentacao`, `/api/redoc` | Páginas HTML sem dados; carregam o OpenAPI com o token da sessão do SGI | Swagger UI e ReDoc | [documentacao-api.md](endpoints/documentacao-api.md) |
 | `GET` | `/api/manuais[/…]` | Bearer; ACL `manuais` ≥ LEITURA (sem regras: todos) | Manuais do BookStack lidos pelo portal: estantes, livros, páginas, busca e imagens | [manuais.md](endpoints/manuais.md) |
 | `GET` `PUT` `POST` | `/api/integracao-bookstack[/testar]` | SuperRoot | Configuração da integração com o BookStack (token cifrado) e teste de conexão | [manuais.md](endpoints/manuais.md#getput-apiintegracao-bookstack-e-post-apiintegracao-bookstacktestar-superroot) |
-| `GET` `POST` `PUT` `DELETE` | `/api/atalhos[/…]` | Bearer (leitura); ACL `atalhos` ≥ MODIFICACAO (gestão) | Atalhos fixos da barra lateral, por categoria (CRUD) | [atalhos.md](endpoints/atalhos.md) |
+| `GET` `POST` `PUT` `DELETE` | `/api/atalhos[/…]` | Bearer (leitura); ACL `atalhos` ≥ MODIFICACAO (gestão) | Atalhos fixos por categoria (CRUD); o menu lateral passou a ser configurado em `/api/menu` | [atalhos.md](endpoints/atalhos.md) |
+| `GET` `PUT` `DELETE` | `/api/menu` | Bearer (leitura); ACL `atalhos` ≥ MODIFICACAO (gravar e restaurar) | Menu lateral configurável: ordem, grupos, nomes, links e itens ocultos | [menu.md](endpoints/menu.md) |
 | `GET` | `/api/contratos/{contrato_id}/vizinhos` | LEITURA | Contrato anterior e próximo na lista (carteira) | [contratos-cadastro.md](endpoints/contratos-cadastro.md) |
 | `PUT` | `/api/autenticacao/tema` | Bearer (1) | Salva meu tema da interface (claro, escuro ou automático) | [autenticacao.md](endpoints/autenticacao.md#put-apiautenticacaotema) |
 | `POST` | `/api/autenticacao/perfil-ativo` | Bearer | Troca o perfil de acesso ativo (token novo) | [autenticacao.md](endpoints/autenticacao.md#post-apiautenticacaoperfil-ativo) |

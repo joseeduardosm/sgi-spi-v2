@@ -149,20 +149,21 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
       @case ('ordem_bancaria') {
         <section class="cartao-dados" aria-labelledby="titulo-ob">
           <header>
-            <div><h2 id="titulo-ob">Ordem Bancária</h2><small>Ao anexar a OB, o valor é debitado nas NEs e a competência é concluída.</small></div>
+            <div><h2 id="titulo-ob">Ordem Bancária</h2><small>Ao anexar a OB, o valor é debitado nas NEs e a competência é concluída. Com o processo financeiro no contrato, a OB paga no SIGEO conclui sozinha (todo dia às 08:00).</small></div>
             @if (d.ordem_bancaria) { <span class="selo-situacao">Concluída</span> } @else { <span class="selo-situacao alerta">Aguardando a OB</span> }
           </header>
           <div class="resumo-medicao" aria-label="Resumo do pagamento">
             <div><span>Valor a pagar (soma das notas, brutos)</span><strong>{{ d.valor_a_pagar | moeda }}</strong></div>
             <div><span>NEs debitadas, em ordem</span><strong class="texto-codigo">{{ d.notas_selecionadas.map(n => n.numero).join(' → ') || '—' }}</strong></div>
             @if (d.concluida_em) { <div class="ok"><span>Concluída em</span><strong>{{ d.concluida_em | date: 'dd/MM/yyyy HH:mm' }}</strong></div> }
+            @if (d.ob_origem === 'sigeo') { <div class="ok"><span>Paga conforme o SIGEO</span><strong class="texto-codigo">{{ d.ob_numero }}</strong><small>{{ d.ob_valor | moeda }} · lançada em {{ d.ob_data | dataBr }}</small></div> }
           </div>
           <div class="corpo">
             @if (d.ordem_bancaria) {
               <article class="cartao-arquivo-final">
                 <span class="icone-arquivo" aria-hidden="true">PDF</span>
-                <div class="dados-arquivo"><strong>Ordem Bancária</strong><small>O valor de {{ d.valor_a_pagar | moeda }} foi debitado nas NEs.</small></div>
-                <button type="button" class="acao-secundaria" (click)="baixar(d.ordem_bancaria.anexo_id)">Baixar Ordem Bancária</button>
+                <div class="dados-arquivo"><strong>{{ d.ob_origem === 'sigeo' ? 'Comprovante de pagamento (SIGEO)' : 'Ordem Bancária' }}</strong><small>O valor de {{ d.valor_a_pagar | moeda }} foi debitado nas NEs.</small></div>
+                <button type="button" class="acao-secundaria" (click)="baixar(d.ordem_bancaria.anexo_id)">{{ d.ob_origem === 'sigeo' ? 'Baixar comprovante' : 'Baixar Ordem Bancária' }}</button>
               </article>
               <!-- E-mail aos prepostos avisando o pagamento (máscara "E-mail de pagamento") -->
               @if (d.email_ob; as e) {
@@ -173,6 +174,8 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
               }
               <div class="espaco-fim-etapa"></div>
             } @else if (editavel()) {
+              <!-- O que a conferência diária do SIGEO viu nesta competência (só quando não pôde concluir sozinha) -->
+              @if (d.ob_sigeo_pendencia) { <p class="aviso-bloco" role="status"><strong>SIGEO:</strong> {{ d.ob_sigeo_pendencia }}</p> }
               <app-campo-arquivo tipo="pdf" rotulo="Ordem Bancária (PDF)" [obrigatorio]="true" (selecionado)="ob = $event" />
               <div class="barra-envio-nf barra-medicao">
                 <div class="texto-envio">

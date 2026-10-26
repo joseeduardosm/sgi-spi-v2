@@ -19,10 +19,12 @@ from app.models.contratos import (
     AvaliacaoCompetencia,
     Competencia,
     Contrato,
+    NotaEmpenho,
     ProcessoProrrogacao,
     Reajuste,
 )
 from app.models.usuario import Usuario
+from app.schemas.contratos.orcamento import ContratoOrcamento, OrcamentoCarteira
 from app.schemas.contratos.painel import (
     AlertasContrato,
     ExecucaoOrcamentaria,
@@ -49,7 +51,7 @@ from app.services.contratos.servico_competencias import (
     total_medido,
     vencimento_pagamento,
 )
-from app.services.contratos.servico_contratos import chave_ordem, designacoes_vigentes, hoje, opcoes_carga_completa, situacao, totais, vigencias
+from app.services.contratos.servico_contratos import chave_ordem, designacoes_vigentes, eh_administrador, hoje, opcoes_carga_completa, situacao, totais, vigencias
 from app.services.contratos.servico_orcamento import meses_previstos
 from app.services.contratos.servico_prorrogacao import meses_disponiveis
 from app.services.contratos.servico_retencao import eh_financeiro
@@ -74,6 +76,8 @@ def carregar_contratos(sessao: Session) -> list[Contrato]:
                 *opcoes_carga_completa(),
                 selectinload(Contrato.competencias).selectinload(Competencia.ciencias),
                 selectinload(Contrato.competencias).selectinload(Competencia.avaliacao),
+                selectinload(Contrato.competencias).selectinload(Competencia.notas_fiscais),
+                selectinload(Contrato.notas_empenho).selectinload(NotaEmpenho.cancelamentos),
                 selectinload(Contrato.alteracoes).selectinload(AlteracaoQuantidade.ciencias),
             )
         )
@@ -312,6 +316,29 @@ def execucao_orcamentaria(contratos: list[Contrato], exercicio: int) -> Execucao
     )
 
 
+def orcamento_da_carteira(contratos: list[Contrato], exercicio: int) -> OrcamentoCarteira:
+    """Orçamento executivo somado dos contratos ativos (e a vencer): remanescente, saldo livre, reforços e sobras, com os contratos que pedem ação."""
+    from app.services.contratos.servico_orcamento import orcamento_executivo
+
+    soma = dict.fromkeys(("previsto_concluido", "pago_concluido", "remanescente", "livre", "necessidade", "reforco", "disponivel_cancelar"), ZERO)
+    reforcos, sobras = [], []
+    for contrato in contratos:
+        if situacao(contrato) not in ("ativo", "a_vencer"):
+            continue
+        o = orcamento_executivo(contrato, exercicio)
+        for campo in ("previsto_concluido", "pago_concluido", "remanescente", "livre", "necessidade", "reforco", "disponivel_cancelar"):
+            soma[campo] += getattr(o, campo)
+        linha = ContratoOrcamento(contrato_id=contrato.id, rotulo=f"{contrato.numero} · {contrato.apelido or contrato.empresa.razao_social}", reforco=o.reforco,
+                                  pedir_reforco_ate=o.pedir_reforco_ate, disponivel_cancelar=o.disponivel_cancelar, remanescente=o.remanescente)
+        if o.reforco > 0:
+            reforcos.append(linha)
+        elif o.disponivel_cancelar > 0:
+            sobras.append(linha)
+    reforcos.sort(key=lambda l: (l.pedir_reforco_ate or date.max, -l.reforco))
+    sobras.sort(key=lambda l: -l.disponivel_cancelar)
+    return OrcamentoCarteira(exercicio=exercicio, precisam_reforco=reforcos, com_sobra=sobras, **soma)
+
+
 def numeros(contratos: list[Contrato]) -> NumerosCarteira:
     """Contagens e somas da carteira (ativos inclui os "a vencer")."""
     estados = {c.id: situacao(c) for c in contratos}
@@ -325,20 +352,27 @@ def numeros(contratos: list[Contrato]) -> NumerosCarteira:
 
 
 def montar_painel(sessao: Session, usuario: Usuario, exercicio: int | None, empresa_id: uuid.UUID | None, contrato_id: uuid.UUID | None) -> Painel:
-    """Monta o painel inteiro. Os filtros valem para alertas, execução e números, não para as pendências."""
+    """Monta o painel inteiro. Os filtros valem para alertas, execução e números, não para as pendências.
+
+    Execução orçamentária, números e opções dos filtros só trazem os contratos do usuário (criador ou integrante vigente da equipe); o administrador de
+    Contratos (controle total na ACL) e o SuperRoot veem a carteira inteira.
+    """
     todos = carregar_contratos(sessao)
-    filtrados = [c for c in todos if (empresa_id is None or c.empresa_id == empresa_id) and (contrato_id is None or c.id == contrato_id)]
+    meus = todos if eh_administrador(sessao, usuario) else [
+        c for c in todos if c.criador_id == usuario.id or any(d.usuario_id == usuario.id for d in designacoes_vigentes(c))]
+    filtrados = [c for c in meus if (empresa_id is None or c.empresa_id == empresa_id) and (contrato_id is None or c.id == contrato_id)]
     # Opções de empresa do filtro, sem repetição
-    empresas = {c.empresa.id: c.empresa.razao_social for c in todos}
+    empresas = {c.empresa.id: c.empresa.razao_social for c in meus}
     return Painel(
         hoje=hoje(),
         minhas_pendencias=pendencias_do_usuario(sessao, todos, usuario),
         alertas=alertas_da_carteira(sessao, filtrados, usuario),
         execucao=execucao_orcamentaria(filtrados, exercicio or hoje().year),
         numeros=numeros(filtrados),
+        orcamento=orcamento_da_carteira(filtrados, exercicio or hoje().year),
         empresas=[OpcaoFiltro(id=i, rotulo=n) for i, n in sorted(empresas.items(), key=lambda e: e[1].lower())],
         contratos=[OpcaoFiltro(id=c.id, rotulo=f"{c.numero} · {c.apelido or c.empresa.razao_social}")
-                   for c in sorted(todos, key=chave_ordem)],
+                   for c in sorted(meus, key=chave_ordem)],
     )
 
 

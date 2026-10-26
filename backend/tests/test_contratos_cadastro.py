@@ -128,7 +128,7 @@ def test_cadastro_calcula_data_final_e_valor_global(cliente, admin):
     assert contrato["itens"][0]["unidade_fornecimento"] == "posto"
     assert contrato["itens"][0]["quantidade_total"] == "24.0000" and contrato["itens"][1]["quantidade_total"] == "100.0000"
     assert contrato["equipe"] == [{**contrato["equipe"][0], "papel": "gestor", "usuario_id": usuario_id, "login": "gestora"}]
-    assert contrato["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": True, "pode_gerir_autoridades": True}
+    assert contrato["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": True, "pode_gerir_autoridades": True, "pode_editar_processo_financeiro": True}
     assert contrato["data_limite_maxima"] == "2030-12-31"
     assert cliente.get("/api/contratos/proximo-numero", params={"ano": 2026}, headers=admin).json()["numero"] == "002/2026"
 
@@ -328,10 +328,14 @@ def test_carteira_meus_contratos_so_da_equipe_vigente(cliente, admin):
     c1 = criar_contrato(cliente, admin, equipe={"gestor": ana})
     c2 = criar_contrato(cliente, admin, equipe={"gestor": bia}, numero="002/2026", empresa_id=c1["empresa"]["id"])
     h = cabecalho(cliente, "ana_meus")
-    todos = cliente.get("/api/contratos", headers=h).json()
-    assert {i["id"] for i in todos["itens"]} >= {c1["id"], c2["id"]}
+    # Quem não é administrador de Contratos só vê os contratos que criou ou em que integra a equipe; o SuperRoot vê todos
+    da_ana = cliente.get("/api/contratos", headers=h).json()
+    assert [i["id"] for i in da_ana["itens"]] == [c1["id"]] and da_ana["total"] == 1
+    assert {i["id"] for i in cliente.get("/api/contratos", headers=admin).json()["itens"]} >= {c1["id"], c2["id"]}
     meus = cliente.get("/api/contratos", params={"meus": "true"}, headers=h).json()
     assert [i["id"] for i in meus["itens"]] == [c1["id"]] and meus["total"] == 1
+    # O vizinho também respeita o escopo
+    assert cliente.get(f"/api/contratos/{c1['id']}/vizinhos", headers=h).json()["total"] == 1
 
 
 def test_exclusao_do_proprio_contrato_com_modificacao_e_qualquer_um_com_controle_total(cliente, admin):
@@ -341,7 +345,7 @@ def test_exclusao_do_proprio_contrato_com_modificacao_e_qualquer_um_com_controle
     h_ana, h_bia, h_chefe = cabecalho(cliente, "ana-c"), cabecalho(cliente, "bia-c"), cabecalho(cliente, "chefe-c")
     dela = criar_contrato(cliente, h_ana, numero="010/2026")
     da_bia = criar_contrato(cliente, h_bia, numero="011/2026", empresa_id=dela["empresa"]["id"])
-    assert cliente.get(f"/api/contratos/{dela['id']}", headers=h_ana).json()["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": True, "pode_gerir_autoridades": False}
+    assert cliente.get(f"/api/contratos/{dela['id']}", headers=h_ana).json()["permissoes"] == {"pode_editar": True, "pode_excluir": True, "pode_administrar": True, "pode_gerir_autoridades": False, "pode_editar_processo_financeiro": True}
     assert cliente.delete(f"/api/contratos/{da_bia['id']}", headers=h_ana).status_code == 403
     assert cliente.delete(f"/api/contratos/{dela['id']}", headers=h_ana).status_code == 204
     assert cliente.get(f"/api/contratos/{da_bia['id']}", headers=h_chefe).json()["permissoes"]["pode_administrar"] is True
@@ -375,3 +379,28 @@ def test_autoridade_do_despacho_e_um_usuario_ativo_escolhido_no_contrato(cliente
     r = cliente.put(f"/api/contratos/{contrato['id']}", json=dados, headers=admin)
     assert r.status_code == 200, r.text
     assert r.json()["autoridade_despacho"] == {"id": autoridade, "nome": "Ana Autoridade", "cargo": "Subsecretária de Gestão Corporativa", "departamento": "Contratos"}
+
+
+def test_exportar_carteira_pdf_e_xlsx_com_o_escopo_da_tela(cliente, admin):
+    """Relatório da carteira com os dados essenciais; quem não é administrador só exporta os próprios contratos."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from tests.apoio_contratos import restringir_contratos
+    from tests.conftest import cabecalho, criar_usuario
+
+    ana = criar_usuario("ana_exp")
+    restringir_contratos(cliente, admin, {ana: "LEITURA"})
+    c1 = criar_contrato(cliente, admin, equipe={"gestor": ana})
+    criar_contrato(cliente, admin, numero="002/2026", empresa_id=c1["empresa"]["id"])
+    r = cliente.get("/api/contratos/exportar", params={"formato": "xlsx"}, headers=admin)
+    assert r.status_code == 200 and "carteira-de-contratos.xlsx" in r.headers["content-disposition"]
+    folha = load_workbook(BytesIO(r.content)).active
+    valores = [c for linha in folha.iter_rows(values_only=True) for c in linha if c is not None]
+    assert "001/2026" in valores and "002/2026" in valores and "Limpeza sede" in valores
+    da_ana = load_workbook(BytesIO(cliente.get("/api/contratos/exportar", params={"formato": "xlsx"}, headers=cabecalho(cliente, "ana_exp")).content)).active
+    numeros = [c for linha in da_ana.iter_rows(values_only=True) for c in linha if isinstance(c, str) and c.endswith("/2026")]
+    assert numeros == ["001/2026"]
+    pdf = cliente.get("/api/contratos/exportar", params={"formato": "pdf", "busca": "002"}, headers=admin)
+    assert pdf.status_code == 200 and pdf.content[:5] == b"%PDF-"

@@ -8,6 +8,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { GraficoComponent, SerieGrafico } from '../../../shared/componentes/grafico/grafico.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
+import { OrcamentoExecutivoComponent } from '../compartilhado/orcamento-executivo.component';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { PainelContratos } from '../compartilhado/contratos.models';
@@ -21,7 +22,7 @@ const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'O
  */
 @Component({
   selector: 'app-painel',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, GraficoComponent, ...PIPES_FORMATACAO],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, GraficoComponent, OrcamentoExecutivoComponent, ...PIPES_FORMATACAO],
   templateUrl: './painel.component.html',
 })
 export class PainelComponent implements OnInit {
@@ -40,8 +41,13 @@ export class PainelComponent implements OnInit {
   protected readonly series = computed<SerieGrafico[]>(() => {
     const meses = this.painel()?.execucao.meses ?? [];
     const mil = (v: string) => Number(v) / 1000;
-    return [{ nome: 'Previsto', dados: meses.map((m) => mil(m.previsto)), cor: '#c9ced4' }, { nome: 'Medido', dados: meses.map((m) => mil(m.medido)), cor: '#2f5d8a' },
-            { nome: 'Pago', dados: meses.map((m) => mil(m.pago)), cor: '#c82331' }];
+    // Pago em verde até o previsto; o que passa do previsto vira uma sobrebarra vermelha em cima do pago (mesma pilha)
+    const ate = meses.map((m) => mil(String(Math.min(Number(m.pago), Number(m.previsto) || Number(m.pago)))));
+    const excedente = meses.map((m) => mil(String(Math.max(Number(m.pago) - Number(m.previsto), 0))));
+    return [{ nome: 'Previsto', dados: meses.map((m) => mil(m.previsto)), cor: '#c9ced4', pilha: 'previsto' },
+            { nome: 'Medido', dados: meses.map((m) => mil(m.medido)), cor: '#2f5d8a', pilha: 'medido' },
+            { nome: 'Pago', dados: ate, cor: '#2f9e6b', pilha: 'pago' },
+            ...(excedente.some((v) => v > 0) ? [{ nome: 'Pago acima do previsto', dados: excedente, cor: '#c82331', pilha: 'pago' }] : [])];
   });
   // Quantidade de riscos de gravidade alta (destaque no cartão)
   protected readonly alertasAltos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.filter((r) => r.gravidade === 'alta').length, 0) ?? 0);

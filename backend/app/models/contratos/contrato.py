@@ -99,6 +99,8 @@ class Contrato(Base):
     sei_gestao_link: Mapped[str] = mapped_column(String(1000))
     sei_execucao_numero: Mapped[str] = mapped_column(String(100))
     sei_execucao_link: Mapped[str] = mapped_column(String(1000))
+    # Processo financeiro (opcional; ex.: 20240605988): é o COD_PROCESSO das ordens bancárias no SIGEO
+    processo_financeiro: Mapped[str] = mapped_column(String(60), default="", server_default="")
     # Nulo = situação calculada pelas datas
     situacao_forcada: Mapped[str | None] = mapped_column(String(20))
     # Fotografia do valor global depois de um reajuste (MVP 6)

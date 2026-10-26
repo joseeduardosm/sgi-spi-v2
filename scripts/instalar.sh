@@ -59,21 +59,21 @@ systemctl daemon-reload
 systemctl enable sgi-spi-api
 systemctl restart sgi-spi-api
 
-echo "==> systemd: timers das notificações (despacho a cada 2 min; lembretes às 07:00)"
+echo "==> systemd: timers das notificações (despacho a cada 2 min; lembretes às 07:00) e da conferência de OBs no SIGEO (de hora em hora; uma vez por dia, na hora da tela)"
 # Unidades antigas (antes se chamavam "mensageria"): desativa e remove, para não rodarem em dobro
 for antiga in sgi-spi-mensageria-emails sgi-spi-mensageria-lembretes; do
   systemctl disable --now "$antiga.timer" 2>/dev/null || true
   systemctl stop "$antiga.service" 2>/dev/null || true
   rm -f "/etc/systemd/system/$antiga.timer" "/etc/systemd/system/$antiga.service"
 done
-for unidade in sgi-spi-notificacoes-despachar sgi-spi-notificacoes-lembretes; do
+for unidade in sgi-spi-notificacoes-despachar sgi-spi-notificacoes-lembretes sgi-spi-sigeo-ob; do
   for tipo in service timer; do
     sed -e "s/__USUARIO__/$USUARIO/g" -e "s|__PROJETO__|$PROJETO|g" \
         "$PROJETO/systemd/$unidade.$tipo" > "/etc/systemd/system/$unidade.$tipo"
   done
 done
 systemctl daemon-reload
-systemctl enable --now sgi-spi-notificacoes-despachar.timer sgi-spi-notificacoes-lembretes.timer
+systemctl enable --now sgi-spi-notificacoes-despachar.timer sgi-spi-notificacoes-lembretes.timer sgi-spi-sigeo-ob.timer
 
 echo "==> Nginx (porta $PORTA)"
 if (( SUBSTITUIR )); then

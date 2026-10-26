@@ -102,7 +102,7 @@ interface LinhaGlosa {
                   }
                 </select>
                 <input [name]="'qtd' + $index" inputmode="decimal" placeholder="Quantidade" [attr.aria-label]="'Quantidade da glosa ' + ($index + 1)" [(ngModel)]="g.quantidade" />
-                <button type="button" class="link-arquivo" [disabled]="glosas().length === 1" (click)="removerGlosa($index)">remover</button>
+                <button type="button" class="acao-perigo acao-pequena" [disabled]="glosas().length === 1" (click)="removerGlosa($index)">Remover</button>
               </div>
             }
             <button type="button" class="acao-secundaria acao-pequena" [disabled]="glosas().length >= (diario()?.itens?.length ?? 0)" (click)="adicionarGlosa()">+ Item</button>
@@ -142,7 +142,7 @@ interface LinhaGlosa {
             <small class="dica-formulario">Até {{ maximoAnexos }} arquivos (fotos, PDF, planilhas…). Vão anexados ao e-mail da ocorrência.</small>
             @for (a of arquivos(); track $index) {
               <span class="chip-anexo">{{ a.name }} <small>({{ tamanhoLegivel(a.size) }})</small>
-                <button type="button" class="link-arquivo" [attr.aria-label]="'Remover ' + a.name" (click)="removerArquivo($index)">remover</button>
+                <button type="button" class="acao-perigo acao-pequena" [attr.aria-label]="'Remover ' + a.name" (click)="removerArquivo($index)">Remover</button>
               </span>
             }
           </div>
@@ -219,7 +219,7 @@ interface LinhaGlosa {
                     } @else {
                       <small class="texto-erro">E-mail não enviado: {{ o.email.erro }}</small>
                       @if (diario()?.pode_registrar) {
-                        <button type="button" class="link-arquivo" [disabled]="reenviando() === o.id" (click)="reenviar(o)">{{ reenviando() === o.id ? 'Reenviando…' : 'Reenviar' }}</button>
+                        <button type="button" class="acao-secundaria acao-pequena" [disabled]="reenviando() === o.id" (click)="reenviar(o)">{{ reenviando() === o.id ? 'Reenviando…' : 'Reenviar' }}</button>
                       }
                     }
                   </div>

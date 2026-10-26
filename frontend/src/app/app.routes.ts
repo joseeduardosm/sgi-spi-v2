@@ -217,6 +217,15 @@ export const rotas: Routes = [
           import('./features/administracao/glpi/integracao-glpi.component').then((m) => m.IntegracaoGlpiComponent),
       },
       {
+        // Integração com o SIGEO (ordens bancárias pagas concluem a etapa da OB): só o SuperRoot
+        path: 'admin/sigeo',
+        title: 'Integração SIGEO | SGI SPI',
+        canActivate: [guardaPapel],
+        data: { papeis: ['SuperRoot'] },
+        loadComponent: () =>
+          import('./features/administracao/sigeo/integracao-sigeo.component').then((m) => m.IntegracaoSigeoComponent),
+      },
+      {
         // Política de SLA de prazos: quem tem ao menos LEITURA no recurso `sla` (gravar exige MODIFICACAO)
         path: 'admin/sla',
         title: 'SLA de prazos | SGI SPI',

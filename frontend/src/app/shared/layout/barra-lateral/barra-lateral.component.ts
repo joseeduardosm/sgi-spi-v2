@@ -106,6 +106,9 @@ export class BarraLateralComponent {
   private abrirGruposAtivos(): void {
     const grupos = this.navegacao.secoes().flatMap((s) => s.itens).filter((i) => i.filhos?.length);
     const ativos = grupos.filter((g) => g.filhos!.some((f) => this.rotaAtiva(f)));
+    // A seção dobrável (Administração) também reabre quando a página atual está dentro dela
+    const secoesAtivas = this.navegacao.secoes().filter((s) => s.dobravel && s.itens.some((i) => this.rotaAtiva(i) || i.filhos?.some((f) => this.rotaAtiva(f)))).map((s) => 'secao-' + s.legenda);
+    if (secoesAtivas.length) this.gruposFechados.update((conjunto) => new Set([...conjunto].filter((id) => !secoesAtivas.includes(id))));
     if (ativos.length) {
       this.gruposFechados.update((conjunto) => new Set([...conjunto].filter((id) => !ativos.some((g) => g.id === id))));
     }

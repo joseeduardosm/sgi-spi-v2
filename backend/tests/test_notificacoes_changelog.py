@@ -174,3 +174,54 @@ def test_envio_a_usuarios_e_setores_escolhidos(cliente, admin):
     # A tela mostra quantos receberão: seleção com a Eva e a Ana = 2 pessoas, as 2 recebem (a preferência não vale para escolhidos)
     contagem = cliente.post(f"{URL}/contagem", json={"usuarios_ids": [ids["ana"], ids["eva"]]}, headers=admin).json()
     assert contagem == {"total": 2, "selecionados": 2}
+
+
+def test_agendar_cancelar_e_enviar_na_hora_marcada(cliente, admin, _ambiente):
+    from datetime import datetime, timedelta, timezone
+
+    from app.core.banco import FabricaSessao
+
+    assert cliente.post("/api/smtp/servidores", json=dados_servidor(), headers=admin).status_code == 201
+    ana = criar_usuario("ana", email="ana@sp.gov.br")
+    ligar_canais([ana], eventos=["sistema.novidades"])
+    rascunho = cliente.get(f"{URL}/rascunho", headers=admin).json()
+    base = {"assunto": rascunho["assunto"], "corpo": rascunho["corpo"], "destino": "todos", "ate_data": rascunho["ate"]}
+    futuro = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+
+    # Agendamento inválido: sem fuso, no passado, de teste
+    assert cliente.post(f"{URL}/envios", json={**base, "agendar_para": "2030-01-01T08:00:00"}, headers=admin).status_code == 422
+    assert cliente.post(f"{URL}/envios", json={**base, "destino": "teste", "email_teste": "a@sp.gov.br", "agendar_para": futuro}, headers=admin).status_code == 422
+    passado = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    assert cliente.post(f"{URL}/envios", json={**base, "agendar_para": passado}, headers=admin).status_code == 400
+
+    # Agendado: não envia agora, aparece como agendado e NÃO avança o próximo rascunho
+    r = cliente.post(f"{URL}/envios", json={**base, "agendar_para": futuro}, headers=admin)
+    assert r.status_code == 202 and r.json()["situacao"] == "agendado" and SmtpSimulado.enviadas == []
+    assert cliente.get(f"{URL}/rascunho", headers=admin).json()["ate"] == rascunho["ate"]
+    envio_id = r.json()["id"]
+
+    # Cancelar: some da fila; cancelar de novo é 409
+    assert cliente.delete(f"{URL}/envios/{envio_id}", headers=admin).status_code == 204
+    assert cliente.delete(f"{URL}/envios/{envio_id}", headers=admin).status_code == 409
+    assert cliente.get(f"{URL}/envios", headers=admin).json()[0]["situacao"] == "cancelado"
+    with FabricaSessao() as s:
+        assert servico_changelog.processar_agendados(s) == 0
+
+    # Novo agendamento que "chega na hora": o timer envia, uma vez só, e aí o rascunho avança
+    r = cliente.post(f"{URL}/envios", json={**base, "agendar_para": futuro}, headers=admin)
+    envio_id = r.json()["id"]
+    from app.models.envio_changelog import EnvioChangelog
+    import uuid
+
+    with FabricaSessao() as s:
+        s.get(EnvioChangelog, uuid.UUID(envio_id)).agendado_para = datetime.now(timezone.utc) - timedelta(minutes=1)
+        s.commit()
+    with FabricaSessao() as s:
+        assert servico_changelog.processar_agendados(s) == 1
+        assert servico_changelog.processar_agendados(s) == 0
+    destinos = [d for _, _, dests, _ in SmtpSimulado.enviadas for d in dests]
+    assert destinos == ["ana@sp.gov.br"]
+    historico = cliente.get(f"{URL}/envios", headers=admin).json()
+    assert historico[0]["situacao"] == "concluido" and historico[0]["enviados"] == 1
+    assert cliente.delete(f"{URL}/envios/{envio_id}", headers=admin).status_code == 409
+    assert cliente.get(f"{URL}/rascunho", headers=admin).json()["ate"] is None

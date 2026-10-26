@@ -108,6 +108,8 @@ class GravacaoContrato(BaseModel):
     sei_gestao_link: Link = Field(..., max_length=1000)
     sei_execucao_numero: TextoObrigatorio = Field(..., max_length=100)
     sei_execucao_link: Link = Field(..., max_length=1000)
+    processo_financeiro: str = Field("", max_length=60, description="Processo(s) financeiro(s) (opcional; ex.: `20240605988`, ou `20250139231, 20260315789` quando há mais de um). "
+                                     "É o `COD_PROCESSO` das ordens bancárias no SIGEO: com ele a conferência diária conclui sozinha a etapa da OB.")
     situacao_forcada: Situacao | None = Field(None, description="Nulo = situação calculada pelas datas.")
     equipe: GravacaoEquipe = Field(default_factory=GravacaoEquipe)
     itens: list[GravacaoItem] = Field(default_factory=list, description="Lista completa, na ordem de exibição.")
@@ -174,6 +176,7 @@ class PermissoesContrato(BaseModel):
     pode_excluir: bool = Field(..., description="Controle total em Contratos (qualquer contrato) ou criador/integrante da equipe vigente do contrato com ACL ≥ MODIFICACAO.")
     pode_administrar: bool = Field(False, description="SuperRoot ou controle total em Contratos: faz tudo sobre qualquer contrato.")
     pode_gerir_autoridades: bool = Field(False, description="Pode cadastrar as autoridades das portarias: SuperRoot, controle total ou gestor/gestor suplente deste contrato.")
+    pode_editar_processo_financeiro: bool = Field(False, description="Pode alterar só o Processo Financeiro: quem edita o contrato ou o Financeiro (DOF, recurso ACL `financeiro`).")
 
 
 class CompetenciaAtualCarteira(BaseModel):
@@ -245,6 +248,7 @@ class DetalheContrato(ResumoContrato):
     sei_gestao_link: str
     sei_execucao_numero: str
     sei_execucao_link: str
+    processo_financeiro: str = ""
     situacao_forcada: Situacao | None
     vigencias: list[LeituraVigencia]
     marcos: list[MarcoLinhaTempo] = Field(..., description="Marcos da linha do tempo, em ordem de data.")
@@ -301,3 +305,13 @@ class AlteracaoCampo(BaseModel):
     para: Any
     autor: str
     ocorrido_em: datetime
+
+
+class GravacaoProcessoFinanceiro(BaseModel):
+    """Corpo do `PUT /contratos/{id}/processo-financeiro`."""
+    processo_financeiro: str = Field("", max_length=60, description="Número do processo financeiro (vazio apaga).")
+
+
+class ResultadoPedidoProcesso(BaseModel):
+    """Resultado do pedido do processo financeiro ao DOF."""
+    destinatarios: int = Field(..., description="Quantas pessoas do Financeiro receberam o pedido (e-mail e sino).")

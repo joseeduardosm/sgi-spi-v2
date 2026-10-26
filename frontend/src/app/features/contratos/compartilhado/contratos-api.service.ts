@@ -21,6 +21,7 @@ import {
   GravacaoPreposto,
   Modelo, PlaceholderPortaria,
   NotaEmpenho,
+  OrcamentoExecutivo,
   OcorrenciaDiario,
   OpcaoEmpresa,
   Pagina,
@@ -160,6 +161,21 @@ export class ContratosApiService {
   }
 
   /** Notas de Empenho do contrato. */
+  /** Grava só o Processo Financeiro (equipe ou Financeiro/DOF). */
+  informarProcessoFinanceiro(id: string, processoFinanceiro: string): Observable<DetalheContrato> {
+    return this.http.put<DetalheContrato>(`${this.base}/${id}/processo-financeiro`, { processo_financeiro: processoFinanceiro });
+  }
+
+  /** Pede o processo financeiro a todo o Financeiro (DOF), por e-mail e no sino. */
+  pedirProcessoFinanceiro(id: string): Observable<{ destinatarios: number }> {
+    return this.http.post<{ destinatarios: number }>(`${this.base}/${id}/processo-financeiro/pedido`, null);
+  }
+
+  /** Saldo remanescente e decisões de empenho do exercício. */
+  orcamentoExecutivo(id: string, exercicio?: number): Observable<OrcamentoExecutivo> {
+    return this.http.get<OrcamentoExecutivo>(`${this.base}/${id}/orcamento-executivo`, { params: exercicio ? { exercicio } : {} });
+  }
+
   notas(id: string): Observable<NotaEmpenho[]> {
     return this.http.get<NotaEmpenho[]>(`${this.base}/${id}/notas-empenho`);
   }
@@ -252,6 +268,12 @@ export class ContratosApiService {
   painelVigencias(empresaId: string): Observable<PainelVigencias> {
     const params = empresaId ? new HttpParams().set('empresa_id', empresaId) : new HttpParams();
     return this.http.get<PainelVigencias>(`${this.base}/painel/vigencias`, { params });
+  }
+
+  /** Baixa o relatório da carteira (dados essenciais) com a mesma busca, filtro e ordem da tela. */
+  exportarCarteira(formato: 'pdf' | 'xlsx', busca: string, meus: boolean, ordenarPor: string, direcao: 'asc' | 'desc') {
+    const params = new HttpParams({ fromObject: { formato, busca, meus: String(meus), ordenar_por: ordenarPor, direcao } });
+    return baixarArquivo(this.http, `${this.base}/exportar?${params.toString()}`);
   }
 
   /** Baixa o relatório executivo de NEs (SuperRoot). */

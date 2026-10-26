@@ -1,74 +1,74 @@
 /home/administrador/projeto/backend/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
   from starlette.testclient import TestClient as TestClient  # noqa
-2026-10-25 23:35:41,465 INFO httpx: HTTP Request: POST http://testserver/api/autenticacao/login "HTTP/1.1 200 OK"
-2026-10-25 23:35:44,265 INFO sgi_spi.auditoria: root setor.criar Secretaria de Parcerias em Investimentos id=1 membros=0
-2026-10-25 23:35:44,471 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,479 INFO sgi_spi.auditoria: root setor.criar Subsecretaria de Gestão Corporativa id=2 membros=0
-2026-10-25 23:35:44,484 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,489 INFO sgi_spi.auditoria: root setor.criar Diretoria de Gestão Administrativa id=3 membros=0
-2026-10-25 23:35:44,494 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,499 INFO sgi_spi.auditoria: root setor.criar Coordenadoria de Gestão de Pessoas id=4 membros=0
-2026-10-25 23:35:44,503 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,508 INFO sgi_spi.auditoria: root setor.criar Serviço de Apoio Administrativo id=5 membros=0
-2026-10-25 23:35:44,512 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,516 INFO sgi_spi.auditoria: root setor.criar Subsecretaria de Gestão de Parcerias id=6 membros=0
-2026-10-25 23:35:44,521 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,525 INFO sgi_spi.auditoria: root setor.criar Diretoria de Estruturação de Parcerias id=7 membros=0
-2026-10-25 23:35:44,529 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,574 INFO sgi_spi.auditoria: root acl.recurso.criar rh ativo=True
-2026-10-25 23:35:44,579 INFO httpx: HTTP Request: POST http://testserver/api/acl/recursos "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,586 INFO sgi_spi.auditoria: root acl.regra.criar regra 1 recurso=1 nivel=CONTROLE_TOTAL usuarios=[2] setores=[]
-2026-10-25 23:35:44,595 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,598 INFO sgi_spi.auditoria: root acl.recurso.criar protocolo ativo=True
-2026-10-25 23:35:44,602 INFO httpx: HTTP Request: POST http://testserver/api/acl/recursos "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,606 INFO sgi_spi.auditoria: root acl.regra.criar regra 2 recurso=2 nivel=MODIFICACAO usuarios=[2] setores=[]
-2026-10-25 23:35:44,610 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
-2026-10-25 23:35:44,880 INFO httpx: HTTP Request: POST http://testserver/api/autenticacao/login "HTTP/1.1 200 OK"
-2026-10-25 23:35:45,042 INFO httpx: HTTP Request: GET http://testserver/api/rh/tipos-cargo "HTTP/1.1 200 OK"
-2026-10-25 23:35:45,052 INFO sgi_spi.auditoria: rita rh.cargo.criar Secretário Executivo (Secretaria de Parcerias em Investimentos) 
-2026-10-25 23:35:45,057 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,066 INFO sgi_spi.auditoria: rita rh.cargo.criar Subsecretário (Subsecretaria de Gestão Corporativa) 
-2026-10-25 23:35:45,069 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,098 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/2/ocupacao "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,109 INFO sgi_spi.auditoria: rita rh.cargo.criar Assessor Especial IV (Subsecretaria de Gestão Corporativa) 
-2026-10-25 23:35:45,113 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,122 INFO sgi_spi.auditoria: rita rh.cargo.criar Diretor (Diretoria de Gestão Administrativa) 
-2026-10-25 23:35:45,126 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,142 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/5/ocupacao "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,151 INFO sgi_spi.auditoria: rita rh.cargo.criar Assessor III (Diretoria de Gestão Administrativa) 
-2026-10-25 23:35:45,154 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,171 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/6/ocupacao "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,181 INFO sgi_spi.auditoria: rita rh.cargo.criar Assistente Técnico III (Diretoria de Gestão Administrativa) 
-2026-10-25 23:35:45,185 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,195 INFO sgi_spi.auditoria: rita rh.cargo.criar Coordenador (Coordenadoria de Gestão de Pessoas) 
-2026-10-25 23:35:45,199 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,217 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/8/ocupacao "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,227 INFO sgi_spi.auditoria: rita rh.cargo.criar Assessor Especial III (Coordenadoria de Gestão de Pessoas) 
-2026-10-25 23:35:45,242 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,264 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/9/ocupacao "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,274 INFO sgi_spi.auditoria: rita rh.cargo.criar Assessor II (Coordenadoria de Gestão de Pessoas) 
-2026-10-25 23:35:45,278 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,294 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/10/ocupacao "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,301 INFO sgi_spi.auditoria: rita rh.cargo.criar Assistente Técnico III (Serviço de Apoio Administrativo) 
-2026-10-25 23:35:45,304 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,316 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/12/ocupacao "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,324 INFO sgi_spi.auditoria: rita rh.cargo.criar Subsecretário (Subsecretaria de Gestão de Parcerias) 
-2026-10-25 23:35:45,327 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,341 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/13/ocupacao "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,350 INFO sgi_spi.auditoria: rita rh.cargo.criar Diretor (Diretoria de Estruturação de Parcerias) 
-2026-10-25 23:35:45,352 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,716 INFO sgi_spi.auditoria: root protocolo.tipo.criar Resoluções SPI 
-2026-10-25 23:35:45,721 INFO httpx: HTTP Request: POST http://testserver/api/protocolo/tipos "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,739 INFO sgi_spi.auditoria: root protocolo.sequencia.criar Resoluções SPI 2026: 1 a 99 
-2026-10-25 23:35:45,742 INFO httpx: HTTP Request: POST http://testserver/api/protocolo/tipos/df91520b-8add-4184-97a1-8f8c9db2b8c3/sequencias "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,753 INFO sgi_spi.auditoria: rita rh.checklist.criar Documentos de direção e chefia (1.15 a 1.18) 
-2026-10-25 23:35:45,755 INFO httpx: HTTP Request: POST http://testserver/api/rh/checklists "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,764 INFO sgi_spi.auditoria: rita rh.checklist.criar Documentos de assessoria (2.04 a 2.17) 
-2026-10-25 23:35:45,766 INFO httpx: HTTP Request: POST http://testserver/api/rh/checklists "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,780 INFO httpx: HTTP Request: GET http://testserver/api/rh/cargos?situacao=vago "HTTP/1.1 200 OK"
-2026-10-25 23:35:45,796 INFO sgi_spi.auditoria: rita rh.pre_cadastro.criar Mariana Costa Ribeiro 
-2026-10-25 23:35:45,799 INFO httpx: HTTP Request: POST http://testserver/api/rh/pre-cadastros "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,807 INFO sgi_spi.auditoria: rita rh.pre_cadastro.criar Rafael Almeida Santos 
-2026-10-25 23:35:45,809 INFO httpx: HTTP Request: POST http://testserver/api/rh/pre-cadastros "HTTP/1.1 201 Created"
-2026-10-25 23:35:45,819 INFO httpx: HTTP Request: GET http://testserver/api/rh/modelos "HTTP/1.1 200 OK"
+2026-10-25 23:53:05,465 INFO httpx: HTTP Request: POST http://testserver/api/autenticacao/login "HTTP/1.1 200 OK"
+2026-10-25 23:53:08,212 INFO sgi_spi.auditoria: root setor.criar Secretaria de Parcerias em Investimentos id=1 membros=0
+2026-10-25 23:53:08,405 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,415 INFO sgi_spi.auditoria: root setor.criar Subsecretaria de Gestão Corporativa id=2 membros=0
+2026-10-25 23:53:08,421 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,426 INFO sgi_spi.auditoria: root setor.criar Diretoria de Gestão Administrativa id=3 membros=0
+2026-10-25 23:53:08,431 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,437 INFO sgi_spi.auditoria: root setor.criar Coordenadoria de Gestão de Pessoas id=4 membros=0
+2026-10-25 23:53:08,442 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,447 INFO sgi_spi.auditoria: root setor.criar Serviço de Apoio Administrativo id=5 membros=0
+2026-10-25 23:53:08,452 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,457 INFO sgi_spi.auditoria: root setor.criar Subsecretaria de Gestão de Parcerias id=6 membros=0
+2026-10-25 23:53:08,462 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,467 INFO sgi_spi.auditoria: root setor.criar Diretoria de Estruturação de Parcerias id=7 membros=0
+2026-10-25 23:53:08,471 INFO httpx: HTTP Request: POST http://testserver/api/setores "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,514 INFO sgi_spi.auditoria: root acl.recurso.criar rh ativo=True
+2026-10-25 23:53:08,519 INFO httpx: HTTP Request: POST http://testserver/api/acl/recursos "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,526 INFO sgi_spi.auditoria: root acl.regra.criar regra 1 recurso=1 nivel=CONTROLE_TOTAL usuarios=[2] setores=[]
+2026-10-25 23:53:08,534 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,538 INFO sgi_spi.auditoria: root acl.recurso.criar protocolo ativo=True
+2026-10-25 23:53:08,540 INFO httpx: HTTP Request: POST http://testserver/api/acl/recursos "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,544 INFO sgi_spi.auditoria: root acl.regra.criar regra 2 recurso=2 nivel=MODIFICACAO usuarios=[2] setores=[]
+2026-10-25 23:53:08,548 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
+2026-10-25 23:53:08,819 INFO httpx: HTTP Request: POST http://testserver/api/autenticacao/login "HTTP/1.1 200 OK"
+2026-10-25 23:53:08,984 INFO httpx: HTTP Request: GET http://testserver/api/rh/tipos-cargo "HTTP/1.1 200 OK"
+2026-10-25 23:53:08,992 INFO sgi_spi.auditoria: rita rh.cargo.criar Secretário Executivo (Secretaria de Parcerias em Investimentos) 
+2026-10-25 23:53:08,996 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,005 INFO sgi_spi.auditoria: rita rh.cargo.criar Subsecretário (Subsecretaria de Gestão Corporativa) 
+2026-10-25 23:53:09,008 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,028 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/2/ocupacao "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,035 INFO sgi_spi.auditoria: rita rh.cargo.criar Assessor Especial IV (Subsecretaria de Gestão Corporativa) 
+2026-10-25 23:53:09,038 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,045 INFO sgi_spi.auditoria: rita rh.cargo.criar Diretor (Diretoria de Gestão Administrativa) 
+2026-10-25 23:53:09,047 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,060 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/5/ocupacao "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,067 INFO sgi_spi.auditoria: rita rh.cargo.criar Assessor III (Diretoria de Gestão Administrativa) 
+2026-10-25 23:53:09,069 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,082 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/6/ocupacao "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,088 INFO sgi_spi.auditoria: rita rh.cargo.criar Assistente Técnico III (Diretoria de Gestão Administrativa) 
+2026-10-25 23:53:09,091 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,097 INFO sgi_spi.auditoria: rita rh.cargo.criar Coordenador (Coordenadoria de Gestão de Pessoas) 
+2026-10-25 23:53:09,100 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,111 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/8/ocupacao "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,118 INFO sgi_spi.auditoria: rita rh.cargo.criar Assessor Especial III (Coordenadoria de Gestão de Pessoas) 
+2026-10-25 23:53:09,120 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,131 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/9/ocupacao "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,139 INFO sgi_spi.auditoria: rita rh.cargo.criar Assessor II (Coordenadoria de Gestão de Pessoas) 
+2026-10-25 23:53:09,141 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,154 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/10/ocupacao "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,160 INFO sgi_spi.auditoria: rita rh.cargo.criar Assistente Técnico III (Serviço de Apoio Administrativo) 
+2026-10-25 23:53:09,163 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,176 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/12/ocupacao "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,183 INFO sgi_spi.auditoria: rita rh.cargo.criar Subsecretário (Subsecretaria de Gestão de Parcerias) 
+2026-10-25 23:53:09,185 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,198 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos/13/ocupacao "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,206 INFO sgi_spi.auditoria: rita rh.cargo.criar Diretor (Diretoria de Estruturação de Parcerias) 
+2026-10-25 23:53:09,208 INFO httpx: HTTP Request: POST http://testserver/api/rh/cargos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,560 INFO sgi_spi.auditoria: root protocolo.tipo.criar Resoluções SPI 
+2026-10-25 23:53:09,564 INFO httpx: HTTP Request: POST http://testserver/api/protocolo/tipos "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,582 INFO sgi_spi.auditoria: root protocolo.sequencia.criar Resoluções SPI 2026: 1 a 99 
+2026-10-25 23:53:09,585 INFO httpx: HTTP Request: POST http://testserver/api/protocolo/tipos/96630942-8120-4fcd-a35e-e66061ce20b5/sequencias "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,596 INFO sgi_spi.auditoria: rita rh.checklist.criar Documentos de direção e chefia (1.15 a 1.18) 
+2026-10-25 23:53:09,599 INFO httpx: HTTP Request: POST http://testserver/api/rh/checklists "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,607 INFO sgi_spi.auditoria: rita rh.checklist.criar Documentos de assessoria (2.04 a 2.17) 
+2026-10-25 23:53:09,609 INFO httpx: HTTP Request: POST http://testserver/api/rh/checklists "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,626 INFO httpx: HTTP Request: GET http://testserver/api/rh/cargos?situacao=vago "HTTP/1.1 200 OK"
+2026-10-25 23:53:09,640 INFO sgi_spi.auditoria: rita rh.pre_cadastro.criar Mariana Costa Ribeiro 
+2026-10-25 23:53:09,643 INFO httpx: HTTP Request: POST http://testserver/api/rh/pre-cadastros "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,651 INFO sgi_spi.auditoria: rita rh.pre_cadastro.criar Rafael Almeida Santos 
+2026-10-25 23:53:09,653 INFO httpx: HTTP Request: POST http://testserver/api/rh/pre-cadastros "HTTP/1.1 201 Created"
+2026-10-25 23:53:09,665 INFO httpx: HTTP Request: GET http://testserver/api/rh/modelos "HTTP/1.1 200 OK"
 seed ok

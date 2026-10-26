@@ -57,9 +57,16 @@ class PedidoEnvioChangelog(ConteudoChangelog):
     setores_ids: list[int] = Field(default_factory=list, max_length=500,
                                    description="Em `selecionados`: setores sistêmicos ou institucionais (membros, quem tem o setor como Departamento e setores filhos).")
     ate_data: date | None = Field(None, description="`ate` do rascunho: o próximo rascunho começa depois desta data (só em `todos`).")
+    agendar_para: datetime | None = Field(None, description="Data e hora (com fuso, ex.: `2026-11-03T08:00:00-03:00`) em que o envio deve sair. Vazio = envia na hora. "
+                                          "Mínimo 1 minuto à frente, máximo 1 ano; não vale para `teste`. A lista de destinatários é montada na hora do envio.")
 
     @model_validator(mode="after")
     def _teste(self) -> "PedidoEnvioChangelog":
+        if self.agendar_para is not None:
+            if self.destino == "teste":
+                raise ValueError("O envio de teste sai na hora: não pode ser agendado.")
+            if self.agendar_para.tzinfo is None:
+                raise ValueError("Informe a data e a hora do agendamento com o fuso horário.")
         """O envio de teste exige um e-mail válido."""
         if self.destino == "teste":
             self.email_teste = _email(self.email_teste or "", obrigatorio=True)
@@ -84,7 +91,28 @@ class EnvioChangelogLeitura(BaseModel):
     erros: str | None = Field(None, description="Um endereço por linha, com o motivo da falha.")
     enviado_por_nome: str
     criado_em: datetime
-    concluido_em: datetime | None = Field(None, description="Nulo enquanto o envio está em andamento.")
+    agendado_para: datetime | None = Field(None, description="Quando o envio agendado sai (nulo nos envios imediatos).")
+    cancelado_em: datetime | None = Field(None, description="Quando o agendamento foi cancelado.")
+    concluido_em: datetime | None = Field(None, description="Nulo enquanto o envio está agendado ou em andamento.")
+    situacao: Literal["agendado", "enviando", "concluido", "cancelado"] = Field("concluido", description="`agendado` (ainda não saiu), `enviando`, `concluido` ou `cancelado`.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _situacao(cls, valor):
+        """Deduz a situação a partir das datas do registro."""
+        if isinstance(valor, dict):
+            return valor
+        if valor.cancelado_em:
+            situacao = "cancelado"
+        elif valor.concluido_em:
+            situacao = "concluido"
+        elif valor.agendado_para and not valor.iniciado_em:
+            situacao = "agendado"
+        else:
+            situacao = "enviando"
+        dados = {c: getattr(valor, c) for c in cls.model_fields if c != "situacao" and hasattr(valor, c)}
+        dados["situacao"] = situacao
+        return dados
 
 
 RascunhoChangelog.model_rebuild()

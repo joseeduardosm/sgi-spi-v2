@@ -55,6 +55,16 @@ Erros:
 
 Planilha com as abas "Previsão mensal" e "Itens por competência".
 
+## `GET /api/contratos/{contrato_id}/orcamento-executivo?exercicio=AAAA`
+
+Exige ACL `contratos` ≥ `LEITURA` (`exercicio` padrão: ano corrente). Respostas executivas do exercício, mostradas no cartão "Orçamento do exercício" do detalhe do contrato (substitui o antigo cartão "Empenho de AAAA"):
+
+- **Saldo remanescente** (`remanescente`): previsto − **valor bruto das notas fiscais** dos meses cuja competência regular concluiu todas as etapas (`meses_concluidos[]`, `previsto_concluido`, `pago_concluido`). Meses em aberto ou ainda não pagos ficam de fora; negativo = pago acima do previsto.
+- **Empenho:** `empenhado` (NEs do exercício: ano do número da NE, ou do cadastro) e `livre` (empenhado − consumido − cancelado − comprometido por medições ainda não pagas).
+- **Necessidade:** `necessidade` = previsto dos meses do exercício ainda sem medição concluída, a partir do corte de pendências (09/2026, ou o "Desconsiderar alertas a partir de" do contrato); `meses_restantes`.
+- **Cobertura:** o saldo livre cobre esses meses em ordem: `meses_cobertos`, `coberto_ate`, `primeiro_descoberto` e `pedir_reforco_ate` (fim do período do primeiro mês descoberto: a medição dele precisa de empenho).
+- **Decisão:** `reforco` = quanto falta empenhar (zero se sobra) e `disponivel_cancelar` = quanto do saldo livre pode ser cancelado ou transferido sem faltar para os meses restantes.
+
 ## `GET /api/contratos/{contrato_id}/notas-empenho`
 
 `LeituraNotaEmpenho[]`: `id`, `numero`, `valor_original`, `consumido`, `cancelado`, `saldo`, `comprometido`, `saldo_livre`, `percentual_consumido`, `faixa`, `vinculada`, `criado_em` e `movimentos[]` (`data`, `tipo` — `pagamento` ou `estorno`, `competencia`, `competencia_id`, `competencia_rotulo`, `debito` — negativo no estorno, `saldo_apos`, `justificativa` — motivo da reabertura no estorno, `autor`).

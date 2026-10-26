@@ -44,6 +44,7 @@ _MODULOS: list[tuple[str, str, list[tuple]]] = [
         ("ocorrencia_diario", "Ocorrência no diário do contrato", "A equipe do contrato recebe quando uma ocorrência é registrada no diário."),
         ("medicao_concluida", "Medição concluída", "A equipe do contrato recebe quando uma medição mensal é concluída."),
         ("medicao_adicional", "Medição adicional incluída", "A equipe do contrato recebe quando uma medição adicional é incluída."),
+        ("pedido_processo_financeiro", "Pedido de processo financeiro", "O Financeiro (DOF) recebe quando a equipe de um contrato pede o número do processo financeiro."),
         ("conferir_retencao", "Conferir retenção de tributos", "O Financeiro recebe quando a nota fiscal é juntada e a retenção precisa ser conferida."),
         ("nota_recusada", "Nota fiscal recusada", "A equipe do contrato recebe quando a nota fiscal é recusada e precisa ser reenviada."),
         ("retencao_conferida", "Retenção conferida", "A equipe do contrato recebe quando a retenção de tributos é conferida e a etapa seguinte pode seguir."),

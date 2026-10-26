@@ -45,5 +45,7 @@ export interface SecaoNavegacao {
   papeis?: Papel[];
   /** O administrador pode reordenar, agrupar e ocultar os itens desta seção (Administração > Menu). */
   configuravel?: boolean;
+  /** A legenda vira um botão que recolhe e abre os itens da seção (ex.: Administração). */
+  dobravel?: boolean;
   itens: ItemNavegacao[];
 }

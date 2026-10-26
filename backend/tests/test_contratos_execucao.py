@@ -961,3 +961,57 @@ def test_acerto_de_centavos_por_item_soma_ao_valor_e_ao_total(cliente, admin, eq
              "notas_empenho_ids": ordem_notas}
     r = cliente.put(f"{base}/medicao", json=corpo, headers=gestora)
     assert r.status_code == 400 and "medido" in r.json()["detalhe"]
+
+
+def test_total_medido_e_a_soma_dos_subtotais_dos_itens_arredondados():
+    """O total bate com as linhas que a tela e o PDF mostram: cada item arredondado em centavos mais o acerto, e a soma disso."""
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    from app.services.contratos import servico_competencias as sc
+
+    # 3 itens de R$ 0,005 × 1 (cada um vira 0,01) e um acerto de −0,01: arredondar só a soma daria 0,02 − 0,01 = 0,01; somando as linhas dá 0,02
+    itens = [SimpleNamespace(quantidade_medida=Decimal("1"), valor_unitario=Decimal("0.005"), acerto=None, despesa_variavel=v) for v in (False, False, True)]
+    itens[0].acerto = Decimal("-0.01")
+    competencia = SimpleNamespace(itens=itens)
+    assert sc.total_medido(competencia) == Decimal("0.02")
+    assert sc.subtotal_medicao(competencia) == Decimal("0.01") and sc.subtotal_despesas_variaveis(competencia) == Decimal("0.01")
+    assert sc.total_medido(competencia) == sc.subtotal_medicao(competencia) + sc.subtotal_despesas_variaveis(competencia)
+
+
+def test_orcamento_executivo_remanescente_cobertura_reforco_e_sobra(cliente, admin, equipe):
+    """Remanescente = previsto − NF dos meses concluídos; o saldo livre das NEs do exercício cobre os meses sem medição (a partir do corte de 09/2026)."""
+    from decimal import Decimal
+
+    from app.core.banco import FabricaSessao, agora_utc
+    from app.models.contratos import Competencia
+    from app.models.contratos.execucao import NotaFiscalCompetencia
+
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    r = cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    assert r.status_code == 200, r.text
+    previsto = {m["competencia"]: Decimal(m["valor"]) for m in cliente.get(_url(contrato, "/previsao"), headers=admin).json()["meses"]}
+    o = cliente.get(_url(contrato, "/orcamento-executivo"), params={"exercicio": 2026}, headers=admin).json()
+    restantes = ["2026-09-01", "2026-10-01", "2026-11-01", "2026-12-01"]
+    necessidade = sum(previsto[m] for m in restantes)
+    assert Decimal(o["empenhado"]) == Decimal("51000.00") and Decimal(o["livre"]) == Decimal("51000.00")
+    assert o["meses_restantes"] == 4 and Decimal(o["necessidade"]) == necessidade and o["meses_cobertos"] == 4 and o["coberto_ate"] == "2026-12-01"
+    assert Decimal(o["reforco"]) == 0 and Decimal(o["disponivel_cancelar"]) == Decimal("51000.00") - necessidade
+    assert o["meses_concluidos"] == [] and Decimal(o["remanescente"]) == 0
+
+    # Setembro concluído (todas as etapas) com NF de 100 a menos que o previsto: remanescente de 100 e o mês sai da necessidade
+    with FabricaSessao() as s:
+        from sqlalchemy import select
+        import uuid
+        c = s.scalar(select(Competencia).where(Competencia.contrato_id == uuid.UUID(contrato["id"]), Competencia.competencia == date(2026, 9, 1), Competencia.tipo == "regular"))
+        c.medicao_concluida_em = c.concluida_em = agora_utc()
+        c.etapa_atual = "concluida"
+        s.add(NotaFiscalCompetencia(competencia_id=c.id, ordem=1, numero="1", valor_bruto=previsto["2026-09-01"] - 100))
+        s.commit()
+    o = cliente.get(_url(contrato, "/orcamento-executivo"), params={"exercicio": 2026}, headers=admin).json()
+    assert [m["competencia"] for m in o["meses_concluidos"]] == ["2026-09-01"] and Decimal(o["remanescente"]) == Decimal("100.00")
+    assert o["meses_restantes"] == 3 and Decimal(o["necessidade"]) == necessidade - previsto["2026-09-01"]
+    # O painel soma o mesmo (o contrato é ativo e visível para o SuperRoot)
+    painel = cliente.get("/api/contratos/painel", params={"exercicio": 2026}, headers=admin).json()["orcamento"]
+    assert Decimal(painel["remanescente"]) == Decimal("100.00") and painel["com_sobra"][0]["contrato_id"] == contrato["id"]

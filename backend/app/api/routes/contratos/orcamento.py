@@ -11,14 +11,14 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.respostas import CONFLITO, INVALIDO, RESPOSTAS_AUTENTICADAS, resposta_nao_encontrado
 from app.api.routes.contratos.comum import SEM_VINCULO, pode_ler, pode_modificar, traduzir_erros
 from app.core.banco import obter_sessao
 from app.models.usuario import Usuario
-from app.schemas.contratos.orcamento import GravacaoCancelamentoNota, GravacaoNotaEmpenho, GravacaoPrevisao, LeituraNotaEmpenho, Previsao
+from app.schemas.contratos.orcamento import GravacaoCancelamentoNota, GravacaoNotaEmpenho, GravacaoPrevisao, LeituraNotaEmpenho, OrcamentoExecutivo, Previsao
 from app.services.contratos import servico_orcamento as servico
 
 roteador = APIRouter(prefix="/contratos/{contrato_id}", tags=["Contratos: orçamento"], responses=RESPOSTAS_AUTENTICADAS)
@@ -73,6 +73,24 @@ def exportar_previsao(contrato_id: uuid.UUID, sequencia_vigencia: int, sessao: S
     with traduzir_erros():
         conteudo, nome = servico.planilha_previsao(sessao, contrato_id, sequencia_vigencia)
     return Response(conteudo, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
+@roteador.get(
+    "/orcamento-executivo",
+    response_model=OrcamentoExecutivo,
+    summary="Orçamento executivo do exercício",
+    description="Saldo remanescente dos meses concluídos (previsto − valor bruto das notas fiscais das competências que fecharam todas as etapas) e as "
+    "decisões de empenho do exercício: por quantos meses o saldo livre das NEs cobre a previsão dos meses ainda sem medição, quanto falta de reforço "
+    "(e até quando pedir) e quanto pode ser cancelado ou transferido. `exercicio` padrão: ano corrente. Exige ACL `contratos` ≥ LEITURA.",
+    responses=NAO_ENCONTRADO,
+)
+def orcamento_executivo(contrato_id: uuid.UUID, exercicio: int | None = Query(None, ge=2000, le=2100), sessao: Session = Depends(obter_sessao),
+                        _: Usuario = Depends(pode_ler)) -> OrcamentoExecutivo:
+    """Respostas executivas do exercício para o contrato."""
+    from app.core.banco import hoje_sao_paulo
+
+    with traduzir_erros():
+        return servico.consultar_orcamento_executivo(sessao, contrato_id, exercicio or hoje_sao_paulo().year)
 
 
 @roteador.get(

@@ -66,7 +66,7 @@ const TEXTO_EXEMPLO = `<p>Sr. Subsecretário,</p>
             <div class="busca-placeholders"><input type="search" name="busca-placeholder" autocomplete="off" placeholder="Pesquisar placeholder…" aria-label="Pesquisar placeholder" [ngModel]="busca()" (ngModelChange)="busca.set($event)" /></div>
             <ul>
               @for (p of placeholdersFiltrados(); track p.nome) {
-                <li><button type="button" class="link-arquivo" (click)="inserir(p)">#{{ p.nome }}</button><small>{{ p.descricao }}</small></li>
+                <li><button type="button" class="acao-secundaria acao-pequena texto-codigo" (click)="inserir(p)">#{{ p.nome }}</button><small>{{ p.descricao }}</small></li>
               } @empty { <li><small>Nenhum placeholder encontrado.</small></li> }
             </ul>
           </aside>
@@ -90,7 +90,8 @@ const TEXTO_EXEMPLO = `<p>Sr. Subsecretário,</p>
     .placeholders-mascara { position: sticky; top: 12px; max-height: min(520px, calc(100vh - 100px)); overflow: auto; padding-bottom: 12px; }
     .busca-placeholders { padding: 0 20px 10px; }
     .placeholders-mascara ul { display: grid; gap: 10px; margin: 0; padding: 0 20px; list-style: none; }
-    .placeholders-mascara li { display: grid; gap: 1px; }
+    .placeholders-mascara li { display: grid; gap: 4px; }
+    .placeholders-mascara li button { justify-self: start; }
     .placeholders-mascara li small { color: var(--spi-apagado); }
     .acoes-mascara { position: sticky; bottom: 0; z-index: 20; display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px;
       border-top: 1px solid var(--cor-e2e5e8); background: var(--cor-ffffff); }

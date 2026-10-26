@@ -8,7 +8,7 @@ Implementação:
 
 ## `GET /api/contratos/painel`
 
-Exige ACL `contratos` ≥ `LEITURA`. Parâmetros opcionais: `exercicio` (padrão: ano corrente), `empresa_id` e `contrato_id`. Os filtros valem para alertas, execução e números, **não** para as pendências.
+Exige ACL `contratos` ≥ `LEITURA`. Parâmetros opcionais: `exercicio` (padrão: ano corrente), `empresa_id` e `contrato_id`. Os filtros valem para alertas, execução e números, **não** para as pendências. **Execução orçamentária, números e as opções dos filtros (empresas e contratos) só trazem os contratos que o usuário criou ou em que integra a equipe vigente**; o administrador de Contratos (controle total na ACL) e o SuperRoot veem a carteira inteira.
 
 Resposta `Painel`:
 - `hoje`.
@@ -28,6 +28,8 @@ Resposta `Painel`:
   - **Corte de alertas:** o corte global é 09/2026 e o contrato pode empurrá-lo para depois com `alertas_a_partir_de` (vale a maior das duas datas). **Corte em 09/2026:** competências de antes de 09/2026 não entram nos riscos `competencias_atrasadas`, `pagamento_vencido`, `pagamento_vencendo` nem `empenho_insuficiente` (nem em "minhas pendências"). A constante é `PENDENCIAS_A_PARTIR_DE`, em `servico_competencias.py`.
   - `competencias_atrasadas`: **um** risco por contrato somando as competências com período encerrado há mais de 30 dias sem medição concluída (`alta` acima de 60 dias). Na competência de diferença de reajuste, o prazo conta da sua criação (conclusão do reajuste).
 - `execucao`: exercício, 12 `meses` com `previsto`, `medido` e `pago` (débitos das OBs, somados no **mês da competência paga**, e não na data do pagamento: a OB de 08/2026 lançada em setembro entra em agosto; estornos entram como negativos), totais, e `empenhado`, `consumido` e `saldo_empenho`.
+- `orcamento` (`OrcamentoCarteira`): soma do orçamento executivo dos contratos **ativos e a vencer** visíveis e filtrados (mesmos campos de [contratos-orcamento.md](contratos-orcamento.md): `remanescente`, `livre`, `necessidade`, `reforco`, `disponivel_cancelar`…), com `precisam_reforco[]` (do prazo mais curto ao mais longo) e `com_sobra[]` (da maior sobra à menor). Cartão "Orçamento do exercício" no painel.
+- Gráfico de execução: o **pago** aparece em verde até o previsto do mês e o que passa do previsto vira uma **sobrebarra vermelha** ("Pago acima do previsto") em cima do pago.
 - `numeros`: `contratos_ativos`, `contratos_a_vencer`, `contratos_encerrados`, `valor_global_ativos`, `base_mensal_ativos`.
 - `empresas[]` e `contratos[]`: opções dos filtros (`id`, `rotulo`).
 

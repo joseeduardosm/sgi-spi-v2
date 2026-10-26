@@ -29,7 +29,7 @@ import { EditorFormularioComponent, definicaoVazia } from './editor-formulario.c
       </header>
       <div class="corpo">
         @if (formularios().length > 1) {
-          <div class="barra-dobrar"><button type="button" class="link-arquivo" (click)="expandirTodos(true)">Expandir todos</button><button type="button" class="link-arquivo" (click)="expandirTodos(false)">Recolher todos</button></div>
+          <div class="barra-dobrar"><button type="button" class="acao-secundaria acao-pequena" (click)="expandirTodos(true)">Expandir todos</button><button type="button" class="acao-secundaria acao-pequena" (click)="expandirTodos(false)">Recolher todos</button></div>
         }
         @for (f of formularios(); track f.id) {
           <article class="indicador cartao-dobravel" style="margin-bottom: 12px">

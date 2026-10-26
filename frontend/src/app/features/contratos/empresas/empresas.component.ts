@@ -40,8 +40,8 @@ type Coluna = 'cnpj' | 'razao_social' | 'nome_fantasia' | 'endereco';
           <thead>
             <tr>
               @for (c of colunas; track c.id) {
-                <th><button type="button" class="link-arquivo" style="color: inherit; text-decoration: none; font-size: inherit; text-transform: inherit; letter-spacing: inherit"
-                            (click)="ordenar(c.id)">{{ c.rotulo }} {{ ordem === c.id ? (direcao === 'asc' ? '▲' : '▼') : '' }}</button></th>
+                <th><button type="button" class="ordenar-coluna" [class.ativa]="ordem === c.id"
+                            (click)="ordenar(c.id)">{{ c.rotulo }}<span aria-hidden="true">{{ ordem === c.id ? (direcao === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th>
               }
               <th>Prepostos</th><th>Contratos</th><th class="coluna-acoes">Ações</th>
             </tr>

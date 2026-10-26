@@ -1505,6 +1505,11 @@ button.gantt-barra {
     width: 260px;
     height: 36px;
   }
+
+  .modal-portal.modal-changelog & input[type='datetime-local'] {
+    width: 220px;
+    height: 36px;
+  }
 }
 
 @media (max-width: 900px) {

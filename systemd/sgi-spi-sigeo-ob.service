@@ -1,0 +1,14 @@
+[Unit]
+Description=sgi-spi: conferência das ordens bancárias no SIGEO (conclui a etapa da OB das competências pagas)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USUARIO__
+Group=__USUARIO__
+WorkingDirectory=__PROJETO__/backend
+ExecStart=__PROJETO__/backend/.venv/bin/python -m app.tarefas.sigeo conferir
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

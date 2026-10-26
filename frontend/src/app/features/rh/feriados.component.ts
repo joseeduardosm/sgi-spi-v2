@@ -56,8 +56,8 @@ interface Edicao {
                 <td>{{ abrangencias[f.abrangencia] }}</td>
                 @if (cgp()) {
                   <td class="coluna-acoes acoes-linha">
-                    <button type="button" class="link-arquivo" (click)="editar(f)">Editar</button>
-                    <button type="button" class="link-arquivo" (click)="excluir(f)">Excluir</button>
+                    <button type="button" class="acao-secundaria acao-pequena" (click)="editar(f)">Editar</button>
+                    <button type="button" class="acao-perigo acao-pequena" (click)="excluir(f)">Excluir</button>
                   </td>
                 }
               </tr>

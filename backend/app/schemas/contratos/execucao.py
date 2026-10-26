@@ -609,6 +609,12 @@ class DetalheCompetencia(ResumoCompetencia):
     documentos: list[LeituraDocumentoMensal]
     consolidado: LeituraArquivo | None
     ordem_bancaria: LeituraArquivo | None
+    ob_origem: str | None = Field(None, description="`manual` (PDF juntado) ou `sigeo` (achada pela conferência diária no SIGEO).")
+    ob_numero: str | None = Field(None, description="Número(s) da OB vindos do SIGEO (ex.: `2026OB01893`).")
+    ob_data: date | None = Field(None, description="Data de lançamento da OB no SIGEO.")
+    ob_valor: Decimal | None = Field(None, description="Valor pago (soma das OBs do mês) segundo o SIGEO.")
+    ob_sigeo_pendencia: str | None = Field(None, description="Por que a conferência do SIGEO ainda não concluiu esta OB (ex.: pagamento parcial).")
+    ob_sigeo_verificado_em: datetime | None = None
     concluida_em: datetime | None
 
 

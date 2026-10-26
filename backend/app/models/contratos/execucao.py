@@ -208,6 +208,15 @@ class Competencia(Base):
     ob_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     ob_enviada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Dados da OB: `manual` (PDF juntado pela equipe) ou `sigeo` (achada pela rotina diária no SIGEO; número(s), data e valor vêm de lá)
+    ob_origem: Mapped[str | None] = mapped_column(String(10))
+    ob_numero: Mapped[str | None] = mapped_column(String(300))
+    ob_data: Mapped[date | None] = mapped_column(Date)
+    ob_valor: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    ob_descricao_sigeo: Mapped[str | None] = mapped_column(Text)
+    # Por que a rotina do SIGEO ainda não concluiu esta OB (ex.: "pago R$ x de R$ y"); limpo quando conclui
+    ob_sigeo_pendencia: Mapped[str | None] = mapped_column(Text)
+    ob_sigeo_verificado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # E-mail ao Financeiro (cópia para a equipe) quando a nota fiscal é juntada
     email_nf_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

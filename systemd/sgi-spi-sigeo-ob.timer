@@ -1,0 +1,9 @@
+[Unit]
+Description=sgi-spi: conferência das OBs no SIGEO (passa de hora em hora; confere uma vez por dia, na hora escolhida na tela)
+
+[Timer]
+OnCalendar=*-*-* *:05:00 America/Sao_Paulo
+Persistent=true
+
+[Install]
+WantedBy=timers.target

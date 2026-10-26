@@ -176,6 +176,9 @@ def main(argumentos: list[str]) -> int:
             from app.services.noticias.servico_noticias import processar_publicacoes
             log.info("Avisos de notícias publicadas: %s", processar_publicacoes(sessao))
             log.info("Notificações despachadas: %s", despachar_pendentes(sessao))
+            # E-mails de changelog agendados que já chegaram na hora
+            from app.services import servico_changelog
+            log.info("Changelog agendado enviado: %s", servico_changelog.processar_agendados(sessao))
         elif comando == "lembretes":
             log.info("Lembretes: %s", gerar_lembretes(sessao))
         else:

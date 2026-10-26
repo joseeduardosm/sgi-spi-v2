@@ -31,6 +31,7 @@ from app.models.menu import MenuConfiguracao
 from app.models.favorito_menu import FavoritoMenu
 from app.models.preferencia_colunas import PreferenciaColunas
 from app.models.integracao_bookstack import IntegracaoBookstack
+from app.models.integracao_sigeo import IntegracaoSigeo
 from app.models.integracao_glpi import ChamadoGlpi, IntegracaoGlpi
 from app.models.diretorio_ldap import DiretorioLdap
 from app.models.envio_changelog import EnvioChangelog

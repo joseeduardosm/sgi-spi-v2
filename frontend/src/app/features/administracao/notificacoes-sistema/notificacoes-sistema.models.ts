@@ -36,7 +36,10 @@ export interface EnvioChangelog {
   erros: string | null;
   enviado_por_nome: string;
   criado_em: string;
+  agendado_para: string | null;
+  cancelado_em: string | null;
   concluido_em: string | null;
+  situacao: 'agendado' | 'enviando' | 'concluido' | 'cancelado';
 }
 
 /** Pedido de envio (`PedidoEnvioChangelog` da API). */
@@ -48,4 +51,6 @@ export interface PedidoEnvioChangelog {
   ate_data: string | null;
   usuarios_ids: number[];
   setores_ids: number[];
+  /** Instante do envio agendado (ISO com fuso); nulo = envia na hora. */
+  agendar_para: string | null;
 }

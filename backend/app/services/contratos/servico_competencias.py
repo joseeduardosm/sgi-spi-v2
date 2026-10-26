@@ -195,18 +195,21 @@ def subtotal_item(item: ItemMedicao) -> Decimal:
 
 
 def total_medido(competencia: Competencia) -> Decimal:
-    """Total medido: soma de quantidade medida × preço de cada item, arredondada, mais os acertos de centavos (sem acertos, o resultado é o de sempre)."""
-    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), ZERO)) + sum((i.acerto or ZERO for i in competencia.itens), ZERO)
+    """Total medido: a **soma dos subtotais dos itens**, cada um arredondado em centavos mais o acerto lançado.
+
+    É o que a tela da medição e o PDF mostram linha a linha; arredondar só a soma faria o total divergir das linhas em centavos.
+    """
+    return sum((subtotal_item(i) for i in competencia.itens), ZERO)
 
 
 def subtotal_medicao(competencia: Competencia) -> Decimal:
-    """Subtotal dos itens que não são despesas variáveis."""
-    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if not i.despesa_variavel), ZERO)) + sum((i.acerto or ZERO for i in competencia.itens if not i.despesa_variavel), ZERO)
+    """Subtotal dos itens que não são despesas variáveis (soma dos subtotais de cada item)."""
+    return sum((subtotal_item(i) for i in competencia.itens if not i.despesa_variavel), ZERO)
 
 
 def subtotal_despesas_variaveis(competencia: Competencia) -> Decimal:
-    """Subtotal dos itens marcados como despesas variáveis."""
-    return calculos.arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if i.despesa_variavel), ZERO)) + sum((i.acerto or ZERO for i in competencia.itens if i.despesa_variavel), ZERO)
+    """Subtotal dos itens marcados como despesas variáveis (soma dos subtotais de cada item)."""
+    return sum((subtotal_item(i) for i in competencia.itens if i.despesa_variavel), ZERO)
 
 
 def tem_despesas_variaveis(competencia: Competencia) -> bool:
@@ -953,6 +956,8 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         ],
         consolidado=_arquivo(competencia.consolidado_anexo),
         ordem_bancaria=_arquivo(competencia.ob_anexo),
+        ob_origem=competencia.ob_origem, ob_numero=competencia.ob_numero, ob_data=competencia.ob_data, ob_valor=competencia.ob_valor,
+        ob_sigeo_pendencia=competencia.ob_sigeo_pendencia, ob_sigeo_verificado_em=competencia.ob_sigeo_verificado_em,
         concluida_em=competencia.concluida_em,
     )
 
@@ -2176,7 +2181,18 @@ def gerar_consolidado(sessao: Session, contrato_id, competencia_id, autor: Usuar
             "contrato-execucao-cadin-memorial", autor.id, contrato_id=contrato.id)
         sessao.flush()
         anexos[memorial.id], memorial_id = memorial, memorial.id
-    conteudo, sha_composicao = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor), enviados_por, ciencias, memorial_id)
+    # Diário de bordo: sempre que alguma ocorrência afeta a competência (com ou sem avaliação de qualidade), entra no consolidado
+    from app.services.contratos.servico_diario import gerar_pdf as diario_pdf, ocorrencias_da_competencia
+
+    diario_id = None
+    ocorrencias = ocorrencias_da_competencia(contrato, competencia)
+    if ocorrencias:
+        diario = servico_anexos.guardar_pdf_gerado(
+            sessao, diario_pdf(contrato, competencia.periodo_inicio, competencia.periodo_fim, _nome(autor), ocorrencias=ocorrencias),
+            f"diario-de-bordo-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf", "contrato-execucao-diario", autor.id, contrato_id=contrato.id)
+        sessao.flush()
+        anexos[diario.id], diario_id = diario, diario.id
+    conteudo, sha_composicao = documentos_execucao.consolidado(contrato, competencia, detalhe, anexos, _nome(autor), enviados_por, ciencias, memorial_id, diario_id)
     nome = f"consolidado-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, nome, "contrato-execucao-consolidado", autor.id, contrato_id=contrato.id)
     competencia.consolidado_anexo, competencia.consolidado_em = anexo, agora_utc()
@@ -2206,24 +2222,37 @@ def registrar_ordem_bancaria(sessao: Session, contrato_id, competencia_id, arqui
         exigir_edicao(sessao, contrato, autor)
     competencia = _carregar_competencia(sessao, contrato, competencia_id)
     _exigir_etapa(competencia, "ordem_bancaria", "A ordem bancária")
+    anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-execucao-ob", autor.id, contrato_id=contrato.id)
+    concluir_ordem_bancaria(sessao, contrato, competencia, anexo, autor, origem="manual")
+    sessao.commit()
+
+
+def concluir_ordem_bancaria(sessao: Session, contrato: Contrato, competencia: Competencia, anexo, autor: Usuario, *, origem: str,
+                            numero: str | None = None, data: date | None = None, valor: Decimal | None = None, descricao: str | None = None) -> Decimal:
+    """Núcleo comum da OB (PDF juntado pela equipe ou pagamento achado no SIGEO): debita o valor a pagar nas NEs, na ordem, e conclui a competência.
+
+    Sem `commit` (o chamador decide). `ErroRegraContrato` se faltar saldo nas NEs. Devolve o valor debitado.
+    """
     # Divide o valor a pagar entre as NEs na ordem escolhida; se faltar saldo, `_exigir_saldo` explica quanto
     notas = _resolver_notas(contrato, [n.nota_id for n in competencia.notas])
     debito = valor_a_pagar(competencia)
     lancamentos = movimentos_em_ordem(notas, debito)
     if lancamentos is None:
         _exigir_saldo(notas, debito)
-    competencia.ob_anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-execucao-ob", autor.id, contrato_id=contrato.id)
+    competencia.ob_anexo = anexo
     agora = agora_utc()
     # Um lançamento de pagamento no extrato de cada NE usada
-    for nota, valor in lancamentos or []:
+    for nota, parcela in lancamentos or []:
         nota.movimentos.append(
-            MovimentoNotaEmpenho(competencia_id=competencia.id, tipo="pagamento", debito=valor, criado_por_id=autor.id, criado_em=agora)
+            MovimentoNotaEmpenho(competencia_id=competencia.id, tipo="pagamento", debito=parcela, criado_por_id=autor.id, criado_em=agora)
         )
     competencia.ob_enviada_em = competencia.concluida_em = agora
     competencia.etapa_atual = "concluida"
-    _auditar(sessao, autor, "contrato.execucao.ordem_bancaria", contrato, competencia, debito=debito,
-             notas={n.numero: v for n, v in lancamentos or []})
-    sessao.commit()
+    competencia.ob_origem, competencia.ob_numero, competencia.ob_data, competencia.ob_valor = origem, numero, data, valor
+    competencia.ob_descricao_sigeo, competencia.ob_sigeo_pendencia = descricao, None
+    _auditar(sessao, autor, "contrato.execucao.ordem_bancaria" if origem == "manual" else "contrato.execucao.ordem_bancaria.sigeo", contrato, competencia,
+             debito=debito, notas={n.numero: v for n, v in lancamentos or []}, ob=numero)
+    return debito
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2380,6 +2409,7 @@ def _reabrir_etapa(sessao: Session, contrato: Contrato, competencia: Competencia
                 estornos[nota.numero] = liquido
         competencia.concluida_em = competencia.ob_enviada_em = None
         competencia.ob_anexo_id = None
+        competencia.ob_origem = competencia.ob_numero = competencia.ob_data = competencia.ob_valor = competencia.ob_descricao_sigeo = None
         competencia.email_ob_enviado_em = competencia.email_ob_ok = competencia.email_ob_erro = None
         competencia.email_ob_destinatarios = []
     # A etapa escolhida volta a ficar aberta mantendo o que foi preenchido; as POSTERIORES são descartadas e

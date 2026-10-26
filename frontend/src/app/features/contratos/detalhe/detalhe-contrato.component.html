@@ -30,16 +30,14 @@
       <small>{{ textoVigencia() }}</small></div>
     <div><span>Valor global (vigência atual)</span><strong>{{ c.valor_global | moeda }}</strong><small>{{ c.vigencias.length }} vigência(s) · limite {{ c.data_limite_maxima | dataBr }}</small></div>
     <div><span>Base mensal</span><strong>{{ c.base_mensal | moeda }}</strong><small>{{ periodicidade() }}</small></div>
-    <div><span>Aditamento · Supressão acumulados</span><strong>{{ c.aditamento_acumulado_percentual | percentual }} · {{ c.supressao_acumulada_percentual | percentual }}</strong><small>{{ c.itens.length }} item(ns) financeiro(s)</small></div>
-    @if (notasDoExercicio().length; as qtd) {
-      <div class="cartao-empenho" role="button" tabindex="0" [attr.aria-label]="'Empenho de ' + exercicio + ': abrir as Notas de Empenho'" (click)="escolher('notas')" (keydown.enter)="escolher('notas')">
-        <span>Empenho de {{ exercicio }} · {{ qtd }} NE(s)</span>
-        <div class="trio-empenho">
-          <p><small>Empenhado</small><strong>{{ saldoExercicio().valor | moeda }}</strong></p>
-          <p><small>Comprometido</small><strong>{{ saldoExercicio().comprometido | moeda }}</strong></p>
-          <p><small>Utilizado</small><strong>{{ saldoExercicio().consumido | moeda }}</strong></p>
-        </div>
-        <small>Saldo livre {{ saldoExercicio().livre | moeda }} · ver Notas de Empenho ›</small>
+    <!-- Orçamento do exercício, consolidado num cartão do mesmo tamanho: saldo remanescente dos meses concluídos e a decisão do empenho.
+         Clicar leva às Notas de Empenho (o aditamento/supressão acumulado continua no cartão "Valores" da aba Principal) -->
+    @if (orcamento(); as o) {
+      <div class="cartao-orcamento-resumo" role="button" tabindex="0" [class.alerta]="+o.reforco > 0 && !reforcoVencido()" [class.perigo]="reforcoVencido()"
+           [attr.aria-label]="'Orçamento de ' + o.exercicio + ': abrir as Notas de Empenho'" (click)="escolher('notas')" (keydown.enter)="escolher('notas')">
+        <span>Saldo remanescente {{ o.exercicio }}{{ mesesConcluidos() }}</span>
+        <strong>{{ o.remanescente | moeda }}</strong>
+        <small>{{ decisaoEmpenho() }}</small>
       </div>
     }
   </div>
@@ -156,7 +154,7 @@
                   <small>Vigência anterior: até {{ p.fim_anterior | dataBr }} · nova: {{ p.data_inicio | dataBr }} a {{ p.data_fim | dataBr }}</small>
                   <div class="acoes-cartao esquerda">
                     <button type="button" class="acao-secundaria acao-pequena" (click)="baixarTermo(p)">Baixar termo assinado</button>
-                    @if (ultimo && p.pode_desfazer) { <button type="button" class="link-arquivo" (click)="desfazer(p)">Desfazer</button> }
+                    @if (ultimo && p.pode_desfazer) { <button type="button" class="acao-perigo acao-pequena" (click)="desfazer(p)">Desfazer</button> }
                   </div>
                 </div>
               }
@@ -220,7 +218,7 @@
 
     @case ('processos') {
       <section class="cartao-dados" aria-labelledby="titulo-processos">
-        <header><div><h2 id="titulo-processos">Processos SEI</h2><small>Gestão e execução do contrato no SEI.</small></div></header>
+        <header><div><h2 id="titulo-processos">Processos</h2><small>Gestão e execução do contrato no SEI e o processo financeiro (SIGEO).</small></div></header>
         <div class="corpo grade-processos">
           @for (p of processos(); track p.chave) {
             <article class="cartao-processo">
@@ -230,7 +228,7 @@
               } @else { <p class="dica-formulario">Número não informado.</p> }
               @if (p.link) {
                 <a class="acao-secundaria" [href]="p.link" target="_blank" rel="noopener noreferrer">Abrir no SEI ↗</a>
-              } @else { <span class="dica-formulario">Sem link cadastrado.</span> }
+              } @else { <span class="dica-formulario">{{ $any(p).nota ?? 'Sem link cadastrado.' }}</span> }
             </article>
           }
         </div>

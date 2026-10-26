@@ -34,6 +34,11 @@ export class NotificacoesSistemaApiService {
     return this.http.post<{ total: number; selecionados: number }>(`${this.base}/contagem`, { usuarios_ids: usuariosIds, setores_ids: setoresIds });
   }
 
+  /** Cancela um envio ainda agendado. */
+  cancelarEnvio(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/envios/${id}`);
+  }
+
   /** Últimos envios, do mais recente para o mais antigo. */
   historico(): Observable<EnvioChangelog[]> {
     return this.http.get<EnvioChangelog[]>(`${this.base}/envios`);

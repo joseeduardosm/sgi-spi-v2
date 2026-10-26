@@ -66,7 +66,7 @@ const EXTENSOES = ['.png', '.jpg', '.jpeg', '.pdf', '.docx', '.xlsx', '.csv'];
                   <figure>
                     @if (a.previa) { <img loading="lazy" decoding="async" [src]="a.previa" [alt]="a.arquivo.name" /> } @else { <span class="arquivo-anexo" aria-hidden="true">{{ a.arquivo.name.split('.').pop() }}</span> }
                     <figcaption>{{ a.arquivo.name }}</figcaption>
-                    <button type="button" class="link-arquivo" [attr.aria-label]="'Remover ' + a.arquivo.name" [disabled]="enviando()" (click)="remover($index)">remover</button>
+                    <button type="button" class="acao-perigo acao-pequena" [attr.aria-label]="'Remover ' + a.arquivo.name" [disabled]="enviando()" (click)="remover($index)">Remover</button>
                   </figure>
                 }
                 @if (anexos().length < maximoAnexos) {

@@ -13,6 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.contratos.orcamento import OrcamentoCarteira
 from app.schemas.contratos.tipos import ValorMonetario
 
 # Tipos de pendência (cada um aponta para uma etapa ou tela onde o usuário precisa agir)
@@ -99,6 +100,7 @@ class Painel(BaseModel):
     alertas: list[AlertasContrato] = Field(..., description="Riscos agrupados por contrato, mais graves primeiro.")
     execucao: ExecucaoOrcamentaria
     numeros: NumerosCarteira
+    orcamento: OrcamentoCarteira = Field(..., description="Saldo remanescente e decisões de empenho somados dos contratos visíveis (mesmos filtros).")
     empresas: list[OpcaoFiltro] = Field(..., description="Opções do filtro de empresa.")
     contratos: list[OpcaoFiltro] = Field(..., description="Opções do filtro de contrato.")
 

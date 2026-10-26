@@ -10,7 +10,7 @@
 
 import uuid
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -37,7 +37,9 @@ from app.schemas.contratos.orcamento import (
     LeituraNotaEmpenho,
     LinhaRelatorioNotas,
     MesPrevisao,
+    MesRemanescente,
     MovimentoNota,
+    OrcamentoExecutivo,
     Previsao,
     VigenciaPrevisao,
 )
@@ -494,3 +496,69 @@ def notas_por_contrato(sessao: Session) -> dict[uuid.UUID, list[NotaEmpenho]]:
         agrupadas[nota.contrato_id].append(nota)
     return agrupadas
 
+
+
+# ---------------------------------------------------------------------------------------------
+# Orçamento executivo do exercício
+# ---------------------------------------------------------------------------------------------
+
+def ano_da_nota(nota: NotaEmpenho) -> int:
+    """Exercício da NE: o ano do número (ex.: `2026NE00007`); sem ele, o ano do cadastro."""
+    numero = (nota.numero or "").strip()
+    return int(numero[:4]) if numero[:4].isdigit() else nota.criado_em.year
+
+
+def orcamento_executivo(contrato: Contrato, exercicio: int) -> OrcamentoExecutivo:
+    """Saldo remanescente dos meses concluídos e as decisões de empenho do exercício.
+
+    - **Remanescente:** previsto − pago (valor bruto das notas fiscais) dos meses cuja competência regular concluiu todas as etapas.
+      Meses em aberto ou ainda não pagos ficam de fora.
+    - **Empenho:** saldo livre das NEs do exercício (empenhado − consumido − cancelado − comprometido por medições ainda não pagas).
+    - **Necessidade:** previsto dos meses do exercício ainda sem medição concluída (os medidos e não pagos já estão no comprometido), a partir do corte
+      de pendências (meses anteriores foram tratados fora do SGI).
+      O saldo livre cobre esses meses em ordem; o que falta é o reforço, o que sobra pode ser cancelado ou transferido.
+    """
+    from app.services.contratos.servico_competencias import PENDENCIAS_A_PARTIR_DE, compromissos  # import tardio: evita ciclo
+
+    previsto = {m.competencia: m.valor for m in meses_previstos(contrato) if m.competencia.year == exercicio}
+    do_ano = [c for c in contrato.competencias if c.competencia.year == exercicio]
+    regulares = {c.competencia: c for c in do_ano if c.tipo == "regular"}
+    concluidos = sorted(m for m, c in regulares.items() if c.concluida_em is not None)
+    meses = []
+    for mes in concluidos:
+        pago = sum((nf.valor_bruto or ZERO for c in do_ano if c.competencia == mes and c.concluida_em is not None for nf in c.notas_fiscais), ZERO)
+        meses.append(MesRemanescente(competencia=mes, previsto=previsto.get(mes, ZERO), pago=pago))
+    previsto_concluido = sum((m.previsto for m in meses), ZERO)
+    pago_concluido = sum((m.pago for m in meses), ZERO)
+
+    notas = [n for n in contrato.notas_empenho if ano_da_nota(n) == exercicio]
+    reservado = compromissos(contrato)
+    empenhado = sum((n.valor_original for n in notas), ZERO)
+    livre = sum((n.saldo - reservado.get(n.id, ZERO) for n in notas), ZERO)
+
+    # Meses que ainda vão precisar de empenho: previsto > 0 e sem medição concluída. Os anteriores ao corte de pendências (o mesmo dos alertas:
+    # o global ou o "Desconsiderar alertas a partir de" do contrato) foram tratados fora do SGI e não contam
+    corte = max(PENDENCIAS_A_PARTIR_DE, contrato.alertas_a_partir_de) if contrato.alertas_a_partir_de else PENDENCIAS_A_PARTIR_DE
+    fim_do_mes = lambda m: regulares[m].periodo_fim if m in regulares else calculos.somar_meses(m, 1) - timedelta(days=1)  # noqa: E731
+    restantes = sorted(m for m, v in previsto.items()
+                       if v > 0 and fim_do_mes(m) >= corte and not (m in regulares and regulares[m].medicao_concluida_em is not None))
+    necessidade = sum((previsto[m] for m in restantes), ZERO)
+    saldo, cobertos, coberto_ate, descoberto = livre, 0, None, None
+    for mes in restantes:
+        if saldo >= previsto[mes]:
+            saldo -= previsto[mes]
+            cobertos, coberto_ate = cobertos + 1, mes
+        else:
+            descoberto = mes
+            break
+    pedir_ate = fim_do_mes(descoberto) if descoberto is not None else None
+    return OrcamentoExecutivo(
+        exercicio=exercicio, meses_concluidos=meses, previsto_concluido=previsto_concluido, pago_concluido=pago_concluido,
+        remanescente=previsto_concluido - pago_concluido, empenhado=empenhado, livre=livre, necessidade=necessidade,
+        meses_restantes=len(restantes), meses_cobertos=cobertos, coberto_ate=coberto_ate, primeiro_descoberto=descoberto, pedir_reforco_ate=pedir_ate,
+        reforco=max(necessidade - livre, ZERO), disponivel_cancelar=max(livre - necessidade, ZERO),
+    )
+
+
+def consultar_orcamento_executivo(sessao: Session, contrato_id: uuid.UUID, exercicio: int) -> OrcamentoExecutivo:
+    return orcamento_executivo(obter_contrato(sessao, contrato_id), exercicio)

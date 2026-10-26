@@ -122,7 +122,9 @@ export const ROTAS_CONTRATOS: Routes = [
   {
     path: ':id/editar',
     title: 'Editar contrato | SGI SPI',
-    ...edicao,
+    // Leitura basta: o Financeiro (DOF) entra para preencher só o Processo Financeiro; a tela confere as permissões do contrato
+    canActivate: [guardaAcl],
+    data: { acl: 'contratos', nivelAcl: 'LEITURA' },
     loadComponent: () => import('./formulario/formulario-contrato.component').then((m) => m.FormularioContratoComponent),
   },
   {

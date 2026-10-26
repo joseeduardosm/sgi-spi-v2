@@ -21,6 +21,9 @@
            placeholder="Buscar por número, empresa, apelido ou objeto" />
     <label class="opcao-meus"><input type="checkbox" name="meus" [ngModel]="meus()" (ngModelChange)="alternarMeus($event)" /> Meus contratos</label>
     <button type="submit" class="acao-secundaria">Buscar</button>
+    <!-- Relatório da lista atual (mesma busca, filtro e ordem): nº, apelido, empresa, base mensal e vigência -->
+    <button type="button" class="acao-secundaria" (click)="exportar('pdf')">Exportar PDF</button>
+    <button type="button" class="acao-secundaria" (click)="exportar('xlsx')">Exportar XLSX</button>
   </form>
 
   <div class="tabela-gestao-envoltorio">

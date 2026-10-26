@@ -76,7 +76,7 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
                   <option [ngValue]="false">Sem validade</option><option [ngValue]="true">Com validade</option>
                 </select>
                 <label class="opcao-empresa"><input type="checkbox" [name]="'emp' + $index" [(ngModel)]="i.vale_outros_contratos" /> Documento da empresa</label></div>
-              <div style="align-self: center"><button type="button" class="link-arquivo" (click)="itens.splice($index, 1)">remover</button></div>
+              <div style="align-self: center"><button type="button" class="acao-perigo acao-pequena" (click)="itens.splice($index, 1)">Remover</button></div>
             </div>
           }
           <button type="button" class="acao-secundaria acao-pequena" (click)="itens.push({ nome: '', observacao: '', obrigatorio: true, com_validade: false, vale_outros_contratos: false })">+ Documento</button>

@@ -17,11 +17,11 @@ Fluxo:
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from html import escape
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.banco import FabricaSessao, agora_utc
@@ -45,7 +45,11 @@ DATA = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 
 
 class ErroChangelog(Exception):
-    """Envio impossível (vira 400)."""
+    """Envio impossível (vira 400, ou o status/código informado)."""
+
+    def __init__(self, mensagem: str, status: int = 400, codigo: str = "invalido") -> None:
+        super().__init__(mensagem)
+        self.status, self.codigo = status, codigo
 
 
 @dataclass
@@ -109,7 +113,10 @@ def _texto_amigavel(linhas: list[str]) -> list[str]:
 
 
 def _ultimo_envio_geral(sessao: Session) -> date | None:
-    return sessao.scalar(select(func.max(EnvioChangelog.ate_data)).where(EnvioChangelog.destino == "todos"))
+    # Agendamento que ainda não saiu (ou foi cancelado) não avança a data do próximo rascunho
+    return sessao.scalar(select(func.max(EnvioChangelog.ate_data)).where(
+        EnvioChangelog.destino == "todos", EnvioChangelog.cancelado_em.is_(None),
+        EnvioChangelog.agendado_para.is_(None) | EnvioChangelog.iniciado_em.is_not(None)))
 
 
 def rascunho(sessao: Session, arquivo: Path | None = None) -> Rascunho:
@@ -210,9 +217,8 @@ def total_selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: li
     return len(pessoas)
 
 
-def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, destino: str, email_teste: str | None,
-                    ate_data: date | None, usuarios_ids: list[int] = (), setores_ids: list[int] = ()) -> tuple[EnvioChangelog, list[str]]:
-    """Grava o envio (com o total de destinatários) e devolve a lista de e-mails a processar."""
+def _lista(sessao: Session, destino: str, email_teste: str | None, usuarios_ids: list[int], setores_ids: list[int]) -> tuple[list[str], str | None]:
+    """Monta a lista de e-mails do destino (e a descrição da seleção); levanta `ErroChangelog` se ninguém receberia."""
     descricao = None
     if destino == "todos":
         lista = destinatarios(sessao)
@@ -224,16 +230,77 @@ def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, d
             raise ErroChangelog("Nenhum destinatário ativo e com e-mail cadastrado entre os usuários e setores escolhidos.")
     else:
         lista = [email_teste or ""]
+    return lista, descricao
+
+
+def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, destino: str, email_teste: str | None,
+                    ate_data: date | None, usuarios_ids: list[int] = (), setores_ids: list[int] = (),
+                    agendar_para: datetime | None = None) -> tuple[EnvioChangelog, list[str]]:
+    """Grava o envio (com o total de destinatários) e devolve a lista de e-mails a processar.
+
+    Com `agendar_para` o envio fica **agendado**: a lista só é montada na hora (`processar_agendados`), então quem entrou ou saiu até lá vale; o total gravado
+    aqui é uma estimativa. Devolve lista vazia, e o chamador não dispara o envio.
+    """
+    agora = agora_utc()
+    if agendar_para is not None:
+        if agendar_para < agora + timedelta(minutes=1):
+            raise ErroChangelog("Escolha um horário pelo menos 1 minuto à frente.")
+        if agendar_para > agora + timedelta(days=366):
+            raise ErroChangelog("O agendamento pode ser feito para no máximo 1 ano à frente.")
+    lista, descricao = _lista(sessao, destino, email_teste, list(usuarios_ids), list(setores_ids))
     envio = EnvioChangelog(
         assunto=assunto, corpo=corpo, destino=destino, destino_descricao=descricao, ate_data=ate_data if destino == "todos" else None,
         total=len(lista), enviados=0, falhas=0, enviado_por_id=autor.id, enviado_por_nome=autor.nome_completo or autor.login,
+        agendado_para=agendar_para, iniciado_em=None if agendar_para else agora,
+        selecao={"usuarios_ids": list(usuarios_ids), "setores_ids": list(setores_ids), "email_teste": email_teste} if agendar_para else None,
     )
     sessao.add(envio)
     sessao.flush()
-    auditar(sessao, autor.login, "notificacoes.changelog", assunto, f"destino={destino} total={len(lista)} {descricao or ''}".strip(),
+    auditar(sessao, autor.login, "notificacoes.changelog.agendar" if agendar_para else "notificacoes.changelog", assunto,
+            f"destino={destino} total={len(lista)} {('para ' + agendar_para.isoformat() + ' ') if agendar_para else ''}{descricao or ''}".strip(),
             autor_id=autor.id, alvo_tipo="envio_changelog", alvo_id=envio.id)
     sessao.commit()
-    return envio, lista
+    return envio, ([] if agendar_para else lista)
+
+
+def cancelar_agendamento(sessao: Session, autor: Usuario, envio_id: uuid.UUID) -> None:
+    """Cancela um envio ainda agendado. `ErroChangelog` se não existe ou se já saiu/foi cancelado."""
+    envio = sessao.get(EnvioChangelog, envio_id)
+    if envio is None:
+        raise ErroChangelog("Envio não encontrado.", 404, "nao_encontrado")
+    if envio.agendado_para is None or envio.iniciado_em is not None or envio.cancelado_em is not None:
+        raise ErroChangelog("Só dá para cancelar um envio que ainda está agendado.", 409, "conflito")
+    envio.cancelado_em = agora_utc()
+    auditar(sessao, autor.login, "notificacoes.changelog.cancelar", envio.assunto, f"agendado para {envio.agendado_para.isoformat()}",
+            autor_id=autor.id, alvo_tipo="envio_changelog", alvo_id=envio.id)
+    sessao.commit()
+
+
+def processar_agendados(sessao: Session) -> int:
+    """Envia os agendamentos que já venceram (chamado pelo timer de 2 em 2 minutos). Cada envio é "reservado" antes de sair, para nunca sair duas vezes."""
+    agora = agora_utc()
+    ids = list(sessao.scalars(select(EnvioChangelog.id).where(
+        EnvioChangelog.agendado_para <= agora, EnvioChangelog.iniciado_em.is_(None), EnvioChangelog.cancelado_em.is_(None)).order_by(EnvioChangelog.agendado_para)))
+    feitos = 0
+    for envio_id in ids:
+        reservado = sessao.execute(update(EnvioChangelog).where(EnvioChangelog.id == envio_id, EnvioChangelog.iniciado_em.is_(None), EnvioChangelog.cancelado_em.is_(None))
+                                   .values(iniciado_em=agora)).rowcount
+        sessao.commit()
+        if not reservado:
+            continue
+        envio = sessao.get(EnvioChangelog, envio_id)
+        sel = envio.selecao or {}
+        try:
+            lista, descricao = _lista(sessao, envio.destino, sel.get("email_teste"), sel.get("usuarios_ids", []), sel.get("setores_ids", []))
+        except ErroChangelog as erro:
+            envio.total, envio.erros, envio.concluido_em = 0, f"Nada enviado: {erro}", agora_utc()
+            sessao.commit()
+            continue
+        envio.total, envio.destino_descricao = len(lista), descricao or envio.destino_descricao
+        sessao.commit()
+        processar_envio(envio_id, lista)
+        feitos += 1
+    return feitos
 
 
 def processar_envio(envio_id: uuid.UUID, lista: list[str]) -> None:

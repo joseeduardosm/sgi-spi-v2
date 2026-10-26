@@ -28,7 +28,9 @@ Avisar todos os usuários, por e-mail oficial (brasão, cabeçalho institucional
    - `selecionados`: 1 ou mais usuários (`usuarios_ids`) e/ou setores sistêmicos ou institucionais (`setores_ids`). Um setor inclui os membros, quem o tem como Departamento e os **setores filhos**. **Quem a administração escolhe recebe sempre** (ativo e com e-mail cadastrado), sem depender da preferência "Novidades do SGI SPI"; sem nenhum destinatário assim, `400`;
    - `todos`: usuários **ativos** com e-mail **que ligaram o e-mail de "Novidades do SGI SPI"** (evento `sistema.novidades`) nas Preferências. Ninguém começa com ele ligado: sem opt-in, não há destinatários (`400`).
    - Só usuários ativos e com e-mail recebem; a preferência de novidades só filtra o envio a `todos` (o `teste` continua indo para o endereço digitado). Sai **um e-mail por destinatário**, em segundo plano, pelo servidor SMTP ativo. Só os envios a todos avançam a data do próximo rascunho (`ate_data`).
-5. **Histórico** (`GET /changelog/envios`): os 30 últimos, com `enviados`, `falhas`, `erros` e `concluido_em` (nulo enquanto envia).
+   - **Agendar:** com `agendar_para` (data e hora com fuso, de 1 minuto a 1 ano à frente; não vale para `teste`) o envio fica `agendado` e **não avança** o próximo rascunho. A rotina `despachar` (a cada 2 minutos) envia o que venceu, **montando a lista de destinatários naquele momento** (`total` no registro é só uma estimativa); cada agendamento é reservado antes de sair e nunca sai duas vezes. Sem destinatários na hora, o envio termina sem nada enviado e o motivo vai em `erros`. Colunas novas (migração `d4f8b2a6c0e3`): `agendado_para`, `iniciado_em`, `cancelado_em`, `selecao`.
+   - **Cancelar:** `DELETE /changelog/envios/{id}` enquanto estiver `agendado` (`204`; `404`; `409` se já saiu ou foi cancelado).
+5. **Histórico** (`GET /changelog/envios`): os 30 últimos, com `situacao` (`agendado`, `enviando`, `concluido` ou `cancelado`), `agendado_para`, `enviados`, `falhas`, `erros` e `concluido_em` (nulo enquanto envia).
 
 ## Endpoints
 
@@ -40,6 +42,7 @@ Todos exigem `Authorization: Bearer <token>` da conta root.
 | `POST /api/notificacoes/changelog/previa` | `ConteudoChangelog` | `200 PreviaChangelog` |
 | `POST /api/notificacoes/changelog/envios` | `PedidoEnvioChangelog` | `202 EnvioChangelogLeitura` |
 | `GET /api/notificacoes/changelog/envios` | — | `200 EnvioChangelogLeitura[]` |
+| `DELETE /api/notificacoes/changelog/envios/{envio_id}` | — | `204`; `404`; `409` |
 
 **`RascunhoChangelog`:** `assunto` (ex.: `"SGI SPI – Novidades de 29/09/2026"`), `corpo`, `desde` (última data enviada a todos, ou `null`), `ate` (data mais recente incluída; `null` se não há novidade), `datas[]`, `total_destinatarios` (`total_destinatarios` = quem ligou o e-mail de novidades) e `setores[]` (`OpcaoSetorChangelog`: `id`, `nome`, `sistemico`, `nivel`; institucionais na ordem da hierarquia, depois os sistêmicos).
 

@@ -69,7 +69,7 @@ interface PrintEscolhido {
               @for (p of prints(); track p.previa) {
                 <figure>
                   <img loading="lazy" decoding="async" [src]="p.previa" [alt]="'Print ' + ($index + 1)" />
-                  <button type="button" class="link-arquivo" [attr.aria-label]="'Remover print ' + ($index + 1)" (click)="removerPrint($index)">remover</button>
+                  <button type="button" class="acao-perigo acao-pequena" [attr.aria-label]="'Remover print ' + ($index + 1)" (click)="removerPrint($index)">Remover</button>
                 </figure>
               }
               @if (prints().length < maximoPrints) {

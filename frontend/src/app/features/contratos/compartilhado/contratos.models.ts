@@ -209,6 +209,8 @@ export interface DetalheContrato extends ResumoContrato {
   sei_gestao_link: string;
   sei_execucao_numero: string;
   sei_execucao_link: string;
+  /** Processo financeiro (opcional): é o COD_PROCESSO das OBs no SIGEO (conferência diária da etapa da OB). */
+  processo_financeiro: string;
   situacao_forcada: Situacao | null;
   vigencias: Vigencia[];
   marcos: Marco[];
@@ -218,7 +220,7 @@ export interface DetalheContrato extends ResumoContrato {
   equipe: MembroEquipe[];
   criador_nome: string | null;
   // O que o usuário logado pode fazer neste contrato (controla os botões)
-  permissoes: { pode_editar: boolean; pode_excluir: boolean; pode_administrar: boolean; pode_gerir_autoridades: boolean };
+  permissoes: { pode_editar: boolean; pode_excluir: boolean; pode_administrar: boolean; pode_gerir_autoridades: boolean; pode_editar_processo_financeiro: boolean };
   // Controle de concorrência: enviar de volta na alteração
   versao: number;
   criado_em: string;
@@ -266,6 +268,7 @@ export interface GravacaoContrato {
   sei_gestao_link: string;
   sei_execucao_numero: string;
   sei_execucao_link: string;
+  processo_financeiro: string;
   situacao_forcada: Situacao | null;
   equipe: GravacaoEquipe;
   itens: GravacaoItem[];
@@ -839,6 +842,14 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   documentos: DocumentoMensal[];
   consolidado: Arquivo | null;
   ordem_bancaria: Arquivo | null;
+  /** `manual` (PDF juntado) ou `sigeo` (achada pela conferência diária no SIGEO). */
+  ob_origem: 'manual' | 'sigeo' | null;
+  ob_numero: string | null;
+  ob_data: string | null;
+  ob_valor: Decimal | null;
+  /** Por que a conferência do SIGEO ainda não concluiu (ex.: pagamento parcial). */
+  ob_sigeo_pendencia: string | null;
+  ob_sigeo_verificado_em: string | null;
   concluida_em: string | null;
 }
 
@@ -1075,6 +1086,8 @@ export interface PainelContratos {
     valor_global_ativos: Decimal;
     base_mensal_ativos: Decimal;
   };
+  // Saldo remanescente e decisões de empenho somados dos contratos visíveis
+  orcamento: OrcamentoCarteira;
   // Opções dos filtros do topo do painel
   empresas: { id: string; rotulo: string }[];
   contratos: { id: string; rotulo: string }[];
@@ -1484,4 +1497,45 @@ export interface PagamentoContrato {
   juntado_em: string;
   ob: ArquivoPagamento;
   consolidado: ArquivoPagamento | null;
+}
+
+
+/** Campos comuns do orçamento executivo (contrato e carteira). */
+export interface OrcamentoResumo {
+  exercicio: number;
+  previsto_concluido: Decimal;
+  pago_concluido: Decimal;
+  /** Previsto − pago (valor bruto das NFs) dos meses concluídos; negativo = pago acima do previsto. */
+  remanescente: Decimal;
+  livre: Decimal;
+  necessidade: Decimal;
+  reforco: Decimal;
+  disponivel_cancelar: Decimal;
+}
+
+/** Orçamento executivo de um contrato (`GET /contratos/{id}/orcamento-executivo`). */
+export interface OrcamentoExecutivo extends OrcamentoResumo {
+  meses_concluidos: { competencia: string; previsto: Decimal; pago: Decimal }[];
+  empenhado: Decimal;
+  meses_restantes: number;
+  meses_cobertos: number;
+  coberto_ate: string | null;
+  primeiro_descoberto: string | null;
+  pedir_reforco_ate: string | null;
+}
+
+/** Contrato que pede ação no painel: reforço necessário ou empenho sobrando. */
+export interface ContratoOrcamento {
+  contrato_id: string;
+  rotulo: string;
+  reforco: Decimal;
+  pedir_reforco_ate: string | null;
+  disponivel_cancelar: Decimal;
+  remanescente: Decimal;
+}
+
+/** Orçamento executivo somado da carteira visível no painel. */
+export interface OrcamentoCarteira extends OrcamentoResumo {
+  precisam_reforco: ContratoOrcamento[];
+  com_sobra: ContratoOrcamento[];
 }

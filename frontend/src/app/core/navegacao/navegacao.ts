@@ -73,12 +73,14 @@ export const NAVEGACAO: SecaoNavegacao[] = [
   {
     // Seção visível só para o SuperRoot
     legenda: 'Administração',
+    dobravel: true,
     papeis: ['SuperRoot'],
     itens: [
       { id: 'acl', rotulo: 'Controle de acesso', icone: 'escudo', rota: '/admin/acl' },
       { id: 'ldap', rotulo: 'Diretórios LDAP', icone: 'banco-dados', rota: '/admin/ldap' },
       { id: 'smtp', rotulo: 'Servidores SMTP', icone: 'envelope', rota: '/admin/smtp' },
       { id: 'glpi', rotulo: 'Integração GLPI', icone: 'ajuda', rota: '/admin/glpi' },
+      { id: 'sigeo', rotulo: 'Integração SIGEO', icone: 'banco-dados', rota: '/admin/sigeo' },
       { id: 'bookstack', rotulo: 'Integração BookStack', icone: 'arquivo', rota: '/admin/bookstack' },
       // Notificações do sistema (e-mail de changelog): só a conta root
       { id: 'notificacoes-sistema', rotulo: 'Notificações do sistema', icone: 'megafone', rota: '/admin/notificacoes-sistema', somenteRoot: true },

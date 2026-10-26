@@ -178,4 +178,11 @@ export class CarteiraComponent implements OnInit {
     if (!confirmado) return;
     this.api.excluir(contrato.id).subscribe({ next: () => this.carregar(this.pagina()), error: (e) => this.dialogos.mostrarErro(e) });
   }
+
+  /** Gera e baixa o relatório da carteira como está na tela (busca, "Meus contratos" e ordenação). */
+  protected exportar(formato: 'pdf' | 'xlsx'): void {
+    this.dialogos
+      .executar(this.api.exportarCarteira(formato, this.busca.trim(), this.meus(), this.ordenarPor(), this.direcao()), 'Gerando o relatório da carteira…')
+      .subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o relatório') });
+  }
 }

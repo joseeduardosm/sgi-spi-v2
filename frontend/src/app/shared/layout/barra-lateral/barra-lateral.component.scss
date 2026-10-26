@@ -388,3 +388,29 @@
     font-size: 25px;
   }
 }
+
+// Legenda de seção dobrável (Administração): mesmo visual da legenda, como botão com a seta
+.nav-legenda-dobravel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 20px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--spi-texto-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: left;
+  cursor: pointer;
+
+  b { font-size: 14px; letter-spacing: 0; transition: transform 0.15s; }
+  b.aberto { transform: rotate(180deg); }
+
+  &:hover,
+  &:focus-visible {
+    color: #fff;
+    outline: none;
+  }
+}

@@ -44,7 +44,7 @@
       }
       @if (alterando(); as a) {
         <p class="aviso-bloco informativo">Alterando {{ tipos[a.tipo].toLowerCase() }} de {{ data(a.inicio) }} a {{ data(a.fim) }}: selecione o novo período.
-          <button type="button" class="link-arquivo" (click)="alterando.set(null); limparSelecao()">Desistir</button></p>
+          <button type="button" class="acao-secundaria acao-pequena" (click)="alterando.set(null); limparSelecao()">Desistir</button></p>
       }
       @if (inicio() && !fim()) { <p class="dica-formulario">Início em {{ data(inicio()!) }}. Agora clique no último dia (Esc cancela).</p> }
       <div class="legenda-grafico legenda-afastamentos">
@@ -96,8 +96,8 @@
                 @if (a.justificativa) { <small class="texto-erro" [innerHTML]="a.justificativa | linkificar"></small> }</td>
               <td class="acoes-linha">
                 @if (a.pode_alterar) {
-                  <button type="button" class="link-arquivo" (click)="iniciarAlteracao(a)">Alterar</button>
-                  <button type="button" class="link-arquivo" (click)="cancelar(a)">Cancelar</button>
+                  <button type="button" class="acao-secundaria acao-pequena" (click)="iniciarAlteracao(a)">Alterar</button>
+                  <button type="button" class="acao-perigo acao-pequena" (click)="cancelar(a)">Cancelar</button>
                 }
               </td>
             </tr>

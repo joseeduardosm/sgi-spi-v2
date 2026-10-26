@@ -9,7 +9,7 @@ O rascunho do próximo e-mail parte das entradas do `CHANGELOG.md` posteriores �
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import JSON, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.banco import Base, agora_utc
@@ -38,4 +38,10 @@ class EnvioChangelog(Base):
     enviado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     enviado_por_nome: Mapped[str] = mapped_column(String(200))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+    # Envio agendado: quando sai; `iniciado_em` marca que o envio começou (evita sair duas vezes); `cancelado_em`, que foi desfeito antes. Sem agendamento, `iniciado_em` = criação.
+    agendado_para: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    iniciado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Escolha guardada para montar a lista só na hora do envio agendado: {usuarios_ids, setores_ids, email_teste}
+    selecao: Mapped[dict | None] = mapped_column(JSON)
     concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

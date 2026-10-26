@@ -100,6 +100,7 @@ export class FormularioContratoComponent implements OnInit {
     sei_gestao_link: '',
     sei_execucao_numero: '',
     sei_execucao_link: '',
+    processo_financeiro: '',
     situacao_forcada: null as Situacao | null,
   };
   // Um signal por papel da equipe (cada seletor de usuário guarda no máximo uma pessoa)
@@ -133,6 +134,11 @@ export class FormularioContratoComponent implements OnInit {
         this.empresas.set(empresas);
         this.execucaoGerada.set(!!execucao?.geradas);
         const rascunho = (history.state?.rascunhoSgi ?? null) as RascunhoContratoSgi | null;
+        if (contrato && !contrato.permissoes.pode_editar && !contrato.permissoes.pode_editar_processo_financeiro) {
+          this.dialogos.mostrarErro(new Error('Você não pode editar este contrato.'), 'Sem permissão');
+          void this.roteador.navigate(['/contratos', contrato.id]);
+          return;
+        }
         if (contrato) this.preencher(contrato);
         else if (rascunho) this.preencherRascunho(rascunho);
         else this.sugerirNumero();
@@ -145,6 +151,30 @@ export class FormularioContratoComponent implements OnInit {
     });
   }
 
+  /** Financeiro (DOF) sem edição do contrato: só o Processo Financeiro fica aberto. */
+  protected readonly somenteProcesso = computed(() => {
+    const c = this.original();
+    return !!c && !c.permissoes.pode_editar && c.permissoes.pode_editar_processo_financeiro;
+  });
+  protected readonly pedindoProcesso = signal(false);
+
+  /** Manda o pedido do processo financeiro a todo o Financeiro (DOF): e-mail e aviso no sino com o link desta tela. */
+  protected async pedirProcesso(): Promise<void> {
+    const c = this.original();
+    if (!c) return;
+    const ok = await this.dialogos.confirmar({
+      titulo: 'Pedir o processo financeiro ao DOF?',
+      mensagem: `Todo o Financeiro (DOF) recebe um e-mail e um aviso no sino pedindo para preencher o Processo Financeiro do contrato ${c.numero}.`,
+      rotuloConfirmar: 'Enviar pedido',
+    });
+    if (!ok) return;
+    this.pedindoProcesso.set(true);
+    this.api.pedirProcessoFinanceiro(c.id).subscribe({
+      next: (r) => { this.pedindoProcesso.set(false); this.dialogos.avisar('Pedido enviado', `${r.destinatarios} pessoa(s) do Financeiro receberam o pedido.`); },
+      error: (e) => { this.pedindoProcesso.set(false); this.dialogos.mostrarErro(e, 'Não foi possível enviar o pedido'); },
+    });
+  }
+
   /** Preenche o formulário com o contrato carregado (valores no formato brasileiro). */
   private preencher(c: DetalheContrato): void {
     this.original.set(c);
@@ -153,7 +183,7 @@ export class FormularioContratoComponent implements OnInit {
       vigencia_inicial_meses: c.vigencia_inicial_meses, vigencia_maxima_meses: c.vigencia_maxima_meses,
       periodicidade_meses: c.periodicidade_meses, mes_reajuste: c.mes_reajuste, liberar_todas_competencias: c.liberar_todas_competencias, permite_medicao_adicional: c.permite_medicao_adicional, alertas_a_partir_de: c.alertas_a_partir_de, sei_gestao_numero: c.sei_gestao_numero,
       sei_gestao_link: c.sei_gestao_link, sei_execucao_numero: c.sei_execucao_numero, sei_execucao_link: c.sei_execucao_link,
-      situacao_forcada: c.situacao_forcada,
+      processo_financeiro: c.processo_financeiro ?? '', situacao_forcada: c.situacao_forcada,
     };
     for (const membro of c.equipe) {
       this.equipe[membro.papel].set([{ id: membro.usuario_id, login: membro.login, nome_completo: membro.nome, cargo: '', ativo: true }]);
@@ -179,7 +209,7 @@ export class FormularioContratoComponent implements OnInit {
       numero: r.numero, empresa_id: r.empresa.id ?? '', apelido: r.apelido, objeto: r.objeto, data_inicio: r.data_inicio,
       vigencia_inicial_meses: r.vigencia_inicial_meses, vigencia_maxima_meses: r.vigencia_maxima_meses, periodicidade_meses: r.periodicidade_meses,
       mes_reajuste: r.mes_reajuste, liberar_todas_competencias: false, permite_medicao_adicional: false, alertas_a_partir_de: null, sei_gestao_numero: r.sei_gestao_numero, sei_gestao_link: r.sei_gestao_link,
-      sei_execucao_numero: r.sei_execucao_numero, sei_execucao_link: r.sei_execucao_link, situacao_forcada: null,
+      sei_execucao_numero: r.sei_execucao_numero, sei_execucao_link: r.sei_execucao_link, processo_financeiro: '', situacao_forcada: null,
     };
     for (const membro of r.equipe) {
       this.equipe[membro.papel].set([{ id: membro.usuario_id, login: membro.login, nome_completo: membro.nome, cargo: '', ativo: true }]);
@@ -374,6 +404,15 @@ export class FormularioContratoComponent implements OnInit {
   /** Monta o corpo no formato da API e cadastra ou altera o contrato. */
   protected salvar(): void {
     const original = this.original();
+    // Financeiro (DOF): grava só o processo financeiro
+    if (this.somenteProcesso() && original) {
+      this.salvando.set(true);
+      this.api.informarProcessoFinanceiro(original.id, this.dados.processo_financeiro.trim()).subscribe({
+        next: () => void this.roteador.navigate(['/contratos', original.id]),
+        error: (e) => { this.salvando.set(false); this.dialogos.mostrarErro(e, 'Não foi possível salvar o processo financeiro'); },
+      });
+      return;
+    }
     const corpo: GravacaoContrato = {
       ...this.dados,
       autoridade_despacho_id: this.autoridade()[0]?.id ?? null,

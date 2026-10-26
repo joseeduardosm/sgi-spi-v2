@@ -148,3 +148,57 @@ class LinhaRelatorioNotas(BaseModel):
     valor_original: ValorMonetario
     consumido: ValorMonetario
     saldo: ValorMonetario
+
+
+# ---------------------------------------------------------------------------------------------
+# Orçamento executivo do exercício (saldo remanescente e decisões de empenho)
+# ---------------------------------------------------------------------------------------------
+
+class MesRemanescente(BaseModel):
+    """Um mês concluído: previsto × pago (valor bruto das notas fiscais)."""
+    competencia: date
+    previsto: ValorMonetario
+    pago: ValorMonetario = Field(..., description="Soma do valor bruto das notas fiscais das competências concluídas do mês.")
+
+
+class OrcamentoExecutivo(BaseModel):
+    """Respostas executivas do exercício: quanto sobrou dos meses já concluídos e o que fazer com o empenho."""
+    exercicio: int
+    meses_concluidos: list[MesRemanescente] = Field(..., description="Meses do exercício com a competência regular concluída (todas as etapas).")
+    previsto_concluido: ValorMonetario
+    pago_concluido: ValorMonetario
+    remanescente: ValorMonetario = Field(..., description="Previsto − pago dos meses concluídos (negativo = pago acima do previsto).")
+    empenhado: ValorMonetario = Field(..., description="Notas de Empenho do exercício (ano do número da NE, ou do cadastro).")
+    livre: ValorMonetario = Field(..., description="Empenhado − consumido − cancelado − comprometido por medições ainda não pagas.")
+    necessidade: ValorMonetario = Field(..., description="Previsto dos meses do exercício ainda sem medição concluída.")
+    meses_restantes: int
+    meses_cobertos: int = Field(..., description="Quantos desses meses o saldo livre cobre, em ordem.")
+    coberto_ate: date | None = Field(None, description="Último mês coberto pelo empenho.")
+    primeiro_descoberto: date | None = Field(None, description="Primeiro mês sem empenho suficiente.")
+    pedir_reforco_ate: date | None = Field(None, description="Fim do período do primeiro mês descoberto: a medição dele precisa de empenho.")
+    reforco: ValorMonetario = Field(..., description="Quanto falta empenhar até o fim do exercício (zero se sobra).")
+    disponivel_cancelar: ValorMonetario = Field(..., description="Quanto do saldo livre sobra depois de cobrir os meses restantes (pode ser cancelado ou transferido).")
+
+
+class ContratoOrcamento(BaseModel):
+    """Linha do resumo do painel: um contrato com reforço necessário ou com sobra."""
+    contrato_id: uuid.UUID
+    rotulo: str
+    reforco: ValorMonetario
+    pedir_reforco_ate: date | None = None
+    disponivel_cancelar: ValorMonetario
+    remanescente: ValorMonetario
+
+
+class OrcamentoCarteira(BaseModel):
+    """Soma do orçamento executivo dos contratos visíveis no painel."""
+    exercicio: int
+    previsto_concluido: ValorMonetario
+    pago_concluido: ValorMonetario
+    remanescente: ValorMonetario
+    livre: ValorMonetario
+    necessidade: ValorMonetario
+    reforco: ValorMonetario
+    disponivel_cancelar: ValorMonetario
+    precisam_reforco: list[ContratoOrcamento] = Field(..., description="Contratos com reforço necessário, do prazo mais curto ao mais longo.")
+    com_sobra: list[ContratoOrcamento] = Field(..., description="Contratos com empenho que pode ser cancelado ou transferido, da maior sobra à menor.")

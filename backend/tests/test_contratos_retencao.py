@@ -305,3 +305,28 @@ def test_despacho_de_pagamento_vai_para_a_tela_e_nao_para_o_consolidado(cliente,
     paginas = _R(_B(cliente.get(f"{base}/arquivos/{c.json()['consolidado']['anexo_id']}", headers=gestora).content)).pages
     assert not any("Trata-se do pagamento" in p.extract_text() for p in paginas)
 
+
+
+def test_pedir_processo_financeiro_ao_dof_e_o_dof_so_altera_esse_campo(cliente, admin, cenario):
+    """A equipe pede ao Financeiro (e-mail e sino); o Financeiro grava só o Processo Financeiro, sem poder editar o resto do contrato."""
+    from app.core.banco import FabricaSessao
+    from app.models.notificacao import Notificacao
+    from sqlalchemy import select
+
+    contrato, base, gestora = cenario
+    url = f"/api/contratos/{contrato['id']}"
+    fin = cabecalho(cliente, "financeiro1")
+    r = cliente.post(f"{url}/processo-financeiro/pedido", headers=gestora)
+    assert r.status_code == 200 and r.json()["destinatarios"] == 2
+    with FabricaSessao() as s:
+        aviso = s.scalar(select(Notificacao).where(Notificacao.assunto.like("Informe o processo financeiro%")))
+        assert aviso is not None and aviso.link == f"/contratos/{contrato['id']}/editar"
+    # Quem não edita o contrato não pede; o Financeiro vê a permissão só do processo
+    assert cliente.post(f"{url}/processo-financeiro/pedido", headers=fin).status_code == 403
+    permissoes = cliente.get(url, headers=fin).json()["permissoes"]
+    assert permissoes["pode_editar"] is False and permissoes["pode_editar_processo_financeiro"] is True
+    r = cliente.put(f"{url}/processo-financeiro", json={"processo_financeiro": " 20240605988 "}, headers=fin)
+    assert r.status_code == 200 and r.json()["processo_financeiro"] == "20240605988"
+    # O resto do contrato continua fechado para o Financeiro; quem não é equipe nem Financeiro não grava o processo
+    assert cliente.put(url, json={}, headers=fin).status_code in (403, 422)
+    assert cliente.put(f"{url}/processo-financeiro", json={"processo_financeiro": "1"}, headers=cabecalho(cliente, "outro")).status_code == 403

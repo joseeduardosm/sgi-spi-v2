@@ -257,3 +257,19 @@ def test_ob_lancada_avisa_os_prepostos_pela_mascara_e_pode_reenviar(cliente, adm
     # Não há o que avisar antes da OB
     outra = cliente.get(_url(contrato, "/competencias/identificador/2026-02"), headers=h).json()
     assert cliente.post(_url(contrato, f"/competencias/{outra['id']}/ordem-bancaria/reenviar-email"), headers=h).status_code == 400
+
+
+def test_consolidado_traz_o_diario_de_bordo_quando_ha_ocorrencia_na_competencia(cliente, admin, cenario):
+    """Toda competência com ocorrência (aqui, a pendência no CADIN vira ocorrência) leva o diário de bordo no consolidado, mesmo sem avaliação."""
+    contrato, h, base = cenario
+    _cadin(cliente, base, h, True, "Débito de ICMS em aberto")
+    _cadin(cliente, base, h, False)
+    textos = _textos_do_consolidado(cliente, base, h)
+    assert "Diário de bordo da competência" in textos[0]  # no índice
+    assert any("Débito de ICMS em aberto" in t and "Diário de bordo" in t for t in textos)
+
+
+def test_consolidado_sem_ocorrencia_nao_tem_diario(cliente, admin, cenario):
+    contrato, h, base = cenario
+    _cadin(cliente, base, h, False)
+    assert not any("Diário de bordo da competência" in t for t in _textos_do_consolidado(cliente, base, h))

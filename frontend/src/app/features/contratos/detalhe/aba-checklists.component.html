@@ -10,7 +10,7 @@
   </header>
   <div class="corpo">
     @if (checklists().length > 1) {
-      <div class="barra-dobrar"><button type="button" class="link-arquivo" (click)="expandirTodos(true)">Expandir todos</button><button type="button" class="link-arquivo" (click)="expandirTodos(false)">Recolher todos</button></div>
+      <div class="barra-dobrar"><button type="button" class="acao-secundaria acao-pequena" (click)="expandirTodos(true)">Expandir todos</button><button type="button" class="acao-secundaria acao-pequena" (click)="expandirTodos(false)">Recolher todos</button></div>
     }
     @for (c of checklists(); track c.id) {
       <article class="cartao-checklist cartao-dobravel" [class.ativo]="c.ativo">

@@ -1,0 +1,64 @@
+/home/administrador/projeto/backend/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+2026-10-26 16:42:34,496 INFO httpx: HTTP Request: POST http://testserver/api/autenticacao/login "HTTP/1.1 200 OK"
+2026-10-26 16:42:36,350 INFO sgi_spi.auditoria: root acl.recurso.criar contratos ativo=True
+2026-10-26 16:42:36,357 INFO httpx: HTTP Request: POST http://testserver/api/acl/recursos "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,364 INFO sgi_spi.auditoria: root acl.regra.criar regra 1 recurso=1 nivel=MODIFICACAO usuarios=[2] setores=[]
+2026-10-26 16:42:36,373 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,378 INFO sgi_spi.auditoria: root acl.regra.criar regra 2 recurso=1 nivel=MODIFICACAO usuarios=[3] setores=[]
+2026-10-26 16:42:36,382 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,387 INFO sgi_spi.auditoria: root acl.regra.criar regra 3 recurso=1 nivel=MODIFICACAO usuarios=[4] setores=[]
+2026-10-26 16:42:36,390 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,395 INFO sgi_spi.auditoria: root acl.regra.criar regra 4 recurso=1 nivel=MODIFICACAO usuarios=[5] setores=[]
+2026-10-26 16:42:36,398 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,404 INFO sgi_spi.auditoria: root acl.regra.criar regra 5 recurso=1 nivel=LEITURA usuarios=[6] setores=[]
+2026-10-26 16:42:36,408 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,412 INFO sgi_spi.auditoria: root acl.recurso.criar protocolo ativo=True
+2026-10-26 16:42:36,416 INFO httpx: HTTP Request: POST http://testserver/api/acl/recursos "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,425 INFO sgi_spi.auditoria: root acl.regra.criar regra 6 recurso=2 nivel=CONTROLE_TOTAL usuarios=[7] setores=[]
+2026-10-26 16:42:36,430 INFO httpx: HTTP Request: POST http://testserver/api/acl/regras "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,951 INFO sgi_spi.auditoria: root protocolo.tipo.criar Portaria SPI SSGC 
+2026-10-26 16:42:36,956 INFO httpx: HTTP Request: POST http://testserver/api/protocolo/tipos "HTTP/1.1 201 Created"
+2026-10-26 16:42:36,975 INFO sgi_spi.auditoria: root protocolo.sequencia.criar Portaria SPI SSGC 2026: 1 a 99 
+2026-10-26 16:42:36,978 INFO httpx: HTTP Request: POST http://testserver/api/protocolo/tipos/b2418f3c-d1d8-4edc-9350-abca2c5a8122/sequencias "HTTP/1.1 201 Created"
+2026-10-26 16:42:37,224 INFO sgi_spi.auditoria: root contrato.modelo.salvar Modelo Portaria sem anterior 
+2026-10-26 16:42:37,227 INFO httpx: HTTP Request: POST http://testserver/api/contratos/modelos "HTTP/1.1 201 Created"
+2026-10-26 16:42:37,233 INFO sgi_spi.auditoria: root contrato.modelo.salvar Modelo Portaria com anterior 
+2026-10-26 16:42:37,235 INFO httpx: HTTP Request: POST http://testserver/api/contratos/modelos "HTTP/1.1 201 Created"
+2026-10-26 16:42:37,601 INFO sgi_spi.auditoria: root portaria.autoridade.criar Roberto Campos Autoridade 
+2026-10-26 16:42:37,605 INFO httpx: HTTP Request: POST http://testserver/api/portarias/autoridades "HTTP/1.1 201 Created"
+2026-10-26 16:42:37,613 INFO sgi_spi.auditoria: root contrato.empresa.criar Empresa Exemplo Serviços Prediais Ltda 
+2026-10-26 16:42:37,619 INFO httpx: HTTP Request: POST http://testserver/api/contratos/empresas "HTTP/1.1 201 Created"
+2026-10-26 16:42:37,647 INFO sgi_spi.auditoria: root contrato.criar Contrato 900/2026 
+2026-10-26 16:42:37,962 INFO httpx: HTTP Request: POST http://testserver/api/contratos "HTTP/1.1 201 Created"
+2026-10-26 16:42:38,235 INFO httpx: HTTP Request: POST http://testserver/api/autenticacao/login "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,340 INFO sgi_spi.auditoria: marina contrato.previsao.salvar Contrato 900/2026 
+2026-10-26 16:42:38,361 INFO httpx: HTTP Request: PUT http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/previsao/1 "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,389 INFO sgi_spi.auditoria: marina contrato.nota_empenho.criar Contrato 900/2026 
+2026-10-26 16:42:38,423 INFO httpx: HTTP Request: POST http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/notas-empenho "HTTP/1.1 201 Created"
+2026-10-26 16:42:38,446 INFO sgi_spi.auditoria: marina contrato.nota_empenho.criar Contrato 900/2026 
+2026-10-26 16:42:38,469 INFO httpx: HTTP Request: POST http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/notas-empenho "HTTP/1.1 201 Created"
+2026-10-26 16:42:38,492 INFO sgi_spi.auditoria: marina contrato.checklist.criar Contrato 900/2026 
+2026-10-26 16:42:38,514 INFO httpx: HTTP Request: POST http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/checklists "HTTP/1.1 201 Created"
+2026-10-26 16:42:38,540 INFO sgi_spi.auditoria: marina contrato.checklist.ativar Contrato 900/2026 
+2026-10-26 16:42:38,558 INFO httpx: HTTP Request: POST http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/checklists/9279064b-10c9-411e-bd06-7332fec29bb4/ativar "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,580 INFO sgi_spi.auditoria: marina contrato.execucao.gerar Contrato 900/2026 
+2026-10-26 16:42:38,608 INFO httpx: HTTP Request: POST http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/execucao/gerar "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,636 INFO httpx: HTTP Request: GET http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/notas-empenho "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,717 INFO httpx: HTTP Request: GET http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/competencias/identificador/2026-01 "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,749 INFO sgi_spi.auditoria: marina contrato.execucao.medicao.salvar Contrato 900/2026 · 01/2026 
+2026-10-26 16:42:38,790 INFO httpx: HTTP Request: PUT http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/competencias/8d591b93-5683-4b3b-8aca-b2ea292b6ff5/medicao "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,817 INFO sgi_spi.auditoria: marina contrato.execucao.medicao.ciencia Contrato 900/2026 · 01/2026 
+2026-10-26 16:42:38,856 INFO httpx: HTTP Request: POST http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/competencias/8d591b93-5683-4b3b-8aca-b2ea292b6ff5/medicao/ciencia "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,886 INFO httpx: HTTP Request: POST http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/competencias/8d591b93-5683-4b3b-8aca-b2ea292b6ff5/medicao/concluir "HTTP/1.1 400 Bad Request"
+2026-10-26 16:42:38,917 INFO httpx: HTTP Request: POST http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/competencias/8d591b93-5683-4b3b-8aca-b2ea292b6ff5/nota-fiscal "HTTP/1.1 400 Bad Request"
+2026-10-26 16:42:38,979 INFO httpx: HTTP Request: GET http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/competencias/8d591b93-5683-4b3b-8aca-b2ea292b6ff5 "HTTP/1.1 200 OK"
+2026-10-26 16:42:38,988 INFO httpx: HTTP Request: PUT http://testserver/api/contratos/4157944d-6eb7-4d0f-99b0-56807cfb0181/competencias/8d591b93-5683-4b3b-8aca-b2ea292b6ff5/retencao "HTTP/1.1 422 Unprocessable Entity"
+contrato 4157944d-6eb7-4d0f-99b0-56807cfb0181
+400
+400
+Traceback (most recent call last):
+  File "/home/administrador/projeto/docs/manuais/atualizacao-2026-10/laboratorio/lab_seed.py", line 77, in <module>
+    for doc in d["documentos"]: c.post(f"{base}/checklist/{doc['id']}", files={"arquivo": ("d.pdf", PDF)}, headers=g)
+               ~^^^^^^^^^^^^^^
+KeyError: 'documentos'

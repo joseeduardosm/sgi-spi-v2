@@ -118,9 +118,9 @@ def painel_vigencias(
 
 
 @roteador_painel.get("/painel", response_model=Painel, summary="Painel de contratos",
-                     description="Minhas pendências (contratos em que sou criador ou integrante da equipe), alertas de risco da carteira, "
-                     "execução orçamentária do exercício (previsto × medido × pago) e números da carteira. Filtros opcionais por empresa "
-                     "e contrato (não se aplicam às pendências). Exige ACL `contratos` ≥ LEITURA.")
+                     description="Minhas pendências, alertas de risco, execução orçamentária do exercício (previsto × medido × pago) e números da carteira, **só dos contratos em que sou "
+                     "criador ou integrante vigente da equipe**; quem tem controle total em Contratos (administrador) e o SuperRoot veem a carteira inteira. "
+                     "Os filtros de empresa e contrato listam apenas os contratos visíveis. Exige ACL `contratos` ≥ LEITURA.")
 def painel(
     exercicio: int | None = Query(None, ge=2000, le=2100),
     empresa_id: uuid.UUID | None = Query(None),

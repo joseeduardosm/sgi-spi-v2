@@ -25,6 +25,8 @@ export interface SerieGrafico {
   dados: (number | null)[];
   /** Cor da série; sem ela, usa a paleta na ordem. */
   cor?: string;
+  /** Barras: séries com a mesma `pilha` ficam empilhadas na mesma coluna (ex.: pago + excedente); as demais ficam lado a lado. */
+  pilha?: string;
   /** Só para gráficos de barras: desenha esta série como linha por cima. */
   linha?: boolean;
   /** Linha pontilhada (ex.: a linha ideal do burndown). */
@@ -160,6 +162,8 @@ export class GraficoComponent {
     const formato = this.formato();
     const series = this.series();
     const reduzir = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Com pilhas nomeadas, o eixo empilha por pilha (cada pilha é uma coluna)
+    const empilhar = this.empilhado() || series.some((s) => s.pilha);
     const cor = (s: SerieGrafico, i: number) => s.cor ?? CORES_GRAFICO[i % CORES_GRAFICO.length];
     const datasets = tipo === 'doughnut'
       ? [{ label: series[0]?.nome ?? '', data: series[0]?.dados ?? [], backgroundColor: this.rotulos().map((_, i) => CORES_GRAFICO[i % CORES_GRAFICO.length]), borderWidth: 2 }]
@@ -169,7 +173,7 @@ export class GraficoComponent {
           borderDash: s.tracejada ? [6, 4] : [],
           borderWidth: tipo === 'line' || s.linha ? 2 : 0, pointRadius: s.semPontos ? 0 : tipo === 'line' || s.linha ? 2.5 : 0, borderRadius: tipo === 'bar' && !s.linha ? 4 : 0,
           pointBackgroundColor: cor(s, i), pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: tema.fundo, pointHoverBackgroundColor: cor(s, i),
-          maxBarThickness: 36,
+          maxBarThickness: 36, ...(s.pilha ? { stack: s.pilha } : {}),
         }));
     return {
       type: tipo as 'bar',
@@ -192,12 +196,12 @@ export class GraficoComponent {
         // Eixo das categorias (rótulos) e eixo dos valores; na barra horizontal eles trocam de lado
         scales: tipo === 'doughnut' ? {} : this.horizontal()
           ? {
-              x: { type: 'linear', stacked: this.empilhado(), beginAtZero: true, grid: { color: tema.linha }, border: { display: true, color: tema.linha }, ticks: { precision: 0, color: tema.apagado, callback: (v) => abreviar(Number(v)) } },
-              y: { type: 'category', stacked: this.empilhado(), grid: { display: false }, border: { display: true, color: tema.linha }, ticks: { color: tema.apagado } },
+              x: { type: 'linear', stacked: empilhar, beginAtZero: true, grid: { color: tema.linha }, border: { display: true, color: tema.linha }, ticks: { precision: 0, color: tema.apagado, callback: (v) => abreviar(Number(v)) } },
+              y: { type: 'category', stacked: empilhar, grid: { display: false }, border: { display: true, color: tema.linha }, ticks: { color: tema.apagado } },
             }
           : {
-              x: { type: 'category', stacked: this.empilhado(), grid: { display: false }, border: { display: true, color: tema.linha }, ticks: { color: tema.apagado } },
-              y: { type: 'linear', stacked: this.empilhado(), beginAtZero: true, grid: { color: tema.linha }, border: { display: true, color: tema.linha }, ticks: { precision: 0, color: tema.apagado, callback: (v) => abreviar(Number(v)) } },
+              x: { type: 'category', stacked: empilhar, grid: { display: false }, border: { display: true, color: tema.linha }, ticks: { color: tema.apagado } },
+              y: { type: 'linear', stacked: empilhar, beginAtZero: true, grid: { color: tema.linha }, border: { display: true, color: tema.linha }, ticks: { precision: 0, color: tema.apagado, callback: (v) => abreviar(Number(v)) } },
             },
         // Fonte proporcional à largura do gráfico (legível também numa TV)
         font: { size: this.tamanhoFonte() },

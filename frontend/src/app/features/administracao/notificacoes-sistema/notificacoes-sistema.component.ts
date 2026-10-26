@@ -31,6 +31,11 @@ function dataBr(texto: string): string {
   imports: [FormsModule, DatePipe, TrilhaComponent, SeletorUsuariosComponent, AdministracaoNotificacoesComponent],
   templateUrl: './notificacoes-sistema.component.html',
   host: { '(document:keydown.escape)': 'fechar()' },
+  // Ações de cada envio: botões do catálogo lado a lado, alinhados à direita (nunca texto solto)
+  styles: `
+    .acoes-envio { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+    .acoes-envio button { white-space: nowrap; }
+  `,
 })
 export class NotificacoesSistemaComponent implements OnInit {
   private readonly api = inject(NotificacoesSistemaApiService);
@@ -45,6 +50,9 @@ export class NotificacoesSistemaComponent implements OnInit {
   protected assunto = '';
   protected corpo = '';
   protected destino: DestinoChangelog = 'teste';
+  /** Quando enviar: na hora ou agendado para `agendarPara` (valor de um `datetime-local`, no horário do navegador). */
+  protected quando: 'agora' | 'agendar' = 'agora';
+  protected agendarPara = '';
   protected emailTeste = '';
   // Destino "selecionados": 1 ou n usuários e/ou setores (sistêmicos ou institucionais)
   protected readonly usuariosApi = inject(UsuariosApiService);
@@ -118,6 +126,8 @@ export class NotificacoesSistemaComponent implements OnInit {
         this.assunto = r.assunto;
         this.corpo = r.corpo;
         this.destino = 'teste';
+        this.quando = 'agora';
+        this.agendarPara = '';
         this.usuarios = [];
         this.setoresEscolhidos.set([]);
         this.filtroSetores.set('');
@@ -151,14 +161,26 @@ export class NotificacoesSistemaComponent implements OnInit {
     this.api.contagem(this.usuarios.map((u) => u.id), this.setoresEscolhidos()).subscribe({ next: (c) => this.contagem.set(c), error: () => this.contagem.set(null) });
   }
 
+  /** Menor horário aceito no agendamento (daqui a 2 minutos), no formato do `datetime-local`. */
+  protected minimoAgendamento(): string {
+    const d = new Date(Date.now() + 2 * 60000 - new Date().getTimezoneOffset() * 60000);
+    return d.toISOString().slice(0, 16);
+  }
+
+  private agendado(): boolean {
+    return this.destino !== 'teste' && this.quando === 'agendar';
+  }
+
   protected podeEnviar(): boolean {
     if (!this.assunto.trim() || !this.corpo.trim()) return false;
+    if (this.agendado() && (!this.agendarPara || new Date(this.agendarPara).getTime() < Date.now() + 60000)) return false;
     if (this.destino === 'selecionados') return this.usuarios.length > 0 || this.setoresEscolhidos().length > 0;
     return this.destino === 'todos' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.emailTeste.trim());
   }
 
   /** Texto do botão de envio conforme o destino. */
   protected rotuloEnviar(): string {
+    if (this.agendado()) return 'Agendar envio';
     return { todos: 'Enviar a todos', selecionados: 'Enviar aos escolhidos', teste: 'Enviar teste' }[this.destino];
   }
 
@@ -168,18 +190,19 @@ export class NotificacoesSistemaComponent implements OnInit {
     if (this.destino === 'selecionados') {
       const nomes = this.setoresEscolhidos().map((id) => r.setores.find((s) => s.id === id)?.nome ?? '');
       const ok = await this.dialogos.confirmar({
-        titulo: 'Enviar aos escolhidos?',
+        titulo: this.agendado() ? 'Agendar o envio aos escolhidos?' : 'Enviar aos escolhidos?',
         mensagem: `"${this.assunto.trim()}" vai para ${this.usuarios.length} usuário(s)` +
-          (nomes.length ? ` e para as pessoas dos setores: ${nomes.join(', ')} (inclui os setores filhos)` : '') + '. Um e-mail para cada.',
-        rotuloConfirmar: 'Enviar',
+          (nomes.length ? ` e para as pessoas dos setores: ${nomes.join(', ')} (inclui os setores filhos)` : '') + `. Um e-mail para cada${this.textoQuando()}.`,
+        rotuloConfirmar: this.agendado() ? 'Agendar' : 'Enviar',
       });
       if (!ok) return;
     }
     if (this.destino === 'todos') {
       const ok = await this.dialogos.confirmar({
-        titulo: 'Enviar a todos os usuários?',
-        mensagem: `"${this.assunto.trim()}" vai para ${r.total_destinatarios} usuário(s) ativo(s) com e-mail, um e-mail para cada. Não há como desfazer.`,
-        rotuloConfirmar: 'Enviar a todos',
+        titulo: this.agendado() ? 'Agendar o envio a todos os usuários?' : 'Enviar a todos os usuários?',
+        mensagem: `"${this.assunto.trim()}" vai para ${r.total_destinatarios} usuário(s) ativo(s) com e-mail (a lista final é a do momento do envio), um e-mail para cada${this.textoQuando()}. ` +
+          (this.agendado() ? 'Você pode cancelar o agendamento até a hora marcada.' : 'Não há como desfazer.'),
+        rotuloConfirmar: this.agendado() ? 'Agendar' : 'Enviar a todos',
         segundos: 3,
       });
       if (!ok) return;
@@ -189,11 +212,15 @@ export class NotificacoesSistemaComponent implements OnInit {
       email_teste: this.destino === 'teste' ? this.emailTeste.trim() : null, ate_data: r.ate,
       usuarios_ids: this.destino === 'selecionados' ? this.usuarios.map((u) => u.id) : [],
       setores_ids: this.destino === 'selecionados' ? this.setoresEscolhidos() : [],
+      agendar_para: this.agendado() ? new Date(this.agendarPara).toISOString() : null,
     };
     this.dialogos.executar(this.api.enviar(pedido), 'Registrando o envio…').subscribe({
       next: (envio) => {
         this.carregarHistorico();
-        if (envio.destino !== 'teste') {
+        if (envio.situacao === 'agendado') {
+          this.fechar();
+          this.dialogos.avisar('Envio agendado', `Sai em ${new Date(envio.agendado_para!).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} para ${envio.total} destinatário(s) (a lista final é a do momento do envio). Dá para cancelar no histórico.`);
+        } else if (envio.destino !== 'teste') {
           this.fechar();
           this.dialogos.avisar('Envio iniciado', `Os e-mails saem em segundo plano para ${envio.total} destinatário(s); acompanhe o resultado no histórico.`);
         } else {
@@ -203,6 +230,19 @@ export class NotificacoesSistemaComponent implements OnInit {
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível enviar'),
     });
+  }
+
+  private textoQuando(): string {
+    return this.agendado() ? `, em ${new Date(this.agendarPara).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : '';
+  }
+
+  protected async cancelarAgendamento(e: EnvioChangelog): Promise<void> {
+    const ok = await this.dialogos.confirmar({
+      titulo: 'Cancelar o agendamento?', mensagem: `"${e.assunto}" não será enviado em ${new Date(e.agendado_para!).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`,
+      rotuloConfirmar: 'Cancelar agendamento', perigo: true,
+    });
+    if (!ok) return;
+    this.api.cancelarEnvio(e.id).subscribe({ next: () => this.carregarHistorico(), error: (erro) => this.dialogos.mostrarErro(erro, 'Não foi possível cancelar') });
   }
 
   /** Reaproveita um envio anterior (ex.: reenviar a todos um texto já testado). */

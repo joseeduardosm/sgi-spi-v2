@@ -40,7 +40,7 @@
     }
     @if (todasDaPaginaMarcadas() && (recebidas()?.total ?? 0) > (recebidas()?.itens?.length ?? 0) && selecionadas().size < (recebidas()?.total ?? 0)) {
       <p class="dica-formulario">Todas as {{ recebidas()?.itens?.length }} notificações desta página estão selecionadas.
-        <button type="button" class="link-arquivo" (click)="selecionarTodasDoFiltro()">Selecionar as {{ recebidas()?.total }} notificações deste filtro</button></p>
+        <button type="button" class="acao-secundaria acao-pequena" (click)="selecionarTodasDoFiltro()">Selecionar as {{ recebidas()?.total }} notificações deste filtro</button></p>
     }
     <div class="tabela-gestao-envoltorio">
       <table class="tabela-gestao tabela-mensagens">

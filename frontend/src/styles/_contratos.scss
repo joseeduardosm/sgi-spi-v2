@@ -1902,6 +1902,14 @@ details.nota-xml { padding: 0; overflow: hidden;
 .faixa-contrato { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; a { color: var(--spi-texto); font-weight: 600; text-decoration: none; &:hover { color: var(--spi-vermelho); } } .apelido-contrato { color: var(--spi-apagado); } }
 .resumo-contrato > div.perigo { border-color: var(--spi-perigo); background: var(--spi-perigo-suave); strong, small { color: var(--spi-perigo); } }
 .resumo-contrato { padding: 0 0 14px; border-bottom: 0; }
+// Cartão do orçamento do exercício no resumo do contrato (mesmo tamanho dos vizinhos): saldo remanescente e a decisão do empenho; clicável
+.resumo-contrato > .cartao-orcamento-resumo { cursor: pointer; transition: border-color 0.15s;
+  &:hover, &:focus-visible { border-color: var(--spi-vermelho); outline: none; }
+  &.alerta { border-color: var(--spi-alerta); background: var(--spi-alerta-suave); small { color: var(--spi-alerta); } }
+  &.perigo { border-color: var(--spi-perigo); background: var(--spi-perigo-suave); small { color: var(--spi-perigo); } } }
+// Campo com um botão ao lado (ex.: Processo Financeiro + "Pedir processo financeiro ao DOF")
+.campo-com-acao { display: flex; gap: 8px; align-items: center; input { flex: 1; min-width: 0; } button { flex: none; white-space: nowrap; } }
+@media (max-width: 640px) { .campo-com-acao { flex-direction: column; align-items: stretch; } }
 // Cartão de empenho do exercício: clicável, leva à aba Notas de Empenho
 .resumo-contrato > .cartao-empenho { grid-column: span 2; cursor: pointer; transition: border-color 0.15s;
   &:hover, &:focus-visible { border-color: var(--spi-vermelho); outline: none; }
@@ -2029,3 +2037,19 @@ details.nota-xml { padding: 0; overflow: hidden;
 // Despacho de pagamento mostrado na etapa Download (texto padrão para copiar): leitura confortável, blocos centralizados como no documento final
 .texto-despacho { max-width: 720px; margin: 0 auto; padding: 4px 2px; font-size: 14px; line-height: 1.65; color: var(--spi-texto);
   p { margin: 0 0 12px; } ul, ol { margin: 0 0 12px; padding-left: 22px; } strong { font-weight: 700; } }
+
+/* Orçamento do exercício (detalhe do contrato e painel): saldo remanescente em destaque e as decisões de empenho em frases curtas */
+.orcamento-executivo {
+  .orcamento-remanescente { display: flex; flex-direction: column; gap: 2px; padding: 0 0 14px; margin-bottom: 12px; border-bottom: 1px solid var(--spi-borda);
+    > span { color: var(--spi-apagado); font-size: var(--spi-texto-micro); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    strong { font-size: 1.6rem; font-weight: 700; }
+    small { color: var(--spi-apagado); }
+    &.negativo strong { color: var(--spi-perigo); } }
+  .orcamento-decisoes { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none;
+    li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .selo-situacao { min-width: 128px; text-align: center; } }
+  .orcamento-listas { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--spi-borda);
+    h3 { margin: 0 0 8px; font-size: 0.85rem; font-weight: 700; }
+    ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+    li { display: flex; justify-content: space-between; gap: 12px; font-size: 0.85rem; a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } span { flex: none; font-weight: 600; } } }
+}

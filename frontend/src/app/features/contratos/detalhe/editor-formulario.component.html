@@ -23,7 +23,7 @@
       <div class="grade-formulario tres-colunas">
         <div><label [for]="'nota-' + $index">Valor</label><input [id]="'nota-' + $index" [name]="'nota' + $index" inputmode="decimal" [(ngModel)]="n.valor" /></div>
         <div><label [for]="'legenda-' + $index">Legenda</label><input [id]="'legenda-' + $index" [name]="'legenda' + $index" [(ngModel)]="n.legenda" /></div>
-        <div style="align-self: center"><button type="button" class="link-arquivo" (click)="definicao.escala.splice($index, 1)">remover</button></div>
+        <div style="align-self: center"><button type="button" class="acao-perigo acao-pequena" (click)="definicao.escala.splice($index, 1)">Remover</button></div>
       </div>
     }
     <button type="button" class="acao-secundaria acao-pequena" (click)="definicao.escala.push({ valor: '', legenda: '' })">+ Nota</button>
@@ -36,7 +36,7 @@
         <div><label [for]="'faixa-max-' + $index">Nota máxima (vazio = sem teto)</label><input [id]="'faixa-max-' + $index" [name]="'fmax' + $index" inputmode="decimal" [(ngModel)]="f.maximo" /></div>
         <div><label [for]="'faixa-pct-' + $index">% do pagamento</label><input [id]="'faixa-pct-' + $index" [name]="'fpct' + $index" inputmode="decimal" [(ngModel)]="f.percentual" /></div>
         <div><label [for]="'faixa-zero-' + $index">Notas mínimas no grupo (opcional)</label><input [id]="'faixa-zero-' + $index" [name]="'fzero' + $index" type="number" min="1" max="100" step="1" [(ngModel)]="f.notas_zero" /></div>
-        <div style="align-self: center"><button type="button" class="link-arquivo" (click)="definicao.faixas.splice($index, 1)">remover</button></div>
+        <div style="align-self: center"><button type="button" class="acao-perigo acao-pequena" (click)="definicao.faixas.splice($index, 1)">Remover</button></div>
       </div>
     }
     <button type="button" class="acao-secundaria acao-pequena" (click)="definicao.faixas.push({ minimo: '', maximo: null, percentual: '' })">+ Faixa</button>
@@ -48,7 +48,7 @@
           <div><label [for]="'grupo-' + ig">Grupo</label><input [id]="'grupo-' + ig" [name]="'grupo' + ig" [(ngModel)]="g.nome" /></div>
           <div style="align-self: center">
             <span class="contador-ciencias" [class.completo]="somaPesos(ig) === 100">Soma dos pesos: {{ somaPesos(ig) }}%</span>
-            <button type="button" class="link-arquivo" style="margin-left: 10px" (click)="definicao.grupos.splice(ig, 1)">remover grupo</button>
+            <button type="button" class="acao-perigo acao-pequena" style="margin-left: 10px" (click)="definicao.grupos.splice(ig, 1)">Remover grupo</button>
           </div>
         </div>
         @for (i of g.itens; track $index; let ii = $index) {
@@ -56,7 +56,7 @@
             <div><label [for]="'item-' + ig + '-' + ii">Item</label><input [id]="'item-' + ig + '-' + ii" [name]="'item' + ig + '_' + ii" [(ngModel)]="i.nome" /></div>
             <div><label [for]="'desc-' + ig + '-' + ii">Descrição</label><input [id]="'desc-' + ig + '-' + ii" [name]="'desc' + ig + '_' + ii" [(ngModel)]="i.descricao" /></div>
             <div><label [for]="'peso-' + ig + '-' + ii">Peso (%)</label><input [id]="'peso-' + ig + '-' + ii" [name]="'peso' + ig + '_' + ii" inputmode="decimal" [(ngModel)]="i.peso" /></div>
-            <div style="align-self: center"><button type="button" class="link-arquivo" (click)="g.itens.splice(ii, 1)">remover</button></div>
+            <div style="align-self: center"><button type="button" class="acao-perigo acao-pequena" (click)="g.itens.splice(ii, 1)">Remover</button></div>
           </div>
         }
         <button type="button" class="acao-secundaria acao-pequena" (click)="g.itens.push({ nome: '', descricao: '', peso: '' })">+ Item</button>

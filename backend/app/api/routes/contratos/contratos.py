@@ -31,7 +31,9 @@ from app.schemas.contratos.contratos import (
     AlteracaoCampo,
     DetalheContrato,
     GravacaoContrato,
+    GravacaoProcessoFinanceiro,
     LeituraDocumento,
+    ResultadoPedidoProcesso,
     LeituraPagamento,
     PaginaContratos,
     VizinhosContrato,
@@ -53,7 +55,8 @@ PDF = {status.HTTP_200_OK: {"content": {"application/pdf": {}}, "description": "
     response_model=PaginaContratos,
     summary="Carteira de contratos",
     description="Busca por número (`012/2026`), empresa, apelido ou objeto. Mais recentes primeiro, ou a coluna escolhida em `ordenar_por` e `direcao`. "
-    "Com `meus=true`, só os contratos em que o usuário integra a equipe vigente (gestor, fiscais, suplentes…). Exige ACL `contratos` ≥ LEITURA.",
+    "**Só traz os contratos que o usuário criou ou em que integra a equipe vigente**; quem tem controle total em Contratos (administrador) e o SuperRoot veem a carteira inteira. "
+    "Com `meus=true`, só os da equipe vigente (gestor, fiscais, suplentes…). Exige ACL `contratos` ≥ LEITURA.",
 )
 def listar_contratos(
     busca: str | None = Query(None, max_length=100),
@@ -67,7 +70,8 @@ def listar_contratos(
     usuario: Usuario = Depends(pode_ler),
 ) -> PaginaContratos:
     """Carteira: lista paginada com busca por número, empresa, apelido ou objeto e ordenação por coluna."""
-    return servico.listar_contratos(sessao, busca, pagina, tamanho_pagina, usuario.id if meus else None, ordenar_por, direcao)
+    return servico.listar_contratos(sessao, busca, pagina, tamanho_pagina, usuario.id if meus else None, ordenar_por, direcao,
+                                    None if servico.eh_administrador(sessao, usuario) else usuario.id)
 
 
 @roteador.get(
@@ -98,6 +102,31 @@ def opcoes_usuarios(
 ) -> list[OpcaoUsuario]:
     """Usuários para montar a equipe, sem exigir acesso ao módulo Usuários."""
     return servico_admin_usuarios.opcoes(sessao, busca, limite)
+
+
+# Antes de `/{contrato_id}`: senão "exportar" seria lido como id de contrato
+@roteador.get(
+    "/exportar",
+    summary="Exportar a carteira (PDF ou XLSX)",
+    description="Relatório com os dados essenciais da carteira (nº do contrato, apelido, empresa, base mensal, início e fim da vigência) e o total da base mensal. "
+    "Usa os mesmos `busca`, `meus`, `ordenar_por` e `direcao` da tela e o mesmo escopo: só os contratos que o usuário criou ou em que integra a equipe; "
+    "o administrador de Contratos e o SuperRoot exportam a carteira inteira. Exige ACL `contratos` ≥ LEITURA.",
+    responses={status.HTTP_200_OK: {"content": {"application/pdf": {}, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}},
+                                    "description": "Arquivo para download."}},
+)
+def exportar_carteira(
+    formato: Literal["pdf", "xlsx"] = Query("xlsx"),
+    busca: str | None = Query(None, max_length=100),
+    meus: bool = Query(False, description="Só os contratos em que o usuário integra a equipe vigente."),
+    ordenar_por: Literal["numero", "empresa", "data_inicio", "data_fim", "situacao", "base_mensal", "valor_global"] = Query("numero"),
+    direcao: Literal["asc", "desc"] = Query("desc"),
+    sessao: Session = Depends(obter_sessao),
+    usuario: Usuario = Depends(pode_ler),
+) -> Response:
+    """Gera o arquivo na memória e devolve como download."""
+    conteudo, nome, tipo = servico.exportar_carteira(sessao, busca, usuario.id if meus else None, ordenar_por, direcao,
+                                                     None if servico.eh_administrador(sessao, usuario) else usuario.id, formato, usuario)
+    return Response(conteudo, media_type=tipo, headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 @roteador.get("/{contrato_id}", response_model=DetalheContrato, summary="Detalhe do contrato", responses=NAO_ENCONTRADO,
@@ -167,6 +196,37 @@ def historico(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _
         return servico.historico(sessao, contrato_id)
 
 
+@roteador.put(
+    "/{contrato_id}/processo-financeiro",
+    response_model=DetalheContrato,
+    summary="Informar o processo financeiro",
+    description="Grava só o Processo Financeiro do contrato (o `COD_PROCESSO` das OBs no SIGEO). Permitido a quem edita o contrato e ao **Financeiro (DOF)** "
+    "(Modificação ou mais no recurso ACL `financeiro`), que na tela de edição vê o resto do contrato bloqueado. Entra no histórico de alterações. "
+    "Exige ACL `contratos` ≥ LEITURA.",
+    responses={**NAO_ENCONTRADO},
+)
+def informar_processo_financeiro(contrato_id: uuid.UUID, dados: GravacaoProcessoFinanceiro, sessao: Session = Depends(obter_sessao),
+                                 usuario: Usuario = Depends(pode_ler)) -> DetalheContrato:
+    """O DOF preenche o processo financeiro pedido pela equipe."""
+    with traduzir_erros(sessao):
+        servico.alterar_processo_financeiro(sessao, contrato_id, dados.processo_financeiro, usuario)
+        return servico.detalhar_contrato(sessao, contrato_id, usuario)
+
+
+@roteador.post(
+    "/{contrato_id}/processo-financeiro/pedido",
+    response_model=ResultadoPedidoProcesso,
+    summary="Pedir o processo financeiro ao DOF",
+    description="Avisa todo o Financeiro (DOF: Modificação ou mais no recurso ACL `financeiro`), por e-mail e no sino, com o link da edição do contrato "
+    "para preencher o Processo Financeiro (evento `contratos.pedido_processo_financeiro`). Só quem edita o contrato. `400` se não houver ninguém no Financeiro.",
+    responses={**NAO_ENCONTRADO, **INVALIDO},
+)
+def pedir_processo_financeiro(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)) -> ResultadoPedidoProcesso:
+    """Pedido ao DOF."""
+    with traduzir_erros(sessao):
+        return ResultadoPedidoProcesso(destinatarios=servico.pedir_processo_financeiro(sessao, contrato_id, usuario))
+
+
 @roteador.get(
     "/{contrato_id}/vizinhos",
     response_model=VizinhosContrato,
@@ -184,7 +244,8 @@ def vizinhos(
     usuario: Usuario = Depends(pode_ler),
 ) -> VizinhosContrato:
     """Anterior e próximo na ordem da carteira."""
-    return servico.vizinhos_na_carteira(sessao, contrato_id, busca, usuario.id if meus else None, ordenar_por, direcao)
+    return servico.vizinhos_na_carteira(sessao, contrato_id, busca, usuario.id if meus else None, ordenar_por, direcao,
+                                        None if servico.eh_administrador(sessao, usuario) else usuario.id)
 
 
 @roteador.get(

@@ -70,7 +70,7 @@ RECURSO = "contratos"
 CAMPOS_AUDITADOS = (
     "numero", "empresa_id", "apelido", "autoridade_despacho_id", "objeto", "data_inicio", "data_fim", "vigencia_inicial_meses",
     "vigencia_maxima_meses", "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "permite_medicao_adicional", "alertas_a_partir_de", "sei_gestao_numero", "sei_gestao_link",
-    "sei_execucao_numero", "sei_execucao_link", "situacao_forcada",
+    "sei_execucao_numero", "sei_execucao_link", "processo_financeiro", "situacao_forcada",
 )
 # Campos do item que não mudam depois de salvo (mudar exigiria excluir e criar outro item)
 CAMPOS_ITEM_IMUTAVEIS = ("descricao", "tipo", "calcula_pro_rata")
@@ -187,7 +187,51 @@ def permissoes(sessao: Session, contrato: Contrato, usuario: Usuario) -> Permiss
         pode_excluir=pode_excluir(sessao, contrato, usuario),
         pode_administrar=pode_editar(sessao, contrato, usuario),
         pode_gerir_autoridades=eh_administrador(sessao, usuario) or any(d.usuario_id == usuario.id and d.papel in ("gestor", "gestor_suplente") for d in designacoes_vigentes(contrato)),
+        pode_editar_processo_financeiro=pode_editar_processo_financeiro(sessao, contrato, usuario),
     )
+
+
+def pode_editar_processo_financeiro(sessao: Session, contrato: Contrato, usuario: Usuario) -> bool:
+    """Quem edita o contrato ou o Financeiro (DOF): este só altera o Processo Financeiro, com o resto do contrato bloqueado."""
+    from app.services.contratos.servico_retencao import eh_financeiro
+
+    return pode_editar(sessao, contrato, usuario) or eh_financeiro(sessao, usuario)
+
+
+def alterar_processo_financeiro(sessao: Session, contrato_id: uuid.UUID, valor: str, autor: Usuario) -> Contrato:
+    """Grava só o Processo Financeiro (a tela do DOF), com o histórico "de → para" como na edição do contrato."""
+    contrato = obter_contrato(sessao, contrato_id)
+    if not pode_editar_processo_financeiro(sessao, contrato, autor):
+        raise SemPermissaoContrato("Só a equipe do contrato ou o Financeiro (DOF) informam o processo financeiro.")
+    antes = _dados_auditados(contrato)
+    contrato.processo_financeiro = (valor or "").strip()
+    contrato.versao += 1
+    auditar_alteracoes(sessao, autor.login, autor.id, "contrato.alterar", "contrato", contrato.id, f"Contrato {contrato.numero}", antes, _dados_auditados(contrato))
+    sessao.commit()
+    return contrato
+
+
+def pedir_processo_financeiro(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> int:
+    """Avisa todo o Financeiro (DOF), por e-mail e no sino, para preencher o Processo Financeiro do contrato. Devolve quantos receberam."""
+    from app.services import notificacoes
+    from app.services.contratos.servico_retencao import usuarios_financeiro
+
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    destinatarios = [u.id for u in usuarios_financeiro(sessao) if u.id != autor.id]
+    if not destinatarios:
+        raise ErroRegraContrato("Não há ninguém no Financeiro (DOF) para receber o pedido: confira o recurso Financeiro em Controle de acesso.")
+    nome = contrato.apelido or contrato.empresa.razao_social
+    notificacoes.notificar(
+        sessao, destinatarios, f"Informe o processo financeiro do contrato {contrato.numero}",
+        f"{autor.nome_completo or autor.login} pede o número do processo financeiro do contrato {contrato.numero} ({nome}, {contrato.empresa.razao_social}).\n\n"
+        "Abra o link, preencha o campo \"Processo Financeiro\" e salve. Com ele, o SGI confere as ordens bancárias pagas no SIGEO e conclui sozinho a etapa de pagamento.",
+        chave=f"processo-financeiro:{contrato.id}:{agora_utc().isoformat()}", link=f"/contratos/{contrato.id}/editar", categoria="pendencia",
+        autor=autor, evento="contratos.pedido_processo_financeiro", forcar_email=True, contrato_id=contrato.id)
+    auditar(sessao, autor.login, "contrato.processo_financeiro.pedir", f"Contrato {contrato.numero}", f"{len(destinatarios)} destinatário(s)",
+            autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id)
+    sessao.commit()
+    return len(destinatarios)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -263,8 +307,21 @@ ORDENACOES_CARTEIRA = {
 }
 
 
-def _consulta_carteira(busca: str | None, equipe_de_usuario_id: int | None):
-    """Consulta da carteira com a busca (apelido, objeto, empresa ou número) e, se pedido, só os contratos da equipe vigente do usuário."""
+def _equipe_vigente(usuario_id: int):
+    """Ids dos contratos em que a pessoa integra a equipe vigente."""
+    agora = agora_utc()
+    return select(DesignacaoEquipe.contrato_id).where(
+        DesignacaoEquipe.usuario_id == usuario_id,
+        or_(DesignacaoEquipe.valido_de.is_(None), DesignacaoEquipe.valido_de <= agora),
+        or_(DesignacaoEquipe.valido_ate.is_(None), DesignacaoEquipe.valido_ate > agora),
+    )
+
+
+def _consulta_carteira(busca: str | None, equipe_de_usuario_id: int | None, restrito_a: int | None = None):
+    """Consulta da carteira com a busca (apelido, objeto, empresa ou número) e, se pedido, só os contratos da equipe vigente do usuário.
+
+    `restrito_a` (quem não é administrador de Contratos) limita a carteira aos contratos que a pessoa criou ou em que integra a equipe vigente.
+    """
     # O join com a empresa permite buscar pela razão social e pelo nome fantasia
     consulta = select(Contrato).join(EmpresaContratada, EmpresaContratada.id == Contrato.empresa_id)
     termo = (busca or "").strip().lower()
@@ -284,25 +341,21 @@ def _consulta_carteira(busca: str | None, equipe_de_usuario_id: int | None):
         elif termo.isdigit():
             condicoes.append(Contrato.sequencial == int(termo))
         consulta = consulta.where(or_(*condicoes))
+    if restrito_a is not None:
+        consulta = consulta.where(or_(Contrato.criador_id == restrito_a, Contrato.id.in_(_equipe_vigente(restrito_a))))
     if equipe_de_usuario_id is not None:
-        agora = agora_utc()
-        vigente = select(DesignacaoEquipe.contrato_id).where(
-            DesignacaoEquipe.usuario_id == equipe_de_usuario_id,
-            or_(DesignacaoEquipe.valido_de.is_(None), DesignacaoEquipe.valido_de <= agora),
-            or_(DesignacaoEquipe.valido_ate.is_(None), DesignacaoEquipe.valido_ate > agora),
-        )
-        consulta = consulta.where(Contrato.id.in_(vigente))
+        consulta = consulta.where(Contrato.id.in_(_equipe_vigente(equipe_de_usuario_id)))
     return consulta
 
 
 def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pagina: int, equipe_de_usuario_id: int | None = None,
-                     ordenar_por: str = "numero", direcao: str = "desc") -> PaginaContratos:
+                     ordenar_por: str = "numero", direcao: str = "desc", restrito_a: int | None = None) -> PaginaContratos:
     """Carteira paginada, com busca por apelido, objeto, empresa ou número. Com `equipe_de_usuario_id`, só os contratos em que a pessoa integra a equipe vigente.
 
     Ordem padrão (`numero` decrescente): ano e sequencial do mais recente ao mais antigo, direto no banco. Qualquer outra ordem carrega os
     contratos da busca, ordena pelos valores já calculados (situação, vigência, valores) e só então pagina; empates seguem a ordem padrão.
     """
-    consulta = _consulta_carteira(busca, equipe_de_usuario_id)
+    consulta = _consulta_carteira(busca, equipe_de_usuario_id, restrito_a)
     # Total antes de paginar; depois, a página pedida, dos contratos mais recentes para os mais antigos
     total = sessao.scalar(select(func.count()).select_from(consulta.subquery())) or 0
     if (ordenar_por, direcao) != ("numero", "desc"):
@@ -325,13 +378,47 @@ def listar_contratos(sessao: Session, busca: str | None, pagina: int, tamanho_pa
     return PaginaContratos(itens=[resumo(c) for c in contratos], total=total, pagina=pagina, tamanho_pagina=tamanho_pagina)
 
 
+def exportar_carteira(sessao: Session, busca: str | None, equipe_de_usuario_id: int | None, ordenar_por: str, direcao: str, restrito_a: int | None,
+                      formato: str, autor: Usuario) -> tuple[bytes, str, str]:
+    """Relatório da carteira (a mesma lista da tela: busca, "meus", ordem e escopo do usuário) em PDF ou XLSX, com os dados essenciais."""
+    from app.services.documentos.pdf import DocumentoPdf
+    from app.services.documentos.planilha import FORMATO_DATA, FORMATO_MOEDA, Aba, Coluna, gerar_planilha
+
+    linhas = listar_contratos(sessao, busca, 1, 1_000_000, equipe_de_usuario_id, ordenar_por, direcao, restrito_a).itens
+    total_base = sum((l.base_mensal for l in linhas), Decimal(0))
+    filtros = "; ".join(f for f in (f'busca "{busca.strip()}"' if (busca or "").strip() else "", "só meus contratos" if equipe_de_usuario_id else "") if f)
+    subtitulo = f"{len(linhas)} contrato(s)" + (f" · {filtros}" if filtros else "")
+    if formato == "xlsx":
+        conteudo = gerar_planilha([Aba(
+            "Contratos",
+            [Coluna("Nº do contrato", largura=14), Coluna("Apelido", largura=34), Coluna("Empresa", largura=44), Coluna("Base mensal", FORMATO_MOEDA, 18),
+             Coluna("Vigência início", FORMATO_DATA, 15), Coluna("Vigência fim", FORMATO_DATA, 15)],
+            [[l.numero, l.apelido, l.empresa_razao_social, l.base_mensal, l.data_inicio, l.data_fim] for l in linhas],
+            titulo=f"Carteira de contratos · {subtitulo}", rodape=["Total", "", "", total_base, "", ""],
+        )])
+        return conteudo, "carteira-de-contratos.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    documento = DocumentoPdf("Carteira de contratos", subtitulo, paisagem=True, autor=autor.nome_completo or autor.login)
+    documento.tabela(
+        ["Nº do contrato", "Apelido", "Empresa", "Base mensal", "Vigência início", "Vigência fim"],
+        [[l.numero, l.apelido or "—", l.empresa_razao_social, _moeda(l.base_mensal), f"{l.data_inicio:%d/%m/%Y}", f"{l.data_fim:%d/%m/%Y}"] for l in linhas],
+        larguras=[1.3, 3, 4, 1.6, 1.3, 1.3], alinhar_direita=[3],
+        rodape=["Total", "", "", _moeda(total_base), "", ""],
+    )
+    return documento.gerar(), "carteira-de-contratos.pdf", "application/pdf"
+
+
+def _moeda(valor: Decimal) -> str:
+    texto = f"{calculos.arredondar(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {texto}"
+
+
 def vizinhos_na_carteira(sessao: Session, contrato_id: uuid.UUID, busca: str | None, equipe_de_usuario_id: int | None = None,
-                         ordenar_por: str = "numero", direcao: str = "desc") -> VizinhosContrato:
+                         ordenar_por: str = "numero", direcao: str = "desc", restrito_a: int | None = None) -> VizinhosContrato:
     """Contrato anterior e próximo na mesma lista que o usuário estava vendo (mesma busca, filtro "meus" e ordenação).
 
     Se o contrato não está nessa lista (ex.: a busca mudou), `posicao` e os vizinhos vêm vazios.
     """
-    consulta = _consulta_carteira(busca, equipe_de_usuario_id)
+    consulta = _consulta_carteira(busca, equipe_de_usuario_id, restrito_a)
     if (ordenar_por, direcao) == ("numero", "desc"):
         ids = list(sessao.scalars(consulta.with_only_columns(Contrato.id).order_by(*ordem_contratos())))
     else:
@@ -451,6 +538,7 @@ def detalhar_contrato(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario)
         sei_gestao_link=contrato.sei_gestao_link,
         sei_execucao_numero=contrato.sei_execucao_numero,
         sei_execucao_link=contrato.sei_execucao_link,
+        processo_financeiro=contrato.processo_financeiro,
         situacao_forcada=contrato.situacao_forcada,
         vigencias=[LeituraVigencia(sequencia=v.sequencia, inicio=v.inicio, fim=v.fim, meses=v.meses) for v in vigencias(contrato)],
         marcos=marcos(contrato),
@@ -572,6 +660,7 @@ def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, numero: str)
         "sei_execucao_link", "situacao_forcada",
     ):
         setattr(contrato, campo, getattr(dados, campo))
+    contrato.processo_financeiro = (dados.processo_financeiro or "").strip()
     if not datas_bloqueadas:
         # O fim da vigência é calculado pelo início e pelo prazo inicial
         contrato.data_fim = calculos.calcular_data_fim(dados.data_inicio, dados.vigencia_inicial_meses)

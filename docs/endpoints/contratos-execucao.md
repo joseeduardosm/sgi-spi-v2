@@ -333,3 +333,11 @@ Etapa final da competência. `multipart/form-data` com o campo `arquivo` (**PDF*
 - **Quem pode:** quem pode editar o contrato (equipe vigente, criador, controle total ou SuperRoot, com Modificação em Contratos) **ou** quem tem no **perfil ativo** a ação própria **"Lançar ordem bancária"** (`LANCAR_OB`, ver [acl.md](acl.md#ações-próprias-de-um-módulo)). A ação própria vale em **qualquer contrato** e **só** para a OB: a conta não altera mais nada no contrato. Para a integração achar o contrato e a competência (`GET /contratos`, `GET /contratos/{id}/execucao`), o perfil também precisa de **Consultar contratos** (`LEITURA`).
 - **Erros:** `400` etapa errada, arquivo inválido ou sem saldo; `401`; `403` sem permissão; `404` contrato ou competência inexistente.
 - **Auditoria:** `contrato.execucao.ordem_bancaria` (com o débito e as NEs usadas).
+
+## OB concluída pelo SIGEO
+
+Além do PDF juntado pela equipe, a etapa da OB pode ser concluída pela conferência diária do SIGEO (08:00), para contratos com Processo Financeiro: ver [integracao-sigeo.md](integracao-sigeo.md). O detalhe da competência traz `ob_origem` (`manual` | `sigeo`), `ob_numero`, `ob_data`, `ob_valor` (SIGEO), `ob_sigeo_pendencia` (por que a conferência ainda não concluiu) e `ob_sigeo_verificado_em`. Com origem SIGEO o arquivo da OB é o "Comprovante de pagamento (SIGEO)" gerado pelo sistema. A reabertura limpa esses campos.
+
+## Diário de bordo no documento consolidado
+
+Toda competência com ocorrência no diário de bordo que a afeta (`ocorrencias_da_competencia`: a competência apontada no registro ou, nos registros antigos, a que contém a data) leva o **diário de bordo** no documento consolidado, com ou sem avaliação de qualidade: o PDF "Diário de bordo da competência" (com os anexos das ocorrências) é gerado na hora do consolidado e entra logo depois da medição e da avaliação, antes das notas fiscais, com SHA-256 na Folha de autenticação. Sem ocorrência, nada muda.

@@ -101,7 +101,9 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
                                   titulo="Medição do serviço", rotulo_total="Subtotal - Medição" if variaveis else "Total medido")
     if variaveis:
         _quadro_subtotais(documento, competencia)
-        total = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens), Decimal(0))) + sum((i.acerto or Decimal(0) for i in competencia.itens), Decimal(0))
+        from app.services.contratos.servico_competencias import total_medido
+
+        total = total_medido(competencia)
     _secao_desconto_reajuste(documento, competencia, arredondar(total))
     # Glosas do diário de bordo das ocorrências que afetam esta competência (a apontada no registro; a data pode ser de outro mês)
     glosas = [
@@ -195,8 +197,9 @@ def _tabela_itens_medicao(documento: DocumentoPdf, competencia: Competencia, sal
 
 def _quadro_subtotais(documento: DocumentoPdf, competencia: Competencia) -> None:
     """Subtotal - Medição, Subtotal - Despesas Variáveis e o Total da medição."""
-    medicao = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if not i.despesa_variavel), Decimal(0))) + sum((i.acerto or Decimal(0) for i in competencia.itens if not i.despesa_variavel), Decimal(0))
-    despesas = arredondar(sum((i.quantidade_medida * i.valor_unitario for i in competencia.itens if i.despesa_variavel), Decimal(0))) + sum((i.acerto or Decimal(0) for i in competencia.itens if i.despesa_variavel), Decimal(0))
+    from app.services.contratos.servico_competencias import subtotal_despesas_variaveis, subtotal_medicao
+
+    medicao, despesas = subtotal_medicao(competencia), subtotal_despesas_variaveis(competencia)
     documento.secao("Total da medição").campos([
         ("Subtotal - Medição", moeda(medicao)), ("Subtotal - Despesas Variáveis", moeda(despesas)), ("Total", moeda(medicao + despesas)),
     ])
@@ -438,14 +441,14 @@ def memorial_cadin(contrato: Contrato, competencia: Competencia, autor: str) -> 
 
 
 def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: dict, autor: str, enviados_por: dict | None = None,
-                ciencias: list[dict] | None = None, memorial_cadin_anexo_id=None) -> tuple[bytes, str]:
+                ciencias: list[dict] | None = None, memorial_cadin_anexo_id=None, diario_anexo_id=None) -> tuple[bytes, str]:
     """Documento consolidado da competência, na ordem de execução, com páginas numeradas em sequência.
 
     A **primeira página é o índice**: cada documento aparece com o título e as páginas clicáveis (hiperlink
     que leva direto ao documento dentro do PDF; os documentos enviados são alcançados pela contracapa).
     Os mesmos documentos entram nos marcadores do leitor de PDF.
 
-    Ordem: 1 medição (memória de cálculo) → 2 avaliação (quando houver) → 3 nota(s) fiscal(is) →
+    Ordem: 1 medição (memória de cálculo) → 2 avaliação (quando houver) → diário de bordo (quando houver ocorrência que afeta a competência) → 3 nota(s) fiscal(is) →
     [com despesas variáveis: medição dos itens de despesas variáveis → nota(s) de débito/recibo/outros] →
     4 retenção de tributos → 5 CADIN → 6 checklist → 7 folha de autenticação → 8 resumo executivo (por último).
     Antes do resumo executivo vem a **Folha de autenticação** (código, SHA-256 da composição e de cada documento incluído, e quem deu ciência). Devolve `(PDF, SHA-256 da composição)`.
@@ -477,6 +480,9 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             documentos.append(("Avaliação dos serviços", "Relatório de avaliação assinado pela contratada", avaliacao.pdf_assinado_anexo_id, False, []))
         elif avaliacao.pdf_gerado_anexo_id:
             documentos.append(("Avaliação dos serviços", "Relatório de avaliação dos serviços", avaliacao.pdf_gerado_anexo_id, True, []))
+    # Diário de bordo das ocorrências que afetam a competência (gerado na hora do consolidado, com os anexos das ocorrências)
+    if diario_anexo_id is not None:
+        documentos.append(("Diário de bordo", "Diário de bordo da competência", diario_anexo_id, True, []))
     # Trilha da nota fiscal: cada nota recusada seguida do PDF da recusa, depois a nota aprovada e a retenção (aprovação)
     for recusa in competencia.recusas:
         for retrato in recusa.notas:

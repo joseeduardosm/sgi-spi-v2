@@ -44,6 +44,8 @@
     </div>
   </section>
 
+  <app-orcamento-executivo [carteira]="p.orcamento" [hoje]="p.hoje" />
+
   <div class="indicadores">
     <div class="indicador"><span>Contratos ativos</span><strong>{{ p.numeros.contratos_ativos }}</strong></div>
     <div class="indicador"><span>A vencer (90 dias)</span><strong>{{ p.numeros.contratos_a_vencer }}</strong></div>

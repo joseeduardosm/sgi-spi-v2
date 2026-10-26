@@ -7,7 +7,9 @@ ativos com e-mail ou de teste) e histórico dos envios. A caixa de notificaçõe
 `/api/notificacoes`.
 """
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+import uuid
+
+from fastapi import APIRouter, Response, BackgroundTasks, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -66,20 +68,34 @@ def previa(dados: ConteudoChangelog, _root: Usuario = Depends(exigir_conta_root)
                description="Registra o envio e manda, em segundo plano, um e-mail por destinatário: `todos` (usuários ativos com e-mail), "
                            "`selecionados` (`usuarios_ids` e `setores_ids`; um setor inclui os membros, quem o tem como Departamento e os "
                            "setores filhos) ou `teste` (só `email_teste`). `400` se a seleção não tiver ninguém ativo com e-mail. O resultado (`enviados`, `falhas`, `concluido_em`) aparece em "
-                           "`GET /changelog/envios`. Só envios a todos avançam a data do próximo rascunho. Só a conta root.",
+                           "`GET /changelog/envios`. Só envios a todos avançam a data do próximo rascunho. **Com `agendar_para`** (data e hora com fuso, de 1 minuto a 1 ano à frente; não vale para `teste`) "
+                           "o envio fica `agendado` e sai na hora marcada (rotina de 2 em 2 minutos), com os destinatários vigentes naquele momento. Só a conta root.",
                responses={**INVALIDO})
 def enviar(dados: PedidoEnvioChangelog, tarefas: BackgroundTasks, sessao: Session = Depends(obter_sessao),
            root: Usuario = Depends(exigir_conta_root)) -> EnvioChangelogLeitura:
     try:
         envio, lista = servico_changelog.registrar_envio(sessao, root, dados.assunto, dados.corpo, dados.destino, dados.email_teste,
-                                                         dados.ate_data, dados.usuarios_ids, dados.setores_ids)
+                                                         dados.ate_data, dados.usuarios_ids, dados.setores_ids, dados.agendar_para)
     except servico_changelog.ErroChangelog as erro:
-        raise ErroApi(status.HTTP_400_BAD_REQUEST, str(erro), "invalido") from erro
-    tarefas.add_task(servico_changelog.processar_envio, envio.id, lista)
+        raise ErroApi(erro.status, str(erro), erro.codigo) from erro
+    # Agendado: a lista vem vazia e o timer (a cada 2 minutos) envia na hora marcada
+    if dados.agendar_para is None:
+        tarefas.add_task(servico_changelog.processar_envio, envio.id, lista)
     return EnvioChangelogLeitura.model_validate(envio)
 
 
+@roteador.delete("/changelog/envios/{envio_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Cancelar um envio agendado",
+                 description="Só enquanto o envio está `agendado` (antes da hora marcada). `404` se não existe; `409` se já saiu ou já foi cancelado. Só a conta root.",
+                 responses={**INVALIDO})
+def cancelar_envio(envio_id: uuid.UUID, sessao: Session = Depends(obter_sessao), root: Usuario = Depends(exigir_conta_root)) -> Response:
+    try:
+        servico_changelog.cancelar_agendamento(sessao, root, envio_id)
+    except servico_changelog.ErroChangelog as erro:
+        raise ErroApi(erro.status, str(erro), erro.codigo) from erro
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @roteador.get("/changelog/envios", response_model=list[EnvioChangelogLeitura], summary="Histórico de envios do changelog",
-              description="Últimos 30 envios (a todos e de teste), do mais recente para o mais antigo. Só a conta root.")
+              description="Últimos 30 envios (a todos, escolhidos, de teste e agendados; cada um com `situacao`), do mais recente para o mais antigo. Só a conta root.")
 def listar_envios(sessao: Session = Depends(obter_sessao), _root: Usuario = Depends(exigir_conta_root)) -> list[EnvioChangelogLeitura]:
     return [EnvioChangelogLeitura.model_validate(e) for e in servico_changelog.historico(sessao)]

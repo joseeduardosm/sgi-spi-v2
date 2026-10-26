@@ -83,6 +83,9 @@ CAMPOS = {
     "processo gestao|link": ("sei_gestao_link", "Processo Gestão · Link"),
     "processo execucao|numero": ("sei_execucao_numero", "Processo Execução · Número"),
     "processo execucao|link": ("sei_execucao_link", "Processo Execução · Link"),
+    # Opcional: só entra se a planilha tiver a linha
+    "processo financeiro": ("processo_financeiro", "Processo Financeiro"),
+    "processo financeiro|numero": ("processo_financeiro", "Processo Financeiro"),
 }
 # Rótulos da equipe: lidos só para avisar que não são importados
 ROTULOS_EQUIPE = ("gestor", "fiscal")
@@ -543,6 +546,7 @@ def analisar(sessao: Session, conteudo: bytes) -> Analise:
         "sei_gestao_link": _vazio(v.get("sei_gestao_link")),
         "sei_execucao_numero": _vazio(v.get("sei_execucao_numero")),
         "sei_execucao_link": _vazio(v.get("sei_execucao_link")),
+        "processo_financeiro": str(v.get("processo_financeiro") or "").strip(),
         "situacao_forcada": None,
         "equipe": {},
         "itens": [_item_para_gravacao(i) for i in leitura.itens],

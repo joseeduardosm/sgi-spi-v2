@@ -38,9 +38,18 @@
     }
 
     @for (secao of navegacao.secoes(); track secao.legenda) {
-      <p class="nav-legenda" [class.nav-legenda-secundaria]="!$first">{{ secao.legenda }}</p>
+      @if (secao.dobravel) {
+        <!-- Seção dobrável (Administração): a legenda é um botão que recolhe e abre os itens -->
+        <button type="button" class="nav-legenda nav-legenda-secundaria nav-legenda-dobravel" (click)="alternarGrupo('secao-' + secao.legenda)"
+                [attr.aria-expanded]="estaAberto('secao-' + secao.legenda)" [attr.aria-controls]="'secao-' + secao.legenda">
+          <span>{{ secao.legenda }}</span><b [class.aberto]="estaAberto('secao-' + secao.legenda)">⌄</b>
+        </button>
+      } @else {
+        <p class="nav-legenda" [class.nav-legenda-secundaria]="!$first">{{ secao.legenda }}</p>
+      }
 
       @for (item of secao.itens; track item.id) {
+       @if (!secao.dobravel || estaAberto('secao-' + secao.legenda) || !layout.barraExpandida()) {
         @if (item.filhos) {
           <button class="nav-item nav-grupo" type="button" (click)="alternarGrupo(item.id)"
                   [attr.aria-expanded]="estaAberto(item.id)" [attr.aria-controls]="'submenu-' + item.id" [title]="item.rotulo">
@@ -81,6 +90,7 @@
           </a>
         }
       }
+       }
     }
   </nav>
 

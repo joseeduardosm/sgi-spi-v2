@@ -223,6 +223,9 @@ def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkey
     restringir_contratos_extra(cliente, admin, {terceiro: "MODIFICACAO"})
     de_fora = cliente.get("/api/contratos/painel", headers=cabecalho(cliente, "terceiro_painel")).json()
     assert de_fora["alertas"] == [] and de_fora["minhas_pendencias"] == []
+    # E também não vê a execução orçamentária, os números nem as opções de filtro de contratos que não são dele
+    assert de_fora["numeros"]["contratos_ativos"] == 0 and de_fora["contratos"] == [] and de_fora["empresas"] == []
+    assert cliente.get("/api/contratos/painel", headers=gestora).json()["numeros"]["contratos_a_vencer"] == 1
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
     # Depois de gerar: pendências de medição e um risco de atraso agregado por contrato
@@ -237,6 +240,11 @@ def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkey
     assert "1 competência(s)" in atrasos[0]["descricao"] and "09/2026" in atrasos[0]["descricao"]
     assert painel["execucao"]["total_previsto"] == "24105.00" and painel["execucao"]["empenhado"] == "51000.00"
     assert painel["numeros"]["contratos_a_vencer"] == 1
+    # Administrador (controle total em Contratos) vê a carteira inteira, mesmo fora da equipe
+    chefe = criar_usuario("chefe_contratos", nome_completo="Chefe", email="chefe.contratos@sp.gov.br")
+    restringir_contratos_extra(cliente, admin, {chefe: "CONTROLE_TOTAL"})
+    visto = cliente.get("/api/contratos/painel", params={"exercicio": 2026}, headers=cabecalho(cliente, "chefe_contratos")).json()
+    assert visto["execucao"]["total_previsto"] == "24105.00" and len(visto["contratos"]) == 1 and visto["minhas_pendencias"] == []
     # O criador também recebe as pendências; filtro por empresa inexistente zera os números
     assert cliente.get("/api/contratos/painel", headers=admin).json()["minhas_pendencias"]
     vazio = cliente.get("/api/contratos/painel", params={"empresa_id": str(contrato["id"])}, headers=admin).json()

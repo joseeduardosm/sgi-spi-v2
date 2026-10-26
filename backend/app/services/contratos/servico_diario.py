@@ -352,12 +352,15 @@ def _paginas_do_anexo(anexo) -> bytes | None:
     return None
 
 
-def gerar_pdf(contrato: Contrato, inicio: date | None = None, fim: date | None = None, autor: str = "") -> bytes:
+def gerar_pdf(contrato: Contrato, inicio: date | None = None, fim: date | None = None, autor: str = "",
+              ocorrencias: list[OcorrenciaDiario] | None = None) -> bytes:
     """Diário de bordo em PDF (A4 paisagem). Os anexos das ocorrências são juntados **no fim**, numa lista de anexos:
     depois do diário vem a lista (nº, ocorrência, arquivo e páginas) e, em seguida, cada anexo precedido de uma folha de rosto.
     Todas as páginas saem numeradas em sequência ("Página X de N").
+
+    `ocorrencias` informa a lista pronta (ex.: as que afetam uma competência, no documento consolidado); sem ela, valem as do período.
     """
-    ocorrencias = ocorrencias_do_periodo(contrato, inicio, fim)
+    ocorrencias = ocorrencias if ocorrencias is not None else ocorrencias_do_periodo(contrato, inicio, fim)
     anexos = [_AnexoDoDiario(n, o, a.anexo) for n, (o, a) in enumerate(((o, a) for o in ocorrencias for a in o.anexos), start=1)]
     periodo = _rotulo_periodo(inicio, fim)
     if not anexos:

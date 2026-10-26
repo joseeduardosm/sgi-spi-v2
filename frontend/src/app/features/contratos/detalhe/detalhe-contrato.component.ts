@@ -15,7 +15,7 @@ import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { CHAVE_CONTEXTO_CARTEIRA, ContextoCarteira, ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
-import { AlteracaoCampo, DetalheContrato, NotaEmpenho, Prorrogacao, VizinhosContrato } from '../compartilhado/contratos.models';
+import { AlteracaoCampo, DetalheContrato, NotaEmpenho, OrcamentoExecutivo, Prorrogacao, VizinhosContrato } from '../compartilhado/contratos.models';
 import { HistoricoCampoComponent } from '../compartilhado/historico-campo.component';
 import { LinhaDoTempoComponent } from '../compartilhado/linha-do-tempo.component';
 import { MESES, PAPEIS, PERIODICIDADES, ROTULOS_CAMPO, ROTULOS_SITUACAO, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
@@ -94,6 +94,33 @@ export class DetalheContratoComponent {
   protected readonly periodicidade = computed(() => PERIODICIDADES.find((p) => p.valor === this.contrato()?.periodicidade_meses)?.rotulo ?? '');
   /** Notas de Empenho do contrato (para o saldo do exercício na aba Principal). */
   protected readonly notas = signal<NotaEmpenho[]>([]);
+  /** Saldo remanescente e decisões de empenho do exercício (cartão executivo). */
+  protected readonly orcamento = signal<OrcamentoExecutivo | null>(null);
+  /** Prazo do reforço de empenho já passou. */
+  protected readonly reforcoVencido = computed(() => {
+    const o = this.orcamento();
+    return !!o && Number(o.reforco) > 0 && !!o.pedir_reforco_ate && o.pedir_reforco_ate < this.hoje;
+  });
+  /** " · jan a ago" (meses concluídos que entram no saldo remanescente) ou " · nenhum mês concluído". */
+  protected readonly mesesConcluidos = computed(() => {
+    const meses = this.orcamento()?.meses_concluidos ?? [];
+    const nome = (d: string) => ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][Number(d.slice(5, 7)) - 1];
+    if (!meses.length) return ' · nenhum mês concluído';
+    return meses.length === 1 ? ` · ${nome(meses[0].competencia)}` : ` · ${nome(meses[0].competencia)} a ${nome(meses[meses.length - 1].competencia)}`;
+  });
+  /** Uma linha com a decisão do empenho: reforço (e até quando), sobra para cancelar ou cobertura completa. */
+  protected readonly decisaoEmpenho = computed(() => {
+    const o = this.orcamento();
+    if (!o) return '';
+    const moeda = (v: string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const mes = (d: string | null) => (d ? `${d.slice(5, 7)}/${d.slice(0, 4)}` : '');
+    if (Number(o.reforco) > 0) {
+      const ate = o.pedir_reforco_ate ? ` até ${o.pedir_reforco_ate.split('-').reverse().join('/')}` : '';
+      return `Falta empenhar ${moeda(o.reforco)}${ate}${this.reforcoVencido() ? ' (vencido)' : ''}`;
+    }
+    if (Number(o.disponivel_cancelar) > 0) return `Empenho cobre até ${mes(o.coberto_ate)} · sobra ${moeda(o.disponivel_cancelar)}`;
+    return o.meses_restantes ? `Empenho cobre até ${mes(o.coberto_ate)}` : 'Sem meses a empenhar no exercício';
+  });
   /** Exercício considerado no saldo de empenho (o ano atual). */
   protected readonly exercicio = Number(this.hoje.slice(0, 4));
   /** NEs do exercício: o ano vem do número da NE (ex.: `2026NE00007`); sem ele, do ano do cadastro. */
@@ -125,13 +152,15 @@ export class DetalheContratoComponent {
     const d = this.diasRestantes();
     return d < 0 ? `vencida há ${-d} dia(s)` : d === 0 ? 'vence hoje' : `faltam ${d} dia(s)`;
   });
-  /** Processos SEI (gestão e execução) para a aba Processos. */
+  /** Processos SEI (gestão e execução) e o processo financeiro (SIGEO) para a aba Processos. */
   protected readonly processos = computed(() => {
     const c = this.contrato();
     if (!c) return [];
     return [
       { chave: 'gestao', rotulo: 'Gestão', campoNumero: 'sei_gestao_numero', numero: c.sei_gestao_numero, link: c.sei_gestao_link },
       { chave: 'execucao', rotulo: 'Execução', campoNumero: 'sei_execucao_numero', numero: c.sei_execucao_numero, link: c.sei_execucao_link },
+      // Processo financeiro: sem link no SEI; é por ele que a conferência diária acha as OBs pagas no SIGEO
+      { chave: 'financeiro', rotulo: 'Financeiro', campoNumero: 'processo_financeiro', numero: c.processo_financeiro, link: '', nota: 'Usado para achar as OBs pagas no SIGEO.' },
     ];
   });
   // Só permite prorrogar quem pode editar e com todos os códigos orçamentários dos itens preenchidos
@@ -188,9 +217,11 @@ export class DetalheContratoComponent {
       historico: this.api.historico(this.id()),
       prorrogacoes: this.alteracoes.prorrogacoes(this.id()),
       notas: this.api.notas(this.id()).pipe(catchError(() => of([] as NotaEmpenho[]))),
+      orcamento: this.api.orcamentoExecutivo(this.id(), this.exercicio).pipe(catchError(() => of(null))),
     }).subscribe({
-      next: ({ contrato, historico, prorrogacoes, notas }) => {
+      next: ({ contrato, historico, prorrogacoes, notas, orcamento }) => {
         this.notas.set(notas);
+        this.orcamento.set(orcamento);
         this.contrato.set(contrato);
         // O nome da tela nos recentes e favoritos passa a ser o número do contrato
         this.atalhos.rotularAtual(`Contrato ${contrato.numero}`);

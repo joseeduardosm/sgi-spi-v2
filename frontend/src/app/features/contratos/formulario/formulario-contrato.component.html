@@ -8,8 +8,8 @@
       <span class="dica-formulario" style="margin: 0">Campos com * são obrigatórios.</span>
       <div class="acoes-formulario">
         <a class="acao-secundaria" [routerLink]="original() ? ['/contratos', original()!.id] : ['/contratos']">Cancelar</a>
-        <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="salvando() || formulario.invalid">
-          {{ salvando() ? 'Salvando…' : original() ? 'Salvar alterações' : 'Salvar contrato' }}
+        <button [class.carregando]="salvando()" type="submit" class="acao-primaria" [disabled]="salvando() || (!somenteProcesso() && formulario.invalid)">
+          {{ salvando() ? 'Salvando…' : somenteProcesso() ? 'Salvar processo financeiro' : original() ? 'Salvar alterações' : 'Salvar contrato' }}
         </button>
       </div>
     </div>
@@ -32,6 +32,19 @@
       }
     }
 
+    @if (somenteProcesso()) {
+      <!-- Financeiro (DOF): só o Processo Financeiro é editável; o resto do contrato aparece bloqueado logo abaixo -->
+      <section class="cartao-dados" aria-labelledby="bloco-processo-dof">
+        <header><div><h2 id="bloco-processo-dof">Processo Financeiro</h2><small>Você está como Financeiro (DOF): só este campo pode ser alterado. O resto do contrato aparece bloqueado.</small></div></header>
+        <div class="corpo grade-formulario">
+          <div><label for="processo-financeiro-dof">Processo Financeiro</label>
+            <input id="processo-financeiro-dof" name="processo_financeiro_dof" maxlength="60" [(ngModel)]="dados.processo_financeiro" placeholder="Ex.: 20240605988" />
+            <small class="dica-formulario">Número do processo das ordens bancárias no SIGEO (COD_PROCESSO). Mais de um: separe por vírgula.</small></div>
+        </div>
+      </section>
+    }
+
+    <fieldset class="campos-contrato" [disabled]="somenteProcesso()">
     <section class="cartao-dados" aria-labelledby="bloco-dados">
       <header><h2 id="bloco-dados">Dados do contrato</h2></header>
       <div class="corpo">
@@ -141,6 +154,14 @@
         <div><label for="sei-gestao-link">Link - Gestão *</label><input id="sei-gestao-link" name="sei_gestao_link" type="url" required pattern="^https?://.+" [(ngModel)]="dados.sei_gestao_link" placeholder="https://" /></div>
         <div><label for="sei-execucao-numero">Número - Execução *</label><input id="sei-execucao-numero" name="sei_execucao_numero" required maxlength="100" [(ngModel)]="dados.sei_execucao_numero" /></div>
         <div><label for="sei-execucao-link">Link - Execução *</label><input id="sei-execucao-link" name="sei_execucao_link" type="url" required pattern="^https?://.+" [(ngModel)]="dados.sei_execucao_link" placeholder="https://" /></div>
+        <div><label for="processo-financeiro">Processo Financeiro (opcional)</label>
+          <div class="campo-com-acao">
+            <input id="processo-financeiro" name="processo_financeiro" maxlength="60" [(ngModel)]="dados.processo_financeiro" placeholder="Ex.: 20240605988" />
+            @if (original() && original()!.permissoes.pode_editar) {
+              <button type="button" class="acao-secundaria" [class.carregando]="pedindoProcesso()" [disabled]="pedindoProcesso()" (click)="pedirProcesso()">Pedir processo financeiro ao DOF</button>
+            }
+          </div>
+          <small class="dica-formulario">Número do processo das ordens bancárias no SIGEO (mais de um: separe por vírgula, ex.: 20250139231, 20260315789). Com ele, a OB paga conclui sozinha a etapa de pagamento. O pedido ao DOF manda e-mail e aviso no sino a todo o Financeiro com o link desta tela.</small></div>
       </div>
     </section>
 
@@ -228,6 +249,7 @@
         </table>
       </div>
     </section>
+    </fieldset>
   </form>
 }
 

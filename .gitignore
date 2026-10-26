@@ -13,3 +13,10 @@ apoio/
 # Cópias de segurança soltas na pasta do backend (contêm segredos ou dados internos): nunca vão para o Git
 backend/.env.bak*
 backend/backup-*.json
+
+# Laboratórios dos manuais (prints): banco SQLite, logs, chave de cifra e anexos gerados em cada rodada. Só os scripts e as imagens vão para o Git
+docs/manuais/*/laboratorio/.cifra
+docs/manuais/*/laboratorio/lab.db
+docs/manuais/*/laboratorio/*.log
+docs/manuais/*/laboratorio/anexos/
+docs/manuais/*/laboratorio/__pycache__/

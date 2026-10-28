@@ -6,6 +6,11 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-28
+
+### Corrigido
+- **Reajuste: diferença de itens "sempre integral" calculada com mês cheio.** Quando a data de efeito do reajuste cai no meio de uma competência já medida, itens com faturamento sempre integral (`calcula_pro_rata = false`) passavam a ter a diferença calculada proporcionalmente (só os dias restantes do mês), como se fossem pró-rata. Corrigido em `_fracao_apos_efeito`: itens sempre integrais recebem a diferença do mês todo, independentemente de quando o efeito cai dentro do período.
+
 ## 2026-10-25
 
 Migrações novas (aplicar com `alembic upgrade head`; cabeça `c3e7a1f5b9d2`): `b2d6f0a4c8e1` (configuração do menu lateral) e `c3e7a1f5b9d2` (curtidas nos cartões do Diretório).

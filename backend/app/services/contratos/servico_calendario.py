@@ -29,8 +29,9 @@ from app.services.contratos.servico_competencias import (
     total_previsto_na_hora,
     vencimento_pagamento,
 )
-from app.services.contratos.servico_contratos import designacoes_vigentes, hoje, situacao
-from app.services.contratos.servico_painel import DIAS_ATRASO, DIAS_VENCENDO, carregar_contratos
+from app.services.contratos.servico_contratos import designacoes_vigentes, hoje, inicio_original, situacao
+from app.services.contratos import servico_parametros
+from app.services.contratos.servico_painel import carregar_contratos
 from app.services.contratos.servico_prorrogacao import meses_disponiveis
 from app.services.tarefas import servico_tarefas
 
@@ -40,13 +41,12 @@ TIPOS = (
     "vigencia_fim", "vigencia_maxima", "reajuste", "pagamento_nf", "prazo_nf_48h", "validade_documento", "medicao_atrasada", "empenho_insuficiente",
     "tarefa_contrato",
 )
-# Documento que vence em até 15 dias é risco alto; em até 30, médio
-DIAS_DOCUMENTO_ALTO = 15
-DIAS_DOCUMENTO_MEDIO = 30
 
 
-def _por_dias(dias: int, alto: int = 30, medio: int = 60) -> str:
-    """Severidade pela folga em dias (vencido ou dentro do limite alto = alta)."""
+def _por_dias(dias: int, alto: int | None = None, medio: int | None = None) -> str:
+    """Severidade pela folga em dias (vencido ou dentro do limite alto = alta); sem limites, os do fim de vigência (parâmetros)."""
+    alto = servico_parametros.valor("dias_fim_vigencia_alto") if alto is None else alto
+    medio = servico_parametros.valor("dias_fim_vigencia_medio") if medio is None else medio
     return "alta" if dias <= alto else "media" if dias <= medio else "info"
 
 
@@ -69,10 +69,10 @@ def _eventos_do_contrato(contrato: Contrato, referencia: date) -> list[EventoCal
     # Fim da vigência atual e vigência máxima
     novo(contrato.data_fim, "vigencia_fim", "Fim da vigência", f"{base}/prorrogacao" if estado != "encerrado" else base, _por_dias((contrato.data_fim - referencia).days))
     if contrato.vigencia_maxima_meses and meses_disponiveis(contrato) <= 0:
-        limite = calculos.data_limite_maxima(contrato.data_inicio, contrato.vigencia_maxima_meses)
+        limite = calculos.data_limite_maxima(inicio_original(contrato), contrato.vigencia_maxima_meses)
         novo(limite, "vigencia_maxima", "Vigência máxima: planejar nova contratação", base, "alta")
     # Reajuste: cada mês de reajuste, a partir do primeiro aniversário, que ainda não tem reajuste aberto
-    aniversario = calculos.primeiro_dia(calculos.somar_meses(contrato.data_inicio, 12))
+    aniversario = calculos.primeiro_dia(calculos.somar_meses(inicio_original(contrato), 12))
     if contrato.mes_reajuste:
         for ano in range(aniversario.year, max(contrato.data_fim.year, referencia.year) + 1):
             mes = date(ano, contrato.mes_reajuste, 1)
@@ -85,15 +85,15 @@ def _eventos_do_contrato(contrato: Contrato, referencia: date) -> list[EventoCal
         vencimento = vencimento_pagamento(competencia)
         if vencimento is not None:
             novo(vencimento, "pagamento_nf", f"Pagamento da competência {rotulo}", rota,
-                 "alta" if vencimento < referencia else "media" if (vencimento - referencia).days <= DIAS_VENCENDO else "info", competencia)
+                 "alta" if vencimento < referencia else "media" if (vencimento - referencia).days <= servico_parametros.valor("dias_pagamento_vencendo") else "info", competencia)
         limite = prazo_nota_fiscal(competencia) if competencia.etapa_atual == "nota_fiscal" else None
         if limite is not None:
             momento = _local(limite)
             novo(momento.date(), "prazo_nf_48h", f"Prazo de contestação e nota fiscal ({rotulo})" if competencia.contestacao_limite_em else f"Prazo de 48 h da nota fiscal ({rotulo})", rota, "alta" if momento.date() < referencia else "media", competencia, momento.time().replace(microsecond=0))
-        if competencia.tipo == "regular" and competencia.medicao_concluida_em is None and (referencia - competencia.periodo_fim).days > DIAS_ATRASO:
+        if competencia.tipo == "regular" and competencia.medicao_concluida_em is None and (referencia - competencia.periodo_fim).days > servico_parametros.valor("dias_atraso"):
             atraso = (referencia - competencia.periodo_fim).days
-            novo(competencia.periodo_fim + timedelta(days=DIAS_ATRASO), "medicao_atrasada", f"Medição da competência {rotulo} atrasada", rota,
-                 "alta" if atraso > 2 * DIAS_ATRASO else "media", competencia)
+            novo(competencia.periodo_fim + timedelta(days=servico_parametros.valor("dias_atraso")), "medicao_atrasada", f"Medição da competência {rotulo} atrasada", rota,
+                 "alta" if atraso > 2 * servico_parametros.valor("dias_atraso") else "media", competencia)
     # Validade dos documentos do checklist: o que mais demora a vencer de cada documento
     validades: dict[str, tuple] = {}
     for competencia in contrato.competencias:
@@ -105,7 +105,7 @@ def _eventos_do_contrato(contrato: Contrato, referencia: date) -> list[EventoCal
     for documento, competencia in validades.values():
         dias = (documento.validade_ate - referencia).days
         novo(documento.validade_ate, "validade_documento", f"Validade: {documento.nome}", f"{base}/execucao/{competencia.identificador}",
-             _por_dias(dias, DIAS_DOCUMENTO_ALTO, DIAS_DOCUMENTO_MEDIO), competencia)
+             _por_dias(dias, servico_parametros.valor("dias_documento_alto"), servico_parametros.valor("dias_documento_medio")), competencia)
     # Empenho: o saldo livre não cobre a próxima competência a medir
     a_medir = sorted((c for c in contrato.competencias if c.medicao_concluida_em is None and c.tipo == "regular" and not anterior_ao_corte(c)), key=lambda c: c.periodo_inicio)
     if a_medir and estado not in ("encerrado", "suspenso"):

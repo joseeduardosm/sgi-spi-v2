@@ -68,6 +68,8 @@ class SecaoContratacao(Base):
     documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratacoes_documentos.id", ondelete="CASCADE"), index=True)
     ordem: Mapped[int] = mapped_column(Integer)
     titulo: Mapped[str] = mapped_column(String(300), default="")
+    # Orientação a quem preenche a seção: só aparece na tela, não vai para a cópia nem para o Word/PDF
+    descricao: Mapped[str] = mapped_column(Text, default="", server_default="")
     origem_sgi_id: Mapped[str | None] = mapped_column(String(40), unique=True)
 
     documento: Mapped[DocumentoContratacao] = relationship(back_populates="secoes")

@@ -15,6 +15,7 @@ import pytest
 from app.services.contratos.erros import ErroRegraContrato
 from app.services.contratos.leitor_nota_xml import ler_nota
 from tests.apoio_contratos import (
+    definir_parametros,
     corpo_conclusao,
     CNPJ_SPI,
     PDF,
@@ -176,7 +177,7 @@ def test_mesma_nota_nao_entra_em_duas_competencias(cliente, cenario):
 
 def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, cenario, monkeypatch):
     # A competência do cenário é de 01/2026: sem o corte de pendências antigas (09/2026), ela aparece em "Minhas pendências"
-    monkeypatch.setattr("app.services.contratos.servico_competencias.PENDENCIAS_A_PARTIR_DE", date(2000, 1, 1))
+    definir_parametros(corte_alertas_a_partir_de=date(2000, 1, 1))
     contrato, base, gestora = cenario
     juntar_nf(cliente, base, gestora, "2105.00", "123", cnpj_emitente="99888777000100")
     detalhe = cliente.get(base, headers=cabecalho(cliente, "financeiro1")).json()
@@ -317,7 +318,10 @@ def test_pedir_processo_financeiro_ao_dof_e_o_dof_so_altera_esse_campo(cliente, 
     url = f"/api/contratos/{contrato['id']}"
     fin = cabecalho(cliente, "financeiro1")
     r = cliente.post(f"{url}/processo-financeiro/pedido", headers=gestora)
-    assert r.status_code == 200 and r.json()["destinatarios"] == 2
+    assert r.status_code == 200 and r.json()["destinatarios"] == 2 and r.json()["pedido_por"] == "Gestora Silva"
+    # Quem e quando ficam gravados no contrato (legenda do campo)
+    detalhe = cliente.get(url, headers=gestora).json()
+    assert detalhe["processo_financeiro_pedido_por"] == "Gestora Silva" and detalhe["processo_financeiro_pedido_em"]
     with FabricaSessao() as s:
         aviso = s.scalar(select(Notificacao).where(Notificacao.assunto.like("Informe o processo financeiro%")))
         assert aviso is not None and aviso.link == f"/contratos/{contrato['id']}/editar"

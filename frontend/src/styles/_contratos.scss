@@ -481,6 +481,7 @@ a.acao-primaria {
   li {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
     padding: 8px 0;
@@ -521,6 +522,18 @@ a.acao-primaria {
 
 .acoes-cartao.esquerda {
   justify-content: flex-start;
+}
+
+/* Botões lado a lado numa linha da lista (ex.: Baixar PDF e Baixar XLSX de cada versão) */
+.lista-ciencias .acoes-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Explicação logo abaixo de uma linha de ações: respiro entre o botão e o texto */
+.acoes-cartao + .dica-formulario {
+  margin: 10px 0 0;
 }
 
 /* Link de arquivo */
@@ -772,7 +785,13 @@ a.acao-primaria {
     &:hover {
       background: var(--spi-vermelho-suave) !important;
     }
+
+    /* Ação destrutiva: sempre a última, depois de um separador */
+    &.perigo { color: var(--spi-perigo) !important; }
+    &:disabled { opacity: 0.45; cursor: default; background: transparent !important; }
   }
+
+  .separador { display: block; height: 1px; margin: 4px 2px; background: var(--spi-borda); }
 }
 
 /* Menu "Relatórios" do cabeçalho do módulo */
@@ -2053,3 +2072,65 @@ details.nota-xml { padding: 0; overflow: hidden;
     ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
     li { display: flex; justify-content: space-between; gap: 12px; font-size: 0.85rem; a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } span { flex: none; font-weight: 600; } } }
 }
+
+/* Reajuste: meses quebrados pela data de efeito, as duas opções lado a lado (pro rata e integral).
+   Borda de 1px em vez de sombra; a opção escolhida ganha a borda do acento. */
+.opcoes-mes-quebrado {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 12px 0 0;
+
+  .opcao-mes-quebrado {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--spi-borda);
+    border-radius: var(--spi-raio-m);
+    background: var(--spi-superficie-alt);
+
+    &.escolhida { border-color: var(--spi-vermelho); background: var(--spi-vermelho-suave); }
+    > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+    h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--spi-titulo); }
+    .mes-quebrado-titulo { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--spi-titulo); }
+    .tabela-gestao-envoltorio { margin: 0; }
+    .sem-reajuste { color: var(--spi-texto-legenda); }
+    .total-opcao { display: flex; justify-content: space-between; gap: 8px; margin: 0; padding-top: 10px; border-top: 1px solid var(--spi-borda); font-size: 14px; }
+    footer { display: flex; justify-content: flex-end; margin-top: auto; }
+  }
+}
+
+@media (max-width: 991px) {
+  .opcoes-mes-quebrado { grid-template-columns: 1fr; }
+}
+
+/* Questionário do item (tipo e faturamento): cada pergunta com duas respostas em cartão, rádio ao lado do texto.
+   Mesma estrutura das categorias do Patrimônio (.pat-categorias); borda de 1px, a escolhida no acento. */
+.perguntas-item {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 4px 0 14px;
+  padding: 0;
+  border: 0;
+
+  legend { grid-column: 1 / -1; margin: 0 0 2px; padding: 0; font-size: 13px; font-weight: 600; color: var(--spi-titulo); }
+
+  .opcao-item {
+    display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 12px 14px;
+    border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--cor-ffffff);
+    font-weight: 400; cursor: pointer; transition: border-color 0.12s, background 0.12s;
+    &:hover { border-color: var(--spi-borda-campo); }
+    &.selecionada { border-color: var(--spi-vermelho); background: var(--spi-vermelho-suave); }
+
+    // O estilo global dos campos (largura total) não vale para o rádio
+    input[type='radio'] { flex: none; width: 18px; height: 18px; margin: 2px 0 0; padding: 0; accent-color: var(--spi-vermelho); }
+    span { display: grid; gap: 3px; min-width: 0; text-align: left; }
+    b { font-size: 14px; font-weight: 600; color: var(--spi-titulo); }
+    small { color: var(--spi-apagado); font-size: 12px; line-height: 1.4; }
+  }
+}
+
+@media (max-width: 700px) { .perguntas-item { grid-template-columns: 1fr; } }

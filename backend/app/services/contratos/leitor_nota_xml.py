@@ -20,13 +20,13 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from xml.etree import ElementTree
 
+from app.services.contratos import servico_parametros
 from app.services.contratos.erros import ErroRegraContrato
 
 NS_NFE = "http://www.portalfiscal.inf.br/nfe"
 NS_NFSE_NACIONAL = "http://www.sped.fazenda.gov.br/nfse"
 NS_NFSE_SP = "http://www.prefeitura.sp.gov.br/nfe"
 TRIBUTOS = ("ir", "inss", "iss", "pis", "cofins", "csll")
-TAMANHO_MAXIMO = 5 * 1024 * 1024
 
 
 @dataclass
@@ -151,8 +151,9 @@ def ler_nota(conteudo: bytes) -> DadosNota:
     """Lê o XML e devolve os dados normalizados. Lança `ErroRegraContrato` se não for uma nota reconhecida."""
     if not conteudo or not conteudo.strip():
         raise ErroRegraContrato("O XML da nota fiscal está vazio.")
-    if len(conteudo) > TAMANHO_MAXIMO:
-        raise ErroRegraContrato("O XML da nota fiscal passa de 5 MB.")
+    limite_mb = servico_parametros.valor("xml_tamanho_maximo_mb")
+    if len(conteudo) > limite_mb * 1024 * 1024:
+        raise ErroRegraContrato(f"O XML da nota fiscal passa de {limite_mb} MB.")
     if b"<!DOCTYPE" in conteudo[:4096].upper() or b"<!ENTITY" in conteudo.upper():
         raise ErroRegraContrato("XML recusado: a nota fiscal não pode conter DOCTYPE nem entidades.")
     try:

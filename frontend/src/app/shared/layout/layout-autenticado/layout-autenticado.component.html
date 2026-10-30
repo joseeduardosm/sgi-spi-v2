@@ -10,6 +10,10 @@
   <app-barra-lateral />
 
   <div class="portal-coluna">
+    <!-- Ambiente de homologação: e-mails e pop-ups são simulados (nada sai do servidor) -->
+    @if (homologacao()) {
+      <div class="faixa-homologacao" role="status"><strong>HOMOLOGAÇÃO</strong><span>Ambiente de testes: e-mails e avisos do navegador são simulados e nada é enviado às pessoas.</span></div>
+    }
     <!-- Personificação (SuperRoot navegando como outro usuário para testar permissões) -->
     @if (autenticacao.usuario()?.personificado_por; as real) {
       <div class="faixa-personificacao" role="status">

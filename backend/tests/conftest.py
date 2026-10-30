@@ -122,6 +122,17 @@ def _banco(_esquema):
             conexao.execute(tabela.delete())
         conexao.commit()  # o PRAGMA só vale fora de transação: sem o commit, a conexão voltaria ao pool com as chaves desligadas
         conexao.exec_driver_sql("PRAGMA foreign_keys=ON")
+    # Os parâmetros de Contratos ficam em cache de memória: cada teste começa do zero. O corte de alertas nasce em 2000 (as competências dos testes
+    # são de 2026-01 e seguem o fluxo completo); os testes do corte e das competências retroativas o definem de novo com `definir_parametros`
+    from datetime import date
+
+    from app.core.banco import FabricaSessao
+    from app.services.contratos import servico_parametros
+
+    servico_parametros.limpar_cache()
+    with FabricaSessao() as sessao:
+        servico_parametros.parametros(sessao).corte_alertas_a_partir_de = date(2000, 1, 1)
+        sessao.commit()
     yield
 
 

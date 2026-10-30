@@ -18,6 +18,7 @@ const SECOES: Record<string, string> = {
   'Calendário de vencimentos': '/contratos/calendario',
   Empresas: '/contratos/empresas',
   Modelos: '/contratos/modelos',
+  Parâmetros: '/contratos/parametros',
 };
 
 /**

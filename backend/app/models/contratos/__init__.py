@@ -21,10 +21,13 @@ from app.models.contratos.alteracoes import (
     CienciaProrrogacao,
     ItemAlteracao,
     ItemReajuste,
+    MemoriaProrrogacao,
     MemoriaReajuste,
+    DocumentoProrrogacao,
     ProcessoProrrogacao,
     Prorrogacao,
     Reajuste,
+    VigenciaRetroativa,
 )
 from app.models.contratos.contrato import (
     PAPEIS_EQUIPE,
@@ -34,6 +37,7 @@ from app.models.contratos.contrato import (
     ItemContrato,
 )
 from app.models.contratos.correcoes import CorrecaoItens, HistoricoItemContrato
+from app.models.contratos.parametros import PADROES as PADROES_PARAMETROS, ParametrosContratos
 from app.models.contratos.rascunho import RascunhoContrato
 from app.models.contratos.diario import AnexoOcorrencia, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
 from app.models.contratos.empresa import EmpresaContratada, PrepostoEmpresa
@@ -103,17 +107,22 @@ __all__ = [
     "ItemReajuste",
     "LimitePrevisao",
     "MemoriaMedicao",
+    "MemoriaProrrogacao",
     "MemoriaReajuste",
+    "DocumentoProrrogacao",
     "ModeloGlobal",
     "CancelamentoNotaEmpenho",
     "MovimentoNotaEmpenho",
     "NotaEmpenho",
     "OcorrenciaDiario",
+    "PADROES_PARAMETROS",
+    "ParametrosContratos",
     "RascunhoContrato",
     "PrepostoEmpresa",
     "PrevisaoVigencia",
     "ProcessoProrrogacao",
     "Prorrogacao",
+    "VigenciaRetroativa",
     "Reajuste",
     "SelecaoNotaEmpenho",
 ]

@@ -29,6 +29,7 @@ from app.models.contratos.execucao import Competencia
 from app.models.tarefas import EquipeTarefas, EstagioTarefa, EventoTarefa, MarcadorTarefa, MembroEquipeTarefas, Tarefa
 from app.models.usuario import Usuario
 from app.services import calendario_util
+from app.services.contratos import servico_parametros
 from app.services.tarefas import servico_estagios, servico_origem
 from app.services.tarefas import servico_tarefas as servico
 
@@ -214,7 +215,7 @@ def catalogo(competencia: Competencia, feriados: set[date]) -> list[Alvo]:
     # Juntar a ordem bancária: vence no pagamento (data da NF + prazo do contrato); até a NF entrar, n + 30 dias
     from app.services.contratos.servico_competencias import vencimento_pagamento
 
-    vencimento = vencimento_pagamento(c) or n + timedelta(days=30)
+    vencimento = vencimento_pagamento(c) or n + timedelta(days=servico_parametros.valor("prazo_pagamento_padrao_dias"))
     ob_em = _utc(c.ob_enviada_em or c.concluida_em)
     alvos.append(Alvo("ob", "Juntar a ordem bancária (OB)", "Ordem bancária", _prazo(vencimento), inicio=ob_em, fim=ob_em, prazo_dinamico=True))
     return alvos
@@ -463,7 +464,7 @@ def _competencias_a_sincronizar(sessao: Session, hoje: date) -> list[Competencia
 
     todas = sessao.scalars(
         select(Competencia).join(Contrato, Contrato.id == Competencia.contrato_id)
-        .where(Competencia.tipo == "regular", Contrato.liberar_todas_competencias.is_(False), Competencia.periodo_fim >= comp.PENDENCIAS_A_PARTIR_DE,
+        .where(Competencia.tipo == "regular", Contrato.liberar_todas_competencias.is_(False), Competencia.periodo_fim >= comp.corte_global_de_alertas(),
                Competencia.periodo_fim < hoje).order_by(Competencia.periodo_fim, Competencia.id)
     )
     com_tarefas = set(sessao.scalars(select(Tarefa.origem_id).where(Tarefa.origem_tipo == ORIGEM).distinct()))

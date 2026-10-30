@@ -51,10 +51,10 @@ from reportlab.platypus import Image
 
 from app.services.documentos.pdf import (BORDA, ESTILO_PEQUENO, ESTILO_ROTULO, ESTILO_TITULO, DocumentoPdf, abrir_pdf, contar_paginas, contracapa,
                                           montar_consolidado, texto)
+from app.services.contratos import servico_parametros
 from app.services.servico_auditoria import auditar
 
 ZERO = Decimal(0)
-MAXIMO_ANEXOS = 5
 
 
 def competencia_da_data(contrato: Contrato, dia: date) -> Competencia | None:
@@ -145,8 +145,9 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoOcorrencia
     for glosa in dados.glosas:
         if glosa.item_id not in itens:
             raise ErroRegraContrato("A glosa aponta para um item que não é deste contrato.")
-    if len(arquivos) > MAXIMO_ANEXOS:
-        raise ErroRegraContrato(f"Anexe no máximo {MAXIMO_ANEXOS} arquivos por ocorrência.")
+    maximo_anexos = servico_parametros.valor("maximo_anexos_ocorrencia")
+    if len(arquivos) > maximo_anexos:
+        raise ErroRegraContrato(f"Anexe no máximo {maximo_anexos} arquivos por ocorrência.")
     if sum(len(c) for _, c in arquivos) > servico_anexos.tamanho_maximo():
         raise ErroRegraContrato("Os anexos somados passam do tamanho máximo permitido.")
     itens_avaliacao = []

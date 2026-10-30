@@ -1,0 +1,44 @@
+<p>O <strong>reajuste</strong> atualiza os preços unitários dos itens do contrato por um índice (percentual), a partir de uma data. O SGI SPI guarda a <strong>memória de cálculo</strong> em PDF e XLSX, exige a <strong>evidência do índice</strong> e o <strong>apostilamento assinado</strong>, e <strong>recalcula as competências</strong> afetadas. Esta página trata do reajuste <strong>normal</strong>; para reajustar uma vigência retroativa, veja <em>Reajuste retroativo</em>.</p>
+<p class="callout info">Exemplos com <strong>dados fictícios</strong> (contrato 900/2026), feitos numa cópia do sistema, nunca em produção.</p>
+
+<h2>Regras importantes</h2>
+<ul>
+<li><strong>Um reajuste por vez</strong> e <strong>uma vez por vigência</strong>: depois de concluído, aquela vigência não pode ser reajustada de novo.</li>
+<li>Percentual <strong>positivo</strong> aumenta o preço; <strong>negativo</strong> dá desconto; <strong>zero</strong> mantém o preço.</li>
+<li>O <strong>mês da data de efeito</strong> é pago <strong>proporcionalmente aos dias</strong> de cada preço (parte do mês pelo preço antigo, parte pelo novo).</li>
+</ul>
+
+<h2>Etapa 1 – Iniciar o reajuste</h2>
+<p>Abra o contrato e entre em <strong>Reajuste</strong>. No cartão <strong>Iniciar reajuste</strong>, informe <strong>a data a partir da qual os novos valores valem</strong> e escolha a <strong>vigência</strong> que será reajustada. Clique em <strong>Abrir reajuste</strong>.</p>
+<p>[[rj01-iniciar-reajuste]]</p>
+
+<h2>Etapa 2 – Acompanhar a elaboração</h2>
+<p>O reajuste fica &quot;em elaboração&quot;. A trilha mostra as etapas: <strong>Abertura</strong>, <strong>Evidência do índice</strong>, <strong>Memória de cálculo</strong>, <strong>Apostilamento</strong> e <strong>Conclusão</strong>. O resumo informa a data de efeito, o mês de reajuste do contrato, a vigência e quantas competências ainda não medidas serão recalculadas. Se desistir, <strong>Cancelar reajuste</strong> descarta tudo sem mudar nenhum preço.</p>
+<p>[[rj02-reajuste-em-elaboracao]]</p>
+
+<h2>Etapa 3 – Evidência do índice</h2>
+<p>Selecione o <strong>PDF</strong> que comprova o índice (por exemplo, a tabela oficial do IPCA ou o documento da cláusula de reajuste) e clique em <strong>Anexar</strong>. Para trocar, use <strong>Substituir evidência</strong>; <strong>Baixar evidência</strong> abre o arquivo enviado.</p>
+
+<h2>Etapa 4 – Memória de cálculo</h2>
+<p>Digite o percentual em <strong>Aplicar o mesmo percentual a todos os itens</strong> e clique em <strong>Aplicar a todos</strong>; depois ajuste item a item, se algum tiver índice diferente. A coluna <strong>Valor referencial (teto)</strong> é opcional: se preenchida, o novo preço não ultrapassa esse teto. O sistema mostra o <strong>novo valor unitário</strong>, a <strong>variação</strong> e o <strong>subtotal mensal</strong> de cada item, e, abaixo, os totais (base mensal e valor global, antes e depois).</p>
+<p>Os valores <strong>só valem depois de clicar em Salvar memória</strong>; enquanto houver percentuais não salvos, o sistema avisa e os totais não mudam.</p>
+<p>[[rj03-memoria-de-calculo]]</p>
+
+<h2>Etapa 5 – Gerar os arquivos, apostilar e concluir</h2>
+<p><strong>Gerar e baixar PDF e XLSX</strong> cria uma versão numerada da memória (v1, v2…) com os dois arquivos. Depois, selecione o <strong>apostilamento assinado</strong> (PDF). O botão <strong>Concluir e aplicar reajuste</strong> só é liberado com <strong>evidência, memória gerada e apostilamento</strong>.</p>
+<p>[[rj04-apostilamento-e-conclusao]]</p>
+<p>Ao concluir, o sistema pede uma confirmação final: repete a data a partir da qual os novos preços valem, quantas competências serão recalculadas e o novo valor global.</p>
+<p>[[rj05-confirmar-conclusao]]</p>
+
+<h2>Competências que já foram medidas</h2>
+<p>Se o reajuste vale a partir de uma data em que <strong>já existem competências medidas e pagas com o preço antigo</strong>, o sistema mostra um aviso no topo e age conforme o sinal da diferença:</p>
+<ul>
+<li><strong>Diferença a pagar</strong> (índice positivo): ao concluir, é gerada uma <strong>competência de diferença de reajuste</strong> (quantidades medidas × (preço novo − preço pago)), paga pelo fluxo normal da execução.</li>
+<li><strong>Desconto</strong> (índice negativo): o <strong>crédito</strong> da SPI é <strong>abatido do valor autorizado</strong> da próxima competência gerada (e, se não couber, das seguintes).</li>
+<li><strong>Sem diferença</strong>: nada a acertar.</li>
+</ul>
+<p>As competências <strong>ainda não medidas</strong> são simplesmente recalculadas com os preços novos.</p>
+
+<h2>Depois de concluído</h2>
+<p>O reajuste passa para o <strong>Histórico</strong> da tela, com a situação <em>Concluído</em>, a base e o valor global antes e depois, e os botões <strong>Baixar memória</strong> e <strong>Baixar apostilamento</strong>.</p>
+<p>[[rj06-historico]]</p>

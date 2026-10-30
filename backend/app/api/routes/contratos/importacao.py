@@ -49,7 +49,7 @@ async def _conteudo(arquivo: UploadFile) -> bytes:
     """Lê o arquivo enviado; só aceita a extensão .xlsx (o formato antigo .xls não é lido)."""
     if not (arquivo.filename or "").lower().endswith(".xlsx"):
         raise ErroApi(status.HTTP_400_BAD_REQUEST, "Envie a planilha no formato .xlsx.", "invalido")
-    return await arquivo.read(servico.TAMANHO_MAXIMO + 1)
+    return await arquivo.read(servico.tamanho_maximo() + 1)
 
 
 @roteador.get(

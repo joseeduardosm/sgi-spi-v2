@@ -53,3 +53,27 @@ def test_sem_folha_de_autenticacao_tira_so_a_folha_do_fim():
     assert len(PdfReader(BytesIO(completo)).pages) == len(PdfReader(BytesIO(corpo)).pages) + len(PdfReader(BytesIO(folha)).pages)
     assert len(PdfReader(BytesIO(servico_autenticacao.sem_folha_de_autenticacao(completo))).pages) == len(PdfReader(BytesIO(corpo)).pages)
     assert servico_autenticacao.sem_folha_de_autenticacao(corpo) == corpo
+
+
+def test_consolidado_aceita_pdf_com_caixa_herdada_do_no_pai():
+    """PDFs como os do iLovePDF herdam a MediaBox do nó /Pages: o consolidado não pode quebrar ('NoneType' has no attribute 'get_object') e todas as páginas levam o selo."""
+    from io import BytesIO
+
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import ArrayObject, FloatObject, NameObject
+
+    from app.services.documentos.pdf import DocumentoPdf, montar_consolidado
+
+    gerado = DocumentoPdf("Documento", "teste").paragrafo("texto").gerar()
+    escritor = PdfWriter()
+    for _ in range(3):
+        escritor.add_blank_page(width=595, height=842)
+    raiz = escritor._root_object["/Pages"]
+    raiz[NameObject("/MediaBox")] = ArrayObject([FloatObject(0), FloatObject(0), FloatObject(595), FloatObject(842)])
+    for pagina in raiz["/Kids"]:
+        del pagina.get_object()["/MediaBox"]  # a página passa a herdar a caixa do pai
+    saida = BytesIO()
+    escritor.write(saida)
+    pdf = montar_consolidado([(gerado, True), (saida.getvalue(), False)])
+    paginas = PdfReader(BytesIO(pdf)).pages
+    assert len(paginas) >= 4 and f"Página {len(paginas)} de {len(paginas)}" in paginas[-1].extract_text()

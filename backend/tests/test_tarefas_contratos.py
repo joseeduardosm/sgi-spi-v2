@@ -14,7 +14,7 @@ from app.models.tarefas import EventoTarefa, Tarefa
 from app.models.usuario import Usuario
 from app.services.contratos import servico_competencias, servico_tarefas_contratos as stc
 from app.services.tarefas import servico_tarefas as servico
-from tests.apoio_contratos import PDF, conferir_retencao, juntar_nf
+from tests.apoio_contratos import PDF, conferir_retencao, definir_parametros, juntar_nf
 from tests.conftest import cabecalho
 from tests.test_contratos_retencao import _ambiente, cenario  # noqa: F401 — fixtures
 from tests.test_contratos_recusa_nf import JUSTIFICATIVA
@@ -30,7 +30,7 @@ _DIA = {"hoje": date(2026, 1, 10)}  # antes da virada de 01/2026: a integração
 def _corte(monkeypatch):
     """A competência de teste é de janeiro: libera o corte de cobrança e controla o "hoje" da integração (`_ligar` avança para 15/03)."""
     _DIA["hoje"] = date(2026, 1, 10)
-    monkeypatch.setattr(servico_competencias, "PENDENCIAS_A_PARTIR_DE", date(2026, 1, 1))
+    definir_parametros(corte_alertas_a_partir_de=date(2026, 1, 1))
     monkeypatch.setattr(stc, "hoje_sao_paulo", lambda: _DIA["hoje"])
 
 

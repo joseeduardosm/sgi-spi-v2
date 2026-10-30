@@ -14,7 +14,7 @@ import { formatarCnpj, formatarCpf } from '../compartilhado/rotulos';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 // Preposto em branco, usado para limpar o formulário
-const PREPOSTO_VAZIO: GravacaoPreposto = { cpf: '', nome: '', telefone: '', email: '', cargo: '', ativo: true };
+const PREPOSTO_VAZIO: GravacaoPreposto = { cpf: '', nome: '', telefone: '', email: '', cargo: '', ativo: true, representante_legal: false };
 
 /** Tela 9: cadastro/detalhe da empresa e seus prepostos. */
 @Component({
@@ -86,7 +86,7 @@ export class EmpresaDetalheComponent implements OnInit {
     evento.stopPropagation();
     this.menuAberto.set(null);
     this.prepostoEmEdicao = p.id;
-    this.preposto = { cpf: formatarCpf(p.cpf), nome: p.nome, telefone: p.telefone, email: p.email, cargo: p.cargo, ativo: p.ativo };
+    this.preposto = { cpf: formatarCpf(p.cpf), nome: p.nome, telefone: p.telefone, email: p.email, cargo: p.cargo, ativo: p.ativo, representante_legal: p.representante_legal ?? false };
   }
 
   /** Limpa o formulário do preposto (volta ao modo "novo"). */

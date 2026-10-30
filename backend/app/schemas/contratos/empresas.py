@@ -67,6 +67,7 @@ class GravacaoPreposto(BaseModel):
     email: Annotated[str, BeforeValidator(_aparar), AfterValidator(_email)] = Field("", max_length=250)
     cargo: Texto = Field("", max_length=150)
     ativo: bool = True
+    representante_legal: bool = Field(False, description="Representante legal da empresa: aparece como signatário no termo aditivo da prorrogação.")
 
 
 class LeituraPreposto(BaseModel):
@@ -78,6 +79,7 @@ class LeituraPreposto(BaseModel):
     email: str
     cargo: str
     ativo: bool
+    representante_legal: bool = False
 
 
 class ContratoDaEmpresa(BaseModel):

@@ -77,11 +77,11 @@ export class ContratacoesApiService {
     this.http.get<OpcaoUsuario[]>(`${this.base}/opcoes-usuarios`, { params: new HttpParams().set('busca', busca) });
 
   // Seções
-  criarSecao(id: string, titulo: string) {
-    return this.http.post<DocumentoContratacao>(`${this.doc(id)}/secoes`, { titulo });
+  criarSecao(id: string, titulo: string, descricao: string) {
+    return this.http.post<DocumentoContratacao>(`${this.doc(id)}/secoes`, { titulo, descricao });
   }
-  renomearSecao(id: string, secaoId: string, titulo: string) {
-    return this.http.put<DocumentoContratacao>(`${this.doc(id)}/secoes/${secaoId}`, { titulo });
+  alterarSecao(id: string, secaoId: string, titulo: string, descricao: string) {
+    return this.http.put<DocumentoContratacao>(`${this.doc(id)}/secoes/${secaoId}`, { titulo, descricao });
   }
   excluirSecao(id: string, secaoId: string) {
     return this.http.delete<DocumentoContratacao>(`${this.doc(id)}/secoes/${secaoId}`);

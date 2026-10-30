@@ -59,7 +59,7 @@ const CORES_REALCE = [
           }
         </div>
       }
-      <div #superficie></div>
+      <div #superficie class="envoltorio-editor-rico"></div>
     </div>
   `,
 })

@@ -528,6 +528,11 @@ textarea {
     color: var(--spi-alerta);
     background: var(--spi-alerta-suave);
   }
+
+  &.perigo {
+    color: var(--spi-perigo);
+    background: var(--spi-perigo-suave);
+  }
 }
 
 .selo-origem {

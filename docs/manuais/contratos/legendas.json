@@ -1,0 +1,270 @@
+{
+ "pf01-campo-processo-financeiro": [
+  {
+   "n": 1,
+   "texto": "Campo Processo Financeiro: o número do processo das ordens bancárias no SIGEO (opcional)"
+  },
+  {
+   "n": 2,
+   "texto": "Pedir processo financeiro ao DOF: avisa o Financeiro por e-mail e pelo sino"
+  },
+  {
+   "n": 3,
+   "texto": "Explicação do campo: mais de um processo se separa por vírgula"
+  }
+ ],
+ "pf01b-confirmar-pedido": [
+  {
+   "n": 1,
+   "texto": "Enviar pedido: o Financeiro recebe e-mail e aviso no sino"
+  },
+  {
+   "n": 2,
+   "texto": "Cancelar: fecha sem avisar ninguém"
+  }
+ ],
+ "pf02-pedido-feito": [
+  {
+   "n": 1,
+   "texto": "Depois do pedido, o sistema mostra a data, a hora e quem pediu, para ninguém pedir duas vezes sem saber"
+  }
+ ],
+ "pf03-aviso-no-sino": [
+  {
+   "n": 1,
+   "texto": "O aviso do pedido chega ao Financeiro (também por e-mail), com o link da tela do contrato"
+  }
+ ],
+ "pf04-tela-do-dof": [
+  {
+   "n": 1,
+   "texto": "O Financeiro só pode preencher este campo; o resto do contrato aparece bloqueado"
+  },
+  {
+   "n": 2,
+   "texto": "Salvar processo financeiro: grava e fecha o pedido"
+  }
+ ],
+ "pf06-processo-preenchido": [
+  {
+   "n": 1,
+   "texto": "Processo preenchido pelo DOF: a partir daqui o SIGEO confere as ordens bancárias deste contrato"
+  }
+ ],
+ "pr01-pagina-prorrogacao": [
+  {
+   "n": 1,
+   "texto": "A trilha mostra as etapas do processo (6 sem itens sob demanda, 7 com); as marcadas como Opcional não bloqueiam o Registro"
+  },
+  {
+   "n": 2,
+   "texto": "Identificação do objeto: confira contrato, contratada e a vigência atual"
+  }
+ ],
+ "pr02-prazo-e-formalizacao": [
+  {
+   "n": 1,
+   "texto": "Prazo da prorrogação em meses (não passa da vigência máxima)"
+  },
+  {
+   "n": 2,
+   "texto": "Data de assinatura do Termo Aditivo"
+  },
+  {
+   "n": 3,
+   "texto": "Número do Termo Aditivo"
+  }
+ ],
+ "pr03-rascunho-salvo": [
+  {
+   "n": 1,
+   "texto": "Registrar prorrogação fica ativo quando prazo, data e termo estão preenchidos"
+  }
+ ],
+ "pr05-vigencia-retroativa-formulario": [
+  {
+   "n": 1,
+   "texto": "Quantos meses a vigência retroativa tem (ela termina no dia anterior ao início do contrato)"
+  },
+  {
+   "n": 2,
+   "texto": "Data de assinatura do Termo Aditivo que criou a vigência"
+  },
+  {
+   "n": 3,
+   "texto": "Cadastrar: abre a janela de aviso com todos os impactos"
+  }
+ ],
+ "pr06-modal-impactos": [
+  {
+   "n": 1,
+   "texto": "O botão de confirmar só libera depois de 10 segundos de leitura"
+  }
+ ],
+ "pr07-modal-impactos-liberado": [
+  {
+   "n": 1,
+   "texto": "Li e entendi os impactos: depois de 10 s o botão fica ativo"
+  }
+ ],
+ "pr08-modal-tem-certeza": [
+  {
+   "n": 1,
+   "texto": "Segunda confirmação (3 segundos): Tem certeza que deseja continuar?"
+  }
+ ],
+ "pr09-vigencia-retroativa-cadastrada": [
+  {
+   "n": 1,
+   "texto": "A vigência retroativa aparece na lista, com o termo e a ação Desfazer (só enquanto não há medição, reajuste ou aditamento nela)"
+  }
+ ],
+ "pr04-confirmar-prorrogacao": [
+  {
+   "n": 1,
+   "texto": "A janela confirma a nova vigência e o que vai acontecer; o botão de confirmar libera após uma contagem curta"
+  }
+ ],
+ "rj01-iniciar-reajuste": [
+  {
+   "n": 1,
+   "texto": "Data a partir da qual os novos preços valem (o mês dessa data é pago proporcional aos dias de cada preço)"
+  },
+  {
+   "n": 2,
+   "texto": "Vigência que será reajustada: uma vez só por vigência"
+  },
+  {
+   "n": 3,
+   "texto": "Abrir reajuste: cria a elaboração"
+  }
+ ],
+ "rj02-reajuste-em-elaboracao": [
+  {
+   "n": 1,
+   "texto": "A trilha mostra as etapas: evidência, memória de cálculo e apostilamento"
+  },
+  {
+   "n": 2,
+   "texto": "Resumo: de quando valem os novos preços, vigência reajustada e competências recalculadas"
+  },
+  {
+   "n": 3,
+   "texto": "Cancelar reajuste: descarta a elaboração sem mudar nenhum preço"
+  }
+ ],
+ "rj03-memoria-de-calculo": [
+  {
+   "n": 1,
+   "texto": "Percentual do índice: digite uma vez e aplique a todos os itens (depois dá para ajustar item a item)"
+  },
+  {
+   "n": 2,
+   "texto": "Salvar memória: os totais só mudam depois de salvar"
+  },
+  {
+   "n": 3,
+   "texto": "Totais: base mensal e valor global antes e depois"
+  }
+ ],
+ "rj04-apostilamento-e-conclusao": [
+  {
+   "n": 1,
+   "texto": "Gera a memória em PDF e XLSX (cada geração cria uma versão nova)"
+  },
+  {
+   "n": 2,
+   "texto": "Concluir: exige evidência, memória gerada e o apostilamento assinado"
+  }
+ ],
+ "rj06-historico": [
+  {
+   "n": 1,
+   "texto": "Histórico: cada reajuste com memória e apostilamento para baixar"
+  }
+ ],
+ "rr01-iniciar-reajuste-retroativo": [
+  {
+   "n": 1,
+   "texto": "Vigência retroativa a reajustar: uma por vez, da mais recente para a mais antiga"
+  },
+  {
+   "n": 2,
+   "texto": "Abrir reajuste retroativo: os preços partem dos da vigência seguinte"
+  }
+ ],
+ "rr02-reajuste-em-elaboracao": [
+  {
+   "n": 1,
+   "texto": "A trilha mostra as etapas: evidência, memória de cálculo e apostilamento"
+  },
+  {
+   "n": 2,
+   "texto": "Resumo: de quando valem os novos preços, vigência reajustada e competências recalculadas"
+  },
+  {
+   "n": 3,
+   "texto": "Cancelar reajuste: descarta a elaboração sem mudar nenhum preço"
+  }
+ ],
+ "rr03-memoria-de-calculo": [
+  {
+   "n": 1,
+   "texto": "Percentual do índice: digite uma vez e aplique a todos os itens (depois dá para ajustar item a item)"
+  },
+  {
+   "n": 2,
+   "texto": "Salvar memória: os totais só mudam depois de salvar"
+  },
+  {
+   "n": 3,
+   "texto": "Totais: base mensal e valor global antes e depois"
+  }
+ ],
+ "rr04-apostilamento-e-conclusao": [
+  {
+   "n": 1,
+   "texto": "Gera a memória em PDF e XLSX (cada geração cria uma versão nova)"
+  },
+  {
+   "n": 2,
+   "texto": "Concluir: exige evidência, memória gerada e o apostilamento assinado"
+  }
+ ],
+ "rj05-confirmar-conclusao": [
+  {
+   "n": 1,
+   "texto": "Confirmação final: a janela repete a data de início dos novos preços, quantas competências serão recalculadas e o novo valor global"
+  }
+ ],
+ "rr05-confirmar-conclusao": [
+  {
+   "n": 1,
+   "texto": "Confirmação final do reajuste retroativo (mesma contagem curta de segurança)"
+  }
+ ],
+ "rr06-historico": [
+  {
+   "n": 1,
+   "texto": "Histórico do reajuste: o retroativo aparece como \"1ª (retroativo)\", com memória e apostilamento"
+  }
+ ],
+ "pr11-minutas-lista": [
+  {
+   "n": 1,
+   "texto": "Minutas e despachos (opcional): lista dos 7 documentos do processo; clique em Ver texto para copiar ao SEI"
+  }
+ ],
+ "pr12-enquadramento": [
+  {
+   "n": 1,
+   "texto": "Enquadramento no Parecer Referencial NLC nº 1/2026 (opcional): 37 itens; os verificáveis pelo sistema já chegam preenchidos"
+  }
+ ],
+ "pr13-pos-assinatura": [
+  {
+   "n": 1,
+   "texto": "Depois da assinatura: informe a publicação no PNCP (condição de eficácia), no DOE e no Contratos.gov; se o contrato exigir garantia, os campos de dados para a planilha da DOF aparecem aqui"
+  }
+ ]
+}

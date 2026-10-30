@@ -217,6 +217,14 @@ export const rotas: Routes = [
           import('./features/administracao/glpi/integracao-glpi.component').then((m) => m.IntegracaoGlpiComponent),
       },
       {
+        // Backup geral (banco inteiro + anexos): gerar, baixar e importar. Só o SuperRoot
+        path: 'admin/backup',
+        title: 'Backup geral | SGI SPI',
+        canActivate: [guardaPapel],
+        data: { papeis: ['SuperRoot'] },
+        loadComponent: () => import('./features/administracao/backup/backup-geral.component').then((m) => m.BackupGeralComponent),
+      },
+      {
         // Integração com o SIGEO (ordens bancárias pagas concluem a etapa da OB): só o SuperRoot
         path: 'admin/sigeo',
         title: 'Integração SIGEO | SGI SPI',

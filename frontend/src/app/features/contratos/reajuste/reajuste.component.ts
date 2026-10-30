@@ -6,7 +6,7 @@ import { DatePipe } from '@angular/common';
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { forkJoin, switchMap } from 'rxjs';
 
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
@@ -14,7 +14,7 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { DetalheContrato, ItemReajuste, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
+import { CalculoMesQuebrado, DetalheContrato, ItemReajuste, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
 import { MESES, paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
@@ -51,8 +51,17 @@ export class ReajusteComponent implements OnInit {
   // Campos da abertura (data a partir da qual os novos valores valem, AAAA-MM-DD, e vigência) e da memória (índice e teto por item)
   protected dataEfeito = '';
   protected vigencia: number | null = null;
+  protected vigenciaRetroativa: number | null = null;
   protected indices: Record<string, string> = {};
+  // Calculadora ao vivo: o reajuste recalculado pelo servidor com o que foi digitado (sem gravar), enquanto houver índice ou teto não salvo
+  protected readonly previa = signal<Reajuste | null>(null);
+  private temporizadorPrevia: ReturnType<typeof setTimeout> | undefined;
+  private pedidoPrevia = 0;
   protected referenciais: Record<string, string> = {};
+  // Opção do mês quebrado sendo gravada (botão com o indicador de carregando)
+  protected readonly escolhendo = signal<CalculoMesQuebrado | null>(null);
+  protected readonly calculos: CalculoMesQuebrado[] = ['pro_rata', 'integral'];
+  protected readonly rotulosCalculo: Record<CalculoMesQuebrado, string> = { pro_rata: 'Opção 1 · Pro rata', integral: 'Opção 2 · Integral' };
   // Percentual digitado em "Aplicar a todos"
   protected indiceTodos = '';
   protected readonly meses = MESES;
@@ -74,13 +83,50 @@ export class ReajusteComponent implements OnInit {
   /** Guarda o painel e preenche os campos da memória com os valores salvos. */
   private aplicar(painel: PainelReajuste): void {
     this.painel.set(painel);
+    this.previa.set(null);
     const r = painel.em_andamento;
     // Sugere a vigência mais recente ainda não reajustada
     this.vigencia = painel.vigencias_disponiveis.at(-1)?.sequencia ?? null;
+    this.vigenciaRetroativa = painel.vigencias_retroativas_disponiveis.at(0)?.sequencia ?? null;
     if (r) {
       this.indices = Object.fromEntries(r.itens.map((i) => [i.item_id, paraDecimalTela(i.indice_percentual)]));
       this.referenciais = Object.fromEntries(r.itens.map((i) => [i.item_id, paraDecimalTela(i.valor_referencial)]));
     }
+  }
+
+  /** Índice e teto digitados de cada item, no formato que a API espera. */
+  private itensMemoria(r: Reajuste): { item_id: string; indice_percentual: string; valor_referencial: string | null }[] {
+    return r.itens.map((i) => ({
+      item_id: i.item_id,
+      indice_percentual: paraDecimalApi(this.indices[i.item_id] || '0'),
+      valor_referencial: this.referenciais[i.item_id] ? paraDecimalApi(this.referenciais[i.item_id]) : null,
+    }));
+  }
+
+  /**
+   * Escolhe como calcular os meses quebrados (vale para todos) e finaliza a memória: grava a escolha com os índices digitados,
+   * gera o PDF e o XLSX e baixa os dois.
+   */
+  protected escolherCalculo(r: Reajuste, calculo: CalculoMesQuebrado): void {
+    if (!this.todosValidos(r) || this.escolhendo()) return;
+    this.escolhendo.set(calculo);
+    this.api.salvarMemoriaReajuste(this.id(), r.id, this.itensMemoria(r), calculo).pipe(
+      switchMap(() => this.api.acaoReajuste(this.id(), r.id, 'memoria/arquivos')),
+    ).subscribe({
+      next: (p) => {
+        this.escolhendo.set(null);
+        this.aplicar(p);
+        const ultima = p.em_andamento?.memorias.at(-1);
+        if (ultima) {
+          this.baixar(r, ultima.pdf.anexo_id);
+          this.baixar(r, ultima.xlsx.anexo_id);
+        }
+      },
+      error: (e) => {
+        this.escolhendo.set(null);
+        this.dialogos.mostrarErro(e, 'Não foi possível finalizar a memória');
+      },
+    });
   }
 
   /** Executa a chamada (com "Executando…" se houver mensagem) e aplica o painel devolvido. */
@@ -95,6 +141,19 @@ export class ReajusteComponent implements OnInit {
   protected abrir(): void {
     if (!this.vigencia || !this.dataEfeito) return;
     this.tratar(this.api.abrirReajuste(this.id(), this.vigencia, this.dataEfeito), 'Não foi possível abrir o reajuste');
+  }
+
+  /** Abre o reajuste retroativo da vigência retroativa escolhida (a data de efeito é o início da vigência seguinte). */
+  protected abrirRetroativo(): void {
+    if (!this.vigenciaRetroativa) return;
+    this.tratar(this.api.abrirReajusteRetroativo(this.id(), this.vigenciaRetroativa), 'Não foi possível abrir o reajuste retroativo');
+  }
+
+  /** Último dia dos preços retroativos: a véspera da data de efeito (início da vigência seguinte). */
+  protected vesperaDoEfeito(r: Reajuste): string {
+    const data = new Date(r.data_efeito + 'T00:00:00');
+    data.setDate(data.getDate() - 1);
+    return `${String(data.getDate()).padStart(2, '0')}/${String(data.getMonth() + 1).padStart(2, '0')}/${data.getFullYear()}`;
   }
 
   /** Anexa a evidência do índice. */
@@ -117,6 +176,30 @@ export class ReajusteComponent implements OnInit {
   protected aplicarATodos(r: Reajuste): void {
     if (!this.indiceValido(this.indiceTodos)) return;
     this.indices = Object.fromEntries(r.itens.map((i) => [i.item_id, this.indiceTodos.trim() || '0']));
+    this.agendarPrevia(r);
+  }
+
+  /** O reajuste que a tela mostra nos totais: a prévia (se há algo digitado e não salvo) ou o gravado. */
+  protected vis(r: Reajuste): Reajuste {
+    const p = this.previa();
+    return p && p.id === r.id && this.alteradoSemSalvar(r) ? p : r;
+  }
+
+  /** Pede ao servidor o cálculo com o que está digitado, logo depois da última tecla (sem salvar). */
+  protected agendarPrevia(r: Reajuste): void {
+    clearTimeout(this.temporizadorPrevia);
+    if (!this.alteradoSemSalvar(r) || !this.todosValidos(r)) {
+      this.previa.set(null);
+      return;
+    }
+    this.temporizadorPrevia = setTimeout(() => {
+      const pedido = ++this.pedidoPrevia;
+      this.api.previaMemoriaReajuste(this.id(), r.id, this.itensMemoria(r)).subscribe({
+        // Ignora resposta velha (a pessoa já digitou outra coisa)
+        next: (p) => { if (pedido === this.pedidoPrevia) this.previa.set(p); },
+        error: () => { if (pedido === this.pedidoPrevia) this.previa.set(null); },
+      });
+    }, 350);
   }
 
   /** Percentual ou teto do item diferente do que está salvo. */
@@ -130,14 +213,20 @@ export class ReajusteComponent implements OnInit {
     return r.itens.some((i) => this.alteradoItem(i));
   }
 
-  /** Novo preço: o salvo, ou a prévia com o que foi digitado (preço × (1 + %/100), 4 casas, limitado ao teto). */
-  protected precoNovo(i: ItemReajuste): number {
+  /**
+   * Novo preço: o salvo, ou a prévia com o que foi digitado, com 4 casas.
+   * Comum: preço × (1 + %/100), limitado ao teto. Retroativo: preço ÷ (1 + %/100), com o referencial como piso.
+   */
+  protected precoNovo(i: ItemReajuste, retroativo = false): number {
     if (!this.alteradoItem(i) || !this.indiceValido(this.indices[i.item_id])) return Number(i.valor_unitario_reajustado);
     const indice = Number(paraDecimalApi(this.indices[i.item_id] || '0'));
     // 4 casas, como o preço unitário (a API arredonda igual)
-    const novo = Math.round((Number(i.valor_unitario_atual) * (1 + indice / 100) + Number.EPSILON) * 10000) / 10000;
-    const teto = this.referenciais[i.item_id] ? Number(paraDecimalApi(this.referenciais[i.item_id])) : null;
-    return teto !== null && Number.isFinite(teto) ? Math.min(novo, teto) : novo;
+    const fator = 1 + indice / 100;
+    const bruto = retroativo ? Number(i.valor_unitario_atual) / fator : Number(i.valor_unitario_atual) * fator;
+    const novo = Math.round((bruto + Number.EPSILON) * 10000) / 10000;
+    const limite = this.referenciais[i.item_id] ? Number(paraDecimalApi(this.referenciais[i.item_id])) : null;
+    if (limite === null || !Number.isFinite(limite)) return novo;
+    return retroativo ? Math.max(novo, limite) : Math.min(novo, limite);
   }
 
   /** Variação percentual entre dois valores ("+4,50%" / "−3,00%"). */
@@ -151,12 +240,7 @@ export class ReajusteComponent implements OnInit {
 
   /** Grava índice e teto de cada item (teto vazio = sem teto). */
   protected salvarMemoria(r: Reajuste): void {
-    const itens = r.itens.map((i) => ({
-      item_id: i.item_id,
-      indice_percentual: paraDecimalApi(this.indices[i.item_id] || '0'),
-      valor_referencial: this.referenciais[i.item_id] ? paraDecimalApi(this.referenciais[i.item_id]) : null,
-    }));
-    this.tratar(this.api.salvarMemoriaReajuste(this.id(), r.id, itens), 'Não foi possível salvar a memória');
+    this.tratar(this.api.salvarMemoriaReajuste(this.id(), r.id, this.itensMemoria(r)), 'Não foi possível salvar a memória');
   }
 
   /** Gera a memória em PDF e XLSX e já baixa o PDF da versão mais recente. */
@@ -174,7 +258,12 @@ export class ReajusteComponent implements OnInit {
   /** Confirma (mostrando o efeito do reajuste) e conclui com o apostilamento. */
   protected async concluir(r: Reajuste): Promise<void> {
     if (!this.apostilamento) return;
-    const ok = await this.dialogos.confirmar({
+    const ok = await this.dialogos.confirmar(r.retroativo ? {
+      titulo: 'Concluir o reajuste retroativo?',
+      mensagem: `Os preços da ${r.sequencia_vigencia}ª vigência (até ${this.vesperaDoEfeito(r)}) passam a ser os retroativos informados, em ${r.competencias_recalculadas} competência(s) ainda não medida(s). O preço atual do contrato não muda.`,
+      rotuloConfirmar: 'Concluir e aplicar',
+      segundos: 5,
+    } : {
       titulo: 'Concluir e aplicar o reajuste?',
       mensagem: `Os novos preços passam a valer a partir de ${r.data_efeito.slice(8, 10)}/${r.data_efeito.slice(5, 7)}/${r.data_efeito.slice(0, 4)} (o mês dessa data é pago proporcionalmente aos dias de cada preço), em ${r.competencias_recalculadas} competência(s) ainda não medida(s)${this.textoRetroativo(r)}, e o valor global passa a ${reais(r.valor_global_reajustado)}.`,
       rotuloConfirmar: 'Concluir e aplicar',

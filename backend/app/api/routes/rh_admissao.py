@@ -190,6 +190,34 @@ def concluir_documentos(admissao_id: int, sessao: Session = Depends(obter_sessao
         return servico_admissao.concluir_documentos(sessao, admissao_id, autor)
 
 
+# Antes de `documentos/{documento_id}`: senão "incluir" seria lido como id do documento
+@roteador.post("/admissoes/{admissao_id}/documentos/incluir", response_model=LeituraAdmissao, summary="Incluir documento fora do checklist do cargo",
+               description="`multipart/form-data` com `nome`, `descricao` (opcional) e `arquivo` (PDF). O checklist do cargo é o ponto de partida: com a etapa de "
+               "documentos aberta dá para incluir documentos que não estavam nele. O incluído vale só para esta admissão, **nunca é obrigatório** (não trava a "
+               "conclusão da etapa) e não muda o checklist. `400` sem nome ou PDF inválido; `409` com a etapa já concluída.",
+               responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
+def incluir_documento(admissao_id: int, nome: str = Form(..., max_length=300), descricao: str = Form("", max_length=1000), arquivo: UploadFile = File(...),
+                      sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(rh)):
+    with _traduzir(sessao):
+        return servico_admissao.incluir_documento(sessao, admissao_id, nome, descricao, (arquivo.file, arquivo.filename or "documento.pdf"), autor)
+
+
+@roteador.delete("/admissoes/{admissao_id}/documentos/{documento_id}/incluido", response_model=LeituraAdmissao, summary="Excluir documento incluído na admissão",
+                 description="Só para documento incluído durante a admissão (`incluido_no_processo`); os do checklist do cargo não saem (`400`). `409` com a etapa "
+                 "de documentos já concluída. O arquivo é descartado (exclusão lógica).", responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
+def excluir_documento_incluido(admissao_id: int, documento_id: int, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(rh)):
+    with _traduzir(sessao):
+        return servico_admissao.excluir_documento_incluido(sessao, admissao_id, documento_id, autor)
+
+
+@roteador.get("/admissoes/{admissao_id}/documentos/{documento_id}/arquivo", response_class=FileResponse, summary="Baixar o arquivo de um documento incluído",
+              responses=NAO_ENCONTRADO)
+def baixar_arquivo_documento(admissao_id: int, documento_id: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(rh)):
+    with _traduzir(sessao):
+        anexo = servico_admissao.arquivo_documento(sessao, admissao_id, documento_id)
+    return servico_anexos.resposta_download(anexo)
+
+
 @roteador.post("/admissoes/{admissao_id}/documentos/{documento_id}", response_model=LeituraAdmissao, summary="Registrar o envio de um documento ao Portal de Indicações",
                description="`multipart/form-data` com `enviado_em` (data), `observacao` e, opcionalmente, o `comprovante` (PDF, imagem ou Office). O Portal de Indicações é externo: aqui só se registra o envio.",
                responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})

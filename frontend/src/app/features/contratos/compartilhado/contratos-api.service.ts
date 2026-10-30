@@ -19,7 +19,7 @@ import {
   GravacaoEmpresa,
   GravacaoOcorrencia,
   GravacaoPreposto,
-  Modelo, PlaceholderPortaria,
+  Modelo, PlaceholderPortaria, TipoModelo,
   NotaEmpenho,
   OrcamentoExecutivo,
   OcorrenciaDiario,
@@ -33,8 +33,10 @@ import {
   PreviaImportacao,
   PreviaImportacaoModelo,
   RascunhoContratoSgi,
+  ParametrosContratos,
   ResumoContrato,
   ResumoEmpresa,
+  ValoresParametrosContratos,
   VizinhosContrato,
 } from './contratos.models';
 
@@ -167,8 +169,8 @@ export class ContratosApiService {
   }
 
   /** Pede o processo financeiro a todo o Financeiro (DOF), por e-mail e no sino. */
-  pedirProcessoFinanceiro(id: string): Observable<{ destinatarios: number }> {
-    return this.http.post<{ destinatarios: number }>(`${this.base}/${id}/processo-financeiro/pedido`, null);
+  pedirProcessoFinanceiro(id: string): Observable<{ destinatarios: number; pedido_em: string; pedido_por: string }> {
+    return this.http.post<{ destinatarios: number; pedido_em: string; pedido_por: string }>(`${this.base}/${id}/processo-financeiro/pedido`, null);
   }
 
   /** Saldo remanescente e decisões de empenho do exercício. */
@@ -287,11 +289,27 @@ export class ContratosApiService {
     return baixarArquivo(this.http, `${this.base}/relatorios/previsao-orcamentaria?${params.toString()}`);
   }
 
+  // --- Parâmetros do módulo ---
+  /** Parâmetros atuais de Contratos (cortes de alertas, prazos, regras e limites). */
+  parametros(): Observable<ParametrosContratos> {
+    return this.http.get<ParametrosContratos>(`${this.base}/parametros`);
+  }
+
+  /** Grava os parâmetros (só controle total em Contratos ou SuperRoot). */
+  salvarParametros(valores: ValoresParametrosContratos): Observable<ParametrosContratos> {
+    return this.http.put<ParametrosContratos>(`${this.base}/parametros`, valores);
+  }
+
   /** Modelos globais, opcionalmente de um tipo. */
-  modelos(tipo?: 'checklist' | 'formulario' | 'portaria' | 'despacho' | 'email_cadin' | 'email_ob', somenteAtivos = true): Observable<Modelo[]> {
+  modelos(tipo?: TipoModelo, somenteAtivos = true): Observable<Modelo[]> {
     let params = new HttpParams().set('somente_ativos', somenteAtivos);
     if (tipo) params = params.set('tipo', tipo);
     return this.http.get<Modelo[]>(`${this.base}/modelos`, { params });
+  }
+
+  /** Placeholders permitidos nas máscaras da prorrogação (do SGI, digitados e condicionais). */
+  placeholdersProrrogacao(): Observable<PlaceholderPortaria[]> {
+    return this.http.get<PlaceholderPortaria[]>(`${this.base}/modelos/prorrogacao/placeholders`);
   }
 
   /** Placeholders permitidos nas máscaras de portaria. */

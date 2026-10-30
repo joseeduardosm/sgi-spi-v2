@@ -11,6 +11,7 @@ from app.core.banco import Base, agora_utc
 
 URL_PADRAO = "https://www.sigeo.fazenda.sp.gov.br/analytics/saw.dll"
 ANALISE_PADRAO = "/users/31818707810/SPI - Execução/PAGO - Execução Contrato - Gestor"
+ANALISE_EMPENHADO_PADRAO = "/users/31818707810/SPI - Execução/EMPENHADO - Execução"
 
 
 class IntegracaoSigeo(Base):
@@ -23,6 +24,8 @@ class IntegracaoSigeo(Base):
     url_base: Mapped[str] = mapped_column(String(300), default=URL_PADRAO)
     # Caminho da análise salva no catálogo do OBIEE (colunas COD_PROCESSO, COD_DOCUMENTO, DATA_LANCAMENTO, DESCRICAO_DOCUMENTO, VALOR_DOCUMENTO…)
     caminho_analise: Mapped[str] = mapped_column(String(500), default=ANALISE_PADRAO)
+    # Análise das Notas de Empenho (e cancelamentos) emitidas: usada para cadastrar sozinha as NEs dos contratos com Processo Financeiro e sem empenho
+    caminho_analise_empenhado: Mapped[str] = mapped_column(String(500), default=ANALISE_EMPENHADO_PADRAO, server_default=ANALISE_EMPENHADO_PADRAO)
     usuario: Mapped[str] = mapped_column(String(100), default="")
     senha_cifrada: Mapped[str] = mapped_column(String(600), default="")
     # Hora do dia (0–23, horário de Brasília) a partir da qual a conferência diária roda; o timer passa de hora em hora e só confere uma vez por dia

@@ -45,9 +45,9 @@ from app.schemas.contratos.importacao import (
     NotaPrevia,
     PreviaImportacaoModelo,
 )
-from app.services.contratos import servico_configuracao_execucao as configuracao
+from app.services.contratos import servico_configuracao_execucao as configuracao, servico_parametros
 from app.services.contratos.erros import ErroRegraContrato
-from app.services.contratos.servico_importacao_xlsx import TAMANHO_MAXIMO, ErroPlanilha, converter_decimal, normalizar, texto
+from app.services.contratos.servico_importacao_xlsx import ErroPlanilha, tamanho_maximo, converter_decimal, normalizar, texto
 from app.services.servico_auditoria import auditar
 
 # Colunas de cada tabela: título normalizado → (chave, rótulo exibido nas mensagens)
@@ -104,8 +104,8 @@ def _abrir_livro(conteudo: bytes):
     """Abre o arquivo; vazio, grande demais ou que não é XLSX vira erro de regra (400)."""
     if not conteudo:
         raise ErroRegraContrato("O arquivo está vazio.")
-    if len(conteudo) > TAMANHO_MAXIMO:
-        raise ErroRegraContrato("O arquivo passa de 5 MB.")
+    if len(conteudo) > tamanho_maximo():
+        raise ErroRegraContrato(f"O arquivo passa de {servico_parametros.valor('planilha_tamanho_maximo_mb')} MB.")
     try:
         return load_workbook(BytesIO(conteudo), data_only=True)
     except (BadZipFile, KeyError, OSError, ValueError) as erro:

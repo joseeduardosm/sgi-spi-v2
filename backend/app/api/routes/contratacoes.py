@@ -105,7 +105,7 @@ def _leitura(sessao: Session, d: DocumentoContratacao, papel: str) -> DocumentoL
                 comentarios_importados=[ComentarioImportadoLeitura.model_validate(c, from_attributes=True) for c in i.comentarios_importados],
                 linhas_tabela=[LinhaTrLeitura.model_validate(l, from_attributes=True) for l in i.linhas_tabela],
                 tem_tabela_tr=arvore._item_da_tabela(d, i)))
-        secoes.append(SecaoLeitura(id=secao.id, ordem=secao.ordem, titulo=secao.titulo, itens=itens))
+        secoes.append(SecaoLeitura(id=secao.id, ordem=secao.ordem, titulo=secao.titulo, descricao=secao.descricao or "", itens=itens))
     membros = [MembroLeitura(usuario_id=m.usuario_id, nome=(nomes[m.usuario_id].nome_completo or nomes[m.usuario_id].login) if m.usuario_id in nomes else "—",
                              login=nomes[m.usuario_id].login if m.usuario_id in nomes else "", papel=m.papel) for m in d.membros]
     return DocumentoLeitura(**base.model_dump(), pode_editar=acesso.pode_editar(papel), pode_gerir=papel in ("administrador", "criador"), pode_revisar=True,
@@ -248,19 +248,22 @@ def descompartilhar(documento_id: uuid.UUID, usuario_id: int, sessao: Session = 
 
 # --- Seções -------------------------------------------------------------------------------------
 
-@roteador.post("/documentos/{documento_id}/secoes", response_model=DocumentoLeitura, status_code=status.HTTP_201_CREATED, summary="Criar seção", responses={**SEM_ACESSO, **INVALIDO})
+@roteador.post("/documentos/{documento_id}/secoes", response_model=DocumentoLeitura, status_code=status.HTTP_201_CREATED, summary="Criar seção",
+                description="Título (obrigatório) e descrição (opcional): a descrição orienta quem preenche e só aparece na tela. Exige papel de editor.",
+                responses={**SEM_ACESSO, **INVALIDO})
 def criar_secao(documento_id: uuid.UUID, dados: GravacaoSecao, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> DocumentoLeitura:
     d, papel = _carregar(sessao, usuario, documento_id, "editar")
     with _traduzir(sessao):
-        arvore.criar_secao(sessao, d, dados.titulo, usuario)
+        arvore.criar_secao(sessao, d, dados.titulo, dados.descricao, usuario)
     return _leitura(sessao, d, papel)
 
 
-@roteador.put("/documentos/{documento_id}/secoes/{secao_id}", response_model=DocumentoLeitura, summary="Renomear seção", responses={**SEM_ACESSO, **INVALIDO})
+@roteador.put("/documentos/{documento_id}/secoes/{secao_id}", response_model=DocumentoLeitura, summary="Alterar seção (título e descrição)",
+               description="Grava o título e a descrição da seção (a descrição vazia remove a orientação). Exige papel de editor.", responses={**SEM_ACESSO, **INVALIDO})
 def renomear_secao(documento_id: uuid.UUID, secao_id: uuid.UUID, dados: GravacaoSecao, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> DocumentoLeitura:
     d, papel = _carregar(sessao, usuario, documento_id, "editar")
     with _traduzir(sessao):
-        arvore.atualizar_secao(sessao, d, secao_id, dados.titulo, usuario)
+        arvore.atualizar_secao(sessao, d, secao_id, dados.titulo, dados.descricao, usuario)
     return _leitura(sessao, d, papel)
 
 

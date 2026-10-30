@@ -68,6 +68,14 @@ export const ROTAS_CONTRATOS: Routes = [
     loadComponent: () => import('./empresas/empresa-detalhe.component').then((m) => m.EmpresaDetalheComponent),
   },
   {
+    // Parâmetros do módulo (cortes de alertas, prazos, regras e limites): quem altera é o controle total em Contratos ou o SuperRoot
+    path: 'parametros',
+    title: 'Parâmetros de Contratos | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'contratos', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./parametros/parametros.component').then((m) => m.ParametrosContratosComponent),
+  },
+  {
     // Modelos globais: checklist e formulário (só SuperRoot) e máscaras de portaria (SuperRoot ou controle total em Contratos)
     path: 'modelos',
     title: 'Modelos globais | SGI SPI',
@@ -82,6 +90,14 @@ export const ROTAS_CONTRATOS: Routes = [
     canActivate: [guardaAcl],
     data: { acl: 'contratos', nivelAcl: 'CONTROLE_TOTAL' },
     loadComponent: () => import('./modelos/modelo-portaria.component').then((m) => m.ModeloPortariaComponent),
+  },
+  {
+    // Página da máscara da prorrogação (minutas, declarações e despachos): `novo` ou o id (mesmas permissões da lista de modelos)
+    path: 'modelos/prorrogacao/:id',
+    title: 'Máscara da prorrogação | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'contratos', nivelAcl: 'CONTROLE_TOTAL' },
+    loadComponent: () => import('./modelos/modelo-prorrogacao.component').then((m) => m.ModeloProrrogacaoComponent),
   },
   {
     // Página da máscara do despacho de pagamento do consolidado: `novo` ou o id (mesmas permissões da lista de modelos)

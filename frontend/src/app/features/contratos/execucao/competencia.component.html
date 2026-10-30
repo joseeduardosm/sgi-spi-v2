@@ -36,6 +36,17 @@
     </div>
   }
 
+  <!-- Competência lançada depois de paga (carga histórica): deixa claro de onde veio e o que passou do limite mensal -->
+  @if (d.carga_historica; as h) {
+    <div class="aviso-bloco informativo" role="note">
+      <p><strong>Lançamento histórico.</strong> {{ h.observacao }} Lançada em {{ h.em | date: 'dd/MM/yyyy' }}.</p>
+      @if (h.excedentes.length) {
+        <p>Itens medidos (e pagos) <strong>acima do limite mensal previsto</strong>: o sistema não aplicou o limite a este lançamento.</p>
+        <ul>@for (e of h.excedentes; track e) { <li>{{ e }}</li> }</ul>
+      }
+    </div>
+  }
+
   <!-- Trilha de etapas: o caminho até a Ordem Bancária, com o que já foi feito e o que está aberto -->
   <app-trilha-etapas [etapas]="trilha()" ariaLabel="Etapas da competência" [navegavel]="true" [selecionada]="selecionada()" (escolheu)="selecionada.set($any($event))" />
 

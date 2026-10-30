@@ -64,6 +64,11 @@ class DocumentoAdmissao(BaseModel):
     registrado_em: datetime | None
     tem_comprovante: bool
     observacao: str
+    incluido_no_processo: bool = Field(False, description="Incluído durante a admissão (não veio do checklist do cargo): nunca obrigatório e pode ser excluído enquanto a etapa estiver aberta.")
+    detalhe: str = Field("", description="Descrição do documento incluído durante a admissão.")
+    tem_arquivo: bool = Field(False, description="O documento incluído tem arquivo (baixar em `…/documentos/{id}/arquivo`).")
+    incluido_por_nome: str = ""
+    incluido_em: datetime | None = None
 
 
 class EtapaAdmissao(BaseModel):

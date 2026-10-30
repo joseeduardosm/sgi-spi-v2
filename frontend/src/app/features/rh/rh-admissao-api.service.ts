@@ -51,6 +51,16 @@ export class RhAdmissaoApiService {
   desfazerDocumento(id: number, docId: number): Observable<LeituraAdmissao> { return this.http.delete<LeituraAdmissao>(`${this.adm}/${id}/documentos/${docId}`); }
   concluirDocumentos(id: number): Observable<LeituraAdmissao> { return this.http.post<LeituraAdmissao>(`${this.adm}/${id}/documentos/concluir`, {}); }
   baixarComprovante(id: number, docId: number) { return baixarArquivo(this.http, `${this.adm}/${id}/documentos/${docId}/comprovante`, 'comprovante'); }
+  /** Inclui documento fora do checklist do cargo (nome, descrição e PDF); nunca obrigatório. */
+  incluirDocumento(id: number, nome: string, descricao: string, arquivo: File): Observable<LeituraAdmissao> {
+    const dados = new FormData();
+    dados.append('nome', nome);
+    dados.append('descricao', descricao);
+    dados.append('arquivo', arquivo);
+    return this.http.post<LeituraAdmissao>(`${this.adm}/${id}/documentos/incluir`, dados);
+  }
+  excluirDocumentoIncluido(id: number, docId: number): Observable<LeituraAdmissao> { return this.http.delete<LeituraAdmissao>(`${this.adm}/${id}/documentos/${docId}/incluido`); }
+  baixarArquivoDocumento(id: number, docId: number) { return baixarArquivo(this.http, `${this.adm}/${id}/documentos/${docId}/arquivo`, 'documento.pdf'); }
 
   gerarResolucao(id: number): Observable<LeituraAdmissao> { return this.http.post<LeituraAdmissao>(`${this.adm}/${id}/resolucao`, {}); }
   salvarResolucao(id: number, html: string): Observable<LeituraAdmissao> { return this.http.put<LeituraAdmissao>(`${this.adm}/${id}/resolucao`, { html }); }

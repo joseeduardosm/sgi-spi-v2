@@ -24,6 +24,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.services.acl_acoes import ACAO_LANCAR_OB
+from app.services.contratos import servico_parametros
 from app.services.tarefas.descricao import texto_da_descricao
 from app.core.banco import agora_utc
 from app.models.anexo import Anexo
@@ -63,6 +64,7 @@ from app.schemas.contratos.execucao import (
     OcorrenciaAvaliacao,
     LeituraConsultaCadin,
     LeituraDocumentoMensal,
+    LeituraCargaHistorica,
     LeituraRecusa,
     NotaRecusada,
     SugestaoOutroContrato,
@@ -83,7 +85,6 @@ from app.services.contratos import avisos, calculos, despacho_documento, documen
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_configuracao_execucao import (
     _nome_chave,
-    _ordem_checklist,
     checklist_ativo,
     formulario_ativo,
     puxar_checklist,
@@ -160,33 +161,48 @@ def puxar_avaliacao(sessao: Session, contrato: Contrato, competencia: Competenci
     competencia.avaliacao = AvaliacaoCompetencia(formulario_id=formulario.id, definicao=formulario.definicao)
 
 
-# Pendências e alertas de execução (competências) anteriores a esta data foram "limpos": não aparecem em "Minhas pendências",
-# nos alertas da carteira nem geram mais avisos de atraso
-PENDENCIAS_A_PARTIR_DE = date(2026, 9, 1)
+def corte_global_de_alertas() -> date:
+    """Pendências e alertas de execução (competências) anteriores a esta data foram "limpos": não aparecem em "Minhas pendências",
+    nos alertas da carteira nem geram mais avisos de atraso. Parâmetro de Contratos (`corte_alertas_a_partir_de`)."""
+    return servico_parametros.valor("corte_alertas_a_partir_de")
+
+
+def corte_do_contrato(contrato: Contrato | None) -> date:
+    """Corte de alertas de um contrato: o maior entre o global e a data "Desconsiderar alertas a partir de" do contrato, se houver."""
+    global_ = corte_global_de_alertas()
+    return max(global_, contrato.alertas_a_partir_de) if contrato is not None and contrato.alertas_a_partir_de else global_
 
 
 def anterior_ao_corte(competencia: Competencia) -> bool:
-    """Competência anterior ao corte de alertas: a pendência dela não é cobrada.
-
-    O corte é a maior entre o global (`PENDENCIAS_A_PARTIR_DE`) e a data "Desconsiderar alertas a partir de" do contrato, se houver."""
+    """Competência anterior ao corte de alertas: a pendência dela não é cobrada (ver `corte_do_contrato`)."""
     desde = competencia.periodo_fim if competencia.tipo == "regular" else competencia.criado_em.date()
-    contrato = competencia.contrato
-    corte = max(PENDENCIAS_A_PARTIR_DE, contrato.alertas_a_partir_de) if contrato is not None and contrato.alertas_a_partir_de else PENDENCIAS_A_PARTIR_DE
-    return desde < corte
+    return desde < corte_do_contrato(competencia.contrato)
+
+
+# Em competência anterior ao corte de alertas (execução retroativa) só valem medição, avaliação (quando houver), nota fiscal e OB
+ETAPAS_DISPENSADAS_NA_RETROATIVA = ("retencao", "checklist", "cadin", "consolidado")
+
+
+def e_retroativa(competencia: Competencia) -> bool:
+    """Competência anterior ao corte de alertas que ainda não passou por retenção, checklist, CADIN ou consolidado.
+
+    Elas seguem um caminho curto (medição → avaliação, se houver → nota fiscal → OB) e não geram e-mails nem avisos.
+    Quem já passou por alguma etapa dispensada (ou está nela) mantém o fluxo completo, para não esconder dados já gravados."""
+    return (anterior_ao_corte(competencia) and competencia.etapa_atual not in ETAPAS_DISPENSADAS_NA_RETROATIVA
+            and competencia.retencao_concluida_em is None and competencia.checklist_concluido_em is None
+            and competencia.cadin_concluido_em is None and competencia.consolidado_em is None)
 
 
 def etapas_da_competencia(competencia: Competencia) -> list[str]:
-    """Etapas desta competência em ordem (sem "avaliacao" quando não há formulário)."""
-    return [e for e in ETAPAS if e != "avaliacao" or tem_avaliacao(competencia)]
+    """Etapas desta competência em ordem (sem "avaliacao" quando não há formulário; sem as dispensadas nas retroativas)."""
+    retroativa = e_retroativa(competencia)
+    return [e for e in ETAPAS if (e != "avaliacao" or tem_avaliacao(competencia)) and not (retroativa and e in ETAPAS_DISPENSADAS_NA_RETROATIVA)]
 
 
 def proxima_etapa(competencia: Competencia, etapa: str) -> str:
     """Etapa seguinte a `etapa` nesta competência."""
     etapas = etapas_da_competencia(competencia)
     return etapas[etapas.index(etapa) + 1]
-
-
-LIMITE_ACERTO = Decimal("1.00")
 
 
 def subtotal_item(item: ItemMedicao) -> Decimal:
@@ -254,20 +270,16 @@ def vencimento_pagamento(competencia: Competencia) -> date | None:
     return None
 
 
-# Prazo para a empresa enviar a nota fiscal depois da medição concluída (o e-mail da medição avisa as 48 horas)
-PRAZO_NOTA_FISCAL_HORAS = 48
-
-
 def prazo_nota_fiscal(competencia: Competencia) -> datetime | None:
     """Limite para a NF, só enquanto ela não foi juntada (juntar a nota encerra o prazo).
 
     Com o prazo de contestação definido (comunicação única), é o fim do último dia útil dele. Competências enviadas antes dessa regra
-    seguem com conclusão da medição + 48 h."""
+    seguem com conclusão da medição + o prazo da NF (parâmetro, 48 h de início)."""
     if competencia.medicao_concluida_em is None or competencia.nf_concluida_em is not None:
         return None
     if competencia.contestacao_limite_em is not None:
         return _com_fuso(competencia.contestacao_limite_em)
-    return competencia.medicao_concluida_em + timedelta(hours=PRAZO_NOTA_FISCAL_HORAS)
+    return competencia.medicao_concluida_em + timedelta(hours=servico_parametros.valor("prazo_nota_fiscal_horas"))
 
 
 def pacote_da_medicao_pronto(competencia: Competencia) -> bool:
@@ -787,6 +799,7 @@ def resumo(competencia: Competencia) -> ResumoCompetencia:
         etapa_atual=competencia.etapa_atual,
         valor_medicao=total_medido(competencia) if competencia.medicao_iniciada_em else None,
         possui_avaliacao=tem_avaliacao(competencia), numero_adicional=competencia.numero_adicional,
+        diferenca_coberta_por_reajuste_id=competencia.diferenca_coberta_por_reajuste_id,
     )
 
 
@@ -844,6 +857,9 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
     reservado = compromissos(contrato, exceto=competencia.id)
     # Documentos iguais, ainda válidos, de outros contratos da mesma empresa (só com o checklist aberto)
     sugestoes = _candidatos_outros_contratos(sessao, contrato, competencia) if "checklist" in etapas_abertas(competencia) else {}
+    # Nomes de quem incluiu documentos durante o processo (uma consulta só)
+    ids_inclusao = {d.incluido_por_id for d in competencia.documentos if d.incluido_por_id}
+    quem_incluiu = {u.id: u.nome_completo or u.login for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(ids_inclusao)))} if ids_inclusao else {}
 
     def opcao_nota(nota: NotaEmpenho) -> NotaSelecionada:
         """NE no formato da tela, com o saldo livre já descontado do reservado."""
@@ -926,6 +942,8 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         pode_recusar="retencao" in etapas_abertas(competencia) and servico_retencao.pode_conferir(sessao, contrato, usuario),
         etapas_abertas=etapas_abertas(competencia),
         etapas_concluidas=etapas_concluidas(competencia),
+        retroativa=e_retroativa(competencia),
+        pode_buscar_ob_sigeo=competencia.etapa_atual == "ordem_bancaria" and bool((contrato.processo_financeiro or "").strip()) and competencia.ob_anexo_id is None,
         email_medicao=EmailMedicao(
             enviado_em=competencia.email_medicao_enviado_em, ok=competencia.email_medicao_ok,
             destinatarios=competencia.email_medicao_destinatarios or [], erro=competencia.email_medicao_erro,
@@ -951,13 +969,16 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
             LeituraDocumentoMensal(id=d.id, ordem=d.ordem, nome=d.nome, observacao=d.observacao, obrigatorio=d.obrigatorio, com_validade=d.com_validade,
                                    validade_ate=d.validade_ate, reaproveitado_de=d.reaproveitado_de, vale_outros_contratos=d.vale_outros_contratos,
                                    reaproveitado_contrato=d.reaproveitado_contrato, sugestao_outro_contrato=_sugestao(d, sugestoes),
-                                   arquivo=_arquivo(anexos.get(d.anexo_id)))
-            for d in sorted(competencia.documentos, key=_ordem_checklist)
+                                   arquivo=_arquivo(anexos.get(d.anexo_id)), incluido_no_processo=d.incluido_no_processo,
+                                   incluido_por_nome=quem_incluiu.get(d.incluido_por_id), incluido_em=d.incluido_em)
+            for d in sorted(competencia.documentos, key=_ordem_documento)
         ],
         consolidado=_arquivo(competencia.consolidado_anexo),
         ordem_bancaria=_arquivo(competencia.ob_anexo),
         ob_origem=competencia.ob_origem, ob_numero=competencia.ob_numero, ob_data=competencia.ob_data, ob_valor=competencia.ob_valor,
         ob_sigeo_pendencia=competencia.ob_sigeo_pendencia, ob_sigeo_verificado_em=competencia.ob_sigeo_verificado_em,
+        carga_historica=LeituraCargaHistorica(em=competencia.carga_historica_em, observacao=competencia.carga_historica_obs or "", excedentes=excedentes_da_medicao(contrato, competencia))
+        if competencia.carga_historica_em else None,
         concluida_em=competencia.concluida_em,
     )
 
@@ -1164,8 +1185,9 @@ def _validar_acerto(competencia: Competencia, item: ItemMedicao, quantidade_medi
         return
     if acerto != acerto.quantize(Decimal("0.01")):
         raise ErroRegraContrato("O acerto é em centavos (duas casas decimais).")
-    if abs(acerto) > LIMITE_ACERTO:
-        raise ErroRegraContrato(f"O acerto de \"{item.descricao_completa}\" passa de R$ 1,00: é só para centavos de dízimas e arredondamentos.")
+    limite = servico_parametros.valor("limite_acerto_centavos")
+    if abs(acerto) > limite:
+        raise ErroRegraContrato(f"O acerto de \"{item.descricao_completa}\" passa de R$ {limite:.2f}".replace(".", ",") + ": é só para centavos de dízimas e arredondamentos.")
     if competencia.tipo == "diferenca_reajuste":
         raise ErroRegraContrato("Na diferença de reajuste os valores vêm do reajuste: não há acerto.")
     if quantidade_medida <= ZERO:
@@ -1216,7 +1238,9 @@ def concluir_medicao(
     _exigir_liberada(competencia)
     _exigir_etapa(competencia, "medicao", "A medição")
     # Com avaliação, a escolha dos prepostos e o prazo ficam para o fim da avaliação; sem ela, são exigidos agora
-    if not tem_avaliacao(competencia) or prepostos_ids is not None or prazo_contestacao_dias is not None:
+    # (competência retroativa não envia e-mail à contratada: não exige preposto nem prazo)
+    retroativa = e_retroativa(competencia)
+    if not retroativa and (not tem_avaliacao(competencia) or prepostos_ids is not None or prazo_contestacao_dias is not None):
         _exigir_envio(contrato, prepostos_ids, prazo_contestacao_dias)
     exigir_saldo_para_medir(sessao, contrato)
     if competencia.tipo == "adicional" and not any(i.quantidade_medida > 0 for i in competencia.itens):
@@ -1237,7 +1261,7 @@ def concluir_medicao(
     # Gera o PDF, marca a conclusão, avança a etapa e atualiza o executado dos itens do contrato
     gerar_memoria(sessao, contrato, competencia, autor)
     competencia.medicao_concluida_em = agora_utc()
-    if prepostos_ids is not None:
+    if prepostos_ids is not None and not retroativa:
         competencia.medicao_envio_solicitado = True
         competencia.medicao_envio_prepostos = [str(i) for i in prepostos_ids]
         competencia.prazo_contestacao_dias = prazo_contestacao_dias
@@ -1745,9 +1769,6 @@ def _exigir_nota_inedita(sessao: Session, competencia: Competencia, chave: str |
         )
 
 
-MAXIMO_NOTAS = 20
-
-
 def registrar_nota_fiscal(
     sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: dict, notas: list[dict], arquivos: list[tuple],
     xmls: list[tuple], autor: Usuario, despesas: list[dict] | None = None, arquivos_despesas: list[tuple] | None = None,
@@ -1769,8 +1790,9 @@ def registrar_nota_fiscal(
     _exigir_etapa(competencia, "nota_fiscal", "A nota fiscal")
     if not notas:
         raise ErroRegraContrato("Junte pelo menos uma nota fiscal.")
-    if len(notas) > MAXIMO_NOTAS:
-        raise ErroRegraContrato(f"No máximo {MAXIMO_NOTAS} notas fiscais por competência.")
+    maximo_notas = servico_parametros.valor("maximo_notas_fiscais")
+    if len(notas) > maximo_notas:
+        raise ErroRegraContrato(f"No máximo {maximo_notas} notas fiscais por competência.")
     existentes = {n.id: n for n in competencia.notas_fiscais}
     preparadas = []  # (nota existente | None, posição do PDF, posição do XML, conteúdo e dados lidos do XML | None, rótulo)
     chaves: dict[str, int] = {}
@@ -1838,8 +1860,9 @@ def registrar_nota_fiscal(
     # Uma NF nova (ou corrigida) exige nova conferência de tributos
     competencia.retencao_concluida_em, competencia.retencao_pdf_anexo_id = None, None
     competencia.retencao_por_id, competencia.retencao_por_nome, competencia.retencao_discriminacao_conferida = None, "", False
-    # As etapas paralelas começam agora: o checklist ativo é copiado neste momento
-    puxar_checklist(contrato, competencia)
+    # As etapas paralelas começam agora: o checklist ativo é copiado neste momento (nas retroativas elas não existem)
+    if not e_retroativa(competencia):
+        puxar_checklist(contrato, competencia)
     competencia.etapa_atual = proxima_etapa(competencia, "nota_fiscal")
     sessao.flush()
     _auditar(sessao, autor, "contrato.execucao.nota_fiscal.concluir", contrato, competencia,
@@ -1859,8 +1882,9 @@ def _preparar_despesas(competencia: Competencia, despesas: list[dict], arquivos:
         return []
     if not despesas:
         raise ErroRegraContrato("Há itens de despesas variáveis na medição: junte ao menos uma nota de débito, recibo ou outro documento da despesa.")
-    if len(despesas) > MAXIMO_NOTAS:
-        raise ErroRegraContrato(f"No máximo {MAXIMO_NOTAS} documentos de despesas variáveis por competência.")
+    maximo_notas = servico_parametros.valor("maximo_notas_fiscais")
+    if len(despesas) > maximo_notas:
+        raise ErroRegraContrato(f"No máximo {maximo_notas} documentos de despesas variáveis por competência.")
     existentes = {d.id: d for d in competencia.despesas_variaveis}
     preparadas = []
     for posicao, item in enumerate(despesas, start=1):
@@ -2103,6 +2127,53 @@ def enviar_documento_mensal(sessao: Session, contrato_id, competencia_id, docume
     sessao.commit()
 
 
+def _ordem_documento(documento: DocumentoMensal) -> tuple[bool, bool, int]:
+    """Itens do modelo (obrigatórios e depois opcionais) e, por último, os incluídos durante o processo, na ordem em que entraram."""
+    return (documento.incluido_no_processo, not documento.obrigatorio, documento.ordem)
+
+
+def incluir_documento_mensal(sessao: Session, contrato_id, competencia_id, nome_documento: str, descricao: str, arquivo: BinaryIO, nome_arquivo: str,
+                             autor: Usuario) -> None:
+    """Etapa 5: inclui no checklist desta competência um documento que não estava no modelo (nome, descrição e PDF).
+
+    O checklist do contrato é o ponto de partida: o documento incluído vale só para esta competência, nunca é obrigatório
+    (não trava a conclusão) e não muda o modelo. Só com a etapa do checklist aberta."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    _exigir_etapa(competencia, "checklist", "O checklist")
+    nome_documento = " ".join((nome_documento or "").split())
+    if not nome_documento:
+        raise ErroRegraContrato("Informe o nome do documento.")
+    documento = DocumentoMensal(
+        ordem=max((d.ordem for d in competencia.documentos), default=0) + 1, nome=nome_documento[:500], observacao=(descricao or "").strip()[:1000],
+        obrigatorio=False, incluido_no_processo=True, incluido_por_id=autor.id, incluido_em=agora_utc(),
+    )
+    documento.anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome_arquivo, "contrato-execucao-checklist", autor.id, contrato_id=contrato.id)
+    documento.enviado_em, documento.enviado_por_id = agora_utc(), autor.id
+    competencia.documentos.append(documento)
+    _auditar(sessao, autor, "contrato.execucao.checklist.incluir", contrato, competencia, documento=documento.nome)
+    sessao.commit()
+
+
+def excluir_documento_mensal(sessao: Session, contrato_id, competencia_id, documento_id: uuid.UUID, autor: Usuario) -> None:
+    """Etapa 5: exclui um documento incluído durante o processo (os do modelo não saem). Só com a etapa do checklist aberta."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    _exigir_etapa(competencia, "checklist", "O checklist")
+    documento = next((d for d in competencia.documentos if d.id == documento_id), None)
+    if documento is None:
+        raise RegistroNaoEncontrado("Documento do checklist")
+    if not documento.incluido_no_processo:
+        raise ErroRegraContrato("Só os documentos incluídos durante o processo podem ser excluídos; os do checklist do contrato ficam.")
+    if documento.anexo is not None:
+        servico_anexos.descartar(documento.anexo)
+    competencia.documentos.remove(documento)
+    _auditar(sessao, autor, "contrato.execucao.checklist.excluir", contrato, competencia, documento=documento.nome)
+    sessao.commit()
+
+
 def concluir_checklist(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
     """Conclui a etapa com os obrigatórios anexados; os opcionais podem ficar sem anexo."""
     contrato = obter_contrato(sessao, contrato_id)
@@ -2260,8 +2331,11 @@ def concluir_ordem_bancaria(sessao: Session, contrato: Contrato, competencia: Co
 # ---------------------------------------------------------------------------------------------
 
 def _descartar_checklist(sessao: Session, competencia: Competencia) -> None:
-    """Descarta a cópia do checklist (e os anexos dela); ela é copiada de novo do checklist ativo quando a etapa recomeçar."""
-    competencia.documentos.clear()
+    """Descarta a cópia do checklist (e os anexos dela); ela é copiada de novo do checklist ativo quando a etapa recomeçar.
+
+    Os documentos incluídos durante o processo ficam: não vêm do modelo, então a nova cópia não os traria de volta."""
+    for documento in [d for d in competencia.documentos if not d.incluido_no_processo]:
+        competencia.documentos.remove(documento)
     sessao.flush()
 
 

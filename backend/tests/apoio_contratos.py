@@ -195,3 +195,31 @@ def corpo_conclusao(base: str, notas: list[str], prazo: int = 3) -> dict:
             prepostos = [novo]
         ids = [str(p.id) for p in prepostos]
     return {"notas_empenho_ids": notas, "prepostos_ids": ids, "prazo_contestacao_dias": prazo}
+
+
+def definir_parametros(**campos) -> None:
+    """Grava parâmetros de Contratos para o teste (ex.: `definir_parametros(corte_alertas_a_partir_de=date(2000, 1, 1))`) e limpa o cache."""
+    from app.core.banco import FabricaSessao
+    from app.services.contratos import servico_parametros
+
+    with FabricaSessao() as sessao:
+        linha = servico_parametros.parametros(sessao)
+        for campo, valor in campos.items():
+            setattr(linha, campo, valor)
+        sessao.commit()
+    servico_parametros.limpar_cache()
+
+
+def preparar_registro_prorrogacao(cliente, base: str, h: dict, calculo: str = "pro_rata") -> dict:
+    """Deixa o rascunho da prorrogação pronto para registrar: escolhe o cálculo dos meses quebrados (se houver) e gera a memória de cálculo.
+
+    `base` é a URL do contrato (`/api/contratos/{id}`). Devolve o rascunho atualizado."""
+    p = cliente.get(f"{base}/prorrogacao", headers=h).json()
+    if p["memoria"] and p["memoria"]["precisa_escolher"]:
+        corpo = {"meses": p["meses"], "regra_sob_demanda": p["regra_sob_demanda"], "calculo_mes_quebrado": calculo,
+                 "plano_sob_demanda": [{"item_id": i["item_id"], "limite": i["limite"], "apontamentos": i["apontamentos"]} for i in p["itens_sob_demanda"]]}
+        r = cliente.put(f"{base}/prorrogacao", json=corpo, headers=h)
+        assert r.status_code == 200, r.text
+    r = cliente.post(f"{base}/prorrogacao/memoria/arquivos", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()

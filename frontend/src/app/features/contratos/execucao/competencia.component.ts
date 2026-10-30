@@ -3,6 +3,7 @@
 
 import { TrilhaEtapasComponent, EtapaTrilha, EstadoEtapa } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { BarraPrazoComponent } from '../../../shared/componentes/barra-prazo/barra-prazo.component';
+import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -27,7 +28,7 @@ const LIMITE_CONSULTAS_EMAIL = 8;
 
 @Component({
   selector: 'app-competencia',
-  imports: [TrilhaEtapasComponent, BarraPrazoComponent, EsqueletoComponent, 
+  imports: [DatePipe, TrilhaEtapasComponent, BarraPrazoComponent, EsqueletoComponent, 
     FormsModule, RouterLink, CabecalhoModuloComponent, EtapaMedicaoComponent, EtapaAvaliacaoComponent, EtapaNotaFiscalComponent,
     EtapaCadinComponent, EtapaFinaisComponent, EtapaRetencaoComponent, ...PIPES_FORMATACAO,
   ],

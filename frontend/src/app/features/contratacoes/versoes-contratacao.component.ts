@@ -39,7 +39,7 @@ const ROTULOS_MUDANCA = { incluido: 'Incluído', removido: 'Retirado', alterado:
       @if (!versoes().length) {
         <div class="estado-vazio">@if (carregado()) { {{ 'Nenhuma versão ainda.' }} } @else { <app-esqueleto tipo="lista" [linhas]="3" /> }</div>
       } @else {
-        <div class="duas-colunas">
+        <div class="layout-versoes">
           <ol class="linha-do-tempo" aria-label="Versões">
             @for (v of versoes(); track v.numero) {
               <li [class.ativa]="v.numero === atual()?.numero">

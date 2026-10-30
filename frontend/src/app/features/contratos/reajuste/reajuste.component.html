@@ -6,21 +6,24 @@
     @if (p.em_andamento; as r) {
       <section class="cartao-dados" aria-labelledby="titulo-reajuste">
         <header>
-          <div><h2 id="titulo-reajuste">Reajuste em elaboração</h2>
-            <small>Percentual positivo reajusta o preço do item; negativo dá desconto; zero mantém o preço.</small></div>
+          <div><h2 id="titulo-reajuste">{{ r.retroativo ? 'Reajuste retroativo em elaboração' : 'Reajuste em elaboração' }}</h2>
+            <small>{{ r.retroativo
+              ? 'Informe o índice do reajuste que levou a esta vigência: o preço retroativo é o preço da vigência seguinte ÷ (1 + índice); o valor referencial é o piso.'
+              : 'Percentual positivo reajusta o preço do item; negativo dá desconto; zero mantém o preço.' }}</small></div>
           @if (p.pode_editar) { <button type="button" class="acao-perigo" (click)="cancelar(r)">Cancelar reajuste</button> }
         </header>
         <div class="corpo">
           <app-trilha-etapas [etapas]="trilha(r)" ariaLabel="Etapas do reajuste" [compacta]="true" />
           <!-- Mês de referência e mês de reajuste sempre no topo -->
           <dl class="resumo-reajuste">
-            <div><dt>Novos valores a partir de</dt><dd>{{ r.data_efeito | dataBr }}</dd></div>
+            @if (r.retroativo) { <div><dt>Preços retroativos até</dt><dd>{{ vesperaDoEfeito(r) }}</dd></div> }
+            @else { <div><dt>Novos valores a partir de</dt><dd>{{ r.data_efeito | dataBr }}</dd></div> }
             <div><dt>Mês de reajuste do contrato</dt><dd>{{ meses[c.mes_reajuste - 1] }}</dd></div>
             <div><dt>Vigência</dt><dd>{{ r.sequencia_vigencia }}ª · {{ r.vigencia_inicio | dataBr }} a {{ r.vigencia_fim | dataBr }}</dd></div>
             <div><dt>Competências recalculadas</dt><dd>{{ r.competencias_recalculadas }} ainda não medida(s)</dd></div>
           </dl>
           @if (r.competencias_com_diferenca) {
-            @let dif = +r.diferenca_retroativa;
+            @let dif = +vis(r).diferenca_retroativa;
             @if (dif > 0) {
               <p class="aviso-bloco informativo">Reajuste retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.data_efeito | dataBr }} mantêm o preço pago. Ao concluir, será gerada uma <strong>competência de diferença de reajuste</strong> de {{ r.diferenca_retroativa | moeda }} (quantidades medidas × (preço novo − preço pago)), paga pelo fluxo normal da execução.</p>
             } @else if (dif < 0) {
@@ -51,8 +54,8 @@
         <div class="tabela-gestao-envoltorio">
           <table class="tabela-gestao">
             <thead>
-              <tr><th>Item</th><th>Descrição</th><th class="num">Qtd. mensal</th><th class="num">Valor unitário atual</th><th class="num">Percentual (%)</th>
-                <th class="num">Valor referencial (teto)</th><th class="num">Novo valor unitário</th><th class="num">Variação</th><th class="num">Subtotal mensal</th></tr>
+              <tr><th>Item</th><th>Descrição</th><th class="num">Qtd. mensal</th><th class="num">{{ r.retroativo ? 'Preço na vigência seguinte' : 'Valor unitário atual' }}</th><th class="num">Percentual (%)</th>
+                <th class="num">{{ r.retroativo ? 'Valor referencial (piso)' : 'Valor referencial (teto)' }}</th><th class="num">{{ r.retroativo ? 'Preço retroativo' : 'Novo valor unitário' }}</th><th class="num">Variação</th><th class="num">Subtotal mensal</th></tr>
             </thead>
             <tbody>
               @for (i of r.itens; track i.item_id) {
@@ -62,9 +65,9 @@
                   <td class="num">{{ i.valor_unitario_atual | moedaUnitaria }}</td>
                   <td class="num" style="width: 110px"><input class="campo-tabela" inputmode="decimal" [class.invalido]="!indiceValido(indices[i.item_id])"
                          [attr.aria-invalid]="!indiceValido(indices[i.item_id])" [attr.aria-label]="'Percentual de ' + i.descricao" [disabled]="!p.pode_editar"
-                         [(ngModel)]="indices[i.item_id]" placeholder="0" /></td>
-                  <td class="num" style="width: 130px"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Valor referencial de ' + i.descricao" [disabled]="!p.pode_editar" [(ngModel)]="referenciais[i.item_id]" placeholder="opcional" /></td>
-                  @let novo = precoNovo(i);
+                         [(ngModel)]="indices[i.item_id]" (ngModelChange)="agendarPrevia(r)" placeholder="0" /></td>
+                  <td class="num" style="width: 130px"><input class="campo-tabela" inputmode="decimal" [attr.aria-label]="'Valor referencial de ' + i.descricao" [disabled]="!p.pode_editar" [(ngModel)]="referenciais[i.item_id]" (ngModelChange)="agendarPrevia(r)" placeholder="opcional" /></td>
+                  @let novo = precoNovo(i, r.retroativo);
                   <td class="num"><strong>{{ novo | moedaUnitaria }}</strong></td>
                   <td class="num" [class.variacao-positiva]="novo > +i.valor_unitario_atual" [class.variacao-negativa]="novo < +i.valor_unitario_atual">
                     {{ novo > +i.valor_unitario_atual ? '+' : '' }}{{ novo - +i.valor_unitario_atual | moedaUnitaria }}</td>
@@ -75,24 +78,104 @@
           </table>
         </div>
         <div class="corpo">
+          @let v = vis(r);
           <div class="indicadores">
             <div class="indicador"><span>Base atual</span><strong>{{ r.base_atual | moeda }}</strong></div>
-            <div class="indicador"><span>Nova base mensal ({{ variacao(r.base_atual, r.base_reajustada) }})</span><strong>{{ r.base_reajustada | moeda }}</strong></div>
+            <div class="indicador"><span>{{ r.retroativo ? 'Base mensal retroativa' : 'Nova base mensal' }} ({{ variacao(v.base_atual, v.base_reajustada) }})</span><strong>{{ v.base_reajustada | moeda }}</strong></div>
             <div class="indicador"><span>Valor global atual</span><strong>{{ r.valor_global_atual | moeda }}</strong></div>
-            <div class="indicador destaque"><span>Novo valor global ({{ variacao(r.valor_global_atual, r.valor_global_reajustado) }})</span><strong>{{ r.valor_global_reajustado | moeda }}</strong></div>
+            <div class="indicador destaque"><span>{{ r.retroativo ? 'Valor global retroativo' : 'Novo valor global' }} ({{ variacao(v.valor_global_atual, v.valor_global_reajustado) }})</span><strong>{{ v.valor_global_reajustado | moeda }}</strong></div>
           </div>
-          @if (alteradoSemSalvar(r)) { <p class="aviso-bloco">Há percentuais alterados e não salvos: os totais acima só mudam depois de "Salvar memória".</p> }
+          <!-- Memória mês a mês: o que ficou em haver em cada mês medido (OB paga ou aguardando); o detalhe item a item vai nos arquivos PDF e XLSX -->
+          @if (v.resumo_meses; as m) {
+            <p class="secao-formulario">Meses medidos (em haver)</p>
+            @if (r.retroativo) {
+              <p class="dica-formulario">Reajuste retroativo: a vigência não tem meses medidos, então não há nada em haver.</p>
+            } @else if (m.meses.length) {
+              <div class="tabela-gestao-envoltorio">
+                <table class="tabela-gestao">
+                  <thead><tr><th>Mês</th><th>OB</th><th class="num">Valor pago</th><th class="num">Valor reajustado</th><th class="num">Em haver</th></tr></thead>
+                  <tbody>
+                    @for (x of m.meses; track x.identificador) {
+                      <tr><td>{{ x.competencia }}</td>
+                        <td><span class="selo-situacao" [class.inativo]="!x.paga">{{ x.paga ? 'Paga' : 'Aguardando OB' }}</span></td>
+                        <td class="num">{{ x.valor_pago | moeda }}</td><td class="num">{{ x.valor_reajustado | moeda }}</td><td class="num"><strong>{{ x.em_haver | moeda }}</strong></td></tr>
+                    }
+                  </tbody>
+                  <tfoot><tr><td><strong>Total em haver</strong></td><td></td><td></td><td></td><td class="num"><strong>{{ m.total_em_haver | moeda }}</strong></td></tr></tfoot>
+                </table>
+              </div>
+            } @else {
+              <p class="dica-formulario">Nenhuma competência medida a partir da data de efeito: nada em haver.</p>
+            }
+            <!-- Meses quebrados pela data de efeito: as duas opções lado a lado; a escolha vale para todos e já fecha a memória -->
+            @if (m.meses_quebrados.length) {
+              <p class="secao-formulario">Meses quebrados pela data de efeito ({{ r.data_efeito | dataBr }})</p>
+              @if (m.precisa_escolher) {
+                <p class="aviso-bloco informativo">{{ m.meses_quebrados.length === 1 ? 'Este mês começa' : 'Estes meses começam' }} com o valor sem reajuste e {{ m.meses_quebrados.length === 1 ? 'termina' : 'terminam' }} com o reajustado. Escolha como calcular: a escolha vale para todos os meses quebrados e todos os itens deste reajuste, e já gera o PDF e o XLSX da memória.</p>
+              } @else {
+                <p class="dica-formulario">Cálculo escolhido: <strong>{{ rotulosCalculo[m.calculo_mes_quebrado!] }}</strong>. Escolher a outra opção gera uma nova versão da memória.</p>
+              }
+              <div class="opcoes-mes-quebrado">
+                @for (op of calculos; track op) {
+                  <section class="opcao-mes-quebrado" [class.escolhida]="m.calculo_mes_quebrado === op" [attr.aria-labelledby]="'opcao-' + op">
+                    <header>
+                      <h3 [id]="'opcao-' + op">{{ rotulosCalculo[op] }}</h3>
+                      @if (m.calculo_mes_quebrado === op) { <span class="selo-situacao">Escolhida</span> }
+                    </header>
+                    <small class="dica-formulario">{{ op === 'pro_rata' ? 'Dias antes do efeito com o valor sem reajuste; a partir dele, com o valor reajustado.' : 'O mês inteiro com o valor reajustado.' }}</small>
+                    @for (mq of m.meses_quebrados; track mq.competencia) {
+                      @let o = mq.opcoes[op];
+                      <p class="mes-quebrado-titulo">{{ mq.rotulo }}</p>
+                      <div class="tabela-gestao-envoltorio">
+                        <table class="tabela-gestao">
+                          <thead><tr><th>Item</th><th>Período</th><th class="num">Qtd.</th><th class="num">Valor unit.</th><th class="num">Valor</th></tr></thead>
+                          <tbody>
+                            @for (it of o.itens; track it.ordem) {
+                              @for (tr of it.trechos; track tr.inicio) {
+                                <tr [class.sem-reajuste]="!tr.reajustado">
+                                  <td>{{ it.ordem }}</td>
+                                  <td>{{ tr.inicio | dataBr }} a {{ tr.fim | dataBr }} <small>({{ tr.dias }} dia(s){{ tr.reajustado ? '' : ', sem reajuste' }})</small></td>
+                                  <td class="num">{{ tr.quantidade | quantidade }}</td>
+                                  <td class="num">{{ tr.valor_unitario | moedaUnitaria }}</td>
+                                  <td class="num">{{ tr.valor | moeda }}</td>
+                                </tr>
+                              }
+                            }
+                          </tbody>
+                          <tfoot>
+                            <tr><td colspan="4">Devido no mês</td><td class="num">{{ o.devido | moeda }}</td></tr>
+                            <tr><td colspan="4">Pago na medição</td><td class="num">{{ o.valor_pago | moeda }}</td></tr>
+                            <tr><td colspan="4"><strong>Em haver</strong></td><td class="num"><strong>{{ o.em_haver | moeda }}</strong></td></tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    }
+                    <p class="total-opcao"><span>Diferença retroativa total</span><strong>{{ (op === 'pro_rata' ? m.diferenca_pro_rata : m.diferenca_integral) | moeda }}</strong></p>
+                    @if (p.pode_editar) {
+                      <footer>
+                        <button type="button" class="acao-secundaria" [class.carregando]="escolhendo() === op" [disabled]="!!escolhendo() || !todosValidos(r)"
+                                (click)="escolherCalculo(r, op)">{{ m.calculo_mes_quebrado === op ? 'Gerar de novo com esta opção' : 'Usar esta opção e gerar PDF e XLSX' }}</button>
+                      </footer>
+                    }
+                  </section>
+                }
+              </div>
+            }
+          }
+          @if (alteradoSemSalvar(r)) { <p class="aviso-bloco informativo">Prévia: os valores acima já refletem o que você digitou. Clique em "Salvar memória" para gravar e poder gerar o PDF e o XLSX.</p> }
           @if (p.pode_editar) {
             <div class="acoes-cartao">
               <button type="button" class="acao-secundaria" [disabled]="!todosValidos(r)" (click)="salvarMemoria(r)">Salvar memória</button>
-              <button type="button" class="acao-secundaria" [disabled]="alteradoSemSalvar(r)" (click)="gerarArquivos(r)">Gerar e baixar PDF e XLSX</button>
+              @if (!v.resumo_meses?.meses_quebrados?.length) {
+                <button type="button" class="acao-secundaria" [disabled]="alteradoSemSalvar(r)" (click)="gerarArquivos(r)">Gerar e baixar PDF e XLSX</button>
+              }
             </div>
           }
           @if (r.memorias.length) {
             <ul class="lista-ciencias">
               @for (m of r.memorias; track m.versao) {
                 <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span>
-                  <span><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.pdf.anexo_id)">Baixar PDF</button> · <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.xlsx.anexo_id)">Baixar XLSX</button></span></li>
+                  <span class="acoes-linha"><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.pdf.anexo_id)">Baixar PDF</button><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.xlsx.anexo_id)">Baixar XLSX</button></span></li>
               }
             </ul>
           }
@@ -100,9 +183,9 @@
           @if (p.pode_editar) {
             <div class="acoes-cartao esquerda">
               <app-envio-pdf rotulo="Selecionar apostilamento assinado" (selecionado)="apostilamento = $event" />
-              <button type="button" class="acao-primaria" [disabled]="!apostilamento || !r.evidencia || !r.memorias.length" (click)="concluir(r)">Concluir e aplicar reajuste</button>
+              <button type="button" class="acao-primaria" [disabled]="!apostilamento || !r.evidencia || !r.memorias.length" (click)="concluir(r)">{{ r.retroativo ? 'Concluir reajuste retroativo' : 'Concluir e aplicar reajuste' }}</button>
             </div>
-            @if (!r.evidencia || !r.memorias.length) { <p class="dica-formulario">A conclusão exige a evidência do índice e a memória gerada.</p> }
+            @if (!r.evidencia || !r.memorias.length) { <p class="dica-formulario">A conclusão exige a evidência do índice e a memória gerada{{ r.resumo_meses?.precisa_escolher ? ' (escolha antes o cálculo dos meses quebrados)' : '' }}.</p> }
           }
         </div>
       </section>
@@ -112,7 +195,7 @@
         <div class="corpo">
           @if (p.vigencias_disponiveis.length) {
             <div class="grade-formulario tres-colunas">
-              <div><label for="reajuste-data">Novos valores valem a partir de *</label><input id="reajuste-data" type="date" [(ngModel)]="dataEfeito" /><small class="dica-formulario">O mês dessa data é pago proporcionalmente aos dias de cada preço.</small></div>
+              <div><label for="reajuste-data">Novos valores valem a partir de *</label><input id="reajuste-data" type="date" [(ngModel)]="dataEfeito" /><small class="dica-formulario">O mês dessa data é pago proporcionalmente aos dias de cada preço; na memória de cálculo dá para cobrar o mês inteiro.</small></div>
               <div><label for="reajuste-vigencia">Vigência *</label>
                 <select id="reajuste-vigencia" [(ngModel)]="vigencia">
                   @for (v of p.vigencias_disponiveis; track v.sequencia) { <option [ngValue]="v.sequencia">{{ v.sequencia }}ª · {{ v.inicio | dataBr }} a {{ v.fim | dataBr }}</option> }
@@ -122,6 +205,22 @@
           } @else { <p class="estado-vazio">Todas as vigências já foram reajustadas.</p> }
         </div>
       </section>
+      @if (p.vigencias_retroativas_disponiveis.length) {
+        <!-- Mesma estrutura do cartão "Iniciar reajuste": o retroativo volta no tempo, a partir da vigência retroativa cadastrada -->
+        <section class="cartao-dados" aria-labelledby="titulo-iniciar-retroativo">
+          <header><div><h2 id="titulo-iniciar-retroativo">Iniciar reajuste retroativo</h2>
+            <small>Define os preços de uma vigência retroativa a partir dos da vigência seguinte. Faz-se uma vigência por vez, da mais recente para a mais antiga, antes das medições dela.</small></div></header>
+          <div class="corpo">
+            <div class="grade-formulario tres-colunas">
+              <div><label for="reajuste-vigencia-retroativa">Vigência retroativa *</label>
+                <select id="reajuste-vigencia-retroativa" [(ngModel)]="vigenciaRetroativa">
+                  @for (v of p.vigencias_retroativas_disponiveis; track v.sequencia) { <option [ngValue]="v.sequencia">{{ v.sequencia }}ª · {{ v.inicio | dataBr }} a {{ v.fim | dataBr }}</option> }
+                </select></div>
+              <div style="align-self: end; margin-bottom: 16px"><button type="button" class="acao-primaria" [disabled]="!vigenciaRetroativa" (click)="abrirRetroativo()">Abrir reajuste retroativo</button></div>
+            </div>
+          </div>
+        </section>
+      }
     }
 
     @if (p.historico.length) {
@@ -133,7 +232,7 @@
             <tbody>
               @for (r of p.historico; track r.id) {
                 <tr>
-                  <td>{{ r.data_efeito | dataBr }}</td><td>{{ r.sequencia_vigencia }}ª</td>
+                  <td>{{ r.data_efeito | dataBr }}</td><td>{{ r.sequencia_vigencia }}ª{{ r.retroativo ? ' (retroativo)' : '' }}</td>
                   <td><span class="selo-situacao" [class.inativo]="r.situacao === 'cancelado'">{{ r.situacao === 'concluido' ? 'Concluído' : 'Cancelado' }}</span></td>
                   <td class="num">{{ r.base_atual | moeda }} → {{ r.base_reajustada | moeda }}</td>
                   <td class="num">{{ r.valor_global_atual | moeda }} → {{ r.valor_global_reajustado | moeda }}</td>

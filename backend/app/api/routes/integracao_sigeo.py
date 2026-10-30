@@ -10,7 +10,7 @@ from app.api.respostas import RESPOSTAS_AUTENTICADAS, VALIDACAO
 from app.core.banco import obter_sessao
 from app.models.usuario import Papel, Usuario
 from app.services import servico_integracao_sigeo as servico
-from app.services.contratos import servico_ob_sigeo
+from app.services.contratos import servico_empenho_sigeo, servico_ob_sigeo
 from app.services.servico_auditoria import auditar
 from app.services.servico_integracao_sigeo import AlteracaoIntegracaoSigeo, LeituraIntegracaoSigeo, ResultadoTesteSigeo
 
@@ -50,5 +50,26 @@ def conferir(ensaio: bool = Query(True, description="Só relata, sem concluir na
     resultado = servico_ob_sigeo.executar(sessao, ensaio=ensaio).como_dict()
     if not ensaio:
         auditar(sessao, autor.login, "integracao_sigeo.conferir", "Conferência de OBs no SIGEO", f"concluidas={len(resultado['concluidas'])} pendencias={len(resultado['pendencias'])}")
+        sessao.commit()
+    return resultado
+
+
+@roteador.post("/empenhos", response_model=dict, summary="Cadastrar agora as NEs e cancelamentos do SIGEO",
+               description="Para cada contrato com Processo Financeiro e **sem nenhuma NE cadastrada**, lê a análise de empenhos do SIGEO e cadastra as Notas de Empenho do(s) "
+               "processo(s) e os cancelamentos (valor negativo ligado à NE pelo documento de origem). Nunca altera contrato que já tem NE. Com `ensaio=true` (padrão) só relata. "
+               "Resposta: `contratos` (o que cadastra), `nes_cadastradas`, `cancelamentos`, `pendencias` e `sem_empenho_no_sigeo`. Restrito ao SuperRoot.")
+def empenhos(ensaio: bool = Query(True, description="Só relata, sem cadastrar nada."), sessao: Session = Depends(obter_sessao),
+             autor: Usuario = Depends(super_root)) -> dict:
+    """Cadastro de empenhos sob demanda."""
+    from app.services.servico_integracao_sigeo import baixar_empenhos
+    from app.services.sigeo.cliente_obiee import ErroSigeo
+
+    try:
+        linhas = baixar_empenhos(servico.obter(sessao))
+    except ErroSigeo as erro:
+        return {"contratos": [], "nes_cadastradas": 0, "cancelamentos": 0, "pendencias": [], "sem_empenho_no_sigeo": [], "erros": [erro.mensagem]}
+    resultado = servico_empenho_sigeo.cadastrar(sessao, linhas, autor, ensaio=ensaio).como_dict()
+    if not ensaio:
+        auditar(sessao, autor.login, "integracao_sigeo.empenhos", "Cadastro de empenhos no SIGEO", f"nes={resultado['nes_cadastradas']} cancelamentos={resultado['cancelamentos']}")
         sessao.commit()
     return resultado

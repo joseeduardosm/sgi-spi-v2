@@ -11,6 +11,7 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { DespesaVariavel, DetalheCompetencia, NotaFiscal } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { oferecerBuscaObSigeo } from './busca-ob-sigeo';
 import { HistoricoRecusasComponent } from './historico-recusas.component';
 
 /** Linha do formulário: uma nota fiscal (registrada e/ou com arquivos novos escolhidos). */
@@ -238,7 +239,11 @@ export class EtapaNotaFiscalComponent implements OnChanges {
     }));
     const dados = { recebida_em: this.recebidaEm, prazo_pagamento_dias: this.prazo, notas, arquivos, xmls, despesas, arquivosDespesas };
     this.dialogos.executar(this.api.notaFiscal(d.contrato_id, d.id, dados), 'Lendo os XMLs e enviando as notas fiscais…').subscribe({
-      next: (novo) => this.atualizado.emit(novo),
+      next: (novo) => {
+        this.atualizado.emit(novo);
+        // Competência retroativa de contrato com Processo Financeiro: já oferece buscar a OB no SIGEO
+        if (novo.retroativa && novo.pode_buscar_ob_sigeo) void oferecerBuscaObSigeo(this.api, this.dialogos, novo, (n) => this.atualizado.emit(n));
+      },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível juntar a nota fiscal'),
     });
   }

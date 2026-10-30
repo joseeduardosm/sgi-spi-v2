@@ -194,6 +194,9 @@ Causa recorrente de botão "no visual nativo do navegador": usar uma classe que 
 
 Sim/não lado a lado: sempre `.acao-positiva` + `.acao-recusar` (verde e vermelho, separados). **Todo `<button>` precisa de uma classe da tabela**; botão sem classe, ou com classe sem estilo global, é erro. Depois de escrever a tela, abra-a (ou rode o build e diga que não abriu) e confira que **nenhum botão ficou com o visual nativo** (fundo cinza do navegador, borda 2px).
 
+### Menu de ações ⋮ (muitas ações na mesma linha ou cartão)
+Quando uma linha, item ou cartão tem mais de duas ações, mostre só a mais usada como botão (`.acao-secundaria .acao-pequena`, ou `.acao-positiva` se for a ação principal da tela) e coloque o resto num menu **⋮**: botão `.acao-secundaria .acao-pequena` com `aria-haspopup="menu"` e `aria-expanded`, dentro de um invólucro com `position: relative`, abrindo um `.menu-flutuante` (global, em `_contratos.scss`) com `role="menu"` e itens `role="menuitem"`. Ações destrutivas ficam **por último**, depois de `<span class="separador" role="separator">`, com a classe `.perigo` (vermelho). Item que não se aplica fica `disabled`. Um menu aberto por vez; clique fora fecha (`host: { '(document:click)': … }`, e o botão ⋮ faz `stopPropagation`). Sem animação (é ação frequente). Exemplos: carteira de contratos e documento de Contratações.
+
 ### Campo de formulário
 Já existe estilo base global — manter. Borda 1px `--spi-borda-campo`, raio 6px, altura mínima 46px, fundo `--spi-superficie`. Foco: borda `--spi-vermelho` + `--spi-anel-foco`. Rótulo acima em 13–14px peso 600 `--spi-rotulo`. Erro: borda `--spi-perigo` + mensagem 12px `--spi-perigo` abaixo.
 

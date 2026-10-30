@@ -85,6 +85,8 @@ export interface SecaoDocumento {
   id: string;
   ordem: number;
   titulo: string;
+  /** Orientação a quem preenche: só na tela (não vai para a cópia nem para o Word/PDF). */
+  descricao: string;
   itens: ItemDocumento[];
 }
 

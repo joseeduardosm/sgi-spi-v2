@@ -16,10 +16,20 @@ Todas as rotas: **SuperRoot**. A senha fica cifrada (`CHAVE_CIFRA_LDAP`) e nunca
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/api/integracao-sigeo` | `ativo`, `url_base`, `caminho_analise`, `usuario`, `possui_senha`, `hora_conferencia`, `configurada`, `ultima_execucao_em`, `ultimo_resultado`, `atualizado_em`, `atualizado_por` |
-| `PUT` | `/api/integracao-sigeo` | Corpo: `ativo`, `url_base`, `caminho_analise`, `usuario`, `senha` (opcional), `hora_conferencia` (0–23). `422` se faltar campo |
+| `GET` | `/api/integracao-sigeo` | `ativo`, `url_base`, `caminho_analise`, `caminho_analise_empenhado`, `usuario`, `possui_senha`, `hora_conferencia`, `configurada`, `ultima_execucao_em`, `ultimo_resultado`, `atualizado_em`, `atualizado_por` |
+| `PUT` | `/api/integracao-sigeo` | Corpo: `ativo`, `url_base`, `caminho_analise`, `caminho_analise_empenhado` (opcional), `usuario`, `senha` (opcional), `hora_conferencia` (0–23). `422` se faltar campo |
 | `POST` | `/api/integracao-sigeo/testar` | Entra no SIGEO, executa a análise e diz quantas OBs vieram (`sucesso`, `mensagem`, `linhas`, `latencia_ms`); sempre `200` |
 | `POST` | `/api/integracao-sigeo/conferir?ensaio=true` | Faz o que a rotina das 08:00 faz. Com `ensaio=true` (padrão) só relata. Resposta: `verificadas`, `aguardando`, `concluidas[]` (`competencia`, `contrato_id`, `ob`, `valor`), `pendencias[]` (`competencia`, `contrato_id`, `motivo`), `sugestoes_processo[]` (contratos esperando OB sem processo financeiro, com os processos que o SIGEO usa para o CNPJ da contratada) e `erros[]` |
+
+## Cadastro automático de NEs e cancelamentos
+
+Contratos com **Processo Financeiro** preenchido e **sem nenhuma NE cadastrada** recebem, sozinhos, as Notas de Empenho do(s) processo(s) e os cancelamentos, lidos da análise de empenhos (`caminho_analise_empenhado`, padrão `…/EMPENHADO - Execução`; migração `b8d2f6a0c4e7`). Roda junto da conferência diária das OBs e sob demanda em `POST /api/integracao-sigeo/empenhos?ensaio=true` (SuperRoot; `ensaio=false` grava). Resposta: `contratos` (NEs e cancelamentos), `nes_cadastradas`, `cancelamentos`, `pendencias` e `sem_empenho_no_sigeo`.
+
+- **NE:** linha com valor positivo; cadastrada com o número curto `AAAANEnnnnn` (fim do `COD_DOCUMENTO`) e o valor como valor original.
+- **Cancelamento:** linha com valor **negativo** (eventos 400093 e 400096); `COD_DOCUMENTO_ORIGEM` é a NE cancelada. Vira um cancelamento dessa NE, com o texto do SIGEO e a data de lançamento na justificativa.
+- **Nunca altera** contrato que já tem NE. Cancelamento sem a NE na análise, soma de cancelamentos acima do valor da NE e números repetidos viram **pendência** e não gravam aquele item. Auditoria `contrato.nota_empenho.sigeo`.
+- **Limite:** a análise hoje só traz NEs de 2025; contratos cujo empenho é de outro exercício aparecem em `sem_empenho_no_sigeo` até a análise ser ampliada no SIGEO.
+- As NEs nascem **sem os pagamentos anteriores ao SGI abatidos**.
 
 ## Regra da conferência
 
@@ -30,3 +40,8 @@ Para cada competência na etapa **ordem bancária** (sem OB juntada) de um contr
 3. A soma das OBs do mês (o pagamento pode vir em partes) é comparada ao **líquido**: valor a pagar (notas brutas + despesas variáveis) − retenções conferidas. A OB paga o líquido; os tributos retidos saem em outros documentos.
 
 Igual ao centavo → **conclui**: gera o PDF "Comprovante de pagamento (SIGEO)" no lugar do PDF da OB, debita as NEs pelo valor a pagar (como no lançamento manual), grava `ob_origem = sigeo`, `ob_numero`, `ob_data`, `ob_valor`, audita (`contrato.execucao.ordem_bancaria.sigeo`), sincroniza as tarefas e envia o e-mail de pagamento. Sem OB do processo ainda → `aguardando` (normal). Qualquer dúvida (texto sem mês, soma parcial ou acima, duas competências do mesmo mês esperando OB) → **não conclui** e grava o motivo em `ob_sigeo_pendencia`, que aparece na etapa da OB; a equipe junta a OB manualmente. Sem mês legível nunca conclui: os contratos de valor fixo repetem o mesmo valor todo mês. Idempotente.
+
+
+## Execução retroativa e e-mail de pagamento
+
+A conferência conclui competências anteriores à data "Desconsiderar alertas a partir de" do contrato (ou ao corte global de 01/09/2026) normalmente, mas **não envia o e-mail de pagamento** a elas: o motivo fica em `email_ob_erro` da competência (o reenvio manual continua possível).

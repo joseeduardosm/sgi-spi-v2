@@ -32,6 +32,9 @@ Uma admissão por ficha de pré-cadastro. As etapas se abrem na ordem (a que est
 | `DELETE` | `/api/rh/admissoes/{id}/documentos/{doc_id}` | Desfaz o registro (até concluir a etapa) |
 | `GET` | `/api/rh/admissoes/{id}/documentos/{doc_id}/comprovante` | Baixa o comprovante |
 | `POST` | `/api/rh/admissoes/{id}/documentos/concluir` | Conclui a etapa de documentos |
+| `POST` | `/api/rh/admissoes/{id}/documentos/incluir` | Inclui documento fora do checklist do cargo (`multipart`: `nome`, `descricao`, `arquivo` PDF). Nunca obrigatório; `409` com a etapa fechada, `400` sem nome |
+| `DELETE` | `/api/rh/admissoes/{id}/documentos/{doc_id}/incluido` | Exclui um documento incluído (só eles; `400` nos do checklist; `409` com a etapa concluída) |
+| `GET` | `/api/rh/admissoes/{id}/documentos/{doc_id}/arquivo` | Baixa o arquivo do documento incluído |
 | `POST` `PUT` | `/api/rh/admissoes/{id}/resolucao` | Gera o texto do modelo / grava o texto editado (`html`) |
 | `GET` | `/api/rh/admissoes/{id}/resolucao.pdf` | PDF (MINUTA até a publicação) |
 | `GET` | `/api/rh/admissoes/{id}/resolucao/copia` | Texto da resolução com os placeholders já trocados, em `html` (formatado) e `texto` (simples), para colar no SEI |
@@ -69,6 +72,9 @@ Ao iniciar a admissão, os itens dos checklists ativos que valem para a classifi
 |---|---|---|
 | `GET` `POST` | `/api/rh/checklists` | Lista / cria (201) |
 | `PUT` `DELETE` | `/api/rh/checklists/{id}` | Altera / exclui (204) |
+
+
+**Checklist "a partir de…":** o checklist do cargo é o ponto de partida da admissão. Com a etapa de documentos aberta, o RH inclui documentos que não estavam nele (nome, descrição e PDF): o incluído vale só para aquela admissão (`incluido_no_processo`, `detalhe`, `tem_arquivo`, `incluido_por_nome`, `incluido_em` em `documentos[]`), **nunca é obrigatório**, pode ser excluído até a etapa ser concluída e não muda o checklist. O arquivo dele é separado do comprovante de envio ao Portal de Indicações (que continua sendo registrado pelo botão de envio). Auditoria `rh.admissao.documento.incluir` e `.excluir`. Migração `b8d2f4a6c9e1`.
 
 ## Boas-vindas, bio e ficha da própria pessoa
 

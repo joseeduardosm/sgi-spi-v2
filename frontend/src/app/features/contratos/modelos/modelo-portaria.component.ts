@@ -121,7 +121,7 @@ export class ModeloPortariaComponent implements OnInit {
   private aplicar(modelo: Modelo): void {
     this.nome = modelo.nome;
     this.ativo = modelo.ativo;
-    this.variante = modelo.conteudo.variante ?? 'sem_anterior';
+    this.variante = (modelo.conteudo.variante as VarianteMascara | undefined) ?? 'sem_anterior';
     this.html = modelo.conteudo.html ?? '';
   }
 

@@ -39,7 +39,9 @@
         <div class="corpo grade-formulario">
           <div><label for="processo-financeiro-dof">Processo Financeiro</label>
             <input id="processo-financeiro-dof" name="processo_financeiro_dof" maxlength="60" [(ngModel)]="dados.processo_financeiro" placeholder="Ex.: 20240605988" />
-            <small class="dica-formulario">Número do processo das ordens bancárias no SIGEO (COD_PROCESSO). Mais de um: separe por vírgula.</small></div>
+            <small class="dica-formulario">Número do processo das ordens bancárias no SIGEO (COD_PROCESSO). Mais de um: separe por vírgula.</small>
+            @if (ultimoPedido(); as p) { <small class="dica-formulario" role="status">Pedido feito em {{ p.em | date: 'dd/MM/yyyy HH:mm' }}{{ p.por ? ' por ' + p.por : '' }}.</small> }
+          </div>
         </div>
       </section>
     }
@@ -161,7 +163,34 @@
               <button type="button" class="acao-secundaria" [class.carregando]="pedindoProcesso()" [disabled]="pedindoProcesso()" (click)="pedirProcesso()">Pedir processo financeiro ao DOF</button>
             }
           </div>
-          <small class="dica-formulario">Número do processo das ordens bancárias no SIGEO (mais de um: separe por vírgula, ex.: 20250139231, 20260315789). Com ele, a OB paga conclui sozinha a etapa de pagamento. O pedido ao DOF manda e-mail e aviso no sino a todo o Financeiro com o link desta tela.</small></div>
+          <small class="dica-formulario">Número do processo das ordens bancárias no SIGEO (mais de um: separe por vírgula, ex.: 20250139231, 20260315789). Com ele, a OB paga conclui sozinha a etapa de pagamento. O pedido ao DOF manda e-mail e aviso no sino a todo o Financeiro com o link desta tela.</small>
+          @if (ultimoPedido(); as p) { <small class="dica-formulario" role="status">Último pedido ao DOF: {{ p.em | date: 'dd/MM/yyyy HH:mm' }}{{ p.por ? ' por ' + p.por : '' }}.</small> }
+        </div>
+      </div>
+    </section>
+
+    <section class="cartao-dados" aria-labelledby="bloco-contratacao">
+      <header><div><h2 id="bloco-contratacao">Contratação e garantia</h2><small>Alimentam as declarações e as planilhas de garantia da prorrogação. Dispensa e inexigibilidade (contratação direta) usam a Declaração de Atendimento do Anexo III; licitação, a do Anexo II.</small></div></header>
+      <div class="corpo grade-formulario">
+        <div><label for="modalidade-contratacao">Origem da contratação</label>
+          <select id="modalidade-contratacao" name="modalidade_contratacao" [(ngModel)]="dados.modalidade_contratacao">
+            <option value="">Não informada</option><option value="licitacao">Licitação</option><option value="dispensa">Dispensa de licitação</option><option value="inexigibilidade">Inexigibilidade</option>
+          </select></div>
+        <div class="ocupa-4 liberar-competencias">
+          <label for="exige-garantia"><input id="exige-garantia" type="checkbox" name="exige_garantia" [(ngModel)]="dados.exige_garantia" /><span>O contrato exige garantia contratual</span></label>
+        </div>
+        @if (dados.exige_garantia) {
+          <div><label for="garantia-modalidade">Modalidade da garantia</label>
+            <select id="garantia-modalidade" name="garantia_modalidade" [(ngModel)]="dados.garantia_modalidade">
+              <option value="">Selecione</option><option value="caucao_dinheiro">I – Caução em dinheiro</option><option value="titulos_divida_publica">II – Títulos da dívida pública</option>
+              <option value="fianca_bancaria">III – Fiança bancária</option><option value="seguro_garantia">IV – Seguro-garantia</option><option value="titulo_capitalizacao">V – Título de capitalização</option>
+            </select></div>
+          <div><label for="garantia-percentual">Percentual da garantia (%)</label><input id="garantia-percentual" name="garantia_percentual" type="number" min="0" max="100" step="0.01" [(ngModel)]="dados.garantia_percentual" /></div>
+          <div><label for="garantia-valor">Valor da garantia (R$)</label><input id="garantia-valor" name="garantia_valor" type="number" min="0" step="0.01" [(ngModel)]="dados.garantia_valor" /></div>
+          <div><label for="garantia-emissor">Seguradora ou instituição financeira</label><input id="garantia-emissor" name="garantia_emissor" maxlength="250" [(ngModel)]="dados.garantia_emissor" /></div>
+          <div><label for="garantia-cnpj">CNPJ da seguradora ou instituição</label><input id="garantia-cnpj" name="garantia_cnpj_emissor" maxlength="18" [(ngModel)]="dados.garantia_cnpj_emissor" /></div>
+          <div><label for="garantia-apolice">Nº da apólice, fiança ou documento</label><input id="garantia-apolice" name="garantia_apolice" maxlength="100" [(ngModel)]="dados.garantia_apolice" /></div>
+        }
       </div>
     </section>
 
@@ -274,21 +303,39 @@
             <label for="item-uf">Unidade de Fornecimento (UF) *</label>
             <input id="item-uf" name="unidade_fornecimento" required maxlength="50" placeholder="Ex.: posto, hora, unidade, m²" [(ngModel)]="item.unidade_fornecimento" />
           </div>
-          <div>
-            <label for="item-tipo">Tipo *</label>
-            <select id="item-tipo" name="tipo" [(ngModel)]="item.tipo"><option value="continuo">Contínuo</option><option value="sob_demanda">Sob demanda</option></select>
-          </div>
-          <div>
-            <label for="item-faturamento">Faturamento *</label>
-            <select id="item-faturamento" name="faturamento" [(ngModel)]="item.calcula_pro_rata">
-              <option [ngValue]="true">Com pró-rata</option><option [ngValue]="false">Sempre integral</option>
-            </select>
-          </div>
         </div>
+        <!-- Questionário: as respostas definem o tipo (contínuo/sob demanda) e o faturamento (pró-rata/integral), sem termo técnico -->
+        <fieldset class="perguntas-item">
+          <legend>Você vai pagar esse item na mesma quantidade todo mês? *</legend>
+          <label class="opcao-item" [class.selecionada]="respostas.quantidade === 'fixa'">
+            <input type="radio" name="resposta-quantidade" [checked]="respostas.quantidade === 'fixa'" (change)="responder('quantidade', 'fixa')" />
+            <span><b>Sim, todo mês a mesma quantidade</b><small>Ex.: postos de vigilância, licenças, locação mensal.</small></span>
+          </label>
+          <label class="opcao-item" [class.selecionada]="respostas.quantidade === 'variavel'">
+            <input type="radio" name="resposta-quantidade" [checked]="respostas.quantidade === 'variavel'" (change)="responder('quantidade', 'variavel')" />
+            <span><b>Não, só quando precisar</b><small>Paga o que for usado em cada mês. Ex.: horas técnicas, peças, chamados.</small></span>
+          </label>
+        </fieldset>
+        @if (respostas.quantidade) {
+          <fieldset class="perguntas-item">
+            <legend>Se o contrato começar ou terminar no meio do mês, esse item é cobrado… *</legend>
+            <label class="opcao-item" [class.selecionada]="respostas.faturamento === 'dias'">
+              <input type="radio" name="resposta-faturamento" [checked]="respostas.faturamento === 'dias'" (change)="responder('faturamento', 'dias')" />
+              <span><b>Só pelos dias do contrato naquele mês</b><small>Ex.: contrato começa dia 16 → paga metade do mês.</small></span>
+            </label>
+            <label class="opcao-item" [class.selecionada]="respostas.faturamento === 'mes'">
+              <input type="radio" name="resposta-faturamento" [checked]="respostas.faturamento === 'mes'" (change)="responder('faturamento', 'mes')" />
+              <span><b>Pelo mês inteiro, mesmo com poucos dias</b><small>Ex.: licença mensal cobrada cheia, qualquer que seja o dia de início.</small></span>
+            </label>
+          </fieldset>
+        }
+        @if (respondido()) {
+          <p class="aviso-formulario">Este item é <strong>{{ tipoItem(item.tipo) }}</strong>, com faturamento <strong>{{ item.calcula_pro_rata ? 'com pró-rata' : 'sempre integral' }}</strong>.</p>
+        }
         <p class="dica-formulario">Depois de salvo, o item não muda nome, tipo nem faturamento (para corrigir, exclua e crie outro).</p>
         <footer>
           <button type="button" class="acao-secundaria" (click)="fecharItem()">Cancelar</button>
-          <button type="submit" class="acao-primaria" [disabled]="!item.descricao.trim() || !item.unidade_fornecimento.trim()">Continuar</button>
+          <button type="submit" class="acao-primaria" [disabled]="!item.descricao.trim() || !item.unidade_fornecimento.trim() || !respondido()">Continuar</button>
         </footer>
       </form>
     } @else {

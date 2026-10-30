@@ -4,6 +4,16 @@ $removido: #c0392b;
 $alterado: #d68910;
 $movido: #5a6673;
 
+/* Sem recorte: o sumário lateral (position: sticky) acompanha a rolagem e os menus ⋮ dos últimos itens
+   podem passar da borda do painel. O conteúdo já tem padding, então nada encosta nos cantos arredondados. */
+.painel-gestao.contratacoes {
+  overflow: visible;
+}
+
+/* Âncora do menu ⋮ (o .menu-flutuante global abre abaixo, alinhado à direita) */
+.contratacoes .menu-acoes-doc { position: relative; display: inline-flex; }
+.contratacoes .aviso-copiado { align-self: center; color: var(--spi-sucesso); font-size: 12px; font-weight: 600; }
+
 .contratacoes {
   /* O painel de gestão não tem padding próprio: sem isto o conteúdo encosta nas bordas */
   padding: 22px 24px 18px;
@@ -60,13 +70,66 @@ $movido: #5a6673;
   .situacao { font-size: 12px; font-weight: 700; &.rascunho { color: #8a6d00; } &.em_revisao { color: #2f6f9f; } &.concluido { color: $incluido; } }
   .papel { display: block; color: #8c97a4; font-size: 11.5px; }
 
-  /* Documento */
+  /* Documento: layout com sumário lateral */
+  .doc-com-sumario {
+    display: grid;
+    grid-template-columns: 192px 1fr;
+    gap: 0;
+    align-items: start;
+  }
+
+  .sumario-doc {
+    position: sticky;
+    top: 16px;
+    padding: 0 16px 18px 0;
+    border-right: 1px solid var(--cor-e8eaec);
+
+    .sumario-titulo {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--cor-6a7786);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    button {
+      display: block;
+      width: 100%;
+      padding: 5px 8px;
+      border: none;
+      border-radius: var(--spi-raio-m);
+      background: none;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12.5px;
+      color: var(--cor-464f5a);
+      line-height: 1.4;
+      transition: background 0.12s;
+
+      &:hover { background: var(--cor-f1f2f4); }
+      &.ativo { color: var(--cor-af3741); font-weight: 600; background: var(--cor-fdf3f4); }
+
+      .sumario-num {
+        color: var(--cor-6a7786);
+        font-variant-numeric: tabular-nums;
+      }
+    }
+  }
+
+  .conteudo-doc {
+    padding-left: 24px;
+  }
+
   .secao-doc {
     margin: 0 0 24px;
 
     > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--cor-e8eaec); }
     h2 { margin: 0; color: var(--cor-361a1c); font-size: 16px; }
     .acoes-linha { display: flex; flex-wrap: wrap; gap: 6px; }
+    /* Orientação a quem preenche: só na tela, em tom informativo, logo abaixo do título */
+    .orientacao-secao { margin: 10px 0 4px; padding: 10px 14px; border: 1px solid var(--spi-info); border-radius: var(--spi-raio-m); background: var(--spi-info-suave); color: var(--spi-texto); font-size: 13px; white-space: pre-line; }
   }
 
   .linha-item {
@@ -118,7 +181,7 @@ $movido: #5a6673;
 }
 
 .versoes {
-  .duas-colunas { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 24px; align-items: start; }
+  .layout-versoes { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 24px; align-items: start; }
   .linha-do-tempo {
     margin: 0;
     padding: 0;
@@ -159,7 +222,48 @@ $movido: #5a6673;
 }
 
 @media (max-width: 900px) {
-  .versoes .duas-colunas { grid-template-columns: 1fr; }
+  .versoes .layout-versoes { grid-template-columns: 1fr; }
+  .contratacoes .doc-com-sumario { grid-template-columns: 1fr; }
+  .contratacoes .sumario-doc { position: static; border-right: none; padding-right: 0; border-bottom: 1px solid var(--cor-e8eaec); padding-bottom: 12px; margin-bottom: 18px; display: flex; flex-wrap: wrap; gap: 4px; .sumario-titulo { width: 100%; } }
+  .contratacoes .conteudo-doc { padding-left: 0; }
+}
+
+/* Modal que ocupa quase toda a tela (edição de item e entrada em lote) */
+.modal-portal.modal-tela-cheia {
+  width: calc(100vw - 16px);
+  height: calc(100dvh - 16px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  .form-contratacoes {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+
+    /* Editor rico cresce para preencher o espaço */
+    app-editor-rico { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+    /* Textarea do lote cresce */
+    textarea { flex: 1; min-height: 0; resize: none; }
+
+    footer { margin-top: auto; }
+  }
+}
+
+/* Dentro do modal-tela-cheia, editor-rico e sua superfície crescem */
+.modal-portal.modal-tela-cheia .editor-rico {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  /* O invólucro do TipTap também cresce: sem isso a área digitável fica só da altura do texto
+     (num item novo, uma faixa fina no topo) e o clique no resto do quadro não chega ao editor */
+  .envoltorio-editor-rico { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .superficie-editor { flex: 1; min-height: 0; overflow-y: auto; }
 }
 
 /* Editor rico (TipTap) */
@@ -173,7 +277,7 @@ $movido: #5a6673;
     .cor { font-weight: 700; }
     .separador { width: 1px; height: 20px; margin: 0 4px; background: var(--cor-d7dbe0); }
   }
-  .superficie-editor { min-height: 140px; padding: 10px 14px; outline: 0; font-size: 14px;
+  .superficie-editor { min-height: 320px; padding: 10px 14px; outline: 0; font-size: 14px;
     p { margin: 0 0 8px; }
     table { width: 100%; border-collapse: collapse; margin: 8px 0; }
     td, th { min-width: 40px; padding: 5px 8px; border: 1px solid var(--cor-cfd4da); vertical-align: top; }

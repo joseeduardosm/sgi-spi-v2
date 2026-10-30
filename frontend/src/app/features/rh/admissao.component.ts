@@ -111,7 +111,7 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
             <header><div><h2 id="et-documentos">2. Documentos</h2><small>O envio ao Portal de Indicações (sistema externo) é feito lá: aqui se registra a data e se anexa o comprovante.</small></div></header>
             <div class="corpo">
               @if (!x.documentos.length) {
-                <p class="dica-formulario">Nenhum documento no checklist deste tipo de cargo (cadastre em RH &gt; Modelos &gt; Checklists).</p>
+                <p class="dica-formulario">Nenhum documento no checklist deste tipo de cargo (cadastre em RH &gt; Modelos &gt; Checklists). Dá para incluir documentos só nesta admissão.</p>
               } @else if (!bloqueada('documentos')) {
                 <div class="tabela-gestao-envoltorio">
                   <table class="tabela-gestao">
@@ -119,13 +119,20 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
                     <tbody>
                       @for (d of x.documentos; track d.id) {
                         <tr>
-                          <td><strong>{{ d.descricao }}</strong>@if (!d.obrigatorio) { <small>opcional</small> }</td>
+                          <td><strong>{{ d.descricao }}</strong>@if (!d.obrigatorio) { <small>opcional</small> }
+                            @if (d.incluido_no_processo) {
+                              <span class="selo-situacao info">Incluído nesta admissão</span>
+                              @if (d.detalhe) { <small>{{ d.detalhe }}</small> }
+                              <small>Incluído por {{ d.incluido_por_nome }}@if (d.incluido_em) { em {{ d.incluido_em | date: 'dd/MM/yyyy HH:mm' }} }</small>
+                            }</td>
                           <td>@if (d.enviado_em) { <span class="selo-situacao">Enviado em {{ dataBr(d.enviado_em) }}</span><small>{{ d.enviado_por_nome }}@if (d.observacao) { · {{ d.observacao }} }</small> } @else { <span class="selo-situacao alerta">Pendente</span> }</td>
                           <td class="coluna-acoes"><div class="acoes-linha">
+                            @if (d.tem_arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="arquivoDocumento(d)">Arquivo</button> }
                             @if (d.tem_comprovante) { <button type="button" class="acao-secundaria acao-pequena" (click)="comprovante(d)">Comprovante</button> }
                             @if (x.etapa === 'documentos') {
                               @if (d.enviado_em) { <button type="button" class="acao-secundaria acao-pequena" (click)="desfazerDocumento(d)">Desfazer</button> }
                               @else { <button type="button" class="acao-secundaria acao-pequena" (click)="abrirDocumento(d)">Registrar envio</button> }
+                              @if (d.incluido_no_processo) { <button type="button" class="acao-perigo acao-pequena" (click)="excluirDocumentoIncluido(d)">Excluir</button> }
                             }
                           </div></td>
                         </tr>
@@ -152,7 +159,27 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
                   </table>
                 </div>
               }
-              @if (x.etapa === 'documentos') { <div class="acoes-formulario" style="margin-top: 12px"><button type="button" class="acao-primaria" (click)="executar(api.concluirDocumentos(x.id))">Concluir documentos</button></div> }
+              <!-- Checklist "a partir de…": documento fora do checklist do cargo, só nesta admissão (nunca obrigatório) -->
+              @if (x.etapa === 'documentos' && incluindoDocumento()) {
+                <div class="grade-parametros" style="margin-top: 12px">
+                  <div class="campo"><label for="incluir-doc-nome">Nome do documento *</label><input id="incluir-doc-nome" maxlength="300" [(ngModel)]="novoDocNome" /></div>
+                  <div class="campo"><label for="incluir-doc-descricao">Descrição</label><input id="incluir-doc-descricao" maxlength="1000" [(ngModel)]="novoDocDescricao" /></div>
+                  <div class="campo"><span class="rotulo">Arquivo (PDF) *</span>
+                    <div class="escolha-comprovante">
+                      <label class="acao-secundaria acao-pequena seletor-arquivo">Escolher arquivo
+                        <input type="file" accept=".pdf,application/pdf" (change)="novoDocArquivo = $any($event.target).files?.[0] ?? null" /></label>
+                      <small class="ajuda">{{ novoDocArquivo ? novoDocArquivo.name : 'Nenhum arquivo escolhido' }}</small>
+                    </div></div>
+                </div>
+                <p class="dica-formulario">O documento entra só nesta admissão, como opcional (não trava a conclusão). O checklist do cargo não muda.</p>
+                <div class="acoes-formulario">
+                  <button type="button" class="acao-secundaria acao-pequena" (click)="incluindoDocumento.set(false)">Cancelar</button>
+                  <button type="button" class="acao-primaria acao-pequena" [disabled]="!novoDocNome.trim() || !novoDocArquivo" (click)="incluirDocumento()">Incluir documento</button>
+                </div>
+              }
+              @if (x.etapa === 'documentos') { <div class="acoes-formulario" style="margin-top: 12px">
+                @if (!incluindoDocumento()) { <button type="button" class="acao-secundaria" (click)="abrirInclusaoDocumento()">+ Incluir documento</button> }
+                <button type="button" class="acao-primaria" (click)="executar(api.concluirDocumentos(x.id))">Concluir documentos</button></div> }
             </div>
           </section>
 
@@ -461,6 +488,36 @@ export class AdmissaoComponent implements OnInit {
 
   protected desfazerDocumento(d: DocumentoAdmissao): void {
     this.executar(this.api.desfazerDocumento(this.a()!.id, d.id));
+  }
+
+  // Inclusão de documento fora do checklist do cargo (formulário aberto e campos)
+  protected readonly incluindoDocumento = signal(false);
+  protected novoDocNome = '';
+  protected novoDocDescricao = '';
+  protected novoDocArquivo: File | null = null;
+
+  protected abrirInclusaoDocumento(): void {
+    this.novoDocNome = '';
+    this.novoDocDescricao = '';
+    this.novoDocArquivo = null;
+    this.incluindoDocumento.set(true);
+  }
+
+  /** Inclui o documento nesta admissão e fecha o formulário. */
+  protected incluirDocumento(): void {
+    if (!this.novoDocNome.trim() || !this.novoDocArquivo) return;
+    this.incluindoDocumento.set(false);
+    this.executar(this.api.incluirDocumento(this.a()!.id, this.novoDocNome.trim(), this.novoDocDescricao.trim(), this.novoDocArquivo));
+  }
+
+  /** Exclui um documento incluído durante a admissão, depois de confirmar. */
+  protected async excluirDocumentoIncluido(d: DocumentoAdmissao): Promise<void> {
+    if (!(await this.dialogos.confirmar({ titulo: `Excluir "${d.descricao}"?`, mensagem: 'O documento sai desta admissão e o arquivo é descartado.', rotuloConfirmar: 'Excluir documento', perigo: true }))) return;
+    this.executar(this.api.excluirDocumentoIncluido(this.a()!.id, d.id));
+  }
+
+  protected arquivoDocumento(d: DocumentoAdmissao): void {
+    this.baixar(this.api.baixarArquivoDocumento(this.a()!.id, d.id));
   }
 
   protected comprovante(d: DocumentoAdmissao): void {

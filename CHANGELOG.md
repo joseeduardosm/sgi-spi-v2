@@ -6,6 +6,30 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-10-30
+
+Migrações novas (aplicar com `alembic upgrade head`; cabeça `c3e5a7b9d2f4`): `c9e3a7f1b5d2` (parâmetros de contratos), `e2a6c0d4f8b1` (modalidade, garantia, representante legal e parâmetros da prorrogação), `a4c8e2f6b0d3` (minutas da prorrogação), `b5d9f3a7c1e4` (enquadramento da prorrogação), `c6e0a4b8d2f5` (pós-assinatura da prorrogação), `d4f8b2c6a0e3` (vigências retroativas), `d1f5b9c3e7a4` (competência de carga histórica), `a7c1e5b9d3f6` (pedido do processo financeiro ao DOF), `b8d2f6a0c4e7` (análise de empenhos do SIGEO), `d1e3f5a7b9c2` (competência com diferença coberta por reajuste), `e4c7a9b2d6f1` e `f2b8d4a6c1e3` (meses quebrados do reajuste), `a7c3e9b5d1f4` (orientação das seções de Contratações), `b8d2f4a6c9e1` (documentos incluídos nos checklists) e `c3e5a7b9d2f4` (fluxo novo da prorrogação).
+
+### Adicionado
+- **Backup geral** (Administração › Backup geral, `/admin/backup`, só SuperRoot): gera um `.zip` com o banco inteiro (configurações, ACLs, servidores SMTP e LDAP, tudo) e todos os anexos, e importa um backup de outro servidor (ex.: produção → homologação). A importação pede "SUBSTITUIR", guarda antes um backup automático do estado atual, restaura o banco numa transação só, troca os anexos, aplica as migrações e reinicia a API. **Modal de andamento** com trilha de etapas, barra de percentual e o que está sendo feito (ex.: "Juntando os anexos: 812 de 4.310 (600 MB de 1,3 GB)"). **Download direto pelo navegador** (aparece na barra de downloads do Chrome) por link assinado de 5 minutos. Endpoints `GET/POST /api/admin/backups`, `GET /arquivo/{nome}`, `POST /arquivo/{nome}/link`, `GET /arquivo/{nome}/baixar`, `POST /importar` (`docs/endpoints/backup-geral.md`).
+- **Modo homologação** (`MODO_HOMOLOGACAO=true`): e-mails e pop-ups do navegador não saem, mas ficam registrados como enviados com a nota "Simulado (homologação)"; SIGEO, sincronização do AD e aniversários parados; faixa "HOMOLOGAÇÃO" no topo; `GET /api/saude` informa `homologacao`. GLPI e BookStack **não** são simulados.
+- **`scripts/instalar.sh` sobe um servidor do zero**: pacotes e Node 22, fuso, banco e usuário do PostgreSQL, `.env` com chaves geradas (pede a senha do SuperRoot), pastas de anexos e backups, sudoers do restart, certificado autoassinado e opções `--homologacao`, `--sem-testes`, `--sem-pacotes`, `--porta`. O Nginx aceita arquivo grande só na importação do backup.
+- **Prorrogação no fluxo novo**: meses → meses quebrados (pro rata × integral lado a lado) → sob demanda → memória de cálculo (PDF e XLSX com capa, tabela mês a mês, total por ano e total da nova vigência) → checklist (modelo "Checklist Prorrogação" em Contratos › Modelos, com PDFs e documentos incluídos) → termo e registro. O registro exige a escolha dos meses quebrados, a memória atualizada e os obrigatórios do checklist. Também: pós-assinatura (PNCP, DOE, garantia), vigências retroativas, modalidade/garantia/representante legal no contrato e parâmetros do módulo de contratos.
+- **Reajuste com meses quebrados**: quando a data de efeito cai no meio de um mês, uma escolha só (pro rata ou integral) para todos esses meses, com as duas opções lado a lado; escolher gera a memória (PDF e XLSX). Os meses medidos aguardando OB aparecem na memória.
+- **Checklists "a partir de…"** na execução mensal e na admissão do RH: incluir documentos durante o processo (nome, descrição, PDF), sempre opcionais e excluíveis, sem mudar o modelo.
+- **Contratações**: sumário lateral, reabrir edição de documento concluído, botão de copiar por seção (sem o título, com os números dos itens em negrito), orientação de cada seção (só na tela; não copia nem exporta) com as orientações da IN SEGES/ME 58/2022, e ações agrupadas no menu ⋮.
+- **Item do contrato por perguntas** (tipo e faturamento) no lugar dos dois selects, valendo também para sob demanda.
+- Empenhos do SIGEO cadastrados a partir da análise das Notas de Empenho, carga histórica de competências e registro de quem pediu o processo financeiro ao DOF.
+
+### Alterado
+- **Prorrogação**: minutas, enquadramento e parecer saíram da tela (as rotas e os dados das prorrogações antigas continuam).
+- **Contratações › Entrada em lote**: "Criar itens" cria direto, sem a prévia.
+
+### Corrigido
+- **Reajuste**: competências anteriores ao mês de referência voltaram a ficar fora da diferença (01/2025 entrava indevidamente).
+- **Prorrogação**: valor calculado no rascunho saía R$ 0 (a nova vigência ainda não existia); agora vem da memória mês a mês.
+- **Contratações**: layout das versões quebrado por colisão de classe CSS e modal "+ Item" que não deixava digitar.
+
 ## 2026-10-28
 
 ### Corrigido

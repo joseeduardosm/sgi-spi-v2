@@ -134,3 +134,11 @@ class AdmissaoDocumento(Base):
     registrado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     comprovante_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="SET NULL"))
     observacao: Mapped[str] = mapped_column(String(500), default="")
+    # Documento incluído durante a admissão (não veio do checklist do cargo): nunca obrigatório, pode ser excluído
+    # enquanto a etapa estiver aberta. Tem descrição e o próprio arquivo, separado do comprovante de envio ao Portal.
+    incluido_no_processo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    detalhe: Mapped[str] = mapped_column(String(1000), default="", server_default="")
+    arquivo_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="SET NULL"))
+    incluido_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    incluido_por_nome: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    incluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -160,7 +160,9 @@ def valores(sessao: Session, admissao: Admissao) -> dict[str, str]:
 
 def _documento(doc: AdmissaoDocumento) -> DocumentoAdmissao:
     return DocumentoAdmissao(id=doc.id, descricao=doc.descricao, obrigatorio=doc.obrigatorio, enviado_em=doc.enviado_em, enviado_por_nome=doc.enviado_por_nome,
-                             registrado_em=doc.registrado_em, tem_comprovante=doc.comprovante_anexo_id is not None, observacao=doc.observacao)
+                             registrado_em=doc.registrado_em, tem_comprovante=doc.comprovante_anexo_id is not None, observacao=doc.observacao,
+                             incluido_no_processo=doc.incluido_no_processo, detalhe=doc.detalhe or "", tem_arquivo=doc.arquivo_anexo_id is not None,
+                             incluido_por_nome=doc.incluido_por_nome or "", incluido_em=doc.incluido_em)
 
 
 def _resumo(sessao: Session, admissao: Admissao) -> dict:
@@ -508,6 +510,63 @@ def desfazer_documento(sessao: Session, admissao_id: int, doc_id: int, autor: Us
     doc.enviado_em, doc.enviado_por_id, doc.enviado_por_nome, doc.registrado_em, doc.comprovante_anexo_id, doc.observacao = None, None, "", None, None, ""
     sessao.commit()
     return leitura(sessao, admissao)
+
+
+def incluir_documento(sessao: Session, admissao_id: int, nome: str, descricao: str, arquivo: tuple[BytesIO, str], autor: Usuario) -> LeituraAdmissao:
+    """Inclui na admissão um documento fora do checklist do cargo (nome, descrição e PDF).
+
+    O checklist é o ponto de partida: o incluído vale só para esta admissão, nunca é obrigatório e não muda o checklist.
+    Só com a etapa de documentos aberta."""
+    admissao = _obter(sessao, admissao_id)
+    _exigir_etapa(admissao, "documentos")
+    if admissao.documentos_concluidos_em is not None:
+        raise ErroAdmissao("A etapa de documentos já foi concluída.", conflito=True)
+    nome = " ".join((nome or "").split())
+    if not nome:
+        raise ErroAdmissao("Informe o nome do documento.")
+    try:
+        anexo = servico_anexos.guardar_pdf(sessao, arquivo[0], arquivo[1], "rh-admissao-documento", autor.id)
+    except servico_anexos.ErroAnexo as erro:
+        raise ErroAdmissao(str(erro)) from erro
+    admissao.documentos.append(AdmissaoDocumento(
+        descricao=nome[:300], detalhe=(descricao or "").strip()[:1000], obrigatorio=False, ordem=max((d.ordem for d in admissao.documentos), default=0) + 1,
+        incluido_no_processo=True, arquivo_anexo_id=anexo.id, incluido_por_id=autor.id, incluido_por_nome=autor.nome_completo or autor.login, incluido_em=agora_utc(),
+    ))
+    auditar(sessao, autor.login, "rh.admissao.documento.incluir", nome, autor_id=autor.id, dados={"admissao_id": admissao.id})
+    sessao.commit()
+    return leitura(sessao, admissao)
+
+
+def excluir_documento_incluido(sessao: Session, admissao_id: int, doc_id: int, autor: Usuario) -> LeituraAdmissao:
+    """Exclui um documento incluído durante a admissão (os do checklist do cargo não saem). Só com a etapa de documentos aberta."""
+    from app.models.anexo import Anexo
+
+    admissao = _obter(sessao, admissao_id)
+    _exigir_etapa(admissao, "documentos")
+    if admissao.documentos_concluidos_em is not None:
+        raise ErroAdmissao("A etapa de documentos já foi concluída.", conflito=True)
+    doc = _doc(admissao, doc_id)
+    if not doc.incluido_no_processo:
+        raise ErroAdmissao("Só os documentos incluídos durante a admissão podem ser excluídos; os do checklist do cargo ficam.")
+    for anexo_id in (doc.arquivo_anexo_id, doc.comprovante_anexo_id):
+        anexo = sessao.get(Anexo, anexo_id) if anexo_id else None
+        if anexo is not None:
+            servico_anexos.descartar(anexo)
+    admissao.documentos.remove(doc)
+    auditar(sessao, autor.login, "rh.admissao.documento.excluir", doc.descricao, autor_id=autor.id, dados={"admissao_id": admissao.id})
+    sessao.commit()
+    return leitura(sessao, admissao)
+
+
+def arquivo_documento(sessao: Session, admissao_id: int, doc_id: int):
+    """Arquivo do documento incluído durante a admissão (para o download)."""
+    from app.models.anexo import Anexo
+
+    doc = _doc(_obter(sessao, admissao_id), doc_id)
+    anexo = sessao.get(Anexo, doc.arquivo_anexo_id) if doc.arquivo_anexo_id else None
+    if anexo is None or anexo.excluido_em is not None:
+        raise AdmissaoNaoEncontrada()
+    return anexo
 
 
 def concluir_documentos(sessao: Session, admissao_id: int, autor: Usuario) -> LeituraAdmissao:

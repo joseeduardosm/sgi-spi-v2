@@ -29,7 +29,7 @@ from app.schemas.contratos.execucao import LeituraChecklist, LeituraFormulario, 
 from app.schemas.contratos.importacao import PreviaImportacaoModelo
 from app.services.contratos import servico_configuracao_execucao as configuracao
 from app.services.contratos import servico_importacao_modelos_xlsx as servico
-from app.services.contratos.servico_importacao_xlsx import TAMANHO_MAXIMO, ErroPlanilha
+from app.services.contratos.servico_importacao_xlsx import ErroPlanilha, tamanho_maximo
 
 roteador = APIRouter(prefix="/contratos", tags=["Contratos: importação de modelos por XLSX"], responses=RESPOSTAS_AUTENTICADAS)
 
@@ -62,7 +62,7 @@ async def _conteudo(arquivo: UploadFile) -> bytes:
     """Lê o arquivo enviado; só aceita a extensão .xlsx."""
     if not (arquivo.filename or "").lower().endswith(".xlsx"):
         raise ErroApi(status.HTTP_400_BAD_REQUEST, "Envie a planilha no formato .xlsx.", "invalido")
-    return await arquivo.read(TAMANHO_MAXIMO + 1)
+    return await arquivo.read(tamanho_maximo() + 1)
 
 
 def _modelo(tipo: str) -> Response:

@@ -134,7 +134,9 @@
 
     @if (editavel()) {
       <p class="secao-formulario">Ao concluir</p>
-      @if (!temAvaliacao()) {
+      @if (retroativa()) {
+        <p class="dica-formulario">Esta competência é <b>anterior ao corte de alertas</b>: segue o caminho curto (medição, nota fiscal e OB) e não envia e-mail à contratada, então não é preciso escolher preposto nem prazo de contestação.</p>
+      } @else if (!temAvaliacao()) {
         <app-opcao-email [obrigatorio]="true" titulo="E-mail à contratada (obrigatório)" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: cadastre um na empresa para poder concluir a medição." descricao="Um único e-mail à equipe e aos prepostos escolhidos (ao menos um), com a medição anexa: dá ciência, pede a nota fiscal no prazo (ou a contestação)." />
         <div class="grade-formulario">
           <div><label for="medicao-prazo-contestacao">Prazo para a contratada contestar (dias úteis) *</label>

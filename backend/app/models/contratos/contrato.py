@@ -101,6 +101,18 @@ class Contrato(Base):
     sei_execucao_link: Mapped[str] = mapped_column(String(1000))
     # Processo financeiro (opcional; ex.: 20240605988): é o COD_PROCESSO das ordens bancárias no SIGEO
     processo_financeiro: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    # Último pedido do processo financeiro ao DOF (botão "Pedir processo financeiro ao DOF"): quem pediu e quando
+    processo_financeiro_pedido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processo_financeiro_pedido_por: Mapped[str | None] = mapped_column(String(200))
+    # Origem da contratação (define a Declaração de Atendimento da prorrogação: Anexo II para licitação, Anexo III para dispensa/inexigibilidade) e garantia contratual
+    modalidade_contratacao: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    exige_garantia: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    garantia_modalidade: Mapped[str] = mapped_column(String(30), default="", server_default="")
+    garantia_percentual: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    garantia_valor: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    garantia_emissor: Mapped[str] = mapped_column(String(250), default="", server_default="")
+    garantia_cnpj_emissor: Mapped[str] = mapped_column(String(14), default="", server_default="")
+    garantia_apolice: Mapped[str] = mapped_column(String(100), default="", server_default="")
     # Nulo = situação calculada pelas datas
     situacao_forcada: Mapped[str | None] = mapped_column(String(20))
     # Fotografia do valor global depois de um reajuste (MVP 6)
@@ -140,6 +152,9 @@ class Contrato(Base):
     )
     prorrogacoes: Mapped[list["Prorrogacao"]] = relationship(  # noqa: F821
         back_populates="contrato", cascade="all, delete-orphan", order_by="Prorrogacao.data_inicio"
+    )
+    vigencias_retroativas: Mapped[list["VigenciaRetroativa"]] = relationship(  # noqa: F821
+        back_populates="contrato", cascade="all, delete-orphan", order_by="VigenciaRetroativa.data_inicio"
     )
     reajustes: Mapped[list["Reajuste"]] = relationship(  # noqa: F821
         back_populates="contrato", cascade="all, delete-orphan", order_by="Reajuste.criado_em"

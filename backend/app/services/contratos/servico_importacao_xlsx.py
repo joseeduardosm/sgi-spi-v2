@@ -47,14 +47,16 @@ from app.schemas.contratos.importacao import (
     PreviaImportacao,
 )
 from app.schemas.contratos.validadores import normalizar_cnpj, normalizar_cpf, somente_digitos
-from app.services.contratos import calculos
+from app.services.contratos import calculos, servico_parametros
 from app.services.contratos.erros import ErroRegraContrato
 from app.services.contratos.servico_contratos import criar_contrato, numero_em_uso
 from app.services.contratos.servico_empresas import criar_empresa, salvar_preposto
 from app.services.servico_auditoria import auditar
 
 # Limite do arquivo enviado (a planilha modelo tem ~12 KB)
-TAMANHO_MAXIMO = 5 * 1024 * 1024
+def tamanho_maximo() -> int:
+    """Tamanho máximo da planilha de importação, em bytes (parâmetro `planilha_tamanho_maximo_mb`)."""
+    return servico_parametros.valor("planilha_tamanho_maximo_mb") * 1024 * 1024
 
 # Rótulo normalizado na planilha → (chave interna, rótulo exibido nas mensagens).
 # Nos blocos agrupados a chave do rótulo é "grupo|campo" (grupo na coluna A, campo na coluna B).
@@ -286,8 +288,8 @@ def abrir_planilha(conteudo: bytes):
     """Abre o arquivo e devolve a primeira aba; arquivo que não é XLSX vira erro de regra (400)."""
     if not conteudo:
         raise ErroRegraContrato("O arquivo está vazio.")
-    if len(conteudo) > TAMANHO_MAXIMO:
-        raise ErroRegraContrato("O arquivo passa de 5 MB. Envie a planilha de cadastro do contrato.")
+    if len(conteudo) > tamanho_maximo():
+        raise ErroRegraContrato(f"O arquivo passa de {servico_parametros.valor('planilha_tamanho_maximo_mb')} MB. Envie a planilha de cadastro do contrato.")
     try:
         # data_only: lê o valor calculado das fórmulas, e não o texto da fórmula
         livro = load_workbook(BytesIO(conteudo), data_only=True, read_only=False)

@@ -20,6 +20,7 @@ class AlteracaoIntegracaoSigeo(BaseModel):
     ativo: bool = Field(..., description="Liga ou desliga a conferência diária das ordens bancárias (08:00).")
     url_base: str = Field(..., min_length=8, max_length=300, description="Endereço do `saw.dll` do SIGEO (ex.: `https://www.sigeo.fazenda.sp.gov.br/analytics/saw.dll`).")
     caminho_analise: str = Field(..., min_length=3, max_length=500, description="Caminho da análise salva no catálogo (ex.: `/users/.../PAGO - Execução Contrato - Gestor`).")
+    caminho_analise_empenhado: str | None = Field(None, min_length=3, max_length=500, description="Caminho da análise das Notas de Empenho emitidas (padrão `…/EMPENHADO - Execução`). Nulo mantém o atual.")
     usuario: str = Field(..., min_length=1, max_length=100, description="Usuário do SIGEO.")
     senha: str | None = Field(None, max_length=200, description="Senha do SIGEO. Vazio preserva a atual; nunca volta pela API.")
     hora_conferencia: int = Field(8, ge=0, le=23, description="Hora do dia (horário de Brasília) da conferência diária das OBs.")
@@ -31,6 +32,7 @@ class LeituraIntegracaoSigeo(BaseModel):
     ativo: bool
     url_base: str
     caminho_analise: str
+    caminho_analise_empenhado: str
     usuario: str
     possui_senha: bool
     hora_conferencia: int
@@ -62,7 +64,7 @@ def obter(sessao: Session) -> IntegracaoSigeo:
 
 def leitura(config: IntegracaoSigeo) -> LeituraIntegracaoSigeo:
     return LeituraIntegracaoSigeo(
-        ativo=config.ativo, url_base=config.url_base, caminho_analise=config.caminho_analise, usuario=config.usuario, possui_senha=bool(config.senha_cifrada), hora_conferencia=config.hora_conferencia,
+        ativo=config.ativo, url_base=config.url_base, caminho_analise=config.caminho_analise, caminho_analise_empenhado=config.caminho_analise_empenhado, usuario=config.usuario, possui_senha=bool(config.senha_cifrada), hora_conferencia=config.hora_conferencia,
         configurada=bool(config.url_base and config.caminho_analise and config.usuario and config.senha_cifrada),
         ultima_execucao_em=config.ultima_execucao_em, ultimo_resultado=config.ultimo_resultado, atualizado_em=config.atualizado_em, atualizado_por=config.atualizado_por,
     )
@@ -74,6 +76,8 @@ def salvar(sessao: Session, dados: AlteracaoIntegracaoSigeo, autor: str) -> Inte
     config.ativo, config.url_base, config.caminho_analise = dados.ativo, dados.url_base.strip().split("?")[0], dados.caminho_analise.strip()
     config.usuario, config.atualizado_por, config.atualizado_em = dados.usuario.strip(), autor, agora_utc()
     config.hora_conferencia = dados.hora_conferencia
+    if dados.caminho_analise_empenhado:
+        config.caminho_analise_empenhado = dados.caminho_analise_empenhado.strip()
     if dados.senha:
         config.senha_cifrada = cifrar_segredo(dados.senha)
     auditar(sessao, autor, "integracao_sigeo.salvar", "Integração SIGEO", f"ativo={config.ativo} usuario={config.usuario} hora={config.hora_conferencia} senha_nova={bool(dados.senha)}")
@@ -107,6 +111,13 @@ def baixar_pagamentos(config: IntegracaoSigeo) -> list[dict[str, str]]:
     usuario, senha = credencial(config)
     with ClienteObiee(config.url_base, usuario, senha) as cliente:
         return cliente.executar_analise(config.caminho_analise)
+
+
+def baixar_empenhos(config: IntegracaoSigeo) -> list[dict[str, str]]:
+    """Executa a análise de empenhos (NEs e cancelamentos emitidos) e devolve as linhas."""
+    usuario, senha = credencial(config)
+    with ClienteObiee(config.url_base, usuario, senha) as cliente:
+        return cliente.executar_analise(config.caminho_analise_empenhado)
 
 
 def testar(config: IntegracaoSigeo) -> ResultadoTesteSigeo:

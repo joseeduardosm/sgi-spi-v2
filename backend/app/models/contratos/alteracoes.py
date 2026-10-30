@@ -10,7 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, Uuid, text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.banco import Base, agora_utc
@@ -44,14 +44,58 @@ class Prorrogacao(Base):
     anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     # Código do documento importante criado para o termo (024, 025…)
     codigo_documento: Mapped[int | None] = mapped_column(Integer)
+    # Checklist do Parecer Referencial na hora do registro: {"respostas": {...}, "efetivos": {"1": "sim"}, "precisa_juridico": bool, "motivos": [...]}
+    enquadramento: Mapped[dict[str, Any]] = mapped_column(TipoJson, default=dict)
     # PDF final do parecer, quando houver
     relatorio_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    # Depois da assinatura: a divulgação no PNCP é condição de eficácia (prazo em dias úteis contado da assinatura: 20 licitação, 10 contratação direta)
+    pncp_prazo_ate: Mapped[date | None] = mapped_column(Date)
+    pncp_publicado_em: Mapped[date | None] = mapped_column(Date)
+    pncp_numero: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    doe_publicado_em: Mapped[date | None] = mapped_column(Date)
+    # Garantia: comprovação da renovação, envio dos dados à DOF e dados digitados das planilhas (responsável, NL, DARE…)
+    garantia_comprovada_em: Mapped[date | None] = mapped_column(Date)
+    garantia_enviada_dof_em: Mapped[date | None] = mapped_column(Date)
+    dados_garantia: Mapped[dict[str, Any]] = mapped_column(TipoJson, default=dict)
+    # Campo "Fiscalização e Gestão Contratual" do Contratos.gov / AUDESP atualizado
+    contratos_gov_atualizado_em: Mapped[date | None] = mapped_column(Date)
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     contrato: Mapped[Contrato] = relationship(back_populates="prorrogacoes")
     anexo: Mapped[Anexo] = relationship(foreign_keys=[anexo_id])
     relatorio_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[relatorio_anexo_id])
+
+
+class VigenciaRetroativa(Base):
+    """Vigência anterior ao início do contrato cadastrado, registrada com o seu termo.
+
+    Funciona como qualquer vigência (gera competências, checklists, NEs e avaliações) e serve de base
+    para o reajuste retroativo. As retroativas formam uma cadeia contínua que termina no dia anterior
+    ao início da vigência original; cadastrar uma recua `contratos.data_inicio` e renumera as vigências.
+    """
+
+    __tablename__ = "contratos_vigencias_retroativas"
+    # Não pode haver duas vigências retroativas começando no mesmo dia
+    __table_args__ = (UniqueConstraint("contrato_id", "data_inicio"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    meses: Mapped[int] = mapped_column(Integer)
+    assinada_em: Mapped[date] = mapped_column(Date)
+    numero_termo: Mapped[str] = mapped_column(String(100), default="")
+    data_inicio: Mapped[date] = mapped_column(Date)
+    data_fim: Mapped[date] = mapped_column(Date)
+    # Início do contrato antes do cadastro (usado para desfazer)
+    inicio_anterior: Mapped[date] = mapped_column(Date)
+    # PDF do termo e o código do documento importante criado para ele
+    anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    codigo_documento: Mapped[int | None] = mapped_column(Integer)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    contrato: Mapped[Contrato] = relationship(back_populates="vigencias_retroativas")
+    anexo: Mapped[Anexo] = relationship(foreign_keys=[anexo_id])
 
 
 class ProcessoProrrogacao(Base):
@@ -71,6 +115,10 @@ class ProcessoProrrogacao(Base):
     # Como tratar os itens sob demanda na nova vigência (ex.: saldo remanescente)
     regra_sob_demanda: Mapped[str] = mapped_column(String(30), default="saldo_remanescente")
     plano_sob_demanda: Mapped[list[Any]] = mapped_column(TipoJson, default=list)
+    # Dados digitados para completar as minutas do processo (placeholder → texto): testemunhas, nº dos documentos do SEI, dotação…
+    dados_minuta: Mapped[dict[str, Any]] = mapped_column(TipoJson, default=dict)
+    # Respostas do checklist do Parecer Referencial: {"respostas": {"1": {"resposta": "sim|nao|na", "doc": "", "obs": ""}}}
+    enquadramento: Mapped[dict[str, Any]] = mapped_column(TipoJson, default=dict)
     # Campos do parecer (todos opcionais; sem nenhum preenchido, não há PDF de parecer)
     avaliacao_geral: Mapped[str] = mapped_column(Text, default="")
     resumo_qualidade: Mapped[str] = mapped_column(Text, default="")
@@ -81,6 +129,9 @@ class ProcessoProrrogacao(Base):
     # PDF do parecer e o hash dos dados que o geraram (evita gerar de novo sem mudança)
     relatorio_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     relatorio_hash: Mapped[str] = mapped_column(String(64), default="")
+    # Como calcular os meses quebrados da nova vigência na memória e no valor: "pro_rata" (pelos dias) ou "integral" (mês
+    # cheio), uma escolha para todos; nulo = ainda não escolhido. Não muda a execução (que segue o faturamento de cada item).
+    calculo_mes_quebrado: Mapped[str | None] = mapped_column(String(10))
     # Prorrogação criada a partir deste rascunho, depois de registrada
     prorrogacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_prorrogacoes.id", ondelete="SET NULL"))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
@@ -91,6 +142,50 @@ class ProcessoProrrogacao(Base):
         back_populates="processo", cascade="all, delete-orphan", order_by="CienciaProrrogacao.registrada_em"
     )
     relatorio_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[relatorio_anexo_id])
+    memorias: Mapped[list["MemoriaProrrogacao"]] = relationship(back_populates="processo", cascade="all, delete-orphan", order_by="MemoriaProrrogacao.versao")
+    documentos: Mapped[list["DocumentoProrrogacao"]] = relationship(back_populates="processo", cascade="all, delete-orphan", order_by="DocumentoProrrogacao.ordem")
+
+
+class MemoriaProrrogacao(Base):
+    """Memória de cálculo da prorrogação (PDF e XLSX), versionada pelo hash dos dados (como a do reajuste)."""
+    __tablename__ = "contratos_prorrogacoes_memorias"
+    __table_args__ = (UniqueConstraint("processo_id", "versao"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    processo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_prorrogacoes_processos.id", ondelete="CASCADE"), index=True)
+    versao: Mapped[int] = mapped_column(Integer)
+    pdf_anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    xlsx_anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    hash_origem: Mapped[str] = mapped_column(String(64))
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    processo: Mapped[ProcessoProrrogacao] = relationship(back_populates="memorias")
+    pdf_anexo: Mapped[Anexo] = relationship(foreign_keys=[pdf_anexo_id])
+    xlsx_anexo: Mapped[Anexo] = relationship(foreign_keys=[xlsx_anexo_id])
+
+
+class DocumentoProrrogacao(Base):
+    """Documento do checklist da prorrogação: copiado do modelo "Checklist Prorrogação" ativo ou incluído durante o processo."""
+    __tablename__ = "contratos_prorrogacoes_documentos"
+    __table_args__ = (UniqueConstraint("processo_id", "ordem"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    processo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_prorrogacoes_processos.id", ondelete="CASCADE"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer)
+    nome: Mapped[str] = mapped_column(String(500))
+    observacao: Mapped[str] = mapped_column(String(1000), default="")
+    # Obrigatório do modelo sem PDF impede registrar; o incluído durante o processo nunca é obrigatório
+    obrigatorio: Mapped[bool] = mapped_column(Boolean, default=True)
+    anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    enviado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    incluido_no_processo: Mapped[bool] = mapped_column(Boolean, default=False)
+    incluido_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    incluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    processo: Mapped[ProcessoProrrogacao] = relationship(back_populates="documentos")
+    anexo: Mapped[Anexo | None] = relationship(foreign_keys=[anexo_id])
 
 
 # Um rascunho por contrato: índice único parcial, que só vale para as linhas em rascunho
@@ -139,6 +234,9 @@ class Reajuste(Base):
     # Data a partir da qual os novos preços valem (qualquer dia da vigência); nula = o dia 1 de `mes_referencia`
     data_efeito: Mapped[date | None] = mapped_column(Date)
     situacao: Mapped[str] = mapped_column(String(20), default="rascunho")
+    # Reajuste retroativo: volta no tempo. `valor_unitario_atual` é o preço da vigência seguinte (valendo a partir da data de efeito, o início dela)
+    # e `valor_unitario_reajustado` é o preço da vigência retroativa (atual ÷ (1 + índice), com o referencial como piso)
+    retroativo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Totais antes e depois do reajuste (base mensal e valor global da vigência)
     base_atual: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     base_reajustada: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
@@ -147,6 +245,10 @@ class Reajuste(Base):
     # Diferença líquida das competências já medidas, gravada na conclusão: > 0 vira competência de
     # diferença a pagar; < 0 (desconto) vira crédito da SPI abatido nas próximas medições
     diferenca_retroativa: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    # Como calcular os meses quebrados pela data de efeito, uma escolha para todos os meses e itens:
+    # "pro_rata" (dias antes do efeito sem reajuste, a partir dele reajustados) ou "integral" (mês inteiro
+    # reajustado). Nulo = ainda não escolhido; a memória só é gerada depois da escolha.
+    calculo_mes_quebrado: Mapped[str | None] = mapped_column(String(10))
     # PDF que comprova o índice e o apostilamento assinado
     evidencia_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     apostilamento_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))

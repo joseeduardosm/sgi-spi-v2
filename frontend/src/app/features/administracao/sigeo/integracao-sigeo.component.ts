@@ -20,6 +20,17 @@ interface ResultadoConferencia {
   pendencias: { competencia: string; contrato_id: string; motivo: string }[];
   sugestoes_processo: { contrato_id: string; contrato: string; empresa: string; processos: string[] }[];
   erros: string[];
+  empenhos?: ResultadoEmpenhos | null;
+}
+
+/** Cadastro de NEs e cancelamentos do SIGEO (rotina diária ou "Cadastrar empenhos agora"). */
+interface ResultadoEmpenhos {
+  contratos: { contrato_id: string; contrato: string; nes: { numero: string; valor: string; cancelamentos: { numero: string; valor: string }[] }[] }[];
+  nes_cadastradas: number;
+  cancelamentos: number;
+  pendencias: { contrato: string; contrato_id: string; motivo: string }[];
+  sem_empenho_no_sigeo: { contrato_id: string; contrato: string; processos: string[] }[];
+  erros?: string[];
 }
 
 /** Configuração como a API devolve (a senha nunca vem, só se existe). */
@@ -27,6 +38,7 @@ interface ConfiguracaoSigeo {
   ativo: boolean;
   url_base: string;
   caminho_analise: string;
+  caminho_analise_empenhado: string;
   usuario: string;
   possui_senha: boolean;
   hora_conferencia: number;
@@ -68,6 +80,9 @@ interface ResultadoTeste {
           <div class="ocupa-duas"><label for="sigeo-analise">Análise consultada *</label>
             <input id="sigeo-analise" name="analise" class="form-control" required maxlength="500" [(ngModel)]="analise" />
             <small class="dica-formulario">Caminho da análise salva no catálogo, com as colunas COD_PROCESSO, COD_DOCUMENTO, DATA_LANCAMENTO, DESCRICAO_DOCUMENTO e VALOR_DOCUMENTO.</small></div>
+          <div class="ocupa-duas"><label for="sigeo-empenhado">Análise de empenhos (NEs e cancelamentos)</label>
+            <input id="sigeo-empenhado" name="empenhado" class="form-control" maxlength="500" [(ngModel)]="analiseEmpenhado" />
+            <small class="dica-formulario">Usada para cadastrar sozinha as NEs dos contratos com Processo Financeiro e sem nenhuma NE. Colunas: COD_PROCESSO, COD_DOCUMENTO, COD_DOCUMENTO_ORIGEM, VALOR_DOCUMENTO (negativo = cancelamento).</small></div>
           <div><label for="sigeo-usuario">Usuário *</label>
             <input id="sigeo-usuario" name="usuario" class="form-control" required autocomplete="off" maxlength="100" [(ngModel)]="usuario" /></div>
           <div><label for="sigeo-senha">Senha {{ c.possui_senha ? '(gravada)' : '*' }}</label>
@@ -100,6 +115,8 @@ interface ResultadoTeste {
             <p>Conclui a OB quando o processo financeiro do contrato, o mês escrito na OB e o líquido a pagar (notas − retenções) batem. Na dúvida, não conclui e explica o motivo.</p></div>
           <div class="acoes-formulario">
             <button type="button" class="acao-secundaria" [class.carregando]="ocupado() === 'ensaio'" [disabled]="!!ocupado() || !c.configurada" (click)="conferir(true)">Simular</button>
+            <button type="button" class="acao-secundaria" [class.carregando]="ocupado() === 'empenhos'" [disabled]="!!ocupado() || !c.configurada" (click)="empenhos(true)">Simular empenhos</button>
+            <button type="button" class="acao-secundaria" [class.carregando]="ocupado() === 'cadastrar'" [disabled]="!!ocupado() || !c.configurada" (click)="empenhos(false)">Cadastrar empenhos agora</button>
             <button type="button" class="acao-primaria" [class.carregando]="ocupado() === 'conferir'" [disabled]="!!ocupado() || !c.configurada" (click)="conferir(false)">Conferir agora</button>
           </div>
         </div>
@@ -124,6 +141,22 @@ interface ResultadoTeste {
                 <tr><td><a [routerLink]="['/contratos', x.contrato_id]" [queryParams]="{ aba: 'execucao' }">{{ x.competencia }}</a></td><td>{{ x.motivo }}</td></tr>
               }</tbody>
             </table></div>
+          }
+          @if (r.empenhos; as e) {
+            <h3 class="titulo-lista-sigeo">Empenhos do SIGEO: {{ e.nes_cadastradas }} NE(s) e {{ e.cancelamentos }} cancelamento(s) {{ simulado() && resultado() ? 'seriam cadastrados' : 'cadastrados' }}</h3>
+            @if (e.contratos.length) {
+              <div class="tabela-gestao-envoltorio"><table class="tabela-gestao">
+                <thead><tr><th>Contrato</th><th>NEs (cancelamentos)</th></tr></thead>
+                <tbody>@for (x of e.contratos; track x.contrato_id) {
+                  <tr><td><a [routerLink]="['/contratos', x.contrato_id]" [queryParams]="{ aba: 'notas' }">{{ x.contrato }}</a></td>
+                    <td class="texto-codigo">@for (n of x.nes; track n.numero) { <div>{{ n.numero }} · {{ moeda(n.valor) }}@if (n.cancelamentos.length) { · cancelamento(s): {{ n.cancelamentos.length }} }</div> }</td></tr>
+                }</tbody>
+              </table></div>
+            }
+            @for (x of e.pendencias; track $index) { <p class="aviso-bloco" role="status"><strong>{{ x.contrato }}:</strong> {{ x.motivo }}</p> }
+            @if (e.sem_empenho_no_sigeo.length) {
+              <p class="dica-formulario">Sem empenho na análise do SIGEO (a análise só traz alguns exercícios): {{ nomesSemEmpenho(e) }}.</p>
+            }
           }
           @if (r.sugestoes_processo.length) {
             <h3 class="titulo-lista-sigeo">Contratos esperando OB sem processo financeiro ({{ r.sugestoes_processo.length }})</h3>
@@ -162,9 +195,10 @@ export class IntegracaoSigeoComponent implements OnInit {
   protected readonly resultado = signal<ResultadoConferencia | null>(null);
   protected readonly simulado = signal(false);
   /** Ação em andamento (trava os botões e mostra o carregando no botão certo). */
-  protected readonly ocupado = signal<'' | 'salvar' | 'testar' | 'ensaio' | 'conferir'>('');
+  protected readonly ocupado = signal<'' | 'salvar' | 'testar' | 'ensaio' | 'conferir' | 'empenhos' | 'cadastrar'>('');
   protected url = '';
   protected analise = '';
+  protected analiseEmpenhado = '';
   protected usuario = '';
   protected senha = '';
   protected ativo = false;
@@ -179,6 +213,7 @@ export class IntegracaoSigeoComponent implements OnInit {
     this.config.set(c);
     this.url = c.url_base;
     this.analise = c.caminho_analise;
+    this.analiseEmpenhado = c.caminho_analise_empenhado;
     this.usuario = c.usuario;
     this.ativo = c.ativo;
     this.hora = c.hora_conferencia;
@@ -189,6 +224,10 @@ export class IntegracaoSigeoComponent implements OnInit {
     this.aviso.set({ texto, erro });
   }
 
+  protected nomesSemEmpenho(e: ResultadoEmpenhos): string {
+    return e.sem_empenho_no_sigeo.map((x) => `${x.contrato} (${x.processos.join(', ')})`).join('; ');
+  }
+
   protected moeda(valor: string): string {
     return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
@@ -196,7 +235,7 @@ export class IntegracaoSigeoComponent implements OnInit {
   protected salvar(): void {
     this.ocupado.set('salvar');
     this.teste.set(null);
-    const corpo = { ativo: this.ativo, url_base: this.url.trim(), caminho_analise: this.analise.trim(), usuario: this.usuario.trim(), senha: this.senha || null, hora_conferencia: this.hora };
+    const corpo = { ativo: this.ativo, url_base: this.url.trim(), caminho_analise: this.analise.trim(), caminho_analise_empenhado: this.analiseEmpenhado.trim() || null, usuario: this.usuario.trim(), senha: this.senha || null, hora_conferencia: this.hora };
     this.http.put<ConfiguracaoSigeo>(this.base, corpo).subscribe({
       next: (c) => { this.preencher(c); this.ocupado.set(''); this.avisar('Configuração salva.'); },
       error: (e) => { this.ocupado.set(''); this.avisar(erroExibivel(e).mensagem, true); },
@@ -208,6 +247,20 @@ export class IntegracaoSigeoComponent implements OnInit {
     this.http.post<ResultadoTeste>(`${this.base}/testar`, null).subscribe({
       next: (t) => { this.teste.set(t); this.ocupado.set(''); },
       error: (e) => { this.ocupado.set(''); this.avisar(erroExibivel(e).mensagem, true); },
+    });
+  }
+
+  /** Cadastra (ou simula) só as NEs e cancelamentos do SIGEO dos contratos com Processo Financeiro e sem NE. */
+  protected empenhos(ensaio: boolean): void {
+    this.ocupado.set(ensaio ? 'empenhos' : 'cadastrar');
+    this.http.post<ResultadoEmpenhos>(`${this.base}/empenhos`, null, { params: { ensaio } }).subscribe({
+      next: (e) => {
+        const base = this.resultado() ?? { verificadas: 0, aguardando: 0, concluidas: [], pendencias: [], sugestoes_processo: [], erros: [] };
+        this.resultado.set({ ...base, empenhos: e, erros: [...(e.erros ?? [])] });
+        this.simulado.set(ensaio);
+        this.ocupado.set('');
+      },
+      error: (err) => { this.ocupado.set(''); this.avisar(erroExibivel(err).mensagem, true); },
     });
   }
 

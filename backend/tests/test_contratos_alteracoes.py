@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, criar_contrato, criar_empresa, item, juntar_nf, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, definir_parametros, PDF, conferir_retencao, criar_contrato, criar_empresa, item, juntar_nf, restringir_contratos, preparar_registro_prorrogacao
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -43,6 +43,7 @@ def test_prorrogar_so_com_prazo_e_termo_nao_gera_parecer(cliente, admin, equipe)
     assert r.json()["nova_vigencia_fim"] == "2027-12-31" and r.json()["itens_sob_demanda"][0]["limite"] == "100.0000"
     assert cliente.post(_url(contrato, "/prorrogacao/parecer"), headers=gestora).status_code == 400
 
+    preparar_registro_prorrogacao(cliente, _url(contrato, ""), gestora)
     r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10", "numero_termo": "01/2026"},
                      files={"termo": ("ta.pdf", PDF)}, headers=gestora)
     assert r.status_code == 200, r.text
@@ -72,6 +73,7 @@ def test_parecer_emite_pdf_e_edicao_apaga_ciencias(cliente, admin, equipe):
     assert r.json()["ciencias"] == []
     cliente.post(_url(contrato, "/prorrogacao/ciencia"), headers=fiscal)
     assert cliente.post(_url(contrato, "/prorrogacao/parecer"), headers=gestora).json()["relatorio"] is not None
+    preparar_registro_prorrogacao(cliente, _url(contrato, ""), gestora)
     r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10"}, files={"termo": ("ta.pdf", PDF)}, headers=gestora)
     relatorio = r.json()[0]["relatorio"]
     assert relatorio is not None
@@ -87,6 +89,7 @@ def test_prorrogacao_limita_itens_sob_demanda_ao_original(cliente, admin, equipe
     assert r.status_code == 400 and "aditamento" in r.json()["detalhe"]
     plano = [{"item_id": item_id, "limite": "40", "apontamentos": {"2027-01-01": "10"}}]
     cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12, "regra_sob_demanda": "manual", "plano_sob_demanda": plano}, headers=gestora)
+    preparar_registro_prorrogacao(cliente, _url(contrato, ""), gestora)
     cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10"}, files={"termo": ("ta.pdf", PDF)}, headers=gestora)
     previsao = cliente.get(_url(contrato, "/previsao"), headers=gestora).json()
     segunda = previsao["vigencias"][1]
@@ -207,6 +210,7 @@ def test_contrato_com_um_item(cliente, admin):
 # --- MVP 8: painel e relatórios --------------------------------------------------------------------
 
 def test_painel_com_pendencias_alertas_e_execucao(cliente, admin, equipe, monkeypatch):
+    definir_parametros(corte_alertas_a_partir_de=date(2026, 9, 1))  # estes testes dependem do corte global de 09/2026
     monkeypatch.setattr("app.services.contratos.servico_painel.hoje", lambda: date(2026, 11, 1))
     monkeypatch.setattr("app.services.contratos.servico_contratos.hoje", lambda: date(2026, 11, 1))
     monkeypatch.setattr("app.services.contratos.servico_competencias.hoje", lambda: date(2026, 11, 1))
@@ -257,6 +261,7 @@ def test_painel_de_vigencias_ordena_vigentes_pelo_vencimento(cliente, admin, equ
     contrato, gestora, _ = equipe
     # Contrato da equipe (01/2026 a 12/2026, máximo 24 meses) prorrogado por 12 meses: vai a 31/12/2027
     cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12, "regra_sob_demanda": "repetir_inicial"}, headers=gestora)
+    preparar_registro_prorrogacao(cliente, _url(contrato, ""), gestora)
     r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10", "numero_termo": "01/2026"},
                      files={"termo": ("ta.pdf", PDF)}, headers=gestora)
     assert r.status_code == 200, r.text
@@ -367,6 +372,7 @@ def test_reajuste_a_partir_de_20_do_mes_gera_uma_competencia_com_dois_trechos(cl
     h = cabecalho(cliente, "gestora")
     _preparar_execucao(cliente, contrato, h)
     cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12, "regra_sob_demanda": "repetir_inicial"}, headers=h)
+    preparar_registro_prorrogacao(cliente, _url(contrato, ""), h)
     r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10"}, files={"termo": ("ta.pdf", PDF)}, headers=h)
     assert r.status_code == 200, r.text
     assert cliente.get(_url(contrato), headers=h).json()["vigencias"][1]["inicio"] == "2027-01-20"
@@ -421,6 +427,7 @@ def test_trimestral_prorrogado_tem_uma_competencia_so_atravessando_as_vigencias(
     h = cabecalho(cliente, "gestora")
     _preparar_execucao(cliente, contrato, h)
     cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12, "regra_sob_demanda": "repetir_inicial"}, headers=h)
+    preparar_registro_prorrogacao(cliente, _url(contrato, ""), h)
     r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10"}, files={"termo": ("ta.pdf", PDF)}, headers=h)
     assert r.status_code == 200, r.text
     assert cliente.get(_url(contrato), headers=h).json()["vigencias"][1]["inicio"] == "2027-01-20"
@@ -456,6 +463,7 @@ def test_trimestral_prorrogado_tem_uma_competencia_so_atravessando_as_vigencias(
 
 def test_alertas_a_partir_de_do_contrato_empurra_o_corte_para_depois(cliente, admin, equipe, monkeypatch):
     """"Desconsiderar alertas a partir de": vale a maior entre a data do contrato e o corte global; sem a data, só o global."""
+    definir_parametros(corte_alertas_a_partir_de=date(2026, 9, 1))  # estes testes dependem do corte global de 09/2026
     import uuid
     from datetime import date as data
 
@@ -504,3 +512,77 @@ def restringir_contratos_extra(cliente, admin, niveis):
     for usuario_id, nivel in niveis.items():
         corpo = {"recurso_id": recurso["id"], "nivel": nivel, "usuarios_ids": [usuario_id], "setores_ids": []}
         assert cliente.post("/api/acl/regras", json=corpo, headers=admin).status_code == 201
+
+
+# --- Vigência retroativa e reajuste retroativo ---------------------------------------------------------
+
+def _cadastrar_retroativa(cliente, contrato, h, meses=12):
+    return cliente.post(_url(contrato, "/vigencias-retroativas"), data={"meses": meses, "assinada_em": "2025-12-20", "numero_termo": "R1"},
+                        files={"termo": ("ta.pdf", PDF)}, headers=h)
+
+
+def test_vigencia_retroativa_recua_inicio_renumera_e_desfaz(cliente, admin, equipe):
+    """Cadastra uma vigência anterior ao início: o contrato recua, a original vira a 2ª e o desfazer devolve tudo."""
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)  # previsão e checklist da vigência original (que passa a ser a 2ª)
+    r = _cadastrar_retroativa(cliente, contrato, gestora)
+    assert r.status_code == 200, r.text
+    retroativa = r.json()[0]
+    assert (retroativa["data_inicio"], retroativa["data_fim"], retroativa["sequencia"]) == ("2025-01-01", "2025-12-31", 1)
+    assert retroativa["codigo_documento"] == 24 and retroativa["pode_desfazer"] and not retroativa["reajustada"]
+    detalhe = cliente.get(_url(contrato), headers=gestora).json()
+    assert detalhe["data_inicio"] == "2025-01-01" and [(v["sequencia"], v["inicio"]) for v in detalhe["vigencias"]] == [(1, "2025-01-01"), (2, "2026-01-01")]
+    # O prazo inicial e o máximo continuam contados a partir da vigência original
+    assert detalhe["data_fim_prazo_inicial"] == "2026-12-31" and detalhe["data_limite_maxima"] == "2027-12-31"
+    assert cliente.get(_url(contrato, "/prorrogacao"), headers=gestora).json()["meses_disponiveis"] == 12
+    # Datas iniciais travadas depois da retroativa
+    assert cliente.get(_url(contrato, "/prorrogacao"), headers=gestora).json()["vigencia_atual_inicio"] == "2026-01-01"
+
+    # Gera as competências: a retroativa tem as suas (2025) além das de 2026
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    assert cliente.get(_url(contrato, "/competencias/identificador/2025-06"), headers=gestora).status_code == 200
+
+    desfeita = cliente.delete(_url(contrato, f"/vigencias-retroativas/{retroativa['id']}"), headers=gestora)
+    assert desfeita.status_code == 200, desfeita.text
+    assert desfeita.json() == []
+    detalhe = cliente.get(_url(contrato), headers=gestora).json()
+    assert detalhe["data_inicio"] == "2026-01-01" and [v["sequencia"] for v in detalhe["vigencias"]] == [1]
+    assert cliente.get(_url(contrato, "/competencias/identificador/2025-06"), headers=gestora).status_code == 404
+
+
+def test_reajuste_retroativo_deflaciona_com_piso_e_exige_ordem(cliente, admin, equipe):
+    """Reajuste retroativo: preço ÷ (1 + índice), referencial é piso; só nas retroativas e antes das medições."""
+    contrato, gestora, _ = equipe
+    _preparar_execucao(cliente, contrato, gestora)
+    _cadastrar_retroativa(cliente, contrato, gestora)
+    painel = cliente.get(_url(contrato, "/reajustes"), headers=gestora).json()
+    assert [v["sequencia"] for v in painel["vigencias_disponiveis"]] == [1, 2]  # todas as vigências aceitam o reajuste comum
+    assert [v["sequencia"] for v in painel["vigencias_retroativas_disponiveis"]] == [1]
+    # O comum não aceita a vigência original como retroativa (a retroativa, sim, aceita o comum)
+    assert cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 2, "retroativo": True}, headers=gestora).status_code == 400
+
+    aberto = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "retroativo": True}, headers=gestora)
+    assert aberto.status_code == 201, aberto.text
+    reajuste = aberto.json()["em_andamento"]
+    assert reajuste["retroativo"] and reajuste["data_efeito"] == "2026-01-01"
+    url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    primeiro, segundo = reajuste["itens"]
+    assert primeiro["valor_unitario_atual"] == "1000.0000"
+    itens = [{"item_id": primeiro["item_id"], "indice_percentual": "5", "valor_referencial": "980"}, {"item_id": segundo["item_id"], "indice_percentual": "5"}]
+    reajuste = cliente.put(f"{url}/memoria", json={"itens": itens}, headers=gestora).json()["em_andamento"]
+    # 1000 ÷ 1,05 = 952,3810, mas o referencial de 980 é o piso; o outro item não tem piso
+    assert reajuste["itens"][0]["valor_unitario_reajustado"] == "980.0000"
+    assert reajuste["itens"][1]["valor_unitario_reajustado"] == str((Decimal(segundo["valor_unitario_atual"]) / Decimal("1.05")).quantize(Decimal("0.0001")))
+    assert reajuste["competencias_com_diferenca"] == 0 and Decimal(reajuste["valor_global_reajustado"]) < Decimal(reajuste["valor_global_atual"])
+    cliente.post(f"{url}/evidencia", files={"arquivo": ("ev.pdf", PDF)}, headers=gestora)
+    cliente.post(f"{url}/memoria/arquivos", headers=gestora)
+    concluido = cliente.post(f"{url}/concluir", files={"arquivo": ("ap.pdf", PDF)}, headers=gestora)
+    assert concluido.status_code == 200, concluido.text
+    assert concluido.json()["vigencias_retroativas_disponiveis"] == []
+
+    # O cadastro (preço atual) não muda; a vigência retroativa passa a ter o preço deflacionado
+    detalhe = cliente.get(_url(contrato), headers=gestora).json()
+    assert detalhe["itens"][0]["valor_unitario"] == "1000.0000"
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
+    assert cliente.get(_url(contrato, "/competencias/identificador/2025-06"), headers=gestora).json()["itens"][0]["valor_unitario"] == "980.0000"
+    assert cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=gestora).json()["itens"][0]["valor_unitario"] == "1000.0000"

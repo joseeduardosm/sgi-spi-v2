@@ -39,57 +39,47 @@ O projeto roda no próprio diretório **`/home/administrador/projeto`**. Não ex
 
 ## Requisitos
 
-Ubuntu 24.04 com:
-- Python 3.12 + `python3-venv`;
-- Node.js 22 + npm;
-- PostgreSQL 16 (banco e usuário próprios, informados em `URL_BANCO_DADOS`);
-- Nginx;
-- sudo.
+Ubuntu 24.04 com acesso à internet (pacotes do sistema, NodeSource, PyPI e npm) e sudo. **O resto o `scripts/instalar.sh` instala**: Python 3 + venv, Node.js 22, PostgreSQL, Nginx, curl, OpenSSL e OpenSSH. Numa máquina sem internet, prepare esses pacotes à mão e use `--sem-pacotes`.
 
-## Instalação no servidor
+## Instalação no servidor (do zero ou para atualizar)
 
-1. Configure o backend:
-
-   ```bash
-   cp backend/.env.example backend/.env
-   chmod 600 backend/.env
-   python3 -c "import secrets; print(secrets.token_urlsafe(48))"  # → CHAVE_SECRETA_JWT
-   python3 -m venv backend/.venv && backend/.venv/bin/pip install bcrypt cryptography
-   backend/.venv/bin/python scripts/gerar-hash-senha.py           # → HASH_SENHA_ADMIN (entre aspas simples)
-   backend/.venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # → CHAVE_CIFRA_LDAP
-   # URL_BANCO_DADOS=postgresql+psycopg://usuario:senha@localhost:5432/banco
-   ```
-
-2. Instale o certificado HTTPS de `portal.spi.sp.gov.br`, emitido pela SPI-AD01-CA:
-
-   - **Chave privada:** `/etc/ssl/private/portal.spi.sp.gov.br.key`, só para o root (`chmod 600`). Ela é gerada no próprio servidor junto com o pedido (`openssl req -new … -keyout`); o `.csr` vai à equipe de servidores.
-   - **Certificado com a cadeia:** `/etc/ssl/certs/portal.spi.sp.gov.br.fullchain.crt`, com o certificado do site seguido do certificado da CA, com fim de linha Unix:
+1. Copie o projeto para a pasta do usuário que vai rodar o sistema (ex.: `/home/administrador/projeto`).
+2. (Opcional) Instale o certificado HTTPS do domínio. Sem ele, o script gera um **autoassinado** (o navegador avisa até trocar pelo oficial nos mesmos caminhos):
+   - **Chave privada:** `/etc/ssl/private/DOMINIO.key`, só para o root (`chmod 600`), gerada no próprio servidor com o pedido (`openssl req -new … -keyout`); o `.csr` vai à equipe de servidores (SPI-AD01-CA).
+   - **Certificado com a cadeia:** `/etc/ssl/certs/DOMINIO.fullchain.crt`, o do site seguido do da CA, com fim de linha Unix:
 
      ```bash
-     { tr -d '\r' < portal.spi.sp.gov.br.crt; echo; tr -d '\r' < SPI-AD01-CA.crt; } | sed '/^$/d' | sudo tee /etc/ssl/certs/portal.spi.sp.gov.br.fullchain.crt >/dev/null
+     { tr -d '\r' < DOMINIO.crt; echo; tr -d '\r' < SPI-AD01-CA.crt; } | sed '/^$/d' | sudo tee /etc/ssl/certs/DOMINIO.fullchain.crt >/dev/null
      ```
 
-   Outro nome: `--dominio NOME`, com os arquivos `NOME.fullchain.crt` e `NOME.key`.
-
-3. Execute a instalação (idempotente):
+3. Rode a instalação (idempotente) a partir do usuário do projeto:
 
    ```bash
-   sudo scripts/instalar.sh                        # porta 80 (interrompe se já houver site padrão nela)
-   sudo scripts/instalar.sh --substituir-default   # porta 80, desativa o site padrão atual (fica em sites-available)
-   sudo scripts/instalar.sh --porta 8081           # outra porta
+   sudo scripts/instalar.sh --dominio portal.spi.sp.gov.br                                  # produção
+   sudo scripts/instalar.sh --dominio homologacao.spi.sp.gov.br --homologacao --sem-testes  # homologação
    ```
 
-   O script:
-   - libera apenas a travessia (`chmod o+x`) de `/home/administrador` e `projeto`, para o Nginx ler o build do Angular;
-   - cria o virtualenv, instala as dependências, roda os testes, aplica as migrações do banco e compila o Angular (`scripts/deploy.sh`);
-   - encerra processos manuais (uvicorn na 8000, `ng serve` na 4200), instala e inicia `sgi-spi-api.service`;
-   - gera `/etc/nginx/sites-available/sgi-spi` a partir de `nginx/sgi-spi.conf`, ativa o site, valida (`nginx -t`) e recarrega o Nginx:
-     - **HTTPS (443)** em `portal.spi.sp.gov.br`;
-     - qualquer outro acesso (HTTP, pelo IP ou por outro nome) redireciona para `https://portal.spi.sp.gov.br`, com o mesmo caminho;
-     - só `127.0.0.1`/`localhost`, no próprio servidor, continua em HTTP (verificações);
-   - verifica `GET /api/saude` pelo Nginx, em HTTP e em HTTPS.
+   Opções: `--homologacao` (envios simulados, ver abaixo), `--sem-testes` (build sem rodar os testes), `--sem-pacotes`, `--porta N` (HTTP; o HTTPS fica na 443) e `--substituir-default` (desativa outro site padrão do Nginx na porta; o `default` do Ubuntu sai sozinho).
 
-4. Acesse `https://portal.spi.sp.gov.br/` e entre com o administrador configurado.
+   O script:
+   - instala os pacotes do sistema e o Node 22, e põe o servidor no fuso de São Paulo;
+   - cria o virtualenv e instala as dependências do backend;
+   - **na primeira vez** (sem `backend/.env`): cria o usuário e o banco `sgi_spi` no PostgreSQL com senha aleatória, **pede a senha do SuperRoot** (login `root`; só o hash bcrypt é gravado) e gera o `backend/.env` com a chave do JWT, a chave de cifra do LDAP/SMTP, as chaves VAPID e `URL_PUBLICA=https://DOMINIO`. Um `.env` que já existe nunca é sobrescrito;
+   - cria a pasta dos anexos (`dados/anexos`) e a dos backups (`dados/backups`), libera só a travessia (`chmod o+x`) dos diretórios até o projeto para o Nginx e grava `/etc/sudoers.d/sgi-spi-restart` (o usuário reinicia a API sem senha, só esse comando);
+   - roda `scripts/deploy.sh` (testes, `alembic upgrade head` e build do Angular);
+   - instala e inicia `sgi-spi-api.service` e os timers das notificações e do SIGEO (remove as unidades antigas "mensageria");
+   - gera o site do Nginx a partir de `nginx/sgi-spi.conf` (HTTPS em DOMINIO; os demais acessos redirecionam para ele) e confere `GET /api/saude` em HTTP e HTTPS.
+
+4. Acesse `https://DOMINIO/` e entre com `root` e a senha informada.
+
+### Homologação (`--homologacao`)
+
+Grava `MODO_HOMOLOGACAO=true` no `.env` (e exige um `--dominio` diferente do de produção):
+- **e-mails e pop-ups do navegador são simulados**: nada sai do servidor, mas o envio fica registrado como feito, com a nota "Simulado (homologação)";
+- a conferência do SIGEO, a sincronização com o AD e o parabéns de aniversário não rodam;
+- a tela mostra a faixa **HOMOLOGAÇÃO** no topo.
+
+Ao restaurar lá um backup de produção, use no `.env` a mesma `CHAVE_CIFRA_LDAP` de produção (senão as senhas do LDAP e do SMTP não abrem). Abrir chamado no GLPI e publicar no BookStack **não** são simulados: confira essas integrações antes de testar.
 
 ## Atualização (deploy)
 

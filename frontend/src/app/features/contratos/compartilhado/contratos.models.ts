@@ -79,6 +79,8 @@ export interface Preposto {
   email: string;
   cargo: string;
   ativo: boolean;
+  /** Representante legal da empresa: signatário do termo aditivo da prorrogação. */
+  representante_legal: boolean;
 }
 
 /** Empresa completa, com os prepostos detalhados. */
@@ -211,6 +213,18 @@ export interface DetalheContrato extends ResumoContrato {
   sei_execucao_link: string;
   /** Processo financeiro (opcional): é o COD_PROCESSO das OBs no SIGEO (conferência diária da etapa da OB). */
   processo_financeiro: string;
+  /** Último pedido do processo ao DOF: quando e quem. */
+  processo_financeiro_pedido_em: string | null;
+  processo_financeiro_pedido_por: string | null;
+  /** Origem da contratação (vazio = não informada) e garantia contratual: alimentam as declarações e as planilhas de garantia da prorrogação. */
+  modalidade_contratacao: ModalidadeContratacao;
+  exige_garantia: boolean;
+  garantia_modalidade: ModalidadeGarantia;
+  garantia_percentual: Decimal | null;
+  garantia_valor: Decimal | null;
+  garantia_emissor: string;
+  garantia_cnpj_emissor: string;
+  garantia_apolice: string;
   situacao_forcada: Situacao | null;
   vigencias: Vigencia[];
   marcos: Marco[];
@@ -248,6 +262,9 @@ export interface GravacaoItem {
 export type GravacaoEquipe = Partial<Record<Papel, number | null>>;
 
 /** Corpo do cadastro/edição do contrato. */
+export type ModalidadeContratacao = '' | 'licitacao' | 'dispensa' | 'inexigibilidade';
+export type ModalidadeGarantia = '' | 'caucao_dinheiro' | 'titulos_divida_publica' | 'fianca_bancaria' | 'seguro_garantia' | 'titulo_capitalizacao';
+
 export interface GravacaoContrato {
   numero: string;
   empresa_id: string;
@@ -269,6 +286,14 @@ export interface GravacaoContrato {
   sei_execucao_numero: string;
   sei_execucao_link: string;
   processo_financeiro: string;
+  modalidade_contratacao: ModalidadeContratacao;
+  exige_garantia: boolean;
+  garantia_modalidade: ModalidadeGarantia;
+  garantia_percentual: number | string | null;
+  garantia_valor: number | string | null;
+  garantia_emissor: string;
+  garantia_cnpj_emissor: string;
+  garantia_apolice: string;
   situacao_forcada: Situacao | null;
   equipe: GravacaoEquipe;
   itens: GravacaoItem[];
@@ -479,6 +504,12 @@ export interface Formulario {
 /** Máscara da portaria usada quando o contrato tem (ou não) portaria anterior. */
 export type VarianteMascara = 'com_anterior' | 'sem_anterior';
 
+/** Documento da prorrogação que uma máscara do tipo `prorrogacao` escreve. */
+export type VarianteProrrogacao = 'despacho_instrucao' | 'declaracao_atendimento_licitacao' | 'declaracao_atendimento_direta' | 'minuta_aditivo' | 'termo_ciencia' | 'declaracao_tce' | 'despacho_autorizacao';
+
+/** Tipos de modelo global. */
+export type TipoModelo = 'checklist' | 'formulario' | 'portaria' | 'despacho' | 'email_cadin' | 'email_ob' | 'prorrogacao' | 'checklist_prorrogacao';
+
 /** Placeholder permitido nas máscaras de portaria. */
 export interface PlaceholderPortaria {
   nome: string;
@@ -489,9 +520,9 @@ export interface PlaceholderPortaria {
 /** Modelo global de checklist, formulário ou máscara de portaria (conteúdo conforme o tipo). */
 export interface Modelo {
   id: string;
-  tipo: 'checklist' | 'formulario' | 'portaria' | 'despacho' | 'email_cadin' | 'email_ob';
+  tipo: TipoModelo;
   nome: string;
-  conteudo: { html?: string; assunto?: string; variante?: VarianteMascara; itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] } & Partial<DefinicaoFormulario>;
+  conteudo: { html?: string; assunto?: string; variante?: VarianteMascara | VarianteProrrogacao; itens?: { nome: string; observacao: string; obrigatorio?: boolean; com_validade?: boolean; vale_outros_contratos?: boolean; pedir_envio?: boolean }[] } & Partial<DefinicaoFormulario>;
   ativo: boolean;
   atualizado_em: string;
 }
@@ -730,6 +761,10 @@ export interface DocumentoMensal {
   /** Documento igual, ainda válido, de outro contrato da mesma empresa (só com o checklist aberto e o documento sem anexo). */
   sugestao_outro_contrato?: SugestaoOutroContrato | null;
   arquivo: Arquivo | null;
+  /** Incluído durante o processo (fora do checklist do contrato): nunca obrigatório e pode ser excluído com a etapa aberta. */
+  incluido_no_processo?: boolean;
+  incluido_por_nome?: string | null;
+  incluido_em?: string | null;
 }
 
 /** Documento ainda válido de outro contrato da mesma empresa que pode ser trazido para a competência. */
@@ -831,6 +866,12 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   /** Etapas que aceitam gravação agora (depois da NF: retenção, CADIN e checklist em paralelo). */
   etapas_abertas: Etapa[];
   etapas_concluidas: Etapa[];
+  /** Lançada depois de paga (carga histórica): origem dos dados e itens medidos acima do limite mensal. */
+  carga_historica: { em: string; observacao: string; excedentes: string[] } | null;
+  /** Competência anterior ao corte de alertas: caminho curto (medição, avaliação se houver, nota fiscal e OB), sem e-mails nem avisos. */
+  retroativa: boolean;
+  /** Espera a OB e o contrato tem Processo Financeiro: a tela oferece "Buscar a OB no SIGEO". */
+  pode_buscar_ob_sigeo: boolean;
   /** Notas fiscais juntadas na etapa 3 (uma ou mais), em ordem. */
   notas_fiscais: NotaFiscal[];
   nf_recebida_em: string | null;
@@ -880,7 +921,18 @@ export interface CamposParecer {
   parecer: string;
 }
 
-/** Rascunho da prorrogação e os dados para montar a tela. */
+/** O que a equipe grava depois da assinatura da prorrogação. */
+export interface GravacaoPosAssinatura {
+  pncp_publicado_em: string | null;
+  pncp_numero: string;
+  doe_publicado_em: string | null;
+  garantia_comprovada_em: string | null;
+  garantia_enviada_dof_em: string | null;
+  contratos_gov_atualizado_em: string | null;
+  dados_garantia: Record<string, string>;
+}
+
+/** Rascunho da prorrogação e os dados para montar a tela (os campos do parecer vêm das telas antigas; a tela nova não os usa). */
 export interface ProcessoProrrogacao extends CamposParecer {
   id: string | null;
   vigencia_atual_inicio: string;
@@ -898,6 +950,40 @@ export interface ProcessoProrrogacao extends CamposParecer {
   exige_checklist_ativo: boolean;
   pode_editar: boolean;
   integra_equipe: boolean;
+  /** Memória de cálculo da nova vigência (nula sem prazo salvo). */
+  memoria: MemoriaProrrogacao | null;
+  /** Versões geradas da memória (PDF e XLSX). */
+  memorias: { versao: number; criada_em: string; pdf: Arquivo; xlsx: Arquivo }[];
+  /** A última versão gerada corresponde aos dados de agora (exigido para registrar). */
+  memoria_atualizada: boolean;
+  /** Checklist da prorrogação: o modelo ativo como ponto de partida, mais os documentos incluídos. */
+  checklist: DocumentoProrrogacao[];
+  obrigatorios_pendentes: number;
+}
+
+/** Memória de cálculo da prorrogação: meses, totais por ano e da vigência, e as duas opções dos meses quebrados. */
+export interface MemoriaProrrogacao {
+  meses: { competencia: string; inicio: string; fim: string; quebrado: boolean; continuos: Decimal; sob_demanda: Decimal; total: Decimal }[];
+  totais_por_ano: { ano: number; total: Decimal }[];
+  total: Decimal;
+  meses_quebrados: { competencia: string; inicio: string; fim: string; dias: number; pro_rata: Decimal; integral: Decimal }[];
+  total_pro_rata: Decimal;
+  total_integral: Decimal;
+  calculo_mes_quebrado: CalculoMesQuebrado | null;
+  precisa_escolher: boolean;
+}
+
+/** Documento do checklist da prorrogação. */
+export interface DocumentoProrrogacao {
+  id: string;
+  ordem: number;
+  nome: string;
+  observacao: string;
+  obrigatorio: boolean;
+  arquivo: Arquivo | null;
+  incluido_no_processo: boolean;
+  incluido_por_nome?: string | null;
+  incluido_em?: string | null;
 }
 
 /** Prorrogação registrada (histórico). */
@@ -910,9 +996,41 @@ export interface Prorrogacao {
   data_inicio: string;
   data_fim: string;
   codigo_documento: number | null;
+  /** No registro, o checklist do Parecer Referencial tinha item não atendido. */
+  precisa_analise_juridica: boolean;
+  /** Último dia para divulgar no PNCP (assinatura + 20 dias úteis na licitação, 10 na contratação direta). */
+  pncp_prazo_ate: string | null;
+  pncp_publicado_em: string | null;
+  pncp_numero: string;
+  situacao_pncp: 'sem_prazo' | 'publicado' | 'no_prazo' | 'vencido';
+  dias_uteis_pncp: number | null;
+  doe_publicado_em: string | null;
+  exige_garantia: boolean;
+  garantia_comprovada_em: string | null;
+  garantia_enviada_dof_em: string | null;
+  garantia_pendente: boolean;
+  dados_garantia: Record<string, string>;
+  contratos_gov_atualizado_em: string | null;
   termo: Arquivo | null;
   relatorio: Arquivo | null;
   pode_desfazer: boolean;
+}
+
+/** Vigência retroativa cadastrada (anterior ao início do contrato). */
+export interface VigenciaRetroativa {
+  id: string;
+  sequencia: number;
+  meses: number;
+  assinada_em: string;
+  numero_termo: string;
+  data_inicio: string;
+  data_fim: string;
+  codigo_documento: number | null;
+  termo: Arquivo | null;
+  /** Já tem reajuste retroativo concluído. */
+  reajustada: boolean;
+  pode_desfazer: boolean;
+  motivo_bloqueio: string;
 }
 
 /** Item no reajuste: preço atual, índice e preço novo. */
@@ -929,10 +1047,74 @@ export interface ItemReajuste {
   subtotal_reajustado: Decimal;
 }
 
+/** Como calcular os meses quebrados pela data de efeito: uma escolha para todos os meses e itens do reajuste. */
+export type CalculoMesQuebrado = 'pro_rata' | 'integral';
+
+/** Um período do item no mês quebrado (dias antes do efeito sem reajuste, ou a partir dele reajustados). */
+export interface TrechoMesQuebrado {
+  inicio: string;
+  fim: string;
+  /** Dias comerciais (30/360). */
+  dias: number;
+  reajustado: boolean;
+  quantidade: Decimal;
+  valor_unitario: Decimal;
+  valor: Decimal;
+}
+
+/** Um item do mês quebrado numa das opções. */
+export interface ItemMesQuebrado {
+  ordem: number;
+  descricao: string;
+  quantidade_medida: Decimal;
+  valor_pago: Decimal;
+  trechos: TrechoMesQuebrado[];
+  devido: Decimal;
+  em_haver: Decimal;
+}
+
+/** Uma opção (pro rata ou integral) de um mês quebrado, com os totais do mês. */
+export interface OpcaoMesQuebrado {
+  itens: ItemMesQuebrado[];
+  valor_pago: Decimal;
+  devido: Decimal;
+  em_haver: Decimal;
+}
+
+/** Mês medido que contém a data de efeito, com as duas opções calculadas. */
+export interface MesQuebradoReajuste {
+  competencia: string;
+  rotulo: string;
+  periodo_inicio: string;
+  periodo_fim: string;
+  opcoes: Record<CalculoMesQuebrado, OpcaoMesQuebrado>;
+}
+
 /** Reajuste em elaboração ou encerrado. */
+/** Resumo da memória mês a mês: meses medidos (OB paga ou aguardando) e o que ficou em haver. */
+export interface ResumoMesesReajuste {
+  /** Meses medidos a partir da referência; `paga` = OB concluída, senão medido aguardando a OB. */
+  meses: { competencia: string; identificador: string; paga: boolean; valor_pago: Decimal; valor_reajustado: Decimal; em_haver: Decimal }[];
+  /** Soma do em haver de todos os meses medidos (= diferença retroativa). */
+  total_em_haver: Decimal;
+  /** Meses quebrados pela data de efeito, com as duas opções de cálculo. */
+  meses_quebrados: MesQuebradoReajuste[];
+  /** Diferença retroativa inteira em cada opção. */
+  diferenca_pro_rata: Decimal;
+  diferenca_integral: Decimal;
+  /** Escolha gravada; nula = ainda não escolhida. */
+  calculo_mes_quebrado: CalculoMesQuebrado | null;
+  /** Há mês quebrado sem escolha: a memória (PDF/XLSX) só é gerada depois dela. */
+  precisa_escolher: boolean;
+}
+
 export interface Reajuste {
   id: string;
+  /** Só em elaboração: a memória mês a mês resumida (os arquivos PDF/XLSX trazem o detalhe item a item). */
+  resumo_meses: ResumoMesesReajuste | null;
   situacao: 'rascunho' | 'concluido' | 'cancelado';
+  /** Reajuste retroativo (volta no tempo): o preço novo é o da vigência retroativa e o referencial é piso. */
+  retroativo: boolean;
   sequencia_vigencia: number;
   vigencia_inicio: string;
   vigencia_fim: string;
@@ -972,6 +1154,8 @@ export interface VigenciaDisponivel {
 export interface PainelReajuste {
   em_andamento: Reajuste | null;
   vigencias_disponiveis: VigenciaDisponivel[];
+  /** Vigências retroativas que aceitam o reajuste retroativo agora (uma por vez, da mais recente para trás). */
+  vigencias_retroativas_disponiveis: VigenciaDisponivel[];
   historico: Reajuste[];
   pode_editar: boolean;
 }
@@ -1538,4 +1722,54 @@ export interface ContratoOrcamento {
 export interface OrcamentoCarteira extends OrcamentoResumo {
   precisam_reforco: ContratoOrcamento[];
   com_sobra: ContratoOrcamento[];
+}
+
+/** Valores dos parâmetros de Contratos (GravacaoParametrosContratos na API); `padroes` e a auditoria vêm só na leitura. */
+export interface ValoresParametrosContratos {
+  corte_alertas_a_partir_de: string;
+  corte_marcadores_a_partir_de: string;
+  dias_pagamento_vencendo: number;
+  dias_atraso: number;
+  dias_vigencia_a_vencer: number;
+  dias_vigencia_atencao: number;
+  dias_sem_prorrogacao_alto: number;
+  dias_documento_alto: number;
+  dias_documento_medio: number;
+  dias_fim_vigencia_alto: number;
+  dias_fim_vigencia_medio: number;
+  vigencia_maxima_padrao_meses: number;
+  maximo_meses_vigencia_retroativa: number;
+  limite_aditamento_sem_autorizacao: string | number;
+  limite_acerto_centavos: string | number;
+  maximo_notas_fiscais: number;
+  prazo_pagamento_padrao_dias: number;
+  prazo_nota_fiscal_horas: number;
+  xml_tamanho_maximo_mb: number;
+  planilha_tamanho_maximo_mb: number;
+  maximo_anexos_ocorrencia: number;
+  anexos_email_maximo_mb: number;
+  ssgc_nome: string;
+  ssgc_cpf: string;
+  secretario_nome: string;
+  secretario_cpf: string;
+  autoridade_competente_nome: string;
+  autoridade_competente_cargo: string;
+  pncp_dias_uteis_licitacao: number;
+  pncp_dias_uteis_direta: number;
+  aviso_pncp_dias_uteis: number;
+  parecer_referencial_validade_dias: number;
+  parecer_referencial_vigencia_ate: string;
+}
+
+/** Leitura dos parâmetros: os valores, quem alterou por último e os valores de fábrica ("Restaurar padrão"). */
+export interface ParametrosContratos extends ValoresParametrosContratos {
+  atualizado_por_nome: string | null;
+  atualizado_em: string | null;
+  padroes: ValoresParametrosContratos;
+}
+
+/** Resultado da busca da OB de uma competência no SIGEO. */
+export interface ResultadoBuscaObSigeo {
+  concluida: boolean;
+  mensagem: string;
 }

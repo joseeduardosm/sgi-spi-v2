@@ -25,7 +25,7 @@ from app.models.contratos import Competencia, Contrato, OcorrenciaDiario
 from app.models.usuario import Usuario
 from app.services import modelo_email, servico_anexos, servico_smtp
 from app.services.cliente_smtp import AnexoEmail, Mensagem, ResultadoSmtp
-from app.services.contratos import servico_diario
+from app.services.contratos import servico_diario, servico_parametros
 from app.services.contratos.documentos_execucao import PAPEIS, data_hora, moeda, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_contratos import designacoes_vigentes, exigir_edicao, obter_contrato
@@ -142,6 +142,13 @@ def mensagem_nf(contrato: Contrato, competencia: Competencia) -> tuple[str, str,
     return assunto, texto, html
 
 
+def _retroativa(competencia: Competencia) -> bool:
+    """Competência anterior ao corte de alertas (execução retroativa): não envia e-mail automático de nenhuma etapa."""
+    from app.services.contratos.servico_competencias import anterior_ao_corte
+
+    return anterior_ao_corte(competencia)
+
+
 def notificar_nf(competencia_id: uuid.UUID) -> None:
     """E-mail da NF juntada: Para = todo o Financeiro (DOF), Cc = equipe (segundo plano, sessão própria). O envio é obrigatório."""
     from app.services.contratos.servico_retencao import usuarios_financeiro
@@ -152,6 +159,8 @@ def notificar_nf(competencia_id: uuid.UUID) -> None:
             return
         contrato = obter_contrato(sessao, competencia.contrato_id)
         competencia = next(c for c in contrato.competencias if c.id == competencia_id)
+        if _retroativa(competencia):
+            return
         financeiro = _unicos(u.email for u in usuarios_financeiro(sessao) if u.email)
         assunto, texto, html = mensagem_nf(contrato, competencia)
         if not financeiro:
@@ -368,13 +377,12 @@ def mensagem_ocorrencia(contrato: Contrato, ocorrencia: OcorrenciaDiario) -> tup
     return assunto, "\n".join(linhas_texto), _html(f"Diário de bordo — contrato {contrato.numero}", blocos)
 
 
-# Anexos acima deste total não vão no e-mail (ficam no sistema, e o e-mail avisa)
-LIMITE_ANEXOS_EMAIL = 15 * 1024 * 1024
+# Anexos acima de um total (parâmetro `anexos_email_maximo_mb`, 15 MB de início) não vão no e-mail: ficam no sistema, e o e-mail avisa
 
 
 def anexos_ocorrencia(ocorrencia: OcorrenciaDiario) -> list[AnexoEmail]:
     """Arquivos da ocorrência para o e-mail (vazio se passarem do limite somados ou se algum não for lido)."""
-    if sum(a.anexo.tamanho for a in ocorrencia.anexos) > LIMITE_ANEXOS_EMAIL:
+    if sum(a.anexo.tamanho for a in ocorrencia.anexos) > servico_parametros.valor("anexos_email_maximo_mb") * 1024 * 1024:
         return []
     try:
         return [AnexoEmail(a.anexo.nome_original, servico_anexos.caminho(a.anexo).read_bytes(), a.anexo.tipo_conteudo) for a in ocorrencia.anexos]
@@ -551,6 +559,8 @@ def notificar_medicao(
             return
         contrato = obter_contrato(sessao, competencia.contrato_id)
         competencia = next(c for c in contrato.competencias if c.id == competencia_id)
+        if not reemissao and _retroativa(competencia):
+            return
         # Sem escolha explícita, vale a feita ao concluir a medição (o e-mail pode sair só quando a avaliação terminar)
         if usar_escolha_salva and prepostos_ids is None and competencia.medicao_envio_prepostos is not None:
             prepostos_ids = [uuid.UUID(i) for i in competencia.medicao_envio_prepostos]
@@ -641,6 +651,8 @@ def notificar_avaliacao(competencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID
             return
         contrato = obter_contrato(sessao, competencia.contrato_id)
         competencia = next(c for c in contrato.competencias if c.id == competencia_id)
+        if _retroativa(competencia):
+            return
         avaliacao = competencia.avaliacao
         assunto, texto, html = mensagem_avaliacao(contrato, competencia)
         prepostos = emails_dos_prepostos(contrato, prepostos_ids)
@@ -781,15 +793,24 @@ def mensagem_ob(sessao: Session, contrato: Contrato, competencia: Competencia) -
     return assunto, texto, _html(assunto, [corpo])
 
 
-def notificar_ob(contrato_id: uuid.UUID, competencia_id: uuid.UUID) -> None:
+def notificar_ob(contrato_id: uuid.UUID, competencia_id: uuid.UUID, respeitar_corte: bool = False) -> None:
     """Avisa os prepostos (Para) e a equipe (Cc) de que a competência foi paga e grava o resultado (segundo plano).
 
     Sem máscara ativa, sem prepostos com e-mail ou sem servidor SMTP, grava a falha com a explicação (a OB já está lançada).
+    Com `respeitar_corte` (primeiro envio, não o reenvio manual), competência anterior à data "Desconsiderar alertas a partir de" não envia nada:
+    é execução retroativa, e a explicação fica gravada para quem quiser usar "Reenviar e-mail".
     """
+    from app.services.contratos.servico_competencias import anterior_ao_corte
+
     with FabricaSessao() as sessao:
         contrato = obter_contrato(sessao, contrato_id)
         competencia = next((c for c in contrato.competencias if c.id == competencia_id), None)
         if competencia is None or competencia.ob_enviada_em is None:
+            return
+        if respeitar_corte and anterior_ao_corte(competencia):
+            competencia.email_ob_enviado_em, competencia.email_ob_ok, competencia.email_ob_destinatarios = None, False, []
+            competencia.email_ob_erro = "Competência anterior à data de corte de alertas do contrato: e-mail de pagamento não enviado (use \"Reenviar e-mail\" se quiser avisar)."
+            sessao.commit()
             return
         montado = mensagem_ob(sessao, contrato, competencia)
         prepostos, equipe = emails_dos_prepostos(contrato), emails_da_equipe(sessao, contrato)

@@ -39,7 +39,8 @@
             <div><label for="preposto-email">E-mail</label><input id="preposto-email" name="email" type="email" maxlength="250" [(ngModel)]="preposto.email" /></div>
             <div><label for="preposto-cargo">Cargo</label><input id="preposto-cargo" name="cargo" maxlength="150" [(ngModel)]="preposto.cargo" /></div>
           </div>
-          <div class="linha-caixas"><label><input type="checkbox" name="ativo" [(ngModel)]="preposto.ativo" /> Preposto ativo</label></div>
+          <div class="linha-caixas"><label><input type="checkbox" name="ativo" [(ngModel)]="preposto.ativo" /> Preposto ativo</label>
+            <label><input type="checkbox" name="representante_legal" [(ngModel)]="preposto.representante_legal" /> Representante legal (assina o termo aditivo)</label></div>
           <div class="acoes-formulario">
             <button type="button" class="acao-secundaria" (click)="limparPreposto()">Limpar formulário</button>
             <button type="submit" class="acao-primaria" [disabled]="formPreposto.invalid">{{ prepostoEmEdicao ? 'Salvar alterações do preposto' : 'Salvar preposto' }}</button>

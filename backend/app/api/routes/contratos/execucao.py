@@ -32,6 +32,7 @@ from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
     AlteracaoPedirEnvio,
     DespachoCompetencia,
+    ResultadoBuscaObSigeo,
     GrupoFinanceiro,
     PrepostoDoEmail,
     ItemDespesaVariavel,
@@ -118,8 +119,8 @@ def duplicar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, sessao: 
 
 
 @roteador.post("/checklists/{checklist_id}/ativar", response_model=list[LeituraChecklist], summary="Ativar checklist",
-               description="Desativa as demais versões e aplica esta às competências que ainda não passaram do checklist "
-               "(documentos já anexados com o mesmo nome são mantidos).", responses={**NAO_ENCONTRADO, **ESCRITA})
+               description="Desativa as demais versões. As competências já criadas não mudam: cada uma copia a versão ativa quando chega à etapa do checklist "
+               "(documentos já anexados com o mesmo nome e os incluídos durante o processo são mantidos).", responses={**NAO_ENCONTRADO, **ESCRITA})
 def ativar_checklist(contrato_id: uuid.UUID, checklist_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Ativa a versão e a aplica às competências que ainda não chegaram ao checklist."""
     with traduzir_erros(sessao):
@@ -674,6 +675,33 @@ def reaproveitar_documento(contrato_id: uuid.UUID, competencia_id: uuid.UUID, do
         return _depois(sessao, contrato_id, competencia_id, autor)
 
 
+# Antes de `checklist/{documento_id}`: senão "incluir" seria lido como id do documento
+@roteador.post("/competencias/{competencia_id}/checklist/incluir", response_model=DetalheCompetencia, summary="Incluir documento no checklist da competência",
+               description="`multipart/form-data` (`nome`, `descricao` opcional e `arquivo`, PDF). O checklist do contrato é o ponto de partida: durante a etapa "
+               "do checklist dá para incluir documentos que não estavam nele. O incluído vale só para esta competência, **nunca é obrigatório** (não trava a "
+               "conclusão da etapa), entra no consolidado, pode ser excluído enquanto a etapa estiver aberta e não muda o checklist do contrato. "
+               "`400` se a etapa do checklist não estiver aberta ou sem nome.",
+               responses={**resposta_nao_encontrado("Competência"), **ARQUIVO_RECUSADO, **SEM_VINCULO})
+def incluir_documento_mensal(contrato_id: uuid.UUID, competencia_id: uuid.UUID, nome: str = Form(..., max_length=500), descricao: str = Form("", max_length=1000),
+                             arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Etapa 5: inclui um documento fora do modelo no checklist desta competência."""
+    with traduzir_erros(sessao):
+        competencias.incluir_documento_mensal(sessao, contrato_id, competencia_id, nome, descricao, *arquivo_pdf(arquivo), autor)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.delete("/competencias/{competencia_id}/checklist/{documento_id}", response_model=DetalheCompetencia, summary="Excluir documento incluído no checklist",
+                 description="Só para documento incluído durante o processo (`incluido_no_processo`) e com a etapa do checklist aberta; os documentos do "
+                 "checklist do contrato não saem (`400`). O arquivo é descartado (exclusão lógica).",
+                 responses={**resposta_nao_encontrado("Competência ou documento"), **SEM_VINCULO})
+def excluir_documento_mensal(contrato_id: uuid.UUID, competencia_id: uuid.UUID, documento_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                             autor: Usuario = Depends(pode_modificar)):
+    """Etapa 5: exclui um documento incluído durante o processo."""
+    with traduzir_erros(sessao):
+        competencias.excluir_documento_mensal(sessao, contrato_id, competencia_id, documento_id, autor)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
 @roteador.post("/competencias/{competencia_id}/checklist/{documento_id}", response_model=DetalheCompetencia, summary="Anexar documento do checklist",
                description="`multipart/form-data` (`arquivo`, PDF; `validade`, data, **obrigatória** para documento com validade). Com todos os documentos anexados, a etapa conclui sozinha; com os obrigatórios, use `/checklist/concluir`. "
                "Ao concluir o checklist, os documentos com validade ainda válidos (até o último dia do período) são reaproveitados na competência seguinte.",
@@ -709,8 +737,26 @@ def ordem_bancaria(contrato_id: uuid.UUID, competencia_id: uuid.UUID, tarefas: B
     """Etapa 8: anexa a OB, debita as NEs na ordem escolhida e conclui a competência; o e-mail de pagamento sai em segundo plano."""
     with traduzir_erros(sessao):
         competencias.registrar_ordem_bancaria(sessao, contrato_id, competencia_id, *arquivo_pdf(arquivo), autor)
-        tarefas.add_task(servico_notificacoes.notificar_ob, contrato_id, competencia_id)
+        tarefas.add_task(servico_notificacoes.notificar_ob, contrato_id, competencia_id, True)
         return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/ordem-bancaria/sigeo", response_model=ResultadoBuscaObSigeo, summary="Buscar a OB no SIGEO",
+               description="Procura agora no SIGEO as OBs do Processo Financeiro do contrato cujo texto traz o mês da competência; se a soma for igual ao líquido a pagar, conclui a "
+               "etapa (comprovante em PDF e débito nas NEs). Só com a competência na etapa `ordem_bancaria` e o contrato com Processo Financeiro (`400` nos demais casos). "
+               "Se a OB ainda não saiu, ou não dá para ter certeza, nada é alterado e a resposta traz o motivo: a conferência geral do sistema tenta de novo. Mesma permissão do "
+               "lançamento da OB (quem edita o contrato ou tem a ação \"Lançar ordem bancária\").",
+               responses={**NAO_ENCONTRADA, **INVALIDO, **SEM_VINCULO})
+def buscar_ob_sigeo(contrato_id: uuid.UUID, competencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_lancar_ob)):
+    """Busca a OB da competência no SIGEO; o e-mail de pagamento (se couber) sai pela conferência."""
+    from app.services.contratos import servico_ob_sigeo
+
+    with traduzir_erros(sessao):
+        contrato = obter_contrato(sessao, contrato_id)
+        competencia = next((c for c in contrato.competencias if c.id == competencia_id), None)
+        if competencia is None:
+            raise ErroApi(404, "Competência não encontrada.", "nao_encontrado")
+        return ResultadoBuscaObSigeo(**servico_ob_sigeo.buscar_da_competencia(sessao, contrato, competencia))
 
 
 @roteador.post("/competencias/{competencia_id}/ordem-bancaria/reenviar-email", response_model=DetalheCompetencia, summary="Reenviar o e-mail de pagamento",

@@ -1,0 +1,47 @@
+<p>O <strong>reajuste retroativo</strong> define os <strong>preços de uma vigência retroativa</strong> (veja <em>Vigência retroativa: voltar o contrato no tempo</em>). Enquanto ele não é feito, a vigência retroativa usa os <strong>preços atuais</strong>, o que não corresponde ao que valia na época. A conta é o contrário do reajuste normal: parte dos preços da <strong>vigência seguinte</strong> e <strong>volta pelo índice</strong>.</p>
+<p class="callout info">Exemplos com <strong>dados fictícios</strong> (contrato 900/2026), feitos numa cópia do sistema, nunca em produção.</p>
+
+<h2>Como o preço retroativo é calculado</h2>
+<p><strong>Preço retroativo = preço da vigência seguinte ÷ (1 + índice)</strong>. Exemplo: o item custa R$ 1.050,00 na vigência seguinte, e o reajuste que levou àquele preço foi de 5%. O preço da vigência retroativa é R$ 1.050,00 ÷ 1,05 = <strong>R$ 1.000,00</strong>.</p>
+<ul>
+<li>O <strong>índice</strong> informado é o do reajuste <strong>que levou a esta vigência</strong> (o que passou o preço da época para o da vigência seguinte).</li>
+<li>O <strong>valor referencial</strong> funciona como <strong>piso</strong>: o preço retroativo não fica abaixo dele. (No reajuste normal ele é um <strong>teto</strong>.)</li>
+</ul>
+
+<h2>Regras</h2>
+<ul>
+<li><strong>Uma vigência por vez</strong>, da <strong>mais recente para a mais antiga</strong>.</li>
+<li>Deve ser feito <strong>antes das medições</strong> daquela vigência.</li>
+<li>Uma vigência retroativa também pode receber o <strong>reajuste normal</strong> (a partir de uma data de efeito dentro dela), à parte do reajuste retroativo.</li>
+<li>Cada vigência retroativa é reajustada <strong>uma única vez</strong>.</li>
+</ul>
+
+<h2>Passo 1 – Iniciar</h2>
+<p>Na tela <strong>Reajuste</strong> do contrato, depois do cartão <em>Iniciar reajuste</em>, aparece o cartão <strong>Iniciar reajuste retroativo</strong> (só existe se houver vigência retroativa pendente). Escolha a vigência e clique em <strong>Abrir reajuste retroativo</strong>.</p>
+<p>[[rr01-iniciar-reajuste-retroativo]]</p>
+
+<h2>Passo 2 – Acompanhar a elaboração</h2>
+<p>A tela é igual à do reajuste normal, com títulos próprios: <em>Reajuste retroativo em elaboração</em>, <em>Preços retroativos até</em> (a véspera do início da vigência seguinte), a coluna <em>Preço na vigência seguinte</em> no lugar do valor atual e <em>Preço retroativo</em> no lugar do novo valor.</p>
+<p>[[rr02-reajuste-em-elaboracao]]</p>
+
+<h2>Passo 3 – Evidência e memória de cálculo</h2>
+<p>Anexe o <strong>PDF da evidência do índice</strong>, informe o percentual (use <strong>Aplicar a todos</strong> para o mesmo índice em todos os itens), clique em <strong>Salvar memória</strong> e confira os totais: <em>Base mensal retroativa</em> e <em>Valor global retroativo</em>.</p>
+<p>[[rr03-memoria-de-calculo]]</p>
+<p class="callout">No exemplo, um índice de 5% faz a base mensal ir de R$ 2.000,00 (vigência seguinte) para R$ 1.904,76 na vigência retroativa. O percentual negativo na variação é esperado: o preço <em>diminui</em> ao voltar no tempo.</p>
+
+<h2>Passo 4 – Gerar, apostilar e concluir</h2>
+<p><strong>Gerar e baixar PDF e XLSX</strong> cria a versão da memória. Selecione o <strong>apostilamento assinado</strong> e clique em <strong>Concluir reajuste retroativo</strong>; o botão só é liberado com evidência, memória e apostilamento.</p>
+<p>[[rr04-apostilamento-e-conclusao]]</p>
+<p>Uma janela de confirmação pede o último &quot;de acordo&quot; antes de aplicar.</p>
+<p>[[rr05-confirmar-conclusao]]</p>
+
+<h2>Passo 5 – Conferir no histórico</h2>
+<p>O reajuste retroativo entra no <strong>Histórico</strong> com a vigência marcada como <em>(retroativo)</em>, a base e o valor global antes e depois e os arquivos (memória e apostilamento).</p>
+<p>[[rr06-historico]]</p>
+
+<h2>Situações comuns</h2>
+<ul>
+<li><strong>Já medi uma competência da vigência retroativa.</strong> Por isso é importante fazer o reajuste <em>antes</em> das medições: o sistema <strong>recusa</strong> o reajuste retroativo com a mensagem <em>&quot;A vigência retroativa já tem competência medida: o reajuste retroativo precisa vir antes das medições&quot;</em>. Também é preciso respeitar a ordem: se houver uma vigência retroativa mais recente sem reajuste, ela vem primeiro.</li>
+<li><strong>O cartão &quot;Iniciar reajuste retroativo&quot; não aparece.</strong> Não há vigência retroativa cadastrada, ou todas já foram reajustadas.</li>
+<li><strong>Errei o índice.</strong> Antes de concluir, altere o percentual, salve a memória e gere de novo (cada geração cria uma versão nova), ou use <strong>Cancelar reajuste</strong> para recomeçar. Depois de concluído, não há como refazer.</li>
+</ul>

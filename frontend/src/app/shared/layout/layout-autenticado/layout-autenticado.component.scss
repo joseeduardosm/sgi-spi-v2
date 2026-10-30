@@ -341,6 +341,22 @@
     text-align: center;
   }
 }
+// Faixa do ambiente de homologação (sempre visível, em tom de alerta, para ninguém confundir com produção)
+.faixa-homologacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+  padding: 6px 18px;
+  background: var(--spi-alerta-suave);
+  border-bottom: 1px solid var(--spi-alerta);
+  color: var(--spi-texto);
+  font-size: 12px;
+
+  strong { color: var(--spi-alerta); font-weight: 700; letter-spacing: 0.06em; }
+}
+
 // Faixa fixa no topo enquanto o SuperRoot personifica outro usuário
 .faixa-personificacao {
   display: flex;

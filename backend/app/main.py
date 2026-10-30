@@ -49,16 +49,15 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     # Garante que a conta administrativa (root) exista e esteja com a senha do .env
     with FabricaSessao() as sessao:
         garantir_conta_admin(sessao)
-    # Inicia a sincronização periódica dos usuários do LDAP em segundo plano
-    agendador = AgendadorSincronizacaoLdap()
-    agendador.iniciar()
-    # Parabéns automático de aniversário (mensagem interna + e-mail, uma vez por dia)
-    agendador_parabens = AgendadorParabens()
-    agendador_parabens.iniciar()
+    # Inicia a sincronização periódica dos usuários do LDAP e o parabéns de aniversário (mensagem interna + e-mail, uma vez
+    # por dia) em segundo plano. Em homologação nenhum dos dois roda: nada toca o AD nem manda mensagem às pessoas.
+    agendadores = [] if config.modo_homologacao else [AgendadorSincronizacaoLdap(), AgendadorParabens()]
+    for agendador in agendadores:
+        agendador.iniciar()
     yield
     # Encerramento: para as rotinas em segundo plano
-    agendador.parar()
-    agendador_parabens.parar()
+    for agendador in agendadores:
+        agendador.parar()
 
 
 # Fuso do processo = São Paulo: o servidor roda em UTC e qualquer `datetime.now()` ou data/hora gravada por bibliotecas (ex.: metadados dos PDFs)

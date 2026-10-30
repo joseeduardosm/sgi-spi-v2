@@ -7,7 +7,6 @@
         <div class="acoes-formulario">
           @if (p.id) { <button type="button" class="acao-perigo" (click)="descartar()">Descartar rascunho</button> }
           <button type="button" class="acao-secundaria" (click)="salvar()">Salvar rascunho</button>
-          @if (p.relatorio) { <button type="button" class="acao-secundaria" (click)="baixar(p.relatorio.anexo_id)">Baixar parecer</button> }
           <button type="button" class="acao-primaria" [disabled]="!meses || !assinadaEm || !termo || p.exige_checklist_ativo" (click)="registrar()">Registrar prorrogação</button>
         </div>
       }
@@ -28,7 +27,7 @@
     </section>
 
     <section class="cartao-dados" aria-labelledby="titulo-prazo">
-      <header><div><h2 id="titulo-prazo">1. Prazo</h2><small>Restam {{ p.meses_disponiveis }} mês(es) até a vigência máxima.</small></div></header>
+      <header><div><h2 id="titulo-prazo">1. Meses</h2><small>Restam {{ p.meses_disponiveis }} mês(es) até a vigência máxima. A nova vigência começa no dia seguinte ao fim da atual.</small></div></header>
       <div class="corpo grade-formulario tres-colunas">
         <div><label for="prorrogacao-meses">Prazo da prorrogação (meses) *</label>
           <input id="prorrogacao-meses" type="number" min="1" [max]="p.meses_disponiveis" [disabled]="!p.pode_editar" [(ngModel)]="meses" /></div>
@@ -37,10 +36,52 @@
       </div>
     </section>
 
+    <!-- Meses quebrados: a nova vigência começa ou termina no meio do mês; uma escolha (pro rata ou integral) para todos, como no reajuste -->
+    @if (p.memoria?.meses_quebrados?.length) {
+      @let m = p.memoria!;
+      <section class="cartao-dados" aria-labelledby="titulo-quebrados">
+        <header><div><h2 id="titulo-quebrados">{{ numero(p, 'quebrados') }}. Meses quebrados</h2>
+          <small>A escolha vale para todos os meses quebrados e todos os itens contínuos, e muda só a memória de cálculo e o valor da prorrogação (a execução segue o faturamento de cada item).</small></div></header>
+        <div class="corpo">
+          @if (m.precisa_escolher) { <p class="aviso-bloco informativo">Escolha como calcular: a escolha já gera o PDF e o XLSX da memória de cálculo.</p> }
+          @else { <p class="dica-formulario">Cálculo escolhido: <strong>{{ rotulosCalculo[m.calculo_mes_quebrado!] }}</strong>. Escolher a outra opção gera uma nova versão da memória.</p> }
+          <div class="opcoes-mes-quebrado">
+            @for (op of calculos; track op) {
+              <section class="opcao-mes-quebrado" [class.escolhida]="m.calculo_mes_quebrado === op" [attr.aria-labelledby]="'opcao-pr-' + op">
+                <header>
+                  <h3 [id]="'opcao-pr-' + op">{{ rotulosCalculo[op] }}</h3>
+                  @if (m.calculo_mes_quebrado === op) { <span class="selo-situacao">Escolhida</span> }
+                </header>
+                <small class="dica-formulario">{{ op === 'pro_rata' ? 'Cada mês quebrado conta só os dias da nova vigência (30/360).' : 'Cada mês quebrado conta o mês inteiro.' }}</small>
+                <div class="tabela-gestao-envoltorio">
+                  <table class="tabela-gestao">
+                    <thead><tr><th>Mês</th><th>Período da nova vigência</th><th class="num">Itens contínuos</th></tr></thead>
+                    <tbody>
+                      @for (q of m.meses_quebrados; track q.competencia) {
+                        <tr><td>{{ q.competencia }}</td><td>{{ q.inicio | dataBr }} a {{ q.fim | dataBr }} <small>({{ q.dias }} dia(s))</small></td>
+                          <td class="num">{{ (op === 'pro_rata' ? q.pro_rata : q.integral) | moeda }}</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                <p class="total-opcao"><span>Total da nova vigência</span><strong>{{ (op === 'pro_rata' ? m.total_pro_rata : m.total_integral) | moeda }}</strong></p>
+                @if (p.pode_editar) {
+                  <footer>
+                    <button type="button" class="acao-secundaria" [class.carregando]="escolhendo() === op" [disabled]="!!escolhendo()" (click)="escolherCalculo(op)">
+                      {{ m.calculo_mes_quebrado === op ? 'Gerar de novo com esta opção' : 'Usar esta opção e gerar PDF e XLSX' }}</button>
+                  </footer>
+                }
+              </section>
+            }
+          </div>
+        </div>
+      </section>
+    }
+
     @if (p.itens_sob_demanda.length) {
       <section class="cartao-dados" aria-labelledby="titulo-sob-demanda">
         <header>
-          <div><h2 id="titulo-sob-demanda">2. Itens sob demanda (opcional)</h2><small>Nenhum limite pode passar da quantidade original. Para ampliar o objeto, registre aditamento.</small></div>
+          <div><h2 id="titulo-sob-demanda">{{ numero(p, 'itens') }}. Itens sob demanda (opcional)</h2><small>Nenhum limite pode passar da quantidade original. Para ampliar o objeto, registre aditamento.</small></div>
           <select aria-label="Regra para itens sob demanda" class="campo-tabela" style="width: auto; height: 36px; padding: 0 10px; border: 1px solid var(--cor-e2e5e8); border-radius: 7px"
                   [disabled]="!p.pode_editar" [(ngModel)]="regra" (ngModelChange)="aoMudarRegra()">
             <option value="saldo_remanescente">Prorrogar com o saldo remanescente</option>
@@ -73,9 +114,106 @@
       </section>
     }
 
+    <!-- Memória de cálculo: capa, tabela mês a mês, totais por ano e da nova vigência (PDF e XLSX) -->
+    <section class="cartao-dados" aria-labelledby="titulo-memoria">
+      <header><div><h2 id="titulo-memoria">{{ numero(p, 'memoria') }}. Memória de cálculo</h2>
+        <small>Itens contínuos (base mensal) e sob demanda planejado, mês a mês, com o total de cada ano e da nova vigência.</small></div>
+        @if (p.memoria_atualizada) { <span class="selo-situacao">Gerada</span> } @else if (p.memoria) { <span class="selo-situacao alerta">Gerar a memória</span> }</header>
+      @if (!p.memoria) {
+        <p class="dica-formulario" style="margin: 14px 22px">Informe os meses e salve o rascunho para calcular a nova vigência.</p>
+      } @else {
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>Mês</th><th>Período</th><th class="num">Itens contínuos</th><th class="num">Sob demanda planejado</th><th class="num">Total do mês</th></tr></thead>
+            <tbody>
+              @for (x of p.memoria.meses; track x.competencia) {
+                <tr><td>{{ x.competencia }}</td><td>{{ x.inicio | dataBr }} a {{ x.fim | dataBr }}@if (x.quebrado) { <small>mês quebrado</small> }</td>
+                  <td class="num">{{ x.continuos | moeda }}</td><td class="num">{{ x.sob_demanda | moeda }}</td><td class="num"><strong>{{ x.total | moeda }}</strong></td></tr>
+              }
+            </tbody>
+            <tfoot>
+              @for (a of p.memoria.totais_por_ano; track a.ano) { <tr><td colspan="4">Total para {{ a.ano }}</td><td class="num">{{ a.total | moeda }}</td></tr> }
+              <tr><td colspan="4"><strong>Total da nova vigência</strong></td><td class="num"><strong>{{ p.memoria.total | moeda }}</strong></td></tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="corpo">
+          @if (p.memoria.precisa_escolher) { <p class="dica-formulario">Escolha o cálculo dos meses quebrados para gerar a memória.</p> }
+          @if (p.pode_editar && !p.memoria.precisa_escolher) {
+            <div class="acoes-cartao esquerda"><button type="button" class="acao-secundaria" (click)="salvarEGerar()">Gerar e baixar PDF e XLSX</button></div>
+          }
+          @if (p.memorias.length) {
+            <ul class="lista-ciencias">
+              @for (v of p.memorias; track v.versao) {
+                <li><span>v{{ v.versao }} · {{ v.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span>
+                  <span class="acoes-linha"><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(v.pdf.anexo_id)">Baixar PDF</button><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(v.xlsx.anexo_id)">Baixar XLSX</button></span></li>
+              }
+            </ul>
+          }
+        </div>
+      }
+    </section>
+
+    <!-- Checklist da prorrogação: o modelo "Checklist Prorrogação" é o ponto de partida; dá para incluir outros documentos -->
+    <section class="cartao-dados" aria-labelledby="titulo-checklist-prorrogacao">
+      <header><div><h2 id="titulo-checklist-prorrogacao">{{ numero(p, 'checklist') }}. Checklist</h2>
+        <small>Documentos do checklist padrão (Contratos → Modelos → Checklist Prorrogação). Os obrigatórios precisam do PDF para registrar; os incluídos aqui são opcionais.</small></div>
+        @if (p.obrigatorios_pendentes === 0) { <span class="selo-situacao">Obrigatórios completos</span> } @else { <span class="selo-situacao alerta">{{ p.obrigatorios_pendentes }} obrigatório(s) pendente(s)</span> }</header>
+      @if (p.checklist.length) {
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>Nº</th><th>Documento</th><th>Tipo</th><th>Situação</th><th>Arquivo</th></tr></thead>
+            <tbody>
+              @for (doc of p.checklist; track doc.id) {
+                <tr>
+                  <td>{{ $index + 1 }}</td>
+                  <td><strong>{{ doc.nome }}</strong>@if (doc.incluido_no_processo) { <span class="selo-situacao info">Incluído neste processo</span> }
+                    @if (doc.observacao) { <small [innerHTML]="doc.observacao | linkificar"></small> }
+                    @if (doc.incluido_no_processo && doc.incluido_por_nome) { <small>Incluído por {{ doc.incluido_por_nome }}@if (doc.incluido_em) { em {{ doc.incluido_em | date: 'dd/MM/yyyy HH:mm' }} }</small> }</td>
+                  <td>{{ doc.obrigatorio ? 'Obrigatório' : 'Opcional' }}</td>
+                  <td><span class="selo-situacao" [class.perigo]="!doc.arquivo">{{ doc.arquivo ? 'Anexado' : doc.obrigatorio ? 'Pendente' : 'Não anexado' }}</span></td>
+                  <td><div class="acoes-linha">
+                    @if (doc.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(doc.arquivo.anexo_id)">Baixar</button> }
+                    @if (p.pode_editar && p.id) { <app-envio-pdf [pequeno]="true" [mostrarNome]="false" [rotulo]="doc.arquivo ? 'Substituir' : 'Selecionar PDF'" (selecionado)="anexarDocumento(doc, $event)" /> }
+                    @if (p.pode_editar && doc.incluido_no_processo) { <button type="button" class="acao-perigo acao-pequena" (click)="excluirDocumento(doc)">Excluir</button> }
+                  </div></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="dica-formulario" style="margin: 14px 22px">{{ p.id ? 'Nenhum documento no checklist: não há modelo "Checklist Prorrogação" ativo. Dá para incluir documentos só nesta prorrogação.' : 'Salve o rascunho para trazer o checklist padrão.' }}</p>
+      }
+      @if (p.pode_editar) { <div class="corpo"><div class="acoes-cartao esquerda"><button type="button" class="acao-secundaria" (click)="abrirInclusao()">+ Incluir documento</button></div></div> }
+    </section>
+
+    @if (incluindoDocumento()) {
+      <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="incluindoDocumento.set(false)"></div>
+      <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-incluir-doc-prorrogacao">
+        <header>
+          <div><span class="modal-sobretitulo">Checklist desta prorrogação</span><h2 id="titulo-incluir-doc-prorrogacao">Incluir documento</h2></div>
+          <button type="button" aria-label="Fechar" (click)="incluindoDocumento.set(false)">×</button>
+        </header>
+        <form (ngSubmit)="incluirDocumento()">
+          <p class="dica-formulario" style="margin: 0 0 14px">O documento entra só nesta prorrogação, como opcional (não trava o registro). O checklist padrão não muda.</p>
+          <div class="grade-formulario">
+            <div class="ocupa-duas"><label for="pr-doc-nome">Nome do documento *</label><input id="pr-doc-nome" name="nome" required maxlength="500" [(ngModel)]="novoDocumentoNome" /></div>
+            <div class="ocupa-duas"><label for="pr-doc-descricao">Descrição</label><textarea id="pr-doc-descricao" name="descricao" maxlength="1000" [(ngModel)]="novoDocumentoDescricao"></textarea></div>
+            <div class="ocupa-duas"><label>Arquivo (PDF) *</label><app-envio-pdf rotulo="Selecionar PDF" (selecionado)="novoDocumentoArquivo = $event" /></div>
+          </div>
+          <footer>
+            <button type="button" class="acao-secundaria" (click)="incluindoDocumento.set(false)">Cancelar</button>
+            <button type="submit" class="acao-primaria" [class.carregando]="enviandoInclusao()" [disabled]="!novoDocumentoNome.trim() || !novoDocumentoArquivo || enviandoInclusao()">Incluir documento</button>
+          </footer>
+        </form>
+      </section>
+    }
+
     @if (p.pode_editar) {
       <section class="cartao-dados" aria-labelledby="titulo-formalizacao">
-        <header><h2 id="titulo-formalizacao">3. Formalização</h2></header>
+        <header><div><h2 id="titulo-formalizacao">{{ numero(p, 'registro') }}. Termo e registro</h2>
+          <small>Com a memória gerada e os obrigatórios do checklist anexados, informe o Termo Aditivo assinado e registre.</small></div></header>
         <div class="corpo grade-formulario tres-colunas">
           <div><label for="ta-data">Data de assinatura do Termo Aditivo *</label><input id="ta-data" type="date" [(ngModel)]="assinadaEm" /></div>
           <div><label for="ta-numero">Número do Termo Aditivo</label><input id="ta-numero" maxlength="100" [(ngModel)]="numeroTermo" /></div>
@@ -84,32 +222,49 @@
       </section>
     }
 
+    <!-- Prorrogações já assinadas: PNCP (condição de eficácia), DOE, garantia e Contratos.gov -->
+    <app-pos-assinatura-prorrogacao [contratoId]="c.id" [podeEditar]="p.pode_editar" />
 
-    <!-- O parecer é opcional e fica por último, depois da formalização -->
-    <section class="cartao-dados" aria-labelledby="titulo-parecer">
-      <header><div><h2 id="titulo-parecer">4. Parecer para prorrogação (opcional)</h2>
-        <small>{{ possuiParecer() ? 'O PDF do parecer será emitido com as ciências registradas.' : 'Sem nenhum campo preenchido, a prorrogação é registrada sem relatório.' }}</small></div></header>
-      <div class="corpo">
-        <div class="grade-formulario">
-          @for (campo of campos; track campo.campo) {
-            <div class="ocupa-duas"><label [for]="'parecer-' + campo.campo">{{ campo.rotulo }}</label>
-              <textarea [id]="'parecer-' + campo.campo" [disabled]="!p.pode_editar" [(ngModel)]="parecer[campo.campo]"></textarea></div>
-          }
-        </div>
-        <p class="secao-formulario">Ciências (opcionais)</p>
-        <ul class="lista-ciencias">
-          @for (ci of p.ciencias; track ci.usuario_id) { <li><span>{{ ci.nome }} · {{ papeis[ci.papel] }}</span><small>{{ ci.registrada_em | date: 'dd/MM/yyyy HH:mm' }}</small></li> }
-          @empty { <li><small>Nenhuma ciência registrada.</small></li> }
-        </ul>
-        <div class="acoes-cartao">
-          @if (p.integra_equipe && p.possui_parecer && !jaRegistrei() && !parecerAlterado()) {
-            <button type="button" class="acao-secundaria" (click)="ciencia()">Registrar minha ciência</button>
-          }
-          @if (p.pode_editar && p.possui_parecer && !parecerAlterado()) { <button type="button" class="acao-secundaria" (click)="emitirParecer()">Emitir e baixar parecer</button> }
-        </div>
-        @if (parecerAlterado()) { <p class="dica-formulario">Salve o rascunho para registrar ciências ou emitir o parecer.</p> }
-      </div>
-    </section>
+    <!-- Vigência retroativa: volta no tempo, com termo próprio; serve de base para o reajuste retroativo -->
+    @if (retroativas().length || p.pode_editar) {
+      <section class="cartao-dados" aria-labelledby="titulo-retroativas">
+        <header><div><h2 id="titulo-retroativas">Vigências retroativas</h2>
+          <small>Vigências anteriores ao início do contrato. Funcionam como as demais (competências, checklists, NEs e avaliação) e permitem o reajuste retroativo.</small></div></header>
+        @if (retroativas().length) {
+          <div class="tabela-gestao-envoltorio">
+            <table class="tabela-gestao">
+              <thead><tr><th>Vigência</th><th>Período</th><th class="num">Meses</th><th>Termo</th><th>Reajuste retroativo</th><th>Ações</th></tr></thead>
+              <tbody>
+                @for (v of retroativas(); track v.id) {
+                  <tr>
+                    <td>{{ v.sequencia }}ª</td>
+                    <td>{{ v.data_inicio | dataBr }} a {{ v.data_fim | dataBr }}</td>
+                    <td class="num">{{ v.meses }}</td>
+                    <td>{{ v.numero_termo || '—' }}@if (v.termo) { · <button type="button" class="acao-secundaria acao-pequena" (click)="baixarTermo(v.termo.anexo_id)">Baixar termo</button> }</td>
+                    <td>{{ v.reajustada ? 'Concluído' : 'Pendente' }}</td>
+                    <td>
+                      @if (p.pode_editar && v.pode_desfazer) { <button type="button" class="acao-perigo acao-pequena" (click)="desfazerRetroativa(v)">Desfazer</button> }
+                      @else if (v.motivo_bloqueio) { <small>{{ v.motivo_bloqueio }}</small> }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+        @if (p.pode_editar) {
+          <div class="corpo grade-formulario tres-colunas">
+            <div><label for="retroativa-meses">Prazo da vigência retroativa (meses) *</label><input id="retroativa-meses" type="number" min="1" max="120" [(ngModel)]="mesesRetroativa" /></div>
+            <div><label for="retroativa-data">Data de assinatura do Termo Aditivo *</label><input id="retroativa-data" type="date" [(ngModel)]="assinadaRetroativa" /></div>
+            <div><label for="retroativa-numero">Número do Termo Aditivo</label><input id="retroativa-numero" maxlength="100" [(ngModel)]="numeroRetroativa" /></div>
+            <div style="align-self: end; margin-bottom: 16px"><app-envio-pdf rotulo="Selecionar Termo Aditivo assinado (PDF)" (selecionado)="termoRetroativa = $event" /></div>
+            <div style="align-self: end; margin-bottom: 16px">
+              <button type="button" class="acao-primaria" [disabled]="!mesesRetroativa || !assinadaRetroativa || !termoRetroativa || p.exige_checklist_ativo" (click)="cadastrarRetroativa()">Cadastrar vigência retroativa</button>
+            </div>
+          </div>
+        }
+      </section>
+    }
   }
 } @else {
   <app-esqueleto tipo="formulario" [linhas]="5" />

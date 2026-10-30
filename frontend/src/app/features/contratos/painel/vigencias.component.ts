@@ -1,7 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para exibir a aba "Vigências": uma linha do tempo de vigência por contrato vigente.
 
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
@@ -9,12 +9,13 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { formatarData } from '../../../shared/utilitarios/formatadores';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
+import { ParametrosContratosService } from '../compartilhado/parametros-contratos.service';
 import { PainelVigencias, VigenciaContratoPainel } from '../compartilhado/contratos.models';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
-/** Até quantos dias o vencimento fica vermelho (mesmo critério de "a vencer") e âmbar. */
-const DIAS_CRITICO = 90;
-const DIAS_ATENCAO = 180;
+/** Até quantos dias o vencimento fica vermelho (mesmo critério de "a vencer") e âmbar: parâmetros de Contratos (90 e 180 de início). */
+interface Limites { critico: number; atencao: number }
+const LIMITES_DE_FABRICA: Limites = { critico: 90, atencao: 180 };
 const DIA_MS = 86_400_000;
 
 /** Linha já calculada para o template: posições em % do trilho (escala própria de cada contrato). */
@@ -52,8 +53,8 @@ interface LinhaPrazo {
         <header>
           <div><h2 id="titulo-prazos">Vigências ({{ linhas().length }})</h2></div>
           <div class="legenda-grafico legenda-prazos">
-            <span><i class="critico"></i>Até {{ DIAS_CRITICO }} dias</span><span><i class="atencao"></i>Até {{ DIAS_ATENCAO }} dias</span>
-            <span><i class="normal"></i>Mais de {{ DIAS_ATENCAO }} dias</span><span><i class="reajuste"></i>Reajuste</span>
+            <span><i class="critico"></i>Até {{ limites().critico }} dias</span><span><i class="atencao"></i>Até {{ limites().atencao }} dias</span>
+            <span><i class="normal"></i>Mais de {{ limites().atencao }} dias</span><span><i class="reajuste"></i>Reajuste</span>
           </div>
         </header>
         <ol class="lista-prazos">
@@ -98,13 +99,19 @@ export class VigenciasComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
 
   protected readonly painel = signal<PainelVigencias | null>(null);
-  protected readonly linhas = signal<LinhaPrazo[]>([]);
   protected empresaId = '';
   protected readonly data = formatarData;
-  protected readonly DIAS_CRITICO = DIAS_CRITICO;
-  protected readonly DIAS_ATENCAO = DIAS_ATENCAO;
+  private readonly parametros = inject(ParametrosContratosService);
+  protected readonly limites = computed<Limites>(() => ({ critico: this.parametros.valores().dias_vigencia_a_vencer, atencao: this.parametros.valores().dias_vigencia_atencao }));
+
+  /** Linhas calculadas a partir do painel e dos limites (refaz sozinha quando os parâmetros chegam). */
+  protected readonly linhas = computed<LinhaPrazo[]>(() => {
+    const p = this.painel();
+    return p ? p.contratos.map((c) => montarLinha(c, p.hoje, this.limites())) : [];
+  });
 
   ngOnInit(): void {
+    this.parametros.carregar();
     this.carregar();
   }
 
@@ -113,7 +120,6 @@ export class VigenciasComponent implements OnInit {
     this.api.painelVigencias(this.empresaId).subscribe({
       next: (p) => {
         this.painel.set(p);
-        this.linhas.set(p.contratos.map((c) => montarLinha(c, p.hoje)));
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar o painel de vigências'),
     });
@@ -126,7 +132,7 @@ function dia(texto: string): number {
 }
 
 /** Posições da linha na escala do próprio contrato: do início ao fim da vigência atual (inclusive). */
-export function montarLinha(c: VigenciaContratoPainel, hoje: string): LinhaPrazo {
+export function montarLinha(c: VigenciaContratoPainel, hoje: string, limites: Limites = LIMITES_DE_FABRICA): LinhaPrazo {
   const inicio = dia(c.data_inicio);
   const total = dia(c.data_fim) + DIA_MS - inicio;
   const posicao = (ms: number) => Math.min(100, Math.max(0, Math.round(((ms - inicio) / total) * 1000) / 10));
@@ -137,7 +143,7 @@ export function montarLinha(c: VigenciaContratoPainel, hoje: string): LinhaPrazo
       titulo: `${v.sequencia === 1 ? 'Vigência inicial' : `${v.sequencia - 1}ª prorrogação`}: ${formatarData(v.inicio)} a ${formatarData(v.fim)}`,
     };
   });
-  const urgencia = c.dias_restantes <= DIAS_CRITICO ? 'critico' : c.dias_restantes <= DIAS_ATENCAO ? 'atencao' : 'normal';
+  const urgencia = c.dias_restantes <= limites.critico ? 'critico' : c.dias_restantes <= limites.atencao ? 'atencao' : 'normal';
   return {
     contrato: c, segmentos, decorrido: posicao(dia(hoje)), urgencia,
     reajustes: c.reajustes.map((r) => ({ posicao: posicao(dia(r)), titulo: `Reajuste a partir de ${formatarData(r).slice(3)}` })),

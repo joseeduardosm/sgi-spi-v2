@@ -56,9 +56,18 @@ def ocorrencia_registrada(sessao: Session, contrato: Contrato, ocorrencia, autor
         prioridade="alta" if ocorrencia.possui_glosa else "normal", autor=autor, evento="contratos.ocorrencia_diario")
 
 
+def _sem_aviso(competencia: Competencia) -> bool:
+    """Competência retroativa (anterior ao corte de alertas): não gera avisos na caixa de notificações."""
+    from app.services.contratos.servico_competencias import anterior_ao_corte
+
+    return anterior_ao_corte(competencia)
+
+
 def medicao_concluida(sessao: Session, contrato: Contrato, competencia: Competencia, autor: Usuario) -> None:
     """Informativo à equipe; encerra o aviso de medição atrasada, se houver."""
     notificacoes.encerrar(sessao, chave=f"atraso:{competencia.id}")
+    if _sem_aviso(competencia):
+        return
     avisar_equipe(
         sessao, contrato, f"{_identificacao(contrato)}: medição de {competencia.numero_competencia} concluída",
         f"{autor.nome_completo or autor.login} concluiu a medição da competência {competencia.numero_competencia}. "
@@ -80,6 +89,8 @@ def nota_fiscal_juntada(sessao: Session, contrato: Contrato, competencia: Compet
 
     for recusa in competencia.recusas:
         notificacoes.encerrar(sessao, chave=f"recusa-nf:{competencia.id}:{recusa.ordem}")
+    if _sem_aviso(competencia):
+        return
 
     notificacoes.notificar(
         sessao, [u.id for u in usuarios_financeiro(sessao)],

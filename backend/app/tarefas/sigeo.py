@@ -15,6 +15,7 @@ import logging
 import sys
 
 from app.core.banco import FabricaSessao
+from app.core.configuracao import obter_configuracao
 from app.services import servico_integracao_sigeo
 from app.services.contratos import servico_ob_sigeo
 
@@ -27,6 +28,9 @@ def main(argumentos: list[str]) -> int:
     if comando not in ("conferir", "agora", "ensaio"):
         print(__doc__)
         return 2
+    if comando in ("conferir", "agora") and obter_configuracao().modo_homologacao:
+        log.info("Homologação: a conferência do SIGEO não roda (nada é consultado nem lançado).")
+        return 0
     with FabricaSessao() as sessao:
         config = servico_integracao_sigeo.obter(sessao)
         if comando in ("conferir", "agora") and not config.ativo:

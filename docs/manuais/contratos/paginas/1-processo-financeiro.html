@@ -1,0 +1,54 @@
+<p>O <strong>Processo Financeiro</strong> é o número do processo no qual o Financeiro (DOF) paga as <strong>ordens bancárias (OBs)</strong> do contrato no <strong>SIGEO</strong> (o sistema de execução orçamentária e financeira do Estado). No SGI SPI ele é um campo opcional do cadastro do contrato, mas é ele que liga o contrato ao SIGEO. Esta página explica o que é, para que serve, como pedir e como o Financeiro preenche.</p>
+<p class="callout info">Todos os exemplos usam <strong>dados fictícios</strong> (contrato 900/2026, pessoas e números inventados), feitos numa cópia do sistema, nunca em produção.</p>
+
+<h2>Para que serve</h2>
+<p>Quando o contrato tem Processo Financeiro, o SGI SPI passa a <strong>conferir sozinho o pagamento</strong> de cada competência:</p>
+<ul>
+<li><strong>Ordem bancária:</strong> o sistema consulta no SIGEO as OBs pagas daquele processo. Se a soma das OBs do mês bate com o valor líquido da competência (notas fiscais brutas, mais despesas variáveis, menos retenções), a etapa de pagamento é <strong>concluída automaticamente</strong>, com o comprovante em PDF. Ninguém precisa anexar a OB à mão.</li>
+<li><strong>Divergência:</strong> se o valor não bate, ou se não é possível saber a que mês a OB se refere, o sistema <strong>não conclui nada</strong>: registra uma pendência para a equipe conferir.</li>
+<li><strong>Empenhos:</strong> se o contrato tem Processo Financeiro e <strong>nenhuma Nota de Empenho cadastrada</strong>, o sistema busca no SIGEO as NEs desse processo (e os cancelamentos, quando houver) e as cadastra na aba Notas de Empenho. Contrato que já tem NE não é alterado.</li>
+</ul>
+<p>Sem o Processo Financeiro, nada disso é feito: o contrato continua funcionando normalmente, mas o pagamento e as NEs são lançados manualmente.</p>
+
+<h2>Contrato com mais de um processo</h2>
+<p>Alguns contratos são pagos por mais de um processo (por exemplo, um por exercício). Nesse caso, digite todos no mesmo campo, <strong>separados por vírgula</strong> (ex.: <span class="texto-codigo">20250139231, 20260315789</span>). O sistema soma as OBs de todos os processos antes de comparar com o valor da competência.</p>
+
+<h2>Quem faz o quê</h2>
+<table>
+<thead><tr><th>Quem</th><th>O que pode fazer</th></tr></thead>
+<tbody>
+<tr><td><strong>Gestor ou equipe do contrato</strong> (quem edita o contrato)</td><td>Vê o campo Processo Financeiro e pode <strong>pedir ao DOF</strong> que o preencha, pelo botão <em>Pedir processo financeiro ao DOF</em>. Também pode digitar o número, se já o conhecer.</td></tr>
+<tr><td><strong>Financeiro (DOF)</strong></td><td>Recebe o pedido por e-mail e pelo sino. Ao abrir o contrato para editar, <strong>só o campo Processo Financeiro pode ser alterado</strong>; todo o resto aparece bloqueado. O DOF pode preencher o campo em qualquer contrato, mesmo que ninguém tenha feito o pedido.</td></tr>
+</tbody>
+</table>
+<p class="callout info">&quot;Financeiro (DOF)&quot; é quem tem, no Controle de acesso, o recurso <strong>Financeiro</strong> com nível Modificação ou superior. Quem administra os acessos define essa lista.</p>
+
+<h2>Passo 1 – O gestor pede o processo ao DOF</h2>
+<p>Abra o contrato, clique em <strong>Editar</strong> e vá até o bloco <strong>Processos SEI</strong>. O campo <strong>Processo Financeiro</strong> fica abaixo dos números do SEI. Ao lado dele há o botão <strong>Pedir processo financeiro ao DOF</strong>.</p>
+<p>[[pf01-campo-processo-financeiro]]</p>
+<p>Ao clicar no botão, o sistema abre uma janela de confirmação. Ela explica o que vai acontecer: <em>todo o Financeiro recebe um e-mail e um aviso no sino</em>, pedindo para preencher o Processo Financeiro daquele contrato.</p>
+<p>[[pf01b-confirmar-pedido]]</p>
+<p>Depois do envio, o sistema mostra, logo abaixo do campo, <strong>quem fez o último pedido e quando</strong>. Assim ninguém pede duas vezes sem perceber, e o DOF sabe a quem responder.</p>
+<p>[[pf02-pedido-feito]]</p>
+<p class="callout">O pedido <strong>não altera o contrato</strong>: apenas avisa o Financeiro. O contrato só muda quando o DOF salvar o número.</p>
+
+<h2>Passo 2 – O DOF recebe o aviso</h2>
+<p>Cada pessoa do Financeiro recebe um e-mail e um aviso no sino (a tela <strong>Notificações</strong>) com o assunto <em>Informe o processo financeiro do contrato…</em>. O aviso traz o link direto para a tela de edição do contrato.</p>
+<p>[[pf03-aviso-no-sino]]</p>
+
+<h2>Passo 3 – O DOF preenche o número</h2>
+<p>Pelo link, o DOF cai na tela <strong>Editar contrato</strong>, numa versão simplificada: no topo, o bloco <strong>Processo Financeiro</strong> (com a informação de quem pediu e quando); abaixo, o restante do contrato, <strong>todo bloqueado</strong>. Basta digitar o número e clicar em <strong>Salvar processo financeiro</strong>.</p>
+<p>[[pf04-tela-do-dof]]</p>
+<p>Se houver mais de um processo, separe por vírgula. O número é o <span class="texto-codigo">COD_PROCESSO</span> que aparece no SIGEO nas ordens bancárias do contrato.</p>
+
+<h2>Passo 4 – O resultado</h2>
+<p>Quando o gestor reabre a edição do contrato, o campo já vem preenchido. A partir daí, o sistema passa a conferir as OBs desse processo.</p>
+<p>[[pf06-processo-preenchido]]</p>
+
+<h2>Perguntas frequentes</h2>
+<ul>
+<li><strong>Preciso do Processo Financeiro para o contrato funcionar?</strong> Não. Ele é opcional; sem ele o pagamento e as NEs continuam sendo lançados à mão.</li>
+<li><strong>A OB não foi conferida sozinha. E agora?</strong> O sistema só conclui quando o mês da OB é identificado e a soma bate com o valor líquido. Caso contrário, deixa uma pendência: confira o valor com o Financeiro e conclua a etapa de pagamento manualmente, anexando a OB.</li>
+<li><strong>O DOF pode mudar outros dados do contrato?</strong> Não. Nessa tela, apenas o Processo Financeiro.</li>
+<li><strong>Troquei o número do processo. As OBs antigas somem?</strong> Não. O que já foi concluído continua concluído; a conferência apenas passa a olhar o novo número.</li>
+</ul>

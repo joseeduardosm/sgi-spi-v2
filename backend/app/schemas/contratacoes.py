@@ -128,6 +128,7 @@ class SecaoLeitura(BaseModel):
     id: uuid.UUID
     ordem: int
     titulo: str
+    descricao: str = Field("", description="Orientação a quem preenche a seção. Só aparece na tela: não vai para o Word, o PDF nem a cópia da seção.")
     itens: list[ItemLeitura] = Field(..., description="Lista plana em pré-ordem; a hierarquia vem de `pai_id`.")
 
 
@@ -141,6 +142,7 @@ class DocumentoLeitura(DocumentoResumo):
 
 class GravacaoSecao(BaseModel):
     titulo: str = Field(..., min_length=1, max_length=300)
+    descricao: str = Field("", max_length=4000, description="Orientação a quem preenche a seção (opcional; vazio = sem orientação). Só aparece na tela.")
 
 
 class GravacaoOrdem(BaseModel):

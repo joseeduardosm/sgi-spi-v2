@@ -1,0 +1,64 @@
+<p>A <strong>prorrogação</strong> estende o prazo do contrato por uma <strong>nova vigência</strong>, formalizada por um <strong>Termo Aditivo</strong> assinado. Esta página mostra o passo a passo da prorrogação <strong>normal</strong> (para a frente no tempo). Para voltar no tempo, veja <em>Vigência retroativa: voltar o contrato no tempo</em>.</p>
+<p class="callout info">Exemplos com <strong>dados fictícios</strong> (contrato 900/2026), feitos numa cópia do sistema, nunca em produção.</p>
+
+<h2>Antes de começar</h2>
+<ul>
+<li>Você precisa ter permissão de <strong>modificação</strong> no contrato (gestor, fiscais ou quem o Controle de acesso autorizar).</li>
+<li>Tenha em mãos o <strong>Termo Aditivo assinado em PDF</strong>, a data de assinatura e o número do termo.</li>
+<li>Se o contrato <strong>já tem competências geradas</strong>, é preciso ter um <strong>checklist ativo</strong> antes de prorrogar. Sem ele, a tela mostra um aviso em vermelho e o botão <em>Registrar prorrogação</em> fica desabilitado.</li>
+<li>A prorrogação respeita a <strong>vigência máxima</strong> do contrato: a tela informa quantos meses ainda restam.</li>
+</ul>
+
+<h2>Como abrir</h2>
+<p>No detalhe do contrato, use a ação <strong>Prorrogação</strong> (ou o caminho <em>Contratos › contrato › Prorrogação</em>). A tela é dividida em <strong>6 ou 7 etapas</strong> na trilha do topo — 7 quando o contrato tem itens sob demanda, 6 quando não tem. As etapas <em>Itens sob demanda</em>, <em>Minutas e despachos</em>, <em>Enquadramento</em> e <em>Parecer e ciências</em> são marcadas como <strong>opcionais</strong> e não bloqueiam o Registro.</p>
+<p>[[pr01-pagina-prorrogacao]]</p>
+
+<h2>Etapa 1 – Prazo</h2>
+<p>Informe o <strong>prazo da prorrogação em meses</strong>. O sistema calcula sozinho o <strong>início</strong> (o dia seguinte ao fim da vigência atual) e o <strong>fim</strong> da nova vigência. O fim só aparece depois de salvar o rascunho.</p>
+
+<h2>Etapa 2/3 – Itens sob demanda (opcional)</h2>
+<p>Se o contrato tem itens sob demanda (ex.: material), o sistema oferece três regras: <em>Prorrogar com o saldo remanescente</em> (leva o que sobrou), <em>Repetir o saldo inicial</em> (volta à quantidade original) ou <em>Alimentar manualmente</em> (você define o limite de cada item na nova vigência). <strong>Nenhum limite pode passar da quantidade original</strong>; para ampliar o objeto, o caminho é o aditamento.</p>
+
+<h2>Etapa 2/3 – Minutas e despachos (opcional)</h2>
+<p>O sistema oferece <strong>7 documentos prontos</strong> para colar no SEI: Despacho de instrução (CCC/DGA → SSGC), Declaração de Atendimento para licitação (Anexo II) ou contratação direta (Anexo III), Minuta do Termo Aditivo (Anexo I), Termo de Ciência e de Notificação (TCE-SP), Declaração de documentos à disposição do TCE-SP e Despacho de autorização. O sistema preenche automaticamente com dados do contrato (empresa, CNPJ, vigências, valor, NEs, processo SEI, equipe). O que o sistema não tem aparece entre colchetes; preencha os campos <em>Dados que o sistema não tem</em> (testemunhas, atos constitutivos etc.) e o texto se atualiza em tempo real.</p>
+<p>[[pr11-minutas-lista]]</p>
+<p class="callout">Para que os documentos apareçam, o administrador (Controle total) precisa ativar um <strong>Modelo</strong> em <em>Contratos › Modelos › Prorrogação</em>. Os modelos padrão são pré-instalados; caso os textos precisem de ajuste, edite o modelo antes de usá-los.</p>
+
+<h2>Etapa 4/5 – Formalização</h2>
+<p>Esta etapa recebe o <strong>Termo Aditivo já assinado</strong>. O roteiro esperado é: gerar a Minuta do Termo Aditivo na etapa anterior (Minutas e despachos), copiá-la para o SEI, obter a assinatura e, então, voltar aqui para informar a <strong>data de assinatura</strong> (obrigatória), o <strong>número do termo</strong> (o mesmo que aparece nos demais documentos gerados) e selecionar o <strong>PDF assinado</strong>.</p>
+<p>[[pr02-prazo-e-formalizacao]]</p>
+<p class="callout">O <strong>Salvar rascunho</strong> guarda prazo e itens, mas <strong>o PDF do termo e a data de assinatura precisam ser informados de novo</strong> ao reabrir o rascunho em outro momento. Confira esses campos antes de registrar.</p>
+
+<h2>Etapa 5/6 – Enquadramento no Parecer Referencial (opcional)</h2>
+<p>O SGI traz o checklist de 37 itens do <strong>Parecer Referencial NLC nº 1/2026</strong> da PGE/SP. Para cada requisito há uma resposta (<em>Sim / Não / Não se aplica</em>), o número do documento SEI e uma observação. Os itens verificáveis pelo sistema (vigência ainda dentro do prazo, contrato sob a Lei 14.133, garantia exigida ou não etc.) chegam <strong>preenchidos automaticamente</strong>, com a conta mostrada para conferência. Após preencher, o botão <strong>Baixar checklist (XLSX)</strong> gera o <em>Modelo 6</em> do Fluxo Processual, já com suas respostas, para anexar ao processo no SEI.</p>
+<p>[[pr12-enquadramento]]</p>
+<p class="callout warning">Se qualquer item for respondido como <strong>Não</strong>, o sistema exibe o aviso <em>Este caso sai do Parecer Referencial e precisa de análise da Consultoria Jurídica</em>. A prorrogação <strong>não é bloqueada</strong>, mas o aviso fica registrado na prorrogação.</p>
+
+<h2>Etapa 6/7 – Parecer e ciências (opcional)</h2>
+<p>O parecer para prorrogação tem campos de texto (avaliação geral da execução, resumo das avaliações de qualidade, histórico de ocorrências, reclamações, atendimento de chamados e o parecer em si). Se <strong>nenhum campo for preenchido</strong>, a prorrogação é registrada <strong>sem relatório</strong>. Havendo parecer, é possível registrar a <strong>ciência</strong> de cada responsável e <strong>emitir e baixar o parecer</strong>; alterar o texto exige salvar o rascunho de novo antes das ciências.</p>
+
+<h2>Registrar a prorrogação</h2>
+<p>Com prazo, data e termo preenchidos, o botão <strong>Registrar prorrogação</strong> é liberado. Se você precisar guardar o trabalho para depois, use <strong>Salvar rascunho</strong>; para abandonar, <strong>Descartar rascunho</strong>.</p>
+<p>[[pr03-rascunho-salvo]]</p>
+<p>Ao clicar, o sistema abre uma janela de confirmação com a <strong>nova vigência</strong> (início e fim), avisa que o termo entrará nos <strong>documentos importantes</strong> do contrato e informa se o parecer será gerado. O botão de confirmar libera após uma contagem de poucos segundos, para evitar cliques por engano.</p>
+<p>[[pr04-confirmar-prorrogacao]]</p>
+<p>Depois de confirmar: a nova vigência existe, as competências do novo período passam a ser geradas, e o termo assinado fica nos documentos importantes.</p>
+
+<h2>Depois da assinatura</h2>
+<p>Após o registro, uma seção chamada <strong>Depois da assinatura</strong> aparece na página da prorrogação. Ela mostra o <strong>prazo para publicar o aditivo no PNCP</strong> (condição de eficácia: 20 dias úteis para licitações, 10 para dispensa ou inexigibilidade, contados a partir da data de assinatura) e um selo indicando a situação.</p>
+<p>[[pr13-pos-assinatura]]</p>
+<p>Registre aqui:</p>
+<ul>
+<li><strong>Divulgado no PNCP em</strong> e o <strong>Número ou link do PNCP</strong>: quando publicar, o selo muda para <em>PNCP publicado</em>.</li>
+<li><strong>Extrato publicado no DOE em</strong>: data da publicação no Diário Oficial do Estado.</li>
+<li><strong>Contratos.gov atualizado em</strong>: data em que o campo <em>Fiscalização e Gestão Contratual</em> foi atualizado no portal federal (AUDESP).</li>
+<li>Se o contrato <strong>exige garantia</strong>, aparecem também os campos de dados para a <strong>planilha de garantia (DOF)</strong> e o botão <strong>Baixar planilha de garantia (XLSX)</strong>, com os dados do contrato já preenchidos.</li>
+</ul>
+<p class="callout warning">A publicação no PNCP é <strong>condição de eficácia</strong>: o aditivo não produz efeitos jurídicos enquanto não for publicado. Fique atento ao prazo indicado pela tela.</p>
+
+<h2>E depois?</h2>
+<ul>
+<li>A prorrogação normalmente vem acompanhada de <strong>reajuste</strong>, quando a nova vigência começa no mês de reajuste do contrato. Veja <em>Reajuste do contrato</em>.</li>
+<li>Os <strong>empenhos</strong> da nova vigência precisam ser cadastrados na aba Notas de Empenho para que as medições possam ser pagas.</li>
+<li>Lembre-se de publicar o aditivo no <strong>PNCP</strong> e atualizar o <strong>Contratos.gov</strong> (campo Fiscalização e Gestão Contratual). O sistema avisa por e-mail e pelo sino se o prazo estiver perto de vencer.</li>
+</ul>

@@ -11,7 +11,7 @@ import pytest
 from pypdf import PdfReader
 
 from app.services.contratos import email_cadin_mascara, email_ob_mascara
-from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, criar_contrato, gerar_cpf, juntar_nf, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, definir_parametros, PDF, conferir_retencao, criar_contrato, gerar_cpf, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import HOJE, _preparar_execucao, _url
 from tests.test_smtp import SmtpSimulado, SmtpSslSimulado, dados_servidor
@@ -230,6 +230,7 @@ def test_conta_de_integracao_so_lanca_a_ob_pela_acao_do_perfil(cliente, admin, c
 def test_ob_lancada_avisa_os_prepostos_pela_mascara_e_pode_reenviar(cliente, admin, cenario):
     """Ao lançar a OB, a máscara "E-mail de pagamento" vai aos prepostos (equipe em Cc), com valor e data; falha e reenvio ficam registrados."""
     contrato, h, base = cenario
+    definir_parametros(corte_alertas_a_partir_de=date(2000, 1, 1))  # a competência do cenário é de 01/2026: sem o corte, o e-mail de pagamento não sai
     assert _cadin(cliente, base, h, False).json()["etapa_atual"] == "consolidado"
     assert cliente.post(f"{base}/consolidado", headers=h).json()["etapa_atual"] == "ordem_bancaria"
     # Sem máscara ativa: a OB é lançada e o e-mail registra a falha com a explicação

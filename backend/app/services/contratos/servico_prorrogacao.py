@@ -11,7 +11,7 @@ previsão sob demanda da nova vigência. Só a última prorrogação pode ser de
 import hashlib
 import json
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import BinaryIO
 
@@ -25,7 +25,9 @@ from app.models.contratos import (
     CienciaProrrogacao,
     Contrato,
     DocumentoContrato,
+    DocumentoProrrogacao,
     LimitePrevisao,
+    ModeloGlobal,
     PrevisaoVigencia,
     ProcessoProrrogacao,
     Prorrogacao,
@@ -33,14 +35,23 @@ from app.models.contratos import (
 from app.models.usuario import Usuario
 from app.schemas.contratos.alteracoes import (
     CAMPOS_PARECER,
+    DocumentoProrrogacaoLeitura,
+    GravacaoDadosMinuta,
+    GravacaoEnquadramento,
+    GravacaoPosAssinatura,
     GravacaoProrrogacao,
+    LeituraEnquadramento,
+    LeituraMemoriaVersao,
+    LeituraMinuta,
+    LeituraMinutas,
     LeituraProcessoProrrogacao,
     LeituraProrrogacao,
     PlanoItemLeitura,
+    ResumoMemoriaProrrogacao,
 )
 from app.schemas.contratos.execucao import LeituraArquivo, LeituraCiencia
-from app.services import servico_anexos
-from app.services.contratos import calculos, valores
+from app.services import calendario_util, servico_anexos
+from app.services.contratos import calculos, memoria_prorrogacao, prorrogacao_documentos, prorrogacao_mascara, servico_enquadramento, servico_pos_assinatura, valores
 from app.services.contratos.documentos_execucao import PAPEIS, data_hora, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo
@@ -72,7 +83,7 @@ def _rascunho(sessao: Session, contrato: Contrato) -> ProcessoProrrogacao | None
     return sessao.scalar(
         select(ProcessoProrrogacao)
         .where(ProcessoProrrogacao.contrato_id == contrato.id, ProcessoProrrogacao.situacao == "rascunho")
-        .options(selectinload(ProcessoProrrogacao.ciencias))
+        .options(selectinload(ProcessoProrrogacao.ciencias), selectinload(ProcessoProrrogacao.memorias), selectinload(ProcessoProrrogacao.documentos))
     )
 
 
@@ -83,8 +94,7 @@ def meses_disponiveis(contrato: Contrato) -> int:
 
 def nova_vigencia(contrato: Contrato, meses: int | None) -> tuple[date, date | None]:
     """(início, fim) da nova vigência: começa no dia seguinte ao fim atual; sem prazo, o fim fica vazio."""
-    inicio = contrato.data_fim + timedelta(days=1)
-    return inicio, calculos.calcular_data_fim(inicio, meses) if meses else None
+    return memoria_prorrogacao.nova_vigencia(contrato, meses)
 
 
 def _saldo_remanescente(contrato: Contrato, item) -> Decimal:
@@ -133,6 +143,10 @@ def consultar(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> Leit
         )
     atual = vigencias(contrato)[-1]
     textos = {c: getattr(processo, c) if processo else "" for c in CAMPOS_PARECER}
+    memoria = memoria_prorrogacao.resumo(contrato, processo)
+    documentos = processo.documentos if processo else []
+    ids_inclusao = {d.incluido_por_id for d in documentos if d.incluido_por_id}
+    quem_incluiu = {u.id: u.nome_completo or u.login for u in sessao.scalars(select(Usuario).where(Usuario.id.in_(ids_inclusao)))} if ids_inclusao else {}
     return LeituraProcessoProrrogacao(
         id=processo.id if processo else None, vigencia_atual_inicio=atual.inicio, vigencia_atual_fim=atual.fim, meses=meses,
         nova_vigencia_inicio=inicio, nova_vigencia_fim=fim, meses_disponiveis=meses_disponiveis(contrato),
@@ -142,7 +156,31 @@ def consultar(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> Leit
         relatorio=_arquivo(processo.relatorio_anexo) if processo else None,
         exige_checklist_ativo=bool(contrato.competencias) and checklist_ativo(contrato) is None,
         pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(sessao, contrato, usuario),
+        memoria=ResumoMemoriaProrrogacao(**memoria) if memoria else None,
+        memorias=[LeituraMemoriaVersao(versao=m.versao, criada_em=m.criado_em, pdf=_arquivo(m.pdf_anexo), xlsx=_arquivo(m.xlsx_anexo)) for m in (processo.memorias if processo else [])],
+        memoria_atualizada=bool(processo and memoria_prorrogacao.memoria_atualizada(contrato, processo)),
+        checklist=[
+            DocumentoProrrogacaoLeitura(id=d.id, ordem=d.ordem, nome=d.nome, observacao=d.observacao, obrigatorio=d.obrigatorio, arquivo=_arquivo(d.anexo),
+                                        incluido_no_processo=d.incluido_no_processo, incluido_por_nome=quem_incluiu.get(d.incluido_por_id), incluido_em=d.incluido_em)
+            for d in sorted(documentos, key=lambda d: (d.incluido_no_processo, d.ordem))
+        ],
+        obrigatorios_pendentes=sum(1 for d in documentos if d.obrigatorio and not d.anexo_id),
     )
+
+
+def _copiar_checklist(sessao: Session, processo: ProcessoProrrogacao) -> None:
+    """Ponto de partida do checklist: copia os documentos do modelo "Checklist Prorrogação" ativo (o mais recente), se houver.
+
+    Só copia num processo ainda sem documentos (os do modelo não saem; sem nenhum, o processo nunca recebeu a cópia)."""
+    if processo.documentos:
+        return
+    modelo = sessao.scalar(select(ModeloGlobal).where(ModeloGlobal.tipo == "checklist_prorrogacao", ModeloGlobal.ativo.is_(True))
+                           .order_by(ModeloGlobal.atualizado_em.desc()))
+    if modelo is None:
+        return
+    for ordem, item in enumerate((modelo.conteudo or {}).get("itens", []), start=1):
+        processo.documentos.append(DocumentoProrrogacao(ordem=ordem, nome=item.get("nome", "")[:500], observacao=(item.get("observacao") or "")[:1000],
+                                                        obrigatorio=bool(item.get("obrigatorio", True))))
 
 
 def _validar_plano(contrato: Contrato, dados: GravacaoProrrogacao) -> list[dict]:
@@ -184,12 +222,16 @@ def salvar(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoProrrogacao, 
     if processo is None:
         processo = ProcessoProrrogacao(contrato_id=contrato.id, criado_por_id=autor.id)
         sessao.add(processo)
-    # Compara antes de aplicar, para saber se o texto do parecer mudou
-    parecer_mudou = any((getattr(processo, c) or "") != getattr(dados, c) for c in CAMPOS_PARECER)
+    # Compara antes de aplicar, para saber se o texto do parecer mudou (campo não enviado = mantém o gravado)
+    parecer_mudou = any(getattr(dados, c) is not None and (getattr(processo, c) or "") != getattr(dados, c) for c in CAMPOS_PARECER)
     processo.meses, processo.regra_sob_demanda = dados.meses, dados.regra_sob_demanda
     processo.plano_sob_demanda = _validar_plano(contrato, dados)
+    if dados.calculo_mes_quebrado is not None:
+        processo.calculo_mes_quebrado = dados.calculo_mes_quebrado
     for campo in CAMPOS_PARECER:
-        setattr(processo, campo, getattr(dados, campo))
+        if getattr(dados, campo) is not None:
+            setattr(processo, campo, getattr(dados, campo))
+    _copiar_checklist(sessao, processo)
     # Editar o parecer depois das ciências as invalida (a tela confirma antes)
     removidas = 0
     if parecer_mudou and processo.ciencias:
@@ -199,6 +241,139 @@ def salvar(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoProrrogacao, 
     auditar(sessao, autor.login, "contrato.prorrogacao.salvar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
             alvo_id=contrato.id, dados={"meses": dados.meses, "ciencias_removidas": removidas})
     sessao.commit()
+
+
+def _rascunho_ou_novo(sessao: Session, contrato: Contrato, autor: Usuario) -> ProcessoProrrogacao:
+    """Rascunho em andamento; se ainda não houver, cria um vazio (as minutas podem ser preparadas antes de escolher o prazo)."""
+    processo = _rascunho(sessao, contrato)
+    if processo is None:
+        processo = ProcessoProrrogacao(contrato_id=contrato.id, criado_por_id=autor.id)
+        sessao.add(processo)
+        _copiar_checklist(sessao, processo)
+        sessao.flush()
+    return processo
+
+
+# ---------------------------------------------------------------------------------------------
+# Memória de cálculo e checklist da prorrogação
+# ---------------------------------------------------------------------------------------------
+
+def gerar_memoria(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> None:
+    """Gera o PDF e o XLSX da memória de cálculo (nova versão só se os dados mudaram)."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    processo = _rascunho(sessao, contrato)
+    if processo is None:
+        raise ErroRegraContrato("Informe e salve o prazo da prorrogação antes de gerar a memória de cálculo.")
+    memoria_prorrogacao.gerar_arquivos(sessao, contrato, processo, autor)
+    auditar(sessao, autor.login, "contrato.prorrogacao.memoria", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id,
+            dados={"versao": len(processo.memorias)})
+    sessao.commit()
+
+
+def _documento_do_rascunho(sessao: Session, contrato: Contrato, documento_id: uuid.UUID) -> tuple[ProcessoProrrogacao, DocumentoProrrogacao]:
+    processo = _rascunho(sessao, contrato)
+    documento = next((d for d in (processo.documentos if processo else []) if d.id == documento_id), None)
+    if documento is None:
+        raise RegistroNaoEncontrado("Documento do checklist")
+    return processo, documento
+
+
+def anexar_documento(sessao: Session, contrato_id: uuid.UUID, documento_id: uuid.UUID, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
+    """Anexa (ou substitui) o PDF de um documento do checklist da prorrogação."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    _, documento = _documento_do_rascunho(sessao, contrato, documento_id)
+    documento.anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-prorrogacao-checklist", autor.id, contrato_id=contrato.id)
+    documento.enviado_em, documento.enviado_por_id = agora_utc(), autor.id
+    auditar(sessao, autor.login, "contrato.prorrogacao.checklist.enviar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
+            alvo_id=contrato.id, dados={"documento": documento.nome})
+    sessao.commit()
+
+
+def incluir_documento(sessao: Session, contrato_id: uuid.UUID, nome_documento: str, descricao: str, arquivo: BinaryIO, nome_arquivo: str, autor: Usuario) -> None:
+    """Inclui no checklist da prorrogação um documento fora do modelo (nome, descrição e PDF): nunca obrigatório."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    nome_documento = " ".join((nome_documento or "").split())
+    if not nome_documento:
+        raise ErroRegraContrato("Informe o nome do documento.")
+    processo = _rascunho_ou_novo(sessao, contrato, autor)
+    documento = DocumentoProrrogacao(
+        ordem=max((d.ordem for d in processo.documentos), default=0) + 1, nome=nome_documento[:500], observacao=(descricao or "").strip()[:1000],
+        obrigatorio=False, incluido_no_processo=True, incluido_por_id=autor.id, incluido_em=agora_utc(),
+    )
+    documento.anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome_arquivo, "contrato-prorrogacao-checklist", autor.id, contrato_id=contrato.id)
+    documento.enviado_em, documento.enviado_por_id = agora_utc(), autor.id
+    processo.documentos.append(documento)
+    auditar(sessao, autor.login, "contrato.prorrogacao.checklist.incluir", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
+            alvo_id=contrato.id, dados={"documento": documento.nome})
+    sessao.commit()
+
+
+def excluir_documento(sessao: Session, contrato_id: uuid.UUID, documento_id: uuid.UUID, autor: Usuario) -> None:
+    """Exclui um documento incluído durante o processo (os do modelo ficam)."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    processo, documento = _documento_do_rascunho(sessao, contrato, documento_id)
+    if not documento.incluido_no_processo:
+        raise ErroRegraContrato("Só os documentos incluídos durante o processo podem ser excluídos; os do checklist padrão ficam.")
+    if documento.anexo is not None:
+        servico_anexos.descartar(documento.anexo)
+    processo.documentos.remove(documento)
+    auditar(sessao, autor.login, "contrato.prorrogacao.checklist.excluir", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
+            alvo_id=contrato.id, dados={"documento": documento.nome})
+    sessao.commit()
+
+
+def minutas(sessao: Session, contrato_id: uuid.UUID) -> LeituraMinutas:
+    """Documentos da prorrogação (minutas e despachos) e os dados que os completam."""
+    contrato = obter_contrato(sessao, contrato_id)
+    return prorrogacao_documentos.panorama(sessao, contrato, _rascunho(sessao, contrato))
+
+
+def minuta(sessao: Session, contrato_id: uuid.UUID, variante: str) -> LeituraMinuta:
+    """Texto preenchido de um documento, pronto para copiar para o SEI."""
+    contrato = obter_contrato(sessao, contrato_id)
+    return prorrogacao_documentos.gerar(sessao, contrato, _rascunho(sessao, contrato), variante)
+
+
+def salvar_dados_minuta(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoDadosMinuta, autor: Usuario) -> LeituraMinutas:
+    """Grava o que a equipe digitou para completar as minutas (substitui o anterior; texto vazio apaga o dado)."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    invalidos = [n for n in dados.dados if n.lower() not in prorrogacao_mascara.PLACEHOLDERS or n.lower() in prorrogacao_mascara.CONDICIONAIS]
+    if invalidos:
+        raise ErroRegraContrato("Dado desconhecido nas minutas: " + ", ".join(invalidos) + ".")
+    processo = _rascunho_ou_novo(sessao, contrato, autor)
+    novos = {n.lower(): v.strip() for n, v in dados.dados.items() if v.strip()}
+    processo.dados_minuta = novos
+    auditar(sessao, autor.login, "contrato.prorrogacao.minutas", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
+            alvo_id=contrato.id, dados={"campos": sorted(novos)})
+    sessao.commit()
+    return prorrogacao_documentos.panorama(sessao, contrato, processo)
+
+
+def enquadramento(sessao: Session, contrato_id: uuid.UUID) -> LeituraEnquadramento:
+    """Checklist do Parecer Referencial da prorrogação em andamento."""
+    contrato = obter_contrato(sessao, contrato_id)
+    return servico_enquadramento.consultar(sessao, contrato, _rascunho(sessao, contrato))
+
+
+def salvar_enquadramento(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoEnquadramento, autor: Usuario) -> LeituraEnquadramento:
+    """Grava as respostas do checklist do Parecer Referencial."""
+    return servico_enquadramento.salvar(sessao, contrato_id, dados, autor)
+
+
+def planilha_enquadramento(sessao: Session, contrato_id: uuid.UUID) -> tuple[bytes, str]:
+    """Checklist em XLSX (Modelo 6) e o nome sugerido do arquivo."""
+    contrato = obter_contrato(sessao, contrato_id)
+    return servico_enquadramento.planilha(sessao, contrato, _rascunho(sessao, contrato)), f"checklist-parecer-referencial-{contrato.numero.replace('/', '-')}.xlsx"
+
+
+def atualizar_pos_assinatura(sessao: Session, contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID, dados: GravacaoPosAssinatura, autor: Usuario) -> None:
+    """Grava as datas de PNCP, DOE, garantia e Contratos.gov de uma prorrogação registrada."""
+    servico_pos_assinatura.atualizar(sessao, contrato_id, prorrogacao_id, dados, autor)
 
 
 def registrar_ciencia(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> None:
@@ -302,6 +477,14 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, assinada_em: date, numero
         raise ErroRegraContrato(f"A prorrogação ultrapassa a vigência máxima: restam {meses_disponiveis(contrato)} mês(es).")
     if contrato.competencias and checklist_ativo(contrato) is None:
         raise ErroRegraContrato("O contrato já tem competências geradas: ative um checklist antes de prorrogar.")
+    memoria = memoria_prorrogacao.resumo(contrato, processo)
+    if memoria and memoria["precisa_escolher"]:
+        raise ErroRegraContrato("Escolha como calcular os meses quebrados (pro rata ou integral) antes de registrar.")
+    if not memoria_prorrogacao.memoria_atualizada(contrato, processo):
+        raise ErroRegraContrato("Gere a memória de cálculo da prorrogação (com os dados atuais) antes de registrar.")
+    pendentes = [d.nome for d in processo.documentos if d.obrigatorio and not d.anexo_id]
+    if pendentes:
+        raise ErroRegraContrato("Anexe os documentos obrigatórios do checklist: " + "; ".join(pendentes) + ".")
     # Emite o parecer final (se houver) e guarda o termo como documento importante com o próximo código
     relatorio = emitir_parecer(sessao, contrato, processo, autor)
     inicio, fim = nova_vigencia(contrato, processo.meses)
@@ -316,10 +499,11 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, assinada_em: date, numero
     prorrogacao = Prorrogacao(
         meses=processo.meses, assinada_em=assinada_em, numero_termo=numero, fim_anterior=contrato.data_fim, data_inicio=inicio, data_fim=fim,
         anexo=anexo, codigo_documento=codigo, relatorio_anexo_id=relatorio.id if relatorio else None, criado_por_id=autor.id,
+        enquadramento=servico_enquadramento.fotografia(sessao, contrato, processo, assinada_em), pncp_prazo_ate=servico_pos_assinatura.prazo_pncp(sessao, contrato, assinada_em),
     )
     contrato.prorrogacoes.append(prorrogacao)
-    # Número da nova vigência: 1 (original) + quantidade de prorrogações
-    sequencia = len(contrato.prorrogacoes) + 1
+    # Número da nova vigência: retroativas + original + quantidade de prorrogações
+    sequencia = len(contrato.vigencias_retroativas) + len(contrato.prorrogacoes) + 1
     sob_demanda = processo.plano_sob_demanda or []
     # Previsão da nova vigência, já selada, com os limites e apontamentos planejados no rascunho
     if any(i.tipo == "sob_demanda" for i in contrato.itens):
@@ -342,7 +526,8 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, assinada_em: date, numero
     processo.prorrogacao_id = prorrogacao.id
     auditar(sessao, autor.login, "contrato.prorrogacao.registrar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
             alvo_id=contrato.id, dados={"campos": {"data_fim": {"de": prorrogacao.fim_anterior, "para": fim}}, "meses": processo.meses,
-                                        "termo": numero, "com_parecer": relatorio is not None})
+                                        "termo": numero, "com_parecer": relatorio is not None,
+                                        "precisa_analise_juridica": prorrogacao.enquadramento["precisa_juridico"]})
     from app.services.contratos import avisos
     avisos.alteracao_concluida(sessao, contrato, "prorrogacao", prorrogacao.id,
                                f"prorrogação de {processo.meses} meses registrada (vigência até {fim:%d/%m/%Y})", autor)
@@ -356,13 +541,18 @@ def listar(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> list[Le
     anexos = {a.id: a for a in sessao.scalars(select(Anexo).where(Anexo.id.in_(
         [p.anexo_id for p in contrato.prorrogacoes] + [p.relatorio_anexo_id for p in contrato.prorrogacoes if p.relatorio_anexo_id])))}
     ultima = contrato.prorrogacoes[-1] if contrato.prorrogacoes else None
+    hoje, feriados = date.today(), calendario_util.feriados_cadastrados(sessao)
     return [
         LeituraProrrogacao(
             id=p.id, meses=p.meses, assinada_em=p.assinada_em, numero_termo=p.numero_termo, fim_anterior=p.fim_anterior, data_inicio=p.data_inicio,
-            data_fim=p.data_fim, codigo_documento=p.codigo_documento, termo=_arquivo(anexos.get(p.anexo_id)),
+            data_fim=p.data_fim, codigo_documento=p.codigo_documento, precisa_analise_juridica=bool((p.enquadramento or {}).get("precisa_juridico")),
+            pncp_prazo_ate=p.pncp_prazo_ate, pncp_publicado_em=p.pncp_publicado_em, pncp_numero=p.pncp_numero, situacao_pncp=situacao[0], dias_uteis_pncp=situacao[1],
+            doe_publicado_em=p.doe_publicado_em, exige_garantia=contrato.exige_garantia, garantia_comprovada_em=p.garantia_comprovada_em,
+            garantia_enviada_dof_em=p.garantia_enviada_dof_em, garantia_pendente=contrato.exige_garantia and p.garantia_comprovada_em is None,
+            dados_garantia=p.dados_garantia or {}, contratos_gov_atualizado_em=p.contratos_gov_atualizado_em, termo=_arquivo(anexos.get(p.anexo_id)),
             relatorio=_arquivo(anexos.get(p.relatorio_anexo_id)), pode_desfazer=p is ultima and pode_desfazer(sessao, contrato, p, usuario)[0],
         )
-        for p in contrato.prorrogacoes
+        for p, situacao in ((p, servico_pos_assinatura.situacao_pncp(sessao, p, hoje, feriados)) for p in contrato.prorrogacoes)
     ]
 
 
@@ -370,7 +560,7 @@ def pode_desfazer(sessao: Session, contrato: Contrato, prorrogacao: Prorrogacao,
     """(pode desfazer?, motivo) para a prorrogação informada."""
     if not pode_editar(sessao, contrato, usuario):
         return False, "Sem permissão para alterar o contrato."
-    sequencia = contrato.prorrogacoes.index(prorrogacao) + 2
+    sequencia = len(contrato.vigencias_retroativas) + contrato.prorrogacoes.index(prorrogacao) + 2
     # Competências geradas na vigência criada por esta prorrogação
     competencias = [c for c in contrato.competencias if c.sequencia_vigencia == sequencia]
     if any(c.medicao_iniciada_em or c.etapa_atual != "medicao" for c in competencias):
@@ -393,7 +583,7 @@ def desfazer(sessao: Session, contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID,
     permitido, motivo = pode_desfazer(sessao, contrato, prorrogacao, autor)
     if not permitido:
         raise ErroRegraContrato(motivo)
-    sequencia = len(contrato.prorrogacoes) + 1
+    sequencia = len(contrato.vigencias_retroativas) + len(contrato.prorrogacoes) + 1
     # Remove competências e previsão da vigência desfeita, e o termo dos documentos importantes
     for competencia in [c for c in contrato.competencias if c.sequencia_vigencia == sequencia]:
         contrato.competencias.remove(competencia)
@@ -420,10 +610,14 @@ def arquivo(sessao: Session, contrato_id: uuid.UUID, anexo_id: uuid.UUID):
     """Termo aditivo ou parecer de uma prorrogação registrada, ou o parecer do rascunho."""
     contrato = obter_contrato(sessao, contrato_id)
     # Só permite baixar anexos que pertencem às prorrogações deste contrato ou ao rascunho atual
-    permitidos = {p.anexo_id for p in contrato.prorrogacoes} | {p.relatorio_anexo_id for p in contrato.prorrogacoes if p.relatorio_anexo_id}
+    permitidos = {p.anexo_id for p in contrato.prorrogacoes} | {v.anexo_id for v in contrato.vigencias_retroativas} | {p.relatorio_anexo_id for p in contrato.prorrogacoes if p.relatorio_anexo_id}
     processo = _rascunho(sessao, contrato)
     if processo and processo.relatorio_anexo_id:
         permitidos.add(processo.relatorio_anexo_id)
+    # Memórias de cálculo e documentos do checklist dos processos deste contrato (rascunho ou já registrados)
+    for p in sessao.scalars(select(ProcessoProrrogacao).where(ProcessoProrrogacao.contrato_id == contrato.id)
+                            .options(selectinload(ProcessoProrrogacao.memorias), selectinload(ProcessoProrrogacao.documentos))):
+        permitidos |= {a for m in p.memorias for a in (m.pdf_anexo_id, m.xlsx_anexo_id)} | {d.anexo_id for d in p.documentos if d.anexo_id}
     if anexo_id not in permitidos:
         raise RegistroNaoEncontrado("Arquivo")
     return servico_anexos.resposta_download(sessao.get(Anexo, anexo_id))

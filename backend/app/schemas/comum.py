@@ -46,3 +46,4 @@ class RespostaSaude(BaseModel):
     """Resposta do `GET /api/saude`, usado para monitorar se a API está no ar."""
     situacao: str = Field(..., description="`ok` quando a API está respondendo.")
     versao: str = Field(..., description="Versão da API.")
+    homologacao: bool = Field(False, description="Ambiente de homologação: e-mails e pop-ups são simulados e a tela mostra a faixa \"HOMOLOGAÇÃO\".")

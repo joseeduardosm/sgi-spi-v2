@@ -29,7 +29,7 @@ from app.schemas.contratos.alteracoes import (
 )
 from app.schemas.contratos.execucao import LeituraArquivo, LeituraCiencia
 from app.services import servico_anexos
-from app.services.contratos import calculos, valores
+from app.services.contratos import calculos, servico_parametros, valores
 from app.services.contratos.documentos_execucao import PAPEIS, data_hora, moeda, moeda_unitaria, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_competencias import CIENCIAS_MINIMAS
@@ -40,8 +40,7 @@ from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_MOEDA_UNITAR
 from app.services.servico_auditoria import auditar
 
 ZERO = Decimal(0)
-# Acima de 25% acumulado na vigência, a lei exige autorização do Ordenador de Despesa
-LIMITE_SEM_AUTORIZACAO = Decimal(25)
+# Acima de N% acumulado na vigência (parâmetro de Contratos, 25 de início), a lei exige autorização do Ordenador de Despesa
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 # Documentos aceitos: tipo → (coluna onde o id do anexo é gravado, categoria do anexo)
 DOCUMENTOS = {
@@ -119,7 +118,7 @@ def leitura(sessao: Session, contrato: Contrato, alteracao: AlteracaoQuantidade,
             for i in alteracao.itens
         ],
         valor_global_original=alteracao.valor_global_original, impacto_valor=alteracao.impacto_valor,
-        impacto_percentual=alteracao.impacto_percentual, acumulado_percentual=acumulado, exige_autorizacao=acumulado > LIMITE_SEM_AUTORIZACAO,
+        impacto_percentual=alteracao.impacto_percentual, acumulado_percentual=acumulado, exige_autorizacao=acumulado > servico_parametros.valor("limite_aditamento_sem_autorizacao"),
         justificativa=_arquivo(anexos.get(alteracao.justificativa_anexo_id)), autorizacao=_arquivo(anexos.get(alteracao.autorizacao_anexo_id)),
         de_acordo=_arquivo(anexos.get(alteracao.de_acordo_anexo_id)), termo=_arquivo(anexos.get(alteracao.termo_anexo_id)),
         memoria_pdf=_arquivo(anexos.get(alteracao.memoria_pdf_anexo_id)), memoria_xlsx=_arquivo(anexos.get(alteracao.memoria_xlsx_anexo_id)),
@@ -348,7 +347,7 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UUID, a
     alteracao, alteracoes = _em_andamento(sessao, contrato, alteracao_id)
     if len(alteracao.ciencias) < CIENCIAS_MINIMAS:
         raise ErroRegraContrato("A conclusão exige ao menos uma ciência de integrante da equipe.")
-    if _acumulado(contrato, alteracoes, alteracao) > LIMITE_SEM_AUTORIZACAO and alteracao.autorizacao_anexo_id is None:
+    if _acumulado(contrato, alteracoes, alteracao) > servico_parametros.valor("limite_aditamento_sem_autorizacao") and alteracao.autorizacao_anexo_id is None:
         raise ErroRegraContrato("Acima de 25%: anexe a autorização do Ordenador de Despesa.")
     faltando = [n for n, c in (("De Acordo da contratada", "de_acordo_anexo_id"), ("Termo Aditivo assinado", "termo_anexo_id")) if getattr(alteracao, c) is None]
     if faltando:

@@ -118,7 +118,10 @@ def _competencias_afetadas(contrato: Contrato, reajuste: Reajuste) -> list[Compe
 
 
 def _competencias_medidas(contrato: Contrato, reajuste: Reajuste) -> list[Competencia]:
-    """Competências regulares já medidas a partir da referência: a diferença de preço delas é paga à parte.
+    """Competências regulares já medidas a partir da referência e ainda sem diferença paga: a diferença delas é paga à parte.
+
+    Mês anterior à referência não entra: foi faturado antes de o reajuste valer, no preço certo daquela época.
+    `diferenca_coberta_por_reajuste_id` impede que um mês já acertado entre de novo.
 
     O reajuste retroativo não tem diferença a acertar: ele exige que a vigência retroativa ainda não tenha medição concluída.
     """
@@ -127,32 +130,66 @@ def _competencias_medidas(contrato: Contrato, reajuste: Reajuste) -> list[Compet
     return sorted(
         (
             c for c in contrato.competencias
-            if c.tipo == "regular" and c.sequencia_vigencia == reajuste.sequencia_vigencia
-            and c.competencia >= reajuste.mes_referencia and c.medicao_concluida_em is not None
+            if c.tipo == "regular"
+            and c.sequencia_vigencia == reajuste.sequencia_vigencia
+            and c.competencia >= reajuste.mes_referencia
+            and c.diferenca_coberta_por_reajuste_id is None
+            and c.medicao_concluida_em is not None
         ),
         key=lambda c: c.periodo_inicio,
     )
 
 
-def _fracao_apos_efeito(competencia: Competencia, linha, efeito) -> Decimal:
+def rotulo_competencia(competencia: Competencia) -> str:
+    """A competência como `AAAA-MM`."""
+    return f"{competencia.competencia:%Y-%m}"
+
+
+# Como calcular os meses quebrados (que contêm a data de efeito): uma escolha só, para todos os meses e itens do reajuste
+MODOS_MES_QUEBRADO = ("pro_rata", "integral")
+
+
+def _quebrado(competencia: Competencia, reajuste: Reajuste) -> bool:
+    """Mês que contém a data de efeito: parte dele é do preço antigo, parte do novo."""
+    return competencia.periodo_inicio < reajuste.efeito <= competencia.periodo_fim
+
+
+def _dias(competencia: Competencia, efeito) -> tuple[int, int, int]:
+    """Dias comerciais (30/360) do mês quebrado: antes do efeito, a partir dele e o total do período medido."""
+    total = calculos.dias_comerciais(competencia.periodo_inicio, competencia.periodo_fim) or 1
+    depois = calculos.dias_comerciais(efeito, competencia.periodo_fim)
+    return total - depois, depois, total
+
+
+def _fracao_apos_efeito(competencia: Competencia, linha, reajuste: Reajuste, modo: str | None = None) -> Decimal:
     """Quanto da quantidade medida da linha vale a diferença: tudo, nada ou a fração dos dias a partir da data de efeito.
 
-    Linha de trecho (mês com virada): só os trechos que começam na data de efeito ou depois. Linha de mês inteiro medida antes do
-    reajuste que atravessa a data: item pró-rata usa a fração dos dias comerciais (30/360); item sempre integral usa o mês cheio.
+    - Trecho de mês partido pela virada de vigência: só conta o trecho da vigência deste reajuste (o da vigência
+      anterior é regido pelo reajuste dela), e só a partir do efeito.
+    - Mês quebrado (contém o efeito): `integral` cobra o mês inteiro com o preço novo; `pro_rata`, só os dias a partir
+      do efeito. Vale para todos os itens, inclusive os de faturamento sempre integral: a escolha do gestor manda.
+      `modo` simula uma opção sem gravá-la; sem ele vale a escolha gravada e, enquanto não houver escolha, pro rata.
+    - Mês inteiro: tudo se termina no efeito ou depois; nada se termina antes.
+
+    O mês do fim da vigência já vem medido só até o último dia dela: as duas opções param ali, e a vigência
+    seguinte (prorrogação) é tratada pelo reajuste dela.
     """
+    efeito = reajuste.efeito
     if linha.periodo_inicio is not None:
-        return Decimal(1) if linha.periodo_inicio >= efeito else ZERO
-    if competencia.periodo_inicio < efeito <= competencia.periodo_fim:
-        # Item sempre integral: cobra o mês cheio mesmo que o efeito caia no meio do período
-        if not linha.calcula_pro_rata:
+        if linha.sequencia_vigencia != reajuste.sequencia_vigencia:
+            return ZERO
+        if competencia.periodo_fim < efeito:
             return Decimal(1)
-        depois = calculos.dias_comerciais(efeito, competencia.periodo_fim)
-        total = calculos.dias_comerciais(competencia.periodo_inicio, competencia.periodo_fim) or 1
+        return Decimal(1) if linha.periodo_inicio >= efeito else ZERO
+    if _quebrado(competencia, reajuste):
+        if (modo or reajuste.calculo_mes_quebrado) == "integral":
+            return Decimal(1)
+        _, depois, total = _dias(competencia, efeito)
         return Decimal(depois) / Decimal(total)
     return Decimal(1) if competencia.periodo_fim >= efeito else ZERO
 
 
-def _diferencas(contrato: Contrato, reajuste: Reajuste, novos: dict) -> tuple[list[Competencia], dict, dict]:
+def _diferencas(contrato: Contrato, reajuste: Reajuste, novos: dict, modo: str | None = None) -> tuple[list[Competencia], dict, dict]:
     """Competências medidas desde a referência e, por item, a quantidade medida e o valor da diferença (só dos dias com o novo preço)."""
     medidas = _competencias_medidas(contrato, reajuste)
     quantidades: dict = {}
@@ -161,7 +198,7 @@ def _diferencas(contrato: Contrato, reajuste: Reajuste, novos: dict) -> tuple[li
         for linha in competencia.itens:
             if linha.item_id not in novos or linha.quantidade_medida <= 0:
                 continue
-            quantidade = linha.quantidade_medida * _fracao_apos_efeito(competencia, linha, reajuste.efeito)
+            quantidade = linha.quantidade_medida * _fracao_apos_efeito(competencia, linha, reajuste, modo)
             if quantidade <= 0:
                 continue
             quantidades[linha.item_id] = quantidades.get(linha.item_id, ZERO) + quantidade
@@ -220,7 +257,7 @@ def detalhe_meses(contrato: Contrato, reajuste: Reajuste, novos: dict | None = N
         for linha in sorted(competencia.itens, key=lambda l: (l.ordem, l.periodo_inicio or competencia.periodo_inicio)):
             if linha.item_id not in novos or linha.quantidade_medida <= 0:
                 continue
-            quantidade_pos = linha.quantidade_medida * _fracao_apos_efeito(competencia, linha, reajuste.efeito)
+            quantidade_pos = linha.quantidade_medida * _fracao_apos_efeito(competencia, linha, reajuste)
             if quantidade_pos <= 0:
                 continue
             item = cadastro.get(linha.item_id)
@@ -235,18 +272,77 @@ def detalhe_meses(contrato: Contrato, reajuste: Reajuste, novos: dict | None = N
     return meses
 
 
-def resumo_meses(contrato: Contrato, reajuste: Reajuste) -> dict:
-    """Resumo executivo: meses pagos (OB concluída) com o valor em haver, o total e o que está medido mas ainda sem OB (também entra na diferença)."""
-    meses = detalhe_meses(contrato, reajuste)
-    pagos = [m for m in meses if m.paga]
-    total_pagos = calculos.arredondar(sum((l.em_haver for m in pagos for l in m.linhas), ZERO))
-    diferenca = diferenca_retroativa(contrato, reajuste)
+def _trechos_do_item(competencia: Competencia, linha, preco_novo: Decimal, reajuste: Reajuste, modo: str) -> list[dict]:
+    """Memória de um item no mês quebrado, período a período.
+
+    Pro rata: os dias antes do efeito com o valor sem reajuste e os dias a partir dele com o valor reajustado.
+    Integral: o período medido inteiro com o valor reajustado."""
+    efeito = reajuste.efeito
+    medida = linha.quantidade_medida
+    if modo == "integral":
+        _, _, total = _dias(competencia, efeito)
+        return [{"inicio": competencia.periodo_inicio, "fim": competencia.periodo_fim, "dias": total, "reajustado": True,
+                 "quantidade": medida, "valor_unitario": preco_novo, "valor": calculos.arredondar(medida * preco_novo)}]
+    antes, depois, total = _dias(competencia, efeito)
+    q_antes = medida * Decimal(antes) / Decimal(total)
+    q_depois = medida * Decimal(depois) / Decimal(total)
+    return [
+        {"inicio": competencia.periodo_inicio, "fim": efeito - timedelta(days=1), "dias": antes, "reajustado": False,
+         "quantidade": q_antes, "valor_unitario": linha.valor_unitario, "valor": calculos.arredondar(q_antes * linha.valor_unitario)},
+        {"inicio": efeito, "fim": competencia.periodo_fim, "dias": depois, "reajustado": True,
+         "quantidade": q_depois, "valor_unitario": preco_novo, "valor": calculos.arredondar(q_depois * preco_novo)},
+    ]
+
+
+def _opcao_mes_quebrado(competencia: Competencia, reajuste: Reajuste, novos: dict, modo: str) -> dict:
+    """Uma opção (pro rata ou integral) de um mês quebrado: cada item com os trechos, o devido, o pago e o em haver."""
+    itens = []
+    for linha in sorted(competencia.itens, key=lambda l: l.ordem):
+        if linha.item_id not in novos or linha.quantidade_medida <= 0 or linha.periodo_inicio is not None:
+            continue
+        trechos = _trechos_do_item(competencia, linha, novos[linha.item_id], reajuste, modo)
+        pago = calculos.arredondar(linha.quantidade_medida * linha.valor_unitario)
+        # Em haver pela mesma conta da diferença retroativa (quantidade alcançada × diferença de preço), para os totais baterem
+        em_haver = calculos.arredondar(linha.quantidade_medida * _fracao_apos_efeito(competencia, linha, reajuste, modo) * (novos[linha.item_id] - linha.valor_unitario))
+        itens.append({"ordem": linha.ordem, "descricao": linha.descricao_completa, "quantidade_medida": linha.quantidade_medida,
+                      "valor_pago": pago, "trechos": trechos, "devido": calculos.arredondar(pago + em_haver), "em_haver": em_haver})
     return {
-        "meses": [{"competencia": m.rotulo, "identificador": m.identificador, "valor_pago": m.pago, "valor_reajustado": m.reajustado, "em_haver": m.em_haver} for m in pagos],
-        "total_em_haver": total_pagos,
-        "medidos_nao_pagos": [{"competencia": m.rotulo, "em_haver": m.em_haver} for m in meses if not m.paga],
-        "valor_medidos_nao_pagos": calculos.arredondar(diferenca - total_pagos) if not reajuste.retroativo else ZERO,
+        "itens": itens,
+        "valor_pago": calculos.arredondar(sum((i["valor_pago"] for i in itens), ZERO)),
+        "devido": calculos.arredondar(sum((i["devido"] for i in itens), ZERO)),
+        "em_haver": calculos.arredondar(sum((i["em_haver"] for i in itens), ZERO)),
+    }
+
+
+def meses_quebrados(contrato: Contrato, reajuste: Reajuste, novos: dict | None = None) -> list[dict]:
+    """Meses medidos que contêm a data de efeito, com as duas opções calculadas para o gestor comparar e escolher."""
+    if reajuste.retroativo:
+        return []
+    novos = novos if novos is not None else {i.item_id: i.valor_unitario_reajustado for i in reajuste.itens}
+    return [
+        {"competencia": rotulo_competencia(c), "rotulo": c.numero_competencia, "periodo_inicio": c.periodo_inicio, "periodo_fim": c.periodo_fim,
+         "opcoes": {modo: _opcao_mes_quebrado(c, reajuste, novos, modo) for modo in MODOS_MES_QUEBRADO}}
+        for c in _competencias_medidas(contrato, reajuste) if _quebrado(c, reajuste)
+    ]
+
+
+def resumo_meses(contrato: Contrato, reajuste: Reajuste) -> dict:
+    """Resumo executivo: cada mês medido a partir da referência (com OB paga ou não) e o valor em haver, o total e os
+    meses quebrados com as duas opções de cálculo."""
+    meses = detalhe_meses(contrato, reajuste)
+    diferenca = diferenca_retroativa(contrato, reajuste)
+    quebrados = meses_quebrados(contrato, reajuste)
+    return {
+        "meses": [{"competencia": m.rotulo, "identificador": m.identificador, "paga": m.paga, "valor_pago": m.pago,
+                   "valor_reajustado": m.reajustado, "em_haver": m.em_haver} for m in meses],
+        "total_em_haver": diferenca if not reajuste.retroativo else ZERO,
         "diferenca_retroativa": diferenca,
+        "meses_quebrados": quebrados,
+        # Diferença retroativa inteira em cada opção: a escolha vale para todos os meses quebrados de uma vez
+        "diferenca_pro_rata": diferenca_retroativa(contrato, reajuste, "pro_rata") if quebrados else diferenca,
+        "diferenca_integral": diferenca_retroativa(contrato, reajuste, "integral") if quebrados else diferenca,
+        "calculo_mes_quebrado": reajuste.calculo_mes_quebrado,
+        "precisa_escolher": bool(quebrados) and reajuste.calculo_mes_quebrado is None,
     }
 
 
@@ -255,9 +351,9 @@ def competencias_medidas_na_vigencia(contrato: Contrato, reajuste: Reajuste) -> 
     return [c for c in contrato.competencias if c.tipo == "regular" and c.sequencia_vigencia == reajuste.sequencia_vigencia and c.medicao_concluida_em is not None]
 
 
-def diferenca_retroativa(contrato: Contrato, reajuste: Reajuste) -> Decimal:
-    """Diferença líquida das competências já medidas: > 0 a pagar à contratada, < 0 crédito da SPI."""
-    _, _, valores_diferenca = _diferencas(contrato, reajuste, {i.item_id: i.valor_unitario_reajustado for i in reajuste.itens})
+def diferenca_retroativa(contrato: Contrato, reajuste: Reajuste, modo: str | None = None) -> Decimal:
+    """Diferença líquida das competências já medidas: > 0 a pagar à contratada, < 0 crédito da SPI (`modo` simula uma opção do mês quebrado)."""
+    _, _, valores_diferenca = _diferencas(contrato, reajuste, {i.item_id: i.valor_unitario_reajustado for i in reajuste.itens}, modo)
     return calculos.arredondar(sum(valores_diferenca.values(), ZERO))
 
 
@@ -298,6 +394,10 @@ def gerar_competencia_diferenca(contrato: Contrato, reajuste: Reajuste, novos: d
     if checklist:
         copiar_checklist(competencia, checklist)
     contrato.competencias.append(competencia)
+    # Marcar as competências de origem como cobertas por este reajuste,
+    # para que reajustes futuros não as incluam de novo na diferença
+    for c in medidas:
+        c.diferenca_coberta_por_reajuste_id = reajuste.id
     return competencia
 
 
@@ -466,8 +566,19 @@ def deflacionar_preco(atual: Decimal, indice: Decimal, referencial: Decimal | No
     return max(anterior, referencial) if referencial is not None else anterior
 
 
+def aplicar_calculo_mes_quebrado(contrato: Contrato, reajuste: Reajuste, modo: str | None) -> None:
+    """Grava como calcular os meses quebrados (`pro_rata` ou `integral`), uma escolha para todos; `None` mantém a atual.
+
+    Só aceita a escolha quando há mês quebrado: sem ele as duas opções dão o mesmo valor e a escolha esconderia um engano."""
+    if modo is None:
+        return
+    if not meses_quebrados(contrato, reajuste):
+        raise ErroRegraContrato("Este reajuste não tem mês quebrado pela data de efeito: não há o que escolher.")
+    reajuste.calculo_mes_quebrado = modo
+
+
 def salvar_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, dados: GravacaoMemoriaReajuste, autor: Usuario) -> None:
-    """Grava índice e teto de cada item, recalcula os novos preços e os totais."""
+    """Grava índice e teto de cada item, a escolha do cálculo dos meses quebrados, recalcula os novos preços e os totais."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
@@ -479,6 +590,8 @@ def salvar_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UU
         linha.indice_percentual, linha.valor_referencial = entrada.indice_percentual, entrada.valor_referencial
         calcular = deflacionar_preco if reajuste.retroativo else reajustar_preco
         linha.valor_unitario_reajustado = calcular(linha.valor_unitario_atual, entrada.indice_percentual, entrada.valor_referencial)
+    # Depois dos preços: a validação compara os dois cenários, que dependem do novo preço
+    aplicar_calculo_mes_quebrado(contrato, reajuste, dados.calculo_mes_quebrado)
     calcular_totais(contrato, reajuste)
     auditar(sessao, autor.login, "contrato.reajuste.memoria", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id,
             dados={"itens": {str(i.item_id): {"indice": i.indice_percentual, "novo": i.valor_unitario_reajustado} for i in reajuste.itens}})
@@ -501,6 +614,8 @@ def previa_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UU
             linha.indice_percentual, linha.valor_referencial = entrada.indice_percentual, entrada.valor_referencial
             calcular = deflacionar_preco if reajuste.retroativo else reajustar_preco
             linha.valor_unitario_reajustado = calcular(linha.valor_unitario_atual, entrada.indice_percentual, entrada.valor_referencial)
+        # Depois dos preços: a validação compara os dois cenários, que dependem do novo preço
+        aplicar_calculo_mes_quebrado(contrato, reajuste, dados.calculo_mes_quebrado)
         calcular_totais(contrato, reajuste)
         return leitura(contrato, reajuste, {})
     finally:
@@ -508,7 +623,7 @@ def previa_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UU
 
 
 # Versão do layout dos arquivos da memória: ao mudar o layout (colunas, quebras de página), sobe e a próxima geração cria uma versão nova com o layout atual
-FORMATO_MEMORIA = 4
+FORMATO_MEMORIA = 6
 
 
 def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, autor: Usuario) -> None:
@@ -516,10 +631,12 @@ def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id:
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
+    if reajuste.calculo_mes_quebrado is None and meses_quebrados(contrato, reajuste):
+        raise ErroRegraContrato("Escolha como calcular os meses quebrados (pro rata ou integral) antes de gerar a memória.")
     # Hash dos dados da memória: se nada mudou desde a última versão, não gera arquivos novos
     origem = hashlib.sha256(json.dumps(
         [[str(i.item_id), str(i.valor_unitario_atual), str(i.indice_percentual), str(i.valor_referencial), str(i.valor_unitario_reajustado)] for i in reajuste.itens]
-        + [str(reajuste.mes_referencia), str(reajuste.efeito), FORMATO_MEMORIA]
+        + [str(reajuste.mes_referencia), str(reajuste.efeito), str(reajuste.calculo_mes_quebrado), FORMATO_MEMORIA]
         # A memória mês a mês também entra: medição, preço pago e OB concluída de cada mês mudam o que está em haver
         + [[m.identificador, m.paga, str(m.pago), str(m.em_haver)] for m in detalhe_meses(contrato, reajuste)]
     ).encode()).hexdigest()
@@ -592,6 +709,7 @@ def _pdf_memoria(contrato: Contrato, reajuste: Reajuste, versao: int, autor: Usu
         ("Valor global atual", moeda(reajuste.valor_global_atual)), ("Novo valor global", moeda(reajuste.valor_global_reajustado)),
         ("Competências já medidas", _texto_diferenca(contrato, reajuste)),
     ])
+    _secao_quebrados_pdf(documento, contrato, reajuste)
     _secoes_meses_pdf(documento, contrato, reajuste)
     return documento.gerar()
 
@@ -604,26 +722,60 @@ def _linhas_mes(mes: MesDetalhe) -> list[list]:
              calculos.arredondar(l.reajustado), calculos.arredondar(l.em_haver)] for l in mes.linhas]
 
 
+def _ob(mes: dict | MesDetalhe) -> str:
+    """Situação da OB do mês medido, para os títulos e a coluna do resumo."""
+    paga = mes["paga"] if isinstance(mes, dict) else mes.paga
+    return "OB paga" if paga else "medida, aguardando OB"
+
+
 def _texto_resumo(contrato: Contrato, reajuste: Reajuste) -> list[str]:
-    """Linhas do resumo executivo (PDF e planilha): mês a mês em haver, total e o que ainda está sem OB."""
-    r = resumo_meses(contrato, reajuste)
+    """Texto do resumo executivo quando não há mês medido (ou no retroativo), e a linha do destino da diferença."""
     if reajuste.retroativo:
-        return ["Não há meses pagos nesta vigência retroativa: nada em haver."]
-    linhas = [f"{m['competencia']} — valor em haver {moeda(m['em_haver'])}" for m in r["meses"]] or ["Nenhum mês pago (OB concluída) a partir da referência."]
-    linhas.append(f"Total em haver (meses pagos): {moeda(r['total_em_haver'])}")
-    if r["medidos_nao_pagos"]:
-        meses = ", ".join(f"{m['competencia']} ({moeda(m['em_haver'])})" for m in r["medidos_nao_pagos"])
-        linhas.append(f"Medidos e ainda sem OB (entram na diferença gerada pelo sistema): {meses} — {moeda(r['valor_medidos_nao_pagos'])}")
-    linhas.append(f"Diferença retroativa total: {_texto_diferenca(contrato, reajuste)}")
-    return linhas
+        return ["Não há meses medidos nesta vigência retroativa: nada em haver."]
+    if not resumo_meses(contrato, reajuste)["meses"]:
+        return ["Nenhum mês medido a partir da referência: nada em haver."]
+    return [f"Diferença retroativa total: {_texto_diferenca(contrato, reajuste)}"]
+
+
+ROTULOS_MODO = {"pro_rata": "Pro rata (dias antes do efeito sem reajuste, a partir dele reajustados)", "integral": "Integral (mês inteiro reajustado)"}
+CABECALHO_QUEBRADO = ["Mês", "Item", "Descrição", "Período", "Dias", "Qtd.", "Valor unit.", "Valor"]
+
+
+def _linhas_quebrados(contrato: Contrato, reajuste: Reajuste) -> tuple[list[list], list[dict]]:
+    """Linhas período a período dos meses quebrados na opção escolhida (PDF e planilha) e os meses, para os subtotais."""
+    linhas, meses = [], []
+    for mes in meses_quebrados(contrato, reajuste):
+        opcao = mes["opcoes"][reajuste.calculo_mes_quebrado or "pro_rata"]
+        for item in opcao["itens"]:
+            for t in item["trechos"]:
+                periodo = f"{t['inicio']:%d/%m} a {t['fim']:%d/%m/%Y}" + ("" if t["reajustado"] else " (sem reajuste)")
+                linhas.append([mes["rotulo"], item["ordem"], item["descricao"], periodo, t["dias"], t["quantidade"], t["valor_unitario"], t["valor"]])
+        meses.append({"rotulo": mes["rotulo"], **opcao})
+    return linhas, meses
+
+
+def _secao_quebrados_pdf(documento: DocumentoPdf, contrato: Contrato, reajuste: Reajuste) -> None:
+    """Meses quebrados pela data de efeito: a opção escolhida e a memória período a período."""
+    linhas, meses = _linhas_quebrados(contrato, reajuste)
+    if not linhas:
+        return
+    secao = documento.nova_pagina().secao(f"Meses quebrados pela data de efeito ({reajuste.efeito:%d/%m/%Y})")
+    secao.paragrafo(f"Cálculo escolhido: {ROTULOS_MODO[reajuste.calculo_mes_quebrado or 'pro_rata']}.")
+    secao.tabela(
+        CABECALHO_QUEBRADO,
+        [[l[0], str(l[1]), l[2], l[3], str(l[4]), quantidade(l[5]), moeda_unitaria(l[6]), moeda(l[7])] for l in linhas],
+        larguras=[1.1, 0.6, 4.2, 2.6, 0.7, 1.1, 1.3, 1.4], alinhar_direita=[4, 5, 6, 7],
+    )
+    for m in meses:
+        documento.paragrafo(f"{m['rotulo']}: devido {moeda(m['devido'])} − pago {moeda(m['valor_pago'])} = em haver {moeda(m['em_haver'])}")
 
 
 def _secoes_meses_pdf(documento: DocumentoPdf, contrato: Contrato, reajuste: Reajuste) -> None:
-    """Uma seção por mês já pago (item a item) e o resumo executivo."""
+    """Uma seção por mês medido (item a item, com a situação da OB) e o resumo executivo."""
     larguras = [0.55, 2.8, 2.3, 0.9, 1.2, 1.3, 1.2, 1.4, 1.5, 1.3]
-    for mes in (m for m in detalhe_meses(contrato, reajuste) if m.paga):
+    for mes in detalhe_meses(contrato, reajuste):
         linhas = _linhas_mes(mes)
-        documento.nova_pagina().secao(f"Memória de {mes.rotulo} (OB paga)").tabela(
+        documento.nova_pagina().secao(f"Memória de {mes.rotulo} ({_ob(mes)})").tabela(
             CABECALHO_MES,
             [[str(l[0]), l[1], l[2], quantidade(l[3]), moeda_unitaria(l[4]), moeda_unitaria(l[5]), _moeda_com_sinal(l[6], unitario=True), moeda(l[7]), moeda(l[8]), moeda(l[9])] for l in linhas],
             larguras=larguras, alinhar_direita=[3, 4, 5, 6, 7, 8, 9], rodape=["", f"Subtotal {mes.rotulo}", "", "", "", "", "", moeda(mes.pago), moeda(mes.reajustado), moeda(mes.em_haver)],
@@ -634,29 +786,39 @@ def _secoes_meses_pdf(documento: DocumentoPdf, contrato: Contrato, reajuste: Rea
         for texto in _texto_resumo(contrato, reajuste):
             secao.paragrafo(texto)
         return
-    # Tabela: um mês por linha, com o total no rodapé; o que sobra (meses sem OB e destino da diferença) vem em texto, abaixo
+    # Tabela: um mês medido por linha, com a situação da OB e o total no rodapé; o destino da diferença vem em texto, abaixo
     secao.tabela(
-        ["Mês", "Valor pago", "Valor reajustado", "Em haver"],
-        [[m["competencia"], moeda(m["valor_pago"]), moeda(m["valor_reajustado"]), moeda(m["em_haver"])] for m in resumo["meses"]],
-        larguras=[1.2, 2, 2, 2], alinhar_direita=[1, 2, 3],
-        rodape=["Total em haver", moeda(sum((m["valor_pago"] for m in resumo["meses"]), ZERO)), moeda(sum((m["valor_reajustado"] for m in resumo["meses"]), ZERO)), moeda(resumo["total_em_haver"])],
+        ["Mês", "OB", "Valor pago", "Valor reajustado", "Em haver"],
+        [[m["competencia"], _ob(m), moeda(m["valor_pago"]), moeda(m["valor_reajustado"]), moeda(m["em_haver"])] for m in resumo["meses"]],
+        larguras=[1.2, 2.2, 2, 2, 2], alinhar_direita=[2, 3, 4],
+        rodape=["Total em haver", "", moeda(sum((m["valor_pago"] for m in resumo["meses"]), ZERO)), moeda(sum((m["valor_reajustado"] for m in resumo["meses"]), ZERO)), moeda(resumo["total_em_haver"])],
     )
     documento.espaco(4)
-    for texto in _texto_resumo(contrato, reajuste)[len(resumo["meses"]) + 1:]:
+    for texto in _texto_resumo(contrato, reajuste):
         documento.paragrafo(texto)
 
 
 def _xlsx_memoria(contrato: Contrato, reajuste: Reajuste) -> bytes:
-    """Monta a planilha da memória de cálculo com as mesmas colunas do PDF (aba "Reajuste", uma aba por mês pago e a aba "Resumo")."""
+    """Monta a planilha da memória de cálculo com as mesmas colunas do PDF (aba "Reajuste", uma aba por mês medido e a aba "Resumo")."""
     abas = _abas_itens(contrato, reajuste)
-    for mes in (m for m in detalhe_meses(contrato, reajuste) if m.paga):
+    for mes in detalhe_meses(contrato, reajuste):
         abas.append(Aba(
             mes.rotulo.replace("/", "-"),
             [Coluna("Item", largura=6), Coluna("Descrição", largura=40), Coluna("Tipo · SIAFÍSICO · CATMAT/CATSER", largura=30), Coluna("Qtd.", FORMATO_QUANTIDADE),
              Coluna("Valor unit.", FORMATO_MOEDA_UNITARIA), Coluna("Valor unit. reaj.", FORMATO_MOEDA_UNITARIA), Coluna("Dif. +/−", FORMATO_MOEDA_UNITARIA),
              Coluna("Valor pago", FORMATO_MOEDA, 16), Coluna("Valor reajustado", FORMATO_MOEDA, 16), Coluna("Em haver", FORMATO_MOEDA, 16)],
-            _linhas_mes(mes), titulo=f"Memória de {mes.rotulo} — Contrato {contrato.numero}",
+            _linhas_mes(mes), titulo=f"Memória de {mes.rotulo} ({_ob(mes)}) — Contrato {contrato.numero}",
             rodape=["", f"Subtotal {mes.rotulo}", "", "", "", "", "", mes.pago, mes.reajustado, mes.em_haver],
+        ))
+    linhas_quebrados, meses_q = _linhas_quebrados(contrato, reajuste)
+    if linhas_quebrados:
+        abas.append(Aba(
+            "Meses quebrados",
+            [Coluna("Mês", largura=12), Coluna("Item", largura=6), Coluna("Descrição", largura=40), Coluna("Período", largura=26), Coluna("Dias", largura=6),
+             Coluna("Qtd.", FORMATO_QUANTIDADE), Coluna("Valor unit.", FORMATO_MOEDA_UNITARIA), Coluna("Valor", FORMATO_MOEDA, 16)],
+            linhas_quebrados, titulo=f"Meses quebrados pela data de efeito ({reajuste.efeito:%d/%m/%Y}) — Contrato {contrato.numero}",
+            observacoes=[f"Cálculo escolhido: {ROTULOS_MODO[reajuste.calculo_mes_quebrado or 'pro_rata']}."]
+            + [f"{m['rotulo']}: devido {moeda(m['devido'])} − pago {moeda(m['valor_pago'])} = em haver {moeda(m['em_haver'])}" for m in meses_q],
         ))
     resumo = resumo_meses(contrato, reajuste)
     if reajuste.retroativo or not resumo["meses"]:
@@ -664,11 +826,12 @@ def _xlsx_memoria(contrato: Contrato, reajuste: Reajuste) -> bytes:
                         titulo=f"Resumo executivo — Contrato {contrato.numero}"))
     else:
         abas.append(Aba(
-            "Resumo", [Coluna("Mês", largura=14), Coluna("Valor pago", FORMATO_MOEDA, 18), Coluna("Valor reajustado", FORMATO_MOEDA, 18), Coluna("Em haver", FORMATO_MOEDA, 18)],
-            [[m["competencia"], m["valor_pago"], m["valor_reajustado"], m["em_haver"]] for m in resumo["meses"]],
+            "Resumo", [Coluna("Mês", largura=14), Coluna("OB", largura=24), Coluna("Valor pago", FORMATO_MOEDA, 18), Coluna("Valor reajustado", FORMATO_MOEDA, 18),
+                       Coluna("Em haver", FORMATO_MOEDA, 18)],
+            [[m["competencia"], _ob(m), m["valor_pago"], m["valor_reajustado"], m["em_haver"]] for m in resumo["meses"]],
             titulo=f"Memória de cálculo executiva — Contrato {contrato.numero}",
-            rodape=["Total em haver", sum((m["valor_pago"] for m in resumo["meses"]), ZERO), sum((m["valor_reajustado"] for m in resumo["meses"]), ZERO), resumo["total_em_haver"]],
-            observacoes=_texto_resumo(contrato, reajuste)[len(resumo["meses"]) + 1:],
+            rodape=["Total em haver", "", sum((m["valor_pago"] for m in resumo["meses"]), ZERO), sum((m["valor_reajustado"] for m in resumo["meses"]), ZERO), resumo["total_em_haver"]],
+            observacoes=_texto_resumo(contrato, reajuste),
         ))
     return gerar_planilha(abas)
 

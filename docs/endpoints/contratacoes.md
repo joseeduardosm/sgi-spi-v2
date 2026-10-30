@@ -5,7 +5,7 @@
 Tag no OpenAPI: **Contratações**. Implementação:
 - rotas: `backend/app/api/routes/contratacoes.py`; schemas: `backend/app/schemas/contratacoes.py`;
 - regras: `backend/app/services/contratacoes/` (`acesso`, `arvore`, `conteudo`, `versoes`, `diferencas`, `revisoes`, `conferencia`, `docx_exportacao`, `docx_importacao`, `html_blocos`);
-- modelos: `backend/app/models/contratacoes.py` (`contratacoes_documentos`, `_secoes`, `_itens`, `_tabela_tr`, `_revisoes`, `_comentarios_importados`, `_membros`, `_versoes`, `_historico_itens`; migração `e5b8c3d7a921`);
+- modelos: `backend/app/models/contratacoes.py` (`contratacoes_documentos`, `_secoes`, `_itens`, `_tabela_tr`, `_revisoes`, `_comentarios_importados`, `_membros`, `_versoes`, `_historico_itens`; migração `e5b8c3d7a921`; descrição da seção na `a7c3e9b5d1f4`);
 - modelos de exportação: `backend/app/recursos/contratacoes/etp.docx` e `tr.docx` (os mesmos do SGI SPI antigo, 10.23.1.220);
 - avisos: `app/tarefas/notificacoes.py` (revisão parada há `CONTRATACOES_DIAS_AVISO` dias, no timer diário).
 
@@ -47,11 +47,11 @@ Documento sem acesso responde `404` (não revela que existe); papel insuficiente
 | `POST /documentos/{id}/duplicar` | MODIFICACAO | Cópia em rascunho (sem revisões, membros nem vínculo) |
 | `PUT /documentos/{id}/contrato` | criador | `{ contrato_id \| null }` |
 | `PUT`/`DELETE /documentos/{id}/membros/{usuario_id}` | criador | `{ papel: editor\|revisor }`; devolve os membros |
-| `POST`/`PUT`/`DELETE /documentos/{id}/secoes[/{sid}]`, `PUT …/secoes/{sid}/ordem` | editor | Cria, renomeia, exclui (com os itens) e move seções |
+| `POST`/`PUT`/`DELETE /documentos/{id}/secoes[/{sid}]`, `PUT …/secoes/{sid}/ordem` | editor | Cria, altera, exclui (com os itens) e move seções. Corpo do `POST`/`PUT`: `{ "titulo", "descricao" }`: a `descricao` (opcional, até 4000 caracteres; vazia remove) orienta quem preenche, aparece só na tela, logo abaixo do título, e **não** vai para o Word, o PDF nem o botão Copiar; entra nas versões |
 | `POST /documentos/{id}/itens` | editor | `{ secao_id, pai_id?, tipo, conteudo?, conteudo_html?, posicao? }` (até 8 níveis; HTML sanitizado) |
 | `PUT`/`DELETE /documentos/{id}/itens/{iid}` | editor | Edita (grava antes e depois no histórico) / exclui com os filhos |
 | `POST …/itens/{iid}/mover`, `…/duplicar`, `…/limpar-filhos` | editor | Move com a subárvore, duplica com a subárvore, apaga só os filhos (`400` se mover para dentro de si mesmo) |
-| `POST /documentos/{id}/lote/previa`, `POST …/lote` | editor | Entrada em lote (`#`..`######`, `@` subseção, `**` inciso, `$$` alínea): a **prévia** não grava; gravar cria os itens marcados "precisa de revisão" |
+| `POST /documentos/{id}/lote/previa`, `POST …/lote` | editor | Entrada em lote (`#`..`######`, `@` subseção, `**` inciso, `$$` alínea): a **prévia** não grava; gravar cria os itens marcados "precisa de revisão". A tela chama só o `POST …/lote` (o botão "Criar itens" cria direto); a prévia continua disponível na API |
 | `POST …/itens/{iid}/linhas-tr`, `DELETE …/linhas-tr/{lid}` | editor | Tabela estruturada do **item 1.1 do TR** (`400` fora dele) |
 | `POST …/itens/{iid}/revisoes` | revisor ou mais | `{ comentario, conteudo_proposto?, conteudo_proposto_html? }`: comentário ou **proposta**; avisa o criador e os editores |
 | `POST …/revisoes/{rid}/aplicar` | editor | Copia a proposta para o item e gera versão (`409` se já aplicada) |

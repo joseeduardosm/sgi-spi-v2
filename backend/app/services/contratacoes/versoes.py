@@ -48,7 +48,7 @@ def foto(documento: DocumentoContratacao) -> dict:
             linhas += [{"id": str(l.id), "item_id": str(i.id), "ordem": l.ordem, "descricao": l.descricao, "siafisico": l.siafisico, "catser_catmat": l.catser_catmat,
                         "unidade": l.unidade, "quantidade_mensal": str(l.quantidade_mensal), "quantidade_objeto": str(l.quantidade_objeto)} for l in i.linhas_tabela]
     return {"nome": documento.nome, "processo": documento.processo, "link_sei": documento.link_sei or "", "situacao": documento.situacao,
-            "secoes": [{"id": str(s.id), "ordem": s.ordem, "titulo": s.titulo} for s in secoes], "itens": itens, "linhas_tabela": linhas}
+            "secoes": [{"id": str(s.id), "ordem": s.ordem, "titulo": s.titulo, "descricao": s.descricao or ""} for s in secoes], "itens": itens, "linhas_tabela": linhas}
 
 
 def _hash(f: dict) -> str:
@@ -165,10 +165,10 @@ def restaurar_versao(sessao: Session, documento: DocumentoContratacao, numero: i
     for sid, s in secoes_foto.items():
         secao = atuais_secoes.get(sid)
         if secao is None:
-            secao = SecaoContratacao(id=uuid.UUID(sid), documento_id=documento.id, ordem=s["ordem"], titulo=s["titulo"])
+            secao = SecaoContratacao(id=uuid.UUID(sid), documento_id=documento.id, ordem=s["ordem"], titulo=s["titulo"], descricao=s.get("descricao", ""))
             sessao.add(secao)
         else:
-            secao.ordem, secao.titulo = s["ordem"], s["titulo"]
+            secao.ordem, secao.titulo, secao.descricao = s["ordem"], s["titulo"], s.get("descricao", "")
     sessao.flush()
     # Pais antes dos filhos: cria/atualiza em ordem de profundidade
     def profundidade(i: dict) -> int:

@@ -19,6 +19,10 @@ from app.core.criptografia import ErroDecifrarSegredo, decifrar_segredo
 from app.models.servidor_smtp import ServidorSmtp
 
 
+# Prefixo do resultado de um envio simulado (modo homologação), mostrado onde o resultado do envio aparece
+SIMULADO = "Simulado (homologação):"
+
+
 class ErroSmtp(Exception):
     """Falha de conexão, segurança, autenticação ou envio, com mensagem pronta para a tela."""
 
@@ -58,6 +62,8 @@ class ResultadoSmtp:
     latencia_ms: int
     mensagem: str
     id_mensagem: str | None = None
+    # Homologação: o envio não aconteceu, mas conta como feito (sucesso=True) para o fluxo seguir
+    simulado: bool = False
 
 
 @dataclass(frozen=True)
@@ -209,6 +215,11 @@ def enviar(parametros: ParametrosSmtp, mensagem: Mensagem) -> ResultadoSmtp:
     inicio = time.perf_counter()
     email = montar_mensagem(parametros, mensagem)
     destinatarios = [*mensagem.para, *mensagem.cc, *mensagem.cco]
+    # Homologação: não conecta ao servidor; o envio fica registrado como simulado
+    from app.core.configuracao import obter_configuracao
+
+    if obter_configuracao().modo_homologacao:
+        return ResultadoSmtp(True, _ms(inicio), f"{SIMULADO} {len(destinatarios)} destinatário(s), nada saiu do servidor.", email["Message-ID"], simulado=True)
     try:
         conexao = _conectar(parametros)
         try:

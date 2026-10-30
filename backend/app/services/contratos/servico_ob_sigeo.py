@@ -101,10 +101,12 @@ class Resultado:
     # Contratos com competência esperando OB e sem processo financeiro: o processo que o SIGEO tem para o CNPJ da contratada
     sugestoes_processo: list[dict] = field(default_factory=list)
     erros: list[str] = field(default_factory=list)
+    # Resultado do cadastro de empenhos desta rodada (ver `servico_empenho_sigeo.Resultado`)
+    empenhos: dict | None = None
 
     def como_dict(self) -> dict:
         return {"verificadas": self.verificadas, "aguardando": self.aguardando, "concluidas": self.concluidas, "pendencias": self.pendencias,
-                "sugestoes_processo": self.sugestoes_processo, "erros": self.erros}
+                "sugestoes_processo": self.sugestoes_processo, "erros": self.erros, "empenhos": self.empenhos}
 
 
 def pagamentos(linhas: list[dict[str, str]]) -> list[Pagamento]:
@@ -164,8 +166,10 @@ def _ja_usadas(sessao: Session) -> set[str]:
     return usadas
 
 
-def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False, hoje: date | None = None) -> Resultado:
-    """Confere as competências que esperam OB contra as linhas do SIGEO. Em `ensaio` só relata (nada é gravado)."""
+def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False, hoje: date | None = None, competencia_id=None) -> Resultado:
+    """Confere as competências que esperam OB contra as linhas do SIGEO. Em `ensaio` só relata (nada é gravado).
+
+    Com `competencia_id`, confere só essa competência (a busca pedida na tela da execução)."""
     from app.services.contratos import servico_competencias, servico_tarefas_contratos
     from app.services.contratos.servico_contratos import obter_contrato
 
@@ -178,6 +182,8 @@ def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False
         select(Competencia).join(Contrato, Contrato.id == Competencia.contrato_id)
         .where(Competencia.etapa_atual == "ordem_bancaria", Competencia.ob_anexo_id.is_(None), Contrato.processo_financeiro != "")
         .order_by(Competencia.periodo_inicio)))
+    if competencia_id is not None:
+        candidatas = [c for c in candidatas if c.id == competencia_id]
     concluir: list[tuple] = []
     for competencia in candidatas:
         contrato = obter_contrato(sessao, competencia.contrato_id)
@@ -230,14 +236,15 @@ def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False
             sessao.rollback()
             resultado.concluidas.pop()
             resultado.pendencias.append({"competencia": rotulo, "contrato_id": str(contrato.id), "motivo": f"OB {numeros} achada, mas não deu para concluir: {erro}"})
-    resultado.sugestoes_processo = _sugestoes_processo(sessao, linhas)
+    if competencia_id is None:
+        resultado.sugestoes_processo = _sugestoes_processo(sessao, linhas)
     if not ensaio:
         sessao.commit()
         from app.services.contratos.servico_notificacoes import notificar_ob
 
         for contrato_id, competencia_id in concluir:
             try:
-                notificar_ob(contrato_id, competencia_id)
+                notificar_ob(contrato_id, competencia_id, respeitar_corte=True)
             except Exception:  # noqa: BLE001 - o e-mail nunca desfaz a conclusão; o resultado fica gravado na competência
                 log.exception("Falha no e-mail de pagamento da competência %s", competencia_id)
     return resultado
@@ -274,8 +281,48 @@ def executar(sessao: Session, ensaio: bool = False) -> Resultado:
         resultado = conferir(sessao, linhas, ensaio=ensaio)
     except ErroSigeo as erro:
         resultado = Resultado(erros=[erro.mensagem])
+    # Empenhos: contratos com Processo Financeiro e sem NE ganham as NEs e cancelamentos do SIGEO (uma falha aqui não desfaz a conferência das OBs)
+    empenhos = None
+    try:
+        from app.services.contratos import servico_empenho_sigeo
+        from app.services.contratos.servico_tarefas_contratos import usuario_sistema
+
+        empenhos = servico_empenho_sigeo.cadastrar(sessao, servico_integracao_sigeo.baixar_empenhos(config), usuario_sistema(sessao), ensaio=ensaio).como_dict()
+    except ErroSigeo as erro:
+        resultado.erros.append(f"Empenhos: {erro.mensagem}")
+    except Exception:  # noqa: BLE001 - nunca derruba a rotina das OBs
+        log.exception("Falha ao cadastrar empenhos do SIGEO")
+        sessao.rollback()
+        resultado.erros.append("Empenhos: erro inesperado (veja o log do servidor).")
+    resultado.empenhos = empenhos
     if not ensaio:
         config = servico_integracao_sigeo.obter(sessao)
         config.ultima_execucao_em, config.ultimo_resultado = agora_utc(), resultado.como_dict()
         sessao.commit()
     return resultado
+
+
+def buscar_da_competencia(sessao: Session, contrato, competencia) -> dict:
+    """Busca agora no SIGEO a OB de uma competência (botão da tela da execução). Devolve `{"concluida": bool, "mensagem": str}`.
+
+    Só vale com Processo Financeiro e a competência na etapa da OB. Se a OB do mês ainda não saiu (ou não dá para ter certeza), a competência
+    segue esperando e a conferência geral do sistema tenta de novo no próximo ciclo."""
+    from app.services import servico_integracao_sigeo
+    from app.services.contratos.erros import ErroRegraContrato
+    from app.services.sigeo.cliente_obiee import ErroSigeo
+
+    if not (contrato.processo_financeiro or "").strip():
+        raise ErroRegraContrato("O contrato não tem Processo Financeiro: peça ao DOF para preenchê-lo ou junte a OB à mão.")
+    if competencia.etapa_atual != "ordem_bancaria" or competencia.ob_anexo_id is not None:
+        raise ErroRegraContrato("A competência não está esperando a OB.")
+    config = servico_integracao_sigeo.obter(sessao)
+    try:
+        linhas = servico_integracao_sigeo.baixar_pagamentos(config)
+    except ErroSigeo as erro:
+        return {"concluida": False, "mensagem": f"Não foi possível consultar o SIGEO agora: {erro.mensagem} A conferência geral tenta de novo depois."}
+    resultado = conferir(sessao, linhas, competencia_id=competencia.id)
+    if resultado.concluidas:
+        return {"concluida": True, "mensagem": f"OB {resultado.concluidas[0]['ob']} encontrada no SIGEO: competência concluída."}
+    if resultado.pendencias:
+        return {"concluida": False, "mensagem": resultado.pendencias[0]["motivo"]}
+    return {"concluida": False, "mensagem": "Ainda não há OB deste mês no SIGEO para o processo financeiro do contrato. A conferência geral do sistema tenta de novo no próximo ciclo."}

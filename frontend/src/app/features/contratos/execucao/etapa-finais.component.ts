@@ -13,7 +13,9 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { HtmlConfiavelPipe } from '../../contratacoes/html-confiavel.pipe';
 import { DetalheCompetencia, DocumentoMensal, Etapa } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { ParametrosContratosService } from '../compartilhado/parametros-contratos.service';
 import { ROTULOS_ETAPA } from '../compartilhado/rotulos';
+import { buscarObNoSigeo } from './busca-ob-sigeo';
 import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
 /** Etapas 5 (checklist mensal), 6 (documento consolidado) e 7 (Ordem Bancária). */
@@ -43,7 +45,9 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
                 @for (doc of d.documentos; track doc.id) {
                   <tr class="linha-checklist" [class.doc-anexado]="!!doc.arquivo" [class.doc-pendente]="!doc.arquivo">
                     <td>{{ $index + 1 }}</td>
-                    <td><strong>{{ doc.nome }}</strong>@if (doc.observacao) { <small [innerHTML]="doc.observacao | linkificar"></small> }</td>
+                    <td><strong>{{ doc.nome }}</strong>@if (doc.incluido_no_processo) { <span class="selo-situacao info">Incluído neste processo</span> }
+                      @if (doc.observacao) { <small [innerHTML]="doc.observacao | linkificar"></small> }
+                      @if (doc.incluido_no_processo && doc.incluido_por_nome) { <small>Incluído por {{ doc.incluido_por_nome }}@if (doc.incluido_em) { em {{ doc.incluido_em | date: 'dd/MM/yyyy HH:mm' }} }</small> }</td>
                     <td>{{ doc.obrigatorio ? 'Obrigatório' : 'Opcional' }}@if (doc.com_validade) { <small>Com validade</small> }</td>
                     <td><span class="selo-situacao" [class.perigo]="!doc.arquivo">{{ doc.arquivo ? 'Anexado' : doc.obrigatorio ? 'Pendente' : 'Não anexado' }}</span></td>
                     <td>
@@ -54,6 +58,7 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
                             <input type="date" [name]="'validade-' + doc.id" [ngModel]="validades[doc.id] ?? doc.validade_ate ?? ''" (ngModelChange)="validades[doc.id] = $event" /></label>
                         }
                         @if (editavel()) { <app-envio-pdf [pequeno]="true" [mostrarNome]="false" [rotulo]="doc.arquivo ? 'Substituir' : 'Selecionar documento PDF'" (selecionado)="enviarDocumento(doc, $event)" /> }
+                        @if (editavel() && doc.incluido_no_processo) { <button type="button" class="acao-perigo acao-pequena" (click)="excluirIncluido(doc)">Excluir</button> }
                       </div>
                       @if (doc.com_validade && doc.arquivo && doc.validade_ate) {
                         <small class="validade-doc" [attr.data-situacao]="vencimento(doc.validade_ate)">
@@ -75,6 +80,28 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
               </tbody>
             </table>
           </div>
+          @if (incluindoDocumento()) {
+            <!-- Checklist "a partir de…": documento fora do modelo, só nesta competência (nunca obrigatório) -->
+            <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="incluindoDocumento.set(false)"></div>
+            <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-incluir-documento">
+              <header>
+                <div><span class="modal-sobretitulo">Checklist desta competência</span><h2 id="titulo-incluir-documento">Incluir documento</h2></div>
+                <button type="button" aria-label="Fechar" (click)="incluindoDocumento.set(false)">×</button>
+              </header>
+              <form (ngSubmit)="incluirDocumento()">
+                <p class="dica-formulario" style="margin: 0 0 14px">O documento entra só nesta competência, como opcional (não trava a conclusão), e vai para o consolidado. O checklist do contrato não muda.</p>
+                <div class="grade-formulario">
+                  <div class="ocupa-duas"><label for="incluir-doc-nome">Nome do documento *</label><input id="incluir-doc-nome" name="nome" required maxlength="500" [(ngModel)]="novoDocumentoNome" /></div>
+                  <div class="ocupa-duas"><label for="incluir-doc-descricao">Descrição</label><textarea id="incluir-doc-descricao" name="descricao" maxlength="1000" [(ngModel)]="novoDocumentoDescricao"></textarea></div>
+                  <div class="ocupa-duas"><label>Arquivo (PDF) *</label><app-envio-pdf rotulo="Selecionar PDF" (selecionado)="novoDocumentoArquivo = $event" /></div>
+                </div>
+                <footer>
+                  <button type="button" class="acao-secundaria" (click)="incluindoDocumento.set(false)">Cancelar</button>
+                  <button type="submit" class="acao-primaria" [class.carregando]="enviandoInclusao()" [disabled]="!novoDocumentoNome.trim() || !novoDocumentoArquivo || enviandoInclusao()">Incluir documento</button>
+                </footer>
+              </form>
+            </section>
+          }
           @if (editavel()) {
             <div class="barra-envio-nf barra-medicao">
               <div class="texto-envio">
@@ -82,6 +109,7 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
                 @else { <span class="dica-formulario">Obrigatórios completos. Conclua o checklist para liberar o documento consolidado.</span> }
               </div>
               <div class="botoes-barra">
+                <button type="button" class="acao-secundaria" (click)="abrirInclusao()">+ Incluir documento</button>
                 @if (sugestoes(d) > 0) { <button type="button" class="acao-secundaria" (click)="trazerTodos()">Trazer os documentos válidos de outros contratos ({{ sugestoes(d) }})</button> }
                 <button type="button" class="acao-primaria" [disabled]="obrigatoriosPendentes(d) > 0" (click)="concluirChecklist()" [title]="obrigatoriosPendentes(d) ? 'Anexe os documentos obrigatórios' : ''">Concluir checklist</button>
               </div>
@@ -176,6 +204,12 @@ import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
             } @else if (editavel()) {
               <!-- O que a conferência diária do SIGEO viu nesta competência (só quando não pôde concluir sozinha) -->
               @if (d.ob_sigeo_pendencia) { <p class="aviso-bloco" role="status"><strong>SIGEO:</strong> {{ d.ob_sigeo_pendencia }}</p> }
+              @if (d.pode_buscar_ob_sigeo) {
+                <div class="acoes-cartao esquerda">
+                  <button type="button" class="acao-secundaria" (click)="buscarOb()">Buscar a OB no SIGEO</button>
+                  <small class="dica-formulario">Procura agora a OB paga deste mês no processo financeiro do contrato; se o valor bater com o líquido, conclui a competência.</small>
+                </div>
+              }
               <app-campo-arquivo tipo="pdf" rotulo="Ordem Bancária (PDF)" [obrigatorio]="true" (selecionado)="ob = $event" />
               <div class="barra-envio-nf barra-medicao">
                 <div class="texto-envio">
@@ -199,6 +233,7 @@ export class EtapaFinaisComponent {
   readonly atualizado = output<DetalheCompetencia>();
 
   private readonly api = inject(ExecucaoApiService);
+  private readonly parametros = inject(ParametrosContratosService);
   private readonly dialogos = inject(DialogosService);
   /** Despacho de pagamento da competência (nulo enquanto não há máscara ativa ou fora da etapa Download). */
   protected readonly despacho = signal<{ html: string; titulo: string } | null>(null);
@@ -206,6 +241,7 @@ export class EtapaFinaisComponent {
   protected readonly despachoAberto = signal(false);
 
   constructor() {
+    this.parametros.carregar();
     // Ao abrir a etapa Download (ou trocar de competência), busca o despacho preenchido
     effect(() => {
       const d = this.detalhe();
@@ -233,15 +269,58 @@ export class EtapaFinaisComponent {
     void gravar.catch(() => navigator.clipboard?.writeText(texto).catch(() => undefined));
   }
 
+  // Inclusão de documento fora do checklist do contrato (janela aberta, campos e envio em andamento)
+  protected readonly incluindoDocumento = signal(false);
+  protected readonly enviandoInclusao = signal(false);
+  protected novoDocumentoNome = '';
+  protected novoDocumentoDescricao = '';
+  protected novoDocumentoArquivo: File | null = null;
+
+  protected abrirInclusao(): void {
+    this.novoDocumentoNome = '';
+    this.novoDocumentoDescricao = '';
+    this.novoDocumentoArquivo = null;
+    this.incluindoDocumento.set(true);
+  }
+
+  /** Inclui o documento nesta competência (nome, descrição e PDF). */
+  protected incluirDocumento(): void {
+    const d = this.detalhe();
+    if (!this.novoDocumentoNome.trim() || !this.novoDocumentoArquivo) return;
+    this.enviandoInclusao.set(true);
+    this.api.incluirDocumentoMensal(d.contrato_id, d.id, this.novoDocumentoNome.trim(), this.novoDocumentoDescricao.trim(), this.novoDocumentoArquivo).subscribe({
+      next: (novo) => {
+        this.enviandoInclusao.set(false);
+        this.incluindoDocumento.set(false);
+        this.atualizado.emit(novo);
+      },
+      error: (e) => {
+        this.enviandoInclusao.set(false);
+        this.dialogos.mostrarErro(e, 'Não foi possível incluir o documento');
+      },
+    });
+  }
+
+  /** Exclui um documento incluído durante o processo, depois de confirmar. */
+  protected async excluirIncluido(documento: DocumentoMensal): Promise<void> {
+    const ok = await this.dialogos.confirmar({ titulo: `Excluir "${documento.nome}"?`, mensagem: 'O documento sai do checklist desta competência e o arquivo é descartado.', rotuloConfirmar: 'Excluir documento' });
+    if (!ok) return;
+    const d = this.detalhe();
+    this.api.excluirDocumentoMensal(d.contrato_id, d.id, documento.id).subscribe({
+      next: (novo) => this.atualizado.emit(novo),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível excluir o documento'),
+    });
+  }
+
   // Validade digitada para cada documento com validade (por id), antes de escolher o arquivo
   protected validades: Record<string, string> = {};
   // PDF da OB escolhido
   protected ob: File | null = null;
 
-  /** Situação da validade: vencida, a vencer em até 30 dias ou em dia. */
+  /** Situação da validade: vencida, a vencer em até N dias (parâmetro `dias_documento_medio`, 30 de início) ou em dia. */
   protected vencimento(validade: string): 'vencido' | 'perto' | 'ok' {
     const dias = (new Date(validade + 'T00:00:00').getTime() - new Date().setHours(0, 0, 0, 0)) / 86_400_000;
-    return dias < 0 ? 'vencido' : dias <= 30 ? 'perto' : 'ok';
+    return dias < 0 ? 'vencido' : dias <= this.parametros.valores().dias_documento_medio ? 'perto' : 'ok';
   }
 
   /** Anexa o PDF de um documento do checklist. */
@@ -343,6 +422,11 @@ export class EtapaFinaisComponent {
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o documento consolidado'),
     });
+  }
+
+  /** Busca agora a OB da competência no SIGEO (contrato com Processo Financeiro). */
+  protected buscarOb(): void {
+    buscarObNoSigeo(this.api, this.dialogos, this.detalhe(), (novo) => this.atualizado.emit(novo));
   }
 
   /** Reenvia o e-mail de pagamento aos prepostos (quando o primeiro envio falhou). */

@@ -13,6 +13,7 @@ Cadastro das empresas contratadas e de seus **prepostos**. O preposto é um cont
   - **Cadastro, alteração e prepostos:** ACL `contratos` ≥ `MODIFICACAO`.
   - **Exclusão da empresa:** ACL `contratos` = `CONTROLE_TOTAL`.
 - **CNPJ:** aceito com ou sem máscara, gravado com os 14 dígitos, validado pelos dígitos verificadores e **único**.
+- **Representante legal:** `representante_legal` (bool, padrão falso) marca o preposto que assina o termo aditivo da prorrogação (nome, `cargo` e CPF vão para o preâmbulo da minuta); `POST/PUT …/prepostos` aceitam e devolvem o campo (migração `e2a6c0d4f8b1`).
 - **CPF do preposto:** **opcional** (vazio = sem CPF, gravado como nulo). Se informado: mesmas regras (11 dígitos, válido) e único **dentro da empresa**; prepostos sem CPF não colidem entre si. Migração `f9c3e7a1b5d2`.
 - **Exclusão:** só para empresas **sem contratos**. As demais podem ser inativadas.
 - **Auditoria:** `contrato.empresa.criar`, `contrato.empresa.alterar`, `contrato.empresa.excluir`, `contrato.preposto.salvar` e `contrato.preposto.excluir`. As alterações guardam o "de → para" de cada campo (`alvo_tipo = empresa`).

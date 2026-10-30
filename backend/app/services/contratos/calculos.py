@@ -15,8 +15,6 @@ from enum import StrEnum
 
 # Precisão do dinheiro (2 casas)
 CENTAVO = Decimal("0.01")
-# Um contrato fica "a vencer" quando faltam 90 dias ou menos para o fim da vigência
-DIAS_A_VENCER = 90
 
 
 class TipoItem(StrEnum):
@@ -66,11 +64,13 @@ def meses_em(inicio: date, fim: date) -> int:
 
 @dataclass(frozen=True)
 class Vigencia:
-    """Bloco fechado de vigência. Sequência 1 = inicial; 2, 3… = prorrogações em ordem de início."""
+    """Bloco fechado de vigência, numerado em ordem de início: as retroativas primeiro, depois a original e as prorrogações."""
 
     sequencia: int
     inicio: date
     fim: date
+    # Vigência retroativa: anterior ao início original do contrato (cadastrada para expedir o reajuste retroativo)
+    retroativa: bool = False
 
     @property
     def meses(self) -> int:
@@ -79,19 +79,24 @@ class Vigencia:
 
 
 def montar_vigencias(
-    data_inicio: date, data_fim: date, vigencia_inicial_meses: int, prorrogacoes: Iterable[tuple[date, date]] = ()
+    data_inicio: date, data_fim: date, vigencia_inicial_meses: int, prorrogacoes: Iterable[tuple[date, date]] = (),
+    retroativas: Iterable[tuple[date, date]] = (),
 ) -> list[Vigencia]:
-    """Vigência inicial e uma vigência por prorrogação (`(inicio, novo_fim)`), em ordem.
+    """Vigências retroativas, a original e uma vigência por prorrogação (`(inicio, novo_fim)`), em ordem.
 
-    Sem prorrogações, `data_fim` do contrato é a fonte do fim (vale para dados importados).
-    Com prorrogações, o primeiro bloco é reconstruído pela vigência inicial em meses.
+    `data_inicio` é o início do contrato (o da vigência retroativa mais antiga, quando há). A vigência original
+    começa no dia seguinte ao fim da última retroativa. Sem prorrogações, `data_fim` do contrato é o fim da
+    original (vale para dados importados); com prorrogações, ele é reconstruído pela vigência inicial em meses.
     """
-    # Prorrogações em ordem de início; a 1ª vigência vai até o fim original ou até o prazo inicial
+    antigas = sorted(retroativas)
+    # A original começa depois da última retroativa
+    inicio_original = antigas[-1][1] + timedelta(days=1) if antigas else data_inicio
     termos = sorted(prorrogacoes)
-    fim_inicial = data_fim if not termos else calcular_data_fim(data_inicio, vigencia_inicial_meses)
-    vigencias = [Vigencia(1, data_inicio, fim_inicial)]
-    # Cada prorrogação vira uma vigência numerada a partir de 2
-    vigencias += [Vigencia(indice, inicio, fim) for indice, (inicio, fim) in enumerate(termos, start=2)]
+    fim_inicial = data_fim if not termos else calcular_data_fim(inicio_original, vigencia_inicial_meses)
+    vigencias = [Vigencia(n, inicio, fim, retroativa=True) for n, (inicio, fim) in enumerate(antigas, start=1)]
+    vigencias.append(Vigencia(len(antigas) + 1, inicio_original, fim_inicial))
+    # Cada prorrogação vira uma vigência numerada depois da original
+    vigencias += [Vigencia(n, inicio, fim) for n, (inicio, fim) in enumerate(termos, start=len(antigas) + 2)]
     return vigencias
 
 
@@ -106,7 +111,10 @@ def calcular_situacao(data_fim: date, situacao_forcada: str | None, hoje: date) 
         return Situacao(situacao_forcada)
     if hoje > data_fim:
         return Situacao.ENCERRADO
-    return Situacao.A_VENCER if hoje + timedelta(days=DIAS_A_VENCER) >= data_fim else Situacao.ATIVO
+    # Um contrato fica "a vencer" quando faltam N dias ou menos para o fim da vigência (parâmetro de Contratos)
+    from app.services.contratos.servico_parametros import valor
+
+    return Situacao.A_VENCER if hoje + timedelta(days=valor("dias_vigencia_a_vencer")) >= data_fim else Situacao.ATIVO
 
 
 @dataclass(frozen=True)

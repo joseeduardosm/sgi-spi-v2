@@ -19,6 +19,7 @@ import {
   PreviaCorrecao,
   PainelExecucao,
   RespostaAvaliacao,
+  ResultadoBuscaObSigeo,
 } from './contratos.models';
 import { GrupoDestinatarios } from './opcao-email.component';
 
@@ -323,6 +324,16 @@ export class ExecucaoApiService {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/checklist/${documentoId}`), this.formulario({ arquivo, validade }));
   }
 
+  /** Inclui no checklist da competência um documento fora do modelo (nome, descrição e PDF); nunca obrigatório. */
+  incluirDocumentoMensal(id: string, c: string, nome: string, descricao: string, arquivo: File): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/checklist/incluir'), this.formulario({ nome, descricao, arquivo }));
+  }
+
+  /** Exclui um documento incluído durante o processo (só eles; os do checklist do contrato ficam). */
+  excluirDocumentoMensal(id: string, c: string, documentoId: string): Observable<DetalheCompetencia> {
+    return this.http.delete<DetalheCompetencia>(this.competencia(id, c, `/checklist/${documentoId}`));
+  }
+
   /** Texto do despacho de pagamento (máscara ativa), para mostrar na tela e copiar; `html` nulo = sem máscara ativa. */
   despacho(id: string, c: string): Observable<{ html: string | null; titulo: string }> {
     return this.http.get<{ html: string | null; titulo: string }>(this.competencia(id, c, '/despacho'));
@@ -336,6 +347,11 @@ export class ExecucaoApiService {
   /** Etapa 7: anexa a ordem bancária e conclui a competência. */
   ordemBancaria(id: string, c: string, arquivo: File): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/ordem-bancaria'), this.formulario({ arquivo }));
+  }
+
+  /** Busca agora no SIGEO a OB da competência (contrato com Processo Financeiro); conclui se o mês e o líquido baterem. */
+  buscarObSigeo(id: string, c: string): Observable<ResultadoBuscaObSigeo> {
+    return this.http.post<ResultadoBuscaObSigeo>(this.competencia(id, c, '/ordem-bancaria/sigeo'), {});
   }
 
   /** Reabre a competência em uma etapa anterior (SuperRoot ou gestor). */

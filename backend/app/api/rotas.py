@@ -8,8 +8,8 @@ caminhos podem coincidir (ver comentário abaixo).
 
 from fastapi import APIRouter
 
-from app.api.routes import acl, assinatura_email, autenticacao, atalhos, menu, busca, chamados, contratacoes, documentacao, diretorio, favoritos, integracao_bookstack, integracao_glpi, integracao_sigeo, ldap, manuais, melhorias, sla, painel_executivo, notificacoes, notificacoes_changelog, notificacoes_cliente_windows, notificacoes_preferencias, noticias, patrimonio, preferencias, protocolo, reserva_espacos, rh, rh_admissao, rh_cargos, rh_pessoal, rh_pre_cadastro, tarefas, saude, setores, smtp, usuarios
-from app.api.routes.contratos import alteracoes, portarias, contratos, correcoes, diario, empresas, execucao, exportacao, importacao, importacao_modelos, migracao, modelos, orcamento, rascunhos, relatorios
+from app.api.routes import acl, assinatura_email, backup, autenticacao, atalhos, menu, busca, chamados, contratacoes, documentacao, diretorio, favoritos, integracao_bookstack, integracao_glpi, integracao_sigeo, ldap, manuais, melhorias, sla, painel_executivo, notificacoes, notificacoes_changelog, notificacoes_cliente_windows, notificacoes_preferencias, noticias, patrimonio, preferencias, protocolo, reserva_espacos, rh, rh_admissao, rh_cargos, rh_pessoal, rh_pre_cadastro, tarefas, saude, setores, smtp, usuarios
+from app.api.routes.contratos import alteracoes, portarias, contratos, correcoes, diario, empresas, execucao, exportacao, importacao, importacao_modelos, migracao, modelos, orcamento, parametros as parametros_contratos, rascunhos, relatorios
 
 roteador_api = APIRouter()
 # Módulos do portal: saúde, autenticação, usuários, setores, ACL, diretórios LDAP e servidores SMTP
@@ -46,6 +46,7 @@ roteador_api.include_router(contratacoes.roteador)
 # Caminhos fixos antes de contratos: `/contratos/empresas` não pode cair em `/contratos/{contrato_id}`
 roteador_api.include_router(empresas.roteador)
 roteador_api.include_router(modelos.roteador)
+roteador_api.include_router(parametros_contratos.roteador)
 roteador_api.include_router(migracao.roteador)
 roteador_api.include_router(importacao.roteador)
 roteador_api.include_router(importacao_modelos.roteador)
@@ -57,6 +58,7 @@ roteador_api.include_router(atalhos.roteador)
 roteador_api.include_router(menu.roteador)
 roteador_api.include_router(integracao_glpi.roteador)
 roteador_api.include_router(integracao_sigeo.roteador)
+roteador_api.include_router(backup.roteador)
 roteador_api.include_router(integracao_bookstack.roteador)
 roteador_api.include_router(manuais.roteador)
 roteador_api.include_router(relatorios.roteador)

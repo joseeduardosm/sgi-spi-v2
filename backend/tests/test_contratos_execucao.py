@@ -12,7 +12,7 @@ import pytest
 from pypdf import PdfReader
 
 from app.services.contratos import calculos
-from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, criar_contrato, juntar_nf, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, definir_parametros, PDF, conferir_retencao, criar_contrato, juntar_nf, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 
 # Data "de hoje" fixa nos testes: janeiro e fevereiro de 2026 já acabaram; março está em curso
@@ -981,6 +981,7 @@ def test_total_medido_e_a_soma_dos_subtotais_dos_itens_arredondados():
 
 def test_orcamento_executivo_remanescente_cobertura_reforco_e_sobra(cliente, admin, equipe):
     """Remanescente = previsto − NF dos meses concluídos; o saldo livre das NEs do exercício cobre os meses sem medição (a partir do corte de 09/2026)."""
+    definir_parametros(corte_alertas_a_partir_de=date(2026, 9, 1))  # estes testes dependem do corte global de 09/2026
     from decimal import Decimal
 
     from app.core.banco import FabricaSessao, agora_utc

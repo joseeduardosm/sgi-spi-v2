@@ -513,6 +513,11 @@ def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str
     _versao(tarefa, versao)
     if acao not in acoes(sessao, autor, tarefa):
         de = ROTULOS_STATUS[tarefa.status]
+        # Mensagens que dizem o motivo certo (a genérica deixava a pessoa sem saber se era a situação da tarefa ou a permissão)
+        if tarefa.controlada_externamente:
+            raise ErroTarefa("Esta tarefa é controlada por outro módulo (ex.: Contratos): ela avança e conclui por lá, e aqui só dá para comentar.", 403, "sem_permissao")
+        if acao in ("validar", "devolver") and tarefa.status == "em_validacao" and not eh_lider(sessao, autor, tarefa):
+            raise ErroTarefa(f"Só a liderança da equipe pode {acao} uma entrega em validação. Peça a quem lidera a equipe ({tarefa.equipe.nome if tarefa.equipe else 'da tarefa'}).", 403, "sem_permissao")
         raise ErroTarefa(f"Não é possível \"{acao}\" esta tarefa agora (situação: {de}), ou você não tem permissão para isso.", 403, "sem_permissao")
     texto = (texto or "").strip()
     if acao == "devolver":

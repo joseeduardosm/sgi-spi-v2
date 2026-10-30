@@ -72,6 +72,8 @@ class Configuracao(BaseSettings):
     # Anexos (PDFs) guardados fora do banco. O banco guarda só os metadados e a chave relativa
     # do arquivo neste diretório (AAAA/MM/<uuid>.pdf).
     anexos_diretorio: Path = DIRETORIO_BACKEND.parent / "dados" / "anexos"
+    # Backups gerais (banco + anexos em .zip), gerados e importados pela tela Administração › Backup (só SuperRoot)
+    backups_diretorio: Path = DIRETORIO_BACKEND.parent / "dados" / "backups"
     # Tamanho máximo de cada PDF enviado; o Nginx precisa aceitar um pouco mais que isso
     anexos_tamanho_maximo_mb: int = Field(25, gt=0, le=200)
 
@@ -85,6 +87,11 @@ class Configuracao(BaseSettings):
     notificacoes_despacho: str = Field("thread", pattern="^(thread|sincrono|desligado)$")
     # Notificações cientes ou encerradas há mais de N meses saem da caixa e da busca (continuam no banco, para auditoria)
     notificacoes_meses_na_caixa: int = Field(6, ge=1, le=120)
+
+    # Ambiente de homologação: nada sai do servidor. E-mails e pop-ups do navegador são **simulados** (ficam registrados
+    # como enviados, com a nota "Simulado (homologação)"), a conferência do SIGEO, a sincronização com o LDAP e o
+    # parabéns de aniversário não rodam, e a tela mostra a faixa "HOMOLOGAÇÃO"
+    modo_homologacao: bool = False
 
     # Endereço do sistema usado nos links dos e-mails (ex.: link direto para a etapa da competência)
     url_publica: str = "https://portal.spi.sp.gov.br"

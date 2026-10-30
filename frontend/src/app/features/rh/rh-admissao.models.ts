@@ -7,6 +7,8 @@ export interface EtapaAdmissao { chave: ChaveEtapa; rotulo: string; estado: 'fei
 
 export interface DocumentoAdmissao {
   id: number; descricao: string; obrigatorio: boolean; enviado_em: string | null; enviado_por_nome: string; registrado_em: string | null; tem_comprovante: boolean; observacao: string;
+  /** Incluído durante a admissão (fora do checklist do cargo): nunca obrigatório, com descrição e arquivo próprios. */
+  incluido_no_processo?: boolean; detalhe?: string; tem_arquivo?: boolean; incluido_por_nome?: string; incluido_em?: string | null;
 }
 
 export interface ResumoAdmissao {

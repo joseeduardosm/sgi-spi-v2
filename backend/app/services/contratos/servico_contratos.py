@@ -71,6 +71,7 @@ CAMPOS_AUDITADOS = (
     "numero", "empresa_id", "apelido", "autoridade_despacho_id", "objeto", "data_inicio", "data_fim", "vigencia_inicial_meses",
     "vigencia_maxima_meses", "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "permite_medicao_adicional", "alertas_a_partir_de", "sei_gestao_numero", "sei_gestao_link",
     "sei_execucao_numero", "sei_execucao_link", "processo_financeiro", "situacao_forcada",
+    "modalidade_contratacao", "exige_garantia", "garantia_modalidade", "garantia_percentual", "garantia_valor", "garantia_emissor", "garantia_cnpj_emissor", "garantia_apolice",
 )
 # Campos do item que não mudam depois de salvo (mudar exigiria excluir e criar outro item)
 CAMPOS_ITEM_IMUTAVEIS = ("descricao", "tipo", "calcula_pro_rata")
@@ -99,6 +100,7 @@ def opcoes_carga_completa() -> list:
         selectinload(Contrato.equipe),
         selectinload(Contrato.empresa),
         selectinload(Contrato.prorrogacoes),
+        selectinload(Contrato.vigencias_retroativas),
         selectinload(Contrato.previsoes).selectinload(PrevisaoVigencia.limites),
         selectinload(Contrato.previsoes).selectinload(PrevisaoVigencia.apontamentos),
         selectinload(Contrato.competencias).selectinload(Competencia.itens),
@@ -211,8 +213,10 @@ def alterar_processo_financeiro(sessao: Session, contrato_id: uuid.UUID, valor: 
     return contrato
 
 
-def pedir_processo_financeiro(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> int:
-    """Avisa todo o Financeiro (DOF), por e-mail e no sino, para preencher o Processo Financeiro do contrato. Devolve quantos receberam."""
+def pedir_processo_financeiro(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> tuple[int, datetime, str]:
+    """Avisa todo o Financeiro (DOF), por e-mail e no sino, para preencher o Processo Financeiro do contrato.
+
+    Guarda no contrato quem pediu e quando (legenda do campo). Devolve (quantos receberam, instante do pedido, nome de quem pediu)."""
     from app.services import notificacoes
     from app.services.contratos.servico_retencao import usuarios_financeiro
 
@@ -228,10 +232,11 @@ def pedir_processo_financeiro(sessao: Session, contrato_id: uuid.UUID, autor: Us
         "Abra o link, preencha o campo \"Processo Financeiro\" e salve. Com ele, o SGI confere as ordens bancárias pagas no SIGEO e conclui sozinho a etapa de pagamento.",
         chave=f"processo-financeiro:{contrato.id}:{agora_utc().isoformat()}", link=f"/contratos/{contrato.id}/editar", categoria="pendencia",
         autor=autor, evento="contratos.pedido_processo_financeiro", forcar_email=True, contrato_id=contrato.id)
+    contrato.processo_financeiro_pedido_em, contrato.processo_financeiro_pedido_por = agora_utc(), autor.nome_completo or autor.login
     auditar(sessao, autor.login, "contrato.processo_financeiro.pedir", f"Contrato {contrato.numero}", f"{len(destinatarios)} destinatário(s)",
             autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id)
     sessao.commit()
-    return len(destinatarios)
+    return len(destinatarios), contrato.processo_financeiro_pedido_em, contrato.processo_financeiro_pedido_por
 
 
 # ---------------------------------------------------------------------------------------------
@@ -239,9 +244,15 @@ def pedir_processo_financeiro(sessao: Session, contrato_id: uuid.UUID, autor: Us
 # ---------------------------------------------------------------------------------------------
 
 def vigencias(contrato: Contrato) -> list[calculos.Vigencia]:
-    """Vigências do contrato: a inicial e uma por prorrogação registrada."""
+    """Vigências do contrato: as retroativas, a inicial e uma por prorrogação registrada."""
     prorrogacoes = [(p.data_inicio, p.data_fim) for p in contrato.prorrogacoes]
-    return calculos.montar_vigencias(contrato.data_inicio, contrato.data_fim, contrato.vigencia_inicial_meses, prorrogacoes)
+    retroativas = [(v.data_inicio, v.data_fim) for v in contrato.vigencias_retroativas]
+    return calculos.montar_vigencias(contrato.data_inicio, contrato.data_fim, contrato.vigencia_inicial_meses, prorrogacoes, retroativas)
+
+
+def inicio_original(contrato: Contrato) -> date:
+    """Início da vigência original: o do contrato, ou o dia seguinte ao fim da última retroativa."""
+    return next(v for v in vigencias(contrato) if not v.retroativa).inicio
 
 
 def item_valor(contrato: Contrato, item: ItemContrato, vigencia: calculos.Vigencia) -> calculos.ItemValor:
@@ -445,6 +456,7 @@ def opcoes_carga_resumo() -> list:
         selectinload(Contrato.itens),
         selectinload(Contrato.empresa),
         selectinload(Contrato.prorrogacoes),
+        selectinload(Contrato.vigencias_retroativas),
         selectinload(Contrato.previsoes).selectinload(PrevisaoVigencia.limites),
         selectinload(Contrato.competencias).selectinload(Competencia.itens),
     ]
@@ -524,8 +536,8 @@ def detalhar_contrato(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario)
         sequencial=contrato.sequencial,
         ano=contrato.ano,
         empresa=OpcaoEmpresa.model_validate(contrato.empresa, from_attributes=True),
-        data_fim_prazo_inicial=calculos.calcular_data_fim(contrato.data_inicio, contrato.vigencia_inicial_meses),
-        data_limite_maxima=calculos.data_limite_maxima(contrato.data_inicio, contrato.vigencia_maxima_meses),
+        data_fim_prazo_inicial=calculos.calcular_data_fim(inicio_original(contrato), contrato.vigencia_inicial_meses),
+        data_limite_maxima=calculos.data_limite_maxima(inicio_original(contrato), contrato.vigencia_maxima_meses),
         vigencia_inicial_meses=contrato.vigencia_inicial_meses,
         vigencia_maxima_meses=contrato.vigencia_maxima_meses,
         periodicidade_meses=contrato.periodicidade_meses,
@@ -539,6 +551,10 @@ def detalhar_contrato(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario)
         sei_execucao_numero=contrato.sei_execucao_numero,
         sei_execucao_link=contrato.sei_execucao_link,
         processo_financeiro=contrato.processo_financeiro,
+        processo_financeiro_pedido_em=contrato.processo_financeiro_pedido_em, processo_financeiro_pedido_por=contrato.processo_financeiro_pedido_por,
+        modalidade_contratacao=contrato.modalidade_contratacao, exige_garantia=contrato.exige_garantia, garantia_modalidade=contrato.garantia_modalidade,
+        garantia_percentual=contrato.garantia_percentual, garantia_valor=contrato.garantia_valor, garantia_emissor=contrato.garantia_emissor,
+        garantia_cnpj_emissor=contrato.garantia_cnpj_emissor, garantia_apolice=contrato.garantia_apolice,
         situacao_forcada=contrato.situacao_forcada,
         vigencias=[LeituraVigencia(sequencia=v.sequencia, inicio=v.inicio, fim=v.fim, meses=v.meses) for v in vigencias(contrato)],
         marcos=marcos(contrato),
@@ -563,10 +579,13 @@ def marcos(contrato: Contrato) -> list[MarcoLinhaTempo]:
     lista = [
         MarcoLinhaTempo(data=contrato.data_inicio, tipo="inicio", rotulo="Início"),
         MarcoLinhaTempo(
-            data=calculos.calcular_data_fim(contrato.data_inicio, contrato.vigencia_inicial_meses), tipo="prazo_inicial",
+            data=calculos.calcular_data_fim(inicio_original(contrato), contrato.vigencia_inicial_meses), tipo="prazo_inicial",
             rotulo=f"Prazo inicial ({contrato.vigencia_inicial_meses}m)",
         ),
     ]
+    for retroativa in contrato.vigencias_retroativas:
+        numero = f" nº {retroativa.numero_termo}" if retroativa.numero_termo else ""
+        lista.append(MarcoLinhaTempo(data=retroativa.data_inicio, tipo="termo_aditivo", rotulo=f"TA retroativo{numero} ({retroativa.meses}m)"))
     for prorrogacao in contrato.prorrogacoes:
         # Uma marca por prorrogação, reajuste e alteração (os cancelados não aparecem)
         numero = f" nº {prorrogacao.numero_termo}" if prorrogacao.numero_termo else ""
@@ -583,7 +602,7 @@ def marcos(contrato: Contrato) -> list[MarcoLinhaTempo]:
     lista.append(MarcoLinhaTempo(data=contrato.data_fim, tipo="vigencia_atual", rotulo="Vigência atual"))
     # Por fim, o fim da vigência atual e o limite máximo; a lista sai em ordem de data
     lista.append(MarcoLinhaTempo(
-        data=calculos.data_limite_maxima(contrato.data_inicio, contrato.vigencia_maxima_meses), tipo="maximo",
+        data=calculos.data_limite_maxima(inicio_original(contrato), contrato.vigencia_maxima_meses), tipo="maximo",
         rotulo=f"Máximo ({contrato.vigencia_maxima_meses}m)",
     ))
     return sorted(lista, key=lambda m: m.data)
@@ -642,12 +661,12 @@ def _validar_cabecalho(sessao: Session, dados: GravacaoContrato, contrato: Contr
 
 def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, numero: str) -> None:
     """Copia os dados do cabeçalho para o contrato, respeitando as regras de vigência."""
-    # Depois de uma prorrogação, as datas iniciais ficam travadas (as vigências dependem delas)
-    datas_bloqueadas = bool(contrato.id and contrato.prorrogacoes)
+    # Depois de uma prorrogação ou de uma vigência retroativa, as datas iniciais ficam travadas (as vigências dependem delas)
+    datas_bloqueadas = bool(contrato.id and (contrato.prorrogacoes or contrato.vigencias_retroativas))
     if datas_bloqueadas and (
         dados.data_inicio != contrato.data_inicio or dados.vigencia_inicial_meses != contrato.vigencia_inicial_meses
     ):
-        raise ErroRegraContrato("Depois de uma prorrogação, a data inicial e a vigência inicial não podem ser alteradas.")
+        raise ErroRegraContrato("Depois de uma prorrogação ou vigência retroativa, a data inicial e a vigência inicial não podem ser alteradas.")
     soma_vigencias = dados.vigencia_inicial_meses + (sum(p.meses for p in contrato.prorrogacoes) if contrato.id else 0)
     # A vigência máxima não pode ficar menor que a soma das vigências já registradas
     if dados.vigencia_maxima_meses < soma_vigencias:
@@ -657,9 +676,11 @@ def _aplicar_cabecalho(contrato: Contrato, dados: GravacaoContrato, numero: str)
     for campo in (
         "empresa_id", "apelido", "autoridade_despacho_id", "objeto", "data_inicio", "vigencia_inicial_meses", "vigencia_maxima_meses",
         "periodicidade_meses", "mes_reajuste", "liberar_todas_competencias", "permite_medicao_adicional", "alertas_a_partir_de", "sei_gestao_numero", "sei_gestao_link", "sei_execucao_numero",
-        "sei_execucao_link", "situacao_forcada",
+        "sei_execucao_link", "situacao_forcada", "modalidade_contratacao", "exige_garantia", "garantia_modalidade", "garantia_percentual", "garantia_valor", "garantia_emissor",
+        "garantia_apolice",
     ):
         setattr(contrato, campo, getattr(dados, campo))
+    contrato.garantia_cnpj_emissor = "".join(c for c in (dados.garantia_cnpj_emissor or "") if c.isdigit())
     contrato.processo_financeiro = (dados.processo_financeiro or "").strip()
     if not datas_bloqueadas:
         # O fim da vigência é calculado pelo início e pelo prazo inicial

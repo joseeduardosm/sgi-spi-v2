@@ -29,7 +29,7 @@ from app.models.notificacao import EntregaNotificacao, Notificacao
 from app.models.notificacao_preferencias import ConfigNotificacaoUsuario
 from app.models.usuario import Usuario
 from app.services import modelo_email, servico_smtp
-from app.services.cliente_smtp import Mensagem as EmailSmtp
+from app.services.cliente_smtp import SIMULADO, Mensagem as EmailSmtp
 from app.services.notificacoes import layout_email, navegador, preferencias
 from app.services.notificacoes.catalogo import EVENTOS, ROTULOS_MODULO
 from app.services.servico_smtp import SemServidorAtivo
@@ -87,6 +87,9 @@ def _enviar_smtp(sessao: Session, usuario: Usuario | None, assunto: str, texto: 
         return False, "Destinatário sem e-mail cadastrado no perfil."
     try:
         resultado = servico_smtp.enviar_email(sessao, EmailSmtp(para=[usuario.email.strip()], assunto=assunto, texto=texto, html=html))
+        # Homologação: conta como enviado e guarda a nota de simulação no lugar do erro (fica visível no histórico de envios)
+        if resultado.simulado:
+            return True, resultado.mensagem
         return resultado.sucesso, None if resultado.sucesso else resultado.mensagem
     except SemServidorAtivo as erro:
         return False, str(erro)
@@ -120,6 +123,11 @@ def enviar_navegador(sessao: Session, entrega_id: uuid.UUID) -> bool:
         return False
     entrega = _entrega(sessao, entrega_id)
     n = entrega.notificacao
+    if obter_configuracao().modo_homologacao:
+        # Homologação: o pop-up não é enviado, mas fica registrado como enviado (simulação)
+        entrega.navegador_ok, entrega.navegador_erro = True, f"{SIMULADO} pop-up do navegador não enviado."
+        sessao.commit()
+        return True
     dados = navegador.montar_payload(entrega.id, entrega.assunto_copia, modelo_email.corpo_texto(entrega.corpo_copia), n.link)
     enviados, erro = navegador.enviar(sessao, entrega.destinatario_id, dados)
     entrega.navegador_ok, entrega.navegador_erro = enviados > 0, erro

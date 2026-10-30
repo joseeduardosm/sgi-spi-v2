@@ -18,7 +18,7 @@ from app.api.routes.contratos.comum import pode_ler, traduzir_erros
 from app.core.banco import obter_sessao
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import GravacaoModelo, LeituraModelo, PlaceholderPortaria
-from app.services.contratos import despacho_mascara, email_cadin_mascara, email_ob_mascara, portaria_mascara, servico_configuracao_execucao as servico
+from app.services.contratos import despacho_mascara, email_cadin_mascara, email_ob_mascara, portaria_mascara, prorrogacao_mascara, servico_configuracao_execucao as servico
 
 roteador = APIRouter(prefix="/contratos/modelos", tags=["Contratos: modelos globais"], responses=RESPOSTAS_AUTENTICADAS)
 # Criar, alterar e excluir: checklists e formulários só o SuperRoot; máscaras de portaria também quem tem controle total em Contratos
@@ -29,7 +29,7 @@ NAO_ENCONTRADO = resposta_nao_encontrado("Modelo")
 @roteador.get("", response_model=list[LeituraModelo], summary="Listar modelos globais",
               description="Modelos de checklist e de formulário para clonar nos contratos e máscaras de portaria. Exige ACL `contratos` ≥ LEITURA.")
 def listar_modelos(
-    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob"] | None = Query(None),
+    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao"] | None = Query(None),
     somente_ativos: bool = Query(True),
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(pode_ler),
@@ -66,8 +66,15 @@ def listar_placeholders_email_ob(_: Usuario = Depends(pode_ler)):
     return [PlaceholderPortaria(nome=nome, descricao=descricao, da_anterior=False) for nome, descricao in email_ob_mascara.PLACEHOLDERS.items()]
 
 
+@roteador.get("/prorrogacao/placeholders", response_model=list[PlaceholderPortaria], summary="Placeholders das máscaras da prorrogação",
+              description="Lista fechada de placeholders aceitos nas minutas e despachos da prorrogação (escritos `#nome`, `#nome#` ou `##nome##`): os que o SGI calcula (contrato, empresa, nova vigência, valores, autoridades dos Parâmetros de Contratos), os que a equipe digita na prorrogação (testemunhas, nº dos documentos do SEI, dotação…) e os condicionais `#se…`, que mantêm ou omitem o parágrafo. Exige ACL `contratos` ≥ LEITURA.")
+def listar_placeholders_prorrogacao(_: Usuario = Depends(pode_ler)):
+    """Placeholders permitidos nas máscaras da prorrogação."""
+    return [PlaceholderPortaria(nome=nome, descricao=descricao, da_anterior=False) for nome, descricao in prorrogacao_mascara.PLACEHOLDERS.items()]
+
+
 @roteador.post("", response_model=LeituraModelo, status_code=status.HTTP_201_CREATED, summary="Criar modelo global",
-               description="Checklist e formulário: só SuperRoot. Portaria, despacho, e-mail de CADIN e e-mail de pagamento: SuperRoot ou controle total em Contratos (`403` para os demais). Placeholders fora da lista, ou duas máscaras ativas da mesma variante, são recusados (`400`/`409`).", responses=INVALIDO)
+               description="Checklist e formulário: só SuperRoot. Portaria, despacho, e-mail de CADIN, e-mail de pagamento e prorrogação: SuperRoot ou controle total em Contratos (`403` para os demais). Placeholders fora da lista, ou duas máscaras ativas da mesma variante, são recusados (`400`/`409`).", responses=INVALIDO)
 def criar_modelo(dados: GravacaoModelo, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_ler)):
     """Cria um modelo; `traduzir_erros` converte regras violadas em 400."""
     with traduzir_erros(sessao):

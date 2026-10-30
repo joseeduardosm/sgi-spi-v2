@@ -251,11 +251,11 @@ def planilha_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int) -
 
 
 def previsao_salva_em_todas(contrato: Contrato) -> bool:
-    """Pré-requisito da execução: cada vigência com item sob demanda precisa de previsão salva."""
+    """Pré-requisito da execução: cada vigência com item sob demanda precisa de previsão salva (as retroativas ficam fora: sem sob demanda)."""
     if not any(i.tipo == "sob_demanda" for i in contrato.itens):
         return True
     # Todas as vigências precisam ter previsão salva (o `:=` guarda a previsão para testar `salva`)
-    return all((p := valores.previsao_da_vigencia(contrato, v.sequencia)) and p.salva for v in vigencias(contrato))
+    return all((p := valores.previsao_da_vigencia(contrato, v.sequencia)) and p.salva for v in vigencias(contrato) if not v.retroativa)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -518,7 +518,7 @@ def orcamento_executivo(contrato: Contrato, exercicio: int) -> OrcamentoExecutiv
       de pendências (meses anteriores foram tratados fora do SGI).
       O saldo livre cobre esses meses em ordem; o que falta é o reforço, o que sobra pode ser cancelado ou transferido.
     """
-    from app.services.contratos.servico_competencias import PENDENCIAS_A_PARTIR_DE, compromissos  # import tardio: evita ciclo
+    from app.services.contratos.servico_competencias import compromissos, corte_do_contrato  # import tardio: evita ciclo
 
     previsto = {m.competencia: m.valor for m in meses_previstos(contrato) if m.competencia.year == exercicio}
     do_ano = [c for c in contrato.competencias if c.competencia.year == exercicio]
@@ -538,7 +538,7 @@ def orcamento_executivo(contrato: Contrato, exercicio: int) -> OrcamentoExecutiv
 
     # Meses que ainda vão precisar de empenho: previsto > 0 e sem medição concluída. Os anteriores ao corte de pendências (o mesmo dos alertas:
     # o global ou o "Desconsiderar alertas a partir de" do contrato) foram tratados fora do SGI e não contam
-    corte = max(PENDENCIAS_A_PARTIR_DE, contrato.alertas_a_partir_de) if contrato.alertas_a_partir_de else PENDENCIAS_A_PARTIR_DE
+    corte = corte_do_contrato(contrato)
     fim_do_mes = lambda m: regulares[m].periodo_fim if m in regulares else calculos.somar_meses(m, 1) - timedelta(days=1)  # noqa: E731
     restantes = sorted(m for m, v in previsto.items()
                        if v > 0 and fim_do_mes(m) >= corte and not (m in regulares and regulares[m].medicao_concluida_em is not None))

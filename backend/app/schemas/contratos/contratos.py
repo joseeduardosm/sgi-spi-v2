@@ -110,6 +110,14 @@ class GravacaoContrato(BaseModel):
     sei_execucao_link: Link = Field(..., max_length=1000)
     processo_financeiro: str = Field("", max_length=60, description="Processo(s) financeiro(s) (opcional; ex.: `20240605988`, ou `20250139231, 20260315789` quando há mais de um). "
                                      "É o `COD_PROCESSO` das ordens bancárias no SIGEO: com ele a conferência diária conclui sozinha a etapa da OB.")
+    modalidade_contratacao: Literal["", "licitacao", "dispensa", "inexigibilidade"] = Field("", description="Origem da contratação (vazio = não informada): define a Declaração de Atendimento da prorrogação (licitação: Anexo II; dispensa ou inexigibilidade: Anexo III).")
+    exige_garantia: bool = Field(False, description="O contrato exige garantia contratual.")
+    garantia_modalidade: Literal["", "caucao_dinheiro", "titulos_divida_publica", "fianca_bancaria", "seguro_garantia", "titulo_capitalizacao"] = Field("", description="Modalidade da garantia (I a V do art. 96 da Lei 14.133).")
+    garantia_percentual: Decimal | None = Field(None, ge=0, le=100, max_digits=7, decimal_places=4, description="Percentual da garantia sobre o valor do contrato.")
+    garantia_valor: Decimal | None = Field(None, ge=0, max_digits=18, decimal_places=2, description="Valor da garantia, em reais.")
+    garantia_emissor: str = Field("", max_length=250, description="Seguradora ou instituição financeira (apólice ou fiança).")
+    garantia_cnpj_emissor: str = Field("", max_length=18, description="CNPJ da seguradora ou da instituição financeira (só dígitos são gravados).")
+    garantia_apolice: str = Field("", max_length=100, description="Número da apólice, da fiança ou do documento da garantia.")
     situacao_forcada: Situacao | None = Field(None, description="Nulo = situação calculada pelas datas.")
     equipe: GravacaoEquipe = Field(default_factory=GravacaoEquipe)
     itens: list[GravacaoItem] = Field(default_factory=list, description="Lista completa, na ordem de exibição.")
@@ -249,6 +257,16 @@ class DetalheContrato(ResumoContrato):
     sei_execucao_numero: str
     sei_execucao_link: str
     processo_financeiro: str = ""
+    processo_financeiro_pedido_em: datetime | None = Field(None, description="Quando a equipe pediu o processo financeiro ao DOF pela última vez.")
+    processo_financeiro_pedido_por: str | None = Field(None, description="Quem fez o último pedido ao DOF.")
+    modalidade_contratacao: str = ""
+    exige_garantia: bool = False
+    garantia_modalidade: str = ""
+    garantia_percentual: Decimal | None = None
+    garantia_valor: Decimal | None = None
+    garantia_emissor: str = ""
+    garantia_cnpj_emissor: str = ""
+    garantia_apolice: str = ""
     situacao_forcada: Situacao | None
     vigencias: list[LeituraVigencia]
     marcos: list[MarcoLinhaTempo] = Field(..., description="Marcos da linha do tempo, em ordem de data.")
@@ -314,4 +332,6 @@ class GravacaoProcessoFinanceiro(BaseModel):
 
 class ResultadoPedidoProcesso(BaseModel):
     """Resultado do pedido do processo financeiro ao DOF."""
+    pedido_em: datetime = Field(..., description="Instante do pedido (fica gravado no contrato).")
+    pedido_por: str = Field(..., description="Nome de quem pediu.")
     destinatarios: int = Field(..., description="Quantas pessoas do Financeiro receberam o pedido (e-mail e sino).")

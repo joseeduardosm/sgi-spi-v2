@@ -28,13 +28,13 @@ from app.models.notificacao import EntregaNotificacao, Notificacao
 from app.models.usuario import Usuario
 from app.services import notificacoes
 from app.services.notificacoes import despacho, navegador
+from app.services.contratos import servico_parametros
 from app.services.contratos.servico_competencias import anterior_ao_corte
 from app.services.servico_auditoria import auditar
 
 log = logging.getLogger("sgi_spi.notificacoes")
 
 MARCOS_VENCIMENTO = (30, 60, 90)
-DIAS_ATRASO = 30
 DIAS_LEMBRETE_CIENCIA = 3
 
 
@@ -75,7 +75,7 @@ def _avisar_atrasos(sessao: Session, contratos: list[Contrato], dia: date) -> in
         for competencia in contrato.competencias:
             if competencia.tipo != "regular" or competencia.medicao_concluida_em is not None or anterior_ao_corte(competencia):
                 continue
-            if (dia - competencia.periodo_fim).days <= DIAS_ATRASO:
+            if (dia - competencia.periodo_fim).days <= servico_parametros.valor("dias_atraso"):
                 continue
             mensagem = notificacoes.notificar(
                 sessao, avisos.ids_da_equipe(contrato),
@@ -85,6 +85,36 @@ def _avisar_atrasos(sessao: Session, contratos: list[Contrato], dia: date) -> in
                 chave=f"atraso:{competencia.id}", categoria="pendencia", prioridade="alta",
                 link=f"/contratos/{contrato.id}/execucao/{competencia.identificador}", contrato_id=contrato.id, evento="contratos.medicao_atrasada")
             gerados += bool(mensagem)
+    return gerados
+
+
+def _avisar_pos_assinatura(sessao: Session, contratos: list[Contrato], dia: date) -> int:
+    """Prorrogações assinadas: um aviso do prazo do PNCP perto de vencer, outro quando vence, e um da garantia sem comprovação (cada um uma vez só)."""
+    from app.services import calendario_util
+    from app.services.contratos import avisos, servico_pos_assinatura
+
+    feriados = calendario_util.feriados_cadastrados(sessao)
+    aviso = servico_parametros.valor("aviso_pncp_dias_uteis")
+    gerados = 0
+    for contrato in contratos:
+        for p in contrato.prorrogacoes:
+            situacao, restantes = servico_pos_assinatura.situacao_pncp(sessao, p, dia, feriados)
+            if situacao == "vencido" or (situacao == "no_prazo" and restantes is not None and restantes <= aviso):
+                vencido = situacao == "vencido"
+                mensagem = notificacoes.notificar(
+                    sessao, avisos.ids_da_equipe(contrato),
+                    f"Contrato {contrato.numero}: " + (f"prazo do PNCP venceu em {p.pncp_prazo_ate:%d/%m/%Y}" if vencido else f"faltam {restantes} dia(s) útil(eis) para divulgar o aditivo no PNCP"),
+                    f"A divulgação do termo aditivo da prorrogação no PNCP é condição de eficácia e deve ocorrer até {p.pncp_prazo_ate:%d/%m/%Y}. Registre a publicação na tela da prorrogação.",
+                    chave=f"pncp:{p.id}:{'vencido' if vencido else 'aviso'}", categoria="prazo",
+                    prioridade="alta", link=f"/contratos/{contrato.id}/prorrogacao", contrato_id=contrato.id, evento="contratos.pncp_prazo")
+                gerados += bool(mensagem)
+            if contrato.exige_garantia and p.garantia_comprovada_em is None and calendario_util.uteis_entre(p.assinada_em, dia, feriados) >= aviso:
+                mensagem = notificacoes.notificar(
+                    sessao, avisos.ids_da_equipe(contrato), f"Contrato {contrato.numero}: garantia da prorrogação sem comprovação",
+                    f"O termo aditivo foi assinado em {p.assinada_em:%d/%m/%Y} e a comprovação da renovação da garantia ainda não foi registrada. Registre-a e envie os dados à DOF.",
+                    chave=f"garantia:{p.id}", categoria="pendencia", prioridade="alta", link=f"/contratos/{contrato.id}/prorrogacao",
+                    contrato_id=contrato.id, evento="contratos.garantia_pendente")
+                gerados += bool(mensagem)
     return gerados
 
 
@@ -111,9 +141,10 @@ def gerar_lembretes(sessao: Session, dia: date | None = None) -> dict[str, int]:
 
     dia = dia or hoje()
     contratos = list(sessao.scalars(select(Contrato).options(
-        selectinload(Contrato.equipe), selectinload(Contrato.competencias).selectinload(Competencia.itens),
+        selectinload(Contrato.equipe), selectinload(Contrato.competencias).selectinload(Competencia.itens), selectinload(Contrato.prorrogacoes),
     )))
-    resultado = {"vencimentos": _avisar_vencimentos(sessao, contratos, dia), "atrasos": _avisar_atrasos(sessao, contratos, dia)}
+    resultado = {"vencimentos": _avisar_vencimentos(sessao, contratos, dia), "atrasos": _avisar_atrasos(sessao, contratos, dia),
+                 "pos_assinatura": _avisar_pos_assinatura(sessao, contratos, dia)}
     sessao.commit()
     resultado["despachados"] = despachar_pendentes(sessao)
     resultado["lembretes_ciencia"] = _lembrar_ciencias(sessao, dia)

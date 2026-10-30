@@ -345,3 +345,35 @@ def test_placeholder_nivel_e_o_grupo_ponto_nivel_do_cargo(cliente, ambiente):
     texto = cliente.get(f"{RH}/admissoes/{aid}/resolucao/copia", headers=h).json()["texto"]
     assert "nível 2.16" in texto
     assert "nivel" in cliente.get(f"{RH}/modelos/placeholders", headers=h).text
+
+
+def test_documento_incluido_durante_a_admissao(cliente, ambiente):
+    """O checklist do cargo é o ponto de partida: inclui documento fora dele (nunca obrigatório), baixa, exclui e não muda o checklist."""
+    amb, h = ambiente, ambiente["h"]
+    aid = cliente.post(f"{RH}/admissoes", json={"ficha_id": _ficha(cliente, amb)["id"]}, headers=h).json()["id"]
+    incluir = lambda nome="Declaração de bens": cliente.post(  # noqa: E731
+        f"{RH}/admissoes/{aid}/documentos/incluir", data={"nome": nome, "descricao": "Pedido pela chefia"},
+        files={"arquivo": ("declaracao.pdf", io.BytesIO(PDF), "application/pdf")}, headers=h)
+    # Antes da etapa de documentos não inclui
+    assert incluir().status_code == 409
+    cliente.post(f"{RH}/admissoes/{aid}/chamado", json={"solicitacoes": {}}, headers=h)
+
+    r = incluir()
+    assert r.status_code == 200, r.text
+    extra = r.json()["documentos"][-1]
+    assert extra["descricao"] == "Declaração de bens" and extra["detalhe"] == "Pedido pela chefia"
+    assert extra["incluido_no_processo"] is True and extra["obrigatorio"] is False and extra["tem_arquivo"] is True and extra["incluido_por_nome"]
+    assert cliente.get(f"{RH}/admissoes/{aid}/documentos/{extra['id']}/arquivo", headers=h).status_code == 200
+    # Item do checklist do cargo não sai; o incluído sai
+    rg = r.json()["documentos"][0]["id"]
+    assert cliente.delete(f"{RH}/admissoes/{aid}/documentos/{rg}/incluido", headers=h).status_code == 400
+    assert cliente.delete(f"{RH}/admissoes/{aid}/documentos/{extra['id']}/incluido", headers=h).status_code == 200
+    assert all(not d["incluido_no_processo"] for d in cliente.get(f"{RH}/admissoes/{aid}", headers=h).json()["documentos"])
+
+    # O incluído não trava a conclusão; depois de concluída a etapa, não inclui mais
+    assert incluir("Comprovante extra").status_code == 200
+    cliente.post(f"{RH}/admissoes/{aid}/documentos/{rg}", data={"enviado_em": "2026-10-20"}, headers=h)
+    assert cliente.post(f"{RH}/admissoes/{aid}/documentos/concluir", headers=h).status_code == 200
+    assert incluir("Tarde demais").status_code == 409
+    # O checklist do cargo continua com os mesmos documentos
+    assert [i["descricao"] for c in cliente.get(f"{RH}/checklists", headers=h).json() for i in c["itens"]].count("Comprovante extra") == 0

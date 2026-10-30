@@ -15,6 +15,7 @@ import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { CHAVE_CONTEXTO_CARTEIRA, ContextoCarteira, ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { ParametrosContratosService } from '../compartilhado/parametros-contratos.service';
 import { AlteracaoCampo, DetalheContrato, NotaEmpenho, OrcamentoExecutivo, Prorrogacao, VizinhosContrato } from '../compartilhado/contratos.models';
 import { HistoricoCampoComponent } from '../compartilhado/historico-campo.component';
 import { LinhaDoTempoComponent } from '../compartilhado/linha-do-tempo.component';
@@ -48,6 +49,7 @@ export class DetalheContratoComponent {
   readonly id = input.required<string>();
 
   private readonly api = inject(ContratosApiService);
+  private readonly parametros = inject(ParametrosContratosService);
   private readonly alteracoes = inject(AlteracoesApiService);
   private readonly execucao = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
@@ -147,7 +149,7 @@ export class DetalheContratoComponent {
     if (!c) return 0;
     return Math.round((new Date(c.data_fim + 'T00:00:00').getTime() - new Date(this.hoje + 'T00:00:00').getTime()) / 86_400_000);
   });
-  protected readonly faixaVigencia = computed<'ok' | 'alerta' | 'perigo'>(() => (this.diasRestantes() < 0 ? 'perigo' : this.diasRestantes() <= 90 ? 'alerta' : 'ok'));
+  protected readonly faixaVigencia = computed<'ok' | 'alerta' | 'perigo'>(() => (this.diasRestantes() < 0 ? 'perigo' : this.diasRestantes() <= this.parametros.valores().dias_vigencia_a_vencer ? 'alerta' : 'ok'));
   protected readonly textoVigencia = computed(() => {
     const d = this.diasRestantes();
     return d < 0 ? `vencida há ${-d} dia(s)` : d === 0 ? 'vence hoje' : `faltam ${d} dia(s)`;
@@ -177,6 +179,7 @@ export class DetalheContratoComponent {
   protected readonly vizinhos = signal<VizinhosContrato | null>(null);
 
   constructor() {
+    this.parametros.carregar();
     // Abre a aba indicada na URL (?aba=...) uma vez
     // Links antigos (?aba=portaria) caem na aba Equipe, onde a portaria passou a ficar
     const pedida = this.rota.snapshot.queryParamMap.get('aba');

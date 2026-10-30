@@ -126,11 +126,13 @@ class ModeloGlobal(Base):
     """
 
     __tablename__ = "contratos_modelos"
-    # Tipos aceitos; `portaria` guarda a máscara do texto da portaria de designação ({"html", "variante"}); `despacho`, a do despacho de pagamento do consolidado ({"html"})
-    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria', 'despacho', 'email_cadin', 'email_ob')", name="ck_contratos_modelos_tipo"),)
+    # Tipos aceitos; `portaria` guarda a máscara do texto da portaria de designação ({"html", "variante"}); `despacho`, a do despacho de pagamento do consolidado ({"html"}); `prorrogacao`, as minutas e despachos da prorrogação ({"html", "variante"})
+    # `checklist_prorrogacao`: documentos pedidos na prorrogação ({"itens"}), copiados para o processo como ponto de partida
+    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria', 'despacho', 'email_cadin', 'email_ob', 'prorrogacao', 'checklist_prorrogacao')",
+                                      name="ck_contratos_modelos_tipo"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    tipo: Mapped[str] = mapped_column(String(20), index=True)
+    tipo: Mapped[str] = mapped_column(String(30), index=True)
     nome: Mapped[str] = mapped_column(String(300))
     # Conteúdo em JSON, no mesmo formato usado pelo checklist ou pelo formulário do contrato
     conteudo: Mapped[dict[str, Any]] = mapped_column(TipoJson)
@@ -174,6 +176,8 @@ class Competencia(Base):
     adicional_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
     # Reajuste que originou a competência de diferença (somente tipo = diferenca_reajuste)
     reajuste_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="SET NULL"), index=True)
+    # Reajuste que calculou e pagou o retroativo desta competência regular; None = ainda sem cobertura
+    diferenca_coberta_por_reajuste_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="SET NULL"), index=True)
 
     # Etapa 1 — medição
     medicao_iniciada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -217,6 +221,9 @@ class Competencia(Base):
     # Por que a rotina do SIGEO ainda não concluiu esta OB (ex.: "pago R$ x de R$ y"); limpo quando conclui
     ob_sigeo_pendencia: Mapped[str | None] = mapped_column(Text)
     ob_sigeo_verificado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Carga histórica: competência lançada depois de paga, a partir dos documentos do processo (sem o limite mensal de quantidades). Quando e de onde veio.
+    carga_historica_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    carga_historica_obs: Mapped[str | None] = mapped_column(Text)
 
     # E-mail ao Financeiro (cópia para a equipe) quando a nota fiscal é juntada
     email_nf_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -479,6 +486,11 @@ class DocumentoMensal(Base):
     anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     enviado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    # Documento incluído durante o processo (não veio do modelo): nunca obrigatório, pode ser excluído e
+    # sobrevive quando o checklist é copiado de novo (retrocesso da etapa)
+    incluido_no_processo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    incluido_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    incluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     competencia: Mapped[Competencia] = relationship(back_populates="documentos")
     anexo: Mapped[Anexo | None] = relationship()

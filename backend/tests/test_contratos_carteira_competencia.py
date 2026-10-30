@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from tests.apoio_contratos import criar_contrato, restringir_contratos
+from tests.apoio_contratos import criar_contrato, definir_parametros, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -19,8 +19,7 @@ def _hoje(monkeypatch):
     monkeypatch.setattr("app.services.contratos.servico_contratos.hoje", lambda: HOJE)
     monkeypatch.setattr("app.services.contratos.servico_competencias.hoje", lambda: HOJE)
     monkeypatch.setattr("app.services.contratos.servico_painel.hoje", lambda: HOJE)
-    monkeypatch.setattr("app.services.contratos.servico_competencias.PENDENCIAS_A_PARTIR_DE", date(2000, 1, 1))
-    monkeypatch.setattr("app.services.contratos.competencia_atual.MARCADORES_A_PARTIR_DE", date(2000, 1, 1))
+    definir_parametros(corte_alertas_a_partir_de=date(2000, 1, 1), corte_marcadores_a_partir_de=date(2000, 1, 1))
 
 
 def _linha(cliente, h, contrato):
@@ -87,6 +86,6 @@ def test_competencias_em_andamento_uma_linha_por_competencia_e_corte_de_agosto(c
     andamento = _linha(cliente, h, contrato)["competencias_em_andamento"]
     assert [c["identificador"] for c in andamento] == ["2026-01"] and andamento[0]["situacao"] == "em_andamento"
     # Com o corte em agosto/2026, a competência de janeiro não gera marcador
-    monkeypatch.setattr("app.services.contratos.competencia_atual.MARCADORES_A_PARTIR_DE", date(2026, 8, 1))
+    definir_parametros(corte_marcadores_a_partir_de=date(2026, 8, 1))
     linha = _linha(cliente, h, contrato)
     assert linha["competencias_em_andamento"] == [] and linha["competencia_atual"]["identificador"] == "2026-08"

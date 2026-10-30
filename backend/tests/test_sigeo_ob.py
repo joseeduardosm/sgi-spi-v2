@@ -61,7 +61,7 @@ def esperando_ob(cliente, equipe):  # noqa: F811
 def test_conclui_quando_processo_mes_e_liquido_batem_em_partes(cliente, esperando_ob, monkeypatch):
     contrato, competencia_id, gestora = esperando_ob
     enviados = []
-    monkeypatch.setattr("app.services.contratos.servico_notificacoes.notificar_ob", lambda a, b: enviados.append(b))
+    monkeypatch.setattr("app.services.contratos.servico_notificacoes.notificar_ob", lambda a, b, **k: enviados.append(b))
     linhas = [
         _linha("20240605988", 10, "800.00", "SERV. NF 1 REF SET/26 PARCIAL"),
         _linha("20240605988", 11, "100.00", "SERV. NF 1 SET/26 COMPLEMENTO"),
@@ -83,9 +83,24 @@ def test_conclui_quando_processo_mes_e_liquido_batem_em_partes(cliente, esperand
         assert so.conferir(s, linhas).verificadas == 0
 
 
+def test_execucao_retroativa_nao_envia_email_de_pagamento(cliente, esperando_ob):
+    """Competência anterior a "Desconsiderar alertas a partir de" é conferida e concluída, mas o e-mail de pagamento não sai."""
+    contrato, competencia_id, _ = esperando_ob
+    with FabricaSessao() as s:
+        s.get(Contrato, s.get(Competencia, competencia_id).contrato_id).alertas_a_partir_de = date(2026, 10, 15)
+        s.commit()
+    with FabricaSessao() as s:
+        r = so.conferir(s, [_linha("20240605988", 10, "900.00", "SERV. NF 1 REF SET/26")])
+    assert len(r.concluidas) == 1
+    with FabricaSessao() as s:
+        c = s.get(Competencia, competencia_id)
+        assert c.etapa_atual == "concluida" and c.email_ob_enviado_em is None and c.email_ob_ok is False
+        assert "anterior à data de corte" in c.email_ob_erro
+
+
 def test_nao_conclui_parcial_nem_sem_mes(cliente, esperando_ob, monkeypatch):
     contrato, competencia_id, gestora = esperando_ob
-    monkeypatch.setattr("app.services.contratos.servico_notificacoes.notificar_ob", lambda a, b: None)
+    monkeypatch.setattr("app.services.contratos.servico_notificacoes.notificar_ob", lambda a, b, **k: None)
     with FabricaSessao() as s:
         r = so.conferir(s, [_linha("20240605988", 20, "800.00", "SERV. NF 1 REF SET/26 PARCIAL")])
     assert r.concluidas == [] and "faltam R$ 100,00" in r.pendencias[0]["motivo"]

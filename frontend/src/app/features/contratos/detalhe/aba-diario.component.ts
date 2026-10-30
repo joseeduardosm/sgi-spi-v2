@@ -13,15 +13,13 @@ import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { ParametrosContratosService } from '../compartilhado/parametros-contratos.service';
 import { AnexoOcorrencia, DiarioContrato, OcorrenciaDiario } from '../compartilhado/contratos.models';
 import { paraDecimalApi, ROTULOS_PAPEL } from '../compartilhado/rotulos';
 import { EditorRicoComponent } from '../../contratacoes/editor-rico.component';
 import { DescricaoTarefaPipe } from '../../tarefas/descricao-tarefa.pipe';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
-/** Máximo de arquivos por ocorrência (mesmo limite da API). */
-const MAXIMO_ANEXOS = 5;
-
 /** Campos do formulário guardados como rascunho (os anexos não entram). */
 interface RascunhoOcorrencia {
   data: string;
@@ -243,6 +241,7 @@ export class AbaDiarioComponent implements OnInit {
   readonly usuarioId = input<number | null>(null);
 
   private readonly api = inject(ContratosApiService);
+  private readonly parametros = inject(ParametrosContratosService);
   private readonly execucao = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly rascunhos = inject(RascunhoService);
@@ -265,7 +264,8 @@ export class AbaDiarioComponent implements OnInit {
   protected descricao = '';
   protected possuiGlosa = false;
   protected impactaAvaliacao = false;
-  protected readonly maximoAnexos = MAXIMO_ANEXOS;
+  /** Máximo de arquivos por ocorrência (parâmetro de Contratos, o mesmo limite da API). */
+  protected get maximoAnexos(): number { return this.parametros.valores().maximo_anexos_ocorrencia; }
   protected readonly arquivos = signal<File[]>([]);
   protected readonly itensMarcados = signal<Set<string>>(new Set());
   /** Itens do formulário de avaliação ativo agrupados como no formulário. */
@@ -469,8 +469,8 @@ export class AbaDiarioComponent implements OnInit {
   protected aoEscolherArquivos(campo: HTMLInputElement): void {
     const escolhidos = Array.from(campo.files ?? []);
     campo.value = '';
-    const livres = MAXIMO_ANEXOS - this.arquivos().length;
-    if (escolhidos.length > livres) this.erro.set(`No máximo ${MAXIMO_ANEXOS} arquivos por ocorrência.`);
+    const livres = this.maximoAnexos - this.arquivos().length;
+    if (escolhidos.length > livres) this.erro.set(`No máximo ${this.maximoAnexos} arquivos por ocorrência.`);
     this.arquivos.update((l) => [...l, ...escolhidos.slice(0, livres)]);
   }
 
@@ -558,7 +558,7 @@ export class AbaDiarioComponent implements OnInit {
       }
     }
     if (this.impactaAvaliacao && !this.itensMarcados().size) return 'Marque os itens da avaliação que a ocorrência impacta.';
-    if (this.arquivos().length > MAXIMO_ANEXOS) return `No máximo ${MAXIMO_ANEXOS} arquivos por ocorrência.`;
+    if (this.arquivos().length > this.maximoAnexos) return `No máximo ${this.maximoAnexos} arquivos por ocorrência.`;
     return null;
   }
 }

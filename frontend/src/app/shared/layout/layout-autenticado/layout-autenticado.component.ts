@@ -2,11 +2,13 @@
 // Este arquivo serve para montar a moldura das telas autenticadas (barra lateral, barra superior e conteúdo).
 
 import { Component, DestroyRef, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
-import { filter, map, startWith, tap } from 'rxjs';
+import { catchError, filter, map, of, startWith, tap } from 'rxjs';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
+import { ambiente } from '../../../../environments/ambiente';
 import { AtalhosService } from '../../../core/navegacao/atalhos.service';
 import { PreferenciaTema, TemaService } from '../../../core/tema/tema.service';
 import { CaixaNotificacoesService } from '../../../core/notificacoes/caixa-notificacoes.service';
@@ -59,6 +61,11 @@ export class LayoutAutenticadoComponent {
   private readonly elemento = inject(ElementRef<HTMLElement>);
   // Sino das notificações (contador de pendentes) e janela de avisos
   protected readonly caixa = inject(CaixaNotificacoesService);
+  // Ambiente de homologação (vem do `GET /api/saude`): mostra a faixa no topo; se a consulta falhar, não mostra
+  protected readonly homologacao = toSignal(
+    inject(HttpClient).get<{ homologacao?: boolean }>(`${ambiente.urlApi}/saude`).pipe(map((r) => !!r.homologacao), catchError(() => of(false))),
+    { initialValue: false },
+  );
 
   constructor() {
     this.caixa.iniciar(inject(DestroyRef));

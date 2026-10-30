@@ -130,7 +130,7 @@ def test_entrada_em_lote_com_previa(cliente, equipe):
     assert _abrir(cliente, h["ana"], doc["id"])["secoes"][0]["itens"] == []  # a prévia não grava
     r = cliente.post(f"{URL}/documentos/{doc['id']}/lote", json={"secao_id": sec, "texto": texto}, headers=h["ana"])
     assert r.status_code == 201 and r.json()["criados"] == 5
-    assert all(i["precisa_revisao"] for i in _abrir(cliente, h["ana"], doc["id"])["secoes"][0]["itens"])
+    assert not any(i["precisa_revisao"] for i in _abrir(cliente, h["ana"], doc["id"])["secoes"][0]["itens"])
     assert cliente.post(f"{URL}/documentos/{doc['id']}/lote", json={"secao_id": sec, "texto": "sem marcador"}, headers=h["ana"]).status_code == 400
 
 
@@ -324,3 +324,29 @@ def test_sessao_gera_versao_antes_da_primeira_edicao(cliente, equipe):
     assert versoes[-1]["tipo"] == "criacao" and len(versoes) <= 2
     with FabricaSessao() as sessao:
         assert sessao.get(DocumentoContratacao, uuid.UUID(doc["id"])).ultima_edicao_em is not None
+
+
+def test_descricao_da_secao_so_aparece_na_tela(cliente, equipe):
+    """A seção nasce com título e descrição; a descrição pode ser alterada, não vai para o Word e volta com a versão restaurada."""
+    import io
+
+    from docx import Document
+
+    ids, h = equipe
+    doc = _criar(cliente, h["ana"])
+    r = cliente.post(f"{URL}/documentos/{doc['id']}/secoes", json={"titulo": "OBJETO", "descricao": "Descreva o que será contratado."}, headers=h["ana"])
+    assert r.status_code == 201, r.text
+    secao = r.json()["secoes"][-1]
+    assert secao["descricao"] == "Descreva o que será contratado."
+    _item(cliente, h["ana"], doc["id"], secao["id"], "Aquisição de climatizadores.")
+
+    r = cliente.put(f"{URL}/documentos/{doc['id']}/secoes/{secao['id']}", json={"titulo": "OBJETO", "descricao": "Nova orientação."}, headers=h["ana"])
+    assert r.status_code == 200 and r.json()["secoes"][0]["descricao"] == "Nova orientação."
+
+    word = cliente.get(f"{URL}/documentos/{doc['id']}/exportar/word", headers=h["ana"]).content
+    texto = " ".join(p.text for p in Document(io.BytesIO(word)).paragraphs)
+    assert "Aquisição de climatizadores." in texto and "Nova orientação." not in texto
+
+    # Sem descrição continua valendo (campo opcional) e a vazia remove a orientação
+    r = cliente.put(f"{URL}/documentos/{doc['id']}/secoes/{secao['id']}", json={"titulo": "OBJETO"}, headers=h["ana"])
+    assert r.json()["secoes"][0]["descricao"] == ""

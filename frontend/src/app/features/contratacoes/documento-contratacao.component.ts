@@ -17,14 +17,14 @@ import { ContratosApiService } from '../contratos/compartilhado/contratos-api.se
 import { ResumoContrato } from '../contratos/compartilhado/contratos.models';
 import { ContratacoesApiService } from './contratacoes-api.service';
 import {
-  Conferencia, DocumentoContratacao, EntradaHistorico, ItemDocumento, PreviaLote, ROTULOS_ITEM, ROTULOS_PAPEL, ROTULOS_SITUACAO, ROTULOS_TIPO, SecaoDocumento, Situacao, TipoItem,
+  Conferencia, DocumentoContratacao, EntradaHistorico, ItemDocumento, ROTULOS_ITEM, ROTULOS_PAPEL, ROTULOS_SITUACAO, ROTULOS_TIPO, SecaoDocumento, Situacao, TipoItem,
 } from './contratacoes.models';
 import { EditorRicoComponent } from './editor-rico.component';
 import { HtmlConfiavelPipe } from './html-confiavel.pipe';
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
-type Janela = null | 'edicao' | 'revisoes' | 'historico' | 'lote' | 'compartilhar' | 'contrato' | 'conferencia' | 'dados' | 'tabela';
+type Janela = null | 'edicao' | 'revisoes' | 'historico' | 'lote' | 'compartilhar' | 'contrato' | 'conferencia' | 'dados' | 'tabela' | 'secao';
 
 interface Linha {
   item: ItemDocumento;
@@ -46,6 +46,7 @@ interface Edicao {
 /** Tela do documento. Todas as ações chamam a API, que devolve o documento inteiro atualizado. */
 @Component({
   selector: 'app-documento-contratacao',
+  host: { '(document:click)': 'menuAberto.set(null)' },
   imports: [EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, RouterLink, TrilhaComponent, EditorRicoComponent, HtmlConfiavelPipe, SeletorUsuariosComponent],
   template: `
     @if (doc(); as d) {
@@ -75,73 +76,142 @@ interface Edicao {
           </div>
           <span class="espacador"></span>
           @if (d.pode_editar) {
-            <button type="button" class="acao-secundaria acao-pequena" (click)="abrirJanela('dados')">Dados</button>
-            <button type="button" class="acao-secundaria acao-pequena" (click)="salvarVersao()">Salvar versão</button>
-            <button type="button" class="acao-positiva acao-pequena" (click)="conferir()">Conferir e concluir</button>
+            @if (d.situacao === 'concluido') {
+              <button type="button" class="acao-secundaria acao-pequena" (click)="reabrirEdicao()">Reabrir edição</button>
+            } @else {
+              <button type="button" class="acao-positiva acao-pequena" (click)="conferir()">Conferir e concluir</button>
+            }
           }
-          @if (d.pode_gerir) {
-            <button type="button" class="acao-secundaria acao-pequena" (click)="abrirJanela('compartilhar')">Compartilhar ({{ d.membros.length }})</button>
-            <button type="button" class="acao-secundaria acao-pequena" (click)="abrirJanela('contrato')">Contrato</button>
-          }
-          <button type="button" class="acao-secundaria acao-pequena" (click)="duplicar()">Duplicar</button>
-          @if (d.pode_gerir) { <button type="button" class="acao-recusar acao-pequena" (click)="excluir()">Excluir</button> }
+          <!-- Demais ações do documento no menu ⋮ (mesmo padrão da carteira de contratos) -->
+          <div class="menu-acoes-doc">
+            <button type="button" class="acao-secundaria acao-pequena" aria-label="Mais ações do documento" aria-haspopup="menu"
+                    [attr.aria-expanded]="menuAberto() === 'doc'" (click)="alternarMenu($event, 'doc')">⋮</button>
+            @if (menuAberto() === 'doc') {
+              <div class="menu-flutuante" role="menu">
+                @if (d.pode_editar) {
+                  <button type="button" role="menuitem" (click)="abrirJanela('dados')">Dados do documento</button>
+                  <button type="button" role="menuitem" (click)="salvarVersao()">Salvar versão</button>
+                }
+                @if (d.pode_gerir) {
+                  <button type="button" role="menuitem" (click)="abrirJanela('compartilhar')">Compartilhar ({{ d.membros.length }})</button>
+                  <button type="button" role="menuitem" (click)="abrirJanela('contrato')">Vincular contrato</button>
+                }
+                <button type="button" role="menuitem" (click)="duplicar()">Duplicar documento</button>
+                @if (d.pode_gerir) {
+                  <span class="separador" role="separator"></span>
+                  <button type="button" role="menuitem" class="perigo" (click)="excluir()">Excluir documento</button>
+                }
+              </div>
+            }
+          </div>
         </div>
 
-        @for (s of d.secoes; track s.id; let i = $index) {
-          <article class="secao-doc">
-            <header>
-              <h2>{{ s.ordem }}. {{ s.titulo }}</h2>
-              @if (d.pode_editar) {
-                <div class="acoes-linha">
-                  <button type="button" class="acao-secundaria acao-pequena" [disabled]="i === 0" (click)="moverSecao(s, s.ordem - 1)" aria-label="Subir seção">↑</button>
-                  <button type="button" class="acao-secundaria acao-pequena" [disabled]="i === d.secoes.length - 1" (click)="moverSecao(s, s.ordem + 1)" aria-label="Descer seção">↓</button>
-                  <button type="button" class="acao-secundaria acao-pequena" (click)="renomearSecao(s)">Renomear</button>
-                  <button type="button" class="acao-secundaria acao-pequena" (click)="abrirLote(s, null)">Entrada em lote</button>
-                  <button type="button" class="acao-secundaria acao-pequena" (click)="novoItem(s, null, 'item')">+ Item</button>
-                  <button type="button" class="acao-recusar acao-pequena" (click)="excluirSecao(s)">Excluir</button>
-                </div>
+        @if (d.secoes.length) {
+          <div class="doc-com-sumario">
+            <!-- Sumário lateral: lista de seções com destaque na ativa -->
+            <nav class="sumario-doc" aria-label="Sumário do documento">
+              <span class="sumario-titulo">Sumário</span>
+              @for (s of d.secoes; track s.id) {
+                <button type="button" [class.ativo]="secaoAtiva() === s.id" (click)="selecionarSecao(s.id)">
+                  <span class="sumario-num">{{ s.ordem }}.</span> {{ s.titulo }}
+                </button>
               }
-            </header>
-            @for (l of linhas(s); track l.item.id) {
-              <div class="linha-item" [class.precisa-revisao]="l.item.precisa_revisao" [style.margin-left.px]="l.profundidade * 26">
-                <div class="texto-item">
-                  <span class="marcador">{{ l.item.marcador }}</span>
-                  <div class="conteudo-item" [innerHTML]="(l.item.conteudo_html || l.item.conteudo) | htmlConfiavel"></div>
-                </div>
-                @if (l.item.tem_tabela_tr) {
-                  <div class="tabela-tr">
-                    <table class="tabela-gestao"><thead><tr><th>#</th><th>Descrição</th><th>CATMAT/CATSER</th><th>Siafísico</th><th>UF</th><th>Qtd. mensal</th><th>Qtd. objeto</th><th></th></tr></thead>
-                      <tbody>@for (t of l.item.linhas_tabela; track t.id) {
-                        <tr><td>{{ t.ordem }}</td><td>{{ t.descricao }}</td><td>{{ t.catser_catmat }}</td><td>{{ t.siafisico }}</td><td>{{ t.unidade }}</td><td>{{ t.quantidade_mensal }}</td><td>{{ t.quantidade_objeto }}</td>
-                          <td>@if (d.pode_editar) { <button type="button" class="acao-recusar acao-pequena" (click)="excluirLinhaTr(t.id)">Excluir</button> }</td></tr> }</tbody></table>
-                    @if (d.pode_editar) { <button type="button" class="acao-secundaria acao-pequena" (click)="abrirTabela(l.item)">+ Linha da tabela</button> }
-                  </div>
+            </nav>
+            <!-- Conteúdo: apenas a seção ativa -->
+            <div class="conteudo-doc">
+              @for (s of d.secoes; track s.id; let i = $index) {
+                @if (secaoAtiva() === s.id) {
+                <article class="secao-doc" [id]="'s-' + s.id">
+                  <header>
+                    <h2>{{ s.ordem }}. {{ s.titulo }}</h2>
+                    <div class="acoes-linha">
+                      @if (copiada() === s.id) { <span class="aviso-copiado" role="status">Texto copiado</span> }
+                      @if (d.pode_editar) {
+                        <button type="button" class="acao-secundaria acao-pequena" (click)="novoItem(s, null, 'item')">+ Item</button>
+                      } @else {
+                        <button type="button" class="acao-secundaria acao-pequena" [disabled]="!s.itens.length" (click)="copiarSecao(s)">Copiar</button>
+                      }
+                      @if (d.pode_editar) {
+                        <div class="menu-acoes-doc">
+                          <button type="button" class="acao-secundaria acao-pequena" [attr.aria-label]="'Mais ações da seção ' + s.titulo" aria-haspopup="menu"
+                                  [attr.aria-expanded]="menuAberto() === 's:' + s.id" (click)="alternarMenu($event, 's:' + s.id)">⋮</button>
+                          @if (menuAberto() === 's:' + s.id) {
+                            <div class="menu-flutuante" role="menu">
+                              <button type="button" role="menuitem" [disabled]="!s.itens.length" (click)="copiarSecao(s)">Copiar texto da seção</button>
+                              <button type="button" role="menuitem" (click)="editarSecao(s)">Editar seção</button>
+                              <button type="button" role="menuitem" (click)="abrirLote(s, null)">Entrada em lote</button>
+                              <button type="button" role="menuitem" [disabled]="i === 0" (click)="moverSecao(s, s.ordem - 1)">Subir seção</button>
+                              <button type="button" role="menuitem" [disabled]="i === d.secoes.length - 1" (click)="moverSecao(s, s.ordem + 1)">Descer seção</button>
+                              <span class="separador" role="separator"></span>
+                              <button type="button" role="menuitem" class="perigo" (click)="excluirSecao(s)">Excluir seção</button>
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </header>
+                  @if (s.descricao) { <p class="orientacao-secao">{{ s.descricao }}</p> }
+                  @for (l of linhas(s); track l.item.id) {
+                    <div class="linha-item" [class.precisa-revisao]="l.item.precisa_revisao" [style.margin-left.px]="l.profundidade * 26">
+                      <div class="texto-item">
+                        <span class="marcador">{{ l.item.marcador }}</span>
+                        <div class="conteudo-item" [innerHTML]="(l.item.conteudo_html || l.item.conteudo) | htmlConfiavel"></div>
+                      </div>
+                      @if (l.item.tem_tabela_tr) {
+                        <div class="tabela-tr">
+                          <table class="tabela-gestao"><thead><tr><th>#</th><th>Descrição</th><th>CATMAT/CATSER</th><th>Siafísico</th><th>UF</th><th>Qtd. mensal</th><th>Qtd. objeto</th><th></th></tr></thead>
+                            <tbody>@for (t of l.item.linhas_tabela; track t.id) {
+                              <tr><td>{{ t.ordem }}</td><td>{{ t.descricao }}</td><td>{{ t.catser_catmat }}</td><td>{{ t.siafisico }}</td><td>{{ t.unidade }}</td><td>{{ t.quantidade_mensal }}</td><td>{{ t.quantidade_objeto }}</td>
+                                <td>@if (d.pode_editar) { <button type="button" class="acao-recusar acao-pequena" (click)="excluirLinhaTr(t.id)">Excluir</button> }</td></tr> }</tbody></table>
+                          @if (d.pode_editar) { <button type="button" class="acao-secundaria acao-pequena" (click)="abrirTabela(l.item)">+ Linha da tabela</button> }
+                        </div>
+                      }
+                      @for (c of l.item.comentarios_importados; track $index) {
+                        <p class="comentario-importado" title="Comentário do Word (somente leitura)">💬 <b>{{ c.autor }}</b>: {{ c.comentario }}</p>
+                      }
+                      <div class="acoes-item">
+                        <small class="tipo-item">{{ rotuloItem[l.item.tipo] }}@if (l.item.precisa_revisao) { · <b>precisa de revisão</b> }@if (l.item.revisoes.length) { · {{ l.item.revisoes.length }} revisão(ões) }</small>
+                        @if (d.pode_editar) {
+                          <button type="button" class="acao-secundaria acao-pequena" (click)="editar(l.item)">Editar</button>
+                        } @else {
+                          <button type="button" class="acao-secundaria acao-pequena" (click)="abrirRevisoes(l.item)">Revisões@if (l.item.revisoes.length) { ({{ l.item.revisoes.length }}) }</button>
+                        }
+                        <div class="menu-acoes-doc">
+                          <button type="button" class="acao-secundaria acao-pequena" [attr.aria-label]="'Mais ações do item ' + l.item.marcador" aria-haspopup="menu"
+                                  [attr.aria-expanded]="menuAberto() === 'i:' + l.item.id" (click)="alternarMenu($event, 'i:' + l.item.id)">⋮</button>
+                          @if (menuAberto() === 'i:' + l.item.id) {
+                            <div class="menu-flutuante" role="menu">
+                              @if (d.pode_editar) {
+                                <button type="button" role="menuitem" (click)="novoItem(s, l.item, 'subitem')">+ Filho</button>
+                                <button type="button" role="menuitem" (click)="novoIrmao(s, l)">+ Irmão</button>
+                                <button type="button" role="menuitem" (click)="abrirLote(s, l.item)">Filhos em lote</button>
+                                <button type="button" role="menuitem" (click)="duplicarItem(l.item)">Duplicar</button>
+                                <button type="button" role="menuitem" [disabled]="l.primeiro" (click)="moverItem(l.item, -1)">Subir</button>
+                                <button type="button" role="menuitem" [disabled]="l.ultimo" (click)="moverItem(l.item, 1)">Descer</button>
+                                <span class="separador" role="separator"></span>
+                                <button type="button" role="menuitem" (click)="abrirRevisoes(l.item)">Revisões@if (l.item.revisoes.length) { ({{ l.item.revisoes.length }}) }</button>
+                              }
+                              <button type="button" role="menuitem" (click)="abrirHistorico(l.item)">Histórico</button>
+                              @if (d.pode_editar) {
+                                <span class="separador" role="separator"></span>
+                                <button type="button" role="menuitem" class="perigo" (click)="excluirItem(l.item)">Excluir item</button>
+                              }
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  } @empty { <p class="estado-vazio">Seção sem itens.</p> }
+                </article>
                 }
-                @for (c of l.item.comentarios_importados; track $index) {
-                  <p class="comentario-importado" title="Comentário do Word (somente leitura)">💬 <b>{{ c.autor }}</b>: {{ c.comentario }}</p>
-                }
-                <div class="acoes-item">
-                  <small class="tipo-item">{{ rotuloItem[l.item.tipo] }}@if (l.item.precisa_revisao) { · <b>precisa de revisão</b> }</small>
-                  @if (d.pode_editar) {
-                    <button type="button" class="acao-secundaria acao-pequena" (click)="editar(l.item)">Editar</button>
-                    <button type="button" class="acao-secundaria acao-pequena" [disabled]="l.primeiro" (click)="moverItem(l.item, -1)" aria-label="Subir">↑</button>
-                    <button type="button" class="acao-secundaria acao-pequena" [disabled]="l.ultimo" (click)="moverItem(l.item, 1)" aria-label="Descer">↓</button>
-                    <button type="button" class="acao-secundaria acao-pequena" (click)="novoItem(s, l.item, 'subitem')">+ Filho</button>
-                    <button type="button" class="acao-secundaria acao-pequena" (click)="novoIrmao(s, l)">+ Irmão</button>
-                    <button type="button" class="acao-secundaria acao-pequena" (click)="duplicarItem(l.item)">Duplicar</button>
-                  }
-                  <button type="button" class="acao-secundaria acao-pequena" (click)="abrirRevisoes(l.item)">Revisões@if (l.item.revisoes.length) { ({{ l.item.revisoes.length }}) }</button>
-                  <button type="button" class="acao-secundaria acao-pequena" (click)="abrirHistorico(l.item)">Histórico</button>
-                  @if (d.pode_editar) {
-                    <button type="button" class="acao-secundaria acao-pequena" (click)="abrirLote(s, l.item)">Lote</button>
-                    <button type="button" class="acao-recusar acao-pequena" (click)="excluirItem(l.item)">Excluir</button>
-                  }
-                </div>
-              </div>
-            } @empty { <p class="estado-vazio">Seção sem itens.</p> }
-          </article>
-        } @empty { <p class="estado-vazio">O documento ainda não tem seções.</p> }
-        @if (d.pode_editar) { <button type="button" class="acao-secundaria" (click)="novaSecao()">+ Nova seção</button> }
+              }
+              @if (d.pode_editar) { <button type="button" class="acao-secundaria" (click)="novaSecao()">+ Nova seção</button> }
+            </div>
+          </div>
+        } @else {
+          <p class="estado-vazio">O documento ainda não tem seções.</p>
+          @if (d.pode_editar) { <button type="button" class="acao-secundaria" (click)="novaSecao()">+ Nova seção</button> }
+        }
       </section>
 
       @if (janela()) {
@@ -149,7 +219,7 @@ interface Edicao {
       }
 
       @if (janela() === 'edicao' && edicao(); as e) {
-        <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-ed">
+        <section animate.leave="mov-modal-sai" class="modal-portal modal-tela-cheia" role="dialog" aria-modal="true" aria-labelledby="t-ed">
           <header><div><span class="modal-sobretitulo">{{ e.id ? 'Editar' : 'Novo' }}</span><h2 id="t-ed">{{ rotuloItem[e.tipo] }}</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             <div class="grade-formulario">
@@ -220,17 +290,13 @@ interface Edicao {
       }
 
       @if (janela() === 'lote') {
-        <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="t-lote">
+        <section animate.leave="mov-modal-sai" class="modal-portal modal-tela-cheia" role="dialog" aria-modal="true" aria-labelledby="t-lote">
           <header><div><span class="modal-sobretitulo">Entrada em lote</span><h2 id="t-lote">Criar vários itens de uma vez</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
           <div class="form-contratacoes">
             <p class="ajuda">Uma linha por item. <code>#</code> item, <code>##</code> subitem (até <code>######</code>), <code>&#64;</code> subseção, <code>**</code> inciso, <code>$$</code> alínea. Linha sem marcador continua a anterior.</p>
             <textarea rows="10" [(ngModel)]="loteTexto" aria-label="Texto do lote"></textarea>
-            @if (lotePrevia(); as p) {
-              <ul class="previa-lote">@for (i of p.itens; track $index) { <li [style.margin-left.px]="i.profundidade * 20"><b>{{ rotuloItem[i.tipo] }}</b> {{ i.conteudo }}</li> }</ul>
-            }
             <footer><button type="button" class="acao-secundaria" (click)="fechar()">Cancelar</button>
-              <button type="button" class="acao-secundaria" [disabled]="!loteTexto.trim() || ocupado()" (click)="previaLote()">Ver prévia</button>
-              <button type="button" class="acao-positiva" [disabled]="!lotePrevia() || ocupado()" (click)="gravarLote()">Criar itens</button></footer>
+              <button type="button" class="acao-positiva" [class.carregando]="ocupado()" [disabled]="!loteTexto.trim() || ocupado()" (click)="gravarLote()">Criar itens</button></footer>
           </div>
         </section>
       }
@@ -284,6 +350,23 @@ interface Edicao {
         </section>
       }
 
+      @if (janela() === 'secao') {
+        <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-sec">
+          <header><div><span class="modal-sobretitulo">Seção</span><h2 id="t-sec">{{ secaoEditandoId ? 'Editar seção' : 'Nova seção' }}</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
+          <form class="form-contratacoes" (ngSubmit)="salvarSecao()">
+            <div class="grade-formulario uma-coluna">
+              <div><label for="sc-titulo">Título *</label><input id="sc-titulo" name="titulo" maxlength="300" [(ngModel)]="secaoTitulo" /></div>
+              <div><label for="sc-desc">Descrição</label>
+                <textarea id="sc-desc" name="descricao" rows="5" maxlength="4000" [(ngModel)]="secaoDescricao"
+                          placeholder="Orientação para quem vai preencher esta seção"></textarea>
+                <small class="ajuda">Aparece só na tela, logo abaixo do título. Não vai para o botão Copiar, nem para o Word e o PDF.</small></div>
+            </div>
+            <footer><button type="button" class="acao-secundaria" (click)="fechar()">Cancelar</button>
+              <button type="submit" class="acao-positiva" [class.carregando]="ocupado()" [disabled]="!secaoTitulo.trim() || ocupado()">Salvar</button></footer>
+          </form>
+        </section>
+      }
+
       @if (janela() === 'dados') {
         <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="t-dad">
           <header><div><span class="modal-sobretitulo">Documento</span><h2 id="t-dad">Dados do documento</h2></div><button type="button" aria-label="Fechar" (click)="fechar()">×</button></header>
@@ -330,12 +413,17 @@ export class DocumentoContratacaoComponent implements OnInit {
   protected readonly doc = signal<DocumentoContratacao | null>(null);
   protected readonly erro = signal('');
   protected readonly janela = signal<Janela>(null);
+  protected readonly secaoAtiva = signal<string | null>(null);
   protected readonly ocupado = signal(false);
   protected readonly edicao = signal<Edicao | null>(null);
   protected readonly itemAtualId = signal<string | null>(null);
+  // Menu ⋮ aberto: 'doc', 's:<seção>' ou 'i:<item>' (um por vez; clique fora fecha)
+  protected readonly menuAberto = signal<string | null>(null);
+  // Seção recém-copiada: o botão mostra "Copiado" por alguns segundos
+  protected readonly copiada = signal<string | null>(null);
+  private temporizadorCopia: ReturnType<typeof setTimeout> | undefined;
   protected readonly itemAtual = computed(() => this.doc()?.secoes.flatMap((s) => s.itens).find((i) => i.id === this.itemAtualId()) ?? null);
   protected readonly historico = signal<EntradaHistorico[]>([]);
-  protected readonly lotePrevia = signal<PreviaLote | null>(null);
   protected readonly conferencia = signal<Conferencia | null>(null);
   protected readonly contratos = signal<ResumoContrato[]>([]);
   protected readonly buscaContrato = signal('');
@@ -356,6 +444,10 @@ export class DocumentoContratacaoComponent implements OnInit {
   protected novosMembros: OpcaoUsuario[] = [];
   protected novoPapel: 'editor' | 'revisor' = 'editor';
   protected dadosNome = '';
+  // Formulário da seção (nova ou em edição)
+  protected secaoEditandoId: string | null = null;
+  protected secaoTitulo = '';
+  protected secaoDescricao = '';
   protected dadosProcesso = '';
   protected dadosLink = '';
   protected linhaTr = { descricao: '', siafisico: '', catser_catmat: '', unidade: '', quantidade_mensal: '0', quantidade_objeto: '0' };
@@ -374,9 +466,60 @@ export class DocumentoContratacaoComponent implements OnInit {
 
   ngOnInit(): void {
     this.api.abrir(this.id).subscribe({
-      next: (d) => this.doc.set(d),
+      next: (d) => {
+        this.doc.set(d);
+        // Activa a primeira seção ao carregar (se nenhuma estiver ativa)
+        if (!this.secaoAtiva() && d.secoes.length) this.secaoAtiva.set(d.secoes[0].id);
+      },
       error: (e) => { this.erro.set(e?.status === 404 ? 'Documento não encontrado ou sem acesso.' : 'Não foi possível abrir o documento.'); },
     });
+  }
+
+  /** Exibe somente a seção escolhida no painel lateral. */
+  protected selecionarSecao(id: string): void {
+    this.secaoAtiva.set(id);
+  }
+
+  /** Abre ou fecha um menu ⋮; `stopPropagation` evita que o clique no documento o feche na mesma hora. */
+  protected alternarMenu(evento: Event, chave: string): void {
+    evento.stopPropagation();
+    this.menuAberto.set(this.menuAberto() === chave ? null : chave);
+  }
+
+  /**
+   * Copia o texto da seção, sem o título, com o índice de cada item em negrito e o recuo dos subitens.
+   * Vai como HTML (cola formatado no Word e no SEI) e como texto puro, para onde não aceita formatação.
+   */
+  protected async copiarSecao(secao: SecaoDocumento): Promise<void> {
+    const html: string[] = [];
+    const texto: string[] = [];
+    for (const l of this.linhas(secao)) {
+      // O conteúdo já vem sanitizado pela API; o DOMParser só lê, não executa nada
+      const corpo = new DOMParser().parseFromString(l.item.conteudo_html || `<p>${escaparHtml(l.item.conteudo)}</p>`, 'text/html').body;
+      if (l.item.marcador) {
+        const negrito = document.createElement('b');
+        negrito.textContent = l.item.marcador + ' ';
+        const alvo = corpo.querySelector('p, li, h1, h2, h3, h4') ?? corpo;
+        alvo.insertBefore(negrito, alvo.firstChild);
+      }
+      html.push(`<div style="margin-left:${l.profundidade * 24}px">${corpo.innerHTML}</div>`);
+      texto.push('    '.repeat(l.profundidade) + (corpo.textContent ?? '').trim());
+    }
+    try {
+      if (typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([html.join('')], { type: 'text/html' }),
+          'text/plain': new Blob([texto.join('\n')], { type: 'text/plain' }),
+        })]);
+      } else {
+        await navigator.clipboard.writeText(texto.join('\n'));
+      }
+      this.copiada.set(secao.id);
+      clearTimeout(this.temporizadorCopia);
+      this.temporizadorCopia = setTimeout(() => this.copiada.set(null), 2500);
+    } catch (e) {
+      this.dialogos.mostrarErro(e, 'Não foi possível copiar a seção');
+    }
   }
 
   /** Itens da seção em pré-ordem, com a profundidade e a posição entre os irmãos. */
@@ -400,6 +543,11 @@ export class DocumentoContratacaoComponent implements OnInit {
   private aplicar(d: DocumentoContratacao, fechar = true): void {
     this.ocupado.set(false);
     this.doc.set(d);
+    // Mantém a seção ativa; se ela deixou de existir (foi excluída), ativa a primeira disponível
+    const ativa = this.secaoAtiva();
+    if (ativa && !d.secoes.find((s) => s.id === ativa)) {
+      this.secaoAtiva.set(d.secoes[0]?.id ?? null);
+    }
     if (fechar) this.janela.set(null);
   }
 
@@ -434,6 +582,11 @@ export class DocumentoContratacaoComponent implements OnInit {
   protected mudarSituacao(situacao: Situacao): void {
     if (situacao === 'concluido') { this.conferir(); this.doc.update((d) => d && { ...d }); return; }
     this.acao(this.api.situacao(this.id, situacao, false), 'Não foi possível mudar a situação');
+  }
+
+  /** Volta o documento para rascunho para continuar editando após ter sido concluído. */
+  protected reabrirEdicao(): void {
+    this.acao(this.api.situacao(this.id, 'rascunho', false), 'Não foi possível reabrir o documento');
   }
 
   protected conferir(): void {
@@ -493,13 +646,38 @@ export class DocumentoContratacaoComponent implements OnInit {
 
   // Seções
   protected novaSecao(): void {
-    const titulo = window.prompt('Título da nova seção:', '');
-    if (titulo?.trim()) this.acao(this.api.criarSecao(this.id, titulo.trim()), 'Não foi possível criar a seção', false);
+    this.secaoEditandoId = null;
+    this.secaoTitulo = '';
+    this.secaoDescricao = '';
+    this.janela.set('secao');
   }
 
-  protected renomearSecao(s: SecaoDocumento): void {
-    const titulo = window.prompt('Título da seção:', s.titulo);
-    if (titulo?.trim() && titulo.trim() !== s.titulo) this.acao(this.api.renomearSecao(this.id, s.id, titulo.trim()), 'Não foi possível renomear', false);
+  protected editarSecao(s: SecaoDocumento): void {
+    this.secaoEditandoId = s.id;
+    this.secaoTitulo = s.titulo;
+    this.secaoDescricao = s.descricao;
+    this.janela.set('secao');
+  }
+
+  /** Cria a seção (e a deixa ativa) ou grava título e descrição da seção em edição. */
+  protected salvarSecao(): void {
+    const titulo = this.secaoTitulo.trim();
+    if (!titulo) return;
+    const descricao = this.secaoDescricao.trim();
+    if (this.secaoEditandoId) {
+      this.acao(this.api.alterarSecao(this.id, this.secaoEditandoId, titulo, descricao), 'Não foi possível salvar a seção');
+      return;
+    }
+    this.ocupado.set(true);
+    this.api.criarSecao(this.id, titulo, descricao).subscribe({
+      next: (d) => {
+        this.aplicar(d);
+        // Ativa a seção recém-criada (última da lista)
+        const ultima = d.secoes[d.secoes.length - 1];
+        if (ultima) this.secaoAtiva.set(ultima.id);
+      },
+      error: this.falha('Não foi possível criar a seção'),
+    });
   }
 
   protected moverSecao(s: SecaoDocumento, ordem: number): void {
@@ -572,13 +750,7 @@ export class DocumentoContratacaoComponent implements OnInit {
   protected abrirLote(s: SecaoDocumento, pai: ItemDocumento | null): void {
     this.loteAlvo = { secaoId: s.id, paiId: pai?.id ?? null };
     this.loteTexto = '';
-    this.lotePrevia.set(null);
     this.janela.set('lote');
-  }
-
-  protected previaLote(): void {
-    if (!this.loteAlvo) return;
-    this.api.previaLote(this.id, { secao_id: this.loteAlvo.secaoId, pai_id: this.loteAlvo.paiId, texto: this.loteTexto }).subscribe({ next: (p) => this.lotePrevia.set(p), error: this.falha('Não foi possível ler o texto') });
   }
 
   protected gravarLote(): void {
@@ -630,4 +802,9 @@ export class DocumentoContratacaoComponent implements OnInit {
     const ok = await this.dialogos.confirmar({ titulo: 'Voltar a este texto?', mensagem: 'O conteúdo atual do item é substituído; essa troca também entra no histórico.', rotuloConfirmar: 'Restaurar' });
     if (ok) this.acao(this.api.restaurarItem(this.id, h.id, estado), 'Não foi possível restaurar o item');
   }
+}
+
+/** Escapa texto puro para entrar em HTML (itens antigos sem `conteudo_html`). */
+function escaparHtml(texto: string): string {
+  return texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

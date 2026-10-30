@@ -38,7 +38,7 @@ from app.schemas.contratos.painel import (
     VigenciaContratoPainel,
     VigenciaSegmento,
 )
-from app.services.contratos import calculos
+from app.services.contratos import calculos, servico_parametros
 from app.services.contratos.servico_competencias import (
     CIENCIAS_MINIMAS,
     anterior_ao_corte,
@@ -51,7 +51,7 @@ from app.services.contratos.servico_competencias import (
     total_medido,
     vencimento_pagamento,
 )
-from app.services.contratos.servico_contratos import chave_ordem, designacoes_vigentes, eh_administrador, hoje, opcoes_carga_completa, situacao, totais, vigencias
+from app.services.contratos.servico_contratos import chave_ordem, designacoes_vigentes, eh_administrador, hoje, inicio_original, opcoes_carga_completa, situacao, totais, vigencias
 from app.services.contratos.servico_orcamento import meses_previstos
 from app.services.contratos.servico_prorrogacao import meses_disponiveis
 from app.services.contratos.servico_retencao import eh_financeiro
@@ -62,10 +62,6 @@ ETAPAS_ROTULO = {
     "medicao": "Medição", "avaliacao": "Avaliação", "nota_fiscal": "Nota fiscal", "retencao": "Retenção de tributos", "cadin": "CADIN", "checklist": "Checklist",
     "consolidado": "Documento consolidado", "ordem_bancaria": "Ordem Bancária",
 }
-# Pagamento que vence em até 5 dias vira alerta de risco médio
-DIAS_VENCENDO = 5
-# Competência encerrada sem medição concluída vira risco depois deste prazo (e risco alto depois do dobro)
-DIAS_ATRASO = 30
 
 
 def carregar_contratos(sessao: Session) -> list[Contrato]:
@@ -212,10 +208,10 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato], usuario: Usu
                 risco("vigencia_maxima", "alta", f"Vence em {dias} dia(s) e atingiu a vigência máxima: planejar nova contratação",
                       f"/contratos/{contrato.id}", contrato.data_fim)
             elif contrato.id not in rascunhos_prorrogacao:
-                risco("a_vencer_sem_prorrogacao", "alta" if dias <= 60 else "media",
+                risco("a_vencer_sem_prorrogacao", "alta" if dias <= servico_parametros.valor("dias_sem_prorrogacao_alto") else "media",
                       f"Vence em {dias} dia(s) e a prorrogação não foi iniciada", f"/contratos/{contrato.id}/prorrogacao", contrato.data_fim)
         # Reajuste: a partir de 12 meses de contrato, o mês de reajuste deste ano (ou do anterior) precisa ter reajuste aberto
-        aniversario = calculos.somar_meses(contrato.data_inicio, 12)
+        aniversario = calculos.somar_meses(inicio_original(contrato), 12)
         if referencia >= aniversario:
             mes_reajuste = date(referencia.year, contrato.mes_reajuste, 1)
             if mes_reajuste > referencia:
@@ -246,20 +242,21 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato], usuario: Usu
                 if vencimento < referencia:
                     risco("pagamento_vencido", "alta", f"Pagamento da competência {competencia.numero_competencia} venceu em {vencimento:%d/%m/%Y}",
                           _rota_competencia(contrato, competencia), vencimento)
-                elif (vencimento - referencia).days <= DIAS_VENCENDO:
+                elif (vencimento - referencia).days <= servico_parametros.valor("dias_pagamento_vencendo"):
                     risco("pagamento_vencendo", "media", f"Pagamento da competência {competencia.numero_competencia} vence em {vencimento:%d/%m/%Y}",
                           _rota_competencia(contrato, competencia), vencimento)
 
-        # Atrasos: competências encerradas há mais de 30 dias sem medição concluída
+        # Atrasos: competências encerradas há mais de N dias (parâmetro) sem medição concluída
+        dias_atraso = servico_parametros.valor("dias_atraso")
         atrasadas = sorted(
-            (c for c in abertas if c.medicao_concluida_em is None and (referencia - _medir_desde(c)).days > DIAS_ATRASO),
+            (c for c in abertas if c.medicao_concluida_em is None and (referencia - _medir_desde(c)).days > dias_atraso),
             key=_medir_desde,
         )
         if atrasadas:
             mais_antiga = atrasadas[0]
             atraso = (referencia - _medir_desde(mais_antiga)).days
-            risco("competencias_atrasadas", "alta" if atraso > 2 * DIAS_ATRASO else "media",
-                  f"{len(atrasadas)} competência(s) sem medição concluída há mais de {DIAS_ATRASO} dias "
+            risco("competencias_atrasadas", "alta" if atraso > 2 * dias_atraso else "media",
+                  f"{len(atrasadas)} competência(s) sem medição concluída há mais de {dias_atraso} dias "
                   f"(a mais antiga, {mais_antiga.numero_competencia}, há {atraso} dias)",
                   _rota_competencia(contrato, mais_antiga), mais_antiga.periodo_fim)
 
@@ -383,7 +380,7 @@ def vigencias_da_carteira(sessao: Session, empresa_id: uuid.UUID | None) -> Pain
     Encerrados e suspensos ficam de fora. O filtro de empresa não muda as opções do filtro.
     """
     contratos = list(sessao.scalars(select(Contrato).options(
-        selectinload(Contrato.empresa), selectinload(Contrato.prorrogacoes), selectinload(Contrato.reajustes),
+        selectinload(Contrato.empresa), selectinload(Contrato.prorrogacoes), selectinload(Contrato.vigencias_retroativas), selectinload(Contrato.reajustes),
     )))
     vigentes = [c for c in contratos if situacao(c) in ("ativo", "a_vencer")]
     empresas = {c.empresa.id: c.empresa.razao_social for c in vigentes}
@@ -392,7 +389,7 @@ def vigencias_da_carteira(sessao: Session, empresa_id: uuid.UUID | None) -> Pain
         VigenciaContratoPainel(
             contrato_id=c.id, numero=c.numero, rotulo=c.apelido or c.empresa.razao_social, empresa=c.empresa.razao_social,
             situacao=situacao(c), data_inicio=c.data_inicio, data_fim=c.data_fim, dias_restantes=(c.data_fim - dia).days,
-            data_limite_maxima=calculos.data_limite_maxima(c.data_inicio, c.vigencia_maxima_meses),
+            data_limite_maxima=calculos.data_limite_maxima(inicio_original(c), c.vigencia_maxima_meses),
             meses_prorrogaveis=max(0, meses_disponiveis(c)),
             vigencias=[VigenciaSegmento(sequencia=v.sequencia, inicio=v.inicio, fim=v.fim) for v in vigencias(c)],
             reajustes=sorted(r.mes_referencia for r in c.reajustes if r.situacao == "concluido"),

@@ -50,6 +50,8 @@ class PrepostoEmpresa(Base):
     email: Mapped[str] = mapped_column(String(250), default="")
     cargo: Mapped[str] = mapped_column(String(150), default="")
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Representante legal da empresa (assina o termo aditivo): nome, cargo e CPF do preposto marcado
+    representante_legal: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 

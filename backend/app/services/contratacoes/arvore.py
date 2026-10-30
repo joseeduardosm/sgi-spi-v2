@@ -142,25 +142,26 @@ def _normalizar_secoes(documento: DocumentoContratacao) -> None:
         secao.ordem = n
 
 
-def criar_secao(sessao: Session, documento: DocumentoContratacao, titulo: str, autor: Usuario) -> SecaoContratacao:
+def criar_secao(sessao: Session, documento: DocumentoContratacao, titulo: str, descricao: str, autor: Usuario) -> SecaoContratacao:
     titulo = (titulo or "").strip()
     if not titulo:
         raise ErroContratacao("O título da seção é obrigatório.")
     versoes.antes_da_edicao(sessao, documento, autor)
-    secao = SecaoContratacao(documento_id=documento.id, ordem=max((s.ordem for s in documento.secoes), default=0) + 1, titulo=titulo[:300])
+    secao = SecaoContratacao(documento_id=documento.id, ordem=max((s.ordem for s in documento.secoes), default=0) + 1, titulo=titulo[:300],
+                             descricao=(descricao or "").strip())
     documento.secoes.append(secao)
     _tocar(documento, autor)
     sessao.commit()
     return secao
 
 
-def atualizar_secao(sessao: Session, documento: DocumentoContratacao, secao_id: uuid.UUID, titulo: str, autor: Usuario) -> SecaoContratacao:
+def atualizar_secao(sessao: Session, documento: DocumentoContratacao, secao_id: uuid.UUID, titulo: str, descricao: str, autor: Usuario) -> SecaoContratacao:
     secao = _carregar_secao(sessao, documento, secao_id)
     titulo = (titulo or "").strip()
     if not titulo:
         raise ErroContratacao("O título da seção é obrigatório.")
     versoes.antes_da_edicao(sessao, documento, autor)
-    secao.titulo = titulo[:300]
+    secao.titulo, secao.descricao = titulo[:300], (descricao or "").strip()
     _tocar(documento, autor)
     sessao.commit()
     return secao
@@ -368,7 +369,7 @@ def criar_em_lote(sessao: Session, documento: DocumentoContratacao, secao_id: uu
         base = len(_irmaos(sessao, secao.id, pai_item.id if pai_item else None))
         for n, no in enumerate(lista, start=1):
             texto, html = conteudo.normalizar(no.conteudo, None)
-            item = ItemContratacao(secao_id=secao.id, pai_id=pai_item.id if pai_item else None, tipo=no.tipo, ordem=base + n, conteudo=texto, conteudo_html=html, precisa_revisao=True)
+            item = ItemContratacao(secao_id=secao.id, pai_id=pai_item.id if pai_item else None, tipo=no.tipo, ordem=base + n, conteudo=texto, conteudo_html=html)
             sessao.add(item)
             sessao.flush()
             versoes.historico(sessao, documento, item.id, "criou", None, html or texto, autor, "Entrada em lote")

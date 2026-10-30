@@ -268,8 +268,8 @@ export class EtapaMedicaoComponent implements OnChanges {
     if (!this.notas().length) falta.push('Selecione ao menos uma NE');
     if (this.excedentes().length) falta.push('Há item medido acima do saldo líquido');
     if (this.acertosInvalidos()) falta.push('Há acerto de centavos inválido');
-    if (!this.temAvaliacao() && !this.prepostosIds()?.length) falta.push('Escolha ao menos um preposto para receber a medição');
-    if (!this.temAvaliacao() && !this.prazoValido(this.prazoContestacao())) falta.push('Informe o prazo de contestação (1 a 60 dias úteis)');
+    if (!this.temAvaliacao() && !this.retroativa() && !this.prepostosIds()?.length) falta.push('Escolha ao menos um preposto para receber a medição');
+    if (!this.temAvaliacao() && !this.retroativa() && !this.prazoValido(this.prazoContestacao())) falta.push('Informe o prazo de contestação (1 a 60 dias úteis)');
     if (this.alterado()) falta.push('Salve a medição antes de registrar ciência ou concluir');
     else if (d.ciencias.length < d.ciencias_minimas) falta.push('Falta ao menos uma ciência');
     return falta;
@@ -277,7 +277,7 @@ export class EtapaMedicaoComponent implements OnChanges {
 
   /** Envio obrigatório: ao menos um preposto escolhido e o prazo de contestação válido. */
   protected envioValido(): boolean {
-    return this.temAvaliacao() || (!!this.prepostosIds()?.length && this.prazoValido(this.prazoContestacao()));
+    return this.temAvaliacao() || this.retroativa() || (!!this.prepostosIds()?.length && this.prazoValido(this.prazoContestacao()));
   }
 
   /** Prazo em dias úteis: inteiro de 1 a 60. */
@@ -353,6 +353,11 @@ export class EtapaMedicaoComponent implements OnChanges {
     this.api.cienciaMedicao(d.contrato_id, d.id).subscribe({ next: (novo) => this.atualizado.emit(novo), error: (e) => this.dialogos.mostrarErro(e) });
   }
 
+  /** Competência anterior ao corte de alertas: não envia e-mail à contratada, então não pede preposto nem prazo. */
+  protected retroativa(): boolean {
+    return this.detalhe().retroativa;
+  }
+
   /** Com avaliação de qualidade, os prepostos e o prazo do e-mail único são escolhidos ao concluir a avaliação, não aqui. */
   protected temAvaliacao(): boolean {
     return this.detalhe().etapas.includes('avaliacao');
@@ -360,6 +365,7 @@ export class EtapaMedicaoComponent implements OnChanges {
 
   /** Explica, na confirmação, quando o e-mail único sai: com avaliação de qualidade, só depois de concluí-la; sem ela, logo em seguida. */
   private avisoDoEnvio(): string {
+    if (this.retroativa()) return 'Esta competência é anterior ao corte de alertas: não é enviado e-mail à contratada nem aviso à equipe.';
     const prepostos = this.prepostosIds()?.length ?? 0;
     const quem = `à equipe e a ${prepostos} preposto(s) escolhido(s)`;
     const prazo = `abre o prazo de ${this.prazoContestacao()} dia(s) útil(eis) para a contratada contestar`;
@@ -379,7 +385,7 @@ export class EtapaMedicaoComponent implements OnChanges {
       segundos: 5,
     });
     if (!ok) return;
-    this.dialogos.executar(this.api.concluirMedicao(d.contrato_id, d.id, d.notas_selecionadas.map((n) => n.id), this.temAvaliacao() ? null : (this.prepostosIds() as string[]), this.temAvaliacao() ? null : Number(this.prazoContestacao())), 'Gerando a memória de cálculo…').subscribe({
+    this.dialogos.executar(this.api.concluirMedicao(d.contrato_id, d.id, d.notas_selecionadas.map((n) => n.id), this.temAvaliacao() || this.retroativa() ? null : (this.prepostosIds() as string[]), this.temAvaliacao() || this.retroativa() ? null : Number(this.prazoContestacao())), 'Gerando a memória de cálculo…').subscribe({
       next: (novo) => this.atualizado.emit(novo),
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível concluir a medição'),
     });

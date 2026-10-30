@@ -155,24 +155,31 @@ class LeituraFormulario(BaseModel):
 
 class GravacaoModelo(BaseModel):
     """Corpo para criar ou alterar um modelo global. O conteúdo exigido depende do `tipo`."""
-    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob"]
+    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao"]
     nome: TextoObrigatorio = Field(..., max_length=300)
-    itens: list[GravacaoDocumentoChecklist] | None = Field(None, description="Obrigatório para `checklist`.")
+    itens: list[GravacaoDocumentoChecklist] | None = Field(None, description="Obrigatório para `checklist` e `checklist_prorrogacao` (documentos pedidos na prorrogação; só `nome`, `observacao` e `obrigatorio` contam).")
     definicao: DefinicaoFormulario | None = Field(None, description="Obrigatório para `formulario`.")
-    html: str | None = Field(None, description="Obrigatório para `portaria`, `despacho`, `email_cadin` e `email_ob`: máscara em HTML com os placeholders permitidos (`#nomegestor`...).")
+    html: str | None = Field(None, description="Obrigatório para `portaria`, `despacho`, `email_cadin`, `email_ob` e `prorrogacao`: máscara em HTML com os placeholders permitidos (`#nomegestor`...).")
     assunto: str | None = Field(None, max_length=300, description="Obrigatório para `email_cadin` e `email_ob`: assunto do e-mail (aceita os mesmos placeholders).")
-    variante: Literal["com_anterior", "sem_anterior"] | None = Field(None, description="Obrigatório para `portaria`: máscara usada com ou sem portaria anterior do contrato.")
+    variante: Literal[
+        "com_anterior", "sem_anterior",
+        "despacho_instrucao", "declaracao_atendimento_licitacao", "declaracao_atendimento_direta", "minuta_aditivo", "termo_ciencia", "declaracao_tce", "despacho_autorizacao",
+    ] | None = Field(None, description="Obrigatório para `portaria` (`com_anterior` ou `sem_anterior`) e para `prorrogacao` (qual documento da prorrogação a máscara escreve).")
     ativo: bool = True
 
     @model_validator(mode="after")
     def _conteudo(self) -> "GravacaoModelo":
         """Checklist precisa de documentos; formulário precisa de definição."""
-        if self.tipo == "checklist" and not self.itens:
+        if self.tipo in ("checklist", "checklist_prorrogacao") and not self.itens:
             raise ValueError("o modelo de checklist precisa de ao menos um documento")
         if self.tipo == "formulario" and self.definicao is None:
             raise ValueError("o modelo de formulário precisa da definição")
         if self.tipo == "portaria" and (not (self.html or "").strip() or self.variante is None):
             raise ValueError("o modelo de portaria precisa do texto e da variante (com ou sem portaria anterior)")
+        if self.tipo == "portaria" and self.variante not in ("com_anterior", "sem_anterior"):
+            raise ValueError("a variante da portaria é com_anterior ou sem_anterior")
+        if self.tipo == "prorrogacao" and (not (self.html or "").strip() or self.variante in (None, "com_anterior", "sem_anterior")):
+            raise ValueError("o modelo de prorrogação precisa do texto e de qual documento ele escreve (variante)")
         if self.tipo == "despacho" and not (self.html or "").strip():
             raise ValueError("o modelo de despacho precisa do texto")
         if self.tipo == "email_cadin" and (not (self.html or "").strip() or not (self.assunto or "").strip()):
@@ -225,6 +232,7 @@ class ResumoCompetencia(BaseModel):
     etapa_atual: Etapa
     valor_medicao: ValorMonetario | None = Field(None, description="Nulo enquanto a medição não foi salva.")
     possui_avaliacao: bool
+    diferenca_coberta_por_reajuste_id: uuid.UUID | None = Field(None, description="Reajuste que calculou e pagou o retroativo desta competência regular; nulo se ainda não coberta.")
 
 
 class GrupoCompetencias(BaseModel):
@@ -487,6 +495,9 @@ class LeituraDocumentoMensal(BaseModel):
     sugestao_outro_contrato: "SugestaoOutroContrato | None" = Field(
         None, description="Documento igual, ainda válido, já juntado em outro contrato da mesma empresa (só na etapa do checklist, sem anexo).")
     arquivo: LeituraArquivo | None
+    incluido_no_processo: bool = Field(False, description="Incluído durante o processo (não veio do modelo do checklist): nunca obrigatório e pode ser excluído enquanto a etapa estiver aberta.")
+    incluido_por_nome: str | None = Field(None, description="Quem incluiu o documento (só nos incluídos durante o processo).")
+    incluido_em: datetime | None = None
 
 
 class RespostaAvaliacao(BaseModel):
@@ -537,6 +548,14 @@ class DescontoReajuste(BaseModel):
     reajuste_id: uuid.UUID
     mes_referencia: date = Field(..., description="Mês de referência do reajuste que gerou o crédito.")
     valor: ValorMonetario
+
+
+class LeituraCargaHistorica(BaseModel):
+    """Marca de uma competência lançada por carga histórica: o limite mensal de quantidades não foi aplicado."""
+
+    em: datetime = Field(..., description="Quando a carga lançou a competência.")
+    observacao: str = Field(..., description="De onde vieram os dados (ex.: processo SEI de pagamento) e o que não foi aplicado.")
+    excedentes: list[str] = Field(default_factory=list, description="Itens medidos (e pagos) acima do saldo mensal previsto, com a conta de cada um.")
 
 
 class DetalheCompetencia(ResumoCompetencia):
@@ -598,6 +617,8 @@ class DetalheCompetencia(ResumoCompetencia):
     pode_recusar: bool = Field(False, description="O usuário pode recusar a nota agora (mesma permissão da retenção, com a retenção aberta).")
     etapas_abertas: list[Etapa] = Field(default_factory=list, description="Etapas que aceitam gravação agora (retenção e checklist em paralelo; depois, só o CADIN).")
     etapas_concluidas: list[Etapa] = Field(default_factory=list, description="Etapas já concluídas.")
+    retroativa: bool = Field(False, description="Competência anterior ao corte de alertas, em caminho curto: só medição, avaliação (se houver), nota fiscal e OB; sem e-mails nem avisos e sem preposto/prazo na conclusão da medição.")
+    pode_buscar_ob_sigeo: bool = Field(False, description="A competência espera a OB e o contrato tem Processo Financeiro: a tela oferece \"Buscar a OB no SIGEO\".")
     reaberturas_permitidas: bool = Field(False, description="O usuário pode reabrir etapas (SuperRoot ou gestor vigente do contrato).")
     notas_fiscais: list[LeituraNotaFiscal] = Field(default_factory=list, description="Notas fiscais juntadas na etapa 3 (uma ou mais), em ordem.")
     nf_recebida_em: date | None
@@ -614,6 +635,7 @@ class DetalheCompetencia(ResumoCompetencia):
     ob_data: date | None = Field(None, description="Data de lançamento da OB no SIGEO.")
     ob_valor: Decimal | None = Field(None, description="Valor pago (soma das OBs do mês) segundo o SIGEO.")
     ob_sigeo_pendencia: str | None = Field(None, description="Por que a conferência do SIGEO ainda não concluiu esta OB (ex.: pagamento parcial).")
+    carga_historica: "LeituraCargaHistorica | None" = Field(None, description="Preenchido quando a competência foi lançada depois de paga (carga histórica): de onde veio e quais itens passaram do limite mensal.")
     ob_sigeo_verificado_em: datetime | None = None
     concluida_em: datetime | None
 
@@ -701,3 +723,10 @@ class DespachoCompetencia(BaseModel):
     """Texto do despacho de pagamento da competência (para mostrar e copiar)."""
     html: str | None = Field(None, description="HTML formatado do despacho (parágrafos, negrito, centralizado); nulo se não há máscara de despacho ativa.")
     titulo: str = Field("", description="Título do despacho, com contrato e mês.")
+
+
+class ResultadoBuscaObSigeo(BaseModel):
+    """Resultado da busca da OB de uma competência no SIGEO."""
+
+    concluida: bool = Field(..., description="A OB do mês foi encontrada, conferida com o líquido a pagar e a competência foi concluída.")
+    mensagem: str = Field(..., description="O que aconteceu, em texto para o usuário (OB encontrada, motivo da pendência ou \"ainda não saiu\").")

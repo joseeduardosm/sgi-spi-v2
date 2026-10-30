@@ -82,6 +82,7 @@ export const NAVEGACAO: SecaoNavegacao[] = [
       { id: 'glpi', rotulo: 'Integração GLPI', icone: 'ajuda', rota: '/admin/glpi' },
       { id: 'sigeo', rotulo: 'Integração SIGEO', icone: 'banco-dados', rota: '/admin/sigeo' },
       { id: 'bookstack', rotulo: 'Integração BookStack', icone: 'arquivo', rota: '/admin/bookstack' },
+      { id: 'backup', rotulo: 'Backup geral', icone: 'banco-dados', rota: '/admin/backup' },
       // Notificações do sistema (e-mail de changelog): só a conta root
       { id: 'notificacoes-sistema', rotulo: 'Notificações do sistema', icone: 'megafone', rota: '/admin/notificacoes-sistema', somenteRoot: true },
     ],

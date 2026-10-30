@@ -1,0 +1,63 @@
+<p>A <strong>vigência retroativa</strong> serve para o caso em que o contrato foi cadastrado no SGI SPI <strong>sem os períodos anteriores</strong> ao seu início atual: por exemplo, o contrato começou em 2025, mas só foi cadastrado com a vigência de 2026. Em vez de recomeçar, o gestor <strong>volta no tempo</strong>, cadastrando a vigência anterior com o seu Termo Aditivo, para registrar medições, empenhos e pagamentos daquela época.</p>
+<p class="callout info">Exemplos com <strong>dados fictícios</strong> (contrato 900/2026), feitos numa cópia do sistema, nunca em produção.</p>
+<p class="callout"><strong>Atenção:</strong> é uma ação que mexe na linha do tempo do contrato inteiro. Por isso o sistema pede <strong>duas confirmações</strong> e explica todos os impactos antes de aplicar. Leia esta página antes de usar.</p>
+
+<h2>Quando usar</h2>
+<ul>
+<li>O contrato já existia antes da data inicial cadastrada e há <strong>competências, empenhos ou pagamentos</strong> daquele período que precisam constar no sistema.</li>
+<li>Você tem o <strong>Termo Aditivo assinado (PDF)</strong> que formaliza a vigência anterior.</li>
+<li>O contrato tem um <strong>checklist ativo</strong> (a tela avisa quando falta e desabilita o botão).</li>
+</ul>
+<p>Se a intenção é <em>estender</em> o contrato para a frente, o caminho é a <strong>prorrogação normal</strong>, não esta.</p>
+
+<h2>Passo 1 – Preencher o cartão &quot;Vigências retroativas&quot;</h2>
+<p>Abra o contrato, entre em <strong>Prorrogação</strong> e vá ao último cartão da tela, <strong>Vigências retroativas</strong>. Informe:</p>
+<ul>
+<li><strong>Prazo da vigência retroativa (meses):</strong> quantos meses a vigência anterior tem (de 1 a 120). Ela termina <strong>na véspera do início atual do contrato</strong>.</li>
+<li><strong>Data de assinatura do Termo Aditivo</strong> (obrigatória).</li>
+<li><strong>Número do Termo Aditivo</strong> (opcional, mas recomendado).</li>
+<li>O <strong>PDF do Termo Aditivo assinado</strong>.</li>
+</ul>
+<p>[[pr05-vigencia-retroativa-formulario]]</p>
+
+<h2>Passo 2 – Ler os impactos (janela de 10 segundos)</h2>
+<p>Ao clicar em <strong>Cadastrar vigência retroativa</strong>, abre-se uma janela com o título <em>Atenção: esta ação volta o contrato no tempo</em>. O botão de confirmar fica <strong>bloqueado por 10 segundos</strong>, com contagem regressiva, para que o texto seja lido.</p>
+<p>[[pr06-modal-impactos]]</p>
+<p>Depois de 10 segundos, o botão <strong>Li e entendi os impactos</strong> é liberado. Cada impacto explicado:</p>
+<table>
+<thead><tr><th>Impacto</th><th>O que significa na prática</th></tr></thead>
+<tbody>
+<tr><td><strong>O início do contrato recua</strong></td><td>A data inicial passa a ser a do começo da vigência retroativa. Todas as vigências são <strong>renumeradas</strong>: a mais antiga vira a 1ª (o que era a 1ª vira a 2ª, e assim por diante).</td></tr>
+<tr><td><strong>Surgem competências de época</strong></td><td>Os meses da vigência retroativa passam a existir para <strong>medição, nota fiscal, retenção, CADIN, checklist, consolidado e pagamento</strong>. Pendências e alertas daquele período passam a ser cobrados de quem cuida do contrato.</td></tr>
+<tr><td><strong>É preciso cadastrar os empenhos da época</strong></td><td>As Notas de Empenho e os cancelamentos daquele período precisam existir na aba Notas de Empenho; sem eles, não há como registrar os pagamentos. (Se o contrato tem Processo Financeiro e nenhuma NE, o sistema pode buscá-las no SIGEO; veja a página do Processo Financeiro.)</td></tr>
+<tr><td><strong>Checklists da época</strong></td><td>Cada competência retroativa <strong>copia o checklist ativo</strong> do contrato. É preciso reunir os documentos daquele período.</td></tr>
+<tr><td><strong>Reajustes da época</strong></td><td>Os preços da vigência retroativa <strong>só ficam corretos depois do reajuste retroativo</strong> (o preço volta pelo índice, item a item). Até lá, ela usa os <strong>preços atuais</strong>. Veja <em>Reajuste retroativo</em>.</td></tr>
+<tr><td><strong>O termo entra nos documentos importantes</strong></td><td>O PDF fica nos <strong>documentos importantes</strong> do contrato, e o histórico registra <strong>quem fez e quando</strong>.</td></tr>
+<tr><td><strong>Os prazos não mudam</strong></td><td>A vigência retroativa <strong>não conta no prazo máximo</strong> do contrato nem nas prorrogações: ela não consome meses de prorrogação.</td></tr>
+<tr><td><strong>Nada é apagado</strong></td><td>Nenhum dado existente é removido. <strong>Desfazer</strong> só é possível enquanto não houver medição, reajuste ou aditamento nessa vigência.</td></tr>
+</tbody>
+</table>
+<p>[[pr07-modal-impactos-liberado]]</p>
+
+<h2>Passo 3 – &quot;Tem certeza que deseja continuar?&quot; (janela de 3 segundos)</h2>
+<p>Depois do <strong>Li e entendi os impactos</strong>, uma segunda janela pergunta <em>Tem certeza que deseja continuar?</em>, com o botão <strong>Sim, cadastrar a vigência retroativa</strong> bloqueado por <strong>3 segundos</strong>. É a última chance de desistir: <strong>Cancelar</strong> volta à tela sem alterar nada.</p>
+<p>[[pr08-modal-tem-certeza]]</p>
+
+<h2>Passo 4 – O resultado</h2>
+<p>Ao confirmar, a vigência aparece na tabela do cartão, com o <strong>período</strong>, os <strong>meses</strong>, o <strong>número do termo</strong> (com o botão <strong>Baixar termo</strong>), a situação do <strong>reajuste retroativo</strong> (<em>Pendente</em> até ser feito) e a ação <strong>Desfazer</strong>.</p>
+<p>[[pr09-vigencia-retroativa-cadastrada]]</p>
+
+<h2>O que fazer depois (checklist do gestor)</h2>
+<ol>
+<li><strong>Cadastrar as Notas de Empenho</strong> (e cancelamentos) daquele período.</li>
+<li><strong>Fazer o reajuste retroativo</strong>, para que os preços da época fiquem corretos antes de medir.</li>
+<li>Conferir o <strong>checklist</strong> e reunir os documentos das competências retroativas.</li>
+<li>Medir e pagar as competências de época, como qualquer outra.</li>
+</ol>
+
+<h2>Situações comuns</h2>
+<ul>
+<li><strong>O botão &quot;Cadastrar vigência retroativa&quot; está cinza.</strong> Faltam o prazo, a data de assinatura ou o PDF do termo; ou o contrato não tem checklist ativo.</li>
+<li><strong>Cadastrei por engano.</strong> Use <strong>Desfazer</strong> na linha da vigência. Funciona <strong>apenas</strong> para a vigência retroativa <strong>mais antiga</strong> e se ainda não houve medição, reajuste ou aditamento nela.</li>
+<li><strong>Posso cadastrar mais de uma?</strong> Sim, uma de cada vez: cada nova vigência retroativa termina na véspera do início atual do contrato (que já terá recuado).</li>
+</ul>

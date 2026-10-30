@@ -29,7 +29,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.platypus import Flowable, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # Imagem do brasão usada no cabeçalho de todas as páginas
 CAMINHO_BRASAO = Path(__file__).resolve().parents[2] / "recursos" / "brasao.png"
@@ -84,6 +84,11 @@ class DocumentoPdf:
     def secao(self, titulo: str) -> "DocumentoPdf":
         """Título de seção em vermelho. Os métodos devolvem o próprio documento para encadear chamadas."""
         self.blocos.append(Paragraph(escape(titulo), ESTILO_SECAO))
+        return self
+
+    def nova_pagina(self) -> "DocumentoPdf":
+        """Quebra de página: o que vem a seguir começa numa página nova."""
+        self.blocos.append(PageBreak())
         return self
 
     def paragrafo(self, conteudo: str) -> "DocumentoPdf":
@@ -357,9 +362,14 @@ def montar_consolidado(
     """
     escritor = PdfWriter()
     origem: list[bool] = []
+    # Medidas lidas da página ORIGINAL: em alguns PDFs (ex.: gerados pelo iLovePDF, com páginas que herdam a caixa de um nó pai) a cópia no escritor perde o vínculo com
+    # o documento e `mediabox` falha com "'NoneType' object has no attribute 'get_object'"
+    medidas: list[tuple[float, float, float, float, int]] = []
     for conteudo, gerado in partes:
         leitor = abrir_pdf(conteudo)
         for pagina in leitor.pages:
+            caixa_original = pagina.mediabox
+            medidas.append((float(caixa_original.width), float(caixa_original.height), float(caixa_original.left), float(caixa_original.bottom), int(pagina.rotation or 0)))
             escritor.add_page(pagina)
             origem.append(gerado)
     total = len(escritor.pages)
@@ -373,14 +383,17 @@ def montar_consolidado(
     for titulo_marcador, numero_pagina in marcadores:
         if 1 <= numero_pagina <= total:
             escritor.add_outline_item(titulo_marcador, numero_pagina - 1)
-    for numero, (pagina, gerado) in enumerate(zip(escritor.pages, origem, strict=True), start=1):
-        # Páginas giradas (/Rotate) têm a rotação aplicada ao conteúdo, para o selo cair no canto certo
-        if pagina.rotation:
+    for numero, gerado in enumerate(origem, start=1):
+        pagina = escritor.pages[numero - 1]
+        largura, altura, esquerda, base, rotacao = medidas[numero - 1]
+        # Páginas giradas (/Rotate) têm a rotação aplicada ao conteúdo, para o selo cair no canto certo (na orientação final: largura e altura trocam em 90/270)
+        if rotacao:
             pagina.transfer_rotation_to_content()
-        caixa = pagina.mediabox
-        selo = _selo_pagina(float(caixa.width), float(caixa.height), f"Página {numero} de {total}", gerado)
+            if rotacao % 180:
+                largura, altura = altura, largura
+        selo = _selo_pagina(largura, altura, f"Página {numero} de {total}", gerado)
         # A caixa da página pode não começar em (0, 0): o selo é deslocado para a origem dela
-        pagina.merge_transformed_page(selo.pages[0], Transformation().translate(float(caixa.left), float(caixa.bottom)))
+        pagina.merge_transformed_page(selo.pages[0], Transformation().translate(esquerda, base))
     saida = BytesIO()
     escritor.write(saida)
     return saida.getvalue()

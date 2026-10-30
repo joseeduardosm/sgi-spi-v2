@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from tests.apoio_contratos import juntar_nf
+from tests.apoio_contratos import definir_parametros, juntar_nf
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_retencao import _ambiente, cenario  # noqa: F401 — fixtures (data fixa de 15/03/2026, SMTP simulado, medição concluída)
 
@@ -16,9 +16,7 @@ URL = "/api/contratos/calendario"
 @pytest.fixture(autouse=True)
 def _corte(monkeypatch):
     """A competência de teste é de janeiro de 2026: libera o corte de cobrança (como nos testes do painel)."""
-    from app.services.contratos import servico_competencias
-
-    monkeypatch.setattr(servico_competencias, "PENDENCIAS_A_PARTIR_DE", date(2026, 1, 1))
+    definir_parametros(corte_alertas_a_partir_de=date(2026, 1, 1))
 
 
 def _eventos(cliente, h, de="2026-01-01", ate="2026-12-31", **params):

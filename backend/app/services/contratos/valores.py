@@ -31,14 +31,18 @@ def _alteracoes(contrato: Contrato) -> list:
 
 def preco_em(contrato: Contrato, item: ItemContrato, quando: date) -> Decimal:
     """Preço unitário do item válido na data informada (quem passa o dia 1 de um mês pega o preço do começo do mês)."""
-    # Todas as linhas deste item em reajustes concluídos, com a data a partir da qual valem
-    linhas = [(r.efeito, linha) for r in _reajustes(contrato) for linha in r.itens if linha.item_id == item.id]
+    # Todas as linhas deste item em reajustes concluídos, com a data da virada e os preços de antes e de depois dela.
+    # No reajuste retroativo a virada vai do preço retroativo (reajustado) para o preço da vigência seguinte (atual).
+    linhas = [
+        (r.efeito, (linha.valor_unitario_reajustado, linha.valor_unitario_atual) if r.retroativo else (linha.valor_unitario_atual, linha.valor_unitario_reajustado))
+        for r in _reajustes(contrato) for linha in r.itens if linha.item_id == item.id
+    ]
     # Nunca foi reajustado: vale o preço do cadastro
     if not linhas:
         return item.valor_unitario
     # O último reajuste já em vigor na data; se nenhum ainda vigorava, o preço anterior ao 1º
-    aplicadas = [linha for dia, linha in linhas if dia <= quando]
-    return aplicadas[-1].valor_unitario_reajustado if aplicadas else linhas[0][1].valor_unitario_atual
+    aplicadas = [depois for dia, (_, depois) in linhas if dia <= quando]
+    return aplicadas[-1] if aplicadas else linhas[0][1][0]
 
 
 @dataclass(frozen=True)
@@ -155,7 +159,7 @@ def executado_na_vigencia(contrato: Contrato, item: ItemContrato, sequencia: int
 
 
 def valor_global_vigencia(
-    contrato: Contrato, vigencia: calculos.Vigencia, precos_simulados: tuple[date, dict] | None = None
+    contrato: Contrato, vigencia: calculos.Vigencia, precos_simulados: tuple[date, dict] | None = None, simulado_antes: bool = False
 ) -> Decimal:
     """Valor da vigência somado mês a mês, com o preço e a quantidade vigentes em cada mês.
 
@@ -165,12 +169,13 @@ def valor_global_vigencia(
     do efeito, e o valor coincide com a soma da previsão orçamentária.
 
     `precos_simulados` = (mês de referência, {item_id: novo preço}) simula um reajuste ainda em
-    elaboração (memória de cálculo) sem gravar nada.
+    elaboração (memória de cálculo) sem gravar nada. Com `simulado_antes` (reajuste retroativo), os preços simulados
+    valem até a véspera da data, e não a partir dela.
     """
 
     def preco(item: ItemContrato, quando: date) -> Decimal:
         """Preço na data: o simulado (se houver para o item e já em vigor na data) ou o vigente."""
-        if precos_simulados and quando >= precos_simulados[0] and item.id in precos_simulados[1]:
+        if precos_simulados and (quando < precos_simulados[0] if simulado_antes else quando >= precos_simulados[0]) and item.id in precos_simulados[1]:
             return precos_simulados[1][item.id]
         return preco_em(contrato, item, quando)
 

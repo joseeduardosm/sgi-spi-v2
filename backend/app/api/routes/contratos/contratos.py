@@ -218,13 +218,14 @@ def informar_processo_financeiro(contrato_id: uuid.UUID, dados: GravacaoProcesso
     response_model=ResultadoPedidoProcesso,
     summary="Pedir o processo financeiro ao DOF",
     description="Avisa todo o Financeiro (DOF: Modificação ou mais no recurso ACL `financeiro`), por e-mail e no sino, com o link da edição do contrato "
-    "para preencher o Processo Financeiro (evento `contratos.pedido_processo_financeiro`). Só quem edita o contrato. `400` se não houver ninguém no Financeiro.",
+    "para preencher o Processo Financeiro (evento `contratos.pedido_processo_financeiro`). Grava no contrato quem pediu e quando (`processo_financeiro_pedido_por` e `processo_financeiro_pedido_em`, mostrados como legenda do campo). Só quem edita o contrato. `400` se não houver ninguém no Financeiro.",
     responses={**NAO_ENCONTRADO, **INVALIDO},
 )
 def pedir_processo_financeiro(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)) -> ResultadoPedidoProcesso:
     """Pedido ao DOF."""
     with traduzir_erros(sessao):
-        return ResultadoPedidoProcesso(destinatarios=servico.pedir_processo_financeiro(sessao, contrato_id, usuario))
+        quantos, em, por = servico.pedir_processo_financeiro(sessao, contrato_id, usuario)
+        return ResultadoPedidoProcesso(destinatarios=quantos, pedido_em=em, pedido_por=por)
 
 
 @roteador.get(

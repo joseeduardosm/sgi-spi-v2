@@ -13,4 +13,5 @@ roteador = APIRouter(tags=["Sistema"])
 @roteador.get("/saude", response_model=RespostaSaude, summary="Verificar disponibilidade da API")
 def verificar_saude() -> RespostaSaude:
     """Responde "ok" com a versão da API. Não consulta o banco: indica só que o processo está no ar."""
-    return RespostaSaude(situacao="ok", versao=obter_configuracao().versao_aplicacao)
+    config = obter_configuracao()
+    return RespostaSaude(situacao="ok", versao=config.versao_aplicacao, homologacao=config.modo_homologacao)

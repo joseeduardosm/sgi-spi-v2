@@ -39,7 +39,7 @@ from app.schemas.contratos.execucao import (
     LeituraModelo,
 )
 from app.services.contratacoes import conteudo as conteudo_html
-from app.services.contratos import despacho_mascara, email_cadin_mascara, email_ob_mascara, portaria_mascara
+from app.services.contratos import despacho_mascara, email_cadin_mascara, email_ob_mascara, portaria_mascara, prorrogacao_mascara
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado, SemPermissaoContrato
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato
 from app.services.servico_auditoria import auditar, valor_json
@@ -161,12 +161,25 @@ def excluir_checklist(sessao: Session, contrato_id: uuid.UUID, checklist_id: uui
 
 
 def copiar_checklist(competencia: Competencia, checklist: Checklist) -> None:
-    """Fotografia do checklist na competência. Documentos já anexados com o mesmo nome são mantidos."""
+    """Fotografia do checklist na competência. Documentos já anexados com o mesmo nome são mantidos.
+
+    Os documentos incluídos durante o processo (fora do modelo) também ficam, renumerados para depois dos itens do checklist."""
     # Documentos já anexados na competência, indexados pelo nome (sem diferenciar maiúsculas/espaços)
-    anexados = {d.nome.strip().lower(): d for d in competencia.documentos if d.anexo_id}
-    competencia.documentos.clear()
-    # Grava a remoção antes de inserir a nova lista: o banco não aceita duas linhas com a mesma `ordem` na competência
+    anexados = {d.nome.strip().lower(): d for d in competencia.documentos if d.anexo_id and not d.incluido_no_processo}
+    incluidos = sorted((d for d in competencia.documentos if d.incluido_no_processo), key=lambda d: d.ordem)
+    for documento in [d for d in competencia.documentos if not d.incluido_no_processo]:
+        competencia.documentos.remove(documento)
     sessao = object_session(competencia)
+    # Os incluídos vão para depois do último item do checklist. Em duas fases (primeiro uma ordem provisória negativa),
+    # porque o banco não aceita, nem por um instante, duas linhas com a mesma `ordem` na competência
+    for n, documento in enumerate(incluidos, start=1):
+        documento.ordem = -n
+    if sessao is not None:
+        sessao.flush()
+    ultimo = max((item.ordem for item in checklist.itens), default=0)
+    for n, documento in enumerate(incluidos, start=1):
+        documento.ordem = ultimo + n
+    # Grava a remoção e a nova ordem antes de inserir a lista
     if sessao is not None:
         sessao.flush()
     # Recria a lista a partir do checklist, reaproveitando o anexo de um documento com o mesmo nome
@@ -387,6 +400,9 @@ def _conteudo(dados: GravacaoModelo) -> dict[str, Any]:
     """Conteúdo JSON do modelo: documentos (checklist), definição com ids (formulário) ou HTML validado (portaria)."""
     if dados.tipo == "checklist":
         return {"itens": [i.model_dump() for i in dados.itens or []]}
+    if dados.tipo == "checklist_prorrogacao":
+        # Só o que a prorrogação usa: nome, descrição e se é obrigatório (validade e documento da empresa são da execução mensal)
+        return {"itens": [{"nome": i.nome, "observacao": i.observacao, "obrigatorio": i.obrigatorio} for i in dados.itens or []]}
     if dados.tipo == "portaria":
         try:
             html = conteudo_html.sanitizar(dados.html or "")
@@ -406,6 +422,15 @@ def _conteudo(dados: GravacaoModelo) -> dict[str, Any]:
         if ruins:
             raise ErroRegraContrato("Placeholders não permitidos na máscara: " + ", ".join(ruins) + ". Use somente os da lista ao lado do editor.")
         return {"html": html}
+    if dados.tipo == "prorrogacao":
+        try:
+            html = conteudo_html.sanitizar(dados.html or "")
+        except conteudo_html.ErroConteudo as erro:
+            raise ErroRegraContrato(str(erro)) from erro
+        ruins = prorrogacao_mascara.invalidos(html)
+        if ruins:
+            raise ErroRegraContrato("Placeholders não permitidos na máscara: " + ", ".join(ruins) + ". Use somente os da lista ao lado do editor.")
+        return {"html": html, "variante": dados.variante}
     if dados.tipo == "email_cadin":
         try:
             html = conteudo_html.sanitizar(dados.html or "")
@@ -433,7 +458,7 @@ def exigir_permissao_modelo(sessao: Session, usuario: Usuario, tipo: str) -> Non
     """Máscaras de portaria: SuperRoot ou controle total em Contratos. Checklists e formulários: só SuperRoot."""
     if usuario.superusuario:
         return
-    if tipo in ("portaria", "despacho", "email_cadin", "email_ob") and servico_acl.resolver_acesso(sessao, usuario, "contratos") == NivelAcl.CONTROLE_TOTAL:
+    if tipo in ("portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao") and servico_acl.resolver_acesso(sessao, usuario, "contratos") == NivelAcl.CONTROLE_TOTAL:
         return
     raise SemPermissaoContrato("Somente o SuperRoot altera este tipo de modelo; as máscaras de portaria também exigem controle total em Contratos.")
 
@@ -468,13 +493,14 @@ def salvar_modelo(sessao: Session, dados: GravacaoModelo, autor: Usuario, modelo
     if modelo_id and modelo.tipo != dados.tipo:
         raise ErroRegraContrato("O tipo do modelo não pode ser alterado.")
     conteudo = _conteudo(dados)
-    if dados.tipo in ("despacho", "email_cadin", "email_ob") and dados.ativo:
+    if dados.tipo in ("despacho", "email_cadin", "email_ob", "checklist_prorrogacao") and dados.ativo:
         outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == dados.tipo, ModeloGlobal.ativo.is_(True))) if m.id != modelo.id), None)
         if outro is not None:
-            qual = {"despacho": "de despacho", "email_cadin": "de e-mail de CADIN", "email_ob": "de e-mail de pagamento"}[dados.tipo]
-            raise ErroRegraContrato(f"Já existe uma máscara {qual} ativa (\"{outro.nome}\"): desative-a antes.", conflito=True)
-    if dados.tipo == "portaria" and dados.ativo:
-        outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == "portaria", ModeloGlobal.ativo.is_(True)))
+            qual = {"despacho": "máscara de despacho", "email_cadin": "máscara de e-mail de CADIN", "email_ob": "máscara de e-mail de pagamento",
+                    "checklist_prorrogacao": "checklist de prorrogação"}[dados.tipo]
+            raise ErroRegraContrato(f"Já existe um(a) {qual} ativo(a) (\"{outro.nome}\"): desative-a antes.", conflito=True)
+    if dados.tipo in ("portaria", "prorrogacao") and dados.ativo:
+        outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == dados.tipo, ModeloGlobal.ativo.is_(True)))
                       if m.id != modelo.id and m.conteudo.get("variante") == dados.variante), None)
         if outro is not None:
             raise ErroRegraContrato(f"Já existe uma máscara ativa para esta variante (\"{outro.nome}\"): desative-a antes.", conflito=True)

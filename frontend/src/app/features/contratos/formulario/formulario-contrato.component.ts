@@ -1,6 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para controlar o cadastro e a edição do contrato (dados, processos SEI, equipe e itens financeiros).
 
+import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -14,8 +15,9 @@ import { formatarData } from '../../../shared/utilitarios/formatadores';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { DetalheContrato, GravacaoContrato, GravacaoItem, OpcaoEmpresa, Papel, RascunhoContratoSgi, Situacao, TipoItem } from '../compartilhado/contratos.models';
+import { DetalheContrato, GravacaoContrato, ModalidadeContratacao, ModalidadeGarantia, GravacaoItem, OpcaoEmpresa, Papel, RascunhoContratoSgi, Situacao, TipoItem } from '../compartilhado/contratos.models';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
+import { PARAMETROS_DE_FABRICA } from '../compartilhado/parametros-contratos.service';
 import { MESES, PAPEIS, PERIODICIDADES, paraDecimalApi, paraDecimalTela, ROTULOS_SITUACAO, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
@@ -45,7 +47,7 @@ const ITEM_VAZIO: ItemEdicao = {
 /** Tela 2: cadastro e edição do contrato (dados, processos SEI, equipe e itens financeiros). */
 @Component({
   selector: 'app-formulario-contrato',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, SeletorUsuariosComponent, ...PIPES_FORMATACAO],
+  imports: [DatePipe, EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, SeletorUsuariosComponent, ...PIPES_FORMATACAO],
   templateUrl: './formulario-contrato.component.html',
   // Esc fecha a janela do item
   host: { '(document:keydown.escape)': 'fecharItem()' },
@@ -101,6 +103,14 @@ export class FormularioContratoComponent implements OnInit {
     sei_execucao_numero: '',
     sei_execucao_link: '',
     processo_financeiro: '',
+    modalidade_contratacao: '' as ModalidadeContratacao,
+    exige_garantia: false,
+    garantia_modalidade: '' as ModalidadeGarantia,
+    garantia_percentual: null as number | string | null,
+    garantia_valor: null as number | string | null,
+    garantia_emissor: '',
+    garantia_cnpj_emissor: '',
+    garantia_apolice: '',
     situacao_forcada: null as Situacao | null,
   };
   // Um signal por papel da equipe (cada seletor de usuário guarda no máximo uma pessoa)
@@ -114,6 +124,8 @@ export class FormularioContratoComponent implements OnInit {
   // Janela do item (2 passos)
   protected readonly itemAberto = signal<{ passo: 1 | 2; indice: number | null } | null>(null);
   protected item: ItemEdicao = { ...ITEM_VAZIO };
+  // Questionário do passo 1: as respostas definem o tipo e o faturamento do item (nulo = ainda sem resposta)
+  protected respostas: { quantidade: 'fixa' | 'variavel' | null; faturamento: 'dias' | 'mes' | null } = { quantidade: null, faturamento: null };
   // Posição do item sendo arrastado (reordenação por arrastar e soltar)
   private arrastando: number | null = null;
 
@@ -125,6 +137,8 @@ export class FormularioContratoComponent implements OnInit {
   /** Carrega empresas e, na edição, o contrato e a situação da execução (em paralelo). */
   ngOnInit(): void {
     const id = this.id();
+    // Contrato novo: a vigência máxima já vem com o padrão dos parâmetros de Contratos (se a pessoa ainda não mexeu no campo)
+    if (!id) this.api.parametros().subscribe({ next: (p) => { if (this.dados.vigencia_maxima_meses === PARAMETROS_DE_FABRICA.vigencia_maxima_padrao_meses) this.dados.vigencia_maxima_meses = p.vigencia_maxima_padrao_meses; }, error: () => undefined });
     forkJoin({
       empresas: this.api.opcoesEmpresas(true),
       contrato: id ? this.api.consultar(id) : of(null),
@@ -157,6 +171,8 @@ export class FormularioContratoComponent implements OnInit {
     return !!c && !c.permissoes.pode_editar && c.permissoes.pode_editar_processo_financeiro;
   });
   protected readonly pedindoProcesso = signal(false);
+  /** Último pedido ao DOF (legenda do campo): vem do contrato e se atualiza quando um novo pedido é enviado. */
+  protected readonly ultimoPedido = signal<{ em: string; por: string } | null>(null);
 
   /** Manda o pedido do processo financeiro a todo o Financeiro (DOF): e-mail e aviso no sino com o link desta tela. */
   protected async pedirProcesso(): Promise<void> {
@@ -170,7 +186,7 @@ export class FormularioContratoComponent implements OnInit {
     if (!ok) return;
     this.pedindoProcesso.set(true);
     this.api.pedirProcessoFinanceiro(c.id).subscribe({
-      next: (r) => { this.pedindoProcesso.set(false); this.dialogos.avisar('Pedido enviado', `${r.destinatarios} pessoa(s) do Financeiro receberam o pedido.`); },
+      next: (r) => { this.pedindoProcesso.set(false); this.ultimoPedido.set({ em: r.pedido_em, por: r.pedido_por }); this.dialogos.avisar('Pedido enviado', `${r.destinatarios} pessoa(s) do Financeiro receberam o pedido.`); },
       error: (e) => { this.pedindoProcesso.set(false); this.dialogos.mostrarErro(e, 'Não foi possível enviar o pedido'); },
     });
   }
@@ -178,12 +194,16 @@ export class FormularioContratoComponent implements OnInit {
   /** Preenche o formulário com o contrato carregado (valores no formato brasileiro). */
   private preencher(c: DetalheContrato): void {
     this.original.set(c);
+    this.ultimoPedido.set(c.processo_financeiro_pedido_em ? { em: c.processo_financeiro_pedido_em, por: c.processo_financeiro_pedido_por ?? '' } : null);
     this.dados = {
       numero: c.numero, empresa_id: c.empresa.id, apelido: c.apelido, objeto: c.objeto, data_inicio: c.data_inicio,
       vigencia_inicial_meses: c.vigencia_inicial_meses, vigencia_maxima_meses: c.vigencia_maxima_meses,
       periodicidade_meses: c.periodicidade_meses, mes_reajuste: c.mes_reajuste, liberar_todas_competencias: c.liberar_todas_competencias, permite_medicao_adicional: c.permite_medicao_adicional, alertas_a_partir_de: c.alertas_a_partir_de, sei_gestao_numero: c.sei_gestao_numero,
       sei_gestao_link: c.sei_gestao_link, sei_execucao_numero: c.sei_execucao_numero, sei_execucao_link: c.sei_execucao_link,
       processo_financeiro: c.processo_financeiro ?? '', situacao_forcada: c.situacao_forcada,
+      modalidade_contratacao: c.modalidade_contratacao ?? '', exige_garantia: c.exige_garantia ?? false, garantia_modalidade: c.garantia_modalidade ?? '',
+      garantia_percentual: c.garantia_percentual ?? null, garantia_valor: c.garantia_valor ?? null, garantia_emissor: c.garantia_emissor ?? '',
+      garantia_cnpj_emissor: c.garantia_cnpj_emissor ?? '', garantia_apolice: c.garantia_apolice ?? '',
     };
     for (const membro of c.equipe) {
       this.equipe[membro.papel].set([{ id: membro.usuario_id, login: membro.login, nome_completo: membro.nome, cargo: '', ativo: true }]);
@@ -210,6 +230,7 @@ export class FormularioContratoComponent implements OnInit {
       vigencia_inicial_meses: r.vigencia_inicial_meses, vigencia_maxima_meses: r.vigencia_maxima_meses, periodicidade_meses: r.periodicidade_meses,
       mes_reajuste: r.mes_reajuste, liberar_todas_competencias: false, permite_medicao_adicional: false, alertas_a_partir_de: null, sei_gestao_numero: r.sei_gestao_numero, sei_gestao_link: r.sei_gestao_link,
       sei_execucao_numero: r.sei_execucao_numero, sei_execucao_link: r.sei_execucao_link, processo_financeiro: '', situacao_forcada: null,
+      modalidade_contratacao: '' as ModalidadeContratacao, exige_garantia: false, garantia_modalidade: '' as ModalidadeGarantia, garantia_percentual: null as number | string | null, garantia_valor: null as number | string | null, garantia_emissor: '', garantia_cnpj_emissor: '', garantia_apolice: '',
     };
     for (const membro of r.equipe) {
       this.equipe[membro.papel].set([{ id: membro.usuario_id, login: membro.login, nome_completo: membro.nome, cargo: '', ativo: true }]);
@@ -236,7 +257,7 @@ export class FormularioContratoComponent implements OnInit {
     this.api.salvarEmpresa({ cnpj: e.cnpj, razao_social: e.razao_social, nome_fantasia: e.nome_fantasia, endereco: e.endereco, ativa: true }).pipe(
       switchMap((empresa) =>
         r.prepostos.length
-          ? from(r.prepostos).pipe(concatMap((p) => this.api.salvarPreposto(empresa.id, { ...p, ativo: true })), last())
+          ? from(r.prepostos).pipe(concatMap((p) => this.api.salvarPreposto(empresa.id, { ...p, ativo: true, representante_legal: false })), last())
           : of(empresa),
       ),
       switchMap((empresa) => forkJoin({ empresa: of(empresa), opcoes: this.api.opcoesEmpresas(true) })),
@@ -312,18 +333,38 @@ export class FormularioContratoComponent implements OnInit {
   /** Abre a janela de item no passo 1 (nome, tipo e faturamento). */
   protected novoItem(): void {
     this.item = { ...ITEM_VAZIO };
+    // Item novo começa sem resposta: a pessoa precisa responder, não herdar um padrão sem perceber
+    this.respostas = { quantidade: null, faturamento: null };
     this.itemAberto.set({ passo: 1, indice: null });
   }
 
   /** Abre um item existente; itens já salvos vão direto ao passo 2 (nome/tipo não mudam). */
   protected editarItem(indice: number): void {
     this.item = { ...this.itens()[indice] };
+    // Item ainda não salvo volta ao passo 1 com as respostas que levaram ao tipo e ao faturamento dele
+    this.respostas = { quantidade: this.item.tipo === 'continuo' ? 'fixa' : 'variavel', faturamento: this.item.calcula_pro_rata ? 'dias' : 'mes' };
     this.itemAberto.set({ passo: this.item.salvo ? 2 : 1, indice });
+  }
+
+  /** Grava a resposta do questionário e traduz para o tipo (contínuo/sob demanda) e o faturamento (pró-rata/integral). */
+  protected responder(pergunta: 'quantidade' | 'faturamento', valor: 'fixa' | 'variavel' | 'dias' | 'mes'): void {
+    if (pergunta === 'quantidade') {
+      this.respostas.quantidade = valor as 'fixa' | 'variavel';
+      this.item.tipo = valor === 'fixa' ? 'continuo' : 'sob_demanda';
+    } else {
+      this.respostas.faturamento = valor as 'dias' | 'mes';
+      this.item.calcula_pro_rata = valor === 'dias';
+    }
+  }
+
+  /** As duas perguntas respondidas: o tipo e o faturamento estão definidos. */
+  protected respondido(): boolean {
+    return this.respostas.quantidade !== null && this.respostas.faturamento !== null;
   }
 
   /** Avança para o passo 2 (códigos, quantidades e preço). */
   protected continuarItem(): void {
-    if (!this.item.descricao.trim() || !this.item.unidade_fornecimento.trim()) return;
+    if (!this.item.descricao.trim() || !this.item.unidade_fornecimento.trim() || !this.respondido()) return;
     this.itemAberto.update((a) => (a ? { ...a, passo: 2 } : a));
   }
 

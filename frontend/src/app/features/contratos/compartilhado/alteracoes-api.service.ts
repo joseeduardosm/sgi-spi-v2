@@ -7,13 +7,14 @@ import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../../environments/ambiente';
 import { baixarArquivo } from '../../../shared/utilitarios/download';
-import { CamposParecer, PainelAlteracao, PainelReajuste, ProcessoProrrogacao, Prorrogacao, RegraSobDemanda } from './contratos.models';
+import { CalculoMesQuebrado, GravacaoPosAssinatura, PainelAlteracao, PainelReajuste, ProcessoProrrogacao, Prorrogacao, Reajuste, RegraSobDemanda, VigenciaRetroativa } from './contratos.models';
 
-/** Corpo do rascunho da prorrogação (prazo, plano dos itens sob demanda e campos do parecer). */
-export interface GravacaoProrrogacao extends CamposParecer {
+/** Corpo do rascunho da prorrogação (prazo, plano dos itens sob demanda e o cálculo dos meses quebrados; nulo mantém a escolha). */
+export interface GravacaoProrrogacao {
   meses: number | null;
   regra_sob_demanda: RegraSobDemanda;
   plano_sob_demanda: { item_id: string; limite: string; apontamentos: Record<string, string> }[];
+  calculo_mes_quebrado?: CalculoMesQuebrado | null;
 }
 
 /** Prorrogação, reajuste e aditamento/supressão (docs/endpoints/contratos-alteracoes.md). */
@@ -45,9 +46,24 @@ export class AlteracoesApiService {
     return this.http.delete<void>(`${this.base}/${id}/prorrogacao`);
   }
 
-  /** Registra ciência no parecer ou gera o PDF do parecer. */
-  acaoProrrogacao(id: string, acao: 'ciencia' | 'parecer'): Observable<ProcessoProrrogacao> {
-    return this.http.post<ProcessoProrrogacao>(`${this.base}/${id}/prorrogacao/${acao}`, {});
+  /** Gera o PDF e o XLSX da memória de cálculo da prorrogação (nova versão só se os dados mudaram). */
+  gerarMemoriaProrrogacao(id: string): Observable<ProcessoProrrogacao> {
+    return this.http.post<ProcessoProrrogacao>(`${this.base}/${id}/prorrogacao/memoria/arquivos`, {});
+  }
+
+  /** Anexa (ou substitui) o PDF de um documento do checklist da prorrogação. */
+  anexarDocumentoProrrogacao(id: string, documentoId: string, arquivo: File): Observable<ProcessoProrrogacao> {
+    return this.http.post<ProcessoProrrogacao>(`${this.base}/${id}/prorrogacao/checklist/${documentoId}`, this.arquivo({ arquivo }));
+  }
+
+  /** Inclui um documento fora do checklist padrão (nome, descrição e PDF); nunca obrigatório. */
+  incluirDocumentoProrrogacao(id: string, nome: string, descricao: string, arquivo: File): Observable<ProcessoProrrogacao> {
+    return this.http.post<ProcessoProrrogacao>(`${this.base}/${id}/prorrogacao/checklist/incluir`, this.arquivo({ nome, descricao, arquivo }));
+  }
+
+  /** Exclui um documento incluído no checklist da prorrogação. */
+  excluirDocumentoProrrogacao(id: string, documentoId: string): Observable<ProcessoProrrogacao> {
+    return this.http.delete<ProcessoProrrogacao>(`${this.base}/${id}/prorrogacao/checklist/${documentoId}`);
   }
 
   /** Registra a prorrogação com o Termo Aditivo assinado. */
@@ -66,9 +82,36 @@ export class AlteracoesApiService {
     return this.http.delete<Prorrogacao[]>(`${this.base}/${id}/prorrogacoes/${prorrogacaoId}`);
   }
 
+  /** Grava o pós-assinatura (PNCP, DOE, garantia, Contratos.gov) de uma prorrogação registrada. */
+  salvarPosAssinatura(id: string, prorrogacaoId: string, dados: GravacaoPosAssinatura): Observable<Prorrogacao[]> {
+    return this.http.put<Prorrogacao[]>(`${this.base}/${id}/prorrogacoes/${prorrogacaoId}/pos-assinatura`, dados);
+  }
+
+  /** Baixa a planilha de dados de garantia para a DOF (XLSX). */
+  baixarPlanilhaGarantia(id: string, prorrogacaoId: string) {
+    return baixarArquivo(this.http, `${this.base}/${id}/prorrogacoes/${prorrogacaoId}/garantia/planilha`, 'dados-garantia.xlsx');
+  }
+
   /** Baixa o termo ou o parecer de uma prorrogação. */
   baixarProrrogacao(id: string, anexoId: string) {
     return baixarArquivo(this.http, `${this.base}/${id}/prorrogacoes/arquivos/${anexoId}`);
+  }
+
+  // --- Vigência retroativa ---
+  /** Vigências anteriores ao início do contrato. */
+  vigenciasRetroativas(id: string): Observable<VigenciaRetroativa[]> {
+    return this.http.get<VigenciaRetroativa[]>(`${this.base}/${id}/vigencias-retroativas`);
+  }
+
+  /** Cadastra uma vigência retroativa com o Termo Aditivo assinado. */
+  cadastrarVigenciaRetroativa(id: string, meses: number, assinadaEm: string, numeroTermo: string, termo: File): Observable<VigenciaRetroativa[]> {
+    return this.http.post<VigenciaRetroativa[]>(`${this.base}/${id}/vigencias-retroativas`,
+      this.arquivo({ meses: String(meses), assinada_em: assinadaEm, numero_termo: numeroTermo, termo }));
+  }
+
+  /** Desfaz a vigência retroativa mais antiga. */
+  desfazerVigenciaRetroativa(id: string, vigenciaId: string): Observable<VigenciaRetroativa[]> {
+    return this.http.delete<VigenciaRetroativa[]>(`${this.base}/${id}/vigencias-retroativas/${vigenciaId}`);
   }
 
   // --- Reajuste ---
@@ -77,9 +120,14 @@ export class AlteracoesApiService {
     return this.http.get<PainelReajuste>(`${this.base}/${id}/reajustes`);
   }
 
-  /** Abre um reajuste para a vigência e o mês de referência. */
+  /** Abre um reajuste para a vigência e a data de efeito; o retroativo dispensa a data (vale o início da vigência seguinte). */
   abrirReajuste(id: string, sequencia: number, dataEfeito: string): Observable<PainelReajuste> {
     return this.http.post<PainelReajuste>(`${this.base}/${id}/reajustes`, { sequencia_vigencia: sequencia, data_efeito: dataEfeito });
+  }
+
+  /** Abre o reajuste retroativo da vigência retroativa escolhida. */
+  abrirReajusteRetroativo(id: string, sequencia: number): Observable<PainelReajuste> {
+    return this.http.post<PainelReajuste>(`${this.base}/${id}/reajustes`, { sequencia_vigencia: sequencia, retroativo: true });
   }
 
   /** Anexa a evidência do índice ou o apostilamento (que conclui o reajuste). */
@@ -87,9 +135,15 @@ export class AlteracoesApiService {
     return this.http.post<PainelReajuste>(`${this.base}/${id}/reajustes/${reajusteId}/${acao}`, this.arquivo({ arquivo }));
   }
 
-  /** Grava índice e teto de cada item. */
-  salvarMemoriaReajuste(id: string, reajusteId: string, itens: { item_id: string; indice_percentual: string; valor_referencial: string | null }[]): Observable<PainelReajuste> {
-    return this.http.put<PainelReajuste>(`${this.base}/${id}/reajustes/${reajusteId}/memoria`, { itens });
+  /** Calculadora ao vivo: o reajuste como ficaria com estes índices e tetos, sem gravar nada. */
+  previaMemoriaReajuste(id: string, reajusteId: string, itens: { item_id: string; indice_percentual: string; valor_referencial: string | null }[]): Observable<Reajuste> {
+    return this.http.post<Reajuste>(`${this.base}/${id}/reajustes/${reajusteId}/memoria/previa`, { itens });
+  }
+
+  /** Grava índice e teto de cada item e, se informado, como calcular os meses quebrados (nulo mantém a escolha). */
+  salvarMemoriaReajuste(id: string, reajusteId: string, itens: { item_id: string; indice_percentual: string; valor_referencial: string | null }[],
+                        calculo: CalculoMesQuebrado | null = null): Observable<PainelReajuste> {
+    return this.http.put<PainelReajuste>(`${this.base}/${id}/reajustes/${reajusteId}/memoria`, { itens, calculo_mes_quebrado: calculo });
   }
 
   /** Gera os arquivos da memória ou cancela o reajuste. */

@@ -50,6 +50,8 @@ _MODULOS: list[tuple[str, str, list[tuple]]] = [
         ("retencao_conferida", "Retenção conferida", "A equipe do contrato recebe quando a retenção de tributos é conferida e a etapa seguinte pode seguir."),
         ("alteracao_concluida", "Prorrogação, reajuste ou alteração concluídos", "A equipe do contrato recebe quando uma prorrogação, um reajuste ou uma alteração é concluída."),
         ("vencimento_contrato", "Vencimento do contrato (90, 60 e 30 dias)", "A equipe do contrato recebe quando faltam 90, 60 e 30 dias para o fim da vigência."),
+        ("pncp_prazo", "Prazo da divulgação no PNCP", "A equipe do contrato recebe quando o prazo para divulgar o aditivo de prorrogação no PNCP está perto de vencer e quando vence."),
+        ("garantia_pendente", "Garantia da prorrogação pendente", "A equipe do contrato recebe quando a comprovação da renovação da garantia de uma prorrogação ainda não foi registrada."),
         ("medicao_atrasada", "Medição atrasada", "A equipe do contrato recebe quando a medição de uma competência está atrasada."),
         ("correcao_itens", "Correção de itens do contrato", "A equipe do contrato recebe quando uma correção de itens é proposta, aplicada ou recusada."),
         ("portaria", "Portaria de designação", "Você recebe quando uma portaria de designação precisa do seu aceite ou muda de situação."),

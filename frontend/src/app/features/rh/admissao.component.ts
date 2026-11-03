@@ -47,14 +47,20 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
 
           <!-- 1. Formulário de nomeação do GLPI -->
           <section class="cartao-dados" [class.etapa-bloqueada]="bloqueada('chamado')" aria-labelledby="et-chamado">
-            <header><div><h2 id="et-chamado">1. Formulário de nomeação no GLPI</h2><small>O SGI preenche o formulário "CGP - Nomeações" com os dados da ficha; o próprio formulário abre os chamados e dispara os e-mails (rede, e-mail, SEI, Compras SP, equipamento, estação, crachá, telefone e mobiliário).</small></div></header>
+            <header><div>
+              @if (peloModulo(x)) {
+                <h2 id="et-chamado">1. Chamados da nomeação</h2><small>O SGI abre um chamado para cada serviço marcado (rede, e-mail, SEI, Compras SP, equipamento, estação, crachá, telefone e mobiliário), já na equipe certa, e mostra aqui o andamento de cada um.</small>
+              } @else {
+                <h2 id="et-chamado">1. Formulário de nomeação no GLPI</h2><small>O SGI preenche o formulário "CGP - Nomeações" com os dados da ficha; o próprio formulário abre os chamados e dispara os e-mails (rede, e-mail, SEI, Compras SP, equipamento, estação, crachá, telefone e mobiliário).</small>
+              }
+            </div></header>
             <div class="corpo">
               @if (x.status === 'andamento') {
                 <div class="bloco-foto">
                   @if (x.tem_foto) { <img class="foto-admissao" [appImagemAutenticada]="urlFoto()" alt="Foto da pessoa" /> } @else { <span class="foto-admissao vazia" aria-hidden="true">Sem foto</span> }
                   <div class="acoes-foto">
                     <strong>Foto da pessoa (opcional)</strong>
-                    <small class="ajuda">{{ x.etapas[0].estado === 'feita' ? 'O formulário já foi enviado ao GLPI: trocar a foto atualiza só a intranet.' : 'Vai no formulário do GLPI e, quando a conta existir, vira a foto da pessoa na intranet (Diretório).' }} PNG ou JPG, até 5 MB.</small>
+                    <small class="ajuda">{{ peloModulo(x) ? 'Quando a conta existir, vira a foto da pessoa na intranet (Diretório).' : x.etapas[0].estado === 'feita' ? 'O formulário já foi enviado ao GLPI: trocar a foto atualiza só a intranet.' : 'Vai no formulário do GLPI e, quando a conta existir, vira a foto da pessoa na intranet (Diretório).' }} PNG ou JPG, até 5 MB.</small>
                     <div class="acoes-formulario" style="justify-content: flex-start">
                       <label class="acao-secundaria acao-pequena seletor-arquivo">{{ x.tem_foto ? 'Trocar a foto' : 'Escolher a foto' }}
                         <input type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" (change)="escolherFoto($any($event.target))" /></label>
@@ -65,19 +71,22 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
               }
               @if (x.etapas[0].estado === 'feita') {
                 <p class="resumo-chamado">
-                  <span class="selo-situacao">Formulário enviado</span>
-                  em {{ x.etapas[0].em | date: 'dd/MM/yyyy HH:mm' }} · {{ x.chamado_links.length }} chamado(s) aberto(s) pelo GLPI · login de rede proposto <span class="texto-codigo">{{ x.login_proposto }}</span>
+                  <span class="selo-situacao">{{ abertosNoModulo(x) ? 'Chamados abertos' : 'Formulário enviado' }}</span>
+                  em {{ x.etapas[0].em | date: 'dd/MM/yyyy HH:mm' }} · {{ x.chamado_links.length }} chamado(s) aberto(s) {{ abertosNoModulo(x) ? 'no SGI' : 'pelo GLPI' }} · login de rede proposto <span class="texto-codigo">{{ x.login_proposto }}</span>
                 </p>
                 <div class="tabela-gestao-envoltorio">
                   <table class="tabela-gestao">
-                    <thead><tr><th>Serviço</th><th>Pedido</th><th>Chamado no GLPI</th></tr></thead>
+                    <thead><tr><th>Serviço</th><th>Pedido</th><th>{{ abertosNoModulo(x) ? 'Chamado' : 'Chamado no GLPI' }}</th></tr></thead>
                     <tbody>
                       @for (l of linhasChamado(x); track l.chave) {
                         <tr>
                           <td><strong>{{ l.servico }}</strong></td>
                           <td><span [class]="l.pedido ? 'selo-situacao' : 'selo-situacao inativo'">{{ l.pedido ? 'Sim' : 'Não' }}</span></td>
                           <td>
-                            @if (l.link) { <a class="acao-secundaria acao-pequena" [href]="l.link.url" target="_blank" rel="noopener" [title]="l.link.texto">Chamado #{{ l.numero }}</a> }
+                            @if (l.link && l.link.chave) {
+                              <a class="acao-secundaria acao-pequena" [routerLink]="l.link.url" [title]="l.link.texto">Chamado #{{ l.numero }}</a>
+                              <span class="selo-status" [attr.data-chamado]="l.link.status_cor || 'info'">{{ l.link.status_nome }}</span>
+                            } @else if (l.link) { <a class="acao-secundaria acao-pequena" [href]="l.link.url" target="_blank" rel="noopener" [title]="l.link.texto">Chamado #{{ l.numero }}</a> }
                             @else if (l.pedido) { <small>Chamado não identificado</small> }
                             @else { <small>—</small> }
                           </td>
@@ -100,8 +109,8 @@ const ESTADO: Record<string, EstadoEtapa> = { feita: 'concluida', atual: 'atual'
                   <div class="campo"><label for="chamado-espelho">Usuário espelho (login)</label><input id="chamado-espelho" name="espelho" maxlength="100" placeholder="Opcional: quem tem o acesso que servirá de modelo" [(ngModel)]="usuarioEspelho" /></div>
                 </div>
                 <div class="campo" style="margin-top: 14px"><label for="chamado-obs">Observações adicionais para a TI</label><textarea id="chamado-obs" name="obs" rows="3" maxlength="4000" [(ngModel)]="observacoesChamado"></textarea>
-                  <small class="ajuda">O login proposto e o e-mail pessoal da ficha já vão junto.</small></div>
-                <div class="acoes-formulario" style="margin-top: 12px"><button type="button" class="acao-primaria" [class.carregando]="ocupado()" (click)="abrirChamado()">Enviar o formulário ao GLPI</button></div>
+                  <small class="ajuda">{{ peloModulo(x) ? 'O login proposto já vai na descrição; CPF, RG e e-mail pessoal vão numa nota que só a equipe que atende vê.' : 'O login proposto e o e-mail pessoal da ficha já vão junto.' }}</small></div>
+                <div class="acoes-formulario" style="margin-top: 12px"><button type="button" class="acao-primaria" [class.carregando]="ocupado()" (click)="abrirChamado()">{{ peloModulo(x) ? 'Abrir os chamados' : 'Enviar o formulário ao GLPI' }}</button></div>
               }
             </div>
           </section>
@@ -446,14 +455,25 @@ export class AdmissaoComponent implements OnInit {
   /** Uma linha por serviço do formulário: se foi pedido e o chamado que o GLPI abriu para ele (achado pelo título). */
   protected linhasChamado(x: LeituraAdmissao) {
     return this.solicitacoesLista().map(([chave, servico]) => {
-      const link = x.chamado_links.find((l) => this.palavrasServico[chave]?.test(this.semAcento(l.texto))) ?? null;
-      return { chave, servico, pedido: !!x.solicitacoes[chave], link, numero: link ? (/id=(\d+)/.exec(link.url)?.[1] ?? '') : '' };
+      // Chamado do módulo: achado pelo serviço; do GLPI: pelo título
+      const link = x.chamado_links.find((l) => l.chave === chave) ?? x.chamado_links.find((l) => !l.chave && this.palavrasServico[chave]?.test(this.semAcento(l.texto))) ?? null;
+      return { chave, servico, pedido: !!x.solicitacoes[chave], link, numero: link ? (link.numero ?? /id=(\d+)/.exec(link.url)?.[1] ?? '') : '' };
     });
+  }
+
+  /** O próximo envio vai para o módulo Chamados (Parâmetros dos Chamados > RH), e não para o GLPI? Só vale antes de enviar. */
+  protected peloModulo(x: LeituraAdmissao): boolean {
+    return x.etapas[0].estado === 'feita' ? this.abertosNoModulo(x) : x.chamados_destino === 'chamados';
+  }
+
+  /** Os chamados desta admissão foram abertos no módulo Chamados (têm o serviço gravado). */
+  protected abertosNoModulo(x: LeituraAdmissao): boolean {
+    return x.chamado_links.some((l) => !!l.chave);
   }
 
   /** Itens criados que não casam com nenhum serviço conhecido (o formulário pode ganhar destinos novos). */
   protected chamadosSemServico(x: LeituraAdmissao) {
-    return x.chamado_links.filter((l) => !Object.values(this.palavrasServico).some((r) => r.test(this.semAcento(l.texto))));
+    return x.chamado_links.filter((l) => !l.chave && !Object.values(this.palavrasServico).some((r) => r.test(this.semAcento(l.texto))));
   }
 
   /** Endereço da foto (muda a cada troca, para a prévia não ficar em cache). */

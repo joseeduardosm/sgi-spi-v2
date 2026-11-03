@@ -18,7 +18,7 @@ describe('AbrirChamadoComponent', () => {
     const http = TestBed.inject(HttpTestingController);
     TestBed.inject(ChamadoService).abrirModal();
     fixture.detectChanges();
-    http.expectOne('/api/chamados/solicitante').flush(DADOS);
+    http.expectOne('/api/chamados-glpi/solicitante').flush(DADOS);
     fixture.detectChanges();
     // O ngModel inicializa o campo em um microtask: espera antes de digitar (como faz uma pessoa)
     await fixture.whenStable();
@@ -57,7 +57,7 @@ describe('AbrirChamadoComponent', () => {
     TestBed.inject(ChamadoService).abrirModal();
     fixture.detectChanges();
     const { aguardando_validacao: _, ...semCampo } = DADOS;
-    http.expectOne('/api/chamados/solicitante').flush(semCampo);
+    http.expectOne('/api/chamados-glpi/solicitante').flush(semCampo);
     fixture.detectChanges();
     const texto = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(texto).toContain('Chefe Silva');
@@ -77,7 +77,7 @@ describe('AbrirChamadoComponent', () => {
     expect(evento.defaultPrevented).toBe(true);
     expect(elemento.querySelectorAll('.anexos-chamado figure')).toHaveLength(1);
     (elemento.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
-    const req = http.expectOne('/api/chamados');
+    const req = http.expectOne('/api/chamados-glpi');
     const corpo = req.request.body as FormData;
     // Sem campo de local: o servidor usa o andar e lado do cadastro
     expect(JSON.parse(corpo.get('dados') as string)).toEqual({ assunto: 'Sem rede', descricao: 'Meu computador está sem rede.' });
@@ -92,7 +92,7 @@ describe('AbrirChamadoComponent', () => {
     const { fixture, http, elemento } = await abrir();
     await preencher(fixture, 'Sem rede', 'Meu computador está sem rede.');
     (elemento.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
-    http.expectOne('/api/chamados').flush({ detalhe: 'Não foi possível abrir o chamado agora.', codigo: 'glpi_indisponivel' }, { status: 502, statusText: 'Bad Gateway' });
+    http.expectOne('/api/chamados-glpi').flush({ detalhe: 'Não foi possível abrir o chamado agora.', codigo: 'glpi_indisponivel' }, { status: 502, statusText: 'Bad Gateway' });
     fixture.detectChanges();
     expect(elemento.textContent).toContain('Não foi possível abrir o chamado agora.');
     expect((elemento.querySelector('#chamado-assunto') as HTMLInputElement).value).toBe('Sem rede');

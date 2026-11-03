@@ -191,48 +191,8 @@
   /* Aviso de dados que faltam (não é erro): tom de atenção */
   .pat-painel-sala { border-color: #f0d79a; background: var(--cor-fff4dc); }
 
-  /* Combobox de sala: um só campo e a lista de opções logo abaixo, sobre o conteúdo */
-  .pat-seletor-sala {
-    position: relative;
-    margin-bottom: 14px;
-
-    input { width: 100%; margin: 0; padding-right: 36px; }
-    /* Botão da câmera dentro do campo da sala (lê o código ou QR da porta); com ele, o "×" de limpar passa para a esquerda dele */
-    .pat-leitor-sala { position: absolute; top: 4px; right: 6px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: var(--spi-raio-p); color: var(--spi-vermelho); background: transparent; cursor: pointer;
-      svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } &:active { background: var(--cor-eef0f3); } }
-    &:has(.pat-leitor-sala) input { padding-right: 76px; }
-    &:has(.pat-leitor-sala) .pat-limpar-sala { right: 42px; }
-    .pat-limpar-sala { position: absolute; top: 4px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: var(--spi-raio-p); color: var(--spi-apagado); background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
-  }
-
   /* Campo "chapa ou número de série" com sugestões (movimentação, inservíveis, extraviados e baixa) */
   app-busca-bem { display: block; flex: 1 1 200px; min-width: 0; .pat-seletor-sala { margin-bottom: 0; input { padding-right: 12px; } } }
-  .pat-opcoes-bem { top: 100%; margin-top: 4px;
-    li { display: block; padding: 8px 12px; line-height: 1.3; cursor: pointer; strong { margin-right: 6px; } span { font-size: 13px; }
-      small { display: block; margin-top: 1px; color: var(--spi-apagado); font-size: 11px; } &.destacada { background: var(--cor-eef0f3); } } }
-
-  .pat-opcoes-sala {
-    position: absolute;
-    top: calc(100% - 6px);
-    left: 0;
-    right: 0;
-    z-index: 30;
-    max-height: 300px;
-    margin: 0;
-    padding: 4px 0;
-    overflow-y: auto;
-    border: 1px solid var(--cor-e2e5e8);
-    border-radius: var(--spi-raio-m);
-    background: var(--cor-ffffff);
-    box-shadow: var(--spi-sombra-flutuante);
-    list-style: none;
-
-    li { padding: 9px 12px; font-size: 13px; cursor: pointer; }
-    .pat-grupo-sala { position: sticky; top: 0; padding: 6px 12px; color: var(--spi-apagado); background: var(--cor-fafbfc); font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: default; }
-    li.destacada { background: var(--spi-vermelho-suave); }
-    li.escolhida { font-weight: 700; }
-    .pat-sem-sala { color: var(--spi-apagado); cursor: default; }
-  }
 
   /* Topo do detalhe: marcadores e ações */
   .pat-topo-bem { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
@@ -486,3 +446,46 @@
 
   @media (max-width: 700px) { .pat-categorias { grid-template-columns: 1fr; } }
 }
+
+/* Combobox de sala (app-seletor-sala): fica fora de `.patrimonio` porque também é usado na abertura de chamado e no cadastro de rack.
+ * Um só campo e a lista de opções logo abaixo, sobre o conteúdo. */
+.pat-seletor-sala {
+  position: relative;
+  margin-bottom: 14px;
+
+  input { width: 100%; margin: 0; padding-right: 36px; }
+  /* Botão da câmera dentro do campo da sala (lê o código ou QR da porta); com ele, o "×" de limpar passa para a esquerda dele */
+  .pat-leitor-sala { position: absolute; top: 4px; right: 6px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: var(--spi-raio-p); color: var(--spi-vermelho); background: transparent; cursor: pointer;
+    svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } &:active { background: var(--cor-eef0f3); } }
+  &:has(.pat-leitor-sala) input { padding-right: 76px; }
+  &:has(.pat-leitor-sala) .pat-limpar-sala { right: 42px; }
+  .pat-limpar-sala { position: absolute; top: 4px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: var(--spi-raio-p); color: var(--spi-apagado); background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+}
+
+.pat-opcoes-sala {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 300px;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  border: 1px solid var(--cor-e2e5e8);
+  border-radius: var(--spi-raio-m);
+  background: var(--cor-ffffff);
+  box-shadow: var(--spi-sombra-flutuante);
+  list-style: none;
+
+  li { padding: 9px 12px; font-size: 13px; cursor: pointer; }
+  .pat-grupo-sala { position: sticky; top: 0; padding: 6px 12px; color: var(--spi-apagado); background: var(--cor-fafbfc); font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: default; }
+  li.destacada { background: var(--spi-vermelho-suave); }
+  li.escolhida { font-weight: 700; }
+  .pat-sem-sala { color: var(--spi-apagado); cursor: default; }
+}
+
+/* Lista de bens do combobox (chapa, descrição e sala em duas linhas): global porque a Rede (ligar um bem na porta) usa o mesmo campo */
+.pat-opcoes-bem { top: 100%; margin-top: 4px;
+  li { display: block; padding: 8px 12px; line-height: 1.3; cursor: pointer; strong { margin-right: 6px; } span { font-size: 13px; }
+    small { display: block; margin-top: 1px; color: var(--spi-apagado); font-size: 11px; } &.destacada { background: var(--cor-eef0f3); } } }

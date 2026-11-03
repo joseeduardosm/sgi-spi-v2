@@ -80,7 +80,10 @@ export class DialogosService {
 
   /** Mostra o erro de uma chamada à API (mensagem, código e correlação). */
   mostrarErro(erro: unknown, titulo = 'Não foi possível concluir a operação'): void {
-    this.erro.set({ ...erroExibivel(erro), titulo });
+    const exibivel = erroExibivel(erro);
+    // Perfil vencido (revalidação de 30 dias): o interceptor já leva à página de perfil, que explica o que falta; a janela de erro só atrapalharia
+    if (exibivel.codigo === 'revisao_perfil_obrigatoria') return;
+    this.erro.set({ ...exibivel, titulo });
   }
 
   /** Aviso sem erro de API (ex.: pré-requisitos que faltam), na mesma janela dos erros. */

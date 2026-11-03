@@ -39,11 +39,20 @@ O projeto roda no próprio diretório **`/home/administrador/projeto`**. Não ex
 
 ## Requisitos
 
-Ubuntu 24.04 com acesso à internet (pacotes do sistema, NodeSource, PyPI e npm) e sudo. **O resto o `scripts/instalar.sh` instala**: Python 3 + venv, Node.js 22, PostgreSQL, Nginx, curl, OpenSSL e OpenSSH. Numa máquina sem internet, prepare esses pacotes à mão e use `--sem-pacotes`.
+Ubuntu 24.04 com acesso à internet (pacotes do sistema, NodeSource, PyPI e npm) e sudo. **O resto o `scripts/instalar.sh` instala**: git, Python 3 + venv, Node.js 22, PostgreSQL, Nginx, curl, OpenSSL e OpenSSH. Numa máquina sem internet, prepare esses pacotes à mão e use `--sem-pacotes`.
 
 ## Instalação no servidor (do zero ou para atualizar)
 
-1. Copie o projeto para a pasta do usuário que vai rodar o sistema (ex.: `/home/administrador/projeto`).
+1. **Máquina nova:** entre com o usuário que vai rodar o sistema (ex.: `administrador`) e baixe só o instalador. Ele instala o git, **clona o repositório do GitHub** (`https://github.com/joseeduardosm/sgi-spi-v2`, ramo `estado-atual-servidor`) em `~/projeto` e continua a partir da cópia clonada:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/joseeduardosm/sgi-spi-v2/estado-atual-servidor/scripts/instalar.sh -o instalar.sh
+   sudo bash instalar.sh --dominio homologacao.spi.sp.gov.br --homologacao --sem-testes
+   ```
+
+   **Sem DNS** (ex.: homologação em casa), informe o IP da máquina no lugar do nome: `--dominio 192.168.0.50`. O site fica em `https://192.168.0.50/` (o HTTP redireciona para ele) com certificado autoassinado para o IP; o navegador avisa uma vez ("Avançado → continuar"). Se o IP mudar, ou quando houver DNS, rode o instalador de novo com o endereço novo.
+
+   Use `--diretorio DIR` para clonar em outra pasta e `--ramo NOME` para outro ramo. Não rode como `curl … | sudo bash`: a senha do SuperRoot é pedida no terminal. **Máquina que já tem o projeto:** rode `sudo scripts/instalar.sh …` de dentro dele (passo 3).
 2. (Opcional) Instale o certificado HTTPS do domínio. Sem ele, o script gera um **autoassinado** (o navegador avisa até trocar pelo oficial nos mesmos caminhos):
    - **Chave privada:** `/etc/ssl/private/DOMINIO.key`, só para o root (`chmod 600`), gerada no próprio servidor com o pedido (`openssl req -new … -keyout`); o `.csr` vai à equipe de servidores (SPI-AD01-CA).
    - **Certificado com a cadeia:** `/etc/ssl/certs/DOMINIO.fullchain.crt`, o do site seguido do da CA, com fim de linha Unix:
@@ -59,9 +68,12 @@ Ubuntu 24.04 com acesso à internet (pacotes do sistema, NodeSource, PyPI e npm)
    sudo scripts/instalar.sh --dominio homologacao.spi.sp.gov.br --homologacao --sem-testes  # homologação
    ```
 
+   Com `--atualizar`, puxa antes a versão nova do GitHub (`git pull --ff-only` do ramo atual; recusa se houver alteração local não commitada). Sem ela, instala o código como está na pasta.
+
    Opções: `--homologacao` (envios simulados, ver abaixo), `--sem-testes` (build sem rodar os testes), `--sem-pacotes`, `--porta N` (HTTP; o HTTPS fica na 443) e `--substituir-default` (desativa outro site padrão do Nginx na porta; o `default` do Ubuntu sai sozinho).
 
    O script:
+   - numa máquina nova, clona o repositório (ver passo 1);
    - instala os pacotes do sistema e o Node 22, e põe o servidor no fuso de São Paulo;
    - cria o virtualenv e instala as dependências do backend;
    - **na primeira vez** (sem `backend/.env`): cria o usuário e o banco `sgi_spi` no PostgreSQL com senha aleatória, **pede a senha do SuperRoot** (login `root`; só o hash bcrypt é gravado) e gera o `backend/.env` com a chave do JWT, a chave de cifra do LDAP/SMTP, as chaves VAPID e `URL_PUBLICA=https://DOMINIO`. Um `.env` que já existe nunca é sobrescrito;

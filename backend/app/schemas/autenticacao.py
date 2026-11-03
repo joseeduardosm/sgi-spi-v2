@@ -46,8 +46,7 @@ class UsuarioSessao(BaseModel):
     revisao_obrigatoria: bool = Field(False, description="Revalidação do perfil vencida (mais de 30 dias) ou nunca feita.")
     conta_root: bool = Field(False, description="Conta administrativa principal (login `LOGIN_ADMIN`): libera a tela Notificações do sistema.")
     tema: Literal["claro", "escuro", "auto"] = Field("auto", description="Tema da interface escolhido pelo usuário (`auto` segue o sistema operacional).")
-    perfis: list[PerfilSessao] = Field(default_factory=list, description="Perfis de acesso ativos do usuário (entre eles ele alterna no menu do usuário).")
-    perfil_ativo: PerfilSessao | None = Field(None, description="Perfil que vale nesta sessão (o escolhido ou o padrão); nulo se o usuário não tem perfis.")
+    perfis: list[PerfilSessao] = Field(default_factory=list, description="Perfis de acesso ativos do usuário (diretos e pelos setores). **Todos valem juntos**: as ações se somam.")
     personificado_por: PersonificadorSessao | None = Field(
         None, description="Só na personificação: o SuperRoot real que está usando a sessão como este usuário (o frontend mostra a faixa \"Parar de personificar\").")
 
@@ -65,11 +64,6 @@ class PreferenciaTema(BaseModel):
     """Corpo do `PUT /api/autenticacao/tema`."""
 
     tema: Literal["claro", "escuro", "auto"] = Field(..., description="`claro`, `escuro` ou `auto` (segue o tema do sistema operacional).")
-
-
-class PedidoPerfilAtivo(BaseModel):
-    """Corpo do `POST /api/autenticacao/perfil-ativo`."""
-    perfil_id: int = Field(..., description="Perfil (ativo e do próprio usuário) que passa a valer na sessão.")
 
 
 class PedidoPersonificar(BaseModel):

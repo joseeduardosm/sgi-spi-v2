@@ -18,6 +18,8 @@
   --spi-superficie-ativa: var(--spi-vermelho-suave);
   --spi-sucesso: #1d6b43; --spi-sucesso-suave: #d4f0de;
   --spi-alerta: #9a6400; --spi-alerta-suave: #fdf1d8;
+  // Atenção: entre alerta e perigo (ex.: SLA em 75%). Contraste AA conferido: 4,93:1 no claro
+  --spi-atencao: #a34a00; --spi-atencao-suave: #fde6d3;
   --spi-perigo: #a91c28; --spi-perigo-suave: #fcecee;
   --spi-info: #1a56a0; --spi-info-suave: #dbeafe;
   --spi-fonte: 'Inter', Arial, Helvetica, sans-serif;
@@ -167,6 +169,7 @@
   --spi-superficie-alt: #171c23;
   --spi-sucesso: #6fd3a0; --spi-sucesso-suave: #173327;
   --spi-alerta: #f0c062; --spi-alerta-suave: #3a2e14;
+  --spi-atencao: #f5a362; --spi-atencao-suave: #3d2614;
   --spi-perigo: #f1959c; --spi-perigo-suave: #3a2226;
   --spi-info: #7fb0ee; --spi-info-suave: #1a2a40;
   --spi-sombra-flutuante: 0 12px 30px #0000004d;
@@ -322,6 +325,8 @@
     --spi-superficie-alt: #fafbfc;
     --spi-sucesso: #1d6b43; --spi-sucesso-suave: #d4f0de;
     --spi-alerta: #9a6400; --spi-alerta-suave: #fdf1d8;
+    // Atenção (laranja) também no tema claro da impressão
+    --spi-atencao: #a34a00; --spi-atencao-suave: #fde6d3;
     --spi-perigo: #a91c28; --spi-perigo-suave: #fcecee;
     --spi-info: #1a56a0; --spi-info-suave: #dbeafe;
     --spi-fundo: #f6f7f8;

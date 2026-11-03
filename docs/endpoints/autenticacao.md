@@ -97,20 +97,15 @@ Use sempre `AutenticacaoService.entrar()`, que grava a sessão e agenda a expira
 Retorna o `UsuarioSessao` do dono do token, com a situação do perfil recalculada. O frontend usa este endpoint para validar a sessão restaurada do navegador.
 
 - **Autorização:** Bearer.
-- **Resposta `200`:** `UsuarioSessao`, ver acima. Traz também `perfis` (`[{id, nome}]`, perfis ativos do usuário), `perfil_ativo` (`{id, nome}` ou nulo) e `personificado_por` (`{id, login, nome_completo}` ou nulo; preenchido quando um SuperRoot está personificando).
+- **Resposta `200`:** `UsuarioSessao`, ver acima. Traz também `perfis` (`[{id, nome}]`, perfis ativos do usuário, diretos e pelos setores; **todos valem juntos**) e `personificado_por` (`{id, login, nome_completo}` ou nulo; preenchido quando um SuperRoot está personificando).
 - **Erros:** `401` (`nao_autenticado`), com `detalhe` `Não autenticado.`, `Token inválido.`, `Sessão expirada.` ou `Usuário inválido ou inativo.`
 
 ---
 
-## `POST /api/autenticacao/perfil-ativo`
+## Perfil ativo (retirado)
 
-Troca o **perfil de acesso ativo** do usuário (só ele vale no cálculo do acesso; ver [acl.md](acl.md#perfis-de-acesso)). Devolve um token novo com o claim `pa`; o Angular guarda a sessão e **recarrega a aplicação em `/`** (zera acessos, atalhos e notificações).
-
-- **Autorização:** Bearer.
-- **Corpo:** `{"perfil_id": 3}`.
-- **Resposta `200`:** `RespostaToken` (como o login), com o `usuario` já no novo perfil.
-- **Erros:** `401` (`nao_autenticado`); `403` (`acesso_negado`) se o perfil não é do usuário ou está inativo.
-- **Auditoria:** `autenticacao.perfil_ativo`.
+O `POST /api/autenticacao/perfil-ativo` e o claim `pa` do token **deixaram de existir**: todos os perfis do usuário valem juntos (os direitos se
+somam; ver [acl.md](acl.md#perfis-de-acesso)), então não há perfil para escolher. Token antigo com `pa` continua válido; o claim é ignorado.
 
 ---
 

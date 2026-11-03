@@ -1,0 +1,168 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para dar o visual do painel de TV dos Chamados (só carrega quando o painel abre).
+
+/* ---------------------------------------------------------------------------------------------
+   Painel de TV (S14, "quadro de chamada"): leitura a 4–6 m. Na TV (modo-tv) o texto cresce com a tela;
+   dentro do sistema, o mesmo quadro em tamanho normal (com "Tela cheia").
+   --------------------------------------------------------------------------------------------- */
+.painel-tv {
+  --painel-corpo: 1rem;
+  --painel-numero: 2.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: var(--spi-fundo);
+  color: var(--spi-texto);
+  border: 1px solid var(--spi-borda);
+  border-radius: var(--spi-raio-g);
+  font-size: var(--painel-corpo);
+
+  /* Tamanho do texto (Parâmetros > Painel): em tela cheia ele acompanha a largura da TV */
+  &[data-tamanho='compacto'] { --painel-corpo: 0.875rem; --painel-numero: 1.75rem; }
+  &[data-tamanho='grande'] { --painel-corpo: 1.15rem; --painel-numero: 2.5rem; }
+
+  &:fullscreen {
+    --painel-corpo: clamp(1rem, 1.2vw, 1.75rem);
+    --painel-numero: clamp(2rem, 3.2vw, 4rem);
+    min-height: 100dvh;
+    padding: clamp(16px, 2vw, 40px);
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+  }
+  &:fullscreen[data-tamanho='compacto'] { --painel-corpo: clamp(0.875rem, 0.95vw, 1.4rem); --painel-numero: clamp(1.6rem, 2.4vw, 3rem); }
+  &:fullscreen[data-tamanho='grande'] { --painel-corpo: clamp(1.15rem, 1.6vw, 2.25rem); --painel-numero: clamp(2.5rem, 4vw, 5rem); }
+
+  /* No celular o texto volta ao tamanho normal */
+  @media (max-width: 720px) {
+    &, &:fullscreen { --painel-corpo: 1rem; --painel-numero: 2rem; }
+  }
+
+  /* Botão de tela cheia acompanha o tamanho do texto (fica legível na TV) */
+  .painel-tv-lado .acao-secundaria { height: auto; padding: 0.45em 1em; font-size: calc(var(--painel-corpo) * 0.65); }
+
+  /* Selos e sobretítulo crescem junto com o texto da TV (o padrão global é 12px) */
+  .selo-situacao { font-size: calc(var(--painel-corpo) * 0.65); padding: 0.25em 0.75em; }
+  .sobretitulo { font-size: calc(var(--painel-corpo) * 0.6); }
+}
+
+.painel-tv-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+
+  h1 { margin: 0; font-size: calc(var(--painel-corpo) * 1.6); font-weight: 800; }
+}
+
+.painel-tv-lado { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.painel-tv-relogio { font-size: calc(var(--painel-corpo) * 1.4); font-weight: 700; }
+
+.selo-situacao[data-conexao] { color: var(--spi-apagado); background: var(--spi-superficie-alt); }
+.selo-situacao[data-conexao='ao_vivo'] { color: var(--spi-sucesso); background: var(--spi-sucesso-suave); }
+.selo-situacao[data-conexao='reconectando'], .selo-situacao[data-conexao='parado'] { color: var(--spi-perigo); background: var(--spi-perigo-suave); }
+
+.painel-tv-indicadores {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+
+  > div {
+    padding: 12px 16px;
+    background: var(--spi-superficie);
+    border: 1px solid var(--spi-borda);
+    border-radius: var(--spi-raio-m);
+  }
+
+  dt { font-size: calc(var(--painel-corpo) * 0.75); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--spi-rotulo); }
+  dd { margin: 4px 0 0; font-size: var(--painel-numero); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  [data-destaque='atencao'] dd { color: var(--spi-atencao); }
+  [data-destaque='perigo'] dd { color: var(--spi-perigo); }
+  [data-destaque='sucesso'] dd { color: var(--spi-sucesso); }
+
+  @media (max-width: 720px) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.painel-tv-tabela {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+
+  th {
+    padding: 0.2em 0.85em;
+    text-align: left;
+    font-size: calc(var(--painel-corpo) * 0.7);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--spi-rotulo);
+  }
+
+  td {
+    padding: 0.5em 0.65em;
+    background: var(--spi-superficie);
+    border-top: 1px solid var(--spi-borda);
+    border-bottom: 1px solid var(--spi-borda);
+    vertical-align: middle;
+  }
+
+  td:first-child { border-left: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m) 0 0 var(--spi-raio-m); white-space: nowrap; }
+  td:last-child { border-right: 1px solid var(--spi-borda); border-radius: 0 var(--spi-raio-m) var(--spi-raio-m) 0; }
+
+  /* Linha inteira com o fundo suave do nível (texto escuro sobre fundo suave: ≥ 13:1 no tema claro) */
+  tr[data-nivel='alerta'] td { background: var(--spi-alerta-suave); }
+  tr[data-nivel='atencao'] td { background: var(--spi-atencao-suave); }
+  tr[data-nivel='perigo'] td { background: var(--spi-perigo-suave); }
+  tr[data-nivel='resolvido'] td { background: var(--spi-sucesso-suave); }
+
+  /* Chamado novo: entra uma vez (sem cascata) e fica com a borda vermelha SPI por alguns segundos */
+  tr.linha-nova td { border-color: var(--spi-vermelho); animation: mov-entra var(--mov-lento) var(--ease-entra) backwards; }
+
+  /* Celular: sai a abertura e o local (a espera já diz quanto tempo faz) para não rolar para o lado */
+  @media (max-width: 720px) {
+    th:nth-child(1), td:nth-child(1), th:nth-child(4), td:nth-child(4) { display: none; }
+    td:nth-child(2) { border-left: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m) 0 0 var(--spi-raio-m); }
+    td { padding: 8px; }
+  }
+}
+
+.painel-tv-numero { color: var(--spi-apagado); font-weight: 600; margin-right: 4px; }
+.painel-tv-responsavel { display: block; margin-top: 2px; color: var(--spi-apagado); font-size: calc(var(--painel-corpo) * 0.7); }
+
+.selo-situacao[data-painel] { color: var(--spi-info); background: var(--spi-info-suave); white-space: nowrap; }
+.selo-situacao[data-painel='sem'] { color: var(--spi-apagado); background: var(--spi-superficie-alt); }
+.selo-situacao[data-painel='alerta'] { color: var(--spi-alerta); background: var(--spi-superficie); }
+.selo-situacao[data-painel='atencao'] { color: var(--spi-atencao); background: var(--spi-superficie); }
+.selo-situacao[data-painel='perigo'] { color: var(--spi-perigo); background: var(--spi-superficie); }
+.selo-situacao[data-painel='resolvido'] { color: var(--spi-sucesso); background: var(--spi-superficie); }
+
+.painel-tv-vazio, .painel-tv-aviso {
+  margin: 0;
+  padding: 32px 16px;
+  text-align: center;
+  background: var(--spi-superficie);
+  border: 1px solid var(--spi-borda);
+  border-radius: var(--spi-raio-g);
+}
+
+.painel-tv-aviso { color: var(--spi-perigo); p { margin: 8px 0 0; color: var(--spi-texto); } }
+.painel-tv-paginas, .painel-tv-limites { margin: 0; color: var(--spi-apagado); font-size: calc(var(--painel-corpo) * 0.7); }
+.painel-tv-paginas { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 6px; }
+
+/* Linha clicável: abre o chamado (o título também é um link, para teclado e leitor de tela) */
+.painel-tv-tabela tr.linha-clicavel { cursor: pointer; }
+.painel-tv-tabela tr.linha-clicavel:hover td { border-color: var(--spi-vermelho); }
+.painel-tv-link { color: inherit; text-decoration: none; }
+.painel-tv-link:hover, .painel-tv-link:focus-visible { text-decoration: underline; }
+
+/* Cor só no selo (Parâmetros > Painel): a linha fica branca e o selo ganha o fundo suave da cor */
+.painel-tv.sem-cor-linha {
+  .painel-tv-tabela tr[data-nivel] td { background: var(--spi-superficie); }
+  .selo-situacao[data-painel='alerta'] { background: var(--spi-alerta-suave); }
+  .selo-situacao[data-painel='atencao'] { background: var(--spi-atencao-suave); }
+  .selo-situacao[data-painel='perigo'] { background: var(--spi-perigo-suave); }
+  .selo-situacao[data-painel='resolvido'] { background: var(--spi-sucesso-suave); }
+}

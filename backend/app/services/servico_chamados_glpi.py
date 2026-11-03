@@ -19,7 +19,7 @@ from app.core.banco import agora_utc
 from app.core.erros import ErroApi
 from app.models.integracao_glpi import ChamadoGlpi
 from app.models.usuario import Usuario
-from app.schemas.chamados import ChamadoAberto, DadosSolicitante, ListaChamados
+from app.schemas.chamados_glpi import ChamadoAberto, DadosSolicitante, ListaChamados
 from app.services import servico_integracao_glpi as integracao
 from app.services.glpi.cliente_glpi import ClienteGlpi, ErroGlpi
 from app.services.servico_anexos import FORMATOS_GERAIS

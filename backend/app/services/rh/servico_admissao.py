@@ -42,6 +42,9 @@ from app.services.contratacoes.conteudo import ErroConteudo, sanitizar, texto_do
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.rh import rh_mascara, servico_cargos, servico_historico, servico_modelos
 from app.services.rh.servico_pre_cadastro import so_digitos
+from app.services.chamados import rh as chamados_rh
+from app.services.chamados.parametros import ErroParametro as ErroParametroChamados
+from app.services.chamados.servico import ErroChamado
 from app.services.servico_auditoria import auditar
 from app.services.servico_smtp import SemServidorAtivo
 
@@ -172,6 +175,12 @@ def _resumo(sessao: Session, admissao: Admissao) -> dict:
                 setor_nome=sessao.get(Setor, cargo.setor_id).nome, status=admissao.status, etapa=etapa, etapa_rotulo=dict(ETAPAS)[etapa], atualizado_em=admissao.atualizado_em)
 
 
+def _links_dos_chamados(sessao: Session, admissao: Admissao) -> list[LinkChamado]:
+    """Chamados do módulo abertos por esta admissão (com o status de agora) ou, se ela foi pelo GLPI, os links guardados no envio."""
+    proprios = chamados_rh.chamados_da_admissao(sessao, admissao.id)
+    return [LinkChamado(**l) for l in (proprios or admissao.chamado_links or [])]
+
+
 def leitura(sessao: Session, admissao: Admissao) -> LeituraAdmissao:
     ficha, numero = _ficha(sessao, admissao), _numero(sessao, admissao)
     atual = etapa_atual(admissao)
@@ -188,7 +197,7 @@ def leitura(sessao: Session, admissao: Admissao) -> LeituraAdmissao:
         etapas.append(EtapaAdmissao(chave=chave, rotulo=rotulo, estado=estado, em=quando[chave]))
     return LeituraAdmissao(
         **_resumo(sessao, admissao), etapas=etapas, solicitacoes={k: bool((admissao.solicitacoes or {}).get(k)) for k in SOLICITACOES},
-        chamado_glpi_id=admissao.chamado_glpi_id, chamado_url=admissao.chamado_url, chamado_links=[LinkChamado(**l) for l in (admissao.chamado_links or [])], tem_foto=admissao.foto_anexo_id is not None, documentos=[_documento(d) for d in admissao.documentos],
+        chamado_glpi_id=admissao.chamado_glpi_id, chamado_url=admissao.chamado_url, chamado_links=_links_dos_chamados(sessao, admissao), chamados_destino=chamados_rh.destino(sessao), tem_foto=admissao.foto_anexo_id is not None, documentos=[_documento(d) for d in admissao.documentos],
         resolucao_html=admissao.resolucao_html, sem_numero=admissao.sem_numero, numero_protocolo_id=admissao.numero_protocolo_id, numero_protocolo=_rotulo_numero(numero), publicado_em=admissao.publicado_em,
         tem_publicacao=_anexo_da_publicacao(admissao, numero) is not None, email_enviado_em=admissao.email_enviado_em, email_erro=admissao.email_erro, email_destino=ficha.email_pessoal or None,
         posse_em=admissao.posse_em, termo_html=admissao.termo_html, concluida_em=admissao.concluida_em, conta_vinculada=ficha.usuario_id is not None, usuario_id=ficha.usuario_id,
@@ -451,6 +460,8 @@ def abrir_chamado(sessao: Session, admissao_id: int, solicitacoes: dict[str, boo
     desconhecidas = set(solicitacoes) - set(SOLICITACOES)
     if desconhecidas:
         raise ErroAdmissao("Serviço desconhecido no formulário: " + ", ".join(sorted(desconhecidas)) + ".")
+    if chamados_rh.destino(sessao) == "chamados":
+        return _abrir_no_modulo(sessao, admissao, ficha, solicitacoes, observacoes, autor, usuario_espelho)
     cliente, formulario_id = _cliente_formulario(sessao)
     try:
         with cliente as glpi:
@@ -470,6 +481,33 @@ def abrir_chamado(sessao: Session, admissao_id: int, solicitacoes: dict[str, boo
     achado = re.search(r"id=(\d+)", links[0]["url"]) if links else None
     admissao.chamado_glpi_id, admissao.chamado_url = (int(achado.group(1)) if achado else None), (links[0]["url"] if links else None)
     auditar(sessao, autor.login, "rh.admissao.chamado", ficha.nome_completo, f"formulário {formulario_id}; {len(links)} item(ns) criado(s)", autor_id=autor.id, dados={"admissao_id": admissao.id})
+    sessao.commit()
+    return leitura(sessao, admissao)
+
+
+def _abrir_no_modulo(sessao: Session, admissao: Admissao, ficha: PreCadastro, solicitacoes: dict[str, bool], observacoes: str, autor: Usuario,
+                     usuario_espelho: str) -> LeituraAdmissao:
+    """Depois da virada (Parâmetros dos Chamados > RH): um chamado por serviço pedido, no módulo Chamados, sem passar pelo GLPI."""
+    pedidos = {k: rotulo for k, rotulo in SOLICITACOES.items() if solicitacoes.get(k)}
+    if not pedidos:
+        raise ErroAdmissao("Marque pelo menos um serviço para pedir.")
+    cargo = sessao.get(Cargo, admissao.cargo_id)
+    dados = chamados_rh.DadosNomeacao(
+        nome=ficha.nome_completo, cargo=cargo.rotulo, lotacao=sessao.get(Setor, cargo.setor_id).nome,
+        inicio=ficha.inicio_previsto.strftime("%d/%m/%Y") if ficha.inicio_previsto else "", login_proposto=ficha.login_proposto or "",
+        usuario_espelho=usuario_espelho.strip(), observacoes=observacoes, cpf=ficha.cpf or "", rg=ficha.rg_numero or ficha.cin or "",
+        rs=ficha.rs_pv or "", email_pessoal=ficha.email_pessoal or "",
+    )
+    try:
+        criados = chamados_rh.abrir_nomeacao(sessao, admissao.id, pedidos, dados, autor)
+    except (ErroParametroChamados, ErroChamado) as erro:
+        sessao.rollback()
+        raise ErroAdmissao(str(erro), conflito=erro.status == 409) from erro
+    admissao.solicitacoes = {k: bool(solicitacoes.get(k)) for k in SOLICITACOES}
+    admissao.chamado_links, admissao.chamado_em = [], agora_utc()
+    admissao.chamado_glpi_id, admissao.chamado_url = None, f"/chamados/{criados[0].numero}"
+    auditar(sessao, autor.login, "rh.admissao.chamado", ficha.nome_completo, f"módulo Chamados; {len(criados)} chamado(s): "
+            + ", ".join(str(c.numero) for c in criados), autor_id=autor.id, dados={"admissao_id": admissao.id})
     sessao.commit()
     return leitura(sessao, admissao)
 

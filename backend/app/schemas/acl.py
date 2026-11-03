@@ -98,8 +98,8 @@ class AcessoEfetivo(BaseModel):
     url_base: str
     nivel: Nivel | None = Field(..., description="Nível efetivo; nulo = sem acesso.")
     niveis: NiveisTextos = Field(..., description=DESCRICAO_NIVEIS)
-    acoes: list[str] = Field(default_factory=list, description="Ações que o perfil ativo concede no módulo (independentes). O `nivel` mostrado é o maior entre o das regras e o da maior ação marcada, só para a interface decidir o que exibir; o backend confere a ação exata de cada rota.")
-    origens: dict[str, Nivel] = Field(default_factory=dict, description="De onde vem o nível: `perfil` (perfil ativo), `setor` e `direta`, cada um com o seu nível; o efetivo é o maior. Vazio: recurso aberto ou SuperRoot.")
+    acoes: list[str] = Field(default_factory=list, description="Ações que os perfis do usuário (somados) concedem no módulo (independentes). O `nivel` mostrado é o maior entre o das regras e o da maior ação marcada, só para a interface decidir o que exibir; o backend confere a ação exata de cada rota.")
+    origens: dict[str, Nivel] = Field(default_factory=dict, description="De onde vem o nível: `perfil` (a soma dos perfis), `setor` e `direta`, cada um com o seu nível; o efetivo é o maior. Vazio: recurso aberto ou SuperRoot.")
 
 
 # --- Perfis de acesso ---------------------------------------------------------------------------

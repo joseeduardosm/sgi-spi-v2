@@ -1,0 +1,75 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para dar o visual do rack (só carrega nas telas da rede).
+
+.rack {
+  --altura-u: 26px;
+  padding: 16px;
+  background: var(--spi-superficie);
+  border: 1px solid var(--spi-borda);
+  border-radius: var(--spi-raio-g);
+
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 12px;
+    h2 { margin: 0; font-size: var(--spi-texto-destaque); font-weight: 700; } small { color: var(--spi-apagado); } }
+
+  /* Cor do rack (do cadastro): a faixa da esquerda, com as cores do sistema */
+  border-left: 6px solid var(--cor-rack, var(--spi-texto));
+  &[data-cor='cinza'] { --cor-rack: var(--spi-apagado); }
+  &[data-cor='azul'] { --cor-rack: var(--spi-info); }
+  &[data-cor='verde'] { --cor-rack: var(--spi-sucesso); }
+  &[data-cor='amarelo'] { --cor-rack: var(--spi-alerta); }
+  &[data-cor='laranja'] { --cor-rack: var(--spi-atencao); }
+  &[data-cor='vermelho'] { --cor-rack: var(--spi-perigo); }
+}
+
+.rack-corpo {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  column-gap: 8px;
+  padding: 8px;
+  background: var(--spi-superficie-alt);
+  border: 1px solid var(--spi-borda);
+  border-radius: var(--spi-raio-m);
+}
+
+.rack-u {
+  grid-column: 1;
+  align-self: center;
+  font-family: var(--spi-fonte-mono);
+  font-size: var(--spi-texto-micro);
+  color: var(--spi-apagado);
+  text-align: right;
+}
+
+.rack-equipamento {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 1px 0;
+  padding: 0 10px;
+  color: var(--spi-texto);
+  text-decoration: none;
+  background: var(--spi-superficie);
+  border: 1px solid var(--spi-borda-campo);
+  border-radius: var(--spi-raio-p);
+
+  strong { font-size: var(--spi-texto-compacto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  small { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); white-space: nowrap; }
+  &:hover { border-color: var(--spi-vermelho); }
+  &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); border-color: var(--spi-vermelho); }
+}
+
+.rack-portas { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-size: var(--spi-texto-legenda); font-variant-numeric: tabular-nums;
+  .ponto-estado + .ponto-estado { margin-left: 0; } }
+
+.ponto-estado { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: var(--spi-raio-pilula);
+  &[data-estado='up'] { background: var(--spi-sucesso); } &[data-estado='down'] { background: var(--spi-perigo); } }
+
+.rack-sem-posicao { margin: 10px 0 0; color: var(--spi-apagado); font-size: var(--spi-texto-legenda); }
+
+@media (max-width: 520px) {
+  .rack-equipamento small { display: none; }
+}
+
+.rack-acoes { display: flex; justify-content: flex-end; margin-top: 10px; &:empty { display: none; } }

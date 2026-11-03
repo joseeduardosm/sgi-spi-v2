@@ -10,6 +10,8 @@ export interface OcupanteCargo { usuario_id: number; nome: string; login: string
 export interface Cargo {
   id: number; setor_id: number; setor_nome: string; tipo_id: number; tipo_codigo: string; grupo: number | null; nivel: number | null; denominacao: string;
   classificacao: string; rotulo: string; ativo: boolean; ocupante: OcupanteCargo | null;
+  /** Só na resposta de vagar: a ocupação encerrada (abre a tela da exoneração). */
+  ocupacao_encerrada_id?: number | null;
 }
 
 export interface GravacaoCargo {
@@ -41,4 +43,11 @@ export interface EventoHistorico { id: number; tipo: string; titulo: string; det
 
 export interface HistoricoUsuario {
   usuario_id: number; nome: string; login: string; cargo_atual: string; setor_atual: string; ocupacoes: OcupacaoHistorico[]; eventos: EventoHistorico[]; tipos: Record<string, string>;
+}
+
+/** Chamados da exoneração: o inverso da nomeação (desativar a rede, recolher o crachá...). */
+export interface LinkChamadoExoneracao { url: string; texto: string; chave: string | null; numero: number | null; status_nome: string | null; status_cor: string | null }
+export interface LeituraExoneracao {
+  ocupacao_id: number; usuario_id: number; nome: string; login: string; cargo_rotulo: string; setor_nome: string; fim: string | null; ato_fim: string;
+  destino: 'glpi' | 'chamados'; servicos: Record<string, string>; sugestao: Record<string, boolean>; sugestao_da_nomeacao: boolean; chamados: LinkChamadoExoneracao[];
 }

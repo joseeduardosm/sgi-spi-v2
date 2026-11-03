@@ -124,6 +124,16 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
         "MODIFICACAO": _n("Ser o Financeiro dos contratos", "Confere e salva a retenção de tributos das notas fiscais de qualquer contrato, recebe o aviso da nota fiscal por e-mail e a pendência da retenção e vê essas pendências no painel de Contratos."),
         "CONTROLE_TOTAL": _n("Ser o Financeiro dos contratos", "Igual a Modificação: o módulo ainda não tem parâmetros próprios."),
     },
+    "chamados": {
+        "LEITURA": _n("Abrir chamados", "Abre chamados e acompanha os seus (como solicitante, pelo setor em nome do qual pediu ou em cópia): responde, anexa, põe pessoas em cópia, diz que não resolveu e aprova quando pedem. Não vê a fila."),
+        "MODIFICACAO": _n("Atender chamados", "Além de abrir, vê a fila dos seus setores (e dos setores abaixo, se for líder), assume, responde (inclusive em privado), põe em pendente, cria tarefas, pede aprovação, troca responsável, setor, categoria e prioridade, e resolve."),
+        "CONTROLE_TOTAL": _n("Administrar os Chamados", "Faz tudo, vê os chamados de todos os setores, cuida dos Parâmetros (categorias, campos, SLAs, expedientes, status, recorrentes, setores de atendimento, respostas prontas, motivos de pendência, TVs do painel e chamados do RH) e recebe os avisos do painel de saúde. Sem nenhuma regra, o módulo fica fechado: só o SuperRoot entra."),
+    },
+    "rede": {
+        "LEITURA": _n("Ver o plano de face", "Vê os switches, patch panels, a face de cada um, a configuração das portas, as VLANs, o que está ligado em cada porta, os pontos de rede e os chamados de cada porta (só os que já vê nos Chamados). Não muda nada."),
+        "MODIFICACAO": _n("Editar portas e pontos", "Além de ver, configura as portas (descrição, access/trunk, VLANs, velocidade, status), liga e desliga conexões e cadastra, altera e exclui pontos de rede."),
+        "CONTROLE_TOTAL": _n("Administrar a rede", "Faz tudo e ainda cria, altera e exclui modelos de face, equipamentos (com a função na topologia e o IP de gerência) e VLANs, e ajusta o intervalo do ping dos equipamentos. Sem nenhuma regra, o módulo fica fechado: só o SuperRoot entra."),
+    },
     "reserva-espacos": {
         "LEITURA": _n("Solicitar reservas", "Vê a agenda, solicita reservas e altera ou cancela as próprias. Só isso: não aprova nada."),
         "MODIFICACAO": _n("Aprovar reservas", "Vê a fila, defere, indefere e cancela reservas de qualquer pessoa. Só isso: para também solicitar, marque \"Solicitar reservas\" junto."),

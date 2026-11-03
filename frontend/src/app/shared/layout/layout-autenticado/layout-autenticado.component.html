@@ -74,18 +74,11 @@
               @if (!usuario.perfil_restrito) {
                 <button type="button" role="menuitem" (click)="abrirAssinatura()"><app-icone nome="envelope" /> Assinatura de e-mail</button>
               }
-              <!-- Perfil de acesso: mostra o ativo e, com mais de um, permite alternar -->
-              @if (usuario.perfil_ativo) {
-                <div class="menu-usuario-perfis" role="group" aria-label="Perfil de acesso">
-                  <span>Perfil</span>
-                  @if ((usuario.perfis?.length ?? 0) > 1) {
-                    @for (perfil of usuario.perfis; track perfil.id) {
-                      <button type="button" role="menuitemradio" [attr.aria-checked]="perfil.id === usuario.perfil_ativo.id"
-                              [class.ativo]="perfil.id === usuario.perfil_ativo.id" (click)="trocarPerfil(perfil.id)">{{ perfil.nome }}</button>
-                    }
-                  } @else {
-                    <strong>{{ usuario.perfil_ativo.nome }}</strong>
-                  }
+              <!-- Perfis de acesso: só informativo. Todos valem juntos (os direitos se somam), não há perfil para escolher -->
+              @if (usuario.perfis?.length) {
+                <div class="menu-usuario-perfis" role="group" aria-label="Perfis de acesso">
+                  <span>{{ usuario.perfis!.length > 1 ? 'Perfis' : 'Perfil' }}</span>
+                  @for (perfil of usuario.perfis; track perfil.id) { <strong>{{ perfil.nome }}</strong> }
                 </div>
               }
               <!-- Tema da interface: fica salvo no navegador e na conta -->

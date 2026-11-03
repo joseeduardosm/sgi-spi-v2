@@ -1,0 +1,10 @@
+[Unit]
+Description=sgi-spi: Rede (ping) a cada 1min
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

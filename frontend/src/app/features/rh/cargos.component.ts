@@ -3,7 +3,7 @@
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 
 import { OpcaoUsuario } from '../../core/modelos/usuario.model';
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
@@ -228,6 +228,7 @@ export class CargosComponent implements OnInit {
   private readonly rh = inject(RhApiService);
   private readonly setoresApi = inject(SetoresApiService);
   private readonly dialogos = inject(DialogosService);
+  private readonly roteador = inject(Router);
   protected readonly usuarios = inject(UsuariosApiService);
 
   protected readonly motivos = Object.entries(ROTULOS_MOTIVO_FIM);
@@ -354,8 +355,10 @@ export class CargosComponent implements OnInit {
   }
 
   protected vagar(c: Cargo): void {
+    const exoneracao = this.motivo === 'exoneracao';
     this.api.vagar(c.id, this.fim, this.motivo, this.atoFim.trim()).subscribe({
-      next: () => { this.vagando.set(null); this.carregar(); },
+      // Exoneração: segue para os chamados de desligamento (o inverso da nomeação)
+      next: (r) => { this.vagando.set(null); if (exoneracao && r.ocupacao_encerrada_id) void this.roteador.navigate(['/rh/exoneracoes', r.ocupacao_encerrada_id]); else this.carregar(); },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível vagar o cargo'),
     });
   }

@@ -49,31 +49,19 @@ def test_soma_perfil_setor_e_direta(cliente, admin):
     assert efetivo["origens"] == {"perfil": "LEITURA", "setor": "MODIFICACAO"}
 
 
-def test_so_o_perfil_ativo_vale_e_troca_de_perfil(cliente, admin):
+def test_os_perfis_se_somam_sem_perfil_ativo(cliente, admin):
+    """Todos os perfis da pessoa valem juntos (diretos e pelo setor): vale a maior ação, sem trocar nada no menu."""
     ana = criar_usuario("ana")
     rid = _recurso(cliente, admin)
-    p1 = _perfil(cliente, admin, "A leitura", [(rid, "LEITURA")], [ana])
-    p2 = _perfil(cliente, admin, "B total", [(rid, "CONTROLE_TOTAL")], [ana])
-    # O padrão é o primeiro por nome
+    _perfil(cliente, admin, "A leitura", [(rid, "LEITURA")], [ana])
+    _perfil(cliente, admin, "B total", [(rid, "CONTROLE_TOTAL")], [ana])
     h = cabecalho(cliente, "ana")
     sessao = cliente.get("/api/autenticacao/sessao", headers=h).json()
-    assert [p["nome"] for p in sessao["perfis"]] == ["A leitura", "B total"]
-    assert sessao["perfil_ativo"]["id"] == p1
-    r = cliente.post("/api/autenticacao/perfil-ativo", json={"perfil_id": p2}, headers=h)
-    assert r.status_code == 200, r.text
-    h2 = {"Authorization": f"Bearer {r.json()['token_acesso']}"}
-    assert cliente.get("/api/autenticacao/sessao", headers=h2).json()["perfil_ativo"]["id"] == p2
-    niveis = {a["slug"]: a["nivel"] for a in cliente.get("/api/acl/meus-acessos", headers=h2).json()}
-    assert niveis["usuarios"] == "CONTROLE_TOTAL"
-
-
-def test_perfil_ativo_de_outro_usuario_e_recusado(cliente, admin):
-    ana, _ = criar_usuario("ana"), criar_usuario("bia")
-    rid = _recurso(cliente, admin)
-    outro = _perfil(cliente, admin, "Outro", [(rid, "LEITURA")], [])
-    _perfil(cliente, admin, "Meu", [(rid, "LEITURA")], [ana])
-    r = cliente.post("/api/autenticacao/perfil-ativo", json={"perfil_id": outro}, headers=cabecalho(cliente, "ana"))
-    assert r.status_code == 403
+    assert [p["nome"] for p in sessao["perfis"]] == ["A leitura", "B total"] and "perfil_ativo" not in sessao
+    assert {a["slug"]: a["nivel"] for a in cliente.get("/api/acl/meus-acessos", headers=h).json()}["usuarios"] == "CONTROLE_TOTAL"
+    assert cliente.get("/api/usuarios", headers=h).status_code == 200
+    # A troca de perfil ativo deixou de existir
+    assert cliente.post("/api/autenticacao/perfil-ativo", json={"perfil_id": 1}, headers=h).status_code in (404, 405)
 
 
 def test_administracao_de_perfis_so_superroot(cliente, admin):
@@ -128,7 +116,7 @@ def test_personificar_trocar_parar_e_auditar(cliente, admin):
     # Trocar de alvo durante a personificação é permitido (o autor real continua sendo o SuperRoot)
     assert cliente.post("/api/autenticacao/personificar", json={"usuario_id": ana}, headers=h).status_code == 200
     # Ação feita personificando é auditada com o autor real
-    cliente.post("/api/autenticacao/perfil-ativo", json={"perfil_id": 1}, headers=h)
+    assert cliente.post("/api/atalhos/categorias", json={"nome": "Feita personificando"}, headers=h).status_code == 201
     with FabricaSessao() as s:
         registros = list(s.scalars(select(RegistroAuditoria).where(RegistroAuditoria.personificado_por_id.is_not(None))))
     assert all("(por root)" in x.autor for x in registros)
@@ -193,7 +181,7 @@ def test_perfil_por_setor_membros_recebem_o_perfil_e_o_acesso(cliente, admin):
     perfis = cliente.get(f"/api/acl/usuarios/{ana}/perfis", headers=admin).json()
     assert perfis == [{"perfil_id": pid, "nome": "Consulta por setor", "ativo": True, "padrao": False, "via_setores": ["Financeiro"], "direto": False}]
     sessao = cliente.get("/api/autenticacao/sessao", headers=cabecalho(cliente, "ana")).json()
-    assert [p["id"] for p in sessao["perfis"]] == [pid] and sessao["perfil_ativo"]["id"] == pid
+    assert [p["id"] for p in sessao["perfis"]] == [pid]
     assert cliente.put(f"/api/acl/usuarios/{ana}/perfis", json={"perfis_ids": [], "padrao_id": None}, headers=admin).status_code == 200
     assert cliente.get("/api/usuarios", headers=cabecalho(cliente, "ana")).status_code == 200  # continua pelo setor
     # Quem sai do setor perde o perfil; tirar o setor do perfil também

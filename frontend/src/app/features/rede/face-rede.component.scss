@@ -1,0 +1,81 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para dar o visual da face do equipamento (só carrega nas telas da rede).
+
+.face { margin: 0 0 16px; }
+
+/* Equipamento largo (48 portas) rola dentro do quadro no celular, sem rolar a página */
+.face-rolagem { overflow-x: auto; padding-bottom: 4px; }
+
+.face-equipamento {
+  --tamanho-porta: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  background: var(--spi-superficie-alt);
+  border: 1px solid var(--spi-borda);
+  border-radius: var(--spi-raio-m);
+}
+
+.face-grade { display: grid; gap: 4px; }
+.face-extras { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 16px; border-left: 1px solid var(--spi-borda); }
+
+.porta-face {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--tamanho-porta);
+  height: var(--tamanho-porta);
+  font-family: var(--spi-fonte-mono);
+  font-size: var(--spi-texto-micro);
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid var(--spi-borda-campo);
+  border-radius: var(--spi-raio-p);
+
+  &.extra { width: auto; min-width: var(--tamanho-porta); padding: 0 6px; }
+  &[data-estado='up'] { color: var(--spi-superficie); background: var(--spi-sucesso); border-color: var(--spi-sucesso); }
+  &[data-estado='down'] { color: var(--spi-superficie); background: var(--spi-perigo); border-color: var(--spi-perigo); }
+  &[data-estado='sem'] { color: var(--spi-apagado); background: var(--spi-superficie); border-style: dashed; }
+  &:hover { box-shadow: 0 0 0 2px var(--spi-vermelho); }
+  &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); }
+}
+
+/* Chamado aberto na porta: bolinha âmbar no canto */
+.marca-chamado {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  background: var(--spi-alerta);
+  border: 2px solid var(--spi-superficie);
+  border-radius: var(--spi-raio-pilula);
+
+  &.legenda { position: static; display: inline-block; margin-right: 6px; vertical-align: middle; }
+}
+
+.face-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  color: var(--spi-apagado);
+  font-size: var(--spi-texto-legenda);
+}
+
+.amostra {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 3px;
+  border: 1px solid var(--spi-borda-campo);
+
+  &[data-estado='up'] { background: var(--spi-sucesso); border-color: var(--spi-sucesso); }
+  &[data-estado='down'] { background: var(--spi-perigo); border-color: var(--spi-perigo); }
+  &[data-estado='sem'] { background: var(--spi-superficie); border-style: dashed; }
+}
+
+.face-dica { margin-left: auto; }

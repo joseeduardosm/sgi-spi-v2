@@ -29,7 +29,7 @@ export const COMANDOS: readonly ComandoPaleta[] = [
   { id: 'reservar-espaco', rotulo: 'Reservar espaço', descricao: 'Nova reserva de sala ou espaço', palavras: ['reserva', 'sala', 'auditorio', 'novo'], rota: '/reserva-espacos/nova' },
   { id: 'novo-contrato', rotulo: 'Novo contrato', descricao: 'Cadastrar um contrato', palavras: ['criar', 'contrato', 'cadastrar'], acl: 'contratos', nivelAcl: 'MODIFICACAO', rota: '/contratos/novo' },
   { id: 'nova-empresa', rotulo: 'Nova empresa contratada', descricao: 'Cadastrar uma empresa', palavras: ['criar', 'empresa', 'fornecedor', 'cadastrar'], acl: 'contratos', nivelAcl: 'MODIFICACAO', rota: '/contratos/empresas/nova' },
-  { id: 'abrir-chamado', rotulo: 'Abrir chamado', descricao: 'Chamado no GLPI', palavras: ['chamado', 'glpi', 'ti', 'suporte', 'ajuda'], acl: 'abrir-chamado', acao: 'abrir-chamado' },
+  { id: 'abrir-chamado', rotulo: 'Abrir chamado', descricao: 'Chamado para a TI e as equipes de atendimento', palavras: ['chamado', 'glpi', 'ti', 'suporte', 'ajuda'], acl: 'abrir-chamado', acao: 'abrir-chamado' },
   { id: 'sugerir-melhoria', rotulo: 'Sugerir melhoria', descricao: 'Enviar uma sugestão sobre o sistema', palavras: ['melhoria', 'sugestao', 'ideia', 'problema'], acao: 'sugerir-melhoria' },
   { id: 'nova-notificacao', rotulo: 'Nova notificação', descricao: 'Enviar um comunicado aos colegas', palavras: ['notificacao', 'mensagem', 'aviso', 'comunicado', 'enviar'], rota: '/notificacoes?nova=1' },
   { id: 'alternar-tema', rotulo: 'Alternar tema claro/escuro', descricao: 'Muda a aparência do portal', palavras: ['tema', 'escuro', 'claro', 'aparencia', 'dark'], acao: 'alternar-tema' },

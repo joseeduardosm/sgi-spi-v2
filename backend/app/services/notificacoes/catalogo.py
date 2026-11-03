@@ -58,6 +58,18 @@ _MODULOS: list[tuple[str, str, list[tuple]]] = [
         ("portaria_nomeacao", "Nomeação em portaria (ciência)", "Você recebe quando é indicado em uma portaria de designação e precisa dar ciência."),
         ("portaria_dados_rh", "Dados do RH pendentes para uma nomeação", "O RH (CGP) recebe quando alguém indicado em uma portaria de designação está com RS/PV, RG/CIN ou cargo em branco."),
     ]),
+    ("chamados", "Chamados", [
+        ("novo", "Novo chamado para o seu setor", "Os membros do setor responsável recebem quando um chamado é aberto ou passa para o setor (o e-mail sai sempre, mesmo desmarcado)."),
+        ("setor_solicitante", "Chamado aberto em nome do seu setor", "Os membros do setor solicitante recebem na abertura e na solução (o e-mail sai sempre, mesmo desmarcado)."),
+        ("assumido", "Seu chamado está em atendimento", "O solicitante recebe quando alguém assume o chamado."),
+        ("acompanhamento", "Nova resposta no chamado", "O solicitante recebe quando a equipe responde; o responsável (ou o setor, se ninguém assumiu) recebe quando o solicitante responde."),
+        ("solucionado", "Chamado resolvido", "O solicitante recebe quando o chamado é resolvido."),
+        ("reaberto", "Chamado reaberto: não resolveu", "O responsável (ou o setor, se ninguém assumiu, também por e-mail) recebe quando o solicitante diz que não resolveu."),
+        ("sla_estourado", "Prazo de chamado estourado", "O setor responsável recebe quando ninguém agiu no prazo de atendimento; o responsável (ou o setor) recebe, também por e-mail, quando o prazo de solução estoura e o chamado vira Urgente."),
+        ("saude", "Algo parou nos Chamados", "Quem administra os Chamados recebe quando as tarefas automáticas param ou quando os e-mails deixam de sair (só pelo sino, que não depende do e-mail)."),
+        ("validacao_pedida", "Aprovação pedida a você", "Quem aprova (a pessoa ou os membros do setor) recebe quando a equipe pede aprovação num chamado (o e-mail sai sempre)."),
+        ("resumo_lider", "Resumo diário do seu setor (líder)", "O líder do setor recebe, no começo de cada dia útil, um e-mail só com a lista dos chamados em aberto em que o setor é o responsável. Sem chamado aberto, não recebe nada.", (CANAL_EMAIL,)),
+    ]),
     ("tarefas", "Tarefas", [
         ("atribuida", "Tarefa atribuída a você", "Você recebe quando uma tarefa é criada para você, quando entra como responsável ou quando ela é transferida a você."),
         ("prazo_alterado", "Prazo alterado", "Os envolvidos recebem quando o prazo de uma tarefa muda."),

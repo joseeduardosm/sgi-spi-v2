@@ -139,8 +139,8 @@ Cálculo do nível efetivo:
 1. SuperRoot → `CONTROLE_TOTAL`.
 2. Recurso não cadastrado, inativo ou **sem regras** → `CONTROLE_TOTAL` para qualquer usuário autenticado (política aberta).
 3. A partir da **primeira regra ou do primeiro direito de perfil**, o recurso vira **lista positiva**: só quem estiver contemplado tem acesso.
-4. **Soma:** o nível é o **maior** entre o **perfil ativo** do usuário, as regras dos **setores** dele e as regras **diretas** (a regra direta deixou de prevalecer sobre a do setor). Ver [perfis de acesso](endpoints/acl.md#perfis-de-acesso).
-5. Nenhuma origem aplicável (nem perfil ativo, nem setor, nem regra direta) → sem acesso.
+4. **Soma:** o nível é o **maior** entre **todos os perfis** do usuário (diretos e pelos setores; os direitos se somam), as regras dos **setores** dele e as regras **diretas** (a regra direta deixou de prevalecer sobre a do setor). Ver [perfis de acesso](endpoints/acl.md#perfis-de-acesso).
+5. Nenhuma origem aplicável (nem perfil, nem setor, nem regra direta) → sem acesso.
 
 No backend, o endpoint declara o nível mínimo com `exigir_acl`, que é verificado antes da execução:
 

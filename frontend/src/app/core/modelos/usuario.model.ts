@@ -37,7 +37,6 @@ export interface Usuario {
   tema?: 'claro' | 'escuro' | 'auto';
   /** Perfis ativos do usuário (para alternar no menu do usuário) e o que vale agora. */
   perfis?: PerfilSessao[];
-  perfil_ativo?: PerfilSessao | null;
   /** Preenchido quando um SuperRoot está personificando este usuário. */
   personificado_por?: PersonificadorSessao | null;
 }

@@ -40,3 +40,24 @@ export const guardaPainelExecutivo: CanActivateFn = () => {
   const verificar = () => (acesso.painelExecutivo() ? true : roteador.createUrlTree(['/'], { queryParams: { acesso: 'negado' } }));
   return acesso.carregado() ? of(verificar()) : acesso.carregar().pipe(map(verificar));
 };
+
+/**
+ * Chamados: o papel exigido vem de `data.papelChamados` (`abrir`, `atender` ou `administrar`; padrão `abrir`).
+ * A API decide quem tem papel (sem regras na ACL, o módulo é fechado: só o SuperRoot).
+ */
+export const guardaChamados: CanActivateFn = (rota) => {
+  const acesso = inject(AcessoService);
+  const roteador = inject(Router);
+  const papel = (rota.data['papelChamados'] ?? 'abrir') as 'abrir' | 'atender' | 'administrar';
+  const verificar = () => (acesso.chamados()?.[papel] ? true : roteador.createUrlTree(['/'], { queryParams: { acesso: 'negado' } }));
+  return acesso.carregado() ? of(verificar()) : acesso.carregar().pipe(map(verificar));
+};
+
+/** Plano de face da rede: exige o papel da rota (`data.papelRede`: `ver`, `editar` ou `administrar`; padrão `ver`). */
+export const guardaRede: CanActivateFn = (rota) => {
+  const acesso = inject(AcessoService);
+  const roteador = inject(Router);
+  const papel = (rota.data['papelRede'] ?? 'ver') as 'ver' | 'editar' | 'administrar';
+  const verificar = () => (acesso.rede()?.[papel] ? true : roteador.createUrlTree(['/'], { queryParams: { acesso: 'negado' } }));
+  return acesso.carregado() ? of(verificar()) : acesso.carregar().pipe(map(verificar));
+};

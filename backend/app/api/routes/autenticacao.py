@@ -20,7 +20,7 @@ from app.api.respostas import INVALIDO, VALIDACAO, erro_regra
 from app.core.banco import obter_sessao
 from app.core.erros import ErroApi
 from app.models.usuario import Usuario
-from app.schemas.autenticacao import PedidoPerfilAtivo, PedidoPersonificar, PreferenciaTema, RequisicaoLogin, RespostaToken, UsuarioSessao
+from app.schemas.autenticacao import PedidoPersonificar, PreferenciaTema, RequisicaoLogin, RespostaToken, UsuarioSessao
 from app.schemas.comum import RespostaErro
 from app.schemas.usuarios import OpcaoUsuario, PerfilLeitura, RevisaoPerfil
 from app.schemas.setores import OpcaoDepartamento
@@ -71,30 +71,6 @@ def obter_sessao_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) ->
 def _inicio_da_sessao(declaracoes: dict) -> datetime:
     """Quando a sessão começou (o novo token preserva, para o limite de duração da sessão continuar valendo)."""
     return datetime.fromtimestamp(declaracoes.get("ini", declaracoes["iat"]), UTC)
-
-
-@roteador.post(
-    "/perfil-ativo",
-    response_model=RespostaToken,
-    summary="Trocar o perfil ativo",
-    description=(
-        "Troca o perfil de acesso que vale nesta sessão e devolve um **token novo** (claim `pa`); o frontend guarda o token e recarrega o aplicativo. "
-        "O perfil precisa ser **ativo** e do próprio usuário (`403 acesso_negado` caso contrário). Na personificação, vale para o usuário personificado."
-    ),
-    responses=NAO_AUTENTICADO,
-)
-def trocar_perfil_ativo(
-    dados: PedidoPerfilAtivo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_autenticado),
-    declaracoes: dict = Depends(obter_declaracoes),
-) -> RespostaToken:
-    """Valida que o perfil é do usuário e emite o token com o perfil escolhido."""
-    perfil = next((p for p in servico_acl.perfis_do_usuario(sessao, usuario.id) if p.id == dados.perfil_id), None)
-    if perfil is None:
-        raise ErroApi(status.HTTP_403_FORBIDDEN, "Este perfil não é seu (ou está inativo).", "acesso_negado")
-    servico_auditoria.auditar(sessao, usuario.login, "autenticacao.perfil_ativo", f"Perfil {perfil.nome}", autor_id=usuario.id, alvo_tipo="perfil", alvo_id=str(perfil.id))
-    sessao.commit()
-    return ServicoAutenticacao(sessao).emitir_token(
-        usuario, perfil_ativo_id=perfil.id, personificado_por_id=declaracoes.get("imp"), inicio_sessao=_inicio_da_sessao(declaracoes))
 
 
 @roteador.post(

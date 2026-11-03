@@ -10,6 +10,7 @@ import { classeMarcador } from '../tarefas/marcadores.paleta';
 import { CabecalhoPatrimonioComponent } from './cabecalho-patrimonio.component';
 import { montarChapa, separarChapa } from './chapa-prefixo';
 import { LeitorCodigoComponent } from './leitor-codigo.component';
+import { RedeDoBemComponent } from '../rede/rede-do-bem.component';
 import { PatrimonioApiService } from './patrimonio-api.service';
 import { PatrimonioEstadoService } from './patrimonio-estado.service';
 import { Bem, COR_SITUACAO, DadosBem, Evento, ROTULOS_CONSERVACAO, ROTULOS_GARANTIA, ROTULOS_SITUACAO, rotuloCategoria } from './patrimonio.models';
@@ -32,7 +33,7 @@ const CAMPOS_EDITAVEIS = ['chapa', 'descricao', 'conservacao', 'situacao', 'orig
 /** `/patrimonio/bens/:bemId`. */
 @Component({
   selector: 'app-detalhe-bem',
-  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoPatrimonioComponent, SeletorSalaComponent, LeitorCodigoComponent],
+  imports: [EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoPatrimonioComponent, SeletorSalaComponent, LeitorCodigoComponent, RedeDoBemComponent],
   template: `
     <app-cabecalho-patrimonio [titulo]="bem() ? 'Bem ' + bem()!.rotulo : 'Bem'" [descricao]="bem()?.descricao ?? ''" />
     @if (bem(); as b) {
@@ -172,6 +173,9 @@ const CAMPOS_EDITAVEIS = ['chapa', 'descricao', 'conservacao', 'situacao', 'orig
               </div>
             }
           }
+
+          <!-- Rede: em qual switch e porta o bem está ligado (só para quem tem acesso à Rede) -->
+          <app-rede-do-bem [bemId]="b.id" />
 
           <h3 class="pat-subtitulo">Fotos ({{ b.fotos.length }}/3)</h3>
           <div class="pat-fotos">

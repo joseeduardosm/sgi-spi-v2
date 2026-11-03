@@ -160,7 +160,7 @@ interface LinhaGlosa {
           <div><span>Ocorrências</span><strong>{{ dd.ocorrencias.length }}</strong></div>
           <div [class.perigo]="contar('glosa') > 0"><span>Com glosa</span><strong>{{ contar('glosa') }}</strong></div>
           <div [class.alerta]="contar('impacto') > 0"><span>Impactam a avaliação</span><strong>{{ contar('impacto') }}</strong></div>
-          <div [class.alerta]="contar('email') > 0"><span>E-mail pendente</span><strong>{{ contar('email') }}</strong></div>
+          <div [class.alerta]="contar('email') > 0"><span>E-mail com falha</span><strong>{{ contar('email') }}</strong></div>
         </div>
         <div class="chips-filtro filtros-diario" role="group" aria-label="Filtrar ocorrências">
           @for (f of filtros; track f.chave) {
@@ -210,8 +210,14 @@ interface LinhaGlosa {
                     }
                   </div>
                   <div class="email-diario">
-                    @if (o.email.enviado_em === null) {
+                    @if (enviando(o)) {
                       <small>Enviando e-mail…</small>
+                    } @else if (o.email.enviado_em === null) {
+                      <!-- Registrada sem marcar "Enviar e-mail": não é pendência; dá para enviar depois, se quiser -->
+                      <small>Sem e-mail (não foi pedido no registro)</small>
+                      @if (diario()?.pode_registrar) {
+                        <button type="button" class="acao-secundaria acao-pequena" [class.carregando]="reenviando() === o.id" [disabled]="reenviando() === o.id" (click)="reenviar(o)">Enviar e-mail</button>
+                      }
                     } @else if (o.email.ok) {
                       <small [title]="o.email.destinatarios.join(', ')">✓ E-mail enviado a {{ o.email.destinatarios.length }} destinatário(s)</small>
                     } @else {
@@ -246,6 +252,7 @@ export class AbaDiarioComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   private readonly rascunhos = inject(RascunhoService);
   private readonly destruir = inject(DestroyRef);
+  private proximaConsulta?: ReturnType<typeof setTimeout>;
 
   protected readonly diario = signal<DiarioContrato | null>(null);
   protected readonly salvando = signal(false);
@@ -282,7 +289,7 @@ export class AbaDiarioComponent implements OnInit {
   protected readonly filtro = signal<'todas' | 'glosa' | 'impacto' | 'email' | 'minhas'>('todas');
   protected readonly filtros: { chave: 'todas' | 'glosa' | 'impacto' | 'email' | 'minhas'; rotulo: string }[] = [
     { chave: 'todas', rotulo: 'Todas' }, { chave: 'glosa', rotulo: 'Com glosa' }, { chave: 'impacto', rotulo: 'Impactam a avaliação' },
-    { chave: 'email', rotulo: 'E-mail pendente' }, { chave: 'minhas', rotulo: 'Minhas' },
+    { chave: 'email', rotulo: 'E-mail com falha' }, { chave: 'minhas', rotulo: 'Minhas' },
   ];
   /** Formulário "Nova ocorrência" (nasce fechado) e quantas ocorrências mostrar (carrega de 20 em 20). */
   protected readonly formularioAberto = signal(false);
@@ -342,16 +349,29 @@ export class AbaDiarioComponent implements OnInit {
 
   protected atende(o: OcorrenciaDiario, f: string): boolean {
     return f === 'todas' || (f === 'glosa' && o.possui_glosa) || (f === 'impacto' && o.impacta_avaliacao)
-      || (f === 'email' && (o.email.enviado_em === null || !o.email.ok)) || (f === 'minhas' && o.registrada_por_id === this.usuarioId());
+      // Só conta a falha de envio: ocorrência registrada sem "Enviar e-mail" não tem nada pendente
+      || (f === 'email' && o.email.ok === false) || (f === 'minhas' && o.registrada_por_id === this.usuarioId());
   }
   protected contar(f: string): number {
     return (this.diario()?.ocorrencias ?? []).filter((o) => this.atende(o, f)).length;
   }
 
+  /**
+   * Envio em segundo plano ainda sem resultado: registrada há menos de 2 minutos e sem envio gravado. Depois disso, sem envio quer dizer
+   * que "Enviar e-mail" não foi marcado (antes, essas ocorrências faziam a tela consultar a API a cada 2,5 s para sempre).
+   */
+  protected enviando(o: OcorrenciaDiario): boolean {
+    return o.email.enviado_em === null && !this.semEmailPedido.has(o.id) && Date.now() - new Date(o.criado_em).getTime() < 2 * 60_000;
+  }
+
+  /** Ocorrências registradas nesta tela sem "Enviar e-mail". */
+  private readonly semEmailPedido = new Set<string>();
+
   /** Há envio em segundo plano ainda sem resultado: a lista é consultada de novo em instantes. */
-  private readonly aguardandoEnvio = computed(() => this.diario()?.ocorrencias.some((o) => o.email.enviado_em === null) ?? false);
+  private readonly aguardandoEnvio = computed(() => this.diario()?.ocorrencias.some((o) => this.enviando(o)) ?? false);
 
   ngOnInit(): void {
+    this.destruir.onDestroy(() => clearTimeout(this.proximaConsulta));
     this.carregar();
     this.restaurarRascunho();
     // Guarda o que está sendo digitado; formulário vazio (ou fechado sem nada) apaga o rascunho
@@ -435,7 +455,10 @@ export class AbaDiarioComponent implements OnInit {
       next: (d) => {
         this.diario.set(d);
         if (!this.competenciaEscolhida) this.sugerirCompetencia();
-        if (this.aguardandoEnvio()) setTimeout(() => this.carregar(), 2500);
+        // Consulta de novo enquanto há envio em andamento; o temporizador morre com a tela (antes seguia rodando depois de sair e
+        // chegava sem login à API, mostrando "Não autenticado")
+        clearTimeout(this.proximaConsulta);
+        if (this.aguardandoEnvio()) this.proximaConsulta = setTimeout(() => this.carregar(), 2500);
       },
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar o diário de bordo'),
     });
@@ -508,7 +531,9 @@ export class AbaDiarioComponent implements OnInit {
     this.api
       .registrarOcorrencia(this.contratoId(), dados, this.arquivos())
       .subscribe({
-        next: () => {
+        next: (nova) => {
+          // Sem "Enviar e-mail": não há envio a esperar (a tela não mostra "Enviando…" nem consulta de novo)
+          if (!dados.enviar_email) this.semEmailPedido.add(nova.id);
           this.salvando.set(false);
           this.limparFormulario();
           // Registrada de verdade: o rascunho não serve mais (a vigilância o apagaria em 2 s; apaga já para não restaurar por engano)

@@ -91,6 +91,13 @@ export const ROTAS_RH: Routes = [
     loadComponent: () => import('./admissoes.component').then((m) => m.AdmissoesComponent),
   },
   {
+    path: 'exoneracoes/:id',
+    title: 'Exoneração | SGI SPI',
+    canActivate: [guardaAcl],
+    data: { acl: 'rh' },
+    loadComponent: () => import('./exoneracao.component').then((m) => m.ExoneracaoComponent),
+  },
+  {
     path: 'admissoes/:id',
     title: 'Admissão | SGI SPI',
     canActivate: [guardaAcl],

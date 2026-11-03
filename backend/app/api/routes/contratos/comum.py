@@ -57,7 +57,7 @@ controle_total = exigir_acl(RECURSO, NivelAcl.CONTROLE_TOTAL)
 def pode_lancar_ob(
     request: Request, usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)
 ) -> Usuario:
-    """Quem pode anexar a OB: quem já edita o contrato (`pode_modificar`) **ou** quem tem a ação própria "Lançar ordem bancária" no perfil ativo.
+    """Quem pode anexar a OB: quem já edita o contrato (`pode_modificar`) **ou** quem tem a ação própria "Lançar ordem bancária" em algum perfil.
 
     A ação própria vale em qualquer contrato e **só** para a OB (não dá nenhum outro poder sobre o contrato).
     """

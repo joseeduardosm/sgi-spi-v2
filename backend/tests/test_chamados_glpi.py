@@ -12,7 +12,7 @@ from tests.conftest import cabecalho, criar_usuario
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
 CONFIG = "/api/integracao-glpi"
-CHAMADOS = "/api/chamados"
+CHAMADOS = "/api/chamados-glpi"
 
 
 def abrir_chamado(cliente, h, assunto, descricao, arquivos=()):

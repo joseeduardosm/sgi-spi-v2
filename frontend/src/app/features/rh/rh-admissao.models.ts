@@ -17,7 +17,7 @@ export interface ResumoAdmissao {
 }
 
 export interface LeituraAdmissao extends ResumoAdmissao {
-  etapas: EtapaAdmissao[]; solicitacoes: Record<string, boolean>; chamado_glpi_id: number | null; chamado_url: string | null; chamado_links: { url: string; texto: string }[]; tem_foto: boolean; documentos: DocumentoAdmissao[];
+  etapas: EtapaAdmissao[]; solicitacoes: Record<string, boolean>; chamado_glpi_id: number | null; chamado_url: string | null; chamado_links: LinkChamadoAdmissao[]; chamados_destino?: 'glpi' | 'chamados'; tem_foto: boolean; documentos: DocumentoAdmissao[];
   resolucao_html: string | null; sem_numero: boolean; numero_protocolo_id: string | null; numero_protocolo: string | null; publicado_em: string | null; tem_publicacao: boolean;
   email_enviado_em: string | null; email_erro: string | null; email_destino: string | null; posse_em: string | null; termo_html: string | null; concluida_em: string | null;
   conta_vinculada: boolean; usuario_id: number | null;
@@ -44,3 +44,6 @@ export interface Bio { bio_texto: string; bio_visivel: boolean }
 
 /** Texto da resolução já preenchido, para colar no SEI: formatado e simples. */
 export interface TextoParaCopiar { html: string; texto: string }
+
+/** Chamado aberto pela Nomeação. Pelo GLPI: só `url` e `texto`. Pelo módulo Chamados: também o serviço, o número e o status de agora. */
+export interface LinkChamadoAdmissao { url: string; texto: string; chave?: string | null; numero?: number | null; status_nome?: string | null; status_cor?: string | null }

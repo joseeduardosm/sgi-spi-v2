@@ -3,9 +3,11 @@
 
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../environments/ambiente';
+import { AcessoService } from '../acesso/acesso.service';
 
 /** Dados do cadastro do usuário que vão no chamado (`DadosSolicitante` da API). */
 export interface DadosSolicitante {
@@ -34,12 +36,20 @@ export interface ChamadoAberto {
 @Injectable({ providedIn: 'root' })
 export class ChamadoService {
   private readonly http = inject(HttpClient);
-  private readonly base = `${ambiente.urlApi}/chamados`;
+  private readonly base = `${ambiente.urlApi}/chamados-glpi`;
 
   /** O modal está aberto? (a barra lateral abre; o modal fecha) */
   readonly modalAberto = signal(false);
 
+  private readonly acesso = inject(AcessoService);
+  private readonly router = inject(Router);
+
+  /** "Abrir Chamado": a partir da data marcada nos Parâmetros (ou antes, para quem administra) vai para a abertura no SGI; senão, modal do GLPI. */
   abrirModal(): void {
+    if (this.acesso.abreNoSgi()) {
+      void this.router.navigate(['/chamados']);
+      return;
+    }
     this.modalAberto.set(true);
   }
 

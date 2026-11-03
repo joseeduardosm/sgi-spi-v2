@@ -1,0 +1,388 @@
+{
+ "v01-atalhos": [
+  {
+   "n": 1,
+   "texto": "Meus chamados: tudo o que você pediu (ou que foi pedido em nome do seu setor)"
+  },
+  {
+   "n": 2,
+   "texto": "Minhas aprovações: quando alguém precisa do seu \"de acordo\""
+  },
+  {
+   "n": 3,
+   "texto": "Abrir chamado: começa um pedido novo"
+  }
+ ],
+ "a01-catalogo": [
+  {
+   "n": 1,
+   "texto": "Busca: digite o que está acontecendo (\"impressora\", \"senha\", \"ar\") para achar a categoria"
+  },
+  {
+   "n": 2,
+   "texto": "Cada cartão é um tipo de pedido; clique no que mais se parece com o seu"
+  }
+ ],
+ "a02-formulario": [
+  {
+   "n": 1,
+   "texto": "A categoria escolhida (\"Trocar\" volta ao catálogo)"
+  },
+  {
+   "n": 2,
+   "texto": "Título curto: o que está acontecendo, em poucas palavras"
+  },
+  {
+   "n": 3,
+   "texto": "Descrição: conte os detalhes; dá para colar print da tela aqui"
+  },
+  {
+   "n": 4,
+   "texto": "Onde é o problema: a sala (o SGI já sugere a sua, pelo Patrimônio; dá para buscar outra)"
+  },
+  {
+   "n": 5,
+   "texto": "Isso está impedindo você de trabalhar? \"Sim\" sobe a prioridade"
+  }
+ ],
+ "m01-meus": [
+  {
+   "n": 1,
+   "texto": "Filtros: abertos, aguardando você (a equipe perguntou algo), resolvidos e todos"
+  },
+  {
+   "n": 2,
+   "texto": "Situação de cada pedido"
+  },
+  {
+   "n": 3,
+   "texto": "Clique no título da coluna para ordenar"
+  }
+ ],
+ "m02-conversa": [
+  {
+   "n": 1,
+   "texto": "Andamento: tudo o que aconteceu, em ordem"
+  },
+  {
+   "n": 2,
+   "texto": "A resposta da equipe (você também recebe aviso no sino e por e-mail)"
+  },
+  {
+   "n": 3,
+   "texto": "Escreva aqui para responder; anexos são aceitos"
+  }
+ ],
+ "m03-nota": [
+  {
+   "n": 1,
+   "texto": "Um clique dá a nota do atendimento, de Péssimo a Ótimo. Depois, se quiser, escreva um comentário"
+  }
+ ],
+ "m04-nao-resolveu": [
+  {
+   "n": 1,
+   "texto": "Conte o que continua sem resolver"
+  },
+  {
+   "n": 2,
+   "texto": "\"Não resolveu\" devolve o chamado para a equipe, com prazo novo"
+  }
+ ],
+ "m05-aprovacoes": [
+  {
+   "n": 1,
+   "texto": "O chamado que espera o seu \"de acordo\": clique para abrir e responder"
+  }
+ ],
+ "m06-responder-aprovacao": [
+  {
+   "n": 1,
+   "texto": "Resposta (obrigatória para não aprovar)"
+  },
+  {
+   "n": 2,
+   "texto": "Aprovar: o atendimento segue"
+  },
+  {
+   "n": 3,
+   "texto": "Não aprovar: quem pediu é avisado com o seu motivo"
+  }
+ ],
+ "f01-fila": [
+  {
+   "n": 1,
+   "texto": "Filtros: abertos, meus, do meu setor, novos, sem responsável, resolvidos e todos"
+  },
+  {
+   "n": 2,
+   "texto": "Prazo de solução: a cor muda com o tempo gasto (amarelo 50%, laranja 75%, vermelho 90%) e sempre vem com o texto"
+  },
+  {
+   "n": 3,
+   "texto": "Clique no chamado para abrir. A fila se atualiza sozinha quando chega um chamado novo"
+  }
+ ],
+ "f02-assumir": [
+  {
+   "n": 1,
+   "texto": "Assumir: o chamado passa a ser seu e o prazo de atendimento é cumprido"
+  },
+  {
+   "n": 2,
+   "texto": "Prazos de atendimento e de solução, com a cor e a porcentagem do tempo gasto"
+  }
+ ],
+ "f03-responder": [
+  {
+   "n": 1,
+   "texto": "Resposta pronta: insere um texto padrão (cadastrado nos Parâmetros), que você pode ajustar"
+  },
+  {
+   "n": 2,
+   "texto": "O texto da resposta"
+  },
+  {
+   "n": 3,
+   "texto": "Mensagem privada: só a equipe que atende vê (anotações internas)"
+  }
+ ],
+ "f04-pendente": [
+  {
+   "n": 1,
+   "texto": "Motivo padronizado (lista dos Parâmetros)"
+  },
+  {
+   "n": 2,
+   "texto": "Ou escreva o que falta: o solicitante é avisado e o prazo de solução para de contar"
+  }
+ ],
+ "f05-resolver": [
+  {
+   "n": 1,
+   "texto": "A aba Resolver troca a resposta pela solução"
+  },
+  {
+   "n": 2,
+   "texto": "Escreva o que foi feito: o solicitante é avisado, dá a nota e ainda pode dizer \"Não resolveu\" por alguns dias úteis"
+  }
+ ],
+ "p01-painel": [
+  {
+   "n": 1,
+   "texto": "O seu setor: o painel mostra os chamados em que ele é o setor responsável"
+  },
+  {
+   "n": 2,
+   "texto": "Números do momento: abertos, sem responsável, prazo estourado e resolvidos hoje"
+  },
+  {
+   "n": 3,
+   "texto": "Sempre pela cor: os vermelhos primeiro, depois os laranjas, os amarelos e os brancos. Clique na linha para abrir o chamado"
+  },
+  {
+   "n": 4,
+   "texto": "Troca de página na mão (ou pelas setas ← → do teclado); sozinho, ele troca a cada poucos segundos"
+  },
+  {
+   "n": 5,
+   "texto": "Tela cheia, para deixar numa TV"
+  }
+ ],
+ "r01-relatorios": [
+  {
+   "n": 1,
+   "texto": "Período: 7, 30, 90 dias, último ano ou personalizado"
+  },
+  {
+   "n": 2,
+   "texto": "Um setor (e os de baixo) ou todos os que você atende"
+  },
+  {
+   "n": 3,
+   "texto": "Prazos cumpridos e a nota média dos solicitantes"
+  }
+ ],
+ "c01-categorias": [
+  {
+   "n": 1,
+   "texto": "Uma aba para cada assunto da configuração"
+  },
+  {
+   "n": 2,
+   "texto": "Cria uma categoria (ou subcategoria, escolhendo a categoria-mãe): setor responsável, prazos e prioridade"
+  },
+  {
+   "n": 3,
+   "texto": "A árvore de categorias; a subcategoria herda o setor e os prazos da mãe quando ficam em branco"
+  }
+ ],
+ "c02-slas": [
+  {
+   "n": 1,
+   "texto": "Prazo de atendimento (até alguém assumir) ou de solução, em minutos, horas ou dias úteis do expediente"
+  }
+ ],
+ "c03-expedientes": [
+  {
+   "n": 1,
+   "texto": "Os horários de trabalho que contam no prazo; feriados vêm do calendário do RH"
+  }
+ ],
+ "c04-status": [
+  {
+   "n": 1,
+   "texto": "Nome e cor de cada situação, e os sub-status (ex.: \"Aguardando peça\")"
+  }
+ ],
+ "c05-recorrentes": [
+  {
+   "n": 1,
+   "texto": "Chamado que se abre sozinho a cada período (ex.: conferir os backups todo dia útil)"
+  },
+  {
+   "n": 2,
+   "texto": "Próxima ocorrência e a última gerada"
+  }
+ ],
+ "c06-respostas": [
+  {
+   "n": 1,
+   "texto": "Título que aparece na lista de quem atende"
+  },
+  {
+   "n": 2,
+   "texto": "Sem setor, vale para todos; com setor, só para quem atende aquele setor"
+  }
+ ],
+ "c07-motivos": [
+  {
+   "n": 1,
+   "texto": "Motivos para escolher ao pôr um chamado em pendente"
+  }
+ ],
+ "c08-rh": [
+  {
+   "n": 1,
+   "texto": "Para onde vão os chamados do RH: GLPI (como hoje) ou os Chamados do SGI"
+  },
+  {
+   "n": 2,
+   "texto": "A categoria de cada serviço da Nomeação; mais abaixo, os da Exoneração (o inverso de cada um)"
+  }
+ ],
+ "c09-saude": [
+  {
+   "n": 1,
+   "texto": "As tarefas automáticas (prazos, recorrentes) e a fila de e-mails: se algo parar, aparece aqui e quem administra é avisado no sino"
+  }
+ ],
+ "n01-racks": [
+  {
+   "n": 1,
+   "texto": "Cada equipamento na posição do rack, com as portas ligadas (verde) e desligadas (vermelho). Clique para abrir a face"
+  },
+  {
+   "n": 2,
+   "texto": "O rack: nome, sala do Patrimônio e quantidade de U (a faixa da esquerda tem a cor do rack)"
+  },
+  {
+   "n": 3,
+   "texto": "Numeração dos U (U1 embaixo)"
+  }
+ ],
+ "n02-face": [
+  {
+   "n": 1,
+   "texto": "Porta verde: ligada"
+  },
+  {
+   "n": 2,
+   "texto": "Porta vermelha: desligada (a bolinha âmbar indica chamado aberto na porta)"
+  },
+  {
+   "n": 3,
+   "texto": "Portas de uplink e fibra, fora da grade"
+  }
+ ],
+ "n03-porta": [
+  {
+   "n": 1,
+   "texto": "Configuração da porta: access ou trunk, VLAN, situação e velocidade (é o cadastro; o SGI não mexe no switch)"
+  },
+  {
+   "n": 2,
+   "texto": "O que está ligado: aqui, uma impressora do Patrimônio (clique para abrir o cadastro do bem). Dá para ligar um bem, outro equipamento ou descrever"
+  },
+  {
+   "n": 3,
+   "texto": "Chamados desta porta e do ponto de rede ligado nela"
+  },
+  {
+   "n": 4,
+   "texto": "Abre um chamado já ligado a esta porta"
+  }
+ ],
+ "n04-pontos": [
+  {
+   "n": 1,
+   "texto": "O código escrito na tomada"
+  },
+  {
+   "n": 2,
+   "texto": "O caminho do ponto até o switch: tomada → patch panel → porta do switch"
+  }
+ ],
+ "c10-painel": [
+  {
+   "n": 1,
+   "texto": "Linhas por página: 0 = automático (quantas couberem na tela)"
+  },
+  {
+   "n": 2,
+   "texto": "Tamanho do texto: compacto cabe mais chamados; grande é para ler de longe"
+  },
+  {
+   "n": 3,
+   "texto": "Colunas que aparecem (o título é obrigatório)"
+  },
+  {
+   "n": 4,
+   "texto": "Cor do prazo na linha inteira ou só no selo; logo abaixo, a voz que anuncia chamado novo"
+  }
+ ],
+ "n05-bem": [
+  {
+   "n": 1,
+   "texto": "No cadastro do bem (Patrimônio): em qual switch e porta ele está ligado. Quem edita a rede liga ou desliga daqui mesmo"
+  }
+ ],
+ "n06-novo-equipamento": [
+  {
+   "n": 1,
+   "texto": "O modelo de face: as portas são criadas por ele"
+  },
+  {
+   "n": 2,
+   "texto": "O rack, já cadastrado em \"Novo rack\""
+  },
+  {
+   "n": 3,
+   "texto": "A posição: o U mais baixo que ele ocupa (não pode sobrepor outro equipamento)"
+  }
+ ],
+ "n07-novo-rack": [
+  {
+   "n": 1,
+   "texto": "Cor do rack, para reconhecer na sala"
+  },
+  {
+   "n": 2,
+   "texto": "Quantidade de U"
+  },
+  {
+   "n": 3,
+   "texto": "Localização: a sala do Patrimônio (busque pelo código, como 05A)"
+  }
+ ]
+}

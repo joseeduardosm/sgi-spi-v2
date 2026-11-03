@@ -33,6 +33,13 @@ from app.models.preferencia_colunas import PreferenciaColunas
 from app.models.integracao_bookstack import IntegracaoBookstack
 from app.models.integracao_sigeo import IntegracaoSigeo
 from app.models.integracao_glpi import ChamadoGlpi, IntegracaoGlpi
+from app.models.rede import ConexaoRede, DispositivoAtrasRede, EquipamentoRede, ModeloFaceRede, ParametroRede, PontoRede, PortaRede, PortaVlanRede, RackRede, VlanRede
+from app.models.chamados import (
+    AcompanhamentoChamado, AnexoChamado, AtorChamado, CampoChamados, CategoriaChamados, CategoriaItilChamados, CategoriaSetorPermitido, Chamado, ExpedienteChamados, FaixaExpedienteChamados,
+    ExecucaoChamados, ParametroChamados, RecorrenteChamados, SetorAtendimentoChamados, SlaChamados, SolucaoChamado, StatusApresentacaoChamados,
+    SubstatusChamados, TarefaChamado, ValidacaoChamado, ValorCampoChamado, ServicoRhChamados,
+    SatisfacaoChamado, RespostaProntaChamados, MotivoPendenciaChamados,
+)
 from app.models.diretorio_ldap import DiretorioLdap
 from app.models.envio_changelog import EnvioChangelog
 from app.models.melhorias import AnexoSugestao, EventoSugestao, SugestaoMelhoria
@@ -56,6 +63,10 @@ from app.models.usuario import OrigemUsuario, Papel, Usuario
 
 # Nomes exportados por `from app.models import *`
 __all__ = [
+    "AcompanhamentoChamado", "AnexoChamado", "CategoriaChamados", "CategoriaItilChamados", "CategoriaSetorPermitido", "Chamado", "ExpedienteChamados", "FaixaExpedienteChamados", "ParametroChamados",
+    "SetorAtendimentoChamados", "SlaChamados", "SolucaoChamado", "AtorChamado", "CampoChamados", "TarefaChamado", "ValidacaoChamado", "ValorCampoChamado",
+    "ExecucaoChamados", "RecorrenteChamados", "StatusApresentacaoChamados", "SubstatusChamados", "ServicoRhChamados", "SatisfacaoChamado", "RespostaProntaChamados", "MotivoPendenciaChamados",
+    "ConexaoRede", "DispositivoAtrasRede", "EquipamentoRede", "ModeloFaceRede", "PontoRede", "PortaRede", "PortaVlanRede", "RackRede", "VlanRede",
     "Admissao", "AdmissaoDocumento", "ChecklistClassificacao", "ChecklistRh", "ItemChecklistRh", "ModeloRh",
     "FichaExperiencia", "FichaFormacao", "PreCadastro",
     "Baixa", "Bem", "Classificacao", "ColaboradorBaixa", "ColaboradorClassificacao", "EventoPatrimonio", "FotoBem", "GrupoMaterial", "PrefixoChapa", "ItemBaixa", "ItemClassificacao", "ItemMovimentacao",

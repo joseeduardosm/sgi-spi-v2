@@ -80,11 +80,6 @@ def obter_usuario_autenticado(
         usuario.personificado_por = real
         # `auditar` lê isto para gravar quem realmente agiu (sem mexer nas chamadas de auditoria)
         sessao.info["personificado_por"] = (real.id, real.login)
-    # Perfil ativo escolhido no menu do usuário (claim `pa`): vale só se ainda for um perfil ativo do usuário; senão, o padrão
-    if conteudo.get("pa") is not None:
-        escolhido = int(conteudo["pa"])
-        if any(p.id == escolhido for p in servico_acl.perfis_do_usuario(sessao, usuario.id)):
-            usuario.perfil_ativo_id = escolhido
     # Quem está usando o sistema não cai: perto do vencimento, a resposta traz um token novo (só para usuário ativo)
     renovado = renovar_token(conteudo)
     if renovado:
@@ -93,7 +88,7 @@ def obter_usuario_autenticado(
 
 
 def obter_declaracoes(credenciais: HTTPAuthorizationCredentials | None = Depends(esquema_bearer)) -> dict:
-    """Declarações (claims) do token da requisição: `sub`, `ini`, `pa` (perfil ativo), `imp` (SuperRoot real, na personificação)."""
+    """Declarações (claims) do token da requisição: `sub`, `ini`, `imp` (SuperRoot real, na personificação)."""
     if credenciais is None:
         raise _nao_autenticado("Não autenticado.")
     try:

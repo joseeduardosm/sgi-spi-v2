@@ -1,0 +1,13 @@
+[Unit]
+Description=sgi-spi: testa por ping o IP de gerência dos equipamentos de rede (no ar / fora do ar)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=__USUARIO__
+Group=__USUARIO__
+WorkingDirectory=__PROJETO__/backend
+ExecStart=__PROJETO__/backend/.venv/bin/python -m app.tarefas.rede ping
+# Sem NoNewPrivileges: o /usr/bin/ping usa a capacidade cap_net_raw do próprio binário, que o NoNewPrivileges desligaria
+PrivateTmp=true
+ProtectSystem=full

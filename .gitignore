@@ -20,3 +20,5 @@ docs/manuais/*/laboratorio/lab.db
 docs/manuais/*/laboratorio/*.log
 docs/manuais/*/laboratorio/anexos/
 docs/manuais/*/laboratorio/__pycache__/
+docs/manuais/*/laboratorio/web/
+replica/

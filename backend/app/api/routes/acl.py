@@ -42,8 +42,8 @@ def _efetivos(sessao: Session, usuario: Usuario, somente_concedidos: bool, perfi
     consulta do SuperRoot.
     """
     detalhes = servico_acl.acessos_detalhados(sessao, usuario, perfil_id)
-    ativo = perfil_id if perfil_id is not None else servico_acl.perfil_ativo_id(sessao, usuario)
-    do_perfil = servico_acl.acoes_do_perfil(sessao, ativo) if ativo is not None and not usuario.superusuario else {}
+    perfis = [perfil_id] if perfil_id is not None else servico_acl.perfis_ids_do_usuario(sessao, usuario.id)
+    do_perfil = servico_acl.acoes_do_perfil(sessao, perfis) if not usuario.superusuario else {}
     resposta = []
     for r, nivel, origens in detalhes:
         marcadas = do_perfil.get(r.id, set())

@@ -87,8 +87,8 @@ class RegraAcl(Base):
 class PerfilAcl(Base):
     """Perfil de acesso: um conjunto de direitos (módulo × nível) que pode ser atribuído a vários usuários.
 
-    O usuário tem um ou mais perfis e **um ativo por vez** (o padrão ou o escolhido no menu do usuário). O nível do perfil ativo soma-se às
-    regras por setor e às diretas: vale o maior nível.
+    O usuário tem um ou mais perfis (diretos e pelos setores) e **todos valem juntos**: as ações se somam, e o resultado soma-se às regras
+    por setor e às diretas (vale o maior nível). O "padrão" da ficha ficou só informativo.
     """
 
     __tablename__ = "acl_perfis"

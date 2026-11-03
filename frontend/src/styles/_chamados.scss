@@ -1,0 +1,282 @@
+// Módulo Chamados: só o que não existe em outro lugar. A estrutura das telas copia as existentes (DESIGN.md):
+// listas em `.painel-gestao.protocolo` + `.barra-protocolo`, filtros em `.chips-filtro`, detalhe no layout de página da tarefa
+// (cards com borda, como o card do DESIGN.md) e linha do tempo `.linha-do-tempo` de Tarefas. Só tokens `--spi-*`, nunca hex.
+
+.modulo-chamados {
+  // Catálogo de categorias (abertura): cartões de indicador clicáveis, um por categoria do nível atual
+  .catalogo-chamados {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: var(--spi-espaco-12);
+    margin: 0 0 var(--spi-espaco-20);
+    padding: 0;
+    list-style: none;
+  }
+
+  .cartao-categoria {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spi-espaco-4);
+    width: 100%;
+    min-height: 88px;
+    padding: var(--spi-espaco-16);
+    border: 1px solid var(--spi-borda);
+    border-radius: var(--spi-raio-g);
+    color: var(--spi-texto);
+    background: var(--spi-superficie);
+    text-align: left;
+    cursor: pointer;
+
+    strong { font-size: var(--spi-texto-corpo); font-weight: 600; }
+    small { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); }
+    &:hover { border-color: var(--spi-borda-campo); box-shadow: var(--spi-sombra-sutil); }
+    &:focus-visible { outline: 0; box-shadow: var(--spi-anel-foco); }
+  }
+
+  // Categoria escolhida, com o caminho e a ação de trocar
+  .categoria-escolhida {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spi-espaco-8) var(--spi-espaco-12);
+    margin-bottom: var(--spi-espaco-16);
+    padding: var(--spi-espaco-12) var(--spi-espaco-16);
+    border-radius: var(--spi-raio-g);
+    background: var(--spi-superficie-alt);
+
+    span { flex: 1 1 240px; color: var(--spi-texto); font-weight: 600; }
+    small { display: block; color: var(--spi-apagado); font-weight: 400; }
+  }
+
+  .editor-chamado { margin-bottom: var(--spi-espaco-16); }
+  // Busca de outra sala logo abaixo do seletor de sala
+  .busca-local { margin-top: calc(var(--spi-espaco-8) - 16px); }
+  .acoes-formulario .botao-arquivo { margin-right: auto; }
+  .acoes-formulario { flex-wrap: wrap; padding: var(--spi-espaco-8) 0 var(--spi-espaco-16); }
+
+  .opcoes-sim-nao {
+    display: flex;
+    gap: var(--spi-espaco-16);
+    margin-bottom: var(--spi-espaco-16);
+
+    label { display: inline-flex; align-items: center; gap: var(--spi-espaco-8); margin: 0; font-weight: 400; }
+    input { width: auto; height: auto; margin: 0; }
+  }
+
+  // Arquivos escolhidos antes de enviar
+  .arquivos-chamado {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spi-espaco-8);
+    margin: 0 0 var(--spi-espaco-12);
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--spi-espaco-8);
+      padding: var(--spi-espaco-4) var(--spi-espaco-4) var(--spi-espaco-4) var(--spi-espaco-12);
+      border: 1px solid var(--spi-borda);
+      border-radius: var(--spi-raio-pilula);
+      font-size: var(--spi-texto-compacto);
+    }
+  }
+
+  // Filtros rápidos no topo do painel (o painel já tem o padding de `.protocolo`; o `_rh.scss` somaria outro)
+  .painel-gestao.protocolo > .chips-filtro { display: flex; flex-wrap: wrap; gap: var(--spi-espaco-8); margin: 0 0 var(--spi-espaco-16); padding: 0 0 var(--spi-espaco-16); }
+
+  // Campos adicionais da categoria em edição (Parâmetros)
+  .campos-categoria { display: grid; gap: var(--spi-espaco-12); margin: var(--spi-espaco-8) 0 var(--spi-espaco-24); padding: var(--spi-espaco-20) var(--spi-espaco-24); border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); background: var(--spi-superficie-alt); h3 { margin: 0; color: var(--spi-titulo); font-size: var(--spi-texto-destaque); font-weight: 700; } p { margin: 0; } }
+
+  // Botões da linha das tabelas de Parâmetros (Editar/Excluir) lado a lado, cada um com a sua cor do catálogo
+  // (o `.acoes-linha` global pinta todos de vermelho claro e confunde "Editar" com "Excluir")
+  .botoes-linha { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--spi-espaco-8); }
+
+  // "Anexar arquivos" é um <label> com cara de botão: dentro do `.grade-formulario` não pode herdar o estilo de rótulo de campo
+  .grade-formulario label.botao-arquivo { display: inline-flex; align-items: center; margin: 0 auto 0 0; color: var(--cor-6a7786); font-size: 12px; font-weight: 700; }
+
+  .titulo-secao-parametros { margin: var(--spi-espaco-24) 0 var(--spi-espaco-4); color: var(--spi-titulo); font-size: var(--spi-texto-destaque); font-weight: 700; }
+
+  .numero-chamado { font-family: var(--spi-fonte-mono); font-variant-numeric: tabular-nums; }
+
+  // Linha do tempo: mensagem privada da equipe em destaque (alerta), automática em uma linha apagada
+  .linha-do-tempo li.privado .conteudo-evento { padding: var(--spi-espaco-8) var(--spi-espaco-12); border-radius: var(--spi-raio-m); background: var(--spi-alerta-suave); }
+  .linha-do-tempo li.automatico .topo-evento strong { color: var(--spi-apagado); font-weight: 400; }
+  .lista-anexos-evento {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spi-espaco-8);
+    margin: var(--spi-espaco-8) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+
+  // Faixas do expediente nos Parâmetros
+  .faixa-expediente {
+    display: grid;
+    grid-template-columns: minmax(140px, 200px) 140px 140px auto;
+    justify-content: start;
+    gap: var(--spi-espaco-8) var(--spi-espaco-12);
+    align-items: end;
+    margin-bottom: var(--spi-espaco-8);
+
+    select, input { margin-bottom: 0; }
+  }
+
+  .faixa-expediente label { display: block; margin: 0 0 var(--spi-espaco-4); color: var(--spi-rotulo); font-size: var(--spi-texto-legenda); font-weight: 600; }
+
+  .linha-caixa {
+    display: flex; align-items: center; gap: var(--spi-espaco-8); margin-bottom: var(--spi-espaco-12);
+    color: var(--spi-texto); font-size: var(--spi-texto-compacto); font-weight: 400;
+    input { width: auto; height: auto; margin: 0; }
+  }
+  // Setores escolhidos em "Quem pode escolher este assunto": fichas com o "×" para tirar
+  .fichas-setores { display: flex; flex-wrap: wrap; gap: var(--spi-espaco-8); margin: 0 0 var(--spi-espaco-12); padding: 0; list-style: none;
+    li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-pilula);
+      background: var(--spi-superficie-alt); font-size: 13px; color: var(--spi-texto); }
+    button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--spi-raio-pilula); background: transparent; color: var(--spi-apagado); font-size: 16px; line-height: 1; cursor: pointer;
+      &:hover { background: var(--spi-superficie); color: var(--spi-texto); }
+      &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); } } }
+  // Frase de ajuda num formulário: em bloco (o <small> é de linha), com o espaço do padrão antes do próximo campo
+  .grade-formulario small.dica-formulario { display: block; }
+  // Frase de ajuda logo abaixo da caixa: em bloco, alinhada ao texto da opção (depois da caixinha) e com espaço antes da próxima
+  .linha-caixa + .dica-formulario { display: block; margin: calc(-1 * var(--spi-espaco-8)) 0 var(--spi-espaco-16) 24px; }
+
+  // Detalhe do chamado (DESIGN.md): conversa à esquerda, dados à direita; cada bloco é um card com borda de 1px, sem sombra
+  .detalhe-chamado {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: var(--spi-espaco-16);
+    align-items: start;
+  }
+
+  .coluna-chamado { display: grid; gap: var(--spi-espaco-16); min-width: 0; }
+
+  .cartao-chamado {
+    display: grid;
+    gap: var(--spi-espaco-12);
+    padding: var(--spi-espaco-20) var(--spi-espaco-24);
+    border: 1px solid var(--spi-borda);
+    border-radius: var(--spi-raio-g);
+    background: var(--spi-superficie);
+
+    > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--spi-espaco-4) var(--spi-espaco-12); }
+    > header h2 { margin: 0; color: var(--spi-titulo); font-size: var(--spi-texto-destaque); font-weight: 700; }
+    > header small { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); }
+    .rotulo-cartao { margin: 0; color: var(--spi-apagado); font-size: var(--spi-texto-micro); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .acao-pequena { justify-self: start; }
+    .linha-do-tempo { margin: 0; }
+    dl { display: grid; gap: var(--spi-espaco-12); margin: 0; }
+    dt { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); font-weight: 600; }
+    dd { display: grid; justify-items: start; gap: var(--spi-espaco-4); margin: var(--spi-espaco-4) 0 0; color: var(--spi-texto); font-size: var(--spi-texto-compacto); overflow-wrap: anywhere; }
+    dd small { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); }
+  }
+
+  .selos-chamado { display: flex; flex-wrap: wrap; gap: var(--spi-espaco-8); }
+  // Formulários curtos dentro dos cartões (tarefa, aprovação, em cópia, alterar): rótulo acima do campo, como o `.campo` da barra do Protocolo
+  .campo-linha {
+    display: grid;
+    gap: var(--spi-espaco-4);
+    min-width: 0;
+
+    label { margin: 0; color: var(--spi-rotulo); font-size: var(--spi-texto-legenda); font-weight: 600; }
+    input, select, textarea { width: 100%; margin: 0; }
+  }
+  .formulario-linha-chamado { display: grid; gap: var(--spi-espaco-12); }
+  .formulario-linha-chamado > button { justify-self: start; }
+  .grade-informacoes { grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); dd { display: flex; align-items: center; gap: var(--spi-espaco-8); } }
+  .lista-tarefas-chamado {
+    display: grid; gap: var(--spi-espaco-8); margin: 0; padding: 0; list-style: none;
+    li { display: grid; gap: 2px; padding-bottom: var(--spi-espaco-8); border-bottom: 1px solid var(--spi-borda); }
+    li .linha-caixa { margin: 0; }
+    li.feita span { color: var(--spi-apagado); text-decoration: line-through; }
+    small { padding-left: 24px; color: var(--spi-apagado); font-size: var(--spi-texto-legenda); }
+  }
+  .aprovacao-chamado { display: grid; gap: var(--spi-espaco-8); padding-bottom: var(--spi-espaco-12); border-bottom: 1px solid var(--spi-borda); p { margin: 0; font-size: var(--spi-texto-compacto); } small { color: var(--spi-apagado); } }
+  .item-copia { display: inline-flex; align-items: center; gap: var(--spi-espaco-8); }
+  .estado-vazio-chamado { margin: 0; color: var(--spi-apagado); font-size: var(--spi-texto-compacto); }
+  .composicao-chamado { display: grid; gap: var(--spi-espaco-12); padding-top: var(--spi-espaco-12); border-top: 1px solid var(--spi-borda); }
+  .composicao-chamado .abas { margin-bottom: 0; }
+  .composicao-chamado .acoes-formulario { padding: 0; }
+  .editor-chamado .superficie-editor { min-height: 120px; max-height: 320px; overflow-y: auto; }
+
+  // O atalho principal do cabeçalho não muda de cor quando a pessoa já está na tela dele (o texto sumia no vermelho)
+  .cabecalho-modulo nav a.acao-primaria.ativo { color: #fff; background: var(--spi-vermelho); border-color: var(--spi-vermelho); }
+
+  @media (max-width: 1100px) {
+    // Uma coluna: os dados do chamado (situação, prazos, pessoas) sobem para antes da conversa
+    .detalhe-chamado { grid-template-columns: minmax(0, 1fr); }
+    // Situação e prazos sobem para antes da conversa; pessoas e classificação ficam depois dela
+    .detalhe-chamado > aside { display: contents; }
+    .detalhe-chamado > aside > .antes-da-conversa { order: -1; }
+    .detalhe-chamado > aside > .cartao-chamado:not(.antes-da-conversa) { order: 1; }
+  }
+
+  @media (max-width: 767px) {
+    .cartao-chamado { padding: var(--spi-espaco-16); }
+    .faixa-expediente { grid-template-columns: 1fr 1fr; }
+    // Os atalhos quebram linha em vez de sair da tela
+    .cabecalho-modulo nav { flex-wrap: wrap; overflow: visible; }
+
+    // A tabela vira lista de cartões: cada célula com o seu rótulo
+    .tabela-chamados {
+      thead { display: none; }
+      tr { display: grid; gap: var(--spi-espaco-4); padding: var(--spi-espaco-12) 0; border-bottom: 1px solid var(--spi-borda); }
+      td { display: flex; gap: var(--spi-espaco-8); padding: 0; border: 0; }
+      td[data-rotulo]::before { content: attr(data-rotulo); flex: 0 0 96px; color: var(--spi-apagado); font-size: var(--spi-texto-legenda); font-weight: 600; }
+      td.estado-vazio { display: block; }
+    }
+  }
+}
+
+// Selos do módulo: a forma é a global (pílula); aqui só as cores, pelos atributos próprios do Chamados
+.selo-status[data-chamado] { color: var(--spi-info); background: var(--spi-info-suave); }
+.selo-status[data-chamado='alerta'] { color: var(--spi-alerta); background: var(--spi-alerta-suave); }
+.selo-status[data-chamado='sucesso'] { color: var(--spi-sucesso); background: var(--spi-sucesso-suave); }
+.selo-status[data-chamado='neutro'] { color: var(--spi-apagado); background: var(--spi-superficie-alt); }
+.selo-status[data-chamado='atencao'] { color: var(--spi-atencao); background: var(--spi-atencao-suave); }
+.selo-status[data-chamado='perigo'] { color: var(--spi-perigo); background: var(--spi-perigo-suave); }
+
+.selo-prioridade[data-prioridade-chamado] { color: var(--spi-apagado); background: var(--spi-superficie-alt); }
+.selo-prioridade[data-prioridade-chamado='alta'] { color: var(--spi-alerta); background: var(--spi-alerta-suave); }
+.selo-prioridade[data-prioridade-chamado='urgente'] { color: var(--spi-perigo); background: var(--spi-perigo-suave); }
+
+// Prazo (SLA): 50% âmbar, 75% laranja (token de atenção), 90% ou estourado vermelho, cumprido verde. O texto sempre acompanha
+.selo-situacao[data-prazo] { color: var(--spi-apagado); background: var(--spi-superficie-alt); }
+.selo-situacao[data-prazo='ok'] { color: var(--spi-info); background: var(--spi-info-suave); }
+.selo-situacao[data-prazo='alerta'] { color: var(--spi-alerta); background: var(--spi-alerta-suave); }
+.selo-situacao[data-prazo='atencao'] { color: var(--spi-atencao); background: var(--spi-atencao-suave); }
+.selo-situacao[data-prazo='perigo'] { color: var(--spi-perigo); background: var(--spi-perigo-suave); }
+.selo-situacao[data-prazo='cumprido'] { color: var(--spi-sucesso); background: var(--spi-sucesso-suave); }
+
+/* Endereço com token (Parâmetros > Painel de TV): quebra em qualquer ponto para não estourar o cartão no celular */
+.modulo-chamados .quebra-tudo { margin: 6px 0 10px; word-break: break-all; }
+
+/* Aviso de "atualizado ao vivo" com o botão na mesma linha (fila e detalhe) */
+.modulo-chamados .aviso-formulario > button { margin-left: 8px; vertical-align: middle; }
+
+/* Nota de satisfação: a escolhida fica com a borda e o texto no vermelho SPI (o acento de "item ativo") */
+.modulo-chamados .notas-satisfacao { flex-wrap: wrap; justify-content: flex-start; margin-bottom: 10px; }
+.modulo-chamados .notas-satisfacao .nota-escolhida { color: var(--spi-vermelho); border-color: var(--spi-vermelho); background: var(--spi-vermelho-suave); }
+
+/* Grupo de caixas de marcar com título (Parâmetros > Painel, VLANs da porta): fieldset sem moldura e legenda no estilo dos rótulos */
+.modulo-chamados fieldset.grupo-caixas {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+
+  legend { margin-bottom: 6px; padding: 0; color: var(--spi-texto); font-size: var(--spi-texto-legenda); font-weight: 700; }
+  .linha-caixas { margin: 0; }
+}
+.modulo-chamados .grade-formulario fieldset.grupo-caixas { margin-bottom: 8px; }
+.modulo-chamados .grade-formulario small.ajuda { display: block; margin-top: 4px; color: var(--spi-apagado); font-size: var(--spi-texto-legenda); }
+
+/* Parâmetros > RH: título de cada fluxo (Nomeação, Exoneração) dentro da grade */
+.modulo-chamados .grade-formulario .titulo-grupo-rh { margin: 8px 0 0; font-size: var(--spi-texto-destaque); font-weight: 700;
+  small { color: var(--spi-apagado); font-size: var(--spi-texto-legenda); font-weight: 400; } }
+/* Nome de cada serviço (Rede, E-mail...) acima dos seus quatro campos; a linha separa um serviço do outro */
+.modulo-chamados .grade-formulario .subtitulo-servico-rh { margin: 4px 0 8px; padding-top: 12px; border-top: 1px solid var(--spi-borda);
+  font-size: var(--spi-texto-corpo); font-weight: 600; }

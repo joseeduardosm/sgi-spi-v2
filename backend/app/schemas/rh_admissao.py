@@ -91,6 +91,11 @@ class EntradaChamado(BaseModel):
 class LinkChamado(BaseModel):
     url: str
     texto: str
+    # Só nos chamados do módulo Chamados (depois da virada): serviço, número e status de agora
+    chave: str | None = None
+    numero: int | None = None
+    status_nome: str | None = None
+    status_cor: str | None = None
 
 
 class EntradaTexto(BaseModel):
@@ -138,6 +143,7 @@ class LeituraAdmissao(ResumoAdmissao):
     chamado_glpi_id: int | None
     chamado_url: str | None
     chamado_links: list[LinkChamado]
+    chamados_destino: str = Field("glpi", description="Para onde vão os chamados da Nomeação agora: `glpi` (formulário do GLPI) ou `chamados` (módulo do SGI).")
     tem_foto: bool
     documentos: list[DocumentoAdmissao]
     resolucao_html: str | None

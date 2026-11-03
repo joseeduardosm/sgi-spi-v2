@@ -2,6 +2,8 @@
 
 **Leia e siga `AGENTS.md`**: código em pt-BR (nomes e comentários), documentação obrigatória da API e escopo.
 
+- **Regra de negócio: NUNCA crie ou altere sem perguntar.** Como o sistema escolhe, calcula, prioriza, ordena, bloqueia, atribui ou classifica algo é decisão minha. Quando surgir essa necessidade (inclusive ao explicar um comportamento estranho), explique a regra atual, proponha 2 ou 3 alternativas com a recomendação e **espere eu escolher** antes de escrever código.
+
 - **Elemento ou tela que ainda não existe no SGI:** se não houver tela equivalente para copiar, **não implemente direto**. Consulte as referências da seção "Referências para elementos novos" do `DESIGN.md`, proponha 2 ou 3 opções e **espere eu escolher** antes de escrever código.
 
 - Todo o sistema fica em `/home/administrador/projeto` (sem cópia em /var/www). Nginx e systemd apontam para cá; API em 127.0.0.1:8000.

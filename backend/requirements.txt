@@ -6,6 +6,8 @@ PyJWT==2.15.0
 bcrypt==5.0.0
 SQLAlchemy==2.0.54
 psycopg[binary]==3.3.6
+# Leitura do banco do GLPI (MariaDB) na migração pelo botão: só cliente, só SELECT
+PyMySQL==1.1.1
 alembic==1.20.0
 ldap3==2.9.1
 cryptography==50.0.1

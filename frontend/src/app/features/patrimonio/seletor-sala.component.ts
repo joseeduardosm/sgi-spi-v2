@@ -56,6 +56,9 @@ export class SeletorSalaComponent {
   readonly leitor = input(false);
   /** Salas a esconder (a origem, na movimentação). */
   readonly excluir = input<string[]>([]);
+  /** Lista de salas vinda de fora (ex.: abertura de chamado, para quem não tem acesso ao Patrimônio); sem ela, usa as do Patrimônio. */
+  readonly opcoes = input<OpcaoSala[] | null>(null);
+  protected readonly salas = computed(() => this.opcoes() ?? this.estado.salas());
 
   protected readonly lendo = signal(false);
   protected readonly avisoLeitura = signal('');
@@ -68,7 +71,7 @@ export class SeletorSalaComponent {
   constructor() {
     // Quando quem usa o componente define o valor (ou as salas terminam de carregar), o campo mostra o nome da sala escolhida
     effect(() => {
-      const sala = this.estado.salas().find((s) => s.id === this.valor());
+      const sala = this.salas().find((s) => s.id === this.valor());
       if (sala) this.texto.set(sala.rotulo);
     });
   }
@@ -76,7 +79,7 @@ export class SeletorSalaComponent {
   protected readonly grupos = computed(() => {
     const termo = this.filtro().trim().toLowerCase();
     const mapa = new Map<number | null, OpcaoSala[]>();
-    for (const s of this.estado.salas()) {
+    for (const s of this.salas()) {
       if (this.soAtivas() && !s.ativo && s.id !== this.valor()) continue;
       if (this.soDeposito() && !s.deposito) continue;
       if (this.excluir().includes(s.id)) continue;
@@ -101,7 +104,7 @@ export class SeletorSalaComponent {
   /** Fecha depois do clique numa opção ser processado (o `mousedown` das opções já impede o campo de perder o foco). */
   protected fecharDepois(): void {
     this.aberto.set(false);
-    const sala = this.estado.salas().find((s) => s.id === this.valor());
+    const sala = this.salas().find((s) => s.id === this.valor());
     this.texto.set(sala ? sala.rotulo : '');
   }
 
@@ -125,7 +128,7 @@ export class SeletorSalaComponent {
   protected lerPorta(codigo: string): void {
     this.avisoLeitura.set('');
     const alvo = normalizarCodigoSala(codigo);
-    const sala = this.estado.salas().find((s) => s.codigo && normalizarCodigoSala(s.codigo) === alvo);
+    const sala = this.salas().find((s) => s.codigo && normalizarCodigoSala(s.codigo) === alvo);
     if (!sala) { this.avisoLeitura.set(`Nenhuma sala com o código lido (${codigo.trim()}).`); return; }
     if ((this.soAtivas() && !sala.ativo) || (this.soDeposito() && !sala.deposito) || this.excluir().includes(sala.id)) {
       this.avisoLeitura.set(`A sala ${sala.codigo} não pode ser escolhida aqui.`);

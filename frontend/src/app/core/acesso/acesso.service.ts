@@ -60,6 +60,20 @@ export interface AcessoEfetivo {
  * Acessos efetivos do usuário (GET /api/acl/meus-acessos), usados para ocultar módulos.
  * A proteção efetiva continua no backend.
  */
+/** O que a pessoa pode fazer no módulo Chamados (`papeis` de `GET /chamados/contexto`). */
+export interface PapeisChamadosAcesso {
+  abrir: boolean;
+  atender: boolean;
+  administrar: boolean;
+}
+
+/** O que a pessoa pode fazer no plano de face da rede (`GET /rede/contexto`). */
+export interface PapeisRedeAcesso {
+  ver: boolean;
+  editar: boolean;
+  administrar: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AcessoService {
   private readonly http = inject(HttpClient);
@@ -73,6 +87,15 @@ export class AcessoService {
    * (diferente dos demais): quem diz é `GET /painel-executivo/acesso`.
    */
   readonly painelExecutivo = signal(false);
+  /**
+   * Papéis no módulo Chamados. Também fica fora do mapa de níveis: sem regras na ACL, o módulo é fechado (só o SuperRoot)
+   * até a virada do GLPI; quem diz é `GET /chamados/contexto` (403 = nenhum papel).
+   */
+  readonly chamados = signal<PapeisChamadosAcesso | null>(null);
+  /** O "Abrir chamado" do sistema vai para o módulo do SGI (e não para o GLPI)? Depende do papel e da data "a partir de". */
+  readonly abreNoSgi = signal(false);
+  /** Papéis no plano de face da rede: fechado (só o SuperRoot) até haver regras; quem diz é `GET /rede/contexto`. */
+  readonly rede = signal<PapeisRedeAcesso | null>(null);
   // Requisição em andamento, compartilhada entre chamadas simultâneas (evita pedir duas vezes)
   private carregamentoPendente?: Observable<void>;
 
@@ -105,6 +128,27 @@ export class AcessoService {
         tap((r) => this.painelExecutivo.set(r.pode)),
         catchError(() => of({ pode: false })),
       )),
+      switchMap(() => this.http.get<{ papeis: PapeisChamadosAcesso; inicio_atendimento: string | null; atendimento_aberto: boolean }>(
+        `${ambiente.urlApi}/chamados/contexto`).pipe(
+        tap((r) => {
+          this.chamados.set(r.papeis);
+          // "A partir de": sem data marcada vale o papel; com data, antes dela só quem administra abre no SGI (os demais, no GLPI)
+          this.abreNoSgi.set(r.papeis.abrir && (!r.inicio_atendimento || r.atendimento_aberto || r.papeis.administrar));
+        }),
+        // 403 (sem papel) ou erro: o módulo fica escondido
+        catchError(() => {
+          this.chamados.set(null);
+    this.abreNoSgi.set(false);
+          return of(null);
+        }),
+      )),
+      switchMap(() => this.http.get<PapeisRedeAcesso>(`${ambiente.urlApi}/rede/contexto`).pipe(
+        tap((r) => this.rede.set(r.ver ? r : null)),
+        catchError(() => {
+          this.rede.set(null);
+          return of(null);
+        }),
+      )),
       tap(() => this.carregado.set(true)),
       map(() => undefined),
       // Erro na API não trava a tela: considera carregado (sem acessos)
@@ -123,6 +167,9 @@ export class AcessoService {
   private reiniciar(): void {
     this.niveis.set(new Map());
     this.painelExecutivo.set(false);
+    this.chamados.set(null);
+    this.abreNoSgi.set(false);
+    this.rede.set(null);
     this.carregado.set(false);
   }
 }

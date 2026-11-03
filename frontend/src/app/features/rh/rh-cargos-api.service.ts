@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../environments/ambiente';
 import { baixarArquivo } from '../../shared/utilitarios/download';
-import { Cargo, GravacaoCargo, HistoricoUsuario, MotivoFim, NoOrganograma, PendenciaCargo, TipoCargo } from './rh-cargos.models';
+import { Cargo, GravacaoCargo, HistoricoUsuario, MotivoFim, NoOrganograma, PendenciaCargo, TipoCargo, LeituraExoneracao } from './rh-cargos.models';
 
 /** Filtros da lista de cargos. */
 export interface FiltrosCargos { setor_id?: number | null; tipo_id?: number | null; situacao?: 'vago' | 'ocupado' | ''; busca?: string; incluir_inativos?: boolean }
@@ -48,6 +48,14 @@ export class RhCargosApiService {
 
   ocupar(id: number, usuarioId: number, inicio: string | null, ato: string): Observable<Cargo> {
     return this.http.post<Cargo>(`${this.base}/cargos/${id}/ocupacao`, { usuario_id: usuarioId, inicio: inicio || null, ato });
+  }
+
+  exoneracao(ocupacaoId: number): Observable<LeituraExoneracao> {
+    return this.http.get<LeituraExoneracao>(`${this.base}/exoneracoes/${ocupacaoId}`);
+  }
+
+  abrirChamadosExoneracao(ocupacaoId: number, solicitacoes: Record<string, boolean>, observacoes: string): Observable<LeituraExoneracao> {
+    return this.http.post<LeituraExoneracao>(`${this.base}/exoneracoes/${ocupacaoId}/chamados`, { solicitacoes, observacoes });
   }
 
   vagar(id: number, fim: string | null, motivo: MotivoFim, ato: string): Observable<Cargo> {

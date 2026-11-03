@@ -1,0 +1,106 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para o visual da tela de Relatórios dos Chamados: filtros, cartões de indicador com tendência, blocos de gráfico e tabela.
+// Só tokens do tema (claro e escuro); vermelho é o acento; as outras cores aparecem só com o significado de status de cada indicador.
+
+:host { display: block; }
+
+// Filtros numa faixa só, com o ícone ao lado de cada campo e o Exportar na ponta direita
+.rc-filtros {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px; margin-bottom: 16px; padding: 16px 20px;
+  border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); background: var(--spi-superficie);
+  .campo { display: flex; flex-direction: column; gap: 4px; min-width: 200px; label { font-size: var(--spi-texto-legenda); font-weight: 600; color: var(--spi-texto); } }
+  .rc-filtro { display: flex; align-items: flex-end; gap: 10px; }
+  .rc-filtro-setor .campo { min-width: 300px; }
+  .rc-filtro-icone { display: grid; place-items: center; width: 28px; height: 46px; color: var(--spi-apagado); app-icone { width: 22px; height: 22px; } }
+  .rc-exportar { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; app-icone { width: 18px; height: 18px; } }
+}
+
+// Cartões de indicador: ícone num quadrado com o tom do status, número grande, rótulo, contexto e a minissérie colada no rodapé
+.rc-cartoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.rc-cartao {
+  --tom: var(--spi-apagado); --tom-suave: var(--spi-superficie-alt);
+  display: flex; flex-direction: column; gap: 2px; padding: 16px 16px 0; overflow: hidden; color: inherit; text-decoration: none;
+  border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); background: var(--spi-superficie);
+  // Card de indicador clicável (DESIGN.md): leva à lista filtrada; hover com a borda do campo e a sombra sutil
+  &:hover { border-color: var(--spi-borda-campo); box-shadow: var(--spi-sombra-sutil); }
+  &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); }
+  &[data-tom='info'] { --tom: var(--spi-info); --tom-suave: var(--spi-info-suave); }
+  &[data-tom='sucesso'] { --tom: var(--spi-sucesso); --tom-suave: var(--spi-sucesso-suave); }
+  &[data-tom='alerta'] { --tom: var(--spi-alerta); --tom-suave: var(--spi-alerta-suave); }
+  &[data-tom='perigo'] { --tom: var(--spi-perigo); --tom-suave: var(--spi-perigo-suave); }
+  .rc-cartao-icone { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 10px; border-radius: var(--spi-raio-m);
+    color: var(--tom); background: var(--tom-suave); app-icone { width: 24px; height: 24px; } }
+  b { font-size: 28px; font-weight: 700; line-height: 1.1; color: var(--spi-titulo); font-variant-numeric: tabular-nums; }
+  .rc-cartao-rotulo { font-size: 14px; color: var(--spi-texto); }
+  small { min-height: 2.6em; font-size: 12px; color: var(--spi-apagado); }
+  small.rc-atencao { color: var(--spi-perigo); }
+  app-minigrafico { margin: 6px -16px 0; }
+}
+
+// Blocos (cartões grandes) em duas colunas; a segunda linha com as duas metades iguais
+.rc-linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; margin-bottom: 16px; align-items: stretch; }
+.rc-linha-igual { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+.rc-bloco {
+  display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 20px 24px;
+  border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); background: var(--spi-superficie);
+  > header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px;
+    h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; font-weight: 700; color: var(--spi-titulo);
+      app-icone { width: 22px; height: 22px; color: var(--spi-vermelho); } }
+    small { display: block; margin-top: 4px; font-size: 13px; color: var(--spi-apagado); } }
+  .tabela-gestao-envoltorio { margin: 0; }
+}
+
+// Linhas que abrem a lista (tabelas e notas): ponteiro, destaque ao passar e foco visível pelo teclado
+.rc-clicavel { cursor: pointer;
+  &:hover { background: var(--spi-superficie-alt); }
+  &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); } }
+.rc-distribuicao li.rc-clicavel { padding: 2px 4px; margin: 0 -4px; border-radius: var(--spi-raio-p); }
+
+// Legenda desenhada pela tela (no cabeçalho do bloco): bolinha da cor da série + nome, em texto do tema
+.rc-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--spi-texto);
+  li { display: inline-flex; align-items: center; gap: 6px; }
+  i { display: inline-block; width: 10px; height: 10px; border-radius: var(--spi-raio-pilula); } }
+.rc-legenda-direita { justify-content: flex-end; }
+
+// Satisfação: anel de quantos responderam + painel da nota média com estrelas e a distribuição das notas
+.rc-satisfacao { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
+.rc-anel { position: relative; width: 132px; height: 132px;
+  svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  circle { fill: none; stroke-width: 12; }
+  .fundo { stroke: var(--spi-superficie-alt); }
+  .valor { stroke: var(--spi-sucesso); stroke-linecap: round; }
+  > span { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    b { font-size: 28px; font-weight: 700; line-height: 1; color: var(--spi-titulo); }
+    small { margin-top: 4px; font-size: 11px; line-height: 1.3; color: var(--spi-apagado); } } }
+.rc-nota { padding: 16px 20px; border-radius: var(--spi-raio-g); background: var(--spi-superficie-alt);
+  .rc-nota-titulo { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--spi-titulo);
+    app-icone { width: 18px; height: 18px; color: var(--spi-alerta); } }
+  .rc-nota-valor { display: flex; align-items: center; gap: 12px; margin: 8px 0 12px;
+    b { font-size: 32px; font-weight: 700; color: var(--spi-titulo); font-variant-numeric: tabular-nums; } }
+  .rc-estrelas { display: inline-flex; gap: 4px; color: var(--spi-borda);
+    span { width: 22px; height: 22px; } span.cheia { color: var(--spi-alerta); }
+    // A estrela da Lucide é só contorno: a cheia ganha preenchimento (o ícone fica dentro do componente app-icone)
+    span.cheia ::ng-deep svg { fill: currentColor; } } }
+.rc-distribuicao { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--spi-apagado);
+  li { display: grid; grid-template-columns: 56px 1fr 24px; align-items: center; gap: 8px; }
+  i { height: 6px; border-radius: var(--spi-raio-pilula); background: var(--spi-superficie); overflow: hidden; }
+  em { display: block; height: 100%; border-radius: var(--spi-raio-pilula); background: var(--spi-alerta); }
+  b { text-align: right; color: var(--spi-texto); font-variant-numeric: tabular-nums; } }
+
+// Por setor responsável: faixa de aviso (info) no topo do bloco, depois a tabela
+.rc-setores { gap: 16px; }
+.rc-aviso-setor { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-radius: var(--spi-raio-m); background: var(--spi-info-suave); color: var(--spi-texto);
+  app-icone { flex: none; width: 22px; height: 22px; color: var(--spi-info); }
+  strong { display: block; font-size: 15px; font-weight: 700; color: var(--spi-titulo); }
+  small { display: block; margin-top: 2px; font-size: 13px; } }
+
+// Celular: tudo em uma coluna; filtros ocupam a largura toda
+@media (max-width: 760px) {
+  .rc-cartoes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .rc-cartao { padding: 12px 12px 0; b { font-size: 24px; } app-minigrafico { margin: 6px -12px 0; } }
+  .rc-filtros { padding: 14px 16px; .campo, .rc-filtro-setor .campo { min-width: 0; flex: 1; } .rc-filtro { width: 100%; } .rc-exportar { margin-left: 0; width: 100%; justify-content: center; } }
+  .rc-linha, .rc-linha-igual { grid-template-columns: 1fr; }
+  .rc-bloco { padding: 16px; }
+  .rc-satisfacao { grid-template-columns: 1fr; justify-items: center; }
+  .rc-nota { width: 100%; }
+}

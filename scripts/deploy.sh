@@ -13,7 +13,8 @@ cd "$ROOT/backend"
 .venv/bin/pip install -q --upgrade pip
 .venv/bin/pip install -q -r requirements-dev.txt
 [[ -f .env ]] || { echo "ERRO: backend/.env não existe. Copie de backend/.env.example e preencha." >&2; exit 1; }
-if (( TESTES )); then .venv/bin/pytest -q; fi
+# Testes do backend em paralelo (8 processos, pytest-xdist), como manda o CLAUDE.md
+if (( TESTES )); then .venv/bin/pytest -q -n 8; fi
 echo "==> Banco de dados: aplicando migrações (alembic upgrade head)"
 .venv/bin/alembic upgrade head
 
@@ -27,7 +28,11 @@ npx ng build --configuration production
 if [[ -z "${SGI_SEM_RESTART:-}" ]] && systemctl list-unit-files sgi-spi-api.service >/dev/null 2>&1; then
   echo "==> Reiniciando sgi-spi-api"
   sudo systemctl restart sgi-spi-api
-  sleep 2
-  curl -fsS http://127.0.0.1:8000/api/saude && echo
+  # A API leva alguns segundos para subir (dois workers): espera até 60 s pela saúde antes de dar o deploy por concluído
+  for _ in $(seq 1 30); do
+    curl -fsS http://127.0.0.1:8000/api/saude 2>/dev/null && echo && break
+    sleep 2
+  done || true
+  curl -fsS -o /dev/null http://127.0.0.1:8000/api/saude || { echo "!! A API não respondeu em 60 s: veja journalctl -u sgi-spi-api"; exit 1; }
 fi
 echo "==> Concluído"

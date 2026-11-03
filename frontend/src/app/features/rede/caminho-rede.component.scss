@@ -1,0 +1,49 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para o desenho do caminho até o core: caixas iguais, uma embaixo da outra, ligadas pelos quadradinhos das portas.
+
+// Largura igual em todas as caixas: assim os quadradinhos das portas ficam alinhados e o cabo desce reto entre eles
+$largura-caixa: 300px;
+$porta: 28px;
+// Distância do quadradinho até a borda direita da caixa
+$recuo: 16px;
+
+.cascata-caminho { display: flex; flex-direction: column; align-items: flex-start; margin: 0; padding: 0; list-style: none; }
+.cascata-caminho > li { display: flex; flex-direction: column; align-items: flex-start; }
+
+// Cabo: o traço vertical sai do centro do quadradinho de baixo da caixa de cima e chega no de cima da caixa seguinte (sem texto: as portas estão nos quadradinhos)
+.cabo-caminho { display: flex; justify-content: flex-end; align-items: center; width: $largura-caixa; max-width: 100%; min-height: 36px;
+  padding-right: calc(#{$recuo} + #{$porta} / 2 + 12px); position: relative; color: var(--spi-apagado); font-size: var(--spi-texto-legenda);
+  &::after { content: ''; position: absolute; top: 0; bottom: 0; right: calc(#{$recuo} + #{$porta} / 2); border-right: 2px solid var(--spi-borda-campo); } }
+
+.caixa-caminho { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: $largura-caixa; max-width: 100%;
+  padding: 12px calc(#{$recuo} + #{$porta} + 8px) 12px 12px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); background: var(--spi-superficie);
+  strong { font-size: 0.9rem; font-weight: 700; color: var(--spi-texto); overflow-wrap: anywhere; }
+  > a { text-decoration: none; } > a:hover strong { color: var(--spi-vermelho); }
+  .selo-status { margin-top: 4px; }
+  // Os quadradinhos ficam metade para fora da borda, como a porta no equipamento
+  .porta-face { position: absolute; right: $recuo; --tamanho-porta: #{$porta}; z-index: 1; }
+  .porta-cima { top: calc(#{$porta} / -2); }
+  .porta-baixo { bottom: calc(#{$porta} / -2); } }
+// Caixa com quadradinho de baixo: espaço para ele não encostar no cabo da próxima caixa
+.caixa-caminho:has(.porta-baixo) { margin-bottom: 0; }
+
+.tipo-caminho { font-size: var(--spi-texto-legenda); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--spi-apagado); }
+
+// Telefone → computador: lado a lado, ligados por um traço curto; o primeiro fica embaixo do cabo
+.dispositivos-caminho { display: flex; flex-wrap: wrap; align-items: center;
+  .caixa-caminho { padding-right: 12px; }
+  .caixa-caminho + .caixa-caminho { margin-left: 24px; position: relative;
+    &::before { content: ''; position: absolute; left: -25px; top: 50%; width: 24px; border-top: 2px solid var(--spi-borda-campo); } } }
+
+@media (max-width: 640px) {
+  .cascata-caminho, .cascata-caminho > li { align-items: stretch; }
+  .caixa-caminho, .cabo-caminho { width: 100%; }
+  .dispositivos-caminho { flex-direction: column; align-items: stretch;
+    .caixa-caminho + .caixa-caminho { margin: 12px 0 0; &::before { left: 24px; top: -14px; width: 0; height: 12px; border-top: 0; border-left: 2px solid var(--spi-borda-campo); } } }
+}
+
+// Aviso no fim (ex.: o equipamento não tem cabo até o core): afastado da última caixa e do quadradinho dela
+.aviso-caminho { margin: 24px 0 0; }
+
+// A porta aberta na tela: contorno vermelho (o acento do SGI) em volta do quadradinho
+.caixa-caminho .porta-face.porta-atual { outline: 2px solid var(--spi-vermelho); outline-offset: 2px; }

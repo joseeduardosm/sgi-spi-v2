@@ -24,8 +24,9 @@ from app.models.acl import NivelAcl
 from app.models.usuario import Usuario
 from app.schemas.rh_cargos import (
     GravacaoCargo, GravacaoTipoCargo, HistoricoUsuario, LeituraCargo, LeituraTipoCargo, NoOrganograma, OcuparCargo, PendenciaCargo, VagarCargo, VincularCargoLegado,
+    EntradaExoneracao, LeituraExoneracao,
 )
-from app.services.rh import papeis, servico_cargos, servico_historico
+from app.services.rh import papeis, servico_cargos, servico_exoneracao, servico_historico
 from app.services.rh.servico_cargos import CargoNaoEncontrado, ErroRegraCargo
 
 roteador = APIRouter(prefix="/rh", tags=["Módulo RH: cargos e histórico"], responses=RESPOSTAS_AUTENTICADAS)
@@ -117,9 +118,31 @@ def ocupar_cargo(cargo_id: int, dados: OcuparCargo, sessao: Session = Depends(ob
                "`409` se o cargo já está vago. Exige **Gerir setores e cargos**.", responses={**CONFLITO, **INVALIDO, **NAO_ENCONTRADO})
 def vagar_cargo(cargo_id: int, dados: VagarCargo, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(gerir)):
     with _traduzir(sessao):
-        servico_cargos.vagar(sessao, cargo_id, autor, fim=dados.fim, motivo=dados.motivo, ato=dados.ato)
+        encerrada = servico_cargos.vagar(sessao, cargo_id, autor, fim=dados.fim, motivo=dados.motivo, ato=dados.ato)
         sessao.commit()
-        return servico_cargos.leitura(sessao, servico_cargos.obter(sessao, cargo_id))
+        resposta = LeituraCargo.model_validate(servico_cargos.leitura(sessao, servico_cargos.obter(sessao, cargo_id)), from_attributes=True)
+        resposta.ocupacao_encerrada_id = encerrada.id
+        return resposta
+
+
+@roteador.get("/exoneracoes/{ocupacao_id}", response_model=LeituraExoneracao, summary="Chamados da exoneração",
+              description="A exoneração (ocupação encerrada com o motivo `exoneracao`), os serviços a desfazer (o inverso da nomeação), a sugestão "
+              "(o que foi pedido na nomeação da pessoa) e os chamados já abertos, com o status de agora. Exige **Gerir setores e cargos**.",
+              responses={**CONFLITO, **NAO_ENCONTRADO})
+def exoneracao(ocupacao_id: int, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(gerir)):
+    with _traduzir(sessao):
+        return servico_exoneracao.leitura(sessao, ocupacao_id)
+
+
+@roteador.post("/exoneracoes/{ocupacao_id}/chamados", response_model=LeituraExoneracao, summary="Abrir os chamados da exoneração",
+               description="Um chamado por serviço marcado, na categoria de cada serviço da Exoneração (Parâmetros dos Chamados > RH). Só depois da virada "
+               "(destino `chamados`; antes: 409, use o formulário do GLPI). Uma vez por exoneração (409 na segunda). Exige **Gerir setores e cargos**.",
+               responses={**CONFLITO, **INVALIDO, **NAO_ENCONTRADO})
+def abrir_chamados_exoneracao(ocupacao_id: int, dados: EntradaExoneracao, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(gerir)):
+    with _traduzir(sessao):
+        resposta = servico_exoneracao.abrir(sessao, ocupacao_id, dados.solicitacoes, dados.observacoes, autor)
+        sessao.commit()
+        return resposta
 
 
 @roteador.get("/cargos-a-reconciliar", response_model=list[PendenciaCargo], summary="Pessoas com cargo ainda sem vínculo",

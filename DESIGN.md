@@ -67,6 +67,7 @@ Sempre usadas em par. Texto forte sobre fundo suave, com bolinha à esquerda.
 |--------|-------------|-------|--------|-------------|-------|--------|-----------------|
 | Sucesso | `--spi-sucesso` | `#1d6b43` | `#6fd3a0` | `--spi-sucesso-suave` | `#d4f0de` | `#173327` | Vigente, concluído, localizado |
 | Alerta | `--spi-alerta` | `#9a6400` | `#f0c062` | `--spi-alerta-suave` | `#fdf1d8` | `#3a2e14` | A vencer, pendente, sem chapa |
+| Atenção | `--spi-atencao` | `#a34a00` | `#f5a362` | `--spi-atencao-suave` | `#fde6d3` | `#3d2614` | Entre alerta e perigo: prazo de chamado em 75% (Chamados). Contraste AA 4,93:1 (claro) e 6,93:1 (escuro) |
 | Perigo | `--spi-perigo` | `#a91c28` | `#f1959c` | `--spi-perigo-suave` | `#fcecee` | `#3a2226` | Vencido, inservível, erro |
 | Informação | `--spi-info` | `#1a56a0` | `#7fb0ee` | `--spi-info-suave` | `#dbeafe` | `#1a2a40` | Em análise, rascunho, novo |
 | Neutro | `--spi-apagado` | — | — | `--spi-superficie-alt` | — | — | Arquivado, baixado, sem status |
@@ -200,6 +201,13 @@ Quando uma linha, item ou cartão tem mais de duas ações, mostre só a mais us
 ### Campo de formulário
 Já existe estilo base global — manter. Borda 1px `--spi-borda-campo`, raio 6px, altura mínima 46px, fundo `--spi-superficie`. Foco: borda `--spi-vermelho` + `--spi-anel-foco`. Rótulo acima em 13–14px peso 600 `--spi-rotulo`. Erro: borda `--spi-perigo` + mensagem 12px `--spi-perigo` abaixo.
 
+
+### Campo de escolha com busca (`app-campo-escolha`)
+Substitui o `<select>` quando a lista é longa ou precisa de pesquisa (setores, categorias, SLAs...). Um campo só: ao focar mostra todas as opções;
+digitar filtra (sem diferenciar acentos); setas, Enter e Esc; o "×" limpa quando há opção vazia (`vazio="Herdar"`). Funciona como um select:
+`[(ngModel)]` e `required`. `[opcoes]` recebe `{valor, rotulo}[]` (monte uma vez, num `computed`). Mesmo padrão do campo de sala do Patrimônio
+(`app-seletor-sala`). Para escolher **várias** opções, use o campo para acrescentar e mostre as escolhidas em fichas com "×" (ex.: "Quem pode
+escolher este assunto" nos Parâmetros dos Chamados). Para pessoas, continua o `app-seletor-usuarios`.
 ### Card
 Fundo `--spi-superficie`, borda 1px `--spi-borda`, raio 12px, padding 16–24px, **sem sombra**. Cabeçalho opcional: título 20px/700 + ações à direita, separado do corpo por borda inferior.
 

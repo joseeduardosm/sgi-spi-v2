@@ -32,6 +32,10 @@ export interface ItemNavegacao {
   acl?: string;
   /** Só quem pode ver o Painel Executivo (a API decide; sem regras na ACL, apenas o SuperRoot). */
   painelExecutivo?: boolean;
+  /** Só quem tem algum papel no módulo Chamados (a API decide; sem regras na ACL, apenas o SuperRoot). */
+  chamados?: boolean;
+  /** Só quem tem algum papel no plano de face da rede (a API decide; sem regras na ACL, apenas o SuperRoot). */
+  rede?: boolean;
   filhos?: ItemNavegacao[];
   /** Só no editor do menu: o administrador ocultou o item (no menu real ele nem chega a existir). */
   oculto?: boolean;

@@ -218,6 +218,9 @@ def substituir_estrutura(sessao: Session, arvore: dict[str, dict], autor_login: 
 
     - Setores sistêmicos (grupos do sistema) e os membros deles são mantidos.
     - Os setores institucionais, os membros deles e as regras de ACL que os citam (CASCADE) saem.
+    - **Exceção:** setor citado por chamado ou categoria do módulo Chamados não é apagado (o histórico apontaria para o nada).
+      Se o nome dele continua na estrutura nova, ele é **reaproveitado** (mesmo id, novo lugar na hierarquia); se não continua,
+      fica **inativo** e fora da hierarquia. Os membros saem do mesmo jeito.
     - O Departamento de todos os usuários é limpo: como é obrigatório no perfil, o usuário comum é
       levado a "Meu perfil" no próximo login para escolher o novo setor.
     Devolve um resumo do que foi feito.
@@ -229,8 +232,13 @@ def substituir_estrutura(sessao: Session, arvore: dict[str, dict], autor_login: 
     for setor in antigos:
         setor.setor_pai_id = None
     sessao.flush()
+    em_uso = _setores_em_uso_nos_chamados(sessao)
+    preservados = {s.nome.lower(): s for s in antigos if s.id in em_uso}
     for setor in antigos:
-        sessao.delete(setor)
+        if setor.id in em_uso:
+            setor.ativo = False
+        else:
+            sessao.delete(setor)
     sessao.flush()
     usuarios = list(sessao.scalars(select(Usuario).where(func.trim(Usuario.departamento) != "")))
     for usuario in usuarios:
@@ -238,22 +246,43 @@ def substituir_estrutura(sessao: Session, arvore: dict[str, dict], autor_login: 
 
     criados: list[str] = []
 
+    reaproveitados: list[str] = []
+
     def criar(ramo: dict[str, dict], pai_id: int | None) -> None:
         for nome, filhos in ramo.items():
-            setor = Setor(nome=nome, setor_pai_id=pai_id, sistemico=False, ativo=True)
-            sessao.add(setor)
+            setor = preservados.pop(nome.lower(), None)
+            if setor is not None:
+                # Setor que os Chamados citam: volta ativo, com o mesmo id, no lugar novo
+                setor.nome, setor.setor_pai_id, setor.ativo = nome, pai_id, True
+                reaproveitados.append(nome)
+            else:
+                setor = Setor(nome=nome, setor_pai_id=pai_id, sistemico=False, ativo=True)
+                sessao.add(setor)
+                criados.append(nome)
             sessao.flush()
-            criados.append(nome)
             criar(filhos, setor.id)
 
     criar(arvore, None)
     resumo = {
-        "setores_removidos": sorted(s.nome for s in antigos),
+        "setores_removidos": sorted(s.nome for s in antigos if s.id not in em_uso),
         "membros_removidos": membros,
         "departamentos_limpos": len(usuarios),
         "setores_criados": criados,
+        "setores_reaproveitados": reaproveitados,
+        "setores_inativados_em_uso": sorted(s.nome for s in preservados.values()),
     }
     auditar(sessao, autor_login, "setores.reorganizar", "Estrutura organizacional",
             f"{len(antigos)} setor(es) removido(s), {len(criados)} criado(s), {len(usuarios)} departamento(s) limpo(s)",
             alvo_tipo="setores", alvo_id="estrutura", dados=resumo)
     return resumo
+
+
+def _setores_em_uso_nos_chamados(sessao: Session) -> set[int]:
+    """Setores citados pelo módulo Chamados (responsável ou solicitante de chamado, responsável de categoria, ajustes de atendimento)."""
+    from app.models.chamados import CategoriaChamados, Chamado, SetorAtendimentoChamados
+
+    ids: set[int] = set()
+    for coluna in (Chamado.setor_id, Chamado.setor_solicitante_id, CategoriaChamados.setor_id, SetorAtendimentoChamados.setor_id,
+                   SetorAtendimentoChamados.area_painel_id):
+        ids |= {i for i in sessao.scalars(select(coluna).distinct()) if i is not None}
+    return ids

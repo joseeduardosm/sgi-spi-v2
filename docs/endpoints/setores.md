@@ -108,6 +108,9 @@ cd backend
 O script (`servico_setores.substituir_estrutura`) faz tudo numa transação só:
 - mantém os **setores sistêmicos** e os membros deles;
 - apaga os **setores institucionais**, os membros deles e as regras de ACL que citam esses setores (em cascata);
+- **exceção (desde 2026-11-01):** o setor citado pelo módulo [Chamados](chamados.md) (responsável ou solicitante de chamado, responsável de categoria,
+  ajustes de atendimento) **não é apagado**: se o nome continua na árvore nova, é reaproveitado com o mesmo id (`setores_reaproveitados` no resumo);
+  se não continua, fica inativo e fora da hierarquia (`setores_inativados_em_uso`). Os membros saem do mesmo jeito;
 - **limpa o Departamento de todos os usuários.** Como o campo é obrigatório no perfil, o usuário comum é levado a "Meu perfil" no próximo login (`403 revisao_perfil_obrigatoria` na API) para escolher o novo setor. O SuperRoot não é bloqueado;
 - cadastra a árvore oficial e registra `setores.reorganizar` na auditoria.
 

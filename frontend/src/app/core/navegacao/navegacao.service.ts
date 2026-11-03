@@ -34,7 +34,7 @@ export class NavegacaoService {
   /** Mantém só os itens permitidos (papel, conta root e ACL), aplicando o mesmo filtro aos submenus. */
   private filtrarItens(itens: ItemNavegacao[]): ItemNavegacao[] {
     return itens
-      .filter((i) => this.permitido(i.papeis) && (!i.somenteRoot || !!this.autenticacao.usuario()?.conta_root) && (!i.acl || this.acesso.pode(i.acl)) && (!i.painelExecutivo || this.acesso.painelExecutivo()))
+      .filter((i) => this.permitido(i.papeis) && (!i.somenteRoot || !!this.autenticacao.usuario()?.conta_root) && (!i.acl || this.acesso.pode(i.acl)) && (!i.painelExecutivo || this.acesso.painelExecutivo()) && (!i.chamados || !!this.acesso.chamados()) && (!i.rede || !!this.acesso.rede()))
       .map((i) => (i.filhos ? { ...i, filhos: this.filtrarItens(i.filhos) } : i));
   }
 

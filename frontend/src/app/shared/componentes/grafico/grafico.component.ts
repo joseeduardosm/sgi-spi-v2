@@ -72,6 +72,41 @@ const cursorVertical: Plugin = {
 };
 
 /**
+ * Valor escrito na ponta de cada barra (em cima na vertical, à direita na horizontal), na cor de texto do tema e não na cor da série.
+ * Liga com `[valores]="true"`; serve de leitura direta quando há poucas barras. Zero fica sem rótulo.
+ */
+const valoresNasBarras: Plugin = {
+  id: 'valoresNasBarras',
+  afterDatasetsDraw(grafico) {
+    const opcoes = (grafico.options.plugins as Record<string, { ativo?: boolean; horizontal?: boolean; formato?: FormatoGrafico }>)['valoresNasBarras'];
+    if (!opcoes?.ativo) return;
+    const { ctx } = grafico;
+    const tema = coresDoTema();
+    ctx.save();
+    ctx.font = `600 ${Math.max(11, Math.round(Number(grafico.options.font?.size ?? 12) * 0.9))}px ${Chart.defaults.font.family}`;
+    ctx.fillStyle = tema.apagado;
+    grafico.data.datasets.forEach((d, i) => {
+      const meta = grafico.getDatasetMeta(i);
+      if (meta.hidden || (meta.type !== 'bar')) return;
+      meta.data.forEach((barra, j) => {
+        const valor = d.data[j] as number | null;
+        // Zero não ganha rótulo: só polui (a ausência de barra já diz)
+        if (valor === null || valor === undefined || Number(valor) === 0) return;
+        const texto = formatarValor(Number(valor), opcoes.formato ?? 'numero');
+        if (opcoes.horizontal) {
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillText(texto, barra.x + 6, barra.y);
+        } else {
+          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(texto, barra.x, barra.y - 4);
+        }
+      });
+    });
+    ctx.restore();
+  },
+};
+
+/**
  * Gráfico acessível: o canvas tem `aria-label` e há uma descrição em texto para leitores de tela.
  * Redimensiona com o contêiner e é destruído ao sair da tela.
  */
@@ -105,11 +140,15 @@ export class GraficoComponent {
   readonly empilhado = input(false);
   /** Barras na horizontal (bom para nomes longos, como setores). */
   readonly horizontal = input(false);
-  /** Esconde a legenda (útil quando há uma única série). */
+  /** Esconde a legenda (útil quando há uma única série ou quando a tela desenha a própria legenda). */
   readonly semLegenda = input(false);
+  /** Escreve o valor na ponta de cada barra. */
+  readonly valores = input(false);
   /** Com `clicavel`, o ponteiro vira "mãozinha" sobre as barras/fatias e o clique emite o índice. */
   readonly clicavel = input(false);
   readonly itemClicado = output<number>();
+  /** Com `clicavel`: o índice da categoria (barra/ponto) e o da série clicada (ex.: semana 3, série "Resolvidos"). */
+  readonly pontoClicado = output<{ indice: number; serie: number }>();
 
   private readonly tela = viewChild.required<ElementRef<HTMLCanvasElement>>('tela');
   private grafico: Chart | null = null;
@@ -136,7 +175,7 @@ export class GraficoComponent {
       return;
     }
     const contexto = this.tela().nativeElement.getContext('2d');
-    if (contexto) this.grafico = new Chart(contexto, { ...configuracao, plugins: [cursorVertical] });
+    if (contexto) this.grafico = new Chart(contexto, { ...configuracao, plugins: [cursorVertical, valoresNasBarras] });
   }
 
   /** Tamanho inicial da fonte, de 11 a 24 px, conforme a largura do contêiner. */
@@ -183,9 +222,14 @@ export class GraficoComponent {
         indexAxis: this.horizontal() ? 'y' : 'x',
         interaction: { mode: tipo === 'line' ? 'index' : 'nearest', intersect: false, axis: this.horizontal() ? 'y' : 'x' },
         color: tema.apagado,
-        onClick: (_e, elementos) => { if (elementos.length) this.itemClicado.emit(elementos[0].index); },
+        onClick: (_e, elementos) => {
+          if (!elementos.length) return;
+          this.itemClicado.emit(elementos[0].index);
+          this.pontoClicado.emit({ indice: elementos[0].index, serie: elementos[0].datasetIndex });
+        },
         onHover: (evento, elementos) => { const c = evento.native?.target as HTMLElement | undefined; if (c && this.clicavel()) c.style.cursor = elementos.length ? 'pointer' : 'default'; },
         plugins: {
+          ...({ valoresNasBarras: { ativo: this.valores(), horizontal: this.horizontal(), formato } } as object),
           legend: { display: !this.semLegenda() && (series.length > 1 || tipo === 'doughnut'), position: tipo === 'doughnut' ? 'right' : 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, color: tema.apagado } },
           tooltip: {
             backgroundColor: tema.fundo, titleColor: tema.texto, bodyColor: tema.texto, borderColor: tema.linha, borderWidth: 1, padding: 12, cornerRadius: 12,
@@ -196,12 +240,12 @@ export class GraficoComponent {
         // Eixo das categorias (rótulos) e eixo dos valores; na barra horizontal eles trocam de lado
         scales: tipo === 'doughnut' ? {} : this.horizontal()
           ? {
-              x: { type: 'linear', stacked: empilhar, beginAtZero: true, grid: { color: tema.linha }, border: { display: true, color: tema.linha }, ticks: { precision: 0, color: tema.apagado, callback: (v) => abreviar(Number(v)) } },
+              x: { type: 'linear', stacked: empilhar, beginAtZero: true, grace: this.valores() ? '12%' : 0, grid: { color: tema.linha }, border: { display: true, color: tema.linha }, ticks: { precision: 0, color: tema.apagado, callback: (v) => abreviar(Number(v)) } },
               y: { type: 'category', stacked: empilhar, grid: { display: false }, border: { display: true, color: tema.linha }, ticks: { color: tema.apagado } },
             }
           : {
               x: { type: 'category', stacked: empilhar, grid: { display: false }, border: { display: true, color: tema.linha }, ticks: { color: tema.apagado } },
-              y: { type: 'linear', stacked: empilhar, beginAtZero: true, grid: { color: tema.linha }, border: { display: true, color: tema.linha }, ticks: { precision: 0, color: tema.apagado, callback: (v) => abreviar(Number(v)) } },
+              y: { type: 'linear', stacked: empilhar, beginAtZero: true, grace: this.valores() ? '12%' : 0, grid: { color: tema.linha }, border: { display: true, color: tema.linha }, ticks: { precision: 0, color: tema.apagado, callback: (v) => abreviar(Number(v)) } },
             },
         // Fonte proporcional à largura do gráfico (legível também numa TV)
         font: { size: this.tamanhoFonte() },

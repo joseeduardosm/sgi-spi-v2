@@ -4,7 +4,7 @@
 import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 
-import { guardaAcl, guardaPainelExecutivo, guardaPerfil } from './core/acesso/acesso.guards';
+import { guardaAcl, guardaChamados, guardaPainelExecutivo, guardaPerfil, guardaRede } from './core/acesso/acesso.guards';
 import { guardaAutenticacao, guardaContaRoot, guardaPapel, guardaVisitante } from './core/autenticacao/autenticacao.guards';
 import { AutenticacaoService } from './core/autenticacao/autenticacao.service';
 
@@ -143,6 +143,17 @@ export const rotas: Routes = [
         canActivate: [guardaPainelExecutivo],
         title: 'Painel Executivo | SGI SPI',
         loadComponent: () => import('./features/painel-executivo/pagina-painel-executivo.component').then((m) => m.PaginaPainelExecutivoComponent),
+      },
+      {
+        // Chamados: abrir, acompanhar, atender e Parâmetros; cada rota filha exige o seu papel (a API confere de novo)
+        path: 'chamados',
+        canActivate: [guardaChamados],
+        loadChildren: () => import('./features/chamados/chamados.routes').then((m) => m.ROTAS_CHAMADOS),
+      },
+      {
+        path: 'rede',
+        canActivate: [guardaRede],
+        loadChildren: () => import('./features/rede/rede.routes').then((m) => m.ROTAS_REDE),
       },
       {
         // Manuais do BookStack lidos pelo portal: a ACL `manuais` é conferida em cada rota filha (sem regras = todo usuário logado)

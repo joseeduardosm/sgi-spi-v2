@@ -145,15 +145,6 @@ export class LayoutAutenticadoComponent {
     this.folhaPontoAberta.set(true);
   }
 
-  /**
-   * Troca o perfil ativo. Depois do token novo, recarrega a aplicação em `/`: zera acessos, atalhos, notificações
-   * e demais caches, e o usuário já vê o sistema como o novo perfil enxerga.
-   */
-  protected trocarPerfil(perfilId: number): void {
-    if (this.autenticacao.usuario()?.perfil_ativo?.id === perfilId) return;
-    this.autenticacao.trocarPerfil(perfilId).subscribe({ next: () => this.recarregarAplicacao() });
-  }
-
   /** Encerra a personificação e volta a ser o SuperRoot. */
   protected pararPersonificacao(): void {
     this.autenticacao.pararPersonificacao().subscribe({ next: () => this.recarregarAplicacao() });

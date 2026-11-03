@@ -3,11 +3,25 @@
 # Provisiona tudo o que o sistema precisa: pacotes do sistema, Node 22, PostgreSQL (usuário e banco), backend/.env,
 # pasta dos anexos, sudoers do restart, certificado (autoassinado se não houver), build, serviços e Nginx.
 #
-# Executar com sudo, a partir do usuário que vai rodar o sistema (dono do diretório do projeto):
-#   sudo scripts/instalar.sh --dominio homologacao.spi.sp.gov.br --homologacao
-#   sudo scripts/instalar.sh --dominio portal.spi.sp.gov.br
+# Executar com sudo, a partir do usuário que vai rodar o sistema (dono do diretório do projeto).
 #
-# --dominio NOME         nome do site no HTTPS (padrão portal.spi.sp.gov.br, que é PRODUÇÃO). Certificado esperado em
+# Máquina nova (sem o projeto): baixe só este script; ele instala o git, clona o repositório do GitHub em
+# ~/projeto (ou --diretorio) e continua a partir da cópia clonada:
+#   curl -fsSL https://raw.githubusercontent.com/joseeduardosm/sgi-spi-v2/estado-atual-servidor/scripts/instalar.sh -o instalar.sh
+#   sudo bash instalar.sh --dominio homologacao.spi.sp.gov.br --homologacao --sem-testes
+# (não use "curl … | sudo bash": a senha do SuperRoot é pedida no terminal)
+#
+# Máquina com o projeto (atualizar ou reaplicar Nginx/systemd):
+#   sudo scripts/instalar.sh --dominio portal.spi.sp.gov.br               # usa o código como está na pasta
+#   sudo scripts/instalar.sh --dominio portal.spi.sp.gov.br --atualizar   # antes, puxa a versão nova do GitHub
+#
+# --diretorio DIR        onde clonar numa máquina nova (padrão: pasta "projeto" na home do usuário)
+# --ramo NOME            ramo do GitHub a clonar (padrão estado-atual-servidor)
+# --atualizar            com o projeto já na máquina: "git pull" do ramo atual antes de instalar (recusa se houver
+#                        alteração local não commitada, para não perder nada)
+#
+# --dominio NOME|IP      nome do site no HTTPS (padrão portal.spi.sp.gov.br, que é PRODUÇÃO). Sem DNS (ex.: homologação
+#                        em casa), informe o IP da máquina: o site fica em https://IP e o certificado autoassinado sai para o IP. Certificado esperado em
 #                        /etc/ssl/certs/NOME.fullchain.crt e chave em /etc/ssl/private/NOME.key; sem eles, gera um
 #                        autoassinado (o navegador vai avisar até trocar pelo certificado oficial)
 # --homologacao          ambiente de testes: e-mails e pop-ups do navegador são simulados (nada sai do servidor),
@@ -19,6 +33,13 @@
 # --sem-pacotes          não instala pacotes do sistema (máquina já preparada ou sem acesso à internet)
 set -euo pipefail
 
+# Repositório público do sistema (clonado por HTTPS, sem senha)
+REPOSITORIO=https://github.com/joseeduardosm/sgi-spi-v2.git
+RAMO=estado-atual-servidor
+DIRETORIO=""
+ATUALIZAR=0
+# Guarda as opções originais para repassar à cópia clonada
+OPCOES=("$@")
 PORTA=80
 DOMINIO=portal.spi.sp.gov.br
 DOMINIO_PRODUCAO=portal.spi.sp.gov.br
@@ -34,20 +55,60 @@ while [[ $# -gt 0 ]]; do
     --homologacao) HOMOLOGACAO=1; shift ;;
     --sem-testes) SEM_TESTES=1; shift ;;
     --sem-pacotes) PACOTES=0; shift ;;
+    --diretorio) DIRETORIO="$2"; shift 2 ;;
+    --ramo) RAMO="$2"; shift 2 ;;
+    --atualizar) ATUALIZAR=1; shift ;;
     *) echo "Opção desconhecida: $1" >&2; exit 1 ;;
   esac
 done
 
 [[ $EUID -eq 0 ]] || { echo "Execute com sudo." >&2; exit 1; }
 USUARIO="${SUDO_USER:?Execute via sudo a partir do usuário do projeto}"
-PROJETO="$(cd "$(dirname "$0")/.." && pwd)"
-ENV="$PROJETO/backend/.env"
+como_usuario() { sudo -u "$USUARIO" -H "$@"; }
 # Homologação apontando para o domínio de produção redirecionaria tudo para produção
 if (( HOMOLOGACAO )) && [[ "$DOMINIO" == "$DOMINIO_PRODUCAO" ]]; then
   echo "ERRO: em homologação informe --dominio com o endereço da homologação (o padrão é o de produção)." >&2
   exit 1
 fi
-como_usuario() { sudo -u "$USUARIO" -H "$@"; }
+
+# ---------------------------------------------------------------------------------------------
+# 0. Código do sistema: clona do GitHub numa máquina nova, ou usa (e, com --atualizar, atualiza) o que já está aqui
+# ---------------------------------------------------------------------------------------------
+AQUI="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)"
+if [[ -d "$AQUI/.git" && -f "$AQUI/backend/requirements-dev.txt" ]]; then
+  PROJETO="$AQUI"
+  if (( ATUALIZAR )); then
+    echo "==> Atualizando o código do GitHub ($(como_usuario git -C "$PROJETO" rev-parse --abbrev-ref HEAD))"
+    if [[ -n "$(como_usuario git -C "$PROJETO" status --porcelain --untracked-files=no)" ]]; then
+      echo "ERRO: há alterações locais não commitadas em $PROJETO. Faça o commit (ou descarte) antes de --atualizar." >&2
+      exit 1
+    fi
+    como_usuario git -C "$PROJETO" pull --ff-only
+    # Segue com a versão nova deste script (sem --atualizar, para não puxar de novo)
+    SEGUIR=()
+    for opcao in "${OPCOES[@]}"; do [[ "$opcao" == --atualizar ]] || SEGUIR+=("$opcao"); done
+    exec bash "$PROJETO/scripts/instalar.sh" "${SEGUIR[@]}"
+  fi
+else
+  # Script baixado sozinho: traz o repositório e continua a partir da cópia clonada
+  PROJETO="${DIRETORIO:-$(getent passwd "$USUARIO" | cut -d: -f6)/projeto}"
+  if ! command -v git >/dev/null; then
+    echo "==> Instalando o git"
+    DEBIAN_FRONTEND=noninteractive apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q git ca-certificates
+  fi
+  if [[ -d "$PROJETO/.git" ]]; then
+    echo "==> Projeto já clonado em $PROJETO (use --atualizar para puxar a versão nova)"
+  elif [[ -e "$PROJETO" && -n "$(ls -A "$PROJETO" 2>/dev/null)" ]]; then
+    echo "ERRO: $PROJETO já existe e não está vazio. Escolha outra pasta com --diretorio." >&2
+    exit 1
+  else
+    echo "==> Clonando $REPOSITORIO (ramo $RAMO) em $PROJETO"
+    install -d -o "$USUARIO" -g "$USUARIO" "$PROJETO"
+    como_usuario git clone --branch "$RAMO" "$REPOSITORIO" "$PROJETO"
+  fi
+  exec bash "$PROJETO/scripts/instalar.sh" "${OPCOES[@]}"
+fi
+ENV="$PROJETO/backend/.env"
 
 echo "==> Projeto em $PROJETO (usuário $USUARIO, domínio $DOMINIO$( (( HOMOLOGACAO )) && echo ', HOMOLOGAÇÃO'))"
 
@@ -58,7 +119,7 @@ if (( PACOTES )); then
   echo "==> Pacotes do sistema"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
-  apt-get install -y -q python3 python3-venv python3-pip nginx postgresql postgresql-contrib curl ca-certificates gnupg openssl openssh-server
+  apt-get install -y -q git python3 python3-venv python3-pip nginx postgresql postgresql-contrib curl ca-certificates gnupg openssl openssh-server
   # O Angular do projeto exige Node 22 (o build falha em versões antigas)
   if ! command -v node >/dev/null || [[ "$(node -v | sed 's/^v//; s/\..*//')" -lt 22 ]]; then
     echo "==> Node 22 (NodeSource)"
@@ -172,7 +233,7 @@ systemctl daemon-reload
 systemctl enable sgi-spi-api
 systemctl restart sgi-spi-api
 
-echo "==> systemd: timers das notificações (despacho a cada 2 min; lembretes às 07:00) e da conferência de OBs no SIGEO"
+echo "==> systemd: timers das notificações (despacho a cada 2 min; lembretes às 07:00), da conferência de OBs no SIGEO e dos Chamados (prazos e recorrentes a cada minuto; vigia a cada 5 min) e do ping da Rede (a cada minuto)"
 # Em homologação os timers rodam igual: os envios saem simulados e a conferência do SIGEO não consulta nada
 # Unidades antigas (antes se chamavam "mensageria"): desativa e remove, para não rodarem em dobro
 for antiga in sgi-spi-mensageria-emails sgi-spi-mensageria-lembretes; do
@@ -180,14 +241,14 @@ for antiga in sgi-spi-mensageria-emails sgi-spi-mensageria-lembretes; do
   systemctl stop "$antiga.service" 2>/dev/null || true
   rm -f "/etc/systemd/system/$antiga.timer" "/etc/systemd/system/$antiga.service"
 done
-for unidade in sgi-spi-notificacoes-despachar sgi-spi-notificacoes-lembretes sgi-spi-sigeo-ob; do
+for unidade in sgi-spi-notificacoes-despachar sgi-spi-notificacoes-lembretes sgi-spi-sigeo-ob sgi-spi-chamados-minuto sgi-spi-chamados-vigia sgi-spi-rede-ping; do
   for tipo in service timer; do
     sed -e "s/__USUARIO__/$USUARIO/g" -e "s|__PROJETO__|$PROJETO|g" \
         "$PROJETO/systemd/$unidade.$tipo" > "/etc/systemd/system/$unidade.$tipo"
   done
 done
 systemctl daemon-reload
-systemctl enable --now sgi-spi-notificacoes-despachar.timer sgi-spi-notificacoes-lembretes.timer sgi-spi-sigeo-ob.timer
+systemctl enable --now sgi-spi-notificacoes-despachar.timer sgi-spi-notificacoes-lembretes.timer sgi-spi-sigeo-ob.timer sgi-spi-chamados-minuto.timer sgi-spi-chamados-vigia.timer sgi-spi-rede-ping.timer
 
 # ---------------------------------------------------------------------------------------------
 # 7. Certificado e Nginx
@@ -222,7 +283,9 @@ CERT="/etc/ssl/certs/$DOMINIO.fullchain.crt"
 CHAVE="/etc/ssl/private/$DOMINIO.key"
 if [[ ! -f "$CERT" || ! -f "$CHAVE" ]]; then
   echo "    sem certificado para $DOMINIO: gerando um autoassinado (troque pelo oficial nos mesmos caminhos e recarregue o Nginx)"
-  openssl req -x509 -nodes -newkey rsa:2048 -days 825 -subj "/CN=$DOMINIO" -addext "subjectAltName=DNS:$DOMINIO" \
+  # Acesso pelo IP (sem DNS): o certificado precisa declarar o IP, não um nome
+  if [[ "$DOMINIO" =~ ^[0-9]+(\.[0-9]+){3}$ ]]; then NOME_CERT="IP:$DOMINIO"; else NOME_CERT="DNS:$DOMINIO"; fi
+  openssl req -x509 -nodes -newkey rsa:2048 -days 825 -subj "/CN=$DOMINIO" -addext "subjectAltName=$NOME_CERT" \
     -keyout "$CHAVE" -out "$CERT" >/dev/null 2>&1
   chmod 600 "$CHAVE"
 fi
@@ -240,7 +303,8 @@ echo "==> Verificação"
 sleep 2
 curl -fsS "http://127.0.0.1:$PORTA/api/saude" && echo
 curl -fsS -o /dev/null "http://127.0.0.1:$PORTA/" && echo "frontend OK"
-curl -fsS -o /dev/null --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/api/saude" --cacert "$CERT" && echo "HTTPS OK"
+curl -fsS -o /dev/null --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/api/saude" --cacert "$CERT" && echo "HTTPS OK" \
+  || echo "AVISO: a conferência do HTTPS falhou (veja o certificado em $CERT)."
 echo "Aplicação: https://$DOMINIO/ (os demais endereços redirecionam para ele). Login: root com a senha informada na instalação."
 (( HOMOLOGACAO )) && echo "HOMOLOGAÇÃO: e-mails e pop-ups são simulados; SIGEO, AD e aniversários não rodam."
 exit 0

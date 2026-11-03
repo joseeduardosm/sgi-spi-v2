@@ -67,11 +67,6 @@ export class AutenticacaoService {
     );
   }
 
-  /** Perfil ativo escolhido no menu do usuário: a API devolve um token novo e a sessão é trocada. */
-  trocarPerfil(perfilId: number): Observable<Usuario> {
-    return this.trocarSessao(this.http.post<RespostaToken>(`${ambiente.urlApi}/autenticacao/perfil-ativo`, { perfil_id: perfilId }));
-  }
-
   /** O SuperRoot passa a navegar como o usuário informado (testar as permissões dele). */
   personificar(usuarioId: number): Observable<Usuario> {
     return this.trocarSessao(this.http.post<RespostaToken>(`${ambiente.urlApi}/autenticacao/personificar`, { usuario_id: usuarioId }));

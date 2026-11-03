@@ -18,7 +18,11 @@ describe('NavegacaoService', () => {
     usuario,
     possuiPapel: (...papeis: Papel[]) => papeis.some((p) => usuario()?.papeis.includes(p) ?? false),
   };
-  const acessoSimulado = { carregado: signal(true), painelExecutivo: signal(false), pode: (slug: string) => concedidos().has(slug) };
+  const acessoSimulado = {
+    carregado: signal(true), painelExecutivo: signal(false), chamados: signal<{ abrir: boolean; atender: boolean; administrar: boolean } | null>(null),
+    rede: signal<{ ver: boolean; editar: boolean; administrar: boolean } | null>(null),
+    pode: (slug: string) => concedidos().has(slug),
+  };
 
   // Lista plana com os rótulos visíveis de todas as seções
   const rotulos = (nav: NavegacaoService) => nav.secoes().flatMap((s) => s.itens.map((i) => i.rotulo));
@@ -26,6 +30,8 @@ describe('NavegacaoService', () => {
   beforeEach(() => {
     concedidos.set(new Set());
     acessoSimulado.painelExecutivo.set(false);
+    acessoSimulado.chamados.set(null);
+    acessoSimulado.rede.set(null);
     TestBed.configureTestingModule({
       providers: [
         { provide: AutenticacaoService, useValue: autenticacaoSimulada },
@@ -51,6 +57,24 @@ describe('NavegacaoService', () => {
     expect(rotulos(nav).concat(nav.secoes().flatMap((s) => s.itens.flatMap((i) => (i.filhos ?? []).map((f) => f.rotulo))))).not.toContain('Painel Executivo');
     acessoSimulado.painelExecutivo.set(true);
     expect(nav.secoes().flatMap((s) => s.itens.flatMap((i) => (i.filhos ?? []).map((f) => f.rotulo)))).toContain('Painel Executivo');
+  });
+
+  it('mostra Chamados só para quem a API diz ter papel no módulo (fechado até a virada)', () => {
+    const nav = TestBed.inject(NavegacaoService);
+    usuario.set({ id: 2, login: 'fulano', nome_completo: 'Fulano', papeis: [], origem: 'ldap' });
+    const filhos = () => nav.secoes().flatMap((s) => s.itens.flatMap((i) => (i.filhos ?? []).map((f) => f.rotulo)));
+    expect(filhos()).not.toContain('Chamados');
+    acessoSimulado.chamados.set({ abrir: true, atender: false, administrar: false });
+    expect(filhos()).toContain('Chamados');
+  });
+
+  it('mostra Rede só para quem a API diz ter papel no plano de face (fechado sem regras)', () => {
+    const nav = TestBed.inject(NavegacaoService);
+    usuario.set({ id: 2, login: 'fulano', nome_completo: 'Fulano', papeis: [], origem: 'ldap' });
+    const filhos = () => nav.secoes().flatMap((s) => s.itens.flatMap((i) => (i.filhos ?? []).map((f) => f.rotulo)));
+    expect(filhos()).not.toContain('Rede');
+    acessoSimulado.rede.set({ ver: true, editar: false, administrar: false });
+    expect(filhos()).toContain('Rede');
   });
 
   it('oculta módulos sem acesso efetivo na ACL', () => {

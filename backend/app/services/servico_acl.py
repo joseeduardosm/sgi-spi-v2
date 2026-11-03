@@ -67,30 +67,21 @@ def perfis_por_setor(sessao: Session, usuario_id: int) -> dict[int, list[str]]:
     return resultado
 
 
-def perfil_padrao_id(sessao: Session, usuario_id: int) -> int | None:
-    """Perfil padrão do usuário (o marcado como padrão; senão o primeiro por nome), entre os ativos."""
-    perfis = perfis_do_usuario(sessao, usuario_id)
-    if not perfis:
-        return None
-    padrao = set(sessao.scalars(select(UsuarioPerfil.perfil_id).where(UsuarioPerfil.usuario_id == usuario_id, UsuarioPerfil.padrao.is_(True))))
-    return next((p.id for p in perfis if p.id in padrao), perfis[0].id)
-
-
-def perfil_ativo_id(sessao: Session, usuario: Usuario) -> int | None:
-    """Perfil ativo do usuário: o escolhido na sessão (`usuario.perfil_ativo_id`, validado ao autenticar) ou o padrão."""
-    escolhido = getattr(usuario, "perfil_ativo_id", None)
-    if escolhido is not None:
-        return escolhido
-    return perfil_padrao_id(sessao, usuario.id)
+def perfis_ids_do_usuario(sessao: Session, usuario_id: int) -> list[int]:
+    """Ids dos perfis ativos do usuário (diretos e pelos setores). **Todos valem juntos**: as ações se somam, sem perfil "ativo" a escolher."""
+    return [p.id for p in perfis_do_usuario(sessao, usuario_id)]
 
 
 # --- Cálculo ------------------------------------------------------------------------------------
 
-def acoes_do_perfil(sessao: Session, perfil_id: int, recursos_ids: list[int] | None = None) -> dict[int, set[str]]:
-    """Ações que o perfil (se ativo) concede em cada recurso: `{recurso_id: {ações}}`."""
+def acoes_do_perfil(sessao: Session, perfil_id: int | list[int], recursos_ids: list[int] | None = None) -> dict[int, set[str]]:
+    """Ações que o perfil (ou a **soma** dos perfis, com uma lista de ids), se ativo, concede em cada recurso: `{recurso_id: {ações}}`."""
+    ids = perfil_id if isinstance(perfil_id, list) else [perfil_id]
+    if not ids:
+        return {}
     consulta = (
         select(PerfilDireito.recurso_id, PerfilDireito.nivel).join(PerfilAcl, PerfilAcl.id == PerfilDireito.perfil_id)
-        .where(PerfilDireito.perfil_id == perfil_id, PerfilAcl.ativo.is_(True))
+        .where(PerfilDireito.perfil_id.in_(ids), PerfilAcl.ativo.is_(True))
     )
     if recursos_ids is not None:
         consulta = consulta.where(PerfilDireito.recurso_id.in_(recursos_ids))
@@ -104,32 +95,31 @@ def pode_porta(sessao: Session, usuario: Usuario, slug: str, nivel: str) -> bool
     """O usuário passa pela porta `nivel` do módulo? É a checagem das rotas (`exigir_acl`).
 
     Passa se: é SuperRoot; o módulo está aberto; as regras de setor/diretas dão nível >= `nivel` (hierárquicas, como sempre);
-    ou o perfil ativo tem **exatamente a ação** que abre essa porta (ações de perfil são independentes).
+    ou algum dos perfis do usuário tem **exatamente a ação** que abre essa porta (ações de perfil são independentes; os perfis se somam).
     """
     if usuario.superusuario:
         return True
     recurso = sessao.scalar(select(RecursoAcl).where(func.lower(RecursoAcl.slug) == slug.lower(), RecursoAcl.ativo.is_(True)))
     if recurso is None:
         return True
-    perfil_id = perfil_ativo_id(sessao, usuario)
-    _, origens = _calcular(sessao, usuario.id, None, [recurso.id])[recurso.id]
+    perfis = perfis_ids_do_usuario(sessao, usuario.id)
+    _, origens = _calcular(sessao, usuario.id, [], [recurso.id])[recurso.id]
     if not origens and _aberto(sessao, recurso.id):
         return True
     if any(NivelAcl.posicao(n) >= NivelAcl.posicao(nivel) for n in origens.values()):
         return True
     acao = acao_da_porta(slug, nivel)
-    return bool(perfil_id is not None and acao and acao in acoes_do_perfil(sessao, perfil_id, [recurso.id]).get(recurso.id, set()))
+    return bool(acao and acao in acoes_do_perfil(sessao, perfis, [recurso.id]).get(recurso.id, set()))
 
 
 def tem_acao_no_perfil(sessao: Session, usuario: Usuario, slug: str, acao: str) -> bool:
-    """O perfil ativo do usuário tem esta ação própria do módulo (ex.: `LANCAR_OB`)? Vale só pelo perfil; SuperRoot sempre tem."""
+    """Algum perfil do usuário tem esta ação própria do módulo (ex.: `LANCAR_OB`)? Vale só pelos perfis; SuperRoot sempre tem."""
     if usuario.superusuario:
         return True
-    perfil_id = perfil_ativo_id(sessao, usuario)
     recurso = sessao.scalar(select(RecursoAcl).where(func.lower(RecursoAcl.slug) == slug.lower(), RecursoAcl.ativo.is_(True)))
-    if perfil_id is None or recurso is None:
+    if recurso is None:
         return False
-    return acao in acoes_do_perfil(sessao, perfil_id, [recurso.id]).get(recurso.id, set())
+    return acao in acoes_do_perfil(sessao, perfis_ids_do_usuario(sessao, usuario.id), [recurso.id]).get(recurso.id, set())
 
 
 def _aberto(sessao: Session, recurso_id: int) -> bool:
@@ -167,11 +157,11 @@ def resolver_acesso(sessao: Session, usuario: Usuario, slug: str) -> str | None:
     # Recurso não cadastrado ou inativo não restringe nada
     if recurso is None:
         return NivelAcl.CONTROLE_TOTAL
-    nivel, _ = _calcular(sessao, usuario.id, perfil_ativo_id(sessao, usuario), [recurso.id])[recurso.id]
+    nivel, _ = _calcular(sessao, usuario.id, perfis_ids_do_usuario(sessao, usuario.id), [recurso.id])[recurso.id]
     return nivel
 
 
-def _calcular(sessao: Session, usuario_id: int, perfil_id: int | None, recursos_ids: list[int]) -> dict[int, tuple[str | None, dict[str, str]]]:
+def _calcular(sessao: Session, usuario_id: int, perfis_ids: list[int], recursos_ids: list[int]) -> dict[int, tuple[str | None, dict[str, str]]]:
     """Nível e origens (`{origem: nível}`) do usuário em cada recurso, carregando tudo de uma vez.
 
     Recurso sem regra e sem direito de perfil → aberto (CONTROLE_TOTAL, sem origens).
@@ -197,9 +187,10 @@ def _calcular(sessao: Session, usuario_id: int, perfil_id: int | None, recursos_
     ):
         por_setor.setdefault(recurso_id, []).append(nivel)
     do_perfil: dict[int, str] = {}
-    if perfil_id is not None:
+    if perfis_ids:
         slugs = dict(sessao.execute(select(RecursoAcl.id, RecursoAcl.slug).where(RecursoAcl.id.in_(recursos_ids))).all())
-        for recurso_id, acoes in acoes_do_perfil(sessao, perfil_id, recursos_ids).items():
+        # Os perfis se somam: as ações de todos entram juntas
+        for recurso_id, acoes in acoes_do_perfil(sessao, perfis_ids, recursos_ids).items():
             nivel = _nivel_continuo(slugs[recurso_id], acoes)
             if nivel is not None:
                 do_perfil[recurso_id] = nivel
@@ -220,12 +211,12 @@ def _calcular(sessao: Session, usuario_id: int, perfil_id: int | None, recursos_
 
 
 def acessos_detalhados(sessao: Session, usuario: Usuario, perfil_id: int | None = None) -> list[tuple[RecursoAcl, str | None, dict[str, str]]]:
-    """Nível efetivo e origem do usuário em cada recurso ativo. `perfil_id` simula outro perfil ativo (padrão: o ativo do usuário)."""
+    """Nível efetivo e origem do usuário em cada recurso ativo. `perfil_id` simula só aquele perfil (padrão: a soma dos perfis do usuário)."""
     recursos = list(sessao.scalars(select(RecursoAcl).where(RecursoAcl.ativo.is_(True)).order_by(func.lower(RecursoAcl.nome))))
     if usuario.superusuario:
         return [(r, NivelAcl.CONTROLE_TOTAL, {}) for r in recursos]
-    ativo = perfil_id if perfil_id is not None else perfil_ativo_id(sessao, usuario)
-    calculo = _calcular(sessao, usuario.id, ativo, [r.id for r in recursos])
+    perfis = [perfil_id] if perfil_id is not None else perfis_ids_do_usuario(sessao, usuario.id)
+    calculo = _calcular(sessao, usuario.id, perfis, [r.id for r in recursos])
     return [(r, calculo[r.id][0], calculo[r.id][1]) for r in recursos]
 
 

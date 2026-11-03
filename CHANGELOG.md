@@ -6,6 +6,38 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-11-03
+
+Migrações novas (aplicar com `alembic upgrade head`; cabeça `f4b6d8e0a2c3`): Chamados `d4f6a8c0e2b5` (módulo e recurso `chamados` na ACL), `e7a9c1d3f5b8` (campos adicionais, em cópia, tarefas e aprovações), `f8b0d2e4a6c9` (status, sub-status, recorrentes e tarefas automáticas), `9e2c4a6b8d10` (TVs do painel e serviços do RH), `b3d5f7a9c1e4` (satisfação, respostas prontas e motivos de pendência), `d7f9b1c3e5a8` (painel com login e Exoneração), `a4c6e8b0d2f3` (categoria ITIL), `c8e0a2b4d6f7` (setores que podem escolher o assunto), `d0f2b4c6e8a9` (fila, prioridade e prazos por serviço do RH); Rede `c5e7a9b1d3f6` (plano de face), `e1a3c5d7f9b2` (racks), `f2b4d6e8a0c1` (modos de porta), `b6d8f0a2c4e5` (dispositivos em cascata na porta), `e2a4c6e8b0d1` (função na topologia, access point, ping e parâmetros) e `f4b6d8e0a2c3` (porta com ligação fica "ligada").
+
+### Adicionado
+- **Módulo Chamados** (substitui o GLPI; `/chamados`, recurso ACL `chamados`): abertura com assunto, campos adicionais e "Onde podemos te encontrar?" (salas do Patrimônio), fila por setor, atendimento (assumir, responder, transferir, pendência com motivo, solução, reabertura), em cópia, tarefas e aprovações com o seletor de pessoas padrão, prazos de atendimento e solução (SLA com expediente e feriados), status e sub-status configuráveis, recorrentes, satisfação, respostas prontas, **categoria ITIL** (árvore própria, só para quem atende) e tempo real (SSE). Endpoints em `docs/endpoints/chamados.md`.
+- **Painel de TV dos Chamados** com voz: anuncia chamado novo, assumido, resolvido, reaberto e transferido; responder um chamado sem responsável atribui quem respondeu (`docs/painel-tv-chamados.md`).
+- **Relatórios dos Chamados** redesenhados: 6 indicadores com minigráficos, semanas, desempenho da equipe (7 dias, 30 dias, por semana), satisfação, por categoria e por setor (este só para Controle total ou líder de setor com setores abaixo); todo elemento abre a lista de chamados já filtrada. **Exportar** em PDF (paisagem) ou XLSX, com ou sem solução (`GET /api/chamados/relatorios/exportar`).
+- **Parâmetros dos Chamados**: todos os campos de escolha com busca (`app-campo-escolha`), "Quem pode escolher este assunto" por setor, novos nomes e ajudas nas opções, **Atendimento no SGI a partir de** (antes da data só Controle total abre no SGI; os demais vão ao GLPI) e **RH com fila, prioridade e prazos por serviço**, com o destino "GLPI até a data, depois o SGI" (`na_data`), que vira o RH sozinho no dia.
+- **Chamados do RH**: Nomeação e Exoneração abrem um chamado por serviço no módulo (assuntos fixos "Nomeação (RH)" e "Exoneração (RH)", invisíveis para quem abre).
+- **Módulo Rede** (`/rede`, recurso ACL `rede`): modelos de face, racks, equipamentos, portas com os modos de Cisco, Huawei e 3Com (access, trunk, hybrid, QinQ, DTP, roteada; VLAN de voz), VLANs, conexões (conferindo as duas pontas), pontos de rede, dispositivos em cascata na porta (switch → telefone IP → PC), porta e ponto no chamado e "Rede" no cadastro do bem (`docs/endpoints/rede.md`).
+- **Topologia da rede** (`/rede/topologia`), no desenho do Organograma: os cores no topo pela **função** do equipamento (Core primário/secundário, Distribuição, Acesso); se o ping der o primário fora do ar, o secundário assume a frente.
+- **Ping dos equipamentos** (timer `sgi-spi-rede-ping`): no ar / fora do ar depois de 3 falhas seguidas; intervalo em Rede › Pontos, VLANs e modelos › Monitoramento (`GET/PUT /api/rede/parametros`).
+- **Caminho até o core** na tela da porta e no cadastro do bem (`GET /api/rede/portas/{id}/caminho`): caixas em cascata ligadas pelos quadradinhos das portas (mesma dica da face ao passar o mouse; a porta aberta tem contorno vermelho).
+- **Dica da porta** ao passar o mouse na face do switch, com a configuração toda formatada.
+- **Carga da rede por LLDP** (`scripts/importar-rede-lldp.py`, ensaio por padrão): 29 switches Huawei, 3 Dell, 1 3Com, 63 access points, 96 cabos e o status de 1.566 portas.
+- Tipo de equipamento **Access point**; portas extras do modelo de face com **nome e tipo** (uma linha por porta).
+
+### Alterado
+- **ACL: os perfis do usuário somam** (acabou a troca de perfil ativo; a rota de perfil ativo e o `pa` do token saíram).
+- **Rede**: IP de gerência e função obrigatórios em todo equipamento menos patch panel (os antigos aparecem como "cadastro incompleto"); porta com algo ligado fica "ligada" e só muda de status depois de retirar o equipamento (`409 porta_com_equipamento`); ligar um bem na porta é um campo único com busca.
+- Escolha de pessoas nos Chamados com o `app-seletor-usuarios` (o mesmo da Equipe do contrato).
+- `scripts/deploy.sh` espera a API responder (até 60 s) antes de conferir a saúde.
+
+### Corrigido
+- **Perfil vencido** (revalidação de 30 dias): não abre mais a janela de erro junto com o redirecionamento para o Perfil.
+- Diário de bordo: o atualizador automático parava ao sair da tela (evita o "Não autenticado").
+
+### Removido
+- Migração de chamados pelo botão do GLPI desativada (os chamados trazidos por ela foram excluídos; vale a data "a partir de").
+- `backend/app/services/servico_chamados.py` (abertura no GLPI substituída pelo módulo).
+
 ## 2026-10-30
 
 Migrações novas (aplicar com `alembic upgrade head`; cabeça `c3e5a7b9d2f4`): `c9e3a7f1b5d2` (parâmetros de contratos), `e2a6c0d4f8b1` (modalidade, garantia, representante legal e parâmetros da prorrogação), `a4c8e2f6b0d3` (minutas da prorrogação), `b5d9f3a7c1e4` (enquadramento da prorrogação), `c6e0a4b8d2f5` (pós-assinatura da prorrogação), `d4f8b2c6a0e3` (vigências retroativas), `d1f5b9c3e7a4` (competência de carga histórica), `a7c1e5b9d3f6` (pedido do processo financeiro ao DOF), `b8d2f6a0c4e7` (análise de empenhos do SIGEO), `d1e3f5a7b9c2` (competência com diferença coberta por reajuste), `e4c7a9b2d6f1` e `f2b8d4a6c1e3` (meses quebrados do reajuste), `a7c3e9b5d1f4` (orientação das seções de Contratações), `b8d2f4a6c9e1` (documentos incluídos nos checklists) e `c3e5a7b9d2f4` (fluxo novo da prorrogação).
@@ -13,6 +45,7 @@ Migrações novas (aplicar com `alembic upgrade head`; cabeça `c3e5a7b9d2f4`): 
 ### Adicionado
 - **Backup geral** (Administração › Backup geral, `/admin/backup`, só SuperRoot): gera um `.zip` com o banco inteiro (configurações, ACLs, servidores SMTP e LDAP, tudo) e todos os anexos, e importa um backup de outro servidor (ex.: produção → homologação). A importação pede "SUBSTITUIR", guarda antes um backup automático do estado atual, restaura o banco numa transação só, troca os anexos, aplica as migrações e reinicia a API. **Modal de andamento** com trilha de etapas, barra de percentual e o que está sendo feito (ex.: "Juntando os anexos: 812 de 4.310 (600 MB de 1,3 GB)"). **Download direto pelo navegador** (aparece na barra de downloads do Chrome) por link assinado de 5 minutos. Endpoints `GET/POST /api/admin/backups`, `GET /arquivo/{nome}`, `POST /arquivo/{nome}/link`, `GET /arquivo/{nome}/baixar`, `POST /importar` (`docs/endpoints/backup-geral.md`).
 - **Modo homologação** (`MODO_HOMOLOGACAO=true`): e-mails e pop-ups do navegador não saem, mas ficam registrados como enviados com a nota "Simulado (homologação)"; SIGEO, sincronização do AD e aniversários parados; faixa "HOMOLOGAÇÃO" no topo; `GET /api/saude` informa `homologacao`. GLPI e BookStack **não** são simulados.
+- **`scripts/instalar.sh` baixa o sistema do GitHub**: numa máquina nova basta baixar só o script (`curl … raw.githubusercontent.com/…/scripts/instalar.sh`); ele instala o git, clona o repositório em `~/projeto` (`--diretorio`, `--ramo`) e segue a instalação. Numa máquina com o projeto, `--atualizar` faz `git pull --ff-only` antes (recusa com alteração local não commitada).
 - **`scripts/instalar.sh` sobe um servidor do zero**: pacotes e Node 22, fuso, banco e usuário do PostgreSQL, `.env` com chaves geradas (pede a senha do SuperRoot), pastas de anexos e backups, sudoers do restart, certificado autoassinado e opções `--homologacao`, `--sem-testes`, `--sem-pacotes`, `--porta`. O Nginx aceita arquivo grande só na importação do backup.
 - **Prorrogação no fluxo novo**: meses → meses quebrados (pro rata × integral lado a lado) → sob demanda → memória de cálculo (PDF e XLSX com capa, tabela mês a mês, total por ano e total da nova vigência) → checklist (modelo "Checklist Prorrogação" em Contratos › Modelos, com PDFs e documentos incluídos) → termo e registro. O registro exige a escolha dos meses quebrados, a memória atualizada e os obrigatórios do checklist. Também: pós-assinatura (PNCP, DOE, garantia), vigências retroativas, modalidade/garantia/representante legal no contrato e parâmetros do módulo de contratos.
 - **Reajuste com meses quebrados**: quando a data de efeito cai no meio de um mês, uma escolha só (pro rata ou integral) para todos esses meses, com as duas opções lado a lado; escolher gera a memória (PDF e XLSX). Os meses medidos aguardando OB aparecem na memória.

@@ -39,6 +39,10 @@ export const NAVEGACAO: SecaoNavegacao[] = [
           { id: 'melhorias', rotulo: 'Melhorias', rota: '/melhorias' },
           // Painel Executivo: gráficos de contratos, RH e tarefas para a Diretoria (acesso decidido pela API)
           { id: 'painel-executivo', rotulo: 'Painel Executivo', rota: '/painel-executivo', painelExecutivo: true },
+          // Chamados: abrir, acompanhar e atender (substitui o GLPI); fechado até a virada, a API diz quem tem papel
+          { id: 'chamados', rotulo: 'Chamados', rota: '/chamados', chamados: true },
+          // Plano de face da rede: switches, portas, VLANs e pontos (ACL `rede`, fechada até haver regras)
+          { id: 'rede', rotulo: 'Rede', rota: '/rede', rede: true },
           // Ramais: diretório em cartões de visita, para todos
           { id: 'ramais', rotulo: 'Ramais', rota: '/ramais' },
           // Protocolo: numeração institucional (ofícios, portarias, resoluções); aparece para quem tem o recurso ACL `protocolo`

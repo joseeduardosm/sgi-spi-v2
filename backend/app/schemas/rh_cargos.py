@@ -48,6 +48,7 @@ class LeituraCargo(BaseModel):
     rotulo: str = Field(..., description='"FCESP 2.16 – Assessor Especial IV": o que aparece ao lado do nome da pessoa.')
     ativo: bool
     ocupante: OcupanteCargo | None = None
+    ocupacao_encerrada_id: int | None = Field(None, description="Só na resposta de vagar: a ocupação encerrada (a tela da exoneração abre por ela).")
 
 
 class GravacaoCargo(BaseModel):
@@ -147,3 +148,34 @@ class HistoricoUsuario(BaseModel):
     ocupacoes: list[LeituraOcupacao]
     eventos: list[LeituraHistorico]
     tipos: dict[str, str] = Field(..., description="Rótulo de cada tipo de evento, para os filtros da tela.")
+
+
+class LinkChamadoExoneracao(BaseModel):
+    url: str
+    texto: str
+    chave: str | None = None
+    numero: int | None = None
+    status_nome: str | None = None
+    status_cor: str | None = None
+
+
+class LeituraExoneracao(BaseModel):
+    """Chamados da exoneração: o que desfazer da nomeação (rede, e-mail, SEI, crachá...)."""
+    ocupacao_id: int
+    usuario_id: int
+    nome: str
+    login: str
+    cargo_rotulo: str
+    setor_nome: str
+    fim: date | None
+    ato_fim: str
+    destino: str = Field(description="`glpi` (a exoneração segue pelo formulário do GLPI) ou `chamados` (abre aqui).")
+    servicos: dict[str, str] = Field(description="Chave → serviço a pedir (o inverso da nomeação).")
+    sugestao: dict[str, bool] = Field(description="Marcados os serviços pedidos na nomeação da pessoa; sem admissão no SGI, todos.")
+    sugestao_da_nomeacao: bool = Field(description="A sugestão veio da nomeação registrada no SGI (`false`: não havia, vieram todos marcados).")
+    chamados: list[LinkChamadoExoneracao] = Field(description="Chamados já abertos, com o status de agora (vazio antes de enviar).")
+
+
+class EntradaExoneracao(BaseModel):
+    solicitacoes: dict[str, bool] = Field(default_factory=dict)
+    observacoes: str = Field("", max_length=4000)

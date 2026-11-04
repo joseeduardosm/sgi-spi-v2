@@ -594,6 +594,10 @@ def marcos(contrato: Contrato) -> list[MarcoLinhaTempo]:
         if reajuste.situacao != "cancelado":
             rotulo = "Reajuste em elaboração" if reajuste.situacao == "rascunho" else "Reajuste aplicado"
             lista.append(MarcoLinhaTempo(data=reajuste.mes_referencia, tipo="reajuste", rotulo=rotulo))
+    for repactuacao in contrato.repactuacoes:
+        if repactuacao.situacao != "cancelado":
+            rotulo = "Repactuação em elaboração" if repactuacao.situacao == "rascunho" else f"Repactuação (CCT {repactuacao.data_base_cct:%m/%Y})"
+            lista.append(MarcoLinhaTempo(data=repactuacao.mes_referencia, tipo="reajuste", rotulo=rotulo))
     for alteracao in contrato.alteracoes:
         if alteracao.situacao != "cancelada":
             nome = "Aditamento" if alteracao.tipo == "aditamento" else "Supressão"
@@ -921,7 +925,7 @@ def listar_documentos(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraDo
                 numero=f"{codigo:03d}",
                 titulo=documento.titulo if documento else POR_CODIGO[codigo].titulo,
                 anexado=anexo is not None,
-                nome_arquivo=nome_download(codigo, contrato.numero_arquivo),
+                nome_arquivo=nome_download(codigo, contrato.numero_arquivo, documento.titulo if documento else ""),
                 tamanho=anexo.tamanho if anexo else None,
                 enviado_em=documento.enviado_em if anexo else None,
                 enviado_por_nome=nomes.get(documento.enviado_por_id) if anexo else None,
@@ -1008,7 +1012,7 @@ def documento_para_download(sessao: Session, contrato_id: uuid.UUID, codigo: int
     documento = next((d for d in contrato.documentos if d.codigo_tipo == codigo), None)
     if documento is None or documento.anexo is None:
         raise RegistroNaoEncontrado("Documento")
-    return servico_anexos.resposta_download(documento.anexo, nome_download(codigo, contrato.numero_arquivo))
+    return servico_anexos.resposta_download(documento.anexo, nome_download(codigo, contrato.numero_arquivo, documento.titulo))
 
 
 # ---------------------------------------------------------------------------------------------

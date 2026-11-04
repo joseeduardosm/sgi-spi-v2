@@ -47,7 +47,7 @@ import { NumeroProtocolo } from '../../protocolo/protocolo.models';
                         <app-envio-pdf [rotulo]="d.anexado ? 'Substituir' : 'Selecionar documento'" (selecionado)="enviar(d, $event)" />
                         @if (d.anexado) { <button type="button" class="acao-perigo acao-pequena" (click)="limpar(d)">Limpar</button> }
                       </div>
-                    } @else { <small>Anexado pela prorrogação</small> }
+                    } @else { <small>{{ d.titulo.startsWith('CCT ') ? 'Anexado pela repactuação' : 'Anexado pela prorrogação' }}</small> }
                   </td>
                 }
               </tr>

@@ -569,6 +569,9 @@ def pode_desfazer(sessao: Session, contrato: Contrato, prorrogacao: Prorrogacao,
         a.sequencia_vigencia == sequencia and a.situacao != "cancelada" for a in contrato.alteracoes
     ):
         return False, "Há reajuste ou aditamento/supressão na nova vigência. Cancele-os antes."
+    vigencia = next((v for v in vigencias(contrato) if v.sequencia == sequencia), None)
+    if vigencia and any(r.situacao != "cancelado" and vigencia.inicio <= r.efeito <= vigencia.fim for r in contrato.repactuacoes):
+        return False, "Há repactuação valendo a partir da nova vigência. Cancele-a antes."
     return True, ""
 
 

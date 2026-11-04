@@ -172,10 +172,11 @@
             <button type="button" class="acao-secundaria" [disabled]="!c.itens.length" (click)="baixarRelatorioItens()">Relatório PDF</button>
             @if (c.permissoes.pode_editar) {
               <a class="acao-secundaria" [routerLink]="['/contratos', c.id, 'reajuste']">Reajuste</a>
+              <a class="acao-secundaria" [routerLink]="['/contratos', c.id, 'repactuacao']">Repactuação</a>
               <a class="acao-secundaria" [routerLink]="['/contratos', c.id, 'aditamento']">Aditar</a>
               <a class="acao-secundaria" [routerLink]="['/contratos', c.id, 'supressao']">Suprimir</a>
             } @else {
-              <span class="dica-formulario" style="margin: 0">Reajuste, aditamento e supressão: só para o criador, a equipe do contrato ou o SuperRoot.</span>
+              <span class="dica-formulario" style="margin: 0">Reajuste, repactuação, aditamento e supressão: só para o criador, a equipe do contrato ou o SuperRoot.</span>
             }
           </div>
         </header>

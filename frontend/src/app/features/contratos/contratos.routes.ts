@@ -161,6 +161,11 @@ export const ROTAS_CONTRATOS: Routes = [
     loadComponent: () => import('./reajuste/reajuste.component').then((m) => m.ReajusteComponent),
   },
   {
+    path: ':id/repactuacao',
+    title: 'Repactuação | SGI SPI',
+    loadComponent: () => import('./repactuacao/repactuacao.component').then((m) => m.RepactuacaoComponent),
+  },
+  {
     path: ':id/aditamento',
     title: 'Aditamento | SGI SPI',
     data: { tipo: 'aditamento' },

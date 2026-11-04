@@ -28,7 +28,7 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
           <header>
             <h2 [id]="'titulo-modelos-' + tipo.id">{{ tipo.rotulo }}</h2>
             <div class="acoes-cartao">
-              @if (!ehMascara(tipo.id) && tipo.id !== 'checklist_prorrogacao') { <app-importacao-modelo-xlsx [tipo]="$any(tipo.id)" [pequeno]="true" (importado)="carregar()" /> }
+              @if (!ehMascara(tipo.id) && !ehChecklistDeProcesso(tipo.id)) { <app-importacao-modelo-xlsx [tipo]="$any(tipo.id)" [pequeno]="true" (importado)="carregar()" /> }
               @if (ehMascara(tipo.id)) { <a class="acao-primaria acao-pequena" [routerLink]="['/contratos/modelos', tipo.id, 'novo']">+ Nova</a> }
               @else { <button type="button" class="acao-primaria acao-pequena" (click)="abrir($any(tipo.id))">+ Novo</button> }
             </div>
@@ -40,7 +40,7 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
                   <strong style="font-size: 14px">{{ m.nome }}</strong>
                   <span class="selo-situacao" style="flex: none; align-self: flex-start" [class.inativo]="!m.ativo">{{ m.ativo ? 'Ativo' : 'Inativo' }}</span>
                 </div>
-                <small>{{ m.tipo === 'prorrogacao' ? 'Documento do processo de prorrogação' : m.tipo === 'despacho' ? 'Abre o documento consolidado' : m.tipo === 'email_cadin' ? 'Enviado aos prepostos quando o CADIN acusa pendência' : m.tipo === 'email_ob' ? 'Enviado aos prepostos quando a Ordem Bancária é lançada' : m.tipo === 'portaria' ? (m.conteudo.variante === 'com_anterior' ? 'Com portaria anterior' : 'Sem portaria anterior') : m.tipo === 'checklist' || m.tipo === 'checklist_prorrogacao' ? (m.conteudo.itens?.length ?? 0) + ' documento(s)' : (m.conteudo.grupos?.length ?? 0) + ' grupo(s)' }} · atualizado em {{ m.atualizado_em | date: 'dd/MM/yyyy' }}</small>
+                <small>{{ m.tipo === 'prorrogacao' ? 'Documento do processo de prorrogação' : m.tipo === 'despacho' ? 'Abre o documento consolidado' : m.tipo === 'email_cadin' ? 'Enviado aos prepostos quando o CADIN acusa pendência' : m.tipo === 'email_ob' ? 'Enviado aos prepostos quando a Ordem Bancária é lançada' : m.tipo === 'portaria' ? (m.conteudo.variante === 'com_anterior' ? 'Com portaria anterior' : 'Sem portaria anterior') : m.tipo === 'checklist' || ehChecklistDeProcesso(m.tipo) ? (m.conteudo.itens?.length ?? 0) + ' documento(s)' : (m.conteudo.grupos?.length ?? 0) + ' grupo(s)' }} · atualizado em {{ m.atualizado_em | date: 'dd/MM/yyyy' }}</small>
                 <div class="acoes-cartao esquerda">
                   @if (ehMascara(m.tipo)) { <a class="acao-secundaria acao-pequena" [routerLink]="['/contratos/modelos', m.tipo, m.id]">Editar</a> }
                   @else { <button type="button" class="acao-secundaria acao-pequena" (click)="abrir($any(m.tipo), m)">Editar</button> }
@@ -56,7 +56,7 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
     @if (checklistAberto()) {
       <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="checklistAberto.set(false)"></div>
       <section animate.leave="mov-modal-sai" class="modal-portal modal-largo" role="dialog" aria-modal="true" aria-labelledby="titulo-modelo-checklist">
-        <header><div><span class="modal-sobretitulo">Modelo global</span><h2 id="titulo-modelo-checklist">{{ tipoChecklist === 'checklist_prorrogacao' ? 'Checklist da prorrogação' : 'Checklist' }}</h2></div>
+        <header><div><span class="modal-sobretitulo">Modelo global</span><h2 id="titulo-modelo-checklist">{{ tipoChecklist === 'checklist_prorrogacao' ? 'Checklist da prorrogação' : tipoChecklist === 'checklist_repactuacao' ? 'Checklist da repactuação' : 'Checklist' }}</h2></div>
           <button type="button" aria-label="Fechar" (click)="checklistAberto.set(false)">×</button></header>
         <form (ngSubmit)="salvarChecklist()">
           <div class="grade-formulario">
@@ -64,7 +64,7 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
             <div class="linha-caixas" style="align-self: end"><label><input type="checkbox" name="ativo" [(ngModel)]="ativo" /> Ativo</label></div>
           </div>
           @for (i of itens; track $index) {
-            <div class="grade-formulario" [style.grid-template-columns]="tipoChecklist === 'checklist_prorrogacao' ? '2fr 2fr 1fr auto' : '2fr 2fr 1fr 1fr auto'">
+            <div class="grade-formulario" [style.grid-template-columns]="ehChecklistDeProcesso(tipoChecklist) ? '2fr 2fr 1fr auto' : '2fr 2fr 1fr 1fr auto'">
               <div><label [for]="'modelo-doc-' + $index">Documento</label><input [id]="'modelo-doc-' + $index" [name]="'doc' + $index" [(ngModel)]="i.nome" /></div>
               <div><label [for]="'modelo-obs-' + $index">Observação</label><input [id]="'modelo-obs-' + $index" [name]="'obs' + $index" [(ngModel)]="i.observacao" /></div>
               <div><label [for]="'modelo-obr-' + $index">Tipo</label>
@@ -103,20 +103,24 @@ export class ModelosComponent implements OnInit {
 
   // As colunas da tela; quem não é SuperRoot (apenas controle total em Contratos) vê só as portarias
   protected readonly tipos = [
-    { id: 'checklist' as const, rotulo: 'Checklists' }, { id: 'formulario' as const, rotulo: 'Formulários de avaliação' }, { id: 'portaria' as const, rotulo: 'Portarias' }, { id: 'despacho' as const, rotulo: 'Despacho de pagamento' }, { id: 'email_cadin' as const, rotulo: 'E-mail de CADIN' }, { id: 'email_ob' as const, rotulo: 'E-mail de pagamento (OB)' }, { id: 'prorrogacao' as const, rotulo: 'Prorrogação (minutas e despachos)' }, { id: 'checklist_prorrogacao' as const, rotulo: 'Checklist Prorrogação' },
+    { id: 'checklist' as const, rotulo: 'Checklists' }, { id: 'formulario' as const, rotulo: 'Formulários de avaliação' }, { id: 'portaria' as const, rotulo: 'Portarias' }, { id: 'despacho' as const, rotulo: 'Despacho de pagamento' }, { id: 'email_cadin' as const, rotulo: 'E-mail de CADIN' }, { id: 'email_ob' as const, rotulo: 'E-mail de pagamento (OB)' }, { id: 'prorrogacao' as const, rotulo: 'Prorrogação (minutas e despachos)' }, { id: 'checklist_prorrogacao' as const, rotulo: 'Checklist Prorrogação' }, { id: 'checklist_repactuacao' as const, rotulo: 'Checklist Repactuação' },
   ];
   /** Tipos editados em página própria (máscaras com placeholders), não na janela. */
   protected ehMascara(tipo: string): boolean {
     return ['portaria', 'despacho', 'email_cadin', 'email_ob', 'prorrogacao'].includes(tipo);
   }
-  protected readonly tiposVisiveis = computed(() => (this.autenticacao.possuiPapel('SuperRoot') ? this.tipos : this.tipos.filter((t) => this.ehMascara(t.id) || t.id === 'checklist_prorrogacao')));
+  protected readonly tiposVisiveis = computed(() => (this.autenticacao.possuiPapel('SuperRoot') ? this.tipos : this.tipos.filter((t) => this.ehMascara(t.id) || this.ehChecklistDeProcesso(t.id))));
   // Modelos carregados e o estado das janelas de edição
   protected readonly modelos = signal<Modelo[]>([]);
   protected readonly checklistAberto = signal(false);
   protected readonly formularioAberto = signal(false);
   protected emEdicao: Modelo | null = null;
   // Qual checklist a janela edita: o da execução mensal ou o da prorrogação (sem validade nem documento da empresa)
-  protected tipoChecklist: 'checklist' | 'checklist_prorrogacao' = 'checklist';
+  protected tipoChecklist: 'checklist' | 'checklist_prorrogacao' | 'checklist_repactuacao' = 'checklist';
+  /** Checklists de um processo (prorrogação, repactuação): só nome, descrição e obrigatório; sem validade nem importação XLSX. */
+  protected ehChecklistDeProcesso(tipo: string): boolean {
+    return tipo === 'checklist_prorrogacao' || tipo === 'checklist_repactuacao';
+  }
   protected nome = '';
   protected ativo = true;
   protected itens: { nome: string; observacao: string; obrigatorio: boolean; com_validade: boolean; vale_outros_contratos: boolean }[] = [];
@@ -143,11 +147,11 @@ export class ModelosComponent implements OnInit {
   }
 
   /** Abre a janela certa (checklist ou editor de formulário), vazia ou com o modelo escolhido. */
-  protected abrir(tipo: 'checklist' | 'checklist_prorrogacao' | 'formulario', modelo?: Modelo): void {
+  protected abrir(tipo: 'checklist' | 'checklist_prorrogacao' | 'checklist_repactuacao' | 'formulario', modelo?: Modelo): void {
     this.emEdicao = modelo ?? null;
     this.nome = modelo?.nome ?? '';
     this.ativo = modelo?.ativo ?? true;
-    if (tipo === 'checklist' || tipo === 'checklist_prorrogacao') {
+    if (tipo === 'checklist' || tipo === 'checklist_prorrogacao' || tipo === 'checklist_repactuacao') {
       this.tipoChecklist = tipo;
       this.itens = (modelo?.conteudo.itens ?? []).map((i) => ({ nome: i.nome, observacao: i.observacao ?? '', obrigatorio: i.obrigatorio ?? true, com_validade: i.com_validade ?? false, vale_outros_contratos: i.vale_outros_contratos ?? false }));
       this.checklistAberto.set(true);

@@ -1,0 +1,282 @@
+@if (contrato(); as c) {
+  <app-cabecalho-modulo titulo="Repactuação" [trilha]="[{ rotulo: c.numero, rota: ['/contratos', c.id] }, 'Repactuação']" [descricao]="'Contrato ' + c.numero + ' · repactuação pela Convenção Coletiva de Trabalho (CCT)'" />
+  <div class="barra-fixa"><a class="acao-secundaria" [routerLink]="['/contratos', c.id]" [queryParams]="{ aba: 'itens' }">← Contrato {{ c.numero }}</a></div>
+
+  @if (painel(); as p) {
+    @if (p.em_andamento; as r) {
+      @let v = vis(r);
+      <!-- 1. Cadastro: CCT, data de vigência e os itens (linhas) com os itens financeiros vinculados -->
+      <section class="cartao-dados" aria-labelledby="titulo-repactuacao">
+        <header>
+          <div><h2 id="titulo-repactuacao">1. Cadastro da repactuação</h2>
+            <small>Cada item é um componente de custo da CCT (ex.: vale-transporte), com os valores já por unidade do item financeiro (por posto/mês). A diferença soma no preço de cada item vinculado.</small></div>
+          @if (p.pode_editar) { <button type="button" class="acao-perigo" (click)="cancelar(r)">Cancelar repactuação</button> }
+        </header>
+        <div class="corpo">
+          <app-trilha-etapas [etapas]="trilha(r)" ariaLabel="Etapas da repactuação" [compacta]="true" />
+          <dl class="resumo-reajuste">
+            <div><dt>CCT (data-base)</dt><dd>{{ r.data_base_cct | date: 'MM/yyyy' }}</dd></div>
+            <div><dt>Novos valores a partir de</dt><dd>{{ r.data_efeito | dataBr }}</dd></div>
+            <div><dt>Convenção Coletiva</dt><dd><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, r.cct.anexo_id)">Baixar CCT</button></dd></div>
+          </dl>
+          <div class="tabela-gestao-envoltorio">
+            <table class="tabela-gestao">
+              <thead><tr><th>Nº</th><th>Descrição</th><th class="num">Valor vigente</th><th class="num">Valor repactuado</th><th class="num">Diferença</th><th></th></tr></thead>
+              <tbody>
+                @for (l of linhas; track $index; let i = $index) {
+                  <tr>
+                    <td>{{ i + 1 }}</td>
+                    <td><input class="campo-tabela" style="text-align: left" [id]="'rep-desc-' + i" [name]="'desc' + i" maxlength="500" placeholder="Ex.: Vale-transporte" aria-label="Descrição" [disabled]="!p.pode_editar" [(ngModel)]="l.descricao" (ngModelChange)="mudar()" /></td>
+                    <td class="num" style="width: 140px"><input class="campo-tabela" [id]="'rep-vig-' + i" [name]="'vig' + i" inputmode="decimal" placeholder="0,00" aria-label="Valor vigente" [class.invalido]="l.vigente && !valorValido(l.vigente)" [disabled]="!p.pode_editar" [(ngModel)]="l.vigente" (ngModelChange)="mudar()" /></td>
+                    <td class="num" style="width: 140px"><input class="campo-tabela" [id]="'rep-rep-' + i" [name]="'rep' + i" inputmode="decimal" placeholder="0,00" aria-label="Valor repactuado" [class.invalido]="l.repactuado && !valorValido(l.repactuado)" [disabled]="!p.pode_editar" [(ngModel)]="l.repactuado" (ngModelChange)="mudar()" /></td>
+                    <td class="num">@if (diferencaLinha(l); as d) { <strong>{{ d | moedaUnitaria }}</strong> } @else { — }</td>
+                    <td>@if (p.pode_editar) { <button type="button" class="acao-perigo acao-pequena" (click)="removerLinha(i)">Remover</button> }</td>
+                  </tr>
+                  <!-- Itens financeiros vinculados a esta linha (1 ou mais) -->
+                  <tr>
+                    <td></td>
+                    <td colspan="5">
+                      <span class="rotulo-campo">Itens financeiros vinculados @if (!l.itens.size) { <small class="texto-erro">(escolha ao menos um)</small> }</span>
+                      <div class="linha-caixas">
+                        @for (it of p.itens_contrato; track it.id) {
+                          <label><input type="checkbox" [name]="'vinc-' + i + '-' + it.id" [checked]="l.itens.has(it.id)" [disabled]="!p.pode_editar" (change)="alternarItem(l, it.id)" /> {{ it.ordem }}. {{ it.descricao }}</label>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          @if (p.pode_editar) {
+            <div class="acoes-cartao esquerda"><button type="button" class="acao-secundaria acao-pequena" (click)="adicionarLinha()">+ Adicionar item</button></div>
+            @if (alteradoSemSalvar()) { <p class="aviso-bloco informativo">Prévia: os valores abaixo já refletem o que você digitou. Salve para gravar.</p> }
+            <div class="acoes-cartao">
+              <button type="button" class="acao-secundaria" [class.carregando]="salvando()" [disabled]="!linhasValidas() || salvando()" (click)="salvarLinhas(r)">Salvar itens</button>
+              <button type="button" class="acao-primaria" [class.carregando]="salvando()" [disabled]="!linhasValidas() || salvando()" (click)="salvarLinhas(r, true)">{{ r.cadastro_concluido ? 'Salvar e manter finalizado' : 'Finalizar cadastro' }}</button>
+            </div>
+          }
+        </div>
+      </section>
+
+      <!-- 2. Memória de cálculo: itens financeiros e base mensal -->
+      <section class="cartao-dados" aria-labelledby="titulo-memoria-repactuacao">
+        <header><div><h2 id="titulo-memoria-repactuacao">2. Memória de cálculo</h2><small>Preço vigente de cada item financeiro + as diferenças das linhas vinculadas, × quantidade mensal.</small></div>
+          @if (r.memoria_atualizada) { <span class="selo-situacao">Memória atualizada</span> }</header>
+        @if (v.itens.length) {
+          <div class="tabela-gestao-envoltorio">
+            <table class="tabela-gestao">
+              <thead><tr><th>Item</th><th>Descrição</th><th class="num">Preço vigente</th><th class="num">Novo preço</th><th class="num">Diferença</th><th class="num">Qtd. mensal</th><th class="num">Impacto mensal</th></tr></thead>
+              <tbody>
+                @for (i of v.itens; track i.item_id) {
+                  <tr><td>{{ i.ordem }}</td><td>{{ i.descricao }}</td><td class="num">{{ i.valor_unitario_atual | moedaUnitaria }}</td><td class="num"><strong>{{ i.valor_unitario_repactuado | moedaUnitaria }}</strong></td>
+                    <td class="num">{{ i.diferenca | moedaUnitaria }}</td><td class="num">{{ i.tipo === 'continuo' ? (i.quantidade_mensal | quantidade) : 'sob demanda' }}</td><td class="num">{{ i.impacto_mensal | moeda }}</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="corpo">
+            <dl class="resumo-reajuste">
+              <div><dt>Base mensal vigente</dt><dd>{{ v.base_atual | moeda }}</dd></div>
+              <div><dt>Total das diferenças</dt><dd>{{ v.total_diferencas | moeda }}</dd></div>
+              <div><dt>Nova base mensal repactuada</dt><dd><strong>{{ v.base_repactuada | moeda }}</strong></dd></div>
+            </dl>
+          </div>
+        } @else {
+          <p class="dica-formulario" style="margin: 14px 22px">Cadastre os itens e os vínculos para ver os novos preços.</p>
+        }
+      </section>
+
+      <!-- 3. Retroativo: medidas (pago × repactuado) e não medidas (situação); mês quebrado como no reajuste -->
+      <section class="cartao-dados" aria-labelledby="titulo-retroativo-repactuacao">
+        <header><div><h2 id="titulo-retroativo-repactuacao">3. Memória retroativa</h2><small>A partir de {{ r.data_efeito | dataBr }}. As competências já medidas recebem a diferença à parte; as ainda não medidas já usam o novo preço na medição.</small></div></header>
+        @if (v.competencias.length) {
+          <div class="tabela-gestao-envoltorio">
+            <table class="tabela-gestao">
+              <thead><tr><th>Competência</th><th>Situação</th><th class="num">Valor pago</th><th class="num">Valor repactuado</th><th class="num">Diferença</th></tr></thead>
+              <tbody>
+                @for (x of v.competencias; track x.identificador) {
+                  <tr><td><a class="link-arquivo" [routerLink]="['/contratos', id(), 'execucao', x.identificador]">{{ x.competencia }}</a>@if (x.quebrada) { <span class="selo-situacao info">Mês quebrado</span> }</td>
+                    <td><span class="selo-situacao" [class.inativo]="!x.paga">{{ x.situacao }}</span></td>
+                    @if (x.medida) { <td class="num">{{ x.valor_pago | moeda }}</td><td class="num">{{ x.valor_repactuado | moeda }}</td><td class="num"><strong>{{ x.diferenca | moeda }}</strong></td> }
+                    @else { <td colspan="3" class="dica-formulario">Novo preço aplicado na medição</td> }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="corpo">
+            <dl class="resumo-reajuste">
+              <div><dt>Diferença das competências pagas</dt><dd>{{ v.total_retroativo_pagas | moeda }}</dd></div>
+              <div><dt>Diferença total das medidas</dt><dd><strong>{{ v.total_retroativo | moeda }}</strong></dd></div>
+              <div><dt>Ao finalizar</dt><dd>{{ +v.total_retroativo > 0 ? 'Competência de diferença a pagar' : +v.total_retroativo < 0 ? 'Crédito abatido na próxima medição' : 'Nada a acertar' }}</dd></div>
+            </dl>
+          </div>
+        } @else {
+          <p class="dica-formulario" style="margin: 14px 22px">Nenhuma competência a partir da data de vigência.</p>
+        }
+        @if (v.opcoes_mes_quebrado.length) {
+          <div class="corpo">
+            <p class="secao-formulario">Meses quebrados pela data de vigência ({{ r.data_efeito | dataBr }})</p>
+            @if (!r.calculo_mes_quebrado) { <p class="aviso-bloco informativo">Há competência medida que começa sem a repactuação e termina com ela. Escolha como calcular: vale para todos os meses quebrados.</p> }
+            <div class="opcoes-mes-quebrado">
+              @for (o of v.opcoes_mes_quebrado; track o.calculo) {
+                <section class="opcao-mes-quebrado" [class.escolhida]="r.calculo_mes_quebrado === o.calculo" [attr.aria-labelledby]="'rep-opcao-' + o.calculo">
+                  <header><h3 [id]="'rep-opcao-' + o.calculo">{{ rotulosCalculo[o.calculo] }}</h3>@if (r.calculo_mes_quebrado === o.calculo) { <span class="selo-situacao">Escolhida</span> }</header>
+                  <small class="dica-formulario">{{ o.calculo === 'pro_rata' ? 'Dias antes da data de vigência sem a repactuação; a partir dela, com.' : 'O mês inteiro com a repactuação.' }}</small>
+                  <p>Diferença total: <strong>{{ o.total_diferenca | moeda }}</strong></p>
+                  @if (p.pode_editar && r.calculo_mes_quebrado !== o.calculo) {
+                    <button type="button" class="acao-secundaria acao-pequena" [class.carregando]="escolhendo() === o.calculo" [disabled]="!!escolhendo()" (click)="escolherCalculo(r, o.calculo)">Escolher esta opção</button>
+                  }
+                </section>
+              }
+            </div>
+          </div>
+        }
+        @if (p.pode_editar) {
+          <div class="corpo">
+            <div class="acoes-cartao esquerda">
+              <button type="button" class="acao-primaria" [disabled]="!r.cadastro_concluido || alteradoSemSalvar() || (!!v.opcoes_mes_quebrado.length && !r.calculo_mes_quebrado)" (click)="gerarMemoria(r)">Gerar e baixar memória (PDF e XLSX)</button>
+            </div>
+            @if (!r.cadastro_concluido) { <p class="dica-formulario">Finalize o cadastro (passo 1) para gerar a memória.</p> }
+          </div>
+        }
+        @if (r.memorias.length) {
+          <ul class="lista-ciencias">
+            @for (m of r.memorias; track m.versao) {
+              <li><span>v{{ m.versao }} · {{ m.criada_em | date: 'dd/MM/yyyy HH:mm' }}</span>
+                <span class="acoes-linha"><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.pdf.anexo_id)">Baixar PDF</button><button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.xlsx.anexo_id)">Baixar XLSX</button></span></li>
+            }
+          </ul>
+        }
+      </section>
+
+      <!-- 4. Checklist: mesmo padrão do checklist da prorrogação (modelo "Checklist Repactuação" em Contratos › Modelos) -->
+      <section class="cartao-dados" aria-labelledby="titulo-checklist-repactuacao">
+        <header><div><h2 id="titulo-checklist-repactuacao">4. Checklist de repactuação</h2>
+          <small>Documentos do checklist padrão (Contratos → Modelos → Checklist Repactuação). Os obrigatórios precisam do PDF para finalizar; os incluídos aqui são opcionais.</small></div>
+          @if (r.obrigatorios_pendentes === 0) { <span class="selo-situacao">Obrigatórios completos</span> } @else { <span class="selo-situacao alerta">{{ r.obrigatorios_pendentes }} obrigatório(s) pendente(s)</span> }</header>
+        @if (r.checklist.length) {
+          <div class="tabela-gestao-envoltorio">
+            <table class="tabela-gestao">
+              <thead><tr><th>Nº</th><th>Documento</th><th>Tipo</th><th>Situação</th><th>Arquivo</th></tr></thead>
+              <tbody>
+                @for (doc of r.checklist; track doc.id) {
+                  <tr>
+                    <td>{{ $index + 1 }}</td>
+                    <td><strong>{{ doc.nome }}</strong>@if (doc.incluido_no_processo) { <span class="selo-situacao info">Incluído neste processo</span> }
+                      @if (doc.observacao) { <small [innerHTML]="doc.observacao | linkificar"></small> }</td>
+                    <td>{{ doc.obrigatorio ? 'Obrigatório' : 'Opcional' }}</td>
+                    <td><span class="selo-situacao" [class.perigo]="!doc.arquivo">{{ doc.arquivo ? 'Anexado' : doc.obrigatorio ? 'Pendente' : 'Não anexado' }}</span></td>
+                    <td><div class="acoes-linha">
+                      @if (doc.arquivo) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, doc.arquivo.anexo_id)">Baixar</button> }
+                      @if (p.pode_editar) { <app-envio-pdf [pequeno]="true" [mostrarNome]="false" [rotulo]="doc.arquivo ? 'Substituir' : 'Selecionar PDF'" (selecionado)="anexarDocumento(r, doc, $event)" /> }
+                      @if (p.pode_editar && doc.incluido_no_processo) { <button type="button" class="acao-perigo acao-pequena" (click)="excluirDocumento(r, doc)">Excluir</button> }
+                    </div></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="dica-formulario" style="margin: 14px 22px">Nenhum documento no checklist: não há modelo "Checklist Repactuação" ativo. Dá para incluir documentos só nesta repactuação.</p>
+        }
+        @if (p.pode_editar) { <div class="corpo"><div class="acoes-cartao esquerda"><button type="button" class="acao-secundaria" (click)="abrirInclusao()">+ Incluir documento</button></div></div> }
+      </section>
+
+      @if (incluindoDocumento()) {
+        <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="incluindoDocumento.set(false)"></div>
+        <section animate.leave="mov-modal-sai" class="modal-portal" role="dialog" aria-modal="true" aria-labelledby="titulo-incluir-doc-repactuacao">
+          <header>
+            <div><span class="modal-sobretitulo">Checklist desta repactuação</span><h2 id="titulo-incluir-doc-repactuacao">Incluir documento</h2></div>
+            <button type="button" aria-label="Fechar" (click)="incluindoDocumento.set(false)">×</button>
+          </header>
+          <form (ngSubmit)="incluirDocumento(r)">
+            <p class="dica-formulario" style="margin: 0 0 14px">O documento entra só nesta repactuação, como opcional (não trava a finalização).</p>
+            <div class="grade-formulario">
+              <div class="ocupa-duas"><label for="rep-doc-nome">Nome do documento *</label><input id="rep-doc-nome" name="nome" required maxlength="500" [(ngModel)]="novoDocumentoNome" /></div>
+              <div class="ocupa-duas"><label for="rep-doc-descricao">Descrição</label><textarea id="rep-doc-descricao" name="descricao" maxlength="1000" [(ngModel)]="novoDocumentoDescricao"></textarea></div>
+              <div class="ocupa-duas"><label>Arquivo (PDF) *</label><app-envio-pdf rotulo="Selecionar PDF" (selecionado)="novoDocumentoArquivo = $event" /></div>
+            </div>
+            <footer>
+              <button type="button" class="acao-secundaria" (click)="incluindoDocumento.set(false)">Cancelar</button>
+              <button type="submit" class="acao-primaria" [class.carregando]="enviandoInclusao()" [disabled]="!novoDocumentoNome.trim() || !novoDocumentoArquivo || enviandoInclusao()">Incluir documento</button>
+            </footer>
+          </form>
+        </section>
+      }
+
+      <!-- 5. Consolidado e 6. Apostilamento -->
+      <section class="cartao-dados" aria-labelledby="titulo-consolidado-repactuacao">
+        <header><div><h2 id="titulo-consolidado-repactuacao">5. Documento consolidado</h2><small>Capa (contrato e repactuação), CCT, documentos do checklist e memória de cálculo, num PDF só.</small></div>
+          @if (r.consolidado_atualizado) { <span class="selo-situacao">Atualizado</span> } @else if (r.consolidado) { <span class="selo-situacao alerta">Desatualizado: gere de novo</span> }</header>
+        <div class="corpo">
+          <div class="acoes-cartao esquerda">
+            @if (r.consolidado) { <button type="button" class="acao-secundaria" (click)="baixar(r, r.consolidado.anexo_id)">Baixar consolidado</button> }
+            @if (p.pode_editar) { <button type="button" class="acao-primaria" [disabled]="!r.memoria_atualizada" (click)="gerarConsolidado(r)">{{ r.consolidado ? 'Gerar novamente' : 'Gerar consolidado' }}</button> }
+          </div>
+          @if (!r.memoria_atualizada) { <p class="dica-formulario">Gere a memória de cálculo atualizada antes do consolidado.</p> }
+        </div>
+      </section>
+
+      <section class="cartao-dados" aria-labelledby="titulo-finalizar-repactuacao">
+        <header><div><h2 id="titulo-finalizar-repactuacao">6. Apostilamento e finalização</h2><small>Ao finalizar, os preços dos itens vinculados e a base mensal mudam a partir de {{ r.data_efeito | dataBr }}.</small></div></header>
+        <div class="corpo">
+          @if (p.pode_editar) {
+            <div class="acoes-cartao esquerda">
+              <app-envio-pdf rotulo="Selecionar apostilamento assinado" (selecionado)="apostilamento = $event" />
+              <button type="button" class="acao-primaria" [disabled]="!apostilamento || !r.memoria_atualizada || r.obrigatorios_pendentes > 0 || !r.consolidado || salvando()" (click)="finalizar(r)">Finalizar repactuação</button>
+            </div>
+            @if (!r.memoria_atualizada || r.obrigatorios_pendentes > 0 || !r.consolidado) {
+              <p class="dica-formulario">A finalização exige a memória atualizada, os obrigatórios do checklist e o consolidado gerado.</p>
+            }
+          }
+        </div>
+      </section>
+    } @else if (p.pode_editar) {
+      <section class="cartao-dados" aria-labelledby="titulo-iniciar-repactuacao">
+        <header><div><h2 id="titulo-iniciar-repactuacao">Iniciar repactuação</h2><small>Anexe a Convenção Coletiva de Trabalho. Ela também vai para os Documentos importantes do contrato como "CCT mm/aaaa".</small></div></header>
+        <div class="corpo">
+          <div class="grade-formulario tres-colunas">
+            <div><label for="rep-data-base">Data-base da CCT *</label><input id="rep-data-base" type="month" [(ngModel)]="dataBaseCct" /></div>
+            <div><label for="rep-efeito">Novos valores valem a partir de *</label><input id="rep-efeito" type="date" [(ngModel)]="dataEfeito" />
+              <small class="dica-formulario">Mesmo padrão do reajuste: o mês dessa data pode ser pro rata ou integral.</small></div>
+            <div><label>CCT (PDF) *</label><app-envio-pdf rotulo="Selecionar PDF" (selecionado)="cct = $event" /></div>
+          </div>
+          <div class="acoes-cartao"><button type="button" class="acao-primaria" [class.carregando]="salvando()" [disabled]="!dataBaseCct || !dataEfeito || !cct || salvando()" (click)="abrir()">Abrir repactuação</button></div>
+        </div>
+      </section>
+    }
+
+    @if (p.historico.length) {
+      <section class="cartao-dados" aria-labelledby="titulo-historico-repactuacao">
+        <header><h2 id="titulo-historico-repactuacao">Histórico</h2></header>
+        <div class="tabela-gestao-envoltorio">
+          <table class="tabela-gestao">
+            <thead><tr><th>CCT</th><th>A partir de</th><th>Situação</th><th class="num">Base mensal</th><th>Retroativo</th><th>Arquivos</th></tr></thead>
+            <tbody>
+              @for (h of p.historico; track h.id) {
+                <tr>
+                  <td>{{ h.data_base_cct | date: 'MM/yyyy' }}</td><td>{{ h.data_efeito | dataBr }}</td>
+                  <td><span class="selo-situacao" [class.inativo]="h.situacao === 'cancelado'">{{ h.situacao === 'concluido' ? 'Concluída' : 'Cancelada' }}</span></td>
+                  <td class="num">{{ h.base_atual | moeda }} → {{ h.base_repactuada | moeda }}</td>
+                  <td>@if (h.diferenca_retroativa !== null && +h.diferenca_retroativa > 0) { {{ h.diferenca_retroativa | moeda }} a pagar }
+                    @else if (h.diferenca_retroativa !== null && +h.diferenca_retroativa < 0) { Crédito de {{ -h.diferenca_retroativa | moeda }} }
+                    @else { — }</td>
+                  <td><div class="acoes-linha">
+                    @if (h.memorias.at(-1); as m) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(h, m.pdf.anexo_id)">Memória</button> }
+                    @if (h.consolidado) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(h, h.consolidado.anexo_id)">Consolidado</button> }
+                    @if (h.apostilamento) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(h, h.apostilamento.anexo_id)">Apostilamento</button> }
+                    @if (h.competencia_diferenca) { <a class="link-arquivo" [routerLink]="['/contratos', id(), 'execucao', h.competencia_diferenca]">Competência de diferença</a> }
+                  </div></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+  }
+} @else {
+  <app-esqueleto tipo="formulario" [linhas]="5" />
+}

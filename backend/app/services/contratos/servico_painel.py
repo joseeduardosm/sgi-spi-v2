@@ -22,6 +22,7 @@ from app.models.contratos import (
     NotaEmpenho,
     ProcessoProrrogacao,
     Reajuste,
+    Repactuacao,
 )
 from app.models.usuario import Usuario
 from app.schemas.contratos.orcamento import ContratoOrcamento, OrcamentoCarteira
@@ -81,7 +82,7 @@ def carregar_contratos(sessao: Session) -> list[Contrato]:
 
 
 def _nome(competencia: Competencia) -> str:
-    """"Competência 01/2027 · 1ª parte" ou "Diferença de reajuste 01/2026 a 04/2026"."""
+    """"Competência 01/2027 · 1ª parte" ou "Diferença de reajuste 01/2026 a 04/2026" (ou de repactuação)."""
     rotulo = competencia.numero_competencia
     return f"Competência {rotulo}" if competencia.tipo == "regular" else rotulo
 
@@ -110,6 +111,7 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
     # Contratos com prorrogação e com reajuste em elaboração (uma consulta para cada)
     rascunhos_prorrogacao = set(sessao.scalars(select(ProcessoProrrogacao.contrato_id).where(ProcessoProrrogacao.situacao == "rascunho")))
     reajustes = set(sessao.scalars(select(Reajuste.contrato_id).where(Reajuste.situacao == "rascunho")))
+    repactuacoes = set(sessao.scalars(select(Repactuacao.contrato_id).where(Repactuacao.situacao == "rascunho")))
     lista: list[Pendencia] = []
     referencia = hoje()
     # O Financeiro confere as retenções de todos os contratos, mesmo sem integrar a equipe
@@ -162,6 +164,8 @@ def pendencias_do_usuario(sessao: Session, contratos: list[Contrato], usuario: U
             lista.append(_pendencia(contrato, "prorrogacao", "Prorrogação em elaboração", f"/contratos/{contrato.id}/prorrogacao", contrato.data_fim))
         if contrato.id in reajustes:
             lista.append(_pendencia(contrato, "reajuste", "Reajuste em elaboração", f"/contratos/{contrato.id}/reajuste"))
+        if contrato.id in repactuacoes:
+            lista.append(_pendencia(contrato, "repactuacao", "Repactuação em elaboração", f"/contratos/{contrato.id}/repactuacao"))
         for alteracao in contrato.alteracoes:
             if alteracao.situacao not in ("rascunho", "aguardando_ciencias"):
                 continue

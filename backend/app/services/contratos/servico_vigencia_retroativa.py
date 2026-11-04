@@ -73,6 +73,8 @@ def _bloqueio_para_desfazer(sessao: Session, contrato: Contrato, usuario: Usuari
         a.sequencia_vigencia == 1 and a.situacao != "cancelada" for a in contrato.alteracoes
     ):
         return "Há reajuste ou aditamento/supressão nessa vigência. Cancele-os antes."
+    if contrato.vigencias_retroativas and any(r.situacao != "cancelado" and r.efeito < contrato.vigencias_retroativas[0].data_fim for r in contrato.repactuacoes):
+        return "Há repactuação valendo nessa vigência. Cancele-a antes."
     return ""
 
 

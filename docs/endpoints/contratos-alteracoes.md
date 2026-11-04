@@ -212,6 +212,53 @@ Os arquivos só criam **versão nova** quando muda algo da memória (itens, índ
 - **Totais:** `base_atual`, `base_reajustada`, `valor_global_atual`, `valor_global_reajustado`;
 - **Arquivos:** `evidencia`, `apostilamento` e `memorias[]` (`versao`, `pdf`, `xlsx`).
 
+## Repactuação (CCT)
+
+A Convenção Coletiva de Trabalho muda **componentes de custo** (salário, vale-transporte...); a diferença de cada um soma no preço dos
+itens do contrato ligados a ele (Lei 14.133, art. 135). Tela: Contratos › aba Itens › **Repactuação** (`/contratos/:id/repactuacao`).
+
+Regras:
+- **Abertura**: PDF da CCT, data-base da CCT (mês/ano) e data a partir da qual os novos valores valem (`data_efeito`, dentro das vigências).
+  A CCT entra nos **Documentos importantes** como "CCT mm/aaaa" (código 024 em diante; download `CCT_mm_aaaa_SPI_…pdf`). Uma repactuação em
+  elaboração por vez (`409`). Também `409` se já houver reajuste ou repactuação **concluído** com efeito depois da data: a linha do tempo de
+  preços é uma só e cada ato fotografa o preço em vigor no seu efeito.
+- **Linhas** (Nº, descrição, valor vigente, valor repactuado) com valores **já por unidade do item financeiro** (ex.: Vale-transporte R$ 198
+  → R$ 220 por posto/mês) e **1..N itens vinculados**. A diferença em R$ da linha soma no preço unitário de cada vinculado; um item em várias
+  linhas soma todas. "Finalizar" o cadastro (`finalizar: true`) libera a memória.
+- **Memória**: itens (Nº, descrição, vigente, repactuado, diferença % e R$, total), itens financeiros (preço vigente → novo × quantidade mensal
+  = impacto), base mensal vigente, total das diferenças e nova base (só contínuos; sob demanda muda só o preço). PDF e XLSX versionados.
+- **Retroativo** (igual ao reajuste): competências já **medidas** (pagas ou não) entram na diferença = diferença do item × quantidade medida ×
+  fração do mês a partir do efeito; **não medidas** recebem o novo preço na medição (a tela mostra a situação: "Aguardando medição"...).
+  Mês quebrado pelo efeito: uma escolha para todos, `pro_rata` ou `integral`, com as duas opções lado a lado.
+- **Checklist**: copiado do modelo "Checklist Repactuação" ativo (Contratos › Modelos, tipo `checklist_repactuacao`); documentos incluídos
+  durante o processo nunca são obrigatórios.
+- **Consolidado**: capa (contrato e repactuação) + CCT + documentos do checklist + memória, num PDF.
+- **Finalizar** (apostilamento assinado): exige cadastro finalizado, memória atualizada, obrigatórios do checklist e consolidado. Soma as
+  diferenças no preço do cadastro dos itens vinculados, refaz as competências não medidas, e o retroativo positivo vira competência
+  `diferenca_repactuacao` (`AAAA-MM-dif-repactuacao`, mesmo fluxo da diferença de reajuste). **Cada repactuação gera a sua**: a 2ª no mesmo
+  período fica `AAAA-MM-dif-repactuacao-2` ("Diferença de repactuação (2ª) …"); o negativo vira crédito abatido na próxima
+  medição (`descontos_reajuste[].repactuacao_id`). Cancelar não muda preços (a CCT fica nos Documentos importantes).
+
+| Método e caminho | Quem | Descrição |
+|---|---|---|
+| `GET /api/contratos/{id}/repactuacoes` | LEITURA | `PainelRepactuacao {em_andamento, historico[], itens_contrato[], pode_editar}` |
+| `POST /api/contratos/{id}/repactuacoes` | pode editar | multipart `arquivo` (CCT), `data_base_cct`, `data_efeito` → `201` |
+| `PUT …/repactuacoes/{rid}/linhas` | pode editar | `{linhas[{descricao, valor_vigente, valor_repactuado, itens_ids[]}], finalizar}` |
+| `POST …/repactuacoes/{rid}/previa` | pode editar | Mesmo corpo; devolve `LeituraRepactuacao` sem gravar |
+| `PUT …/repactuacoes/{rid}/mes-quebrado` | pode editar | `{calculo: pro_rata \| integral}` |
+| `POST …/repactuacoes/{rid}/memoria` | pode editar | Gera PDF/XLSX (`400` sem cadastro finalizado ou sem a escolha do mês quebrado) |
+| `POST …/repactuacoes/{rid}/checklist/incluir` · `POST`/`DELETE …/checklist/{doc}` | pode editar | Checklist (igual ao da prorrogação) |
+| `POST …/repactuacoes/{rid}/consolidado` | pode editar | Gera o consolidado (`400` sem memória atualizada) |
+| `POST …/repactuacoes/{rid}/finalizar` | pode editar | multipart `arquivo` (apostilamento); aplica a repactuação |
+| `POST …/repactuacoes/{rid}/cancelar` · `GET …/arquivos/{anexo_id}` | pode editar / LEITURA | Cancelar / baixar arquivo da repactuação |
+
+`LeituraRepactuacao`: `data_base_cct`, `data_efeito`, `cadastro_concluido`, `linhas[{ordem, descricao, valor_vigente, valor_repactuado, diferenca,
+diferenca_percentual, itens_ids}]`, `itens[{item_id, descricao, valor_unitario_atual, valor_unitario_repactuado, diferenca, quantidade_mensal,
+impacto_mensal}]`, `base_atual`, `total_diferencas`, `base_repactuada`, `calculo_mes_quebrado`, `opcoes_mes_quebrado[{calculo, total_diferenca}]`,
+`competencias[{identificador, competencia, medida, paga, situacao, quebrada, valor_pago, valor_repactuado, diferenca}]`, `total_retroativo_pagas`,
+`total_retroativo`, `memorias[]`, `memoria_atualizada`, `checklist[]`, `obrigatorios_pendentes`, `cct`, `consolidado`, `consolidado_atualizado`,
+`apostilamento`, `diferenca_retroativa`, `competencia_diferenca`.
+
 ## Aditamento / supressão
 
 - Uma alteração em andamento por vez (`409`). Abertura: `tipo` (`aditamento`/`supressao`), vigência e mês de efeito.

@@ -155,7 +155,7 @@ class LeituraFormulario(BaseModel):
 
 class GravacaoModelo(BaseModel):
     """Corpo para criar ou alterar um modelo global. O conteúdo exigido depende do `tipo`."""
-    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao"]
+    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao", "checklist_repactuacao"]
     nome: TextoObrigatorio = Field(..., max_length=300)
     itens: list[GravacaoDocumentoChecklist] | None = Field(None, description="Obrigatório para `checklist` e `checklist_prorrogacao` (documentos pedidos na prorrogação; só `nome`, `observacao` e `obrigatorio` contam).")
     definicao: DefinicaoFormulario | None = Field(None, description="Obrigatório para `formulario`.")
@@ -170,7 +170,7 @@ class GravacaoModelo(BaseModel):
     @model_validator(mode="after")
     def _conteudo(self) -> "GravacaoModelo":
         """Checklist precisa de documentos; formulário precisa de definição."""
-        if self.tipo in ("checklist", "checklist_prorrogacao") and not self.itens:
+        if self.tipo in ("checklist", "checklist_prorrogacao", "checklist_repactuacao") and not self.itens:
             raise ValueError("o modelo de checklist precisa de ao menos um documento")
         if self.tipo == "formulario" and self.definicao is None:
             raise ValueError("o modelo de formulário precisa da definição")
@@ -220,10 +220,10 @@ class ResumoCompetencia(BaseModel):
     """Competência na lista da aba Execução."""
     id: uuid.UUID
     competencia: date
-    tipo: str = Field("regular", description="`regular`, `diferenca_reajuste` (complementar, paga a diferença de um reajuste retroativo) ou `adicional` (outra medição e outro pagamento no mesmo período).")
+    tipo: str = Field("regular", description="`regular`, `diferenca_reajuste` (complementar, paga a diferença de um reajuste retroativo), `diferenca_repactuacao` (o mesmo, de uma repactuação) ou `adicional` (outra medição e outro pagamento no mesmo período).")
     numero_adicional: int = Field(0, description="Número da medição adicional (1, 2…); 0 nas demais.")
     parte: int | None = Field(None, description="1 ou 2 quando o mês se divide entre duas vigências; nulo nos demais casos.")
-    identificador: str = Field(..., description="Chave da rota da tela: `AAAA-MM`, `AAAA-MM-1`, `AAAA-MM-2`, `AAAA-MM-dif` ou `AAAA-MM-adicional-N`.")
+    identificador: str = Field(..., description="Chave da rota da tela: `AAAA-MM`, `AAAA-MM-1`, `AAAA-MM-2`, `AAAA-MM-dif`, `AAAA-MM-dif-repactuacao` ou `AAAA-MM-adicional-N`.")
     rotulo: str = Field(..., description="Rótulo para exibição. Ex.: `01/2027 · 1ª parte`.")
     sequencia_vigencia: int
     periodo_inicio: date
@@ -544,9 +544,10 @@ class LeituraAvaliacao(BaseModel):
 
 
 class DescontoReajuste(BaseModel):
-    """Parte do crédito de um reajuste com desconto retroativo, abatida nesta competência."""
-    reajuste_id: uuid.UUID
-    mes_referencia: date = Field(..., description="Mês de referência do reajuste que gerou o crédito.")
+    """Parte do crédito de um reajuste ou de uma repactuação com desconto retroativo, abatida nesta competência."""
+    reajuste_id: uuid.UUID | None = Field(None, description="Reajuste que gerou o crédito (vazio quando veio de uma repactuação).")
+    repactuacao_id: uuid.UUID | None = Field(None, description="Repactuação que gerou o crédito (vazio quando veio de um reajuste).")
+    mes_referencia: date = Field(..., description="Mês de referência do reajuste ou da repactuação que gerou o crédito.")
     valor: ValorMonetario
 
 

@@ -400,8 +400,8 @@ def _conteudo(dados: GravacaoModelo) -> dict[str, Any]:
     """Conteúdo JSON do modelo: documentos (checklist), definição com ids (formulário) ou HTML validado (portaria)."""
     if dados.tipo == "checklist":
         return {"itens": [i.model_dump() for i in dados.itens or []]}
-    if dados.tipo == "checklist_prorrogacao":
-        # Só o que a prorrogação usa: nome, descrição e se é obrigatório (validade e documento da empresa são da execução mensal)
+    if dados.tipo in ("checklist_prorrogacao", "checklist_repactuacao"):
+        # Só o que a prorrogação e a repactuação usam: nome, descrição e se é obrigatório (validade e documento da empresa são da execução mensal)
         return {"itens": [{"nome": i.nome, "observacao": i.observacao, "obrigatorio": i.obrigatorio} for i in dados.itens or []]}
     if dados.tipo == "portaria":
         try:
@@ -458,7 +458,7 @@ def exigir_permissao_modelo(sessao: Session, usuario: Usuario, tipo: str) -> Non
     """Máscaras de portaria: SuperRoot ou controle total em Contratos. Checklists e formulários: só SuperRoot."""
     if usuario.superusuario:
         return
-    if tipo in ("portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao") and servico_acl.resolver_acesso(sessao, usuario, "contratos") == NivelAcl.CONTROLE_TOTAL:
+    if tipo in ("portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao", "checklist_repactuacao") and servico_acl.resolver_acesso(sessao, usuario, "contratos") == NivelAcl.CONTROLE_TOTAL:
         return
     raise SemPermissaoContrato("Somente o SuperRoot altera este tipo de modelo; as máscaras de portaria também exigem controle total em Contratos.")
 
@@ -493,11 +493,11 @@ def salvar_modelo(sessao: Session, dados: GravacaoModelo, autor: Usuario, modelo
     if modelo_id and modelo.tipo != dados.tipo:
         raise ErroRegraContrato("O tipo do modelo não pode ser alterado.")
     conteudo = _conteudo(dados)
-    if dados.tipo in ("despacho", "email_cadin", "email_ob", "checklist_prorrogacao") and dados.ativo:
+    if dados.tipo in ("despacho", "email_cadin", "email_ob", "checklist_prorrogacao", "checklist_repactuacao") and dados.ativo:
         outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == dados.tipo, ModeloGlobal.ativo.is_(True))) if m.id != modelo.id), None)
         if outro is not None:
             qual = {"despacho": "máscara de despacho", "email_cadin": "máscara de e-mail de CADIN", "email_ob": "máscara de e-mail de pagamento",
-                    "checklist_prorrogacao": "checklist de prorrogação"}[dados.tipo]
+                    "checklist_prorrogacao": "checklist de prorrogação", "checklist_repactuacao": "checklist de repactuação"}[dados.tipo]
             raise ErroRegraContrato(f"Já existe um(a) {qual} ativo(a) (\"{outro.nome}\"): desative-a antes.", conflito=True)
     if dados.tipo in ("portaria", "prorrogacao") and dados.ativo:
         outro = next((m for m in sessao.scalars(select(ModeloGlobal).where(ModeloGlobal.tipo == dados.tipo, ModeloGlobal.ativo.is_(True)))

@@ -2,8 +2,8 @@
 # Este arquivo serve para descobrir o preço, a quantidade e o limite vigentes de cada item em cada mês.
 """Preço, quantidade e limite vigentes de cada item em cada mês, considerando o histórico.
 
-- Preço: reajustes concluídos. Antes do primeiro reajuste vale o preço "atual" que ele fotografou;
-  a partir da **data de efeito** do reajuste (qualquer dia da vigência), o preço reajustado.
+- Preço: reajustes e repactuações concluídos, numa linha do tempo só (pela data de efeito). Antes do primeiro vale o preço "atual" que
+  ele fotografou; a partir da **data de efeito** (qualquer dia da vigência), o preço novo (reajustado ou repactuado).
 - Mês com virada (prorrogação ou reajuste no meio do mês): o mês é cortado em **trechos** (`trechos_do_mes`), cada um com o seu
   preço e pago pelos seus dias (fator 30/360, todos os itens).
 - Quantidade mensal (contínuo): aditamentos/supressões concluídos, pela mesma lógica com o mês de efeito.
@@ -20,8 +20,12 @@ from app.services.contratos import calculos
 
 
 def _reajustes(contrato: Contrato) -> list:
-    """Reajustes concluídos, do mais antigo para o mais recente (pela data de efeito)."""
-    return sorted((r for r in contrato.reajustes if r.situacao == "concluido"), key=lambda r: r.efeito)
+    """Reajustes e repactuações concluídos, do mais antigo para o mais recente (pela data de efeito).
+
+    Os dois têm os mesmos nomes (`efeito`, `retroativo`, `itens` com `item_id`, `valor_unitario_atual` e `valor_unitario_reajustado`),
+    então a linha do tempo do preço os trata igual: cada um fotografa o preço em vigor no seu efeito e diz o preço novo."""
+    concluidos = [r for r in contrato.reajustes if r.situacao == "concluido"] + [r for r in contrato.repactuacoes if r.situacao == "concluido"]
+    return sorted(concluidos, key=lambda r: r.efeito)
 
 
 def _alteracoes(contrato: Contrato) -> list:
@@ -61,7 +65,7 @@ class Trecho:
 
 
 def datas_de_efeito(contrato: Contrato) -> list[date]:
-    """Datas a partir das quais os reajustes concluídos mudam os preços."""
+    """Datas a partir das quais os reajustes e as repactuações concluídos mudam os preços."""
     return sorted({r.efeito for r in _reajustes(contrato)})
 
 

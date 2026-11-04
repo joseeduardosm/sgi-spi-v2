@@ -35,7 +35,7 @@ Configurar a execução (checklist de documentos mensais e formulário de avalia
   - checklist ativo;
   - ao menos 1 NE com saldo.
 - **Identificação e tipos:**
-  - `identificador` (chave da rota da tela): `AAAA-MM`; `AAAA-MM-1`/`AAAA-MM-2` nas partes de um mês dividido; `AAAA-MM-dif` na diferença de reajuste; `AAAA-MM-adicional-N` nas medições adicionais. Em um mês dividido, `AAAA-MM` abre a 1ª parte;
+  - `identificador` (chave da rota da tela): `AAAA-MM`; `AAAA-MM-1`/`AAAA-MM-2` nas partes de um mês dividido; `AAAA-MM-dif` (ou `AAAA-MM-dif-repactuacao`, diferença de repactuação) na diferença de reajuste; `AAAA-MM-adicional-N` nas medições adicionais. Em um mês dividido, `AAAA-MM` abre a 1ª parte;
   - `rotulo` para exibição: `01/2027`, `01/2027 · 1ª parte`, `Diferença de reajuste 01/2026 a 04/2026`;
   - `tipo`: `regular`, `adicional` (ver abaixo) ou `diferenca_reajuste` — competência **complementar** criada ao concluir um reajuste cujo mês de referência alcança competências já medidas. Ela traz, por item, a quantidade já medida desde a referência × (preço reajustado − preço pago). As quantidades não podem ser alteradas; o fluxo é o normal (NEs e ciências, NF, CADIN, checklist, consolidado e OB), sem avaliação, e ela não conta como execução do item.
 - **Situação** (não gravada): `pendente` (o período ainda não terminou), `disponivel`, `em_andamento` (medição salva ou etapa posterior) e `concluida`.

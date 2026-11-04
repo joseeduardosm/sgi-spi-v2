@@ -561,3 +561,114 @@ class PainelAlteracao(BaseModel):
 
 # A leitura do processo referencia `LeituraMemoriaVersao`, definida mais abaixo neste arquivo
 LeituraProcessoProrrogacao.model_rebuild()
+
+
+# ---------------------------------------------------------------------------------------------
+# Repactuação (CCT)
+# ---------------------------------------------------------------------------------------------
+
+class LinhaRepactuacaoGravacao(BaseModel):
+    """Componente de custo repactuado: valores já por unidade do item financeiro (ex.: Vale-transporte por posto/mês)."""
+    descricao: str = Field(min_length=1, max_length=500)
+    valor_vigente: ValorUnitario = Field(..., ge=0)
+    valor_repactuado: ValorUnitario = Field(..., ge=0)
+    itens_ids: list[uuid.UUID] = Field(..., min_length=1, description="Itens financeiros do contrato que recebem a diferença (1 ou mais).")
+
+
+class GravacaoLinhasRepactuacao(BaseModel):
+    linhas: list[LinhaRepactuacaoGravacao] = Field(..., min_length=1)
+    finalizar: bool = Field(False, description="Verdadeiro = \"Finalizar\" o cadastro (libera a memória de cálculo).")
+
+
+class EscolhaMesQuebradoRepactuacao(BaseModel):
+    calculo: Literal["pro_rata", "integral"]
+
+
+class LinhaRepactuacaoLeitura(BaseModel):
+    id: uuid.UUID
+    ordem: int = Field(..., description="Nº da linha (1, 2, 3…).")
+    descricao: str
+    valor_vigente: ValorUnitario
+    valor_repactuado: ValorUnitario
+    diferenca: ValorUnitario = Field(..., description="Valor repactuado − vigente (R$).")
+    diferenca_percentual: Decimal = Field(..., description="Diferença em % sobre o valor vigente (0 quando o vigente é zero).")
+    itens_ids: list[uuid.UUID]
+
+
+class ItemRepactuacaoLeitura(BaseModel):
+    """Item financeiro com a soma das diferenças das linhas vinculadas: preço vigente → novo, × quantidade mensal = impacto."""
+    item_id: uuid.UUID
+    ordem: int
+    descricao: str
+    tipo: str
+    quantidade_mensal: ValorQuantidade
+    valor_unitario_atual: ValorUnitario
+    valor_unitario_repactuado: ValorUnitario
+    diferenca: ValorUnitario
+    impacto_mensal: ValorMonetario = Field(..., description="Diferença × quantidade mensal (só itens contínuos; sob demanda = 0).")
+
+
+class CompetenciaRetroativaRepactuacao(BaseModel):
+    """Competência do período retroativo: medida (entra na diferença) ou ainda não medida (recebe o novo preço na medição)."""
+    identificador: str
+    competencia: str = Field(..., description="Rótulo (MM/AAAA, ou o da competência adicional).")
+    medida: bool
+    paga: bool
+    situacao: str = Field(..., description="Ex.: \"Paga\", \"Na nota fiscal\", \"Aguardando medição\".")
+    quebrada: bool = Field(..., description="Contém a data de efeito (mês quebrado).")
+    valor_pago: ValorMonetario | None = Field(None, description="Valor medido (só nas medidas).")
+    valor_repactuado: ValorMonetario | None = None
+    diferenca: ValorMonetario | None = None
+
+
+class OpcaoMesQuebradoRepactuacao(BaseModel):
+    calculo: Literal["pro_rata", "integral"]
+    total_diferenca: ValorMonetario = Field(..., description="Diferença retroativa total com esta opção.")
+
+
+class LeituraRepactuacao(BaseModel):
+    id: uuid.UUID
+    situacao: Literal["rascunho", "concluido", "cancelado"]
+    data_base_cct: date
+    mes_referencia: date
+    data_efeito: date
+    cadastro_concluido: bool
+    linhas: list[LinhaRepactuacaoLeitura]
+    itens: list[ItemRepactuacaoLeitura]
+    base_atual: ValorMonetario = Field(..., description="Base mensal vigente (itens contínuos) na data de efeito.")
+    total_diferencas: ValorMonetario = Field(..., description="Soma dos impactos mensais dos itens.")
+    base_repactuada: ValorMonetario = Field(..., description="Base mensal vigente + total das diferenças.")
+    calculo_mes_quebrado: Literal["pro_rata", "integral"] | None
+    opcoes_mes_quebrado: list[OpcaoMesQuebradoRepactuacao] = Field(..., description="Vazia quando nenhuma competência medida está quebrada pela data de efeito.")
+    competencias: list[CompetenciaRetroativaRepactuacao]
+    total_retroativo_pagas: ValorMonetario
+    total_retroativo: ValorMonetario = Field(..., description="Pagas + medidas ainda não pagas: > 0 vira competência de diferença; < 0, crédito.")
+    memorias: list[LeituraMemoriaVersao]
+    memoria_atualizada: bool
+    checklist: list[DocumentoProrrogacaoLeitura]
+    obrigatorios_pendentes: int
+    cct: LeituraArquivo
+    consolidado: LeituraArquivo | None
+    consolidado_atualizado: bool = Field(..., description="O consolidado foi gerado depois da última memória e do último documento do checklist.")
+    apostilamento: LeituraArquivo | None
+    diferenca_retroativa: ValorMonetario | None = Field(None, description="Gravada na conclusão.")
+    competencia_diferenca: str | None = Field(None, description="Identificador da competência de diferença gerada na conclusão.")
+    criado_em: datetime
+    concluido_em: datetime | None
+    cancelado_em: datetime | None
+
+
+class ItemContratoOpcao(BaseModel):
+    """Item financeiro do contrato para vincular às linhas."""
+    id: uuid.UUID
+    ordem: int
+    descricao: str
+    tipo: str
+    valor_unitario: ValorUnitario
+
+
+class PainelRepactuacao(BaseModel):
+    em_andamento: LeituraRepactuacao | None
+    historico: list[LeituraRepactuacao]
+    itens_contrato: list[ItemContratoOpcao]
+    pode_editar: bool

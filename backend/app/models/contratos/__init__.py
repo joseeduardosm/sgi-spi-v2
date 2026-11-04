@@ -16,6 +16,12 @@ Este arquivo reexporta as classes para que o restante do código importe de um l
 from app.models.contratos.autenticacao import DocumentoAutenticado
 from app.models.contratos.alteracoes import (
     AbatimentoReajuste,
+    DocumentoRepactuacao,
+    ItemRepactuacao,
+    LinhaRepactuacao,
+    MemoriaRepactuacao,
+    Repactuacao,
+    VinculoLinhaRepactuacao,
     AlteracaoQuantidade,
     CienciaAlteracao,
     CienciaProrrogacao,
@@ -71,6 +77,12 @@ from app.models.contratos.orcamento import (
 
 __all__ = [
     "AbatimentoReajuste",
+    "DocumentoRepactuacao",
+    "ItemRepactuacao",
+    "LinhaRepactuacao",
+    "MemoriaRepactuacao",
+    "Repactuacao",
+    "VinculoLinhaRepactuacao",
     "AutoridadePortaria",
     "PortariaContrato",
     "NomeacaoPortaria",

@@ -16,7 +16,7 @@ from app.services.contratos import servico_contratos, servico_parametros
 
 def _entra_nos_marcadores(c) -> bool:
     """Competência regular ou de diferença de reajuste, não concluída, a partir do corte dos marcadores (parâmetro de Contratos) (as medições adicionais ficam de fora)."""
-    return c.tipo in ("regular", "diferenca_reajuste") and c.etapa_atual != "concluida" and c.periodo_inicio >= servico_parametros.valor("corte_marcadores_a_partir_de")
+    return c.tipo in ("regular", "diferenca_reajuste", "diferenca_repactuacao") and c.etapa_atual != "concluida" and c.periodo_inicio >= servico_parametros.valor("corte_marcadores_a_partir_de")
 
 
 def _resumo(c) -> CompetenciaAtualCarteira:

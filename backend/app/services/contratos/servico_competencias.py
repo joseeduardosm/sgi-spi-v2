@@ -45,7 +45,7 @@ from app.models.contratos import (
     NotaEmpenho,
     SelecaoNotaEmpenho,
 )
-from app.models.contratos.execucao import ETAPAS_PARALELAS, DocumentoMensal
+from app.models.contratos.execucao import ETAPAS_PARALELAS, TIPOS_DIFERENCA, DocumentoMensal
 from app.models.usuario import Usuario
 from app.schemas.contratos.execucao import (
     Contestacao,
@@ -132,6 +132,7 @@ def _carregar_competencia(sessao: Session, contrato: Contrato, competencia_id: u
             selectinload(Competencia.documentos),
             selectinload(Competencia.avaliacao),
             selectinload(Competencia.abatimentos_reajuste).selectinload(AbatimentoReajuste.reajuste),
+            selectinload(Competencia.abatimentos_reajuste).selectinload(AbatimentoReajuste.repactuacao),
         )
     )
     if competencia is None:
@@ -322,9 +323,10 @@ def proxima_competencia_a_medir(contrato: Contrato, depois_de: Competencia | Non
     return candidatas[0] if candidatas else None
 
 
-def registrar_credito_reajuste(sessao: Session, contrato: Contrato, reajuste, valor: Decimal) -> AbatimentoReajuste:
-    """Crédito de um desconto retroativo: vai para a próxima competência a medir (ou fica pendente)."""
-    abatimento = AbatimentoReajuste(contrato_id=contrato.id, reajuste_id=reajuste.id, valor=valor,
+def registrar_credito_reajuste(sessao: Session, contrato: Contrato, reajuste, valor: Decimal, repactuacao=None) -> AbatimentoReajuste:
+    """Crédito de um desconto retroativo (de um reajuste ou de uma repactuação): vai para a próxima competência a medir (ou fica pendente)."""
+    abatimento = AbatimentoReajuste(contrato_id=contrato.id, reajuste_id=reajuste.id if reajuste else None,
+                                    repactuacao_id=repactuacao.id if repactuacao else None, valor=valor,
                                     competencia=proxima_competencia_a_medir(contrato), criado_em=agora_utc())
     sessao.add(abatimento)
     return abatimento
@@ -358,7 +360,7 @@ def ajustar_abatimentos(sessao: Session, contrato: Contrato, competencia: Compet
         if parte <= 0:
             continue
         abatimento.valor -= parte
-        sessao.add(AbatimentoReajuste(contrato_id=contrato.id, reajuste_id=abatimento.reajuste_id, origem_id=abatimento.id,
+        sessao.add(AbatimentoReajuste(contrato_id=contrato.id, reajuste_id=abatimento.reajuste_id, repactuacao_id=abatimento.repactuacao_id, origem_id=abatimento.id,
                                       valor=parte, competencia=destino, criado_em=agora_utc()))
         excesso -= parte
         if excesso <= 0:
@@ -915,7 +917,7 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         valor_autorizado=valor_autorizado(competencia),
         desconto_reajuste=desconto_reajuste(competencia),
         descontos_reajuste=[
-            DescontoReajuste(reajuste_id=a.reajuste_id, mes_referencia=a.reajuste.mes_referencia, valor=a.valor)
+            DescontoReajuste(reajuste_id=a.reajuste_id, repactuacao_id=a.repactuacao_id, mes_referencia=a.mes_referencia_origem, valor=a.valor)
             for a in competencia.abatimentos_reajuste if a.valor > 0
         ],
         valor_a_pagar=valor_a_pagar(competencia),
@@ -1121,8 +1123,8 @@ def salvar_medicao(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid
         raise ErroRegraContrato("Informe a medição de todos os itens da competência.")
     notas = _resolver_notas(contrato, dados.notas_empenho_ids)
     # Competência de diferença de reajuste: quantidades fixas (já medidas); só as NEs mudam
-    if competencia.tipo == "diferenca_reajuste" and any(itens[linha.id].quantidade_medida != linha.quantidade_medida for linha in dados.itens):
-        raise ErroRegraContrato("Na diferença de reajuste as quantidades são as já medidas e não podem ser alteradas; escolha só as NEs.")
+    if competencia.tipo in TIPOS_DIFERENCA and any(itens[linha.id].quantidade_medida != linha.quantidade_medida for linha in dados.itens):
+        raise ErroRegraContrato("Na competência de diferença as quantidades são as já medidas e não podem ser alteradas; escolha só as NEs.")
     # Aplica as quantidades, anotando se alguma mudou
     alterou = False
     for linha in dados.itens:
@@ -1188,8 +1190,8 @@ def _validar_acerto(competencia: Competencia, item: ItemMedicao, quantidade_medi
     limite = servico_parametros.valor("limite_acerto_centavos")
     if abs(acerto) > limite:
         raise ErroRegraContrato(f"O acerto de \"{item.descricao_completa}\" passa de R$ {limite:.2f}".replace(".", ",") + ": é só para centavos de dízimas e arredondamentos.")
-    if competencia.tipo == "diferenca_reajuste":
-        raise ErroRegraContrato("Na diferença de reajuste os valores vêm do reajuste: não há acerto.")
+    if competencia.tipo in TIPOS_DIFERENCA:
+        raise ErroRegraContrato("Na competência de diferença os valores vêm do reajuste ou da repactuação: não há acerto.")
     if quantidade_medida <= ZERO:
         raise ErroRegraContrato(f"Só se acerta item medido: \"{item.descricao_completa}\" está sem quantidade medida.")
     if calculos.arredondar(quantidade_medida * item.valor_unitario) + acerto < ZERO:

@@ -508,7 +508,7 @@ export type VarianteMascara = 'com_anterior' | 'sem_anterior';
 export type VarianteProrrogacao = 'despacho_instrucao' | 'declaracao_atendimento_licitacao' | 'declaracao_atendimento_direta' | 'minuta_aditivo' | 'termo_ciencia' | 'declaracao_tce' | 'despacho_autorizacao';
 
 /** Tipos de modelo global. */
-export type TipoModelo = 'checklist' | 'formulario' | 'portaria' | 'despacho' | 'email_cadin' | 'email_ob' | 'prorrogacao' | 'checklist_prorrogacao';
+export type TipoModelo = 'checklist' | 'formulario' | 'portaria' | 'despacho' | 'email_cadin' | 'email_ob' | 'prorrogacao' | 'checklist_prorrogacao' | 'checklist_repactuacao';
 
 /** Placeholder permitido nas máscaras de portaria. */
 export interface PlaceholderPortaria {
@@ -531,7 +531,7 @@ export interface Modelo {
 export interface ResumoCompetencia {
   id: string;
   competencia: string;
-  tipo: 'regular' | 'diferenca_reajuste' | 'adicional';
+  tipo: 'regular' | 'diferenca_reajuste' | 'diferenca_repactuacao' | 'adicional';
   /** Número da medição adicional (1, 2…); 0 nas demais. */
   numero_adicional: number;
   parte: number | null;
@@ -1151,6 +1151,40 @@ export interface VigenciaDisponivel {
 }
 
 /** Resposta das rotas de reajuste. */
+// --- Repactuação (CCT) ---
+/** Linha da repactuação: componente de custo com valores por unidade do item financeiro e os itens que recebem a diferença. */
+export interface LinhaRepactuacao {
+  id: string; ordem: number; descricao: string; valor_vigente: string; valor_repactuado: string; diferenca: string; diferenca_percentual: string; itens_ids: string[];
+}
+/** Item financeiro com a soma das diferenças das linhas vinculadas: vigente → novo × quantidade mensal = impacto. */
+export interface ItemRepactuacao {
+  item_id: string; ordem: number; descricao: string; tipo: string; quantidade_mensal: string; valor_unitario_atual: string; valor_unitario_repactuado: string;
+  diferenca: string; impacto_mensal: string;
+}
+/** Competência do período retroativo: medida (entra na diferença) ou ainda não medida (recebe o novo preço na medição). */
+export interface CompetenciaRetroativa {
+  identificador: string; competencia: string; medida: boolean; paga: boolean; situacao: string; quebrada: boolean;
+  valor_pago: string | null; valor_repactuado: string | null; diferenca: string | null;
+}
+export interface Repactuacao {
+  id: string; situacao: 'rascunho' | 'concluido' | 'cancelado'; data_base_cct: string; mes_referencia: string; data_efeito: string; cadastro_concluido: boolean;
+  linhas: LinhaRepactuacao[]; itens: ItemRepactuacao[]; base_atual: string; total_diferencas: string; base_repactuada: string;
+  calculo_mes_quebrado: CalculoMesQuebrado | null; opcoes_mes_quebrado: { calculo: CalculoMesQuebrado; total_diferenca: string }[];
+  competencias: CompetenciaRetroativa[]; total_retroativo_pagas: string; total_retroativo: string;
+  memorias: { versao: number; criada_em: string; pdf: Arquivo; xlsx: Arquivo }[]; memoria_atualizada: boolean;
+  checklist: DocumentoProrrogacao[]; obrigatorios_pendentes: number; cct: Arquivo; consolidado: Arquivo | null; consolidado_atualizado: boolean;
+  apostilamento: Arquivo | null; diferenca_retroativa: string | null; competencia_diferenca: string | null;
+  criado_em: string; concluido_em: string | null; cancelado_em: string | null;
+}
+export interface PainelRepactuacao {
+  em_andamento: Repactuacao | null;
+  historico: Repactuacao[];
+  itens_contrato: { id: string; ordem: number; descricao: string; tipo: string; valor_unitario: string }[];
+  pode_editar: boolean;
+}
+/** Linha como a tela grava (valores no formato da API). */
+export interface GravacaoLinhaRepactuacao { descricao: string; valor_vigente: string; valor_repactuado: string; itens_ids: string[] }
+
 export interface PainelReajuste {
   em_andamento: Reajuste | null;
   vigencias_disponiveis: VigenciaDisponivel[];

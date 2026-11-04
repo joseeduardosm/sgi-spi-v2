@@ -47,9 +47,12 @@ POR_CODIGO = {tipo.codigo: tipo for tipo in CATALOGO}
 PREFIXO_TERMO_ADITIVO = "TERMO_ADITIVO"
 
 
-def nome_download(codigo: int, numero_arquivo: str) -> str:
-    """Nome do arquivo baixado, ex.: `DFD_SPI_012_2026.pdf` ou `TERMO_ADITIVO_024_SPI_012_2026.pdf`."""
-    # Código fora do catálogo = termo aditivo de prorrogação (024 em diante)
+def nome_download(codigo: int, numero_arquivo: str, titulo: str = "") -> str:
+    """Nome do arquivo baixado, ex.: `DFD_SPI_012_2026.pdf`, `TERMO_ADITIVO_024_SPI_012_2026.pdf` ou `CCT_01_2026_SPI_012_2026.pdf`."""
+    # Código fora do catálogo = anexado por um processo: termo aditivo (prorrogação) ou CCT (repactuação, título "CCT mm/aaaa")
     tipo = POR_CODIGO.get(codigo)
-    prefixo = tipo.prefixo if tipo else f"{PREFIXO_TERMO_ADITIVO}_{codigo:03d}"
+    if tipo is None and titulo.startswith("CCT "):
+        prefixo = "CCT_" + titulo[4:].replace("/", "_")
+    else:
+        prefixo = tipo.prefixo if tipo else f"{PREFIXO_TERMO_ADITIVO}_{codigo:03d}"
     return f"{prefixo}_SPI_{numero_arquivo}.pdf"

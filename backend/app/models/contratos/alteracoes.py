@@ -340,7 +340,9 @@ class AbatimentoReajuste(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
-    reajuste_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="CASCADE"), index=True)
+    # Origem do crédito: um reajuste ou uma repactuação (um dos dois)
+    reajuste_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="CASCADE"), index=True)
+    repactuacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_repactuacoes.id", ondelete="CASCADE"), index=True)
     # Competência que recebe o desconto; nula enquanto não houver competência a medir
     competencia_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_competencias.id", ondelete="SET NULL"), index=True)
     # Abatimento de onde veio esta sobra (para devolvê-la se a medição for reaberta)
@@ -348,8 +350,186 @@ class AbatimentoReajuste(Base):
     valor: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
-    reajuste: Mapped[Reajuste] = relationship(back_populates="abatimentos")
+    reajuste: Mapped[Reajuste | None] = relationship(back_populates="abatimentos")
+    repactuacao: Mapped["Repactuacao | None"] = relationship(back_populates="abatimentos")
     competencia: Mapped["Competencia | None"] = relationship(back_populates="abatimentos_reajuste")  # noqa: F821
+
+    @property
+    def mes_referencia_origem(self) -> date:
+        """Mês de referência de quem gerou o crédito (reajuste ou repactuação)."""
+        return self.reajuste.mes_referencia if self.reajuste is not None else self.repactuacao.mes_referencia
+
+    @property
+    def rotulo_origem(self) -> str:
+        """Texto da origem do crédito no PDF da medição."""
+        if self.reajuste is not None:
+            return f"Reajuste com referência {self.reajuste.mes_referencia:%m/%Y}"
+        return f"Repactuação (CCT {self.repactuacao.data_base_cct:%m/%Y}) a partir de {self.repactuacao.efeito:%d/%m/%Y}"
+
+
+# ---------------------------------------------------------------------------------------------
+# Repactuação (CCT)
+# ---------------------------------------------------------------------------------------------
+
+class Repactuacao(Base):
+    """Repactuação pela Convenção Coletiva de Trabalho: componentes de custo (linhas) que mudam e somam no preço dos itens vinculados.
+
+    Cada linha (ex.: "Vale-transporte", R$ 198 → R$ 220 por posto/mês) tem valor vigente e repactuado já por unidade do item financeiro,
+    e se liga a 1..N itens do contrato; a diferença em R$ da linha soma no preço unitário de cada item vinculado (um item vinculado a
+    várias linhas soma todas). Vale a partir de `efeito` (data de vigência da CCT), com o mês quebrado em pro rata ou integral, como no reajuste.
+    """
+    __tablename__ = "contratos_repactuacoes"
+    __table_args__ = (CheckConstraint("situacao IN ('rascunho', 'concluido', 'cancelado')", name="ck_contratos_repactuacoes_situacao"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    situacao: Mapped[str] = mapped_column(String(20), default="rascunho")
+    # Data-base da CCT (dia 1 do mês): nome do documento "CCT mm/aaaa" nos Documentos importantes
+    data_base_cct: Mapped[date] = mapped_column(Date)
+    # Primeiro mês com os novos preços (dia 1) e o dia exato a partir do qual valem
+    mes_referencia: Mapped[date] = mapped_column(Date)
+    data_efeito: Mapped[date] = mapped_column(Date)
+    # Cadastro das linhas concluído ("Finalizar" do passo 1): libera a memória
+    cadastro_concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    calculo_mes_quebrado: Mapped[str | None] = mapped_column(String(10))
+    base_atual: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    base_repactuada: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
+    # Diferença das competências já medidas, gravada na conclusão (> 0 vira competência de diferença; < 0, crédito)
+    diferenca_retroativa: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    cct_anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    consolidado_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    apostilamento_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+    concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    contrato: Mapped[Contrato] = relationship(back_populates="repactuacoes")
+    linhas: Mapped[list["LinhaRepactuacao"]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan", order_by="LinhaRepactuacao.ordem")
+    itens: Mapped[list["ItemRepactuacao"]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan", order_by="ItemRepactuacao.ordem")
+    memorias: Mapped[list["MemoriaRepactuacao"]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan", order_by="MemoriaRepactuacao.versao")
+    documentos: Mapped[list["DocumentoRepactuacao"]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan", order_by="DocumentoRepactuacao.ordem")
+    abatimentos: Mapped[list[AbatimentoReajuste]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan")
+    cct_anexo: Mapped[Anexo] = relationship(foreign_keys=[cct_anexo_id])
+    consolidado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[consolidado_anexo_id])
+    apostilamento_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[apostilamento_anexo_id])
+
+    @property
+    def efeito(self) -> date:
+        return self.data_efeito
+
+    # Mesmos nomes do reajuste, para a linha do tempo de preços (`valores.preco_em`) tratar os dois do mesmo jeito
+    @property
+    def retroativo(self) -> bool:
+        return False
+
+
+Index(
+    "ux_contratos_repactuacoes_rascunho",
+    Repactuacao.contrato_id,
+    unique=True,
+    postgresql_where=text("situacao = 'rascunho'"),
+    sqlite_where=text("situacao = 'rascunho'"),
+)
+
+
+class LinhaRepactuacao(Base):
+    """Componente de custo repactuado (ex.: Vale-transporte), com valores por unidade do item financeiro."""
+    __tablename__ = "contratos_repactuacoes_linhas"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    repactuacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_repactuacoes.id", ondelete="CASCADE"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer)
+    descricao: Mapped[str] = mapped_column(String(500))
+    valor_vigente: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    valor_repactuado: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+
+    repactuacao: Mapped[Repactuacao] = relationship(back_populates="linhas")
+    vinculos: Mapped[list["VinculoLinhaRepactuacao"]] = relationship(back_populates="linha", cascade="all, delete-orphan")
+
+    @property
+    def diferenca(self) -> Decimal:
+        return self.valor_repactuado - self.valor_vigente
+
+
+class VinculoLinhaRepactuacao(Base):
+    """Item financeiro do contrato que recebe a diferença de uma linha (1..N por linha)."""
+    __tablename__ = "contratos_repactuacoes_vinculos"
+    __table_args__ = (UniqueConstraint("linha_id", "item_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    linha_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_repactuacoes_linhas.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_itens.id", ondelete="CASCADE"), index=True)
+
+    linha: Mapped[LinhaRepactuacao] = relationship(back_populates="vinculos")
+
+
+class ItemRepactuacao(Base):
+    """Fotografia de um item financeiro na repactuação: preço na data de efeito e o novo (preço + soma das diferenças das linhas)."""
+    __tablename__ = "contratos_repactuacoes_itens"
+    __table_args__ = (UniqueConstraint("repactuacao_id", "item_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    repactuacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_repactuacoes.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_itens.id", ondelete="CASCADE"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer)
+    descricao: Mapped[str] = mapped_column(String(1000))
+    tipo: Mapped[str] = mapped_column(String(20))
+    quantidade_mensal: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    valor_unitario_atual: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    valor_unitario_repactuado: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+
+    repactuacao: Mapped[Repactuacao] = relationship(back_populates="itens")
+
+    # Mesmo nome do reajuste, para `valores.preco_em`
+    @property
+    def valor_unitario_reajustado(self) -> Decimal:
+        return self.valor_unitario_repactuado
+
+    @property
+    def diferenca(self) -> Decimal:
+        return self.valor_unitario_repactuado - self.valor_unitario_atual
+
+
+class MemoriaRepactuacao(Base):
+    """Memória de cálculo da repactuação (PDF e XLSX), versionada pelo hash dos dados."""
+    __tablename__ = "contratos_repactuacoes_memorias"
+    __table_args__ = (UniqueConstraint("repactuacao_id", "versao"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    repactuacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_repactuacoes.id", ondelete="CASCADE"), index=True)
+    versao: Mapped[int] = mapped_column(Integer)
+    pdf_anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    xlsx_anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    hash_origem: Mapped[str] = mapped_column(String(64))
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    repactuacao: Mapped[Repactuacao] = relationship(back_populates="memorias")
+    pdf_anexo: Mapped[Anexo] = relationship(foreign_keys=[pdf_anexo_id])
+    xlsx_anexo: Mapped[Anexo] = relationship(foreign_keys=[xlsx_anexo_id])
+
+
+class DocumentoRepactuacao(Base):
+    """Documento do checklist da repactuação: copiado do modelo "Checklist Repactuação" ativo ou incluído durante o processo."""
+    __tablename__ = "contratos_repactuacoes_documentos"
+    __table_args__ = (UniqueConstraint("repactuacao_id", "ordem"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    repactuacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos_repactuacoes.id", ondelete="CASCADE"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer)
+    nome: Mapped[str] = mapped_column(String(500))
+    observacao: Mapped[str] = mapped_column(String(1000), default="")
+    obrigatorio: Mapped[bool] = mapped_column(Boolean, default=True)
+    anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    enviado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    incluido_no_processo: Mapped[bool] = mapped_column(Boolean, default=False)
+    incluido_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    incluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    repactuacao: Mapped[Repactuacao] = relationship(back_populates="documentos")
+    anexo: Mapped[Anexo | None] = relationship(foreign_keys=[anexo_id])
 
 
 # ---------------------------------------------------------------------------------------------

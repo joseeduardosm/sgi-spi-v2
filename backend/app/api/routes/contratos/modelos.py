@@ -29,7 +29,7 @@ NAO_ENCONTRADO = resposta_nao_encontrado("Modelo")
 @roteador.get("", response_model=list[LeituraModelo], summary="Listar modelos globais",
               description="Modelos de checklist e de formulário para clonar nos contratos e máscaras de portaria. Exige ACL `contratos` ≥ LEITURA.")
 def listar_modelos(
-    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao"] | None = Query(None),
+    tipo: Literal["checklist", "formulario", "portaria", "despacho", "email_cadin", "email_ob", "prorrogacao", "checklist_prorrogacao", "checklist_repactuacao"] | None = Query(None),
     somente_ativos: bool = Query(True),
     sessao: Session = Depends(obter_sessao),
     _: Usuario = Depends(pode_ler),

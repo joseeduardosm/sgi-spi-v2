@@ -223,13 +223,13 @@ def gerar_competencias(contrato_id: uuid.UUID, sessao: Session = Depends(obter_s
 
 @roteador.get("/competencias/identificador/{identificador}", response_model=DetalheCompetencia, summary="Competência pelo identificador",
               description="`identificador` = `AAAA-MM`, `AAAA-MM-1`/`AAAA-MM-2` (mês dividido entre vigências), `AAAA-MM-dif` "
-              "(diferença de reajuste) ou `AAAA-MM-adicional-N` (medição adicional). É a chave da tela `/contratos/:id/execucao/:identificador`.", responses=NAO_ENCONTRADA)
+              "(diferença de reajuste), `AAAA-MM-dif-repactuacao` (diferença de repactuação) ou `AAAA-MM-adicional-N` (medição adicional). É a chave da tela `/contratos/:id/execucao/:identificador`.", responses=NAO_ENCONTRADA)
 def competencia_por_identificador(
     contrato_id: uuid.UUID, identificador: str, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)
 ):
     """Busca a competência pelo identificador legível usado na URL da tela (ex.: `2026-03`)."""
     # Recusa formatos inválidos logo aqui, como 404, sem consultar o banco
-    if not re.fullmatch(r"\d{4}-\d{2}(-(\d|dif|adicional-\d{1,3}))?", identificador):
+    if not re.fullmatch(r"\d{4}-\d{2}(-(\d|dif|dif-repactuacao(-\d{1,3})?|adicional-\d{1,3}))?", identificador):
         raise ErroApi(status.HTTP_404_NOT_FOUND, "Competência não encontrada.", "nao_encontrado")
     with traduzir_erros():
         competencia_id = competencias.localizar_competencia(sessao, contrato_id, identificador)

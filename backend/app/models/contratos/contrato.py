@@ -159,6 +159,9 @@ class Contrato(Base):
     reajustes: Mapped[list["Reajuste"]] = relationship(  # noqa: F821
         back_populates="contrato", cascade="all, delete-orphan", order_by="Reajuste.criado_em"
     )
+    repactuacoes: Mapped[list["Repactuacao"]] = relationship(  # noqa: F821
+        back_populates="contrato", cascade="all, delete-orphan", order_by="Repactuacao.criado_em"
+    )
     alteracoes: Mapped[list["AlteracaoQuantidade"]] = relationship(  # noqa: F821
         back_populates="contrato", cascade="all, delete-orphan", order_by="AlteracaoQuantidade.criado_em"
     )

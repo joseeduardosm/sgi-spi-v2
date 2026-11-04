@@ -6,6 +6,23 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-11-04
+
+Migração nova (aplicar com `alembic upgrade head`; cabeça `a6c8e0b2d4f7`): `a6c8e0b2d4f7` (repactuação: tabelas da repactuação, competência `diferenca_repactuacao`, crédito com `repactuacao_id` e modelo `checklist_repactuacao`).
+
+### Adicionado
+- **Repactuação de contrato pela CCT** (Contrato › aba Itens › **Repactuação**, `/contratos/:id/repactuacao`): a Convenção Coletiva muda componentes de custo (vale-transporte, vale-alimentação…) e a diferença de cada um soma no preço dos itens do contrato vinculados a ele (1..N), a partir da data de vigência.
+  - **Cadastro**: CCT (vai para os Documentos importantes como "CCT mm/aaaa"), data-base, data "a partir de" e os itens (Nº, descrição, valor vigente e repactuado por posto/mês, itens vinculados).
+  - **Memória de cálculo** (PDF e XLSX): preço vigente → novo de cada item × quantidade, base mensal vigente, total das diferenças e nova base.
+  - **Retroativo**: competências medidas (pagas ou não) com valor pago × repactuado e a diferença; não medidas com a situação; mês quebrado pro rata ou integral, como no reajuste.
+  - **Checklist** (modelo novo "Checklist Repactuação" em Contratos › Modelos), **documento consolidado** (capa + CCT + checklist + memória) e **finalização** com o apostilamento: atualiza os preços e a base mensal, refaz as competências não medidas e lança o retroativo — positivo vira competência **"Diferença de repactuação"** (`AAAA-MM-dif-repactuacao`; cada repactuação gera a sua, numeradas no mesmo período), negativo vira crédito na próxima medição.
+  - Endpoints `/api/contratos/{id}/repactuacoes/*` (`docs/endpoints/contratos-alteracoes.md`, seção Repactuação).
+
+### Alterado
+- A linha do tempo de preços dos itens considera reajustes **e** repactuações concluídos; a diferença de cada repactuação é a do próprio componente (nunca cobra de novo a de outra).
+- Crédito de desconto (abatimento) pode vir de um reajuste ou de uma repactuação; o PDF da medição mostra a origem.
+- Painel de pendências e linha do tempo do contrato mostram a repactuação; desfazer prorrogação/vigência retroativa é bloqueado se houver repactuação valendo nela.
+
 ## 2026-11-03
 
 Migrações novas (aplicar com `alembic upgrade head`; cabeça `f4b6d8e0a2c3`): Chamados `d4f6a8c0e2b5` (módulo e recurso `chamados` na ACL), `e7a9c1d3f5b8` (campos adicionais, em cópia, tarefas e aprovações), `f8b0d2e4a6c9` (status, sub-status, recorrentes e tarefas automáticas), `9e2c4a6b8d10` (TVs do painel e serviços do RH), `b3d5f7a9c1e4` (satisfação, respostas prontas e motivos de pendência), `d7f9b1c3e5a8` (painel com login e Exoneração), `a4c6e8b0d2f3` (categoria ITIL), `c8e0a2b4d6f7` (setores que podem escolher o assunto), `d0f2b4c6e8a9` (fila, prioridade e prazos por serviço do RH); Rede `c5e7a9b1d3f6` (plano de face), `e1a3c5d7f9b2` (racks), `f2b4d6e8a0c1` (modos de porta), `b6d8f0a2c4e5` (dispositivos em cascata na porta), `e2a4c6e8b0d1` (função na topologia, access point, ping e parâmetros) e `f4b6d8e0a2c3` (porta com ligação fica "ligada").

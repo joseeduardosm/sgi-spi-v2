@@ -316,7 +316,7 @@ def _secao_desconto_reajuste(documento: DocumentoPdf, competencia: Competencia, 
     desconto = sum((a.valor for a in abatimentos), Decimal(0))
     documento.secao("Desconto de reajuste (crédito de competências já medidas)").tabela(
         ["Origem", "Valor abatido"],
-        [[f"Reajuste com referência {a.reajuste.mes_referencia:%m/%Y}", moeda(a.valor)] for a in abatimentos],
+        [[a.rotulo_origem, moeda(a.valor)] for a in abatimentos],
         larguras=[6, 2], alinhar_direita=[1],
         rodape=[f"Total medido {moeda(total)} − desconto", moeda(max(Decimal(0), total - desconto))],
     )

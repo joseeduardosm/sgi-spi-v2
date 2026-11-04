@@ -5,6 +5,7 @@
 Os três são "atos" que mudam o contrato depois de assinado:
 - **Prorrogação**: estende o prazo, criando uma nova vigência (Termo Aditivo).
 - **Reajuste**: corrige os preços pelo índice do contrato (apostilamento), uma vez por vigência.
+- **Repactuação**: a CCT muda componentes de custo; a diferença de cada um soma no preço dos itens vinculados (apostilamento).
 - **Aditamento/supressão**: aumenta ou diminui as quantidades dos itens, respeitando o limite
   legal de 25% (acima disso, exige autorização do Ordenador de Despesa).
 
@@ -42,8 +43,12 @@ from app.schemas.contratos.alteracoes import (
     LeituraVigenciaRetroativa,
     PainelAlteracao,
     PainelReajuste,
+    EscolhaMesQuebradoRepactuacao,
+    GravacaoLinhasRepactuacao,
+    LeituraRepactuacao,
+    PainelRepactuacao,
 )
-from app.services.contratos import servico_alteracao, servico_pos_assinatura, servico_prorrogacao, servico_reajuste, servico_vigencia_retroativa
+from app.services.contratos import servico_alteracao, servico_pos_assinatura, servico_prorrogacao, servico_reajuste, servico_repactuacao, servico_vigencia_retroativa
 
 # As tags ficam em cada rota (e não no roteador) para separar os três grupos na documentação
 roteador = APIRouter(prefix="/contratos/{contrato_id}", responses=RESPOSTAS_AUTENTICADAS)
@@ -53,6 +58,7 @@ ESCRITA = {**NAO_ENCONTRADO, **INVALIDO, **SEM_VINCULO}
 UPLOAD = {**NAO_ENCONTRADO, **ARQUIVO_RECUSADO, **SEM_VINCULO}
 PDF = {status.HTTP_200_OK: {"content": {"application/pdf": {}}}, **resposta_nao_encontrado("Arquivo")}
 PRORROGACAO, REAJUSTE, ALTERACAO = ["Contratos: prorrogação"], ["Contratos: reajuste"], ["Contratos: aditamento e supressão"]
+REPACTUACAO = ["Contratos: repactuação"]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -401,6 +407,150 @@ def arquivo_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, anexo_id: u
     """Baixa um arquivo do reajuste (evidência, memória ou apostilamento)."""
     with traduzir_erros():
         return servico_reajuste.arquivo(sessao, contrato_id, reajuste_id, anexo_id)
+
+
+# ---------------------------------------------------------------------------------------------
+# Repactuação (CCT)
+# ---------------------------------------------------------------------------------------------
+
+@roteador.get("/repactuacoes", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Repactuação em elaboração e histórico", responses=NAO_ENCONTRADO,
+              description="A repactuação em elaboração (se houver), as concluídas ou canceladas e os itens do contrato para vincular às linhas.")
+def painel_repactuacao(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)):
+    """Repactuação em elaboração e histórico."""
+    with traduzir_erros():
+        return servico_repactuacao.painel(sessao, contrato_id, usuario)
+
+
+@roteador.post("/repactuacoes", response_model=PainelRepactuacao, status_code=status.HTTP_201_CREATED, tags=REPACTUACAO, summary="Abrir repactuação",
+               description="`multipart/form-data`: `arquivo` (PDF da CCT), `data_base_cct` (qualquer dia do mês da data-base) e `data_efeito` (a partir de quando "
+               "os novos valores valem; dentro das vigências do contrato). A CCT entra nos Documentos importantes como \"CCT mm/aaaa\". Uma repactuação em "
+               "elaboração por vez (`409`); também `409` se já houver reajuste ou repactuação concluído com efeito depois desta data.",
+               responses={**UPLOAD, **INVALIDO, **CONFLITO})
+def abrir_repactuacao(contrato_id: uuid.UUID, data_base_cct: date = Form(...), data_efeito: date = Form(...), arquivo: UploadFile = File(...),
+                      sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Abre a repactuação com a CCT."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.abrir(sessao, contrato_id, data_base_cct, data_efeito, *arquivo_pdf(arquivo), autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.put("/repactuacoes/{repactuacao_id}/linhas", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Salvar itens da repactuação",
+              description="Linhas (descrição, valor vigente e repactuado por unidade do item financeiro) e os itens do contrato vinculados a cada uma (1..N). "
+              "A diferença em R$ de cada linha soma no preço unitário dos vinculados. Com `finalizar`, conclui o cadastro e libera a memória.",
+              responses=ESCRITA)
+def linhas_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, dados: GravacaoLinhasRepactuacao, sessao: Session = Depends(obter_sessao),
+                       autor: Usuario = Depends(pode_modificar)):
+    """Grava as linhas e os vínculos."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.salvar_linhas(sessao, contrato_id, repactuacao_id, dados, autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.post("/repactuacoes/{repactuacao_id}/previa", response_model=LeituraRepactuacao, tags=REPACTUACAO, summary="Prévia da repactuação (calculadora)",
+               description="Mesmo corpo de `PUT …/linhas`, mas **não grava nada**: devolve os novos preços, a base mensal e o retroativo como ficariam.",
+               responses=ESCRITA)
+def previa_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, dados: GravacaoLinhasRepactuacao, sessao: Session = Depends(obter_sessao),
+                       autor: Usuario = Depends(pode_modificar)):
+    """Calcula sem gravar."""
+    with traduzir_erros(sessao):
+        return servico_repactuacao.previa(sessao, contrato_id, repactuacao_id, dados, autor)
+
+
+@roteador.put("/repactuacoes/{repactuacao_id}/mes-quebrado", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Escolher o cálculo dos meses quebrados",
+              description="`pro_rata` (dias antes da data de vigência sem a repactuação, a partir dela com) ou `integral` (mês inteiro repactuado), uma escolha "
+              "para todos os meses medidos que contêm a data de vigência.", responses=ESCRITA)
+def mes_quebrado_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, dados: EscolhaMesQuebradoRepactuacao, sessao: Session = Depends(obter_sessao),
+                             autor: Usuario = Depends(pode_modificar)):
+    """Grava a escolha do mês quebrado."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.escolher_mes_quebrado(sessao, contrato_id, repactuacao_id, dados.calculo, autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.post("/repactuacoes/{repactuacao_id}/memoria", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Gerar memória da repactuação (PDF e XLSX)",
+               description="Itens (Nº, descrição, vigente, repactuado, diferença % e R$), itens financeiros (preço vigente → novo × quantidade), base mensal vigente, "
+               "total das diferenças e nova base, e o retroativo (medidas: pago × repactuado; não medidas: situação). Nova versão só se os dados mudaram. "
+               "`400` sem o cadastro finalizado ou sem a escolha do mês quebrado (quando há).", responses=ESCRITA)
+def memoria_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Gera a memória de cálculo."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.gerar_memoria(sessao, contrato_id, repactuacao_id, autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+# Antes de `checklist/{documento_id}`: senão "incluir" seria lido como id do documento
+@roteador.post("/repactuacoes/{repactuacao_id}/checklist/incluir", response_model=PainelRepactuacao, tags=REPACTUACAO,
+               summary="Incluir documento no checklist da repactuação",
+               description="`multipart/form-data` (`nome`, `descricao` opcional e `arquivo` PDF). Nunca obrigatório; pode ser excluído. `400` sem nome.",
+               responses={**ESCRITA, **ARQUIVO_RECUSADO})
+def incluir_documento_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, nome: str = Form(..., max_length=500), descricao: str = Form("", max_length=1000),
+                                  arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Inclui um documento fora do modelo."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.incluir_documento(sessao, contrato_id, repactuacao_id, nome, descricao, *arquivo_pdf(arquivo), autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.post("/repactuacoes/{repactuacao_id}/checklist/{documento_id}", response_model=PainelRepactuacao, tags=REPACTUACAO,
+               summary="Anexar documento do checklist da repactuação",
+               description="`multipart/form-data` (`arquivo`, PDF). Substitui o anterior. Os obrigatórios sem PDF impedem finalizar.", responses={**ESCRITA, **ARQUIVO_RECUSADO})
+def anexar_documento_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, documento_id: uuid.UUID, arquivo: UploadFile = File(...),
+                                 sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Anexa o PDF de um documento do checklist."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.anexar_documento(sessao, contrato_id, repactuacao_id, documento_id, *arquivo_pdf(arquivo), autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.delete("/repactuacoes/{repactuacao_id}/checklist/{documento_id}", response_model=PainelRepactuacao, tags=REPACTUACAO,
+                 summary="Excluir documento incluído no checklist da repactuação",
+                 description="Só para documento incluído durante o processo (`400` nos do checklist padrão).", responses=ESCRITA)
+def excluir_documento_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, documento_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                                  autor: Usuario = Depends(pode_modificar)):
+    """Exclui um documento incluído no checklist."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.excluir_documento(sessao, contrato_id, repactuacao_id, documento_id, autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.post("/repactuacoes/{repactuacao_id}/consolidado", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Gerar documento consolidado",
+               description="PDF único: capa (contrato e repactuação), CCT, documentos do checklist e memória de cálculo. `400` sem a memória atualizada.",
+               responses=ESCRITA)
+def consolidado_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Gera o consolidado."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.gerar_consolidado(sessao, contrato_id, repactuacao_id, autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.post("/repactuacoes/{repactuacao_id}/finalizar", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Finalizar repactuação",
+               description="`multipart/form-data` com o termo de apostilamento assinado (`arquivo`). Exige o cadastro finalizado, a memória atualizada, os "
+               "obrigatórios do checklist e o consolidado. Soma as diferenças no preço dos itens vinculados, aplica o novo preço às competências não "
+               "medidas e lança o retroativo das medidas: positivo vira competência de diferença (`AAAA-MM-dif-repactuacao`), negativo vira crédito.",
+               responses={**UPLOAD, **INVALIDO})
+def finalizar_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
+                          autor: Usuario = Depends(pode_modificar)):
+    """Finaliza e aplica a repactuação."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.finalizar(sessao, contrato_id, repactuacao_id, *arquivo_pdf(arquivo), autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.post("/repactuacoes/{repactuacao_id}/cancelar", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Cancelar repactuação", responses=ESCRITA,
+               description="Cancela a repactuação em elaboração; os preços não mudam e a CCT continua nos Documentos importantes.")
+def cancelar_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Cancela a repactuação em elaboração."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.cancelar(sessao, contrato_id, repactuacao_id, autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.get("/repactuacoes/{repactuacao_id}/arquivos/{anexo_id}", response_class=FileResponse, tags=REPACTUACAO, summary="Baixar arquivo da repactuação",
+              responses=PDF, description="CCT, memória (PDF/XLSX), documentos do checklist, consolidado ou apostilamento (só os desta repactuação).")
+def arquivo_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, anexo_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _: Usuario = Depends(pode_ler)):
+    """Baixa um arquivo da repactuação."""
+    with traduzir_erros():
+        return servico_repactuacao.arquivo(sessao, contrato_id, repactuacao_id, anexo_id)
 
 
 # ---------------------------------------------------------------------------------------------

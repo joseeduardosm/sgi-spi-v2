@@ -40,7 +40,9 @@ ETAPAS = ("medicao", "avaliacao", "nota_fiscal", "retencao", "checklist", "cadin
 ETAPAS_PARALELAS = ("retencao", "checklist")
 # Competência regular (período de execução), complementar (paga a diferença de um reajuste retroativo) ou adicional
 # (outra medição e outro pagamento no mesmo mês de uma competência, com justificativa)
-TIPOS_COMPETENCIA = ("regular", "diferenca_reajuste", "adicional")
+TIPOS_COMPETENCIA = ("regular", "diferenca_reajuste", "diferenca_repactuacao", "adicional")
+# Competências complementares que só pagam a diferença de preço de quantidades já medidas (quantidades fixas, sem avaliação)
+TIPOS_DIFERENCA = ("diferenca_reajuste", "diferenca_repactuacao")
 
 
 class Checklist(Base):
@@ -128,7 +130,7 @@ class ModeloGlobal(Base):
     __tablename__ = "contratos_modelos"
     # Tipos aceitos; `portaria` guarda a máscara do texto da portaria de designação ({"html", "variante"}); `despacho`, a do despacho de pagamento do consolidado ({"html"}); `prorrogacao`, as minutas e despachos da prorrogação ({"html", "variante"})
     # `checklist_prorrogacao`: documentos pedidos na prorrogação ({"itens"}), copiados para o processo como ponto de partida
-    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria', 'despacho', 'email_cadin', 'email_ob', 'prorrogacao', 'checklist_prorrogacao')",
+    __table_args__ = (CheckConstraint("tipo IN ('checklist', 'formulario', 'portaria', 'despacho', 'email_cadin', 'email_ob', 'prorrogacao', 'checklist_prorrogacao', 'checklist_repactuacao')",
                                       name="ck_contratos_modelos_tipo"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -176,6 +178,8 @@ class Competencia(Base):
     adicional_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
     # Reajuste que originou a competência de diferença (somente tipo = diferenca_reajuste)
     reajuste_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="SET NULL"), index=True)
+    # Repactuação que originou a competência de diferença (somente tipo = diferenca_repactuacao)
+    repactuacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_repactuacoes.id", ondelete="SET NULL"), index=True)
     # Reajuste que calculou e pagou o retroativo desta competência regular; None = ainda sem cobertura
     diferenca_coberta_por_reajuste_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="SET NULL"), index=True)
 
@@ -318,6 +322,9 @@ class Competencia(Base):
         """Chave da rota da tela: `AAAA-MM`, `AAAA-MM-1`/`AAAA-MM-2` (mês dividido) ou `AAAA-MM-dif` (diferença de reajuste)."""
         if self.tipo == "diferenca_reajuste":
             return f"{self.competencia:%Y-%m}-dif"
+        if self.tipo == "diferenca_repactuacao":
+            # Cada repactuação tem a sua; a partir da 2ª no mesmo mês, numeradas (`numero_adicional`)
+            return f"{self.competencia:%Y-%m}-dif-repactuacao" + (f"-{self.numero_adicional}" if self.numero_adicional > 1 else "")
         if self.tipo == "adicional":
             return f"{self.competencia:%Y-%m}-adicional-{self.numero_adicional}"
         return f"{self.competencia:%Y-%m}" + (f"-{self.parte}" if self.parte else "")
@@ -327,6 +334,9 @@ class Competencia(Base):
         """Rótulo exibido: `01/2027`, `01/2027 · 1ª parte` ou `Diferença de reajuste 01/2026 a 04/2026`."""
         if self.tipo == "diferenca_reajuste":
             return f"Diferença de reajuste {self.periodo_inicio:%m/%Y} a {self.periodo_fim:%m/%Y}"
+        if self.tipo == "diferenca_repactuacao":
+            numero = f" ({self.numero_adicional}ª)" if self.numero_adicional > 1 else ""
+            return f"Diferença de repactuação{numero} {self.periodo_inicio:%m/%Y} a {self.periodo_fim:%m/%Y}"
         if self.tipo == "adicional":
             return f"{self.competencia:%m/%Y} · Medição adicional {self.numero_adicional}"
         return f"{self.competencia:%m/%Y}" + (f" · {self.parte}ª parte" if self.parte else "")

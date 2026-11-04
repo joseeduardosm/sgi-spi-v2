@@ -46,7 +46,7 @@
               } @else { {{ i.quantidade_medida | quantidade }} }
             </td>
             <td class="num" style="width: 110px">
-              @if (editavel() && medivel() && detalhe().tipo !== 'diferenca_reajuste') {
+              @if (editavel() && medivel() && detalhe().tipo !== 'diferenca_reajuste' && detalhe().tipo !== 'diferenca_repactuacao') {
                 <input class="campo-tabela" inputmode="decimal" placeholder="+0,00" [class.invalido]="acertoInvalido(i.id)" [attr.aria-invalid]="acertoInvalido(i.id)"
                        [attr.aria-label]="'Acerto de centavos de ' + i.descricao" title="Ex.: 0,01 ou -0,02 (até R$ 1,00)" [(ngModel)]="acertos[i.id]" (ngModelChange)="alterado.set(true)" />
               } @else { {{ acertoTexto(i.acerto) }} }

@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../../environments/ambiente';
 import { baixarArquivo } from '../../../shared/utilitarios/download';
-import { CalculoMesQuebrado, GravacaoPosAssinatura, PainelAlteracao, PainelReajuste, ProcessoProrrogacao, Prorrogacao, Reajuste, RegraSobDemanda, VigenciaRetroativa } from './contratos.models';
+import { CalculoMesQuebrado, GravacaoLinhaRepactuacao, GravacaoPosAssinatura, PainelAlteracao, PainelReajuste, PainelRepactuacao, Repactuacao, ProcessoProrrogacao, Prorrogacao, Reajuste, RegraSobDemanda, VigenciaRetroativa } from './contratos.models';
 
 /** Corpo do rascunho da prorrogação (prazo, plano dos itens sob demanda e o cálculo dos meses quebrados; nulo mantém a escolha). */
 export interface GravacaoProrrogacao {
@@ -154,6 +154,57 @@ export class AlteracoesApiService {
   /** Baixa um arquivo do reajuste. */
   baixarReajuste(id: string, reajusteId: string, anexoId: string) {
     return baixarArquivo(this.http, `${this.base}/${id}/reajustes/${reajusteId}/arquivos/${anexoId}`);
+  }
+
+  // --- Repactuação (CCT) ---
+  /** Repactuação em elaboração, histórico e os itens do contrato para vincular. */
+  repactuacoes(id: string): Observable<PainelRepactuacao> {
+    return this.http.get<PainelRepactuacao>(`${this.base}/${id}/repactuacoes`);
+  }
+
+  /** Abre a repactuação com a CCT (vai também para os Documentos importantes). */
+  abrirRepactuacao(id: string, dataBaseCct: string, dataEfeito: string, arquivo: File): Observable<PainelRepactuacao> {
+    return this.http.post<PainelRepactuacao>(`${this.base}/${id}/repactuacoes`, this.arquivo({ arquivo, data_base_cct: dataBaseCct, data_efeito: dataEfeito }));
+  }
+
+  /** Grava as linhas e os vínculos; `finalizar` conclui o cadastro (libera a memória). */
+  salvarLinhasRepactuacao(id: string, repactuacaoId: string, linhas: GravacaoLinhaRepactuacao[], finalizar = false): Observable<PainelRepactuacao> {
+    return this.http.put<PainelRepactuacao>(`${this.base}/${id}/repactuacoes/${repactuacaoId}/linhas`, { linhas, finalizar });
+  }
+
+  /** Calculadora ao vivo: a repactuação como ficaria com estas linhas, sem gravar. */
+  previaRepactuacao(id: string, repactuacaoId: string, linhas: GravacaoLinhaRepactuacao[]): Observable<Repactuacao> {
+    return this.http.post<Repactuacao>(`${this.base}/${id}/repactuacoes/${repactuacaoId}/previa`, { linhas });
+  }
+
+  mesQuebradoRepactuacao(id: string, repactuacaoId: string, calculo: CalculoMesQuebrado): Observable<PainelRepactuacao> {
+    return this.http.put<PainelRepactuacao>(`${this.base}/${id}/repactuacoes/${repactuacaoId}/mes-quebrado`, { calculo });
+  }
+
+  /** Memória, consolidado ou cancelar. */
+  acaoRepactuacao(id: string, repactuacaoId: string, acao: 'memoria' | 'consolidado' | 'cancelar'): Observable<PainelRepactuacao> {
+    return this.http.post<PainelRepactuacao>(`${this.base}/${id}/repactuacoes/${repactuacaoId}/${acao}`, {});
+  }
+
+  /** Apostilamento assinado: finaliza e aplica a repactuação. */
+  finalizarRepactuacao(id: string, repactuacaoId: string, arquivo: File): Observable<PainelRepactuacao> {
+    return this.http.post<PainelRepactuacao>(`${this.base}/${id}/repactuacoes/${repactuacaoId}/finalizar`, this.arquivo({ arquivo }));
+  }
+
+  anexarDocumentoRepactuacao(id: string, repactuacaoId: string, documentoId: string, arquivo: File): Observable<PainelRepactuacao> {
+    return this.http.post<PainelRepactuacao>(`${this.base}/${id}/repactuacoes/${repactuacaoId}/checklist/${documentoId}`, this.arquivo({ arquivo }));
+  }
+
+  incluirDocumentoRepactuacao(id: string, repactuacaoId: string, nome: string, descricao: string, arquivo: File): Observable<PainelRepactuacao> {
+    return this.http.post<PainelRepactuacao>(`${this.base}/${id}/repactuacoes/${repactuacaoId}/checklist/incluir`, this.arquivo({ arquivo, nome, descricao }));
+  }
+
+  excluirDocumentoRepactuacao(id: string, repactuacaoId: string, documentoId: string): Observable<PainelRepactuacao> {
+    return this.http.delete<PainelRepactuacao>(`${this.base}/${id}/repactuacoes/${repactuacaoId}/checklist/${documentoId}`);
+  }
+
+  baixarRepactuacao(id: string, repactuacaoId: string, anexoId: string) {
+    return baixarArquivo(this.http, `${this.base}/${id}/repactuacoes/${repactuacaoId}/arquivos/${anexoId}`);
   }
 
   // --- Aditamento / supressão ---

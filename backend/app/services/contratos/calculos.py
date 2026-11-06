@@ -241,17 +241,39 @@ class PeriodoExecucao:
     meses: tuple[PeriodoMensal, ...]
 
 
+def juntar_viradas_sem_interrupcao(partes: Iterable[PeriodoMensal]) -> list[PeriodoMensal]:
+    """Partes de um mesmo mês civil, com as vigências **contínuas** juntadas numa parte só, da vigência mais recente.
+
+    Regra da execução: o mês só é quebrado no início e no fim **de fato** do contrato. Na virada de uma vigência para a
+    seguinte (prorrogação ou vigência retroativa) sem interrupção, a operação não parou: o mês é tratado **cheio**, na vigência
+    nova (ex.: vigência 2 até 05/08 e vigência 3 a partir de 06/08 → agosto inteiro, 01 a 31/08, na vigência 3). Se houver
+    intervalo entre as vigências (dias sem contrato), as partes continuam separadas, cada uma pelos seus dias.
+    """
+    juntas: list[PeriodoMensal] = []
+    for parte in sorted(partes, key=lambda p: p.inicio):
+        anterior = juntas[-1] if juntas else None
+        # Sem nenhum dia de intervalo entre o fim da anterior e o início desta: a operação seguiu, o mês é um só
+        if anterior is not None and anterior.fim + timedelta(days=1) == parte.inicio:
+            juntas[-1] = PeriodoMensal(parte.competencia, anterior.inicio, parte.fim, parte.sequencia_vigencia)
+        else:
+            juntas.append(parte)
+    return juntas
+
+
 def periodos_de_execucao(vigencias: Sequence[Vigencia], periodicidade_meses: int) -> list[PeriodoExecucao]:
     """Competências por mês civil: a 1ª começa no início do contrato; cada uma agrupa N meses.
 
     **Uma prorrogação nunca corta a competência**, qualquer que seja a periodicidade: os meses de todas as vigências formam uma
-    sequência só, agrupada de N em N; o mês em que uma vigência começa ou termina no meio fica inteiro na mesma competência,
-    com as partes de cada vigência dentro dela (`meses`), e a competência leva a sequência da vigência mais recente.
+    sequência só, agrupada de N em N, e a competência leva a sequência da vigência mais recente. O mês em que uma vigência
+    termina e a seguinte começa **sem interrupção** é tratado cheio, na vigência nova (`juntar_viradas_sem_interrupcao`); só o
+    início e o fim de fato do contrato (ou um intervalo entre vigências) deixam o mês parcial.
     """
     por_mes: dict[date, list[PeriodoMensal]] = {}
     for vigencia in vigencias:
         for parte in meses_da_vigencia(vigencia):
             por_mes.setdefault(parte.competencia, []).append(parte)
+    # Vigências contínuas no mesmo mês viram uma parte só (mês cheio na vigência nova)
+    por_mes = {mes: juntar_viradas_sem_interrupcao(partes) for mes, partes in por_mes.items()}
     meses_civis = sorted(por_mes)
     periodos = []
     for indice in range(0, len(meses_civis), periodicidade_meses):

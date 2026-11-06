@@ -7,6 +7,7 @@ maiúsculas (ex.: `url_banco_dados` ↔ `URL_BANCO_DADOS`). Variáveis do sistem
 sobre o arquivo `.env`. Os valores sem padrão são obrigatórios: a API não sobe sem eles.
 """
 
+import subprocess
 from functools import lru_cache
 from pathlib import Path
 
@@ -15,6 +16,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Pasta `backend/` (dois níveis acima deste arquivo: app/core/ → app/ → backend/)
 DIRETORIO_BACKEND = Path(__file__).resolve().parents[2]
+
+
+def versao_do_git() -> str:
+    """Versão em execução pelo Git: a tag aprovada (ex.: "v2026.11.06") ou "tag-N-gcommit" se houver commits depois dela.
+
+    Sem tag nenhuma, o commit curto; sem Git (ex.: cópia sem .git), "0.1.0". A tela de Versões e o `/api/saude` mostram este valor,
+    e a atualização pelo SGI confere por ele que a versão nova subiu."""
+    try:
+        r = subprocess.run(["git", "-C", str(DIRETORIO_BACKEND.parent), "describe", "--tags", "--always"], capture_output=True, text=True, timeout=10)
+        return (r.stdout.strip() or "0.1.0") if r.returncode == 0 else "0.1.0"
+    except (OSError, subprocess.SubprocessError):
+        return "0.1.0"
 
 
 class Configuracao(BaseSettings):
@@ -34,7 +47,8 @@ class Configuracao(BaseSettings):
 
     # Identificação da aplicação e prefixo comum de todas as rotas (/api/...)
     nome_aplicacao: str = "sgi-spi"
-    versao_aplicacao: str = "0.1.0"
+    # Vem do Git na subida da API (`versao_do_git`); a variável VERSAO_APLICACAO no .env ainda pode fixar outro valor
+    versao_aplicacao: str = Field(default_factory=versao_do_git)
     ambiente: str = "desenvolvimento"
     prefixo_api: str = "/api"
 
@@ -74,6 +88,10 @@ class Configuracao(BaseSettings):
     anexos_diretorio: Path = DIRETORIO_BACKEND.parent / "dados" / "anexos"
     # Backups gerais (banco + anexos em .zip), gerados e importados pela tela Administração › Backup (só SuperRoot)
     backups_diretorio: Path = DIRETORIO_BACKEND.parent / "dados" / "backups"
+    # Atualização do sistema pela tela Administração › Versões: pedido, andamento e log (lidos pela unidade sgi-spi-atualizar)
+    atualizacao_diretorio: Path = DIRETORIO_BACKEND.parent / "dados" / "atualizacao"
+    # Ramo do GitHub que a homologação acompanha ("Atualizar homologação" leva ao último commit dele); a produção só instala tags aprovadas
+    atualizacao_ramo: str = "estado-atual-servidor"
     # Tamanho máximo de cada PDF enviado; o Nginx precisa aceitar um pouco mais que isso
     anexos_tamanho_maximo_mb: int = Field(25, gt=0, le=200)
 

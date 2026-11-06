@@ -28,6 +28,7 @@ from app.models.rede import (
 )
 from app.models.usuario import Usuario
 from app.services import servico_acl
+from app.services.servico_auditoria import auditar
 
 RECURSO_ACL = "rede"
 
@@ -108,9 +109,15 @@ def salvar_modelo(sessao: Session, modelo_id: uuid.UUID | None, nome: str, fabri
     modelo = sessao.get(ModeloFaceRede, modelo_id) if modelo_id else ModeloFaceRede()
     if modelo is None:
         raise _nao_encontrado("Modelo de face")
+    # A grade (linhas, colunas, numeração e portas extras) é a forma das portas dos equipamentos: com equipamento usando o modelo, ela
+    # não muda (as portas deles não acompanhariam). Nome, fabricante e altura continuam editáveis.
+    em_uso = modelo_id is not None and (sessao.scalar(select(func.count()).select_from(EquipamentoRede).where(EquipamentoRede.modelo_face_id == modelo_id)) or 0)
+    grade_atual = (modelo.linhas, modelo.colunas, modelo.numeracao, modelo.portas_extras or [])
     modelo.nome, modelo.fabricante, modelo.linhas, modelo.colunas, modelo.numeracao = nome, fabricante.strip()[:120], linhas, colunas, numeracao
     modelo.altura_u = max(1, min(altura_u, 10))
     modelo.portas_extras = _validar_extras(modelo, extras)
+    if em_uso and (modelo.linhas, modelo.colunas, modelo.numeracao, modelo.portas_extras) != grade_atual:
+        raise ErroRede(f"O modelo está em uso por {em_uso} equipamento(s): a grade e as portas extras não mudam. Crie outro modelo.", 409, "modelo_em_uso")
     sessao.add(modelo)
     sessao.flush()
     return modelo
@@ -246,7 +253,14 @@ def salvar_equipamento(sessao: Session, equipamento_id: uuid.UUID | None, d: Dad
     _validar_equipamento(sessao, d, equipamento_id)
     item = obter_equipamento(sessao, equipamento_id) if equipamento_id else EquipamentoRede(portas=[])
     novo = equipamento_id is None
-    trocou_modelo = item.modelo_face_id != d.modelo_face_id
+    # Regra (decisão do usuário): o modelo de face é escolhido na criação e não muda mais; para trocar, exclui-se o equipamento e
+    # cadastra-se de novo. Só o equipamento antigo que ficou sem modelo pode recebê-lo uma vez (as portas são criadas por ele).
+    definiu_modelo = not novo and item.modelo_face_id is None and d.modelo_face_id is not None
+    if not novo and not definiu_modelo and item.modelo_face_id != d.modelo_face_id:
+        raise ErroRede("O modelo de face não muda depois de criado: exclua o equipamento e cadastre de novo com o outro modelo.", 409, "modelo_travado")
+    # Patch panel não tem parte lógica nas portas: virar (ou deixar de ser) patch panel mudaria o que as portas guardam
+    if not novo and (item.tipo in TIPOS_PASSIVOS) != (d.tipo in TIPOS_PASSIVOS):
+        raise ErroRede("Um equipamento não vira patch panel (nem deixa de ser) depois de criado: exclua e cadastre de novo.", 409, "tipo_travado")
     if (item.ip_gerencia or "") != d.ip_gerencia.strip():
         # IP novo: o resultado do ping antigo não vale mais; o próximo teste diz a situação
         item.ping_situacao, item.ping_falhas, item.ping_verificado_em, item.ping_mudou_em = None, 0, None, None
@@ -254,7 +268,8 @@ def salvar_equipamento(sessao: Session, equipamento_id: uuid.UUID | None, d: Dad
         setattr(item, campo, valor.strip() if isinstance(valor, str) else valor)
     sessao.add(item)
     sessao.flush()
-    if novo or trocou_modelo:
+    # As portas nascem do modelo só na criação (ou quando o equipamento antigo recebe o modelo pela primeira vez)
+    if novo or definiu_modelo:
         sessao.refresh(item, ["modelo_face"])
         gerar_portas(sessao, item)
     return item
@@ -279,6 +294,148 @@ class DadosPorta:
     status: str | None = None
 
 
+# Alvo das auditorias de porta: cada alteração de qualquer atributo da porta (configuração, ligação, dispositivo atrás, ponto, carga LLDP)
+# grava um registro com o id da porta, que alimenta os indicadores "Portas alteradas nos últimos 7 dias" e "quem alterou"
+ALVO_PORTA = "rede_porta"
+
+
+def rotulo_porta_auditoria(porta: PortaRede) -> str:
+    """Texto do alvo na auditoria: "SW-5A · 3" (equipamento · nome ou número da porta)."""
+    return f"{porta.equipamento.nome} · {porta.nome or porta.numero_logico}"[:255]
+
+
+def auditar_portas(sessao: Session, autor: str, autor_id: int | None, acao: str, portas_ids) -> None:
+    """Registra a alteração de cada porta (sem repetir) na auditoria, com o id dela como alvo."""
+    for porta_id in dict.fromkeys(i for i in portas_ids if i is not None):
+        porta = sessao.get(PortaRede, porta_id)
+        if porta is not None:
+            auditar(sessao, autor, acao, rotulo_porta_auditoria(porta), autor_id=autor_id, alvo_tipo=ALVO_PORTA, alvo_id=porta.id)
+
+
+def pontas_da_conexao(sessao: Session, porta_id: uuid.UUID) -> list[uuid.UUID]:
+    """As portas de uma conexão (a própria e, se houver, a do outro lado), para auditar as duas pontas."""
+    conexao = conexao_da_porta(sessao, porta_id)
+    return [conexao.porta_a_id, conexao.porta_b_id] if conexao is not None else [porta_id]
+
+
+@dataclass
+class PortaListada:
+    """Uma linha das listas dos indicadores: a porta, o equipamento e a última alteração dela (quem e quando)."""
+    porta: PortaRede
+    alterado_por: str | None
+    alterado_em: object | None
+
+
+# Janela do indicador "Portas alteradas": os últimos 7 dias (decisão do usuário), contados a partir de agora
+DIAS_PORTAS_ALTERADAS = 7
+
+
+def _ultima_alteracao(desde=None):
+    """Última alteração de cada porta na auditoria (desde `desde`, se informado): alvo_id → (autor, quando).
+
+    O maior horário por porta, ligado de volta à linha da auditoria (funciona no PostgreSQL e no SQLite dos testes; usa o índice de alvo).
+    Duas linhas da mesma porta no mesmo instante (ex.: as duas pontas de uma ligação são portas diferentes, então não acontece) ficariam
+    as duas; o `max(autor)` desempata.
+    """
+    from app.models.auditoria import RegistroAuditoria
+
+    filtro = RegistroAuditoria.alvo_tipo == ALVO_PORTA
+    if desde is not None:
+        filtro = filtro & (RegistroAuditoria.ocorrido_em >= desde)
+    maximo = (select(RegistroAuditoria.alvo_id, func.max(RegistroAuditoria.ocorrido_em).label("quando"))
+              .where(filtro).group_by(RegistroAuditoria.alvo_id).subquery())
+    return (select(RegistroAuditoria.alvo_id, func.max(func.coalesce(func.nullif(Usuario.nome_completo, ""), RegistroAuditoria.autor)).label("autor"),
+                   RegistroAuditoria.ocorrido_em)
+            .join(maximo, (maximo.c.alvo_id == RegistroAuditoria.alvo_id) & (maximo.c.quando == RegistroAuditoria.ocorrido_em))
+            .outerjoin(Usuario, Usuario.id == RegistroAuditoria.autor_id)
+            .where(RegistroAuditoria.alvo_tipo == ALVO_PORTA)
+            .group_by(RegistroAuditoria.alvo_id, RegistroAuditoria.ocorrido_em).subquery())
+
+
+def _alteracoes(sessao: Session, ultima, ids: list[str] | None = None) -> dict[uuid.UUID, tuple[str, object]]:
+    """Última alteração por porta: {id da porta: (autor, quando)}. Com `ids`, só dessas portas.
+
+    A junção com as portas é feita aqui pelo UUID (o id é gravado de jeitos diferentes no PostgreSQL e no SQLite dos testes)."""
+    consulta = select(ultima.c.alvo_id, ultima.c.autor, ultima.c.ocorrido_em)
+    if ids is not None:
+        consulta = consulta.where(ultima.c.alvo_id.in_(ids))
+    resultado = {}
+    for alvo, autor, quando in sessao.execute(consulta):
+        try:
+            resultado[uuid.UUID(alvo)] = (autor, quando)
+        except ValueError:
+            continue
+    return resultado
+
+
+def _ordenar(itens: list[PortaListada]) -> list[PortaListada]:
+    """Mais recente primeiro (sem alteração por último), depois equipamento e número da porta."""
+    from datetime import datetime, timezone
+
+    def chave(i: PortaListada):
+        quando = i.alterado_em
+        instante = quando.replace(tzinfo=quando.tzinfo or timezone.utc).timestamp() if isinstance(quando, datetime) else float("-inf")
+        return (-instante, i.porta.equipamento.nome, i.porta.numero_logico)
+    return sorted(itens, key=chave)
+
+
+def portas_alteradas(sessao: Session) -> list[PortaListada]:
+    """Portas com qualquer alteração (configuração, ligação, dispositivo atrás, ponto, carga LLDP) nos últimos 7 dias, com a última delas."""
+    from datetime import timedelta
+
+    from app.core.banco import agora_utc
+
+    ultimas = _alteracoes(sessao, _ultima_alteracao(agora_utc() - timedelta(days=DIAS_PORTAS_ALTERADAS)))
+    if not ultimas:
+        return []
+    portas = sessao.scalars(select(PortaRede).where(PortaRede.id.in_(list(ultimas))).options(selectinload(PortaRede.equipamento)))
+    return _ordenar([PortaListada(p, *ultimas[p.id]) for p in portas])
+
+
+def _ativas_sem_descricao(sessao: Session) -> list[PortaRede]:
+    return list(sessao.scalars(select(PortaRede).where(PortaRede.status == "up", func.trim(PortaRede.descricao) == "")
+                               .options(selectinload(PortaRede.equipamento))))
+
+
+def portas_ativas_sem_descricao(sessao: Session) -> list[PortaListada]:
+    """Portas ligadas (status `up`) sem descrição, com a última alteração de cada uma (de qualquer época), se houver."""
+    portas = _ativas_sem_descricao(sessao)
+    ultimas = _alteracoes(sessao, _ultima_alteracao(), [str(p.id) for p in portas]) if portas else {}
+    return _ordenar([PortaListada(p, *ultimas.get(p.id, (None, None))) for p in portas])
+
+
+def ultima_alteracao_da_porta(sessao: Session, porta_id: uuid.UUID) -> tuple[str | None, object | None]:
+    """(quem, quando) da última alteração da porta, de qualquer época; (None, None) se nunca foi alterada."""
+    return _alteracoes(sessao, _ultima_alteracao(), [str(porta_id)]).get(porta_id, (None, None))
+
+
+def ultima_alteracao_do_equipamento(sessao: Session, equipamento: EquipamentoRede) -> dict:
+    """A alteração mais recente entre todas as portas do equipamento: quem, quando e qual porta (vazio se nenhuma foi alterada)."""
+    from datetime import datetime, timezone
+
+    portas = {p.id: p for p in equipamento.portas}
+    ultimas = _alteracoes(sessao, _ultima_alteracao(), [str(i) for i in portas]) if portas else {}
+    if not ultimas:
+        return {}
+    instante = lambda q: q.replace(tzinfo=q.tzinfo or timezone.utc) if isinstance(q, datetime) else datetime.min.replace(tzinfo=timezone.utc)  # noqa: E731
+    porta_id, (autor, quando) = max(ultimas.items(), key=lambda par: instante(par[1][1]))
+    porta = portas[porta_id]
+    return {"alterado_por": autor, "alterado_em": quando, "alterado_porta_id": porta_id, "alterado_porta": porta.nome or str(porta.numero_logico)}
+
+
+def indicadores(sessao: Session) -> dict[str, int]:
+    """Números dos cards do topo da Rede (os mesmos critérios das listas)."""
+    from datetime import timedelta
+
+    from app.core.banco import agora_utc
+
+    ultimas = _alteracoes(sessao, _ultima_alteracao(agora_utc() - timedelta(days=DIAS_PORTAS_ALTERADAS)))
+    # Só as portas que ainda existem (a de um equipamento excluído fica na auditoria, mas não conta)
+    alteradas = sessao.scalar(select(func.count()).select_from(PortaRede).where(PortaRede.id.in_(list(ultimas)))) if ultimas else 0
+    sem_descricao = sessao.scalar(select(func.count()).select_from(PortaRede).where(PortaRede.status == "up", func.trim(PortaRede.descricao) == "")) or 0
+    return {"portas_alteradas": alteradas or 0, "portas_ativas_sem_descricao": sem_descricao}
+
+
 def obter_porta(sessao: Session, porta_id: uuid.UUID) -> PortaRede:
     porta = sessao.get(PortaRede, porta_id)
     if porta is None:
@@ -300,6 +457,11 @@ def alterar_porta(sessao: Session, porta_id: uuid.UUID, d: DadosPorta) -> PortaR
     VLAN de voz em access, hybrid e dinâmicas; a roteada não tem VLAN nenhuma e é a única com IP da interface (validado).
     """
     porta = obter_porta(sessao, porta_id)
+    # Regra (decisão do usuário): toda porta salva pela tela tem descrição
+    if not d.descricao.strip():
+        raise ErroRede("Informe a descrição da porta.")
+    if porta.equipamento.tipo in TIPOS_PASSIVOS:
+        return _alterar_porta_passiva(sessao, porta, d)
     if d.modo not in MODOS_PORTA:
         raise ErroRede("Modo inválido.")
     rotulo = ROTULOS_MODO[d.modo]
@@ -344,6 +506,24 @@ def alterar_porta(sessao: Session, porta_id: uuid.UUID, d: DadosPorta) -> PortaR
     return porta
 
 
+def _alterar_porta_passiva(sessao: Session, porta: PortaRede, d: DadosPorta) -> PortaRede:
+    """Porta de patch panel: só descrição e situação (o patch panel não tem parte lógica).
+
+    Pedido com modo diferente de access, VLAN, IP, velocidade ou duplex é recusado. O que já estava gravado nesses campos (de antes da
+    regra) fica como está: salvar a descrição não apaga nada às escondidas.
+    """
+    if d.modo != "access" or d.vlan_nativa_id or d.vlan_voz_id or d.vlans_tag or d.vlans_sem_tag or d.ip_interface.strip() or d.velocidade_mbps or d.duplex:
+        raise ErroRede("Porta de patch panel não tem configuração lógica (modo, VLAN, IP, velocidade ou duplex): só descrição e situação.")
+    if d.status is not None and d.status not in STATUS_PORTA:
+        raise ErroRede("Status inválido (up, down ou desativada).")
+    if d.status != "up" and conexao_da_porta(sessao, porta.id) is not None:
+        raise ErroRede(f"A porta {_nome_porta(porta)} tem um equipamento ligado e fica \"ligada\": retire o equipamento antes de mudar o status.",
+                       409, "porta_com_equipamento")
+    porta.descricao, porta.status = d.descricao.strip()[:250], d.status
+    sessao.flush()
+    return porta
+
+
 # ---------------------------------------------------------------------------------------------
 # VLANs
 # ---------------------------------------------------------------------------------------------
@@ -352,7 +532,7 @@ def listar_vlans(sessao: Session) -> list[VlanRede]:
     return list(sessao.scalars(select(VlanRede).order_by(VlanRede.numero)))
 
 
-def salvar_vlan(sessao: Session, vlan_id: uuid.UUID | None, numero: int, nome: str, descricao: str) -> VlanRede:
+def salvar_vlan(sessao: Session, vlan_id: uuid.UUID | None, numero: int, nome: str, descricao: str, cor_indice: int | None = None) -> VlanRede:
     if not 1 <= numero <= 4094:
         raise ErroRede("O número da VLAN vai de 1 a 4094.")
     repetida = sessao.scalar(select(VlanRede).where(VlanRede.numero == numero))
@@ -362,6 +542,15 @@ def salvar_vlan(sessao: Session, vlan_id: uuid.UUID | None, numero: int, nome: s
     if vlan is None:
         raise _nao_encontrado("VLAN")
     vlan.numero, vlan.nome, vlan.descricao = numero, (nome.strip() or f"VLAN {numero}")[:120], descricao.strip()
+    # Cor como a dos marcadores das Tarefas: escolhida (0–11), mantida se não veio, ou sorteada (1–11) na criação
+    if cor_indice is not None:
+        if not 0 <= cor_indice <= 11:
+            raise ErroRede("Cor inválida (de 0 a 11).")
+        vlan.cor_indice = cor_indice
+    elif vlan_id is None:
+        import random
+
+        vlan.cor_indice = random.randint(1, 11)
     sessao.add(vlan)
     sessao.flush()
     return vlan
@@ -387,8 +576,13 @@ def conexao_da_porta(sessao: Session, porta_id: uuid.UUID) -> ConexaoRede | None
     return sessao.scalar(select(ConexaoRede).where(or_(ConexaoRede.porta_a_id == porta_id, ConexaoRede.porta_b_id == porta_id)))
 
 
+def descricao_do_salto(outra: PortaRede) -> str:
+    """Descrição que a porta ganha ao ser ligada a outra porta (salto/uplink): ex.: "Salto: PP-5A · 1"."""
+    return f"Salto: {outra.equipamento.nome} · {outra.nome or outra.numero_logico}"[:250]
+
+
 def conectar(sessao: Session, porta_id: uuid.UUID, outra_porta_id: uuid.UUID | None, bem_id: uuid.UUID | None, descricao: str,
-             forcar: bool = False) -> ConexaoRede:
+             forcar: bool = False, descrever_salto: bool = True) -> ConexaoRede:
     """Liga a porta a outra porta, a um bem do Patrimônio ou só a uma descrição (ex.: "Telefone da recepção").
 
     Confere as duas pontas (origem e destino): porta já ligada no SGI é recusada (`409 porta_ocupada`); as duas passam ao status "ligada"; porta **descrita no switch**
@@ -408,12 +602,19 @@ def conectar(sessao: Session, porta_id: uuid.UUID, outra_porta_id: uuid.UUID | N
     for p in pontas:
         if conexao_da_porta(sessao, p.id) is not None:
             raise ErroRede(f"A porta {_nome_porta(p)} já está ligada: desligue antes de ligar de novo.", 409, "porta_ocupada")
-    # Só na ligação porta ↔ porta: ao ligar um bem ou uma descrição, a descrição da porta costuma ser o próprio dispositivo
+    # Ligação porta ↔ porta (salto/uplink): as duas pontas ganham a descrição do salto (decisão do usuário), ex.: "Salto: PP-5A · 1".
+    # Se uma delas já tem outra descrição (ex.: "Impressora"), pode haver um dispositivo ali: pede confirmação antes de ligar e trocar.
+    # A carga LLDP liga sem descrever (`descrever_salto=False`): lá a descrição espelha a do switch.
+    saltos = {porta.id: descricao_do_salto(outra), outra.id: descricao_do_salto(porta)} if outra is not None and descrever_salto else {}
     if not forcar and outra is not None:
-        descritas = [f"{_nome_porta(p)} está descrita como “{p.descricao.strip()}”" for p in pontas if p.descricao.strip()]
+        descritas = [f"{_nome_porta(p)} está descrita como “{p.descricao.strip()}”" for p in pontas
+                     if p.descricao.strip() and p.descricao.strip() != saltos.get(p.id)]
         if descritas:
             raise ErroRede("Pode haver um dispositivo nesta ligação: a porta " + "; a porta ".join(descritas)
-                           + ". Confira e confirme para ligar mesmo assim.", 409, "porta_com_dispositivo")
+                           + ". Ao ligar, a descrição passa a ser a do salto. Confira e confirme para ligar mesmo assim.", 409, "porta_com_dispositivo")
+    for p in pontas:
+        if p.id in saltos:
+            p.descricao = saltos[p.id]
     conexao = ConexaoRede(porta_a_id=porta_id, porta_b_id=outra_porta_id, bem_id=bem_id, descricao=descricao.strip()[:250])
     sessao.add(conexao)
     # Ligou um equipamento: as duas pontas passam a "ligada" na hora (porta com equipamento nunca tem outro status)

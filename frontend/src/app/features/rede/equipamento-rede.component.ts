@@ -2,7 +2,8 @@
 // Este arquivo serve para mostrar um equipamento de rede: dados, portas (configuração, o que está ligado, ponto e chamados) e edição.
 
 import { DatePipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
@@ -23,7 +24,7 @@ import {
   styles: ['.titulo-lista-portas { margin: 8px 0 10px; font-size: var(--spi-texto-destaque); font-weight: 700; }'],
   template: `
     <div class="modulo-chamados">
-      <app-cabecalho-rede [titulo]="e()?.nome || 'Equipamento'" [descricao]="e() ? rotuloTipo(e()!.tipo) + (e()!.modelo_nome ? ' · ' + e()!.modelo_nome : '') : ''" />
+      <app-cabecalho-rede [titulo]="e()?.nome || 'Equipamento'" [trilha]="[{ rotulo: e()?.nome || 'Equipamento' }]" [descricao]="e() ? rotuloTipo(e()!.tipo) + (e()!.modelo_nome ? ' · ' + e()!.modelo_nome : '') : ''" />
       @if (e(); as e) {
         <section class="painel-gestao protocolo">
           <!-- Mesmos indicadores da tela de Desempenho das Tarefas -->
@@ -41,6 +42,11 @@ import {
             } @else if (e.ip_gerencia && !passivo(e.tipo)) { <span class="selo-status" data-chamado="neutro">Ping ainda não testado</span> }
             @if (e.cadastro_incompleto) { <span class="selo-status" data-chamado="alerta">Cadastro incompleto: falta {{ !e.ip_gerencia ? 'IP de gerência' : '' }}{{ !e.ip_gerencia && !e.funcao ? ' e ' : '' }}{{ !e.funcao ? 'função' : '' }}</span> }
             {{ dadosTexto(e) }}
+            <!-- A alteração mais recente entre as portas deste equipamento (quem, quando e qual porta) -->
+            <br />Última alteração em porta: @if (e.alterado_em) {
+              {{ e.alterado_por }} - <span class="texto-codigo">{{ e.alterado_em | date: 'dd/MM/yyyy HH:mm:ss' }}</span>
+              (<a [routerLink]="['/rede/portas', e.alterado_porta_id]">porta <span class="texto-codigo">{{ e.alterado_porta }}</span></a>)
+            } @else { nenhuma registrada }
           </p>
           <app-face-rede [e]="e" />
           <h2 class="titulo-lista-portas">Lista de portas</h2>
@@ -53,7 +59,7 @@ import {
                     <td data-rotulo="Porta"><a [routerLink]="['/rede/portas', p.id]"><strong class="texto-codigo">{{ p.nome || p.numero_logico }}</strong></a>
                       @if (p.velocidade_mbps) { <br /><small>{{ vel(p.velocidade_mbps) }}{{ p.duplex ? ' ' + p.duplex : '' }}</small> }</td>
                     <td data-rotulo="Situação">@if (p.status) { <span class="selo-status" [attr.data-chamado]="cor(p)">{{ rotuloStatus(p) }}</span> } @else { — }</td>
-                    <td data-rotulo="VLAN">{{ textoVlan(p) }}</td>
+                    <td data-rotulo="VLAN">{{ passivo(e.tipo) ? '—' : textoVlan(p) }}</td>
                     <td data-rotulo="Descrição">{{ p.descricao || '—' }}</td>
                     <td data-rotulo="Ligado a">
                       @if (p.conexao?.equipamento_id) { <a [routerLink]="['/rede/equipamentos', p.conexao!.equipamento_id]">{{ p.conexao!.texto }}</a> }
@@ -69,12 +75,13 @@ import {
 
         @if (papeis()?.administrar) {
           <section class="cartao-dados" aria-labelledby="re-editar" style="margin-top: 16px">
-            <header><div><h2 id="re-editar">Dados do equipamento</h2><small>Trocar o modelo de face cria as portas que faltam (nenhuma é apagada).</small></div></header>
+            <header><div><h2 id="re-editar">Dados do equipamento</h2><small>O modelo de face e o tipo (patch panel ou não) não mudam depois de criado: para trocar, exclua e cadastre de novo.</small></div></header>
             <div class="corpo">
             <form class="grade-formulario" (ngSubmit)="salvar()">
               <div><label for="ed-nome">Nome</label><input id="ed-nome" name="nome" required minlength="2" maxlength="150" [(ngModel)]="dados.nome" /></div>
               <div><label for="ed-tipo">Tipo</label>
-                <select id="ed-tipo" name="tipo" [(ngModel)]="dados.tipo">@for (t of tipos; track t[0]) { <option [value]="t[0]">{{ t[1] }}</option> }</select></div>
+                <!-- Patch panel não vira switch (nem o contrário): só os tipos do mesmo grupo aparecem -->
+                <select id="ed-tipo" name="tipo" [(ngModel)]="dados.tipo">@for (t of tiposPermitidos(e); track t[0]) { <option [value]="t[0]">{{ t[1] }}</option> }</select></div>
               @if (!passivo(dados.tipo)) {
                 <div><label for="ed-funcao">Função na topologia</label>
                   <select id="ed-funcao" name="funcao" required [(ngModel)]="dados.funcao">
@@ -84,10 +91,18 @@ import {
                   <small class="dica-formulario">Os cores ficam no topo da topologia; se o primário cair (ping), o secundário assume.</small></div>
               }
               <div><label for="ed-modelo">Modelo de face</label>
-                <select id="ed-modelo" name="modelo" [(ngModel)]="dados.modelo_face_id">
-                  <option [ngValue]="null">Sem modelo</option>
-                  @for (m of modelos(); track m.id) { <option [ngValue]="m.id">{{ m.nome }}</option> }
-                </select></div>
+                @if (e.modelo_face_id) {
+                  <!-- Regra: o modelo é escolhido na criação e não muda mais -->
+                  <input id="ed-modelo" name="modelo" [value]="e.modelo_nome" disabled />
+                  <small class="dica-formulario">Para trocar o modelo, exclua o equipamento e cadastre de novo.</small>
+                } @else {
+                  <!-- Equipamento antigo sem modelo: recebe o modelo uma vez (as portas são criadas por ele) -->
+                  <select id="ed-modelo" name="modelo" [(ngModel)]="dados.modelo_face_id">
+                    <option [ngValue]="null">Sem modelo</option>
+                    @for (m of modelos(); track m.id) { <option [ngValue]="m.id">{{ m.nome }}</option> }
+                  </select>
+                  <small class="dica-formulario">Escolha com cuidado: depois de salvo, o modelo não muda.</small>
+                }</div>
               <div><label for="ed-ip">IP de gerência @if (passivo(dados.tipo)) { <small>(opcional)</small> }</label>
                 <input id="ed-ip" name="ip" maxlength="45" [required]="!passivo(dados.tipo)" [(ngModel)]="dados.ip_gerencia" /></div>
               <div><label for="ed-rack">Rack</label>
@@ -117,7 +132,10 @@ export class EquipamentoRedeComponent implements OnInit {
   private readonly api = inject(RedeApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
-  private readonly id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
+  private readonly rota = inject(ActivatedRoute);
+  private readonly destruir = inject(DestroyRef);
+  /** Equipamento aberto. Muda sem recriar a tela quando um link leva a outro equipamento (ex.: "Ligado a" → PATCH PANEL A-1). */
+  private id = this.rota.snapshot.paramMap.get('id')!;
   protected readonly papeis = inject(AcessoService).rede;
 
   protected readonly e = signal<EquipamentoDetalhe | null>(null);
@@ -133,7 +151,14 @@ export class EquipamentoRedeComponent implements OnInit {
   protected readonly vel = velocidade;
 
   ngOnInit(): void {
-    this.carregar();
+    // A mesma tela é reaproveitada entre equipamentos: a cada id novo, mostra o esqueleto e carrega o outro
+    this.rota.paramMap.pipe(takeUntilDestroyed(this.destruir)).subscribe((p) => {
+      const id = p.get('id')!;
+      if (id === this.id && this.e()) return;
+      this.id = id;
+      this.e.set(null);
+      this.carregar();
+    });
     this.api.modelos().subscribe({ next: (x) => this.modelos.set(x), error: () => undefined });
     this.api.racks().subscribe({ next: (x) => this.racks.set(x), error: () => undefined });
   }
@@ -167,6 +192,11 @@ export class EquipamentoRedeComponent implements OnInit {
   protected dadosTexto(e: EquipamentoDetalhe): string {
     return [e.ip_gerencia && `IP de gerência ${e.ip_gerencia}`, e.sala, e.rack_nome && `${e.rack_nome}${e.posicao_u ? ', U' + e.posicao_u : ''}`,
       e.numero_serie && `Série ${e.numero_serie}`].filter(Boolean).join(' · ');
+  }
+
+  /** Tipos que o equipamento pode assumir: patch panel continua patch panel; os demais não viram patch panel. */
+  protected tiposPermitidos(e: EquipamentoDetalhe): [TipoEquipamento, string][] {
+    return this.tipos.filter(([t]) => ehPassivo(t) === ehPassivo(e.tipo));
   }
 
   protected rotuloTipo(t: TipoEquipamento): string {

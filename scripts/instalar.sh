@@ -197,15 +197,15 @@ fi
 echo "==> Pastas e permissões"
 ANEXOS="$(grep -E '^ANEXOS_DIRETORIO=' "$ENV" | cut -d= -f2- || true)"
 ANEXOS="${ANEXOS:-$PROJETO/dados/anexos}"
-install -d -o "$USUARIO" -g "$USUARIO" -m 750 "$ANEXOS" "$PROJETO/dados/backups"
+install -d -o "$USUARIO" -g "$USUARIO" -m 750 "$ANEXOS" "$PROJETO/dados/backups" "$PROJETO/dados/atualizacao"
 # O Nginx (www-data) precisa atravessar os diretórios até o build do Angular.
 # o+x permite apenas a travessia: outros usuários não conseguem listar o conteúdo.
 d="$PROJETO"
 while [[ "$d" != "/" ]]; do chmod o+x "$d"; d="$(dirname "$d")"; done
-# O deploy e o sistema reiniciam a API sem senha (só este comando)
+# O deploy e o sistema reiniciam a API sem senha, e a tela Administração › Versões liga a atualização (só estes comandos)
 SYSTEMCTL="$(command -v systemctl)"
 cat > /etc/sudoers.d/sgi-spi-restart <<EOF
-$USUARIO ALL=(root) NOPASSWD: $SYSTEMCTL restart sgi-spi-api.service, $SYSTEMCTL restart sgi-spi-api
+$USUARIO ALL=(root) NOPASSWD: $SYSTEMCTL restart sgi-spi-api.service, $SYSTEMCTL restart sgi-spi-api, $SYSTEMCTL start --no-block sgi-spi-atualizar.service
 EOF
 chmod 440 /etc/sudoers.d/sgi-spi-restart
 visudo -cf /etc/sudoers.d/sgi-spi-restart >/dev/null
@@ -232,6 +232,12 @@ sed -e "s/__USUARIO__/$USUARIO/g" -e "s|__PROJETO__|$PROJETO|g" \
 systemctl daemon-reload
 systemctl enable sgi-spi-api
 systemctl restart sgi-spi-api
+
+echo "==> systemd: sgi-spi-atualizar (atualização pela tela Administração › Versões; só roda quando pedida)"
+HOME_USUARIO="$(getent passwd "$USUARIO" | cut -d: -f6)"
+sed -e "s/__USUARIO__/$USUARIO/g" -e "s|__PROJETO__|$PROJETO|g" -e "s|__HOME__|$HOME_USUARIO|g" \
+    "$PROJETO/systemd/sgi-spi-atualizar.service" > /etc/systemd/system/sgi-spi-atualizar.service
+systemctl daemon-reload
 
 echo "==> systemd: timers das notificações (despacho a cada 2 min; lembretes às 07:00), da conferência de OBs no SIGEO e dos Chamados (prazos e recorrentes a cada minuto; vigia a cada 5 min) e do ping da Rede (a cada minuto)"
 # Em homologação os timers rodam igual: os envios saem simulados e a conferência do SIGEO não consulta nada
@@ -307,4 +313,14 @@ curl -fsS -o /dev/null --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/api/
   || echo "AVISO: a conferência do HTTPS falhou (veja o certificado em $CERT)."
 echo "Aplicação: https://$DOMINIO/ (os demais endereços redirecionam para ele). Login: root com a senha informada na instalação."
 (( HOMOLOGACAO )) && echo "HOMOLOGAÇÃO: e-mails e pop-ups são simulados; SIGEO, AD e aniversários não rodam."
+if (( HOMOLOGACAO )); then
+  cat <<AVISO
+APROVAR VERSÕES (Administração › Versões): a homologação envia a tag da versão aprovada ao GitHub e precisa de uma chave com escrita:
+  1. como $USUARIO: ssh-keygen -t ed25519 -f ~/.ssh/sgi-spi-deploy -N ""   (e mostre a pública: cat ~/.ssh/sgi-spi-deploy.pub)
+  2. no GitHub: repositório sgi-spi-v2 › Settings › Deploy keys › Add deploy key, cole a chave e marque "Allow write access"
+  3. em ~/.ssh/config:  Host github.com  /  IdentityFile ~/.ssh/sgi-spi-deploy
+  4. git -C $PROJETO remote set-url --push origin git@github.com:joseeduardosm/sgi-spi-v2.git && git -C $PROJETO push --dry-run origin HEAD
+A produção só baixa (HTTPS público), não precisa de chave.
+AVISO
+fi
 exit 0

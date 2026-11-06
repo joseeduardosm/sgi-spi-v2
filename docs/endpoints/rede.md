@@ -25,7 +25,12 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
 - **Rack**: nome único, cor (`preto`, `cinza`, `azul`, `verde`, `amarelo`, `laranja`, `vermelho`), sala do Patrimônio e altura (1–60U). Rack com
   equipamento não é excluído e não encolhe para deixar equipamento de fora (`409 em_uso`). Os racks que estavam escritos à mão nos equipamentos
   viraram cadastro na migração `e1a3c5d7f9b2`.
-- **Equipamento**: ao criar (ou trocar o modelo), as portas que faltam são criadas pelo modelo; nenhuma porta é apagada. IP de gerência
+- **Modelo de face travado** (decisão do usuário): o modelo é escolhido na criação e **não muda depois** (`409 modelo_travado`); para trocar,
+  exclui-se o equipamento e cadastra-se de novo. Só o equipamento antigo que ficou sem modelo pode recebê-lo uma vez. O tipo também não passa de
+  patch panel para os demais (nem o contrário): `409 tipo_travado`. A **grade de um modelo em uso** (linhas, colunas, numeração e portas extras)
+  não muda (`409 modelo_em_uso`, crie outro modelo); nome, fabricante e altura continuam editáveis. A edição do equipamento entra na auditoria
+  (`rede.equipamento.alterar`).
+- **Equipamento**: ao criar, as portas são criadas pelo modelo. IP de gerência
   validado. Bem do Patrimônio e sala opcionais. Fica num **rack já cadastrado** (`rack_id`) e numa posição U (`posicao_u`, o U mais baixo; a
   altura vem do modelo): precisa caber no rack (400) e não pode sobrepor outro equipamento (`409 posicao_ocupada`).
   Tipos: `switch`, `roteador`, `access_point`, `outro` e `patch_panel`. **Todo tipo menos o patch panel exige o IP de gerência e a função na
@@ -47,6 +52,10 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
   | `dinamico_auto` / `dinamico_desejavel` (DTP) | Cisco | VLAN quando access | sim | não | sim | não |
   | `roteada` (L3: `no switchport` / `undo portswitch`) | Cisco, Huawei | não tem | não | não | não | sim (`10.23.0.1/30`, validado) |
 
+  **Descrição obrigatória** (decisão do usuário): salvar a porta sem descrição dá 400. **Porta de patch panel não tem parte lógica**: só
+  descrição e status; modo diferente de `access`, VLAN, IP, velocidade ou duplex dão 400, e o que já estava gravado nesses campos (de antes da
+  regra) fica como está. A leitura da porta traz `equipamento_tipo`. A tela não mostra mais a VLAN de voz (a API ainda aceita `vlan_voz_id`, e o
+  valor já gravado é mantido).
   Combinação fora da tabela: 400. A mesma VLAN não passa com e sem tag na mesma porta. VLAN usada como voz conta como em uso. Status `up`,
   `down` ou `desativada`. Na carga do GLPI, porta com VLANs com e sem tag que não cabem em access/trunk vira `hybrid` (com aviso para conferir).
 - **Conexão**: cada porta em no máximo uma conexão, de qualquer lado (`409 porta_ocupada`); o outro lado é uma porta, um bem do
@@ -57,9 +66,10 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
 - **Dispositivos em cascata na mesma porta** (switch → telefone IP → PC): o primeiro é a conexão (bem ou descrição); os de trás ficam numa lista
   ordenada (`atras`), cada um bem ou descrição. Só existe "atrás" quando a porta tem um primeiro dispositivo (`409 sem_dispositivo`); o mesmo bem
   duas vezes na porta: `409 duplicado`. Tirar um faz os seguintes subirem; desligar a porta tira todos. O cadastro do bem mostra "atrás de …" e,
-  ali, "Desligar" tira só aquele bem. A topologia conta os bens de trás também. A ligação confere as **duas pontas** (origem e destino). Na ligação porta ↔ porta, uma porta **descrita no switch**
-  (ex.: "Sala 05B05 - Impressora") indica um dispositivo nela: `409 porta_com_dispositivo`, com a porta e a descrição na mensagem; a tela pede
-  confirmação e reenvia com `forcar: true` (a descrição pode ser a do próprio uplink). Na lista de portas do outro lado, a descrição aparece ao lado
+  ali, "Desligar" tira só aquele bem. A topologia conta os bens de trás também. A ligação confere as **duas pontas** (origem e destino). Na ligação porta ↔ porta (**salto/uplink**), as duas
+  pontas ganham a **descrição do salto** (ex.: "Salto: PP-5A · 1" de um lado e "Salto: SW-5A · 3" do outro). Se alguma já tem **outra** descrição
+  (ex.: "Sala 05B05 - Impressora"), pode haver um dispositivo nela: `409 porta_com_dispositivo`, com a porta e a descrição na mensagem; a tela pede
+  confirmação e reenvia com `forcar: true`, e a descrição é trocada pela do salto. A carga LLDP liga sem trocar descrições. Na lista de portas do outro lado, a descrição aparece ao lado
   do número.
 - **Ponto de rede**: código único como na tomada (gravado em maiúsculas); chega em uma porta (de patch panel) e uma porta só tem um ponto.
   O `caminho` segue ponto → porta do patch panel → conexão → porta do switch (até 4 saltos).
@@ -80,16 +90,19 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
 | Método e caminho | Quem | Descrição |
 |---|---|---|
 | `GET /api/rede/contexto` | Logado | `{ver, editar, administrar}` (200 mesmo sem papel) |
+| `GET /api/rede/indicadores` | Leitura | Cards do topo: `{portas_alteradas, portas_ativas_sem_descricao}` |
+| `GET /api/rede/portas-alteradas` · `GET /api/rede/portas-sem-descricao` | Leitura | Listas dos cards: `[{porta_id, equipamento_id, equipamento_nome, porta, numero_logico, descricao, alterado_por, alterado_em}]` (a última alteração de cada porta; da mais recente para a mais antiga) |
 | `GET /api/rede/equipamentos?busca=&tipo=` | Leitura | `[{id, nome, tipo, modelo_face_id, modelo_nome, altura_u, bem_id, localizacao_id, sala, rack_id, rack_nome, posicao_u, ip_gerencia, numero_serie, observacao, ativo, funcao, portas_total, portas_up, portas_down, portas_desativadas, ping_situacao, ping_verificado_em, ping_mudou_em, cadastro_incompleto}]` |
 | `POST /api/rede/equipamentos` | Controle total | `{nome, tipo, funcao, modelo_face_id, bem_id, localizacao_id, rack_id, posicao_u, ip_gerencia, numero_serie, observacao, ativo}` → `201` com a face; sem IP ou sem função (menos patch panel): 400 |
-| `GET /api/rede/equipamentos/{id}` | Leitura | Face: o resumo + `modelo`, `posicoes` (número → `[linha, coluna]`) e `portas[{id, numero_logico, nome, descricao, mac, velocidade_mbps, duplex, status, modo, vlan_nativa(_id), vlans_tag(_ids), vlans_sem_tag(_ids), vlan_voz(_id), ip_interface, ultima_mudanca, erros_entrada, erros_saida, conexao{tipo, texto, porta_id, equipamento_id, bem_id}, ponto, chamados_abertos}]` |
-| `PUT` · `DELETE /api/rede/equipamentos/{id}` | Controle total | Altera / exclui (as portas e conexões vão junto; os chamados ficam sem a porta) |
+| `GET /api/rede/equipamentos/{id}` | Leitura | Face: a alteração mais recente entre as portas do equipamento (`alterado_por`, `alterado_em`, `alterado_porta_id`, `alterado_porta`; nulos se nenhuma), mostrada como "Última alteração em porta: nome - dd/mm/aaaa hh:mm:ss (porta N)"; o resumo + `modelo`, `posicoes` (número → `[linha, coluna]`) e `portas[{id, numero_logico, nome, descricao, mac, velocidade_mbps, duplex, status, modo, vlan_nativa(_id), vlans_tag(_ids), vlans_sem_tag(_ids), vlan_voz(_id), ip_interface, ultima_mudanca, erros_entrada, erros_saida, conexao{tipo, texto, porta_id, equipamento_id, bem_id}, ponto, chamados_abertos}]` |
+| `PUT` · `DELETE /api/rede/equipamentos/{id}` | Controle total | Altera (modelo e tipo patch panel × demais travados: `409 modelo_travado` / `409 tipo_travado`; auditado como `rede.equipamento.alterar`) / exclui (as portas e conexões vão junto; os chamados ficam sem a porta) |
 | `GET /api/rede/portas/{id}` | Leitura | A porta + `equipamento_id`, `equipamento_nome` e `chamados[{numero, titulo, status_base, aberto_em}]` |
-| `PUT /api/rede/portas/{id}` | Modificação | Com algo ligado, `status` só `up` (`409 porta_com_equipamento`). `{descricao, modo, vlan_nativa_id, vlans_tag[], vlans_sem_tag[], vlan_voz_id, ip_interface, velocidade_mbps, duplex, status}`; a leitura da porta traz também `vlans_sem_tag(_ids)`, `vlan_voz(_id)` e `ip_interface` |
+| `GET /api/rede/portas/{id}` | Leitura | A porta (mesmos campos da face) + `equipamento_id`, `equipamento_nome`, `equipamento_tipo`, `chamados` e a última alteração da porta (`alterado_por`, `alterado_em`; nulos se nunca foi alterada), mostrada na tela como "Última alteração: nome - dd/mm/aaaa hh:mm:ss" |
+| `PUT /api/rede/portas/{id}` | Modificação | Descrição obrigatória (400). Patch panel: só `descricao` e `status` (400 para o resto). Com algo ligado, `status` só `up` (`409 porta_com_equipamento`). `{descricao, modo, vlan_nativa_id, vlans_tag[], vlans_sem_tag[], vlan_voz_id, ip_interface, velocidade_mbps, duplex, status}`; a leitura da porta traz também `vlans_sem_tag(_ids)`, `vlan_voz(_id)` e `ip_interface` |
 | `POST /api/rede/portas/{id}/conexao/atras` · `DELETE …/atras/{dispositivo_id}` | Modificação | Põe (`{bem_id \| descricao}`) um dispositivo atrás do último da porta / tira um. Respondem a porta (`conexao.atras[{id, ordem, texto, bem_id}]`) |
-| `POST` · `DELETE /api/rede/portas/{id}/conexao` | Modificação | Liga (`{porta_id \| bem_id \| descricao, forcar?}`) / desliga. `409 porta_ocupada` (já ligada) ou `409 porta_com_dispositivo` (porta descrita; repita com `forcar`) |
-| `GET` · `POST /api/rede/modelos` · `PUT` · `DELETE …/{id}` | Leitura / Controle total | `{nome, fabricante, linhas, colunas, numeracao, portas_extras[{numero, rotulo, tipo}], altura_u}` (+ `equipamentos` na leitura) |
-| `GET` · `POST /api/rede/vlans` · `PUT` · `DELETE …/{id}` | Leitura / Controle total | `{numero (1–4094), nome, descricao}` (+ `portas` na leitura); em uso: `409 em_uso` |
+| `POST` · `DELETE /api/rede/portas/{id}/conexao` | Modificação | Liga (`{porta_id \| bem_id \| descricao, forcar?}`) / desliga. `409 porta_ocupada` (já ligada) ou `409 porta_com_dispositivo` (porta com outra descrição; repita com `forcar`). Na ligação porta ↔ porta, as duas pontas ganham "Salto: …" |
+| `GET` · `POST /api/rede/modelos` · `PUT` · `DELETE …/{id}` | Leitura / Controle total | `{nome, fabricante, linhas, colunas, numeracao, portas_extras[{numero, rotulo, tipo}], altura_u}` (+ `equipamentos` na leitura). Em uso, a grade e as extras não mudam: `409 modelo_em_uso` |
+| `GET` · `POST /api/rede/vlans` · `PUT` · `DELETE …/{id}` | Leitura / Controle total | `{numero (1–4094), nome, descricao, cor_indice?}` (+ `cor_indice` e `portas` na leitura); em uso: `409 em_uso`. `cor_indice` (0–11, paleta dos marcadores das Tarefas): ausente mantém a cor; na criação, sorteia de 1 a 11 |
 | `GET` · `POST /api/rede/racks` · `PUT` · `DELETE …/{rack_id}` | Leitura / Controle total | `{nome, cor, localizacao_id, altura_u, observacao}` (+ `sala` e `equipamentos` na leitura) |
 | `GET /api/rede/topologia?raiz_id=` | Leitura | `{raizes[NoTopologia], sem_ligacao[NoTopologia]}`; `NoTopologia` = `{id, nome, tipo, funcao, ping_situacao, assumiu, rack_nome, rack_cor, sala, ip_gerencia, portas_total, portas_up, portas_down, pontos, bens, porta_acima, porta_no_pai, cabos_com_pai, tambem_ligado[], filhos[]}` (`porta_acima`: porta deste equipamento que liga ao de cima; `porta_no_pai`: onde chega; sala vazia usa a do rack) |
 | `GET /api/rede/portas/{id}/caminho` | Leitura | Do core até a porta: `{etapas[{tipo (equipamento\|ponto), nome, cabo, equipamento_id, tipo_equipamento, funcao, ping_situacao, porta_entrada, porta_saida}], dispositivos[{texto, bem_id}], cabo_dispositivos, aviso}`. A subida é a mesma árvore da topologia; `cabo` = "porta de cima ↔ porta deste"; `porta_entrada`/`porta_saida` = a porta deste equipamento no cabo que sobe / no que desce (leitura completa, como na face). Porta de patch panel sobe pelo switch em que ela chega e termina no ponto; porta que é a subida do próprio equipamento para nele (a tela destaca o quadradinho da porta aberta); `aviso` só quando o equipamento não tem cabo até o core |
@@ -135,10 +148,23 @@ coisa no SGI não é mexida: vira aviso no relatório.
 - **Pontos, VLANs e modelos** (`/rede/cadastros`), aba **Monitoramento** (só Controle total): o intervalo entre os pings.
 - **Cadastro do equipamento**: o campo **Função na topologia** aparece em todo tipo menos patch panel, e o IP de gerência fica obrigatório. A lista
   e a tela do equipamento mostram a função, o selo **No ar / Fora do ar** e **Cadastro incompleto** nos que ainda não têm IP ou função.
+- **Indicadores** (topo de `/rede`, no estilo do Painel de chamados; cada card abre `/rede/portas-lista/alteradas` ou `/rede/portas-lista/sem-descricao`
+  com equipamento | porta | descrição | quem alterou - dd/mm/aaaa hh:mm:ss e uma busca):
+  - **Portas alteradas nos últimos 7 dias** (janela móvel, decisão do usuário): portas com **qualquer** alteração — configurar, ligar ou desligar
+    (as duas pontas), pôr ou tirar dispositivo atrás, ponto de rede ligado/desligado da porta e a carga LLDP (situação, interface ou cabo novo,
+    autor `sistema:carga-lldp`). Cada alteração grava uma auditoria com `alvo_tipo = rede_porta` e `alvo_id` = id da porta
+    (`rede.porta.configurar`, `.ligar`, `.desligar`, `.atras`, `.ponto`, `.carga_lldp`). A migração `b7d9f1a3c5e8` ligou à porta as configurações
+    auditadas antes (que só tinham o texto "EQUIPAMENTO · número"). "Quem alterou" mostra o nome completo do usuário (ou o autor técnico).
+  - **Portas ativas sem descrição**: status `up` (ligada) e descrição vazia, com a última alteração de cada uma, se houver.
+- **Navegação**: a trilha mostra Rede › equipamento › porta; da porta, o nome do equipamento volta para a face dele.
 - **Equipamento** (`/rede/equipamentos/:id`): a **face** desenhada pelo modelo (grade + portas extras). **Verde = ligada, vermelho =
   desligada**, tracejado = desativada ou sem informação; bolinha âmbar = chamado aberto. Clicar na porta abre o detalhe dela. Abaixo, a lista
   de portas e, para quem administra, os dados do equipamento.
-- **Porta** (`/rede/portas/:id`): configuração, situação, o que está ligado (outro equipamento, **um bem do Patrimônio** buscado pela chapa ou uma
+- **Porta** (`/rede/portas/:id`): configuração (descrição obrigatória; VLANs com tag e sem tag em dois campos de busca com selos, como os
+  marcadores das Tarefas: o selo mostra só o número, na cor da VLAN, com o nome ao passar o mouse e na busca; "Todas" e "Limpar" ao lado do
+  rótulo; embaixo, o resumo em faixas, ex.: "Com tag: 2469–2483 (15 VLANs)"; quem tem Controle total clica no selo e troca a **cor** e o
+  **nome** da VLAN, que valem em todas as portas e na aba VLANs (migração `c8e0a2b4d6f9`: as VLANs existentes ganham cor pelo número);
+  em patch panel, só descrição e situação), situação, o que está ligado (outro equipamento, **um bem do Patrimônio** buscado pela chapa ou uma
   descrição), ponto de rede e chamados, com "Abrir chamado desta porta".
 - **Cadastro do bem** (Patrimônio): para quem tem acesso à Rede, o quadro "Rede" mostra em qual switch e porta o bem está ligado; quem edita a
   rede liga ou desliga dali mesmo. É a mesma ligação da porta: o que se faz num lugar aparece no outro.

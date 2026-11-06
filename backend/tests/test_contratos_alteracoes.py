@@ -550,6 +550,59 @@ def test_vigencia_retroativa_recua_inicio_renumera_e_desfaz(cliente, admin, equi
     assert cliente.get(_url(contrato, "/competencias/identificador/2025-06"), headers=gestora).status_code == 404
 
 
+def _periodo(cliente, contrato, h, identificador):
+    """(início, fim) da competência pelo identificador `AAAA-MM`."""
+    c = cliente.get(_url(contrato, f"/competencias/identificador/{identificador}"), headers=h).json()
+    return c["periodo_inicio"], c["periodo_fim"]
+
+
+def test_mes_da_virada_sem_interrupcao_e_cheio_e_a_competencia_ja_gerada_se_ajusta(cliente, admin):
+    """Contrato de 20/01/2026: a vigência retroativa e a prorrogação (sem interrupção) deixam o mês da virada cheio, na vigência nova.
+
+    A competência que já existia (sem medição) é ajustada sozinha e, na medição, copia uma linha por item, com o mês inteiro.
+    Desfazer devolve o mês parcial.
+    """
+    import uuid
+
+    from app.core.banco import FabricaSessao
+    from app.models.contratos import Contrato
+
+    gestora = criar_usuario("gestora-virada")
+    restringir_contratos(cliente, admin, {gestora: "MODIFICACAO"})
+    contrato = criar_contrato(cliente, admin, equipe={"gestor": gestora}, data_inicio="2026-01-20", vigencia_maxima_meses=24)
+    h = cabecalho(cliente, "gestora-virada")
+    _preparar_execucao(cliente, contrato, h)
+    cliente.post(_url(contrato, "/execucao/gerar"), headers=h)
+    with FabricaSessao() as sessao:
+        sessao.get(Contrato, uuid.UUID(contrato["id"])).liberar_todas_competencias = True
+        sessao.commit()
+    # Antes: o 1º mês começa no início do contrato e o último termina no fim dele
+    assert _periodo(cliente, contrato, h, "2026-01") == ("2026-01-20", "2026-01-31")
+    assert _periodo(cliente, contrato, h, "2027-01") == ("2027-01-01", "2027-01-19")
+
+    # Vigência retroativa até 19/01/2026: janeiro/2026 passa a ser cheio, na vigência original (agora a 2ª)
+    r = _cadastrar_retroativa(cliente, contrato, h)
+    assert r.status_code == 200, r.text
+    janeiro = cliente.get(_url(contrato, "/competencias/identificador/2026-01"), headers=h).json()
+    assert (janeiro["periodo_inicio"], janeiro["periodo_fim"], janeiro["sequencia_vigencia"]) == ("2026-01-01", "2026-01-31", 2)
+    # Uma linha por item (sem trechos), o mês inteiro: 2 postos contínuos = quantidade 2
+    continuos = [i for i in janeiro["itens"] if i["tipo"] == "continuo"]
+    assert [(i["segmento"], i["periodo_rotulo"], i["quantidade_prevista"]) for i in continuos] == [(1, "", "2.0000")]
+    # Desfazer a retroativa devolve o mês parcial
+    cliente.delete(_url(contrato, f"/vigencias-retroativas/{r.json()[0]['id']}"), headers=h)
+    assert _periodo(cliente, contrato, h, "2026-01") == ("2026-01-20", "2026-01-31")
+
+    # Prorrogação a partir de 20/01/2027: o último mês (01 a 19/01) passa a ser cheio, na vigência nova
+    cliente.put(_url(contrato, "/prorrogacao"), json={"meses": 12, "regra_sob_demanda": "repetir_inicial"}, headers=h)
+    preparar_registro_prorrogacao(cliente, _url(contrato, ""), h)
+    r = cliente.post(_url(contrato, "/prorrogacao/registrar"), data={"assinada_em": "2026-12-10"}, files={"termo": ("ta.pdf", PDF)}, headers=h)
+    assert r.status_code == 200, r.text
+    assert _periodo(cliente, contrato, h, "2027-01") == ("2027-01-01", "2027-01-31")
+    # Desfazer a prorrogação mantém a competência do mês da virada, de novo só até o fim anterior
+    assert cliente.delete(_url(contrato, f"/prorrogacoes/{r.json()[0]['id']}"), headers=h).status_code == 200
+    assert _periodo(cliente, contrato, h, "2027-01") == ("2027-01-01", "2027-01-19")
+
+
 def test_reajuste_retroativo_deflaciona_com_piso_e_exige_ordem(cliente, admin, equipe):
     """Reajuste retroativo: preço ÷ (1 + índice), referencial é piso; só nas retroativas e antes das medições."""
     contrato, gestora, _ = equipe

@@ -748,6 +748,39 @@ def sincronizar_se_defasada(contrato: Contrato, competencia: Competencia) -> boo
     return False
 
 
+def realinhar_ao_calendario(contrato: Contrato) -> list[Competencia]:
+    """Ajusta ao calendário atual as competências regulares **ainda sem medição** cujo período ficou desatualizado.
+
+    Chamado quando as vigências mudam (vigência retroativa ou prorrogação cadastrada ou desfeita). Ex.: o contrato começava em
+    06/08/2026 e a competência 08/2026 nasceu "06/08 a 31/08"; com a vigência retroativa antes dele, agosto passa a ser o mês
+    cheio "01/08 a 31/08". Sem o ajuste, a medição procura o período pelo início antigo, não o acha e nunca copia os itens.
+
+    Só mexe em competência sem medição (nada iniciado, concluído ou medido, e fora da carga histórica): as medidas ficam como
+    estão. Os itens já copiados saem e são copiados de novo, pelo período certo, quando a medição começar (`garantir_itens`).
+    Competência cujo mês não está mais no calendário fica intocada. Devolve as competências ajustadas.
+    """
+    # Período do calendário atual indexado pelo mês da competência
+    por_mes = {p.competencia: p for p in calculos.periodos_de_execucao(vigencias(contrato), contrato.periodicidade_meses)}
+    ajustadas = []
+    for competencia in contrato.competencias:
+        sem_medicao = (
+            competencia.tipo == "regular" and competencia.etapa_atual == "medicao" and competencia.medicao_iniciada_em is None
+            and competencia.medicao_concluida_em is None and competencia.carga_historica_em is None
+            and all(i.quantidade_medida == ZERO for i in competencia.itens)
+        )
+        periodo = por_mes.get(competencia.competencia)
+        if not sem_medicao or periodo is None:
+            continue
+        if (competencia.periodo_inicio, competencia.periodo_fim, competencia.sequencia_vigencia) == (periodo.inicio, periodo.fim, periodo.sequencia_vigencia):
+            continue
+        competencia.periodo_inicio, competencia.periodo_fim, competencia.sequencia_vigencia = periodo.inicio, periodo.fim, periodo.sequencia_vigencia
+        # Itens copiados pelo período antigo saem; a medição os copia de novo, já pelo período certo
+        competencia.itens.clear()
+        competencia.versao_cadastro_sincronizada = contrato.versao_cadastro
+        ajustadas.append(competencia)
+    return ajustadas
+
+
 def gerar_competencias(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) -> int:
     """Cria as competências que faltam (idempotente). Depois disso, itens e ordem ficam bloqueados."""
     contrato = obter_contrato(sessao, contrato_id)

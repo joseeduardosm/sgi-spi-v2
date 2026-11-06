@@ -5,7 +5,9 @@
 - Preço: reajustes e repactuações concluídos, numa linha do tempo só (pela data de efeito). Antes do primeiro vale o preço "atual" que
   ele fotografou; a partir da **data de efeito** (qualquer dia da vigência), o preço novo (reajustado ou repactuado).
 - Mês com virada (prorrogação ou reajuste no meio do mês): o mês é cortado em **trechos** (`trechos_do_mes`), cada um com o seu
-  preço e pago pelos seus dias (fator 30/360, todos os itens).
+  preço e pago pelos seus dias (fator 30/360, todos os itens). Na **execução** (competências), a virada de vigência sem
+  interrupção não corta o mês: ele é cheio, na vigência nova (`calculos.juntar_viradas_sem_interrupcao`); aqui, no valor de cada
+  vigência e na previsão, o mês continua contado pelos dias de cada vigência (valor contratual).
 - Quantidade mensal (contínuo): aditamentos/supressões concluídos, pela mesma lógica com o mês de efeito.
 - Limite (sob demanda): linha de limite da vigência (prorrogação ou alteração); sem linha, o original.
 - Executado: soma das medições concluídas da vigência.

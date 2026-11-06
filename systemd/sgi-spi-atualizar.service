@@ -1,0 +1,16 @@
+[Unit]
+Description=sgi-spi: atualização do sistema pedida na tela Administração › Versões (backup, código, dependências, migrações, build e reinício; volta sozinha se falhar)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+# Ligada pela API com "sudo -n systemctl start --no-block sgi-spi-atualizar.service" (sudoers do instalador); roda fora da API, que é reiniciada no fim
+Type=oneshot
+User=__USUARIO__
+Group=__USUARIO__
+WorkingDirectory=__PROJETO__/backend
+Environment=HOME=__HOME__
+ExecStart=__PROJETO__/backend/.venv/bin/python __PROJETO__/scripts/atualizar-versao.py
+# Backup, npm ci e o build do Angular podem levar vários minutos
+TimeoutStartSec=3600
+PrivateTmp=true

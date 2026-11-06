@@ -1,7 +1,9 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para o painel de uma porta de rede: configuração lógica, o que está ligado, o ponto e os chamados da porta.
 
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
@@ -14,14 +16,17 @@ import { BuscaBemRedeComponent } from './busca-bem-rede.component';
 import { CabecalhoRedeComponent } from './cabecalho-rede.component';
 import { CaminhoRedeComponent } from './caminho-rede.component';
 import { RedeApiService } from './rede-api.service';
+import { SeletorVlansComponent } from './seletor-vlans.component';
 import {
   COR_STATUS_PORTA, EquipamentoResumo, GravacaoPorta, MODOS_PORTA, ModoPorta, modoPorta, Porta, PortaDetalhe, ROTULOS_STATUS_PORTA, velocidade, Vlan,
 } from './rede.models';
 
 @Component({
   selector: 'app-porta-rede',
-  imports: [FormsModule, RouterLink, BuscaBemRedeComponent, CabecalhoRedeComponent, CaminhoRedeComponent, EsqueletoComponent],
+  imports: [DatePipe, FormsModule, RouterLink, BuscaBemRedeComponent, CabecalhoRedeComponent, CaminhoRedeComponent, EsqueletoComponent, SeletorVlansComponent],
   styles: [`
+    /* "Última alteração" em linha própria no cabeçalho do cartão de configuração */
+    .ultima-alteracao { flex-basis: 100%; }
     /* Corrente de dispositivos na porta: número, nome e onde está ligado, um por linha */
     .cadeia-dispositivos { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; padding: 0; list-style: none;
       li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m); }
@@ -31,17 +36,25 @@ import {
   `],
   template: `
     <div class="modulo-chamados">
+      <!-- Trilha Rede › equipamento › porta: o nome do equipamento volta para a face dele -->
       <app-cabecalho-rede [titulo]="p() ? p()!.equipamento_nome + ' · porta ' + (p()!.nome || p()!.numero_logico) : 'Porta'"
-        [descricao]="p()?.descricao || ''" />
+        [descricao]="p()?.descricao || ''"
+        [trilha]="p() ? [{ rotulo: p()!.equipamento_nome, rota: ['/rede/equipamentos', p()!.equipamento_id] }, { rotulo: 'Porta ' + (p()!.nome || p()!.numero_logico) }] : []" />
       @if (p(); as p) {
         <div class="detalhe-chamado">
           <div class="coluna-chamado">
             <section class="cartao-chamado" aria-labelledby="rp-config">
               <header><h2 id="rp-config">Configuração</h2>
-                <small>É o cadastro do que está configurado no equipamento: o SGI não muda o switch.</small></header>
+                <small>É o cadastro do que está configurado no equipamento: o SGI não muda o switch.</small>
+                <!-- Quem fez a última alteração da porta (configuração, ligação, ponto, carga LLDP...) -->
+                <small class="ultima-alteracao">Última alteração: @if (p.alterado_em) { {{ p.alterado_por }} - <span class="texto-codigo">{{ p.alterado_em | date: 'dd/MM/yyyy HH:mm:ss' }}</span> } @else { nenhuma registrada }</small></header>
               <form class="grade-formulario" (ngSubmit)="salvar()">
                 <div class="ocupa-duas"><label for="rp-desc">Descrição</label>
-                  <input id="rp-desc" name="desc" maxlength="250" placeholder="Ex.: Sala 504 - impressora" [disabled]="!papeis()?.editar" [(ngModel)]="cfg.descricao" /></div>
+                  <!-- Regra: toda porta salva tem descrição -->
+                  <input id="rp-desc" name="desc" maxlength="250" required placeholder="Ex.: Sala 504 - impressora" [disabled]="!papeis()?.editar" [(ngModel)]="cfg.descricao" /></div>
+                @if (passiva()) {
+                  <p class="ocupa-duas dica-formulario">Patch panel não tem configuração lógica (modo, VLANs, IP, velocidade): só a descrição e a situação.</p>
+                } @else {
                 <div class="ocupa-duas"><label for="rp-modo">Modo</label>
                   <select id="rp-modo" name="modo" [disabled]="!papeis()?.editar" [ngModel]="cfg.modo" (ngModelChange)="trocarModo($event)">
                     @for (m of modos; track m.valor) { <option [value]="m.valor">{{ m.rotulo }}</option> }
@@ -54,36 +67,22 @@ import {
                       @for (v of vlans(); track v.id) { <option [ngValue]="v.id">{{ v.numero }} · {{ v.nome }}</option> }
                     </select></div>
                 }
-                @if (modo().voz) {
-                  <div><label for="rp-voz">VLAN de voz <small>(telefone IP)</small></label>
-                    <select id="rp-voz" name="voz" [disabled]="!papeis()?.editar" [(ngModel)]="cfg.vlan_voz_id">
-                      <option [ngValue]="null">Nenhuma</option>
-                      @for (v of vlans(); track v.id) { <option [ngValue]="v.id">{{ v.numero }} · {{ v.nome }}</option> }
-                    </select></div>
-                }
                 @if (modo().ip) {
                   <div><label for="rp-ip">IP da interface</label>
                     <input id="rp-ip" name="ip" maxlength="49" class="texto-codigo" placeholder="Ex.: 10.23.0.1/30" [disabled]="!papeis()?.editar" [(ngModel)]="cfg.ip_interface" /></div>
                 }
                 @if (modo().semTag) {
-                  <fieldset class="ocupa-duas grupo-caixas"><legend>VLANs sem tag (untagged, além da PVID)</legend>
-                    <div class="linha-caixas">
-                      @for (v of vlans(); track v.id) {
-                        <label><input type="checkbox" [name]="'sem-' + v.id" [disabled]="!papeis()?.editar || cfg.vlans_tag.includes(v.id)" [checked]="cfg.vlans_sem_tag.includes(v.id)"
-                          (change)="alternar('vlans_sem_tag', v.id)" /> {{ v.numero }} · {{ v.nome }}</label>
-                      }
-                    </div>
-                  </fieldset>
+                  <div class="ocupa-duas">
+                    <app-seletor-vlans idCampo="rp-sem-tag" rotuloCampo="VLANs sem tag" detalheRotulo="(untagged, além da PVID)" prefixoResumo="Sem tag"
+                      rotulo="Adicionar VLAN sem tag" [vlans]="vlans()" [valor]="cfg.vlans_sem_tag" [excluir]="cfg.vlans_tag" [desabilitado]="!papeis()?.editar"
+                      [podeGerir]="!!papeis()?.administrar" (valorChange)="cfg.vlans_sem_tag = $event" (vlanAlterada)="atualizarVlan($event)" /></div>
                 }
                 @if (modo().tag) {
-                  <fieldset class="ocupa-duas grupo-caixas"><legend>VLANs com tag (tagged)</legend>
-                    <div class="linha-caixas">
-                      @for (v of vlans(); track v.id) {
-                        <label><input type="checkbox" [name]="'tag-' + v.id" [disabled]="!papeis()?.editar || cfg.vlans_sem_tag.includes(v.id)" [checked]="cfg.vlans_tag.includes(v.id)"
-                          (change)="alternar('vlans_tag', v.id)" /> {{ v.numero }} · {{ v.nome }}</label>
-                      }
-                    </div>
-                  </fieldset>
+                  <div class="ocupa-duas">
+                    <app-seletor-vlans idCampo="rp-tag" rotuloCampo="VLANs com tag" detalheRotulo="(tagged)" prefixoResumo="Com tag"
+                      rotulo="Adicionar VLAN com tag" [vlans]="vlans()" [valor]="cfg.vlans_tag" [excluir]="cfg.vlans_sem_tag" [desabilitado]="!papeis()?.editar"
+                      [podeGerir]="!!papeis()?.administrar" (valorChange)="cfg.vlans_tag = $event" (vlanAlterada)="atualizarVlan($event)" /></div>
+                }
                 }
                 <div><label for="rp-status">Situação</label>
                   <!-- Porta com equipamento está necessariamente ligada: para mudar, primeiro se retira o que está nela -->
@@ -91,7 +90,9 @@ import {
                     <option [ngValue]="null">Não informada</option><option value="up">Ligada</option><option value="down">Desligada</option><option value="desativada">Desativada</option>
                   </select>
                   @if (p.conexao) { <small class="dica-formulario">Com equipamento ligado, a porta fica ligada. Para desligar ou desativar, retire o equipamento em "Ligado a".</small> }</div>
-                <div><label for="rp-vel">Velocidade (Mb/s)</label><input id="rp-vel" name="vel" type="number" min="1" [disabled]="!papeis()?.editar" [(ngModel)]="cfg.velocidade_mbps" /></div>
+                @if (!passiva()) {
+                  <div><label for="rp-vel">Velocidade (Mb/s)</label><input id="rp-vel" name="vel" type="number" min="1" [disabled]="!papeis()?.editar" [(ngModel)]="cfg.velocidade_mbps" /></div>
+                }
                 @if (papeis()?.editar) {
                   <div class="ocupa-duas acoes-formulario"><button type="submit" class="acao-primaria" [class.carregando]="salvando()" [disabled]="salvando()">Salvar configuração</button></div>
                 }
@@ -221,10 +222,15 @@ import {
 export class PortaRedeComponent implements OnInit {
   private readonly api = inject(RedeApiService);
   private readonly dialogos = inject(DialogosService);
-  private readonly id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
+  private readonly rota = inject(ActivatedRoute);
+  private readonly destruir = inject(DestroyRef);
+  /** Porta aberta. Muda sem recriar a tela quando um link leva a outra porta. */
+  private id = this.rota.snapshot.paramMap.get('id')!;
   protected readonly papeis = inject(AcessoService).rede;
 
   protected readonly p = signal<PortaDetalhe | null>(null);
+  /** Porta de patch panel: sem parte lógica (só descrição e situação). */
+  protected readonly passiva = computed(() => this.p()?.equipamento_tipo === 'patch_panel');
   protected readonly vlans = signal<Vlan[]>([]);
   protected readonly equipamentos = signal<EquipamentoResumo[]>([]);
   protected readonly portasOutro = signal<Porta[]>([]);
@@ -243,7 +249,14 @@ export class PortaRedeComponent implements OnInit {
   protected readonly data = dataHora;
 
   ngOnInit(): void {
-    this.api.porta(this.id).subscribe({ next: (x) => this.aplicar(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível abrir a porta') });
+    // A mesma tela é reaproveitada entre portas: a cada id novo, mostra o esqueleto e carrega a outra
+    this.rota.paramMap.pipe(takeUntilDestroyed(this.destruir)).subscribe((p) => {
+      const id = p.get('id')!;
+      if (id === this.id && this.p()) return;
+      this.id = id;
+      this.p.set(null);
+      this.api.porta(id).subscribe({ next: (x) => this.aplicar(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível abrir a porta') });
+    });
     this.api.vlans().subscribe({ next: (x) => this.vlans.set(x), error: () => undefined });
     this.api.equipamentos().subscribe({ next: (x) => this.equipamentos.set(x), error: () => undefined });
   }
@@ -263,8 +276,9 @@ export class PortaRedeComponent implements OnInit {
     pedido.subscribe({ next: (x) => this.aplicar(x), error: (e) => { this.salvando.set(false); this.dialogos.mostrarErro(e, erro); } });
   }
 
-  protected alternar(lista: 'vlans_tag' | 'vlans_sem_tag', id: string): void {
-    this.cfg[lista] = this.cfg[lista].includes(id) ? this.cfg[lista].filter((x) => x !== id) : [...this.cfg[lista], id];
+  /** Cor ou nome de VLAN trocados pelo selo: atualiza a lista (os dois campos e a VLAN nativa mostram o novo). */
+  protected atualizarVlan(nova: Vlan): void {
+    this.vlans.update((lista) => lista.map((v) => (v.id === nova.id ? nova : v)));
   }
 
   protected trocarModo(valor: ModoPorta): void {
@@ -274,9 +288,20 @@ export class PortaRedeComponent implements OnInit {
 
   /** Manda só o que o modo aceita (o que ficou marcado de outro modo é descartado, em vez de a API recusar). */
   protected salvar(): void {
+    if (!this.cfg.descricao.trim()) {
+      this.dialogos.avisar('Descrição obrigatória', 'Informe a descrição da porta antes de salvar.');
+      return;
+    }
+    // Patch panel: só descrição e situação (a API recusa o resto)
+    if (this.passiva()) {
+      this.executar(this.api.configurarPorta(this.id, { descricao: this.cfg.descricao, modo: 'access', vlan_nativa_id: null, vlans_tag: [], vlans_sem_tag: [],
+        vlan_voz_id: null, ip_interface: '', velocidade_mbps: null, duplex: null, status: this.cfg.status }), 'Não foi possível salvar a porta');
+      return;
+    }
     const m = this.modo();
     this.executar(this.api.configurarPorta(this.id, {
       ...this.cfg, vlan_nativa_id: m.nativa ? this.cfg.vlan_nativa_id : null, vlans_tag: m.tag ? this.cfg.vlans_tag : [], vlans_sem_tag: m.semTag ? this.cfg.vlans_sem_tag : [],
+      // A VLAN de voz saiu da tela: a já gravada é mantida enquanto o modo aceitar
       vlan_voz_id: m.voz ? this.cfg.vlan_voz_id : null, ip_interface: m.ip ? this.cfg.ip_interface.trim() : '',
     }), 'Não foi possível salvar a porta');
   }
@@ -313,7 +338,7 @@ export class PortaRedeComponent implements OnInit {
         this.salvando.set(false);
         // Porta descrita no switch (provável dispositivo): a API explica qual; só liga se a pessoa confirmar
         if (e?.error?.codigo === 'porta_com_dispositivo') {
-          const ok = await this.dialogos.confirmar({ titulo: 'Porta com dispositivo?', mensagem: e.error.detalhe, rotuloConfirmar: 'Ligar mesmo assim' });
+          const ok = await this.dialogos.confirmar({ titulo: 'Porta com dispositivo?', mensagem: e.error.detalhe, rotuloConfirmar: 'Ligar e trocar a descrição' });
           if (ok) this.ligar(true);
           return;
         }

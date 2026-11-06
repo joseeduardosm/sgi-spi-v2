@@ -9,6 +9,7 @@ import { ambiente } from '../../../environments/ambiente';
 import {
   BemResumo, CaminhoRede, EquipamentoDetalhe, EquipamentoResumo, GravacaoEquipamento, GravacaoModelo, GravacaoPonto, GravacaoPorta, GravacaoRack, ModeloFace, PontoRede, PortaDetalhe,
   ParametrosRede, PortaDoBem, Rack, SalaResumo, TopologiaRede, Vlan,
+  IndicadoresRede, PortaListada,
 } from './rede.models';
 
 @Injectable({ providedIn: 'root' })
@@ -89,7 +90,8 @@ export class RedeApiService {
     return this.http.get<Vlan[]>(`${this.base}/vlans`);
   }
 
-  salvarVlan(id: string | null, dados: { numero: number; nome: string; descricao: string }): Observable<Vlan> {
+  /** Cria ou altera a VLAN; sem `cor_indice`, a cor atual fica (na criação, a API sorteia uma). */
+  salvarVlan(id: string | null, dados: { numero: number; nome: string; descricao: string; cor_indice?: number | null }): Observable<Vlan> {
     return id ? this.http.put<Vlan>(`${this.base}/vlans/${id}`, dados) : this.http.post<Vlan>(`${this.base}/vlans`, dados);
   }
 
@@ -136,5 +138,15 @@ export class RedeApiService {
 
   portasDoBem(bemId: string): Observable<PortaDoBem[]> {
     return this.http.get<PortaDoBem[]>(`${this.base}/bens/${bemId}/portas`);
+  }
+
+  /** Cards do topo da Rede: portas alteradas nos últimos 7 dias e portas ligadas sem descrição. */
+  indicadores(): Observable<IndicadoresRede> {
+    return this.http.get<IndicadoresRede>(`${this.base}/indicadores`);
+  }
+
+  /** Lista de um card: `alteradas` (últimos 7 dias) ou `sem-descricao` (ligadas sem descrição). */
+  portasListadas(filtro: 'alteradas' | 'sem-descricao'): Observable<PortaListada[]> {
+    return this.http.get<PortaListada[]>(`${this.base}/${filtro === 'alteradas' ? 'portas-alteradas' : 'portas-sem-descricao'}`);
   }
 }

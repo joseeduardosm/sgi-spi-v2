@@ -6,6 +6,29 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-11-06
+
+Migrações novas (aplicar com `alembic upgrade head`; cabeça `c8e0a2b4d6f9`): Rede `b7d9f1a3c5e8` (liga à porta as auditorias antigas de configuração) e `c8e0a2b4d6f9` (cor das VLANs).
+
+### Adicionado
+- **Atualização do sistema pela tela** (Administração › **Versões do sistema**, `/admin/versoes`, só SuperRoot): a homologação acompanha o ramo do GitHub (`ATUALIZACAO_RAMO`, padrão `estado-atual-servidor`) e **aprova** a versão em execução (tag `vAAAA.MM.DD` enviada ao GitHub, com as novidades do CHANGELOG); a produção lista só as versões aprovadas mais novas e as instala. A instalação roda fora da API (unidade `sgi-spi-atualizar`, `scripts/atualizar-versao.py`): backup geral, código, dependências, migrações, build (trocado de uma vez) e reinício, com modal de andamento; **se falhar, volta sozinha** (código anterior e banco do backup). Endpoints `/api/admin/versoes[/buscar|/atualizar|/aprovar]` (`docs/endpoints/versoes.md`). A versão da aplicação passa a vir do Git (`git describe`). Rode `scripts/instalar.sh` uma vez em cada servidor (unidade, sudoers e `dados/atualizacao`).
+- **Rede — indicadores no topo** (estilo Painel de chamados): **Portas alteradas nos últimos 7 dias** e **Portas ativas sem descrição**, cada um abrindo a lista `/rede/portas-lista/…` (equipamento | porta | descrição | quem alterou e quando), com busca e colunas ordenáveis (`GET /api/rede/indicadores`, `/portas-alteradas`, `/portas-sem-descricao`).
+- **Rede — histórico por porta**: toda alteração de porta (configurar, ligar/desligar nas duas pontas, dispositivo atrás, ponto, carga LLDP) entra na auditoria com a porta como alvo. A porta mostra "Última alteração: nome - dd/mm/aaaa hh:mm:ss" e o equipamento, a alteração mais recente entre as portas dele (com link para a porta).
+- **Rede — VLANs com cor**, como os marcadores das Tarefas: selo só com o número (nome ao passar o mouse), "Todas" e "Limpar", resumo em faixas ("Com tag: 2469–2483 (15 VLANs)"); quem tem Controle total troca cor e nome pelo selo, valendo em todas as portas e na aba VLANs (`cor_indice` em `/api/rede/vlans`).
+- **Rede — navegação**: trilha Rede › equipamento › porta (da porta volta para a face do equipamento).
+- `scripts/limpar-portas-fora-de-rack.py`: limpa as especificações das portas dos equipamentos fora de rack (com backup em JSON e ensaio).
+- **Regra de interface**: toda tabela de dados com todas as colunas ordenáveis (`DESIGN.md`, "Tabela"; `CLAUDE.md`).
+
+### Alterado
+- **Contratos — mês de virada de vigência sem interrupção é cheio, na vigência nova** (prorrogação ou vigência retroativa): uma linha por item no mês inteiro, em vez de dois trechos; só o início e o fim de fato (ou intervalo entre vigências) deixam o mês parcial. Reajuste no meio do mês continua dividindo. O valor de cada vigência e o orçamento continuam contados pelos dias.
+- **Contratos — competência do mês de virada se ajusta sozinha**: cadastrar ou desfazer vigência retroativa ou prorrogação realinha ao calendário as competências ainda sem medição (antes ficavam com o período antigo e sem itens); desfazer a prorrogação mantém a competência do último mês.
+- **Rede — modelo de face travado**: escolhido na criação, não muda mais (`409 modelo_travado`); o tipo patch panel × demais também não (`409 tipo_travado`); a grade de um modelo em uso não muda (`409 modelo_em_uso`). A edição do equipamento passa a ser auditada (`rede.equipamento.alterar`).
+- **Rede — porta**: descrição obrigatória ao salvar; porta de patch panel sem parte lógica (só descrição e situação; a dica, o caminho e a lista também a escondem); VLAN de voz sai da tela; VLANs com e sem tag em campos de busca com selos; ligar porta com porta grava a descrição do salto nas duas pontas ("Salto: PP-5A · 1"), pedindo confirmação se já havia outra.
+
+### Corrigido
+- Contratos: competência do mês de virada sem itens e sem etapas depois do cadastro de vigência retroativa (ex.: 08/2026 do 010/2024 e 12/2025 do 018/2024, corrigidas nos dados).
+- Rede: link para outro equipamento (ou outra porta) na mesma tela não recarregava o conteúdo.
+
 ## 2026-11-04
 
 Migração nova (aplicar com `alembic upgrade head`; cabeça `a6c8e0b2d4f7`): `a6c8e0b2d4f7` (repactuação: tabelas da repactuação, competência `diferenca_repactuacao`, crédito com `repactuacao_id` e modelo `checklist_repactuacao`).

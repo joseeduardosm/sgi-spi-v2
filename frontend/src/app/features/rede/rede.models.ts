@@ -91,16 +91,24 @@ export interface Porta {
   vlans_sem_tag: number[]; vlans_sem_tag_ids: string[]; vlan_voz_id: string | null; vlan_voz: number | null; ip_interface: string;
   ultima_mudanca: string | null; erros_entrada: number; erros_saida: number; conexao: Conexao | null; ponto: string; chamados_abertos: number;
 }
-export interface EquipamentoDetalhe extends EquipamentoResumo { modelo: ModeloFace | null; posicoes: Record<string, [number, number]>; portas: Porta[] }
+export interface EquipamentoDetalhe extends EquipamentoResumo {
+  modelo: ModeloFace | null; posicoes: Record<string, [number, number]>; portas: Porta[];
+  /** A alteração mais recente entre as portas do equipamento: quem, quando e qual porta (nulos se nenhuma foi alterada). */
+  alterado_por: string | null; alterado_em: string | null; alterado_porta_id: string | null; alterado_porta: string | null;
+}
 export interface PortaDetalhe extends Porta {
-  equipamento_id: string; equipamento_nome: string; chamados: { numero: number; titulo: string; status_base: string; aberto_em: string }[];
+  equipamento_id: string; equipamento_nome: string; equipamento_tipo: TipoEquipamento;
+  /** Última alteração da porta (qualquer atributo): quem e quando; nulos se nunca foi alterada. */
+  alterado_por: string | null; alterado_em: string | null;
+  chamados: { numero: number; titulo: string; status_base: string; aberto_em: string }[];
 }
 export interface GravacaoPorta {
   descricao: string; modo: ModoPorta; vlan_nativa_id: string | null; vlans_tag: string[]; vlans_sem_tag: string[]; vlan_voz_id: string | null;
   ip_interface: string; velocidade_mbps: number | null;
   duplex: 'full' | 'half' | null; status: StatusPorta | null;
 }
-export interface Vlan { id: string; numero: number; nome: string; descricao: string; portas: number }
+/** VLAN cadastrada; `cor_indice` é a cor do selo (paleta dos marcadores das Tarefas, 0–11). */
+export interface Vlan { id: string; numero: number; nome: string; descricao: string; cor_indice: number; portas: number }
 export interface PontoRede { id: string; codigo: string; localizacao_id: string | null; porta_id: string | null; observacao: string; sala: string; caminho: string[] }
 export type GravacaoPonto = Omit<PontoRede, 'id' | 'sala' | 'caminho'>;
 
@@ -136,3 +144,11 @@ export interface EtapaCaminho {
   porta_entrada: Porta | null; porta_saida: Porta | null;
 }
 export interface CaminhoRede { etapas: EtapaCaminho[]; dispositivos: { texto: string; bem_id: string | null }[]; cabo_dispositivos: string; aviso: string }
+
+/** Números dos cards do topo da Rede. */
+export interface IndicadoresRede { portas_alteradas: number; portas_ativas_sem_descricao: number }
+/** Linha das listas dos indicadores: equipamento | porta | descrição | quem alterou e quando (a última alteração). */
+export interface PortaListada {
+  porta_id: string; equipamento_id: string; equipamento_nome: string; porta: string; numero_logico: number; descricao: string;
+  alterado_por: string | null; alterado_em: string | null;
+}

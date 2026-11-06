@@ -2,7 +2,7 @@
 // Este arquivo serve para desenhar o caminho de uma porta até o core: caixas em cascata (como as da Topologia) ligadas pelos cabos.
 
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
@@ -66,7 +66,7 @@ import { CaminhoRede, EtapaCaminho, Porta, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_P
          [attr.aria-describedby]="dica()?.porta === p ? idDica : null"
          (mouseenter)="mostrarDica($event, p)" (mouseleave)="dica.set(null)" (focus)="mostrarDica($event, p)" (blur)="dica.set(null)">{{ p.numero_logico }}</a>
     </ng-template>
-    @if (dica(); as d) { <app-dica-porta [porta]="d.porta" [x]="d.x" [y]="d.y" [idDica]="idDica" /> }
+    @if (dica(); as d) { <app-dica-porta [porta]="d.porta" [x]="d.x" [y]="d.y" [idDica]="idDica" [passiva]="portasPassivas().has(d.porta.id)" /> }
   `,
   styleUrls: ['./face-rede.component.scss', './caminho-rede.component.scss'],
   host: { '(window:scroll)': 'dica.set(null)' },
@@ -82,6 +82,9 @@ export class CaminhoRedeComponent {
   /** Porta sob o mouse e onde a dica aparece. */
   protected readonly dica = signal<{ porta: Porta; x: number; y: number } | null>(null);
   protected readonly erro = signal(false);
+  /** Portas de patch panel no caminho (a dica delas não mostra modo nem VLAN). */
+  protected readonly portasPassivas = computed(() => new Set((this.caminho()?.etapas ?? []).filter((e) => e.tipo_equipamento === 'patch_panel')
+    .flatMap((e) => [e.porta_entrada?.id, e.porta_saida?.id]).filter((id): id is string => !!id)));
 
   constructor() {
     effect(() => {

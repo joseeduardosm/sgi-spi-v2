@@ -236,6 +236,14 @@ export const rotas: Routes = [
         loadComponent: () => import('./features/administracao/backup/backup-geral.component').then((m) => m.BackupGeralComponent),
       },
       {
+        // Versões do sistema: homologação atualiza pelo GitHub e aprova; produção instala versões aprovadas. Só o SuperRoot
+        path: 'admin/versoes',
+        title: 'Versões do sistema | SGI SPI',
+        canActivate: [guardaPapel],
+        data: { papeis: ['SuperRoot'] },
+        loadComponent: () => import('./features/administracao/versoes/versoes-sistema.component').then((m) => m.VersoesSistemaComponent),
+      },
+      {
         // Integração com o SIGEO (ordens bancárias pagas concluem a etapa da OB): só o SuperRoot
         path: 'admin/sigeo',
         title: 'Integração SIGEO | SGI SPI',

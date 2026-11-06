@@ -136,6 +136,8 @@ class VlanRede(Base):
     nome: Mapped[str] = mapped_column(String(120))
     descricao: Mapped[str] = mapped_column(Text, default="", server_default="")
     origem_glpi_id: Mapped[int | None] = mapped_column(Integer, unique=True)
+    # Cor do selo da VLAN (mesma paleta de 12 cores dos marcadores das Tarefas; 0 = cinza). Trocar a cor vale em todas as portas.
+    cor_indice: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class PortaRede(Base):

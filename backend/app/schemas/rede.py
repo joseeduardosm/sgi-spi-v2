@@ -43,7 +43,7 @@ class ModeloLeitura(GravacaoModelo):
 class GravacaoEquipamento(BaseModel):
     nome: str = Field(min_length=2, max_length=150)
     tipo: TipoEquipamento = "switch"
-    modelo_face_id: uuid.UUID | None = Field(None, description="Ao criar (ou trocar), as portas que faltam são criadas pelo modelo.")
+    modelo_face_id: uuid.UUID | None = Field(None, description="Ao criar, as portas são criadas pelo modelo. Depois de criado não muda (`409 modelo_travado`).")
     bem_id: uuid.UUID | None = None
     localizacao_id: uuid.UUID | None = None
     rack_id: uuid.UUID | None = Field(None, description="Rack já cadastrado (`/rede/racks`).")
@@ -129,6 +129,10 @@ class EquipamentoDetalhe(EquipamentoResumo):
     modelo: ModeloLeitura | None
     posicoes: dict[int, tuple[int, int]] = Field(description="Número da porta → (linha, coluna) na grade do modelo.")
     portas: list[PortaLeitura]
+    alterado_por: str | None = Field(None, description="Quem fez a alteração mais recente em alguma porta do equipamento; nulo se nenhuma porta foi alterada.")
+    alterado_em: datetime | None = Field(None, description="Quando foi essa alteração.")
+    alterado_porta_id: uuid.UUID | None = Field(None, description="A porta dessa alteração.")
+    alterado_porta: str | None = Field(None, description="Nome (ou número) da porta dessa alteração.")
 
 
 class ChamadoDaPorta(BaseModel):
@@ -141,6 +145,9 @@ class ChamadoDaPorta(BaseModel):
 class PortaDetalhe(PortaLeitura):
     equipamento_id: uuid.UUID
     equipamento_nome: str
+    equipamento_tipo: str = Field(description="Tipo do equipamento: em `patch_panel` a porta não tem parte lógica (só descrição e situação).")
+    alterado_por: str | None = Field(None, description="Quem fez a última alteração da porta (nome completo, ou o autor técnico como `sistema:carga-lldp`); nulo se nunca foi alterada.")
+    alterado_em: datetime | None = Field(None, description="Quando foi a última alteração da porta.")
     chamados: list[ChamadoDaPorta] = Field(description="Chamados da porta e do ponto que chega nela (só os que a pessoa enxerga nos Chamados).")
 
 
@@ -169,10 +176,12 @@ class GravacaoVlan(BaseModel):
     numero: int = Field(ge=1, le=4094)
     nome: str = Field("", max_length=120)
     descricao: str = Field("", max_length=2000)
+    cor_indice: int | None = Field(None, ge=0, le=11, description="Cor do selo (paleta dos marcadores: 0–11). Ausente: mantém a atual; na criação, sorteia uma de 1 a 11.")
 
 
 class VlanLeitura(GravacaoVlan):
     id: uuid.UUID
+    cor_indice: int
     portas: int
 
 
@@ -284,3 +293,21 @@ class CaminhoRede(BaseModel):
     dispositivos: list[DispositivoCaminho] = Field(description="O que está ligado na porta, na ordem da cascata (ex.: telefone IP → computador).")
     cabo_dispositivos: str = Field("", description="Porta em que os dispositivos estão ligados.")
     aviso: str = Field("", description="Ex.: o equipamento não tem cabo até o core.")
+
+
+class IndicadoresRede(BaseModel):
+    """Números dos cards do topo da tela da Rede."""
+    portas_alteradas: int = Field(description="Portas com qualquer alteração (configuração, ligação, dispositivo atrás, ponto ou carga LLDP) nos últimos 7 dias.")
+    portas_ativas_sem_descricao: int = Field(description="Portas ligadas (status `up`) sem descrição.")
+
+
+class PortaListada(BaseModel):
+    """Linha das listas dos indicadores: equipamento | porta | descrição | quem alterou e quando (a última alteração)."""
+    porta_id: uuid.UUID
+    equipamento_id: uuid.UUID
+    equipamento_nome: str
+    porta: str = Field(description="Nome da interface ou, sem ele, o número da porta.")
+    numero_logico: int
+    descricao: str
+    alterado_por: str | None = Field(description="Nome de quem fez a última alteração (ou o autor técnico, ex.: `sistema:carga-lldp`); nulo se nunca foi alterada.")
+    alterado_em: datetime | None

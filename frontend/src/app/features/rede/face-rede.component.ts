@@ -57,7 +57,7 @@ interface CelulaPorta { porta: Porta; linha: number; coluna: number }
     }
 
     <!-- Dica da porta: a configuração toda, formatada, sem precisar abrir a porta -->
-    @if (dica(); as d) { <app-dica-porta [porta]="d.porta" [x]="d.x" [y]="d.y" [idDica]="idDica" /> }
+    @if (dica(); as d) { <app-dica-porta [porta]="d.porta" [x]="d.x" [y]="d.y" [idDica]="idDica" [passiva]="e().tipo === 'patch_panel'" /> }
   `,
 })
 export class FaceRedeComponent {

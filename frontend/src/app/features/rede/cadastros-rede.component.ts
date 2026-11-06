@@ -1,7 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para os cadastros do plano de face em abas: pontos de rede, VLANs e modelos de face.
 
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, NgForm } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
@@ -9,6 +9,8 @@ import { Observable } from 'rxjs';
 import { AcessoService } from '../../core/acesso/acesso.service';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
+import { SeletorCorComponent } from '../../shared/componentes/seletor-cor/seletor-cor.component';
+import { classeMarcador, PALETA_MARCADORES } from '../tarefas/marcadores.paleta';
 import { CabecalhoRedeComponent } from './cabecalho-rede.component';
 import { RedeApiService } from './rede-api.service';
 import { GravacaoModelo, GravacaoPonto, ModeloFace, ParametrosRede, PontoRede, Vlan } from './rede.models';
@@ -21,7 +23,7 @@ function modeloVazio(): GravacaoModelo {
 
 @Component({
   selector: 'app-cadastros-rede',
-  imports: [FormsModule, CabecalhoRedeComponent, EsqueletoComponent],
+  imports: [FormsModule, CabecalhoRedeComponent, EsqueletoComponent, SeletorCorComponent],
   template: `
     <div class="modulo-chamados">
       <app-cabecalho-rede titulo="Pontos, VLANs e modelos" descricao="Os pontos de rede das salas, as VLANs e o desenho da face de cada modelo de equipamento." />
@@ -72,6 +74,9 @@ function modeloVazio(): GravacaoModelo {
                 <div><label for="vl-num">{{ editandoVlan() ? 'Alterar VLAN' : 'Nova VLAN' }}</label>
                   <input id="vl-num" name="numero" type="number" min="1" max="4094" required placeholder="Número (1 a 4094)" [(ngModel)]="vlan.numero" /></div>
                 <div><label for="vl-nome">Nome</label><input id="vl-nome" name="nome" maxlength="120" placeholder="Ex.: Voz" [(ngModel)]="vlan.nome" /></div>
+                <!-- Cor do selo da VLAN (paleta dos marcadores das Tarefas); vale em todas as portas. Na criação, sem escolha, a API sorteia uma -->
+                <div class="ocupa-duas"><span class="rotulo-campo">Cor do selo</span>
+                  <app-seletor-cor tamanho="pequeno" [cores]="coresVlan" [valor]="vlan.cor_indice" rotulo="Cor da VLAN" (escolher)="vlan.cor_indice = $event" /></div>
                 <div class="ocupa-duas acoes-formulario">
                   @if (editandoVlan()) { <button type="button" class="acao-secundaria" (click)="novaVlan(fv)">Cancelar edição</button> }
                   <button type="submit" class="acao-primaria" [class.carregando]="salvando()" [disabled]="fv.invalid || salvando()">{{ editandoVlan() ? 'Salvar VLAN' : 'Criar VLAN' }}</button>
@@ -80,10 +85,19 @@ function modeloVazio(): GravacaoModelo {
             }
             <div class="tabela-gestao-envoltorio">
               <table class="tabela-gestao">
-                <thead><tr><th scope="col">VLAN</th><th scope="col">Nome</th><th scope="col">Portas</th><th scope="col"></th></tr></thead>
+                <!-- Colunas ordenáveis (regra do SGI), com o botão da lista de Chamados -->
+                <thead><tr>
+                  @for (col of colunasVlan; track col.chave) {
+                    <th scope="col" [attr.aria-sort]="sentidoVlan(col.chave)">
+                      <button type="button" class="ordenar-coluna" [class.ativa]="ordemVlan().coluna === col.chave" (click)="ordenarVlan(col.chave)" [title]="'Ordenar por ' + col.rotulo.toLowerCase()">
+                        {{ col.rotulo }}<span aria-hidden="true">{{ ordemVlan().coluna === col.chave ? (ordemVlan().direcao === 'asc' ? '▲' : '▼') : '↕' }}</span></button>
+                    </th>
+                  }
+                  <th scope="col"><span class="somente-leitor-tela">Ações</span></th>
+                </tr></thead>
                 <tbody>
-                  @for (x of vlans(); track x.id) {
-                    <tr><td data-rotulo="VLAN" class="texto-codigo">{{ x.numero }}</td><td data-rotulo="Nome">{{ x.nome }}</td><td data-rotulo="Portas">{{ x.portas }}</td>
+                  @for (x of vlansOrdenadas(); track x.id) {
+                    <tr><td data-rotulo="VLAN"><span [class]="classeVlan(x.cor_indice)"><span class="texto-codigo">{{ x.numero }}</span></span></td><td data-rotulo="Nome">{{ x.nome }}</td><td data-rotulo="Portas">{{ x.portas }}</td>
                       <td>@if (papeis()?.administrar) { <div class="botoes-linha"><button type="button" class="acao-secundaria acao-pequena" (click)="editarVlan(x)">Editar</button>
                         <button type="button" class="acao-perigo acao-pequena" (click)="excluirVlan(x)">Excluir</button></div> }</td></tr>
                   } @empty { <tr><td colspan="4" class="estado-vazio">Nenhuma VLAN cadastrada.</td></tr> }
@@ -114,10 +128,14 @@ function modeloVazio(): GravacaoModelo {
                 <div><label for="md-nome">{{ editandoModelo() ? 'Alterar modelo' : 'Novo modelo' }}</label>
                   <input id="md-nome" name="nome" required minlength="2" maxlength="150" placeholder="Ex.: Switch 48 portas + 4 SFP" [(ngModel)]="modelo.nome" /></div>
                 <div><label for="md-fab">Fabricante</label><input id="md-fab" name="fab" maxlength="120" [(ngModel)]="modelo.fabricante" /></div>
-                <div><label for="md-lin">Linhas</label><input id="md-lin" name="lin" type="number" min="1" max="8" required [(ngModel)]="modelo.linhas" /></div>
-                <div><label for="md-col">Colunas</label><input id="md-col" name="col" type="number" min="1" max="64" required [(ngModel)]="modelo.colunas" /></div>
+                @if (emUso()) {
+                  <!-- Regra: a grade de um modelo em uso não muda (as portas dos equipamentos não acompanhariam) -->
+                  <p class="ocupa-duas dica-formulario">Em uso por {{ emUso() }} equipamento(s): a grade e as portas extras não mudam (crie outro modelo). Nome, fabricante e altura podem ser alterados.</p>
+                }
+                <div><label for="md-lin">Linhas</label><input id="md-lin" name="lin" type="number" min="1" max="8" required [disabled]="!!emUso()" [(ngModel)]="modelo.linhas" /></div>
+                <div><label for="md-col">Colunas</label><input id="md-col" name="col" type="number" min="1" max="64" required [disabled]="!!emUso()" [(ngModel)]="modelo.colunas" /></div>
                 <div><label for="md-num">Numeração</label>
-                  <select id="md-num" name="num" [(ngModel)]="modelo.numeracao">
+                  <select id="md-num" name="num" [disabled]="!!emUso()" [(ngModel)]="modelo.numeracao">
                     <option value="coluna">Por coluna (1 em cima, 2 embaixo, 3 em cima...)</option><option value="linha">Por linha (1 a N na primeira linha)</option>
                   </select></div>
                 <!-- Portas extras (uplink, fibra): uma linha por porta, como as faixas do Expediente nos Parâmetros dos Chamados -->
@@ -126,15 +144,15 @@ function modeloVazio(): GravacaoModelo {
                   @for (e of modelo.portas_extras; track $index) {
                     <div class="faixa-expediente">
                       <div><label [for]="'md-ex-num-' + $index">Número</label>
-                        <input [id]="'md-ex-num-' + $index" [name]="'exnum' + $index" type="number" min="1" required [(ngModel)]="e.numero" /></div>
+                        <input [id]="'md-ex-num-' + $index" [name]="'exnum' + $index" type="number" min="1" required [disabled]="!!emUso()" [(ngModel)]="e.numero" /></div>
                       <div><label [for]="'md-ex-nome-' + $index">Nome da interface</label>
-                        <input [id]="'md-ex-nome-' + $index" [name]="'exnome' + $index" maxlength="20" placeholder="Ex.: 25GE1/0/3" [(ngModel)]="e.rotulo" /></div>
+                        <input [id]="'md-ex-nome-' + $index" [name]="'exnome' + $index" maxlength="20" placeholder="Ex.: 25GE1/0/3" [disabled]="!!emUso()" [(ngModel)]="e.rotulo" /></div>
                       <div><label [for]="'md-ex-tipo-' + $index">Tipo</label>
-                        <select [id]="'md-ex-tipo-' + $index" [name]="'extipo' + $index" [(ngModel)]="e.tipo"><option value="fibra">Fibra</option><option value="cobre">Cobre</option></select></div>
-                      <button type="button" class="acao-perigo acao-pequena" (click)="removerExtra($index)">Remover</button>
+                        <select [id]="'md-ex-tipo-' + $index" [name]="'extipo' + $index" [disabled]="!!emUso()" [(ngModel)]="e.tipo"><option value="fibra">Fibra</option><option value="cobre">Cobre</option></select></div>
+                      @if (!emUso()) { <button type="button" class="acao-perigo acao-pequena" (click)="removerExtra($index)">Remover</button> }
                     </div>
                   } @empty { <p class="dica-formulario">Nenhuma porta extra.</p> }
-                  <button type="button" class="acao-secundaria acao-pequena" (click)="adicionarExtra()">Adicionar porta extra</button>
+                  @if (!emUso()) { <button type="button" class="acao-secundaria acao-pequena" (click)="adicionarExtra()">Adicionar porta extra</button> }
                 </div>
                 <div class="ocupa-duas acoes-formulario">
                   @if (editandoModelo()) { <button type="button" class="acao-secundaria" (click)="novoModelo(fm)">Cancelar edição</button> }
@@ -180,8 +198,25 @@ export class CadastrosRedeComponent implements OnInit {
   protected readonly editandoPonto = signal<string | null>(null);
   protected readonly editandoVlan = signal<string | null>(null);
   protected readonly editandoModelo = signal<string | null>(null);
+  /** Quantos equipamentos usam o modelo em edição (com algum, a grade e as extras ficam travadas). */
+  protected readonly emUso = signal(0);
   protected ponto: GravacaoPonto = { codigo: '', localizacao_id: null, porta_id: null, observacao: '' };
-  protected vlan = { numero: null as number | null, nome: '', descricao: '' };
+  protected vlan = { numero: null as number | null, nome: '', descricao: '', cor_indice: null as number | null };
+  protected readonly coresVlan = PALETA_MARCADORES.map((c, i) => ({ cor: c.borda, rotulo: `Cor ${i + 1}` }));
+  protected readonly colunasVlan: { chave: 'numero' | 'nome' | 'portas'; rotulo: string }[] = [
+    { chave: 'numero', rotulo: 'VLAN' }, { chave: 'nome', rotulo: 'Nome' }, { chave: 'portas', rotulo: 'Portas' },
+  ];
+  protected readonly ordemVlan = signal<{ coluna: 'numero' | 'nome' | 'portas'; direcao: 'asc' | 'desc' }>({ coluna: 'numero', direcao: 'asc' });
+  /** VLANs na ordem escolhida; empate pelo número. */
+  protected readonly vlansOrdenadas = computed(() => {
+    const { coluna, direcao } = this.ordemVlan();
+    const sinal = direcao === 'asc' ? 1 : -1;
+    const texto = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return [...this.vlans()].sort((a, b) => {
+      const va = coluna === 'nome' ? texto(a.nome) : a[coluna], vb = coluna === 'nome' ? texto(b.nome) : b[coluna];
+      return va !== vb ? (va < vb ? -1 : 1) * sinal : a.numero - b.numero;
+    });
+  });
   protected modelo: GravacaoModelo = modeloVazio();
   protected buscaPonto = '';
   protected readonly numeroExtra = (e: { numero: number }) => e.numero;
@@ -238,17 +273,31 @@ export class CadastrosRedeComponent implements OnInit {
 
   protected novaVlan(form?: NgForm): void {
     this.editandoVlan.set(null);
-    this.vlan = { numero: null, nome: '', descricao: '' };
+    this.vlan = { numero: null, nome: '', descricao: '', cor_indice: null };
     form?.resetForm({ numero: null, nome: '' });
   }
 
   protected editarVlan(x: Vlan): void {
     this.editandoVlan.set(x.id);
-    this.vlan = { numero: x.numero, nome: x.nome, descricao: x.descricao };
+    this.vlan = { numero: x.numero, nome: x.nome, descricao: x.descricao, cor_indice: x.cor_indice };
+  }
+
+  protected classeVlan(cor: number): string {
+    return classeMarcador(cor);
+  }
+
+  protected ordenarVlan(coluna: 'numero' | 'nome' | 'portas'): void {
+    const atual = this.ordemVlan();
+    this.ordemVlan.set(atual.coluna === coluna ? { coluna, direcao: atual.direcao === 'asc' ? 'desc' : 'asc' } : { coluna, direcao: coluna === 'portas' ? 'desc' : 'asc' });
+  }
+
+  protected sentidoVlan(coluna: 'numero' | 'nome' | 'portas'): 'ascending' | 'descending' | 'none' {
+    const atual = this.ordemVlan();
+    return atual.coluna !== coluna ? 'none' : atual.direcao === 'asc' ? 'ascending' : 'descending';
   }
 
   protected salvarVlan(form: NgForm): void {
-    this.salvar(this.api.salvarVlan(this.editandoVlan(), { numero: this.vlan.numero ?? 0, nome: this.vlan.nome, descricao: this.vlan.descricao }), () => {
+    this.salvar(this.api.salvarVlan(this.editandoVlan(), { numero: this.vlan.numero ?? 0, nome: this.vlan.nome, descricao: this.vlan.descricao, cor_indice: this.vlan.cor_indice }), () => {
       this.novaVlan(form);
       this.api.vlans().subscribe((x) => this.vlans.set(x));
     });
@@ -262,12 +311,14 @@ export class CadastrosRedeComponent implements OnInit {
 
   protected novoModelo(form?: NgForm): void {
     this.editandoModelo.set(null);
+    this.emUso.set(0);
     this.modelo = modeloVazio();
     form?.resetForm({ nome: '', fab: '', lin: 2, col: 24, num: 'coluna' });
   }
 
   protected editarModelo(x: ModeloFace): void {
     this.editandoModelo.set(x.id);
+    this.emUso.set(x.equipamentos);
     this.modelo = { nome: x.nome, fabricante: x.fabricante, linhas: x.linhas, colunas: x.colunas, numeracao: x.numeracao,
       portas_extras: x.portas_extras.map((e) => ({ ...e })), altura_u: x.altura_u };
   }

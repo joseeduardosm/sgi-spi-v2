@@ -14,7 +14,7 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.models.contratos import Competencia, Contrato
+from app.models.contratos import Competencia, Contrato, ItemMedicao, VigenciaRetroativa
 from app.services.contratos import calculos
 from app.services.contratos.servico_competencias import maximo_de_notas_minimas_por_grupo, nota_final, percentual_da_nota
 from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, juntar_nf
@@ -97,20 +97,59 @@ def test_notas_zero_limitam_a_liberacao_mesmo_com_nota_alta():
 # --- Competência dividida na virada da vigência -----------------------------------------------------
 
 
-def test_mes_com_virada_de_vigencia_e_uma_competencia_so_com_duas_partes():
-    """Janeiro de 2027 cortado pela prorrogação continua uma competência (periodicidade mensal), com as duas partes dentro dela."""
+def test_mes_com_virada_de_vigencia_sem_interrupcao_e_cheio_na_vigencia_nova():
+    """Janeiro de 2027, virada da prorrogação sem interrupção: uma competência com o mês cheio (01 a 31/01) na vigência nova."""
     vigencias = calculos.montar_vigencias(date(2026, 1, 15), date(2027, 1, 14), 12, [(date(2027, 1, 15), date(2028, 1, 14))])
-    janeiro = [p for p in calculos.periodos_de_execucao(vigencias, 1) if p.competencia == date(2027, 1, 1)]
+    periodos = calculos.periodos_de_execucao(vigencias, 1)
+    janeiro = [p for p in periodos if p.competencia == date(2027, 1, 1)]
     assert len(janeiro) == 1
     periodo = janeiro[0]
     assert (periodo.inicio, periodo.fim, periodo.sequencia_vigencia) == (date(2027, 1, 1), date(2027, 1, 31), 2)
-    assert [(p.inicio, p.fim, p.sequencia_vigencia) for p in periodo.meses] == [
-        (date(2027, 1, 1), date(2027, 1, 14), 1), (date(2027, 1, 15), date(2027, 1, 31), 2),
-    ]
-    # Qualquer periodicidade: a prorrogação não corta a competência. Trimestral: jan–mar/2027 é uma só, com as duas vigências dentro
+    # Uma parte só, cheia (fator 1): a operação não parou, então não há divisão pelos dias de cada vigência
+    assert [(p.inicio, p.fim, p.sequencia_vigencia, p.fator) for p in periodo.meses] == [(date(2027, 1, 1), date(2027, 1, 31), 2, Decimal(1))]
+    # O início e o fim de fato do contrato continuam parciais
+    assert (periodos[0].inicio, periodos[0].fim) == (date(2026, 1, 15), date(2026, 1, 31))
+    assert (periodos[-1].inicio, periodos[-1].fim) == (date(2028, 1, 1), date(2028, 1, 14))
+    # Qualquer periodicidade: trimestral, jan–mar/2027 é uma competência só, toda na vigência nova
     trimestral = [p for p in calculos.periodos_de_execucao(vigencias, 3) if p.competencia == date(2027, 1, 1)]
     assert len(trimestral) == 1 and (trimestral[0].inicio, trimestral[0].fim, trimestral[0].sequencia_vigencia) == (date(2027, 1, 1), date(2027, 3, 31), 2)
-    assert {p.sequencia_vigencia for p in trimestral[0].meses} == {1, 2}
+    assert {p.sequencia_vigencia for p in trimestral[0].meses} == {2}
+
+
+def test_mes_com_intervalo_entre_vigencias_continua_dividido():
+    """Com dias sem contrato entre as vigências (14/01 a 19/01), o mês continua com duas partes, cada uma pelos seus dias."""
+    vigencias = [calculos.Vigencia(1, date(2026, 1, 15), date(2027, 1, 13)), calculos.Vigencia(2, date(2027, 1, 20), date(2028, 1, 19))]
+    janeiro = next(p for p in calculos.periodos_de_execucao(vigencias, 1) if p.competencia == date(2027, 1, 1))
+    assert [(p.inicio, p.fim, p.sequencia_vigencia) for p in janeiro.meses] == [
+        (date(2027, 1, 1), date(2027, 1, 13), 1), (date(2027, 1, 20), date(2027, 1, 31), 2),
+    ]
+
+
+def test_realinha_competencia_sem_medicao_ao_calendario_e_preserva_a_medida():
+    """Vigência retroativa antes de um contrato que começava em 06/08: a 08/2026 sem medição vira "01/08 a 31/08"; a medida fica."""
+    from app.services.contratos.servico_competencias import realinhar_ao_calendario
+
+    contrato = Contrato(data_inicio=date(2025, 8, 6), data_fim=date(2027, 8, 5), vigencia_inicial_meses=12, periodicidade_meses=1, versao_cadastro=3)
+    contrato.vigencias_retroativas.append(VigenciaRetroativa(meses=12, data_inicio=date(2025, 8, 6), data_fim=date(2026, 8, 5)))
+    # Nasceu quando o contrato começava em 06/08/2026, com itens copiados e nada medido
+    aberta = Competencia(tipo="regular", competencia=date(2026, 8, 1), periodo_inicio=date(2026, 8, 6), periodo_fim=date(2026, 8, 31),
+                         sequencia_vigencia=1, etapa_atual="medicao", carga_historica_em=None)
+    aberta.itens.append(ItemMedicao(quantidade_medida=Decimal(0)))
+    # Mesmo desalinhada, a que já tem quantidade medida não é tocada
+    medida = Competencia(tipo="regular", competencia=date(2025, 9, 1), periodo_inicio=date(2025, 9, 3), periodo_fim=date(2025, 9, 30),
+                         sequencia_vigencia=1, etapa_atual="medicao", carga_historica_em=None)
+    medida.itens.append(ItemMedicao(quantidade_medida=Decimal(2)))
+    contrato.competencias.extend([aberta, medida])
+    assert realinhar_ao_calendario(contrato) == [aberta]
+    assert (aberta.periodo_inicio, aberta.periodo_fim, aberta.sequencia_vigencia) == (date(2026, 8, 1), date(2026, 8, 31), 2)
+    # Os itens copiados pelo período antigo saem: a medição os copia de novo pelo período certo
+    assert aberta.itens == [] and aberta.versao_cadastro_sincronizada == 3
+    assert (medida.periodo_inicio, len(medida.itens)) == (date(2025, 9, 3), 1)
+
+
+def test_competencia_identificadores():
+    """Identificador da competência regular e da complementar de diferença."""
+    vigencias = calculos.montar_vigencias(date(2026, 1, 15), date(2027, 1, 14), 12, [(date(2027, 1, 15), date(2028, 1, 14))])
     trimestral = [p for p in calculos.periodos_de_execucao(vigencias, 3) if p.competencia == date(2027, 1, 1)]
     # Competência complementar mantém o identificador "-dif"
     contrato = Contrato()

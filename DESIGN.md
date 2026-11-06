@@ -220,6 +220,16 @@ Fundo `--spi-superficie-alt`, sem borda, raio 12px, padding 12–16px. Para agru
 ### Tabela
 Dentro de card. Cabeçalho: fundo `--spi-superficie-alt`, texto 11–12px peso 600 caixa alta `--spi-apagado`. Linhas: 13–14px, borda inferior 1px `--spi-borda`, padding vertical 10–12px, hover `--spi-superficie-alt`, selecionada `--spi-superficie-ativa`. Números, datas e códigos alinhados à direita (códigos em `--spi-fonte-mono`). No celular, a tabela vira lista de cards.
 
+**Colunas sempre ordenáveis** (regra do usuário): toda tabela de dados (lista de registros) tem **todas as colunas ordenáveis**. Padrão único,
+copiado da lista de Chamados (`features/chamados/lista-chamados.component.ts`) e da lista de portas da Rede (`features/rede/lista-portas-rede.component.ts`):
+- cada `<th scope="col">` leva `[attr.aria-sort]` (`ascending`/`descending`/`none`) e, dentro, um `<button type="button" class="ordenar-coluna">` (classe global)
+  com o rótulo e o indicador `▲`/`▼` na coluna ativa e `↕` nas outras (`aria-hidden`); `title="Ordenar por …"`;
+- clicar na coluna ativa inverte o sentido; outra coluna começa crescente (datas e números de "mais recente/maior" começam decrescentes);
+- vazio vai sempre para o fim, nos dois sentidos; empate desempata por uma chave estável (ex.: nome e número);
+- texto compara sem acento e sem diferença de maiúsculas; números e datas pelo valor, nunca pelo texto formatado;
+- lista paginada pela API ordena no servidor (manda a coluna e o sentido, como a fila de Chamados); lista inteira na tela ordena no cliente.
+Exceção: tabela que não é lista de registros (ex.: memória de cálculo, grade de formulário, totais), onde a ordem faz parte do conteúdo.
+
 ### Trilha de etapas (`app-trilha-etapas`)
 Todo fluxo com **3 ou mais passos sequenciais** (portaria de designação, férias, movimentação, baixa, reajuste…) mostra o andamento na mesma trilha da competência da execução: bolinhas numeradas ligadas por uma linha, ✓ nas concluídas (verde), a atual em vermelho, as que ainda não abrem apagadas, e a barra "X de N etapas concluídas". **Não crie trilha própria**: use `shared/componentes/trilha-etapas` e monte `EtapaTrilha[]` (`{ id, rotulo, estado, subtitulo?, titulo?, opcional? }`) a partir do que a API já devolve.
 - **Estados:** `concluida`, `atual` (mais de um = passos paralelos), `aguardando`, `bloqueada` (sem clique) e `recusada`. Devolução, recusa e cancelamento **não ramificam o desenho**: o passo afetado vira `recusada` (ou volta a `atual`) e um selo/aviso `.selo-*` explica o motivo logo abaixo.

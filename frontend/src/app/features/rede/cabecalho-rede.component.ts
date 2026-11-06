@@ -1,11 +1,11 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para exibir o cabeçalho do plano de face da rede (trilha, título e atalhos conforme o papel da pessoa).
 
-import { Component, inject, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AcessoService } from '../../core/acesso/acesso.service';
-import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
+import { ItemTrilha, TrilhaComponent } from '../../shared/componentes/trilha/trilha.component';
 
 @Component({
   selector: 'app-cabecalho-rede',
@@ -14,7 +14,7 @@ import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.componen
     <div class="cabecalho-modulo">
       <div class="cabecalho-pagina" style="margin: 0">
         <div>
-          <app-trilha [itens]="[{ rotulo: 'Rede', rota: '/rede' }]" />
+          <app-trilha [itens]="itensTrilha()" />
           <h1>{{ titulo() }}</h1>
           @if (descricao()) { <small>{{ descricao() }}</small> }
         </div>
@@ -30,5 +30,8 @@ import { TrilhaComponent } from '../../shared/componentes/trilha/trilha.componen
 export class CabecalhoRedeComponent {
   readonly titulo = input.required<string>();
   readonly descricao = input('');
+  /** Passos depois de "Rede" (ex.: o equipamento e a porta), para voltar de uma porta à face do equipamento. */
+  readonly trilha = input<ItemTrilha[]>([]);
+  protected readonly itensTrilha = computed<ItemTrilha[]>(() => [{ rotulo: 'Rede', rota: '/rede' }, ...this.trilha()]);
   protected readonly papeis = inject(AcessoService).rede;
 }

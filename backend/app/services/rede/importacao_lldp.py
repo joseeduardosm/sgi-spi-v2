@@ -84,9 +84,15 @@ def _modelo(sessao: Session, nome: str, r: Relatorio, fabricante: str = "") -> M
     return servico.salvar_modelo(sessao, None, nome, fabricante or fab, linhas, colunas, numeracao, extras, altura)
 
 
+# Autor das alterações de porta feitas pela carga (não há usuário: roda pelo script)
+AUTOR_CARGA = "sistema:carga-lldp"
+
+
 def carregar(sessao: Session, inventario: dict) -> Relatorio:
     """Aplica o inventário. Sem commit (o script decide entre ensaio e gravação)."""
     r = Relatorio()
+    # Portas que a carga alterou (situação, interface ou cabo novo), auditadas no fim
+    alteradas: list = []
     for nome in inventario.get("excluir", []):
         e = _por_nome(sessao, EquipamentoRede, nome)
         if e:
@@ -119,6 +125,9 @@ def carregar(sessao: Session, inventario: dict) -> Relatorio:
             n = numero_da_porta(item["modelo"], interface)
             if n in por_numero:
                 p = por_numero[n]
+                # Mudou a interface ou a situação: é uma alteração da porta (entra nos indicadores, autor "sistema:carga-lldp")
+                if (p.nome, p.status) != (interface, status):
+                    alteradas.append(p.id)
                 p.nome, p.status = interface, status
                 portas[(item["nome"], interface)] = p
                 r.contagem["porta_status"] += 1
@@ -145,9 +154,11 @@ def carregar(sessao: Session, inventario: dict) -> Relatorio:
             r.contagem["cabo_existente"] += 1
             continue
         try:
-            servico.conectar(sessao, a.id, b.id, None, "", forcar=True)
+            servico.conectar(sessao, a.id, b.id, None, "", forcar=True, descrever_salto=False)
+            alteradas.extend([a.id, b.id])
             r.contagem["cabo_criado"] += 1
         except ErroRede as erro:
             r.avisos.append(f"{rotulo}: não ligado ({erro})")
     sessao.flush()
+    servico.auditar_portas(sessao, AUTOR_CARGA, None, "rede.porta.carga_lldp", alteradas)
     return r

@@ -15,7 +15,7 @@ import { RackRedeComponent } from './rack-rede.component';
 import { RedeApiService } from './rede-api.service';
 import {
   CORES_RACK, ehPassivo, EquipamentoResumo, FuncaoEquipamento, GravacaoEquipamento, GravacaoRack, ModeloFace, Rack, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_PING,
-  ROTULOS_TIPO_EQUIPAMENTO, TipoEquipamento,
+  ROTULOS_TIPO_EQUIPAMENTO, TipoEquipamento, IndicadoresRede,
 } from './rede.models';
 
 function equipamentoVazio(): GravacaoEquipamento {
@@ -30,10 +30,33 @@ function rackVazio(): GravacaoRack {
 @Component({
   selector: 'app-equipamentos-rede',
   imports: [FormsModule, RouterLink, CabecalhoRedeComponent, EsqueletoComponent, RackRedeComponent, SeletorSalaComponent],
-  styles: ['.grade-racks { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: start; margin-bottom: 16px; }'],
+  styles: [`
+    .grade-racks { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: start; margin-bottom: 16px; }
+    /* Cards do topo no estilo do Painel de chamados (rótulo em maiúsculas, número grande); cada um abre a lista dele */
+    .indicadores-rede { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 16px;
+      a { display: block; padding: 12px 16px; background: var(--spi-superficie); border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-m);
+        color: var(--spi-texto); text-decoration: none;
+        &:hover { border-color: var(--spi-vermelho); }
+        &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); } }
+      .rotulo-indicador { display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--spi-rotulo); }
+      .numero-indicador { display: block; margin-top: 4px; font-size: 2.25rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+      [data-destaque='atencao'] .numero-indicador { color: var(--spi-atencao); }
+      @media (max-width: 720px) { grid-template-columns: minmax(0, 1fr); } }
+  `],
   template: `
     <div class="modulo-chamados">
       <app-cabecalho-rede titulo="Rede" descricao="Os racks, a face de cada switch e patch panel, a configuração das portas e o que está ligado." />
+      <!-- Indicadores: cada card leva à lista das portas dele -->
+      @if (indicadores(); as ind) {
+        <nav class="indicadores-rede" aria-label="Indicadores da rede">
+          <a routerLink="/rede/portas-lista/alteradas">
+            <span class="rotulo-indicador">Portas alteradas nos últimos 7 dias</span><span class="numero-indicador">{{ ind.portas_alteradas }}</span></a>
+          <a routerLink="/rede/portas-lista/sem-descricao" [attr.data-destaque]="ind.portas_ativas_sem_descricao ? 'atencao' : null">
+            <span class="rotulo-indicador">Portas ativas sem descrição</span><span class="numero-indicador">{{ ind.portas_ativas_sem_descricao }}</span></a>
+        </nav>
+      } @else {
+        <app-esqueleto tipo="cartao" />
+      }
       <section class="painel-gestao protocolo">
         <div class="barra-protocolo">
           <div class="chips-filtro" role="group" aria-label="Visão">
@@ -178,6 +201,8 @@ export class EquipamentosRedeComponent implements OnInit {
   /** Todas as salas ativas, no formato do campo de sala (carregadas uma vez, ao abrir o formulário do rack). */
   protected readonly salas = signal<OpcaoSala[]>([]);
   protected readonly carregando = signal(true);
+  /** Números dos cards do topo (portas alteradas nos últimos 7 dias e ativas sem descrição). */
+  protected readonly indicadores = signal<IndicadoresRede | null>(null);
   protected readonly salvando = signal(false);
   /** Visão padrão: os racks (decisão do usuário); a lista continua para busca e filtro. */
   protected readonly visao = signal<'racks' | 'lista'>('racks');
@@ -190,6 +215,7 @@ export class EquipamentosRedeComponent implements OnInit {
 
   ngOnInit(): void {
     this.carregar();
+    this.api.indicadores().subscribe({ next: (x) => this.indicadores.set(x), error: () => undefined });
     this.api.modelos().subscribe({ next: (x) => this.modelos.set(x), error: () => undefined });
   }
 

@@ -416,7 +416,7 @@ def test_modos_de_porta_das_marcas(cliente, admin):
     porta, cab = c["switch"]["portas"][0]["id"], c["cab"]["analista"]
     v10, v20 = c["v10"]["id"], c["v20"]["id"]
     v30 = cliente.post(f"{BASE}/vlans", json={"numero": 30, "nome": "Câmeras"}, headers=admin).json()["id"]
-    put = lambda corpo: cliente.put(f"{BASE}/portas/{porta}", json=corpo, headers=cab)
+    put = lambda corpo: cliente.put(f"{BASE}/portas/{porta}", json={"descricao": "Uplink", **corpo}, headers=cab)
     # Hybrid: PVID, sem tag e com tag na mesma porta, mais a voz
     r = put({"modo": "hybrid", "vlan_nativa_id": v10, "vlans_sem_tag": [v30], "vlans_tag": [v20], "vlan_voz_id": v20})
     assert r.status_code == 200, r.text
@@ -527,7 +527,7 @@ def test_porta_com_equipamento_fica_ligada(cliente, admin):
     """Ligar algo marca a porta como ligada; com algo ligado, não dá para desligar nem desativar: primeiro se retira o equipamento."""
     c = _cenario(cliente, admin)
     porta, cab = c["switch"]["portas"][2]["id"], c["cab"]["analista"]
-    corpo = {"descricao": "", "modo": "access", "status": "down"}
+    corpo = {"descricao": "Impressora", "modo": "access", "status": "down"}
     assert cliente.put(f"{BASE}/portas/{porta}", json=corpo, headers=cab).json()["status"] == "down"
     assert cliente.post(f"{BASE}/portas/{porta}/conexao", json={"descricao": "Impressora da recepção"}, headers=cab).status_code == 201
     assert cliente.get(f"{BASE}/portas/{porta}", headers=cab).json()["status"] == "up"
@@ -539,10 +539,25 @@ def test_porta_com_equipamento_fica_ligada(cliente, admin):
     # Retirou o equipamento: aí pode desligar
     assert cliente.delete(f"{BASE}/portas/{porta}/conexao", headers=cab).status_code in (200, 204)
     assert cliente.put(f"{BASE}/portas/{porta}", json=corpo, headers=cab).json()["status"] == "down"
-    # Ligação porta ↔ porta: as duas pontas ficam ligadas
+    # Ligação porta ↔ porta (salto): a porta já descrita como "Impressora" pede confirmação; confirmada, as duas pontas ficam ligadas
+    # e ganham a descrição do salto
     outra = c["patch"]["portas"][0]["id"]
+    r = cliente.post(f"{BASE}/portas/{porta}/conexao", json={"porta_id": outra}, headers=cab)
+    assert r.status_code == 409 and r.json()["codigo"] == "porta_com_dispositivo"
+    assert cliente.post(f"{BASE}/portas/{porta}/conexao", json={"porta_id": outra, "forcar": True}, headers=cab).status_code == 201
+    lidas = {x: cliente.get(f"{BASE}/portas/{x}", headers=cab).json() for x in (porta, outra)}
+    assert {p["status"] for p in lidas.values()} == {"up"}
+    assert (lidas[porta]["descricao"], lidas[outra]["descricao"]) == ("Salto: PP-5A · 1", "Salto: SW-5A · 3")
+
+
+def test_salto_sem_descricao_anterior_liga_direto_e_descreve_as_pontas(cliente, admin):
+    """Portas sem descrição (ou já com a do salto) ligam sem confirmação e ganham a descrição do salto."""
+    c = _cenario(cliente, admin)
+    cab = c["cab"]["analista"]
+    porta, outra = c["switch"]["portas"][4]["id"], c["patch"]["portas"][2]["id"]
     assert cliente.post(f"{BASE}/portas/{porta}/conexao", json={"porta_id": outra}, headers=cab).status_code == 201
-    assert {cliente.get(f"{BASE}/portas/{x}", headers=cab).json()["status"] for x in (porta, outra)} == {"up"}
+    assert cliente.get(f"{BASE}/portas/{porta}", headers=cab).json()["descricao"] == "Salto: PP-5A · 3"
+    assert cliente.get(f"{BASE}/portas/{outra}", headers=cab).json()["descricao"] == "Salto: SW-5A · 5"
 
 
 def test_caminho_da_porta_ate_o_core(cliente, admin):
@@ -580,3 +595,127 @@ def test_caminho_da_porta_ate_o_core(cliente, admin):
     x = cliente.get(f"{BASE}/portas/{porta(sw, 9)}/caminho", headers=c["cab"]["leitor"]).json()
     assert x["aviso"] == "" and x["etapas"][-1]["nome"] == "SW-5A"
     assert x["etapas"][-1]["porta_entrada"]["nome"] == "SFP 1" and x["etapas"][-1]["porta_saida"] is None
+
+
+def _corpo_equipamento(e: dict, **mudancas) -> dict:
+    """Corpo do PUT do equipamento a partir da leitura dele, com as mudanças pedidas."""
+    campos = ("nome", "tipo", "modelo_face_id", "bem_id", "localizacao_id", "rack_id", "posicao_u", "ip_gerencia", "numero_serie", "observacao", "ativo", "funcao")
+    return {**{k: e.get(k) for k in campos}, **mudancas}
+
+
+def test_modelo_de_face_e_tipo_travados_depois_de_criado(cliente, admin):
+    """O modelo de face não muda depois de criado (exclui e cadastra de novo); a grade de um modelo em uso também não; a edição é auditada."""
+    c = _cenario(cliente, admin)
+    sw, url = c["switch"], f"{BASE}/equipamentos/{c['switch']['id']}"
+    outro = cliente.post(f"{BASE}/modelos", json={"nome": "Switch 48", "linhas": 2, "colunas": 24, "numeracao": "coluna"}, headers=admin).json()
+    r = cliente.put(url, json=_corpo_equipamento(sw, modelo_face_id=outro["id"]), headers=admin)
+    assert (r.status_code, r.json()["codigo"]) == (409, "modelo_travado")
+    # As portas ficam como estavam (nenhuma criada)
+    assert len(cliente.get(url, headers=admin).json()["portas"]) == 10
+    # Switch não vira patch panel
+    r = cliente.put(url, json=_corpo_equipamento(sw, tipo="patch_panel"), headers=admin)
+    assert (r.status_code, r.json()["codigo"]) == (409, "tipo_travado")
+    # Os demais dados mudam, e a edição entra na auditoria
+    r = cliente.put(url, json=_corpo_equipamento(sw, numero_serie="ABC123"), headers=admin)
+    assert r.status_code == 200, r.text
+    from app.core.banco import FabricaSessao
+    from app.models.auditoria import RegistroAuditoria
+    with FabricaSessao() as sessao:
+        assert sessao.scalar(select(RegistroAuditoria).where(RegistroAuditoria.acao == "rede.equipamento.alterar")) is not None
+    # Modelo em uso: a grade não muda, o nome sim
+    modelo = f"{BASE}/modelos/{c['modelo']['id']}"
+    extras = c["modelo"]["portas_extras"]
+    r = cliente.put(modelo, json={"nome": "Switch 8+2", "linhas": 2, "colunas": 6, "numeracao": "coluna", "portas_extras": []}, headers=admin)
+    assert (r.status_code, r.json()["codigo"]) == (409, "modelo_em_uso")
+    r = cliente.put(modelo, json={"nome": "Switch 8+2 (5º andar)", "linhas": 2, "colunas": 4, "numeracao": "coluna", "portas_extras": extras}, headers=admin)
+    assert r.status_code == 200 and r.json()["nome"] == "Switch 8+2 (5º andar)"
+    # Modelo sem uso continua editável
+    assert cliente.put(f"{BASE}/modelos/{outro['id']}", json={"nome": "Switch 24", "linhas": 2, "colunas": 12, "numeracao": "coluna"}, headers=admin).status_code == 200
+
+
+def test_porta_exige_descricao_e_patch_panel_nao_tem_parte_logica(cliente, admin):
+    """Toda porta salva tem descrição; a porta de patch panel guarda só descrição e situação, sem apagar o que já estava gravado."""
+    c = _cenario(cliente, admin)
+    cab = c["cab"]["analista"]
+    porta_sw = c["switch"]["portas"][0]["id"]
+    r = cliente.put(f"{BASE}/portas/{porta_sw}", json={"descricao": "   ", "modo": "access"}, headers=cab)
+    assert r.status_code == 400 and "descrição" in r.json()["detalhe"]
+    porta_pp = c["patch"]["portas"][0]["id"]
+    assert cliente.get(f"{BASE}/portas/{porta_pp}", headers=cab).json()["equipamento_tipo"] == "patch_panel"
+    for corpo in ({"modo": "trunk"}, {"vlan_nativa_id": c["v10"]["id"]}, {"vlans_tag": [c["v20"]["id"]]}, {"velocidade_mbps": 1000}):
+        r = cliente.put(f"{BASE}/portas/{porta_pp}", json={"descricao": "Sala 504", "modo": "access", **corpo}, headers=cab)
+        assert r.status_code == 400 and "patch panel" in r.json()["detalhe"], corpo
+    # VLAN gravada antes da regra fica onde está quando só a descrição muda
+    from app.core.banco import FabricaSessao
+    from app.models.rede import PortaRede
+    with FabricaSessao() as sessao:
+        sessao.get(PortaRede, uuid.UUID(porta_pp)).vlan_nativa_id = uuid.UUID(c["v10"]["id"])
+        sessao.commit()
+    r = cliente.put(f"{BASE}/portas/{porta_pp}", json={"descricao": "Sala 504", "modo": "access", "status": "down"}, headers=cab)
+    assert r.status_code == 200, r.text
+    assert (r.json()["descricao"], r.json()["status"], r.json()["vlan_nativa"]) == ("Sala 504", "down", 10)
+
+
+def test_indicadores_portas_alteradas_e_ativas_sem_descricao(cliente, admin):
+    """Qualquer alteração da porta (configurar, ligar — as duas pontas —, ponto) entra em "alteradas" com quem e quando; ligada sem descrição entra no outro."""
+    c = _cenario(cliente, admin)
+    cab = c["cab"]["analista"]
+    sw, pp = c["switch"]["portas"], c["patch"]["portas"]
+    assert cliente.get(f"{BASE}/indicadores", headers=c["cab"]["leitor"]).json() == {"portas_alteradas": 0, "portas_ativas_sem_descricao": 0}
+    # Configurar a porta 1 (com descrição, desligada); ligar a 2 do switch na 1 do patch panel (as duas pontas mudam e ficam ligadas)
+    assert cliente.put(f"{BASE}/portas/{sw[0]['id']}", json={"descricao": "Impressora", "modo": "access", "status": "down"}, headers=cab).status_code == 200
+    assert cliente.post(f"{BASE}/portas/{sw[1]['id']}/conexao", json={"porta_id": pp[0]["id"]}, headers=cab).status_code == 201
+    # Uma porta ligada pela carga (sem descrição) entra em "ativas sem descrição", sem alteração registrada
+    with FabricaSessao() as sessao:
+        sessao.get(PortaRede, uuid.UUID(sw[2]["id"])).status = "up"
+        sessao.commit()
+    # Ponto de rede ligado a uma porta também é alteração dela
+    assert cliente.post(f"{BASE}/pontos", json={"codigo": "5A-01", "porta_id": pp[3]["id"]}, headers=cab).status_code == 201
+    assert cliente.get(f"{BASE}/indicadores", headers=cab).json() == {"portas_alteradas": 4, "portas_ativas_sem_descricao": 1}
+    alteradas = cliente.get(f"{BASE}/portas-alteradas", headers=cab).json()
+    assert {(x["equipamento_nome"], x["numero_logico"]) for x in alteradas} == {("SW-5A", 1), ("SW-5A", 2), ("PP-5A", 1), ("PP-5A", 4)}
+    assert all(x["alterado_por"] == "analista" or x["alterado_por"] for x in alteradas) and all(x["alterado_em"] for x in alteradas)
+    ligada = next(x for x in alteradas if (x["equipamento_nome"], x["numero_logico"]) == ("SW-5A", 2))
+    assert ligada["descricao"] == "Salto: PP-5A · 1"
+    # A tela da porta mostra a mesma última alteração (quem e quando); porta nunca alterada vem sem
+    porta = cliente.get(f"{BASE}/portas/{sw[1]['id']}", headers=cab).json()
+    assert (porta["alterado_por"], porta["alterado_em"][:19]) == (ligada["alterado_por"], ligada["alterado_em"][:19])
+    assert cliente.get(f"{BASE}/portas/{sw[5]['id']}", headers=cab).json()["alterado_por"] is None
+    # O equipamento mostra a alteração mais recente entre as portas dele (e qual porta foi)
+    equip = cliente.get(f"{BASE}/equipamentos/{c['switch']['id']}", headers=cab).json()
+    mais_recente = max((x for x in alteradas if x["equipamento_nome"] == "SW-5A"), key=lambda x: x["alterado_em"])
+    assert (equip["alterado_por"], equip["alterado_porta"]) == (mais_recente["alterado_por"], mais_recente["porta"])
+    # Equipamento sem nenhuma porta alterada vem sem
+    novo = cliente.post(f"{BASE}/equipamentos", json={"nome": "SW-6A", "modelo_face_id": c["modelo"]["id"], "ip_gerencia": "10.23.6.2", "funcao": "acesso"}, headers=admin).json()
+    assert novo["alterado_por"] is None and novo["alterado_porta"] is None
+    sem = cliente.get(f"{BASE}/portas-sem-descricao", headers=cab).json()
+    assert [(x["equipamento_nome"], x["numero_logico"], x["alterado_por"], x["alterado_em"]) for x in sem] == [("SW-5A", 3, None, None)]
+    # Desligar também conta (as duas pontas), e o leitor vê as listas
+    assert cliente.delete(f"{BASE}/portas/{sw[1]['id']}/conexao", headers=cab).status_code in (200, 204)
+    assert cliente.get(f"{BASE}/portas-alteradas", headers=c["cab"]["leitor"]).status_code == 200
+    # Alteração com mais de 7 dias sai da conta
+    from datetime import timedelta
+
+    from app.core.banco import agora_utc
+    from app.models.auditoria import RegistroAuditoria
+    with FabricaSessao() as sessao:
+        for r in sessao.scalars(select(RegistroAuditoria).where(RegistroAuditoria.alvo_id == pp[3]["id"])):
+            r.ocorrido_em = agora_utc() - timedelta(days=8)
+        sessao.commit()
+    assert cliente.get(f"{BASE}/indicadores", headers=cab).json()["portas_alteradas"] == 3
+
+
+def test_vlan_tem_cor_como_os_marcadores(cliente, admin):
+    """A VLAN nasce com uma cor sorteada (1–11), troca pela paleta (0–11), mantém a cor quando ela não vem e só quem administra muda."""
+    c = _cenario(cliente, admin)
+    v10 = c["v10"]
+    assert 1 <= v10["cor_indice"] <= 11
+    url = f"{BASE}/vlans/{v10['id']}"
+    assert cliente.put(url, json={"numero": 10, "nome": "Dados", "cor_indice": 0}, headers=admin).json()["cor_indice"] == 0
+    # Renomear sem mandar a cor mantém a cor
+    r = cliente.put(url, json={"numero": 10, "nome": "Dados corporativos"}, headers=admin).json()
+    assert (r["nome"], r["cor_indice"]) == ("Dados corporativos", 0)
+    assert cliente.put(url, json={"numero": 10, "nome": "Dados", "cor_indice": 12}, headers=admin).status_code == 422
+    # A cor nova aparece para todos (é da VLAN, não da porta); quem só edita portas não muda a VLAN
+    assert next(v for v in cliente.get(f"{BASE}/vlans", headers=c["cab"]["leitor"]).json() if v["id"] == v10["id"])["cor_indice"] == 0
+    assert cliente.put(url, json={"numero": 10, "nome": "Dados", "cor_indice": 3}, headers=c["cab"]["analista"]).status_code == 403

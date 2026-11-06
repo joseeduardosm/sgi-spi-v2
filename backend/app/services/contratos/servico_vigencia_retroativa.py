@@ -59,6 +59,14 @@ def _deslocar_sequencias(sessao: Session, contrato: Contrato, delta: int) -> Non
     sessao.expire_all()
 
 
+def _realinhar(contrato: Contrato) -> list[str]:
+    """Ajusta ao calendário novo as competências sem medição; devolve os identificadores ajustados (para a auditoria)."""
+    # Import local: o serviço de competências depende de vários serviços do contrato e não deve ser carregado junto com este módulo
+    from app.services.contratos.servico_competencias import realinhar_ao_calendario
+
+    return [c.identificador for c in realinhar_ao_calendario(contrato)]
+
+
 def _arquivo(anexo: Anexo | None) -> LeituraArquivo | None:
     return LeituraArquivo(anexo_id=anexo.id, nome=anexo.nome_original, tamanho=anexo.tamanho, enviado_em=anexo.criado_em) if anexo else None
 
@@ -122,8 +130,12 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, meses: int, assinada_em: 
     contrato.vigencias_retroativas.append(retroativa)
     contrato.data_inicio = inicio
     contrato.versao += 1
+    # O mês da virada (o do início antigo) passa a ser cheio na vigência que já existia: a competência dele, se ainda sem
+    # medição, é ajustada ao calendário novo (ex.: "06/08 a 31/08" → "01/08 a 31/08")
+    realinhadas = _realinhar(contrato)
     auditar(sessao, autor.login, "contrato.vigencia_retroativa.registrar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
-            alvo_id=contrato.id, dados={"campos": {"data_inicio": {"de": inicio_anterior, "para": inicio}}, "meses": meses, "termo": numero})
+            alvo_id=contrato.id, dados={"campos": {"data_inicio": {"de": inicio_anterior, "para": inicio}}, "meses": meses, "termo": numero,
+                                        "competencias_realinhadas": realinhadas})
     sessao.commit()
     return retroativa
 
@@ -156,8 +168,11 @@ def desfazer(sessao: Session, contrato_id: uuid.UUID, vigencia_id: uuid.UUID, au
     # As vigências seguintes descem uma casa
     _deslocar_sequencias(sessao, contrato, -1)
     contrato = obter_contrato(sessao, contrato_id)
+    # O mês da virada volta a ser o primeiro do contrato, parcial a partir do início devolvido (ex.: "01/08 a 31/08" → "06/08 a 31/08")
+    realinhadas = _realinhar(contrato)
     auditar(sessao, autor.login, "contrato.vigencia_retroativa.desfazer", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
-            alvo_id=contrato.id, dados={"campos": {"data_inicio": {"de": inicio_atual, "para": inicio_anterior}}, "termo": termo})
+            alvo_id=contrato.id, dados={"campos": {"data_inicio": {"de": inicio_atual, "para": inicio_anterior}}, "termo": termo,
+                                        "competencias_realinhadas": realinhadas})
     sessao.commit()
 
 

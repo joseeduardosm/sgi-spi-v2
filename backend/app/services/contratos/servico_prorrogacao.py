@@ -518,6 +518,9 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, assinada_em: date, numero
         contrato.previsoes.append(previsao)
     # O contrato passa a terminar no fim da nova vigência
     contrato.data_fim = fim
+    # O último mês da vigência anterior deixa de ser parcial: sem interrupção, ele é cheio na vigência nova. A competência
+    # dele, se ainda sem medição, é ajustada ao calendário (ex.: "01/08 a 05/08" → "01/08 a 31/08")
+    realinhadas = _realinhar(contrato)
     # O valor reajustado era a fotografia da vigência anterior; a nova usa os preços atuais
     contrato.valor_global_reajustado = None
     contrato.versao += 1
@@ -527,7 +530,8 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, assinada_em: date, numero
     auditar(sessao, autor.login, "contrato.prorrogacao.registrar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
             alvo_id=contrato.id, dados={"campos": {"data_fim": {"de": prorrogacao.fim_anterior, "para": fim}}, "meses": processo.meses,
                                         "termo": numero, "com_parecer": relatorio is not None,
-                                        "precisa_analise_juridica": prorrogacao.enquadramento["precisa_juridico"]})
+                                        "precisa_analise_juridica": prorrogacao.enquadramento["precisa_juridico"],
+                                        "competencias_realinhadas": realinhadas})
     from app.services.contratos import avisos
     avisos.alteracao_concluida(sessao, contrato, "prorrogacao", prorrogacao.id,
                                f"prorrogação de {processo.meses} meses registrada (vigência até {fim:%d/%m/%Y})", autor)
@@ -587,8 +591,9 @@ def desfazer(sessao: Session, contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID,
     if not permitido:
         raise ErroRegraContrato(motivo)
     sequencia = len(contrato.vigencias_retroativas) + len(contrato.prorrogacoes) + 1
-    # Remove competências e previsão da vigência desfeita, e o termo dos documentos importantes
-    for competencia in [c for c in contrato.competencias if c.sequencia_vigencia == sequencia]:
+    # Remove competências e previsão da vigência desfeita, e o termo dos documentos importantes. A competência do mês da virada
+    # (que começa até o fim anterior) fica: ela volta a ser o último mês, parcial, da vigência anterior (realinhada abaixo)
+    for competencia in [c for c in contrato.competencias if c.sequencia_vigencia == sequencia and c.periodo_inicio > prorrogacao.fim_anterior]:
         contrato.competencias.remove(competencia)
     for previsao in [p for p in contrato.previsoes if p.sequencia_vigencia == sequencia]:
         contrato.previsoes.remove(previsao)
@@ -604,9 +609,20 @@ def desfazer(sessao: Session, contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID,
     contrato.data_fim = prorrogacao.fim_anterior
     contrato.versao += 1
     contrato.prorrogacoes.remove(prorrogacao)
+    # O mês da virada volta a terminar no fim anterior (ex.: "01/08 a 31/08" → "01/08 a 05/08"), na vigência anterior
+    realinhadas = _realinhar(contrato)
     auditar(sessao, autor.login, "contrato.prorrogacao.desfazer", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
-            alvo_id=contrato.id, dados={"campos": {"data_fim": {"de": prorrogacao.data_fim, "para": prorrogacao.fim_anterior}}, "termo": prorrogacao.numero_termo})
+            alvo_id=contrato.id, dados={"campos": {"data_fim": {"de": prorrogacao.data_fim, "para": prorrogacao.fim_anterior}}, "termo": prorrogacao.numero_termo,
+                                        "competencias_realinhadas": realinhadas})
     sessao.commit()
+
+
+def _realinhar(contrato: Contrato) -> list[str]:
+    """Ajusta ao calendário novo as competências sem medição; devolve os identificadores ajustados (para a auditoria)."""
+    # Import local: o serviço de competências depende de vários serviços do contrato e não deve ser carregado junto com este módulo
+    from app.services.contratos.servico_competencias import realinhar_ao_calendario
+
+    return [c.identificador for c in realinhar_ao_calendario(contrato)]
 
 
 def arquivo(sessao: Session, contrato_id: uuid.UUID, anexo_id: uuid.UUID):

@@ -26,15 +26,18 @@ export function posicaoDaDica(alvo: HTMLElement): { x: number; y: number } {
       </header>
       @if (porta().descricao) { <p class="descricao-dica-porta">{{ porta().descricao }}</p> }
       <dl>
-        <dt>Modo</dt><dd>{{ modo(porta()) }}</dd>
-        @if (porta().modo === 'roteada') {
-          <dt>IP</dt><dd class="texto-codigo">{{ porta().ip_interface || '—' }}</dd>
-        } @else {
-          <dt>VLANs</dt><dd>{{ vlans(porta()) }}</dd>
+        <!-- Patch panel não tem parte lógica: sem modo, VLAN, IP e velocidade -->
+        @if (!passiva()) {
+          <dt>Modo</dt><dd>{{ modo(porta()) }}</dd>
+          @if (porta().modo === 'roteada') {
+            <dt>IP</dt><dd class="texto-codigo">{{ porta().ip_interface || '—' }}</dd>
+          } @else {
+            <dt>VLANs</dt><dd>{{ vlans(porta()) }}</dd>
+          }
         }
         <dt>Ligada a</dt><dd>{{ porta().conexao?.texto || 'Nada cadastrado' }}</dd>
         @if (porta().ponto) { <dt>Ponto</dt><dd class="texto-codigo">{{ porta().ponto }}</dd> }
-        @if (porta().velocidade_mbps) { <dt>Velocidade</dt><dd>{{ vel(porta().velocidade_mbps) }}@if (porta().duplex) { · {{ porta().duplex === 'full' ? 'full duplex' : 'half duplex' }} }</dd> }
+        @if (porta().velocidade_mbps && !passiva()) { <dt>Velocidade</dt><dd>{{ vel(porta().velocidade_mbps) }}@if (porta().duplex) { · {{ porta().duplex === 'full' ? 'full duplex' : 'half duplex' }} }</dd> }
         @if (porta().mac) { <dt>MAC</dt><dd class="texto-codigo">{{ porta().mac }}</dd> }
         @if (porta().erros_entrada || porta().erros_saida) { <dt>Erros</dt><dd>{{ porta().erros_entrada }} entrada · {{ porta().erros_saida }} saída</dd> }
         @if (porta().ultima_mudanca) { <dt>Mudou em</dt><dd>{{ porta().ultima_mudanca | date: 'dd/MM/yyyy HH:mm' }}</dd> }
@@ -77,6 +80,8 @@ export class DicaPortaComponent {
   readonly x = input(0);
   readonly y = input(0);
   readonly idDica = input('');
+  /** Porta de patch panel: a dica não mostra a parte lógica. */
+  readonly passiva = input(false);
 
   protected corStatus(): string {
     const s = this.porta().status;

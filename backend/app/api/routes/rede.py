@@ -23,7 +23,7 @@ from app.models.usuario import Usuario
 from app.schemas.comum import RespostaErro
 from app.schemas.rede import (
     BemResumo, CaminhoRede, ChamadoDaPorta, DispositivoCaminho, EtapaCaminho, ParametrosRede, ConexaoLeitura, DispositivoAtrasLeitura, GravacaoDispositivoAtras, GravacaoRack, PortaDoBem, RackLeitura, SalaResumo, EquipamentoDetalhe, EquipamentoResumo, GravacaoConexao, GravacaoEquipamento, GravacaoModelo, GravacaoPonto,
-    GravacaoPorta, GravacaoVlan, ModeloLeitura, NoTopologia, PapeisRede, PontoLeitura, PortaDetalhe, PortaLeitura, TopologiaRede, VlanLeitura,
+    GravacaoPorta, GravacaoVlan, IndicadoresRede, ModeloLeitura, NoTopologia, PapeisRede, PontoLeitura, PortaDetalhe, PortaLeitura, PortaListada, TopologiaRede, VlanLeitura,
 )
 from app.services.chamados import acesso as acesso_chamados
 from app.services.rede import ping, servico
@@ -143,7 +143,8 @@ def _detalhe(sessao: Session, e: EquipamentoRede) -> EquipamentoDetalhe:
     contagem = servico.resumo_portas(sessao, [e.id])[e.id]
     return EquipamentoDetalhe(**_resumo(sessao, e, contagem, _salas(sessao, [e.localizacao_id])),
                               modelo=_modelo(sessao, e.modelo_face) if e.modelo_face else None,
-                              posicoes=servico.posicoes(e.modelo_face) if e.modelo_face else {}, portas=_portas(sessao, list(e.portas)))
+                              posicoes=servico.posicoes(e.modelo_face) if e.modelo_face else {}, portas=_portas(sessao, list(e.portas)),
+                              **servico.ultima_alteracao_do_equipamento(sessao, e))
 
 
 def _ponto(sessao: Session, pt: PontoRede, salas: dict) -> PontoLeitura:
@@ -207,6 +208,31 @@ def topologia(raiz_id: uuid.UUID | None = Query(None, description="Equipamento q
     return TopologiaRede(raizes=[montar(r) for r in raizes], sem_ligacao=[montar(n) for n in sem_ligacao])
 
 
+def _listadas(itens: list[servico.PortaListada]) -> list[PortaListada]:
+    return [PortaListada(porta_id=i.porta.id, equipamento_id=i.porta.equipamento_id, equipamento_nome=i.porta.equipamento.nome,
+                         porta=i.porta.nome or str(i.porta.numero_logico), numero_logico=i.porta.numero_logico, descricao=i.porta.descricao,
+                         alterado_por=i.alterado_por, alterado_em=i.alterado_em) for i in itens]
+
+
+@roteador.get("/indicadores", response_model=IndicadoresRede, summary="Indicadores da Rede", responses=SEM_ACESSO,
+              description="Os cards do topo: portas alteradas nos últimos 7 dias (qualquer atributo: configuração, ligação, dispositivo atrás, ponto ou "
+                          "carga LLDP) e portas ligadas sem descrição.")
+def indicadores(_: Usuario = Depends(_exigir("ver")), sessao: Session = Depends(obter_sessao)) -> IndicadoresRede:
+    return IndicadoresRede(**servico.indicadores(sessao))
+
+
+@roteador.get("/portas-alteradas", response_model=list[PortaListada], summary="Portas alteradas nos últimos 7 dias", responses=SEM_ACESSO,
+              description="Cada porta uma vez, com a última alteração dos últimos 7 dias (quem e quando), da mais recente para a mais antiga.")
+def portas_alteradas(_: Usuario = Depends(_exigir("ver")), sessao: Session = Depends(obter_sessao)) -> list[PortaListada]:
+    return _listadas(servico.portas_alteradas(sessao))
+
+
+@roteador.get("/portas-sem-descricao", response_model=list[PortaListada], summary="Portas ligadas sem descrição", responses=SEM_ACESSO,
+              description="Portas com status `up` e descrição vazia, com a última alteração de cada uma (de qualquer época), se houver.")
+def portas_sem_descricao(_: Usuario = Depends(_exigir("ver")), sessao: Session = Depends(obter_sessao)) -> list[PortaListada]:
+    return _listadas(servico.portas_ativas_sem_descricao(sessao))
+
+
 @roteador.get("/equipamentos", response_model=list[EquipamentoResumo], summary="Equipamentos", responses=SEM_ACESSO,
               description="Switches, patch panels e roteadores, com a contagem de portas por status.")
 def equipamentos(busca: str = Query("", max_length=100), tipo: str | None = Query(None), _: Usuario = Depends(_exigir("ver")),
@@ -236,11 +262,14 @@ def equipamento(equipamento_id: uuid.UUID, _: Usuario = Depends(_exigir("ver")),
 
 
 @roteador.put("/equipamentos/{equipamento_id}", response_model=EquipamentoDetalhe, summary="Alterar equipamento",
-              description="Trocar o modelo cria as portas que faltam (nenhuma é apagada).", responses={**INVALIDO, **SEM_ACESSO, **resposta_nao_encontrado("Equipamento")})
+              description="O modelo de face e o tipo patch panel × demais não mudam depois de criado: `409 modelo_travado` / `409 tipo_travado` (exclua e "
+                          "cadastre de novo). Só o equipamento antigo sem modelo pode recebê-lo uma vez (as portas são criadas por ele).",
+              responses={**INVALIDO, **SEM_ACESSO, **CONFLITO, **resposta_nao_encontrado("Equipamento")})
 def alterar_equipamento(equipamento_id: uuid.UUID, corpo: GravacaoEquipamento, usuario: Usuario = Depends(_exigir("administrar")),
                         sessao: Session = Depends(obter_sessao)) -> EquipamentoDetalhe:
     with _traduzir(sessao):
         e = servico.salvar_equipamento(sessao, equipamento_id, DadosEquipamento(**corpo.model_dump()))
+        auditar(sessao, usuario.login, "rede.equipamento.alterar", e.nome, autor_id=usuario.id, alvo_tipo="rede_equipamento", alvo_id=e.id)
         sessao.commit()
     return _detalhe(sessao, servico.obter_equipamento(sessao, e.id))
 
@@ -267,7 +296,8 @@ def _porta_detalhe(sessao: Session, usuario: Usuario, porta: PortaRede) -> Porta
         chamados = [ChamadoDaPorta(numero=c.numero, titulo=c.titulo, status_base=c.status_base, aberto_em=c.aberto_em)
                     for c in servico.chamados_da_porta(sessao, porta, visivel)]
     return PortaDetalhe(**_portas(sessao, [porta])[0].model_dump(), equipamento_id=porta.equipamento_id, equipamento_nome=porta.equipamento.nome,
-                        chamados=chamados)
+                        equipamento_tipo=porta.equipamento.tipo, chamados=chamados,
+                        **dict(zip(("alterado_por", "alterado_em"), servico.ultima_alteracao_da_porta(sessao, porta.id))))
 
 
 @roteador.get("/portas/{porta_id}", response_model=PortaDetalhe, summary="Painel da porta",
@@ -297,9 +327,10 @@ def caminho_da_porta(porta_id: uuid.UUID, _: Usuario = Depends(_exigir("ver")), 
 
 
 @roteador.put("/portas/{porta_id}", response_model=PortaDetalhe, summary="Configurar porta",
-              description="Descrição, modo (access, trunk, hybrid, QinQ, dinâmico auto/desirable ou roteada), VLAN access/nativa/PVID/externa, VLANs com "
+              description="Descrição (**obrigatória**: vazia dá 400), modo (access, trunk, hybrid, QinQ, dinâmico auto/desirable ou roteada), VLAN access/nativa/PVID/externa, VLANs com "
               "tag (trunk, hybrid, dinâmicas), VLANs sem tag (hybrid), VLAN de voz (access, hybrid, dinâmicas), IP da interface (roteada), velocidade, "
-              "duplex e status. Combinação que o modo não aceita: 400. Porta com algo ligado fica \"ligada\" (`up`): outro status dá `409 porta_com_equipamento` "
+              "duplex e status. Combinação que o modo não aceita: 400. **Porta de patch panel** não tem parte lógica: só descrição e status (modo diferente de "
+              "access, VLAN, IP, velocidade ou duplex dão 400; o que já estava gravado nesses campos fica como está). Porta com algo ligado fica \"ligada\" (`up`): outro status dá `409 porta_com_equipamento` "
               "(retire o equipamento antes). É o **cadastro** da configuração: o SGI não fala com o switch.",
               responses={**INVALIDO, **SEM_ACESSO, **CONFLITO, **resposta_nao_encontrado("Porta")})
 def configurar_porta(porta_id: uuid.UUID, corpo: GravacaoPorta, usuario: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> PortaDetalhe:
@@ -308,19 +339,20 @@ def configurar_porta(porta_id: uuid.UUID, corpo: GravacaoPorta, usuario: Usuario
                                                                vlans_tag=corpo.vlans_tag, vlans_sem_tag=corpo.vlans_sem_tag, vlan_voz_id=corpo.vlan_voz_id,
                                                                ip_interface=corpo.ip_interface, velocidade_mbps=corpo.velocidade_mbps, duplex=corpo.duplex,
                                                                status=corpo.status))
-        auditar(sessao, usuario.login, "rede.porta.configurar", f"{p.equipamento.nome} · {p.numero_logico}", autor_id=usuario.id)
+        servico.auditar_portas(sessao, usuario.login, usuario.id, "rede.porta.configurar", [p.id])
         sessao.commit()
     return _porta_detalhe(sessao, usuario, p)
 
 
 @roteador.post("/portas/{porta_id}/conexao", response_model=PortaDetalhe, status_code=status.HTTP_201_CREATED, summary="Ligar a porta",
                description="Liga a outra porta, a um bem do Patrimônio ou a uma descrição. Confere as duas pontas: porta já ligada (de qualquer lado): "
-                           "`409 porta_ocupada`; na ligação porta ↔ porta, porta descrita no switch (dispositivo provável): `409 porta_com_dispositivo`, "
-                           "que a tela confirma e reenvia com `forcar=true`. As duas pontas passam ao status \"ligada\" (`up`).",
+                           "`409 porta_ocupada`; na ligação porta ↔ porta (salto/uplink), as duas pontas ganham a descrição do salto (ex.: \"Salto: PP-5A · 1\"); se alguma "
+                           "já tem outra descrição (dispositivo provável): `409 porta_com_dispositivo`, que a tela confirma e reenvia com `forcar=true`. As duas pontas passam ao status \"ligada\" (`up`).",
                responses={**INVALIDO, **SEM_ACESSO, **CONFLITO, **resposta_nao_encontrado("Porta")})
 def ligar(porta_id: uuid.UUID, corpo: GravacaoConexao, usuario: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> PortaDetalhe:
     with _traduzir(sessao):
         servico.conectar(sessao, porta_id, corpo.porta_id, corpo.bem_id, corpo.descricao, corpo.forcar)
+        servico.auditar_portas(sessao, usuario.login, usuario.id, "rede.porta.ligar", [porta_id, corpo.porta_id])
         sessao.commit()
         return _porta_detalhe(sessao, usuario, servico.obter_porta(sessao, porta_id))
 
@@ -328,7 +360,9 @@ def ligar(porta_id: uuid.UUID, corpo: GravacaoConexao, usuario: Usuario = Depend
 @roteador.delete("/portas/{porta_id}/conexao", response_model=PortaDetalhe, summary="Desligar a porta", responses={**SEM_ACESSO, **resposta_nao_encontrado("Conexão")})
 def desligar(porta_id: uuid.UUID, usuario: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> PortaDetalhe:
     with _traduzir(sessao):
+        pontas = servico.pontas_da_conexao(sessao, porta_id)
         servico.desconectar(sessao, porta_id)
+        servico.auditar_portas(sessao, usuario.login, usuario.id, "rede.porta.desligar", pontas)
         sessao.commit()
         return _porta_detalhe(sessao, usuario, servico.obter_porta(sessao, porta_id))
 
@@ -341,6 +375,7 @@ def adicionar_atras(porta_id: uuid.UUID, corpo: GravacaoDispositivoAtras, usuari
                     sessao: Session = Depends(obter_sessao)) -> PortaDetalhe:
     with _traduzir(sessao):
         servico.adicionar_atras(sessao, porta_id, corpo.bem_id, corpo.descricao)
+        servico.auditar_portas(sessao, usuario.login, usuario.id, "rede.porta.atras", [porta_id])
         sessao.commit()
         return _porta_detalhe(sessao, usuario, servico.obter_porta(sessao, porta_id))
 
@@ -351,6 +386,7 @@ def remover_atras(porta_id: uuid.UUID, dispositivo_id: uuid.UUID, usuario: Usuar
                   sessao: Session = Depends(obter_sessao)) -> PortaDetalhe:
     with _traduzir(sessao):
         servico.remover_atras(sessao, porta_id, dispositivo_id)
+        servico.auditar_portas(sessao, usuario.login, usuario.id, "rede.porta.atras", [porta_id])
         sessao.commit()
         return _porta_detalhe(sessao, usuario, servico.obter_porta(sessao, porta_id))
 
@@ -375,6 +411,8 @@ def criar_modelo(corpo: GravacaoModelo, _: Usuario = Depends(_exigir("administra
 
 
 @roteador.put("/modelos/{modelo_id}", response_model=ModeloLeitura, summary="Alterar modelo de face",
+              description="Nome, fabricante e altura mudam sempre. A grade (linhas, colunas, numeração) e as portas extras só mudam se nenhum equipamento "
+                          "usa o modelo; em uso: `409 modelo_em_uso` (crie outro modelo).",
               responses={**INVALIDO, **SEM_ACESSO, **CONFLITO, **resposta_nao_encontrado("Modelo de face")})
 def alterar_modelo(modelo_id: uuid.UUID, corpo: GravacaoModelo, _: Usuario = Depends(_exigir("administrar")), sessao: Session = Depends(obter_sessao)) -> ModeloLeitura:
     with _traduzir(sessao):
@@ -396,7 +434,7 @@ def excluir_modelo(modelo_id: uuid.UUID, _: Usuario = Depends(_exigir("administr
 def _vlan(sessao: Session, v: VlanRede) -> VlanLeitura:
     portas = (sessao.scalar(select(func.count()).select_from(PortaRede).where((PortaRede.vlan_nativa_id == v.id) | (PortaRede.vlan_voz_id == v.id))) or 0) + \
              (sessao.scalar(select(func.count()).select_from(PortaVlanRede).where(PortaVlanRede.vlan_id == v.id)) or 0)
-    return VlanLeitura(id=v.id, numero=v.numero, nome=v.nome, descricao=v.descricao, portas=portas)
+    return VlanLeitura(id=v.id, numero=v.numero, nome=v.nome, descricao=v.descricao, cor_indice=v.cor_indice, portas=portas)
 
 
 @roteador.get("/vlans", response_model=list[VlanLeitura], summary="VLANs", responses=SEM_ACESSO)
@@ -407,7 +445,7 @@ def vlans(_: Usuario = Depends(_exigir("ver")), sessao: Session = Depends(obter_
 @roteador.post("/vlans", response_model=VlanLeitura, status_code=status.HTTP_201_CREATED, summary="Criar VLAN", responses={**INVALIDO, **SEM_ACESSO, **CONFLITO})
 def criar_vlan(corpo: GravacaoVlan, _: Usuario = Depends(_exigir("administrar")), sessao: Session = Depends(obter_sessao)) -> VlanLeitura:
     with _traduzir(sessao):
-        v = servico.salvar_vlan(sessao, None, corpo.numero, corpo.nome, corpo.descricao)
+        v = servico.salvar_vlan(sessao, None, corpo.numero, corpo.nome, corpo.descricao, corpo.cor_indice)
         sessao.commit()
     return _vlan(sessao, v)
 
@@ -415,7 +453,7 @@ def criar_vlan(corpo: GravacaoVlan, _: Usuario = Depends(_exigir("administrar"))
 @roteador.put("/vlans/{vlan_id}", response_model=VlanLeitura, summary="Alterar VLAN", responses={**INVALIDO, **SEM_ACESSO, **CONFLITO, **resposta_nao_encontrado("VLAN")})
 def alterar_vlan(vlan_id: uuid.UUID, corpo: GravacaoVlan, _: Usuario = Depends(_exigir("administrar")), sessao: Session = Depends(obter_sessao)) -> VlanLeitura:
     with _traduzir(sessao):
-        v = servico.salvar_vlan(sessao, vlan_id, corpo.numero, corpo.nome, corpo.descricao)
+        v = servico.salvar_vlan(sessao, vlan_id, corpo.numero, corpo.nome, corpo.descricao, corpo.cor_indice)
         sessao.commit()
     return _vlan(sessao, v)
 
@@ -444,27 +482,34 @@ def pontos(busca: str = Query("", max_length=40), localizacao_id: uuid.UUID | No
 
 @roteador.post("/pontos", response_model=PontoLeitura, status_code=status.HTTP_201_CREATED, summary="Cadastrar ponto de rede",
                description="Código único (como na tomada); a porta do patch panel só pode ser de um ponto.", responses={**INVALIDO, **SEM_ACESSO, **CONFLITO})
-def criar_ponto(corpo: GravacaoPonto, _: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> PontoLeitura:
+def criar_ponto(corpo: GravacaoPonto, usuario: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> PontoLeitura:
     with _traduzir(sessao):
         pt = servico.salvar_ponto(sessao, None, corpo.codigo, corpo.localizacao_id, corpo.porta_id, corpo.observacao)
+        # O ponto aparece na porta: ligar o ponto a uma porta é uma alteração dela
+        servico.auditar_portas(sessao, usuario.login, usuario.id, "rede.porta.ponto", [pt.porta_id])
         sessao.commit()
     return _ponto(sessao, pt, _salas(sessao, [pt.localizacao_id]))
 
 
 @roteador.put("/pontos/{ponto_id}", response_model=PontoLeitura, summary="Alterar ponto de rede",
               responses={**INVALIDO, **SEM_ACESSO, **CONFLITO, **resposta_nao_encontrado("Ponto de rede")})
-def alterar_ponto(ponto_id: uuid.UUID, corpo: GravacaoPonto, _: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> PontoLeitura:
+def alterar_ponto(ponto_id: uuid.UUID, corpo: GravacaoPonto, usuario: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> PontoLeitura:
     with _traduzir(sessao):
+        anterior = sessao.scalar(select(PontoRede.porta_id).where(PontoRede.id == ponto_id))
         pt = servico.salvar_ponto(sessao, ponto_id, corpo.codigo, corpo.localizacao_id, corpo.porta_id, corpo.observacao)
+        # A porta que perdeu e a que ganhou o ponto mudaram (ou a mesma, se mudou o código)
+        servico.auditar_portas(sessao, usuario.login, usuario.id, "rede.porta.ponto", [anterior, pt.porta_id])
         sessao.commit()
     return _ponto(sessao, pt, _salas(sessao, [pt.localizacao_id]))
 
 
 @roteador.delete("/pontos/{ponto_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Excluir ponto de rede",
                  description="Os chamados que apontavam o ponto ficam sem ele.", responses={**SEM_ACESSO, **resposta_nao_encontrado("Ponto de rede")})
-def excluir_ponto(ponto_id: uuid.UUID, _: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> Response:
+def excluir_ponto(ponto_id: uuid.UUID, usuario: Usuario = Depends(_exigir("editar")), sessao: Session = Depends(obter_sessao)) -> Response:
     with _traduzir(sessao):
+        anterior = sessao.scalar(select(PontoRede.porta_id).where(PontoRede.id == ponto_id))
         servico.excluir_ponto(sessao, ponto_id)
+        servico.auditar_portas(sessao, usuario.login, usuario.id, "rede.porta.ponto", [anterior])
         sessao.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

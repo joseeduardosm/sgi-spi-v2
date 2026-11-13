@@ -1,6 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para guardar, ler e apagar os rascunhos compartilhados dos formulários do contrato.
-"""Rascunhos no servidor: um por tela de um contrato, visível a quem acessa Contratos (a rota exige a ACL) e gravado por quem pode editar o contrato."""
+"""
+===============================================================================
+ARQUIVO: servico_rascunhos.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Guardar, ler e apagar os rascunhos compartilhados dos formulários do contrato
+(diário, avaliação e medição) no servidor.
+
+RESUMO TÉCNICO:
+Um rascunho por tela de um contrato, identificado por (contrato, tipo, chave):
+o diário não tem chave; avaliação e medição usam o id da competência. Ler
+exige acesso a Contratos (a rota cobra a ACL); gravar e apagar exigem poder
+editar o contrato. A gravação usa controle de versão otimista: se alguém
+salvou depois da versão que o autor abriu, recusa com conflito (409). O HTML
+do diário é sanitizado e o tamanho é limitado a TAMANHO_MAXIMO caracteres.
+
+FINALIDADE DE NEGÓCIO:
+Evita que a equipe perca o que digitou num formulário longo e permite que um
+integrante continue o rascunho de outro, sem que um sobrescreva o trabalho do
+colega sem perceber.
+
+CONTEXTO NO SISTEMA:
+Chamado pelas rotas de rascunho de contratos. Modelo RascunhoContrato
+(tabela de rascunhos), schema GravacaoRascunho, servico_contratos (permissão),
+tarefas.descricao (sanitização do HTML) e servico_auditoria.
+
+===============================================================================
+"""
 
 import json
 import uuid
@@ -17,6 +43,7 @@ from app.services.contratos.servico_contratos import exigir_edicao, obter_contra
 from app.services.servico_auditoria import auditar
 from app.services.tarefas.descricao import sanitizar_descricao
 
+# Limite do rascunho serializado em JSON (caracteres), para não encher o banco com um formulário gigante
 TAMANHO_MAXIMO = 300_000
 
 
@@ -31,10 +58,12 @@ def _chave_valida(contrato, tipo: str, chave: str) -> str:
 
 
 def _buscar(sessao: Session, contrato_id: uuid.UUID, tipo: str, chave: str) -> RascunhoContrato | None:
+    """Rascunho de (contrato, tipo, chave), ou None se ainda não houver."""
     return sessao.scalar(select(RascunhoContrato).where(RascunhoContrato.contrato_id == contrato_id, RascunhoContrato.tipo == tipo, RascunhoContrato.chave == chave))
 
 
 def obter(sessao: Session, contrato_id: uuid.UUID, tipo: str, chave: str) -> RascunhoContrato | None:
+    """Lê o rascunho da tela; valida antes que a chave é uma competência do contrato (404 se não for)."""
     contrato = obter_contrato(sessao, contrato_id)
     return _buscar(sessao, contrato.id, tipo, _chave_valida(contrato, tipo, chave))
 
@@ -51,6 +80,7 @@ def gravar(sessao: Session, contrato_id: uuid.UUID, tipo: str, chave: str, dados
     if len(json.dumps(conteudo, ensure_ascii=False, default=str)) > TAMANHO_MAXIMO:
         raise ErroRegraContrato("O rascunho é grande demais para ser salvo.")
     atual = _buscar(sessao, contrato.id, tipo, chave)
+    # Controle otimista: a versão que o autor abriu tem de ser a versão gravada agora (0 = ainda não existia)
     if (dados.versao or 0) != (atual.versao if atual else 0):
         quem = f"{atual.atualizado_por_nome} salvou" if atual else "O rascunho foi apagado"
         raise ErroRegraContrato(f"{quem} um rascunho mais novo depois do que você abriu. Recarregue para ver antes de salvar por cima.", conflito=True)

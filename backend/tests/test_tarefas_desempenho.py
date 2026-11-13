@@ -1,6 +1,37 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar o desempenho da equipe de tarefas (burndown, vazão, ciclo, fluxo acumulado e por pessoa).
-"""Desempenho da equipe (`/api/tarefas/equipes/{id}/desempenho`)."""
+"""
+===============================================================================
+ARQUIVO: test_tarefas_desempenho.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar o painel de desempenho das tarefas, por equipe
+(`/api/tarefas/equipes/{id}/desempenho`) e por pessoa
+(`/api/tarefas/pessoas/{id}/desempenho`): burndown, vazão, ciclo, fluxo
+acumulado e totais por pessoa.
+
+RESUMO TÉCNICO:
+Monta no banco, via `FabricaSessao`, tarefas com linhas do tempo
+controladas (`EventoTarefa` do tipo "status" com o par de/para) e carimbos
+`iniciada_em`/`concluida_em`, todas ao meio-dia de São Paulo para que as
+diferenças de datas deem dias inteiros. Depois chama a API e confere número
+a número as séries calculadas, as permissões (403/404) e a validação do
+período (400).
+
+FINALIDADE DE NEGÓCIO:
+Protege os indicadores que a liderança usa para acompanhar a equipe:
+quantas tarefas faltam (burndown), quantas entram e saem por semana
+(vazão), quanto tempo levam (ciclo e lead time) e quem entregou. Garante
+que conclusão desfeita por reabertura não infla os números e que tarefas
+pessoais só aparecem para a própria pessoa.
+
+CONTEXTO NO SISTEMA:
+Usa a fixture `equipe` e a constante `URL` de `tests/test_tarefas.py`, os
+modelos `Tarefa`, `ResponsavelTarefa` e `EventoTarefa` de
+`app/models/tarefas.py` e exercita o serviço de desempenho do módulo
+Tarefas (`app/services/tarefas/`).
+
+===============================================================================
+"""
 
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -11,6 +42,10 @@ from tests.test_tarefas import URL, equipe  # noqa: F401  (fixture da equipe)
 
 # 12:00 em São Paulo = 15:00 UTC: as diferenças entre datas dão dias inteiros
 def _em(ano, mes, dia) -> datetime:
+    """Devolve o instante 15:00 UTC (meio-dia em Brasília) do dia pedido, já com fuso.
+
+    Usar sempre o meio-dia evita que um cálculo em UTC "vire" o dia e mude os totais diários.
+    """
     return datetime(ano, mes, dia, 15, 0, tzinfo=timezone.utc)
 
 
@@ -20,13 +55,25 @@ def _tarefa(sessao, equipe_id, numero, criada, status, responsavel, movimentos=(
                prazo_original=criada + timedelta(days=60), status=status, criado_em=criada, atualizado_em=_em(2026, 6, 14), **carimbos)
     t.responsaveis = [ResponsavelTarefa(usuario_id=responsavel)]
     sessao.add(t)
+    # `flush` envia o INSERT ao banco sem encerrar a transação (diferente de `commit`):
+    # assim a tarefa já ganha `t.id`, necessário para ligar os eventos logo abaixo.
     sessao.flush()
+    # Cada movimento vira um evento "status" com de/para: é desse histórico que o
+    # painel reconstrói em que coluna a tarefa estava em cada dia.
     for quando, de, para in movimentos:
         sessao.add(EventoTarefa(tarefa_id=t.id, tipo="status", autor_nome="x", titulo="mov", dados={"de": de, "para": para}, criado_em=quando))
     return t
 
 
 def _cenario(equipe_id, ana) -> None:
+    """Grava cinco tarefas (A a E) que cobrem os casos do período 01/06 a 14/06/2026.
+
+    A: aberta antes e concluída na semana 1; B: nunca sai de "A fazer"; C: nasce e
+    termina dentro do período; D: concluída antes do período (não deve contar);
+    E: tarefa migrada, só com carimbos de início e fim, sem eventos de/para.
+    """
+    # `FabricaSessao()` abre uma sessão do SQLAlchemy direto no banco de teste;
+    # o `with` fecha a sessão no fim, e o `commit` torna os dados visíveis para a API.
     with FabricaSessao() as s:
         _tarefa(s, equipe_id, 101, _em(2026, 5, 20), "concluida", ana, [(_em(2026, 5, 25), "a_fazer", "em_andamento"), (_em(2026, 6, 3), "em_andamento", "concluida")],
                 iniciada_em=_em(2026, 5, 25), concluida_em=_em(2026, 6, 3))                                       # A: aberta no início, conclui na semana 1
@@ -39,16 +86,24 @@ def _cenario(equipe_id, ana) -> None:
 
 
 def test_burndown_vazao_ciclo_fluxo_e_pessoas(cliente, equipe):
+    """Confere todas as séries do painel da equipe com o cenário fixo de `_cenario`.
+
+    `cliente` e `equipe` são fixtures do pytest: o pytest as cria antes do teste e
+    as entrega como parâmetros (cliente HTTP de teste e a equipe com ids/cabeçalhos).
+    """
+    # `equipe` devolve: ids dos usuários por login, cabeçalhos de autenticação por login e o id da equipe
     ids, h, equipe_id = equipe
     _cenario(uuid.UUID(equipe_id), ids["ana"])
     r = cliente.get(f"{URL}/equipes/{equipe_id}/desempenho", params={"de": "2026-06-01", "ate": "2026-06-14"}, headers=h["lia"])
     assert r.status_code == 200, r.text
     d = r.json()
+    # Burndown: 3 abertas no início (A, B e E); C entra no escopo no dia 3; o ideal cai em linha reta até zero
     b = d["burndown"]
     assert b["inicial"] == 3 and len(b["dias"]) == 14
     assert b["real"] == [3, 3, 3, 3, 3, 3, 3, 3, 2, 1, 1, 1, 1, 1]
     assert b["escopo"] == [3, 3] + [4] * 12
     assert b["ideal"][0] == 3.0 and b["ideal"][-1] == 0.0 and b["ideal"][1] == round(3 * 12 / 13, 2)
+    # Vazão por semana (criadas x concluídas) e ciclo/lead time (mediana e percentil 85) em dias
     assert [(v["criadas"], v["concluidas"], v["media_movel"]) for v in d["vazao"]] == [(1, 1, 1.0), (0, 2, 1.5)]
     c1, c2 = d["ciclo"]
     assert (c1["ciclo_mediana"], c1["lead_mediana"]) == (9.0, 14.0)
@@ -60,6 +115,7 @@ def test_burndown_vazao_ciclo_fluxo_e_pessoas(cliente, equipe):
 
 
 def test_dias_futuros_ficam_sem_valor_e_permissoes(cliente, equipe):
+    """Dias que ainda não chegaram ficam sem valor (None) e as regras de acesso e de período valem."""
     ids, h, equipe_id = equipe
     hoje = date.today()
     r = cliente.get(f"{URL}/equipes/{equipe_id}/desempenho", params={"de": hoje.isoformat(), "ate": (hoje + timedelta(days=3)).isoformat()}, headers=h["lia"])
@@ -91,6 +147,7 @@ def test_conclusao_desfeita_pela_reabertura_nao_conta(cliente, equipe):
 
 
 def test_desempenho_de_uma_pessoa_inclui_tarefas_pessoais_e_respeita_a_visibilidade(cliente, equipe):
+    """Painel por pessoa: a própria pessoa vê tudo; a liderança só vê o que é da equipe que lidera."""
     ids, h, equipe_id = equipe
     with FabricaSessao() as s:
         _tarefa(s, uuid.UUID(equipe_id), 301, _em(2026, 6, 1), "concluida", ids["ana"], [(_em(2026, 6, 3), "em_andamento", "concluida")], concluida_em=_em(2026, 6, 3))

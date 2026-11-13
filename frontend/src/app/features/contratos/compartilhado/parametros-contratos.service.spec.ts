@@ -1,5 +1,29 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para testar o serviço dos parâmetros de Contratos (valores de fábrica, leitura única e atualização) e o uso nas vigências.
+/**
+ * =============================================================================
+ * ARQUIVO: parametros-contratos.service.spec.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Testar o serviço dos parâmetros de Contratos (valores de fábrica, leitura
+ * única da API e atualização) e o uso dos limites na linha de vigências.
+ *
+ * RESUMO TÉCNICO:
+ * Testes Jasmine com TestBed e HttpClient de teste (HttpTestingController).
+ * Confere que só uma requisição sai mesmo com duas chamadas a carregar() e
+ * que o signal valores() passa a refletir a resposta. Também chama
+ * montarLinha() do painel de vigências com e sem limites personalizados.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Protege a regra de que prazos e limites configurados pelo administrador
+ * (ex.: dias de atraso, faixas crítico/atenção da vigência) valem em todas as
+ * telas, e que, sem a leitura, o sistema segue com os valores de fábrica.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Cobre parametros-contratos.service.ts e a função montarLinha de
+ * painel/vigencias.component.ts.
+ *
+ * =============================================================================
+ */
 
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -10,6 +34,7 @@ import { ParametrosContratos } from './contratos.models';
 import { PARAMETROS_DE_FABRICA, ParametrosContratosService } from './parametros-contratos.service';
 
 describe('ParametrosContratosService', () => {
+  // Cada teste recebe um HttpClient de teste: nenhuma chamada real sai para a API
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] }));
 
   it('começa com os valores de fábrica, lê da API uma única vez e passa a usar o valor novo', () => {

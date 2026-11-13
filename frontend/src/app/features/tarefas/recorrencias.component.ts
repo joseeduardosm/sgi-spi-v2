@@ -1,5 +1,31 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para listar e gerenciar as séries de tarefas recorrentes de uma equipe (ou as pessoais): pausar, retomar, editar e excluir.
+/**
+ * =============================================================================
+ * ARQUIVO: recorrencias.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Listar e gerenciar as séries de tarefas recorrentes de uma equipe (ou as
+ * pessoais): pausar, retomar, editar e excluir.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline. Lê o equipeId da rota (ausente =
+ * recorrências pessoais), carrega as séries pela API e mostra um cartão por
+ * série com estado, próximas datas e responsáveis. A edição abre um modal com
+ * título, prioridade, horário, responsáveis e o SeletorRecorrenciaComponent.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Rotinas fixas da SPI (backups, conferências, relatórios mensais) viram
+ * tarefa sozinhas pelo calendário. Esta tela permite acompanhar essas rotinas,
+ * suspender temporariamente, ajustar a regra ou encerrar a série sem perder as
+ * tarefas já criadas.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rotas /tarefas/recorrencias e /tarefas/equipes/:equipeId/recorrencias
+ * (tarefas.routes.ts). Usa TarefasApiService (/api/tarefas/recorrencias),
+ * SeletorUsuariosComponent, AvataresComponent e DialogosService.
+ *
+ * =============================================================================
+ */
 
 import { DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
@@ -74,15 +100,22 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
     }
   `,
 })
+/**
+ * Lista de séries recorrentes. Recursos usados: `inject()` obtém serviços
+ * (API, diálogos, rota) e `signal()` guarda estado reativo da tela (lista,
+ * carregando, série em edição); mudar um signal redesenha o template.
+ */
 export class RecorrenciasComponent implements OnInit {
   protected readonly api = inject(TarefasApiService);
   private readonly dialogos = inject(DialogosService);
+  // Sem equipeId na URL, a tela mostra as recorrências pessoais do usuário.
   protected readonly equipeId = inject(ActivatedRoute).snapshot.paramMap.get('equipeId');
   protected readonly series = signal<Recorrencia[]>([]);
   protected readonly carregando = signal(true);
   protected readonly editando = signal<Recorrencia | null>(null);
   protected readonly prioridades = ROTULOS_PRIORIDADE;
   protected readonly listaPrioridades: PrioridadeTarefa[] = ['baixa', 'normal', 'alta', 'critica'];
+  /** Cópia editável da série aberta no modal (preenchida em `editar`). */
   protected form: { titulo: string; prioridade: PrioridadeTarefa; hora: string; responsaveis: OpcaoUsuario[]; regra: RegraRecorrencia } = {
     titulo: '', prioridade: 'normal', hora: '18:00', responsaveis: [], regra: { frequencia: 'semanal', intervalo: 1, dias_semana: [0], somente_dias_uteis: false, antecedencia_dias: 0, fim: null, max_ocorrencias: null },
   };
@@ -91,6 +124,7 @@ export class RecorrenciasComponent implements OnInit {
     this.carregar();
   }
 
+  /** Busca as séries na API e atualiza a lista (com esqueleto enquanto carrega). */
   private carregar(): void {
     this.carregando.set(true);
     this.api.recorrencias(this.equipeId).subscribe({
@@ -99,10 +133,16 @@ export class RecorrenciasComponent implements OnInit {
     });
   }
 
+  /**
+   * Estado visual da série, por ordem de prioridade: erro (pausada pelo
+   * sistema) > pausada (pelo usuário) > ativa (há próxima data) > encerrada
+   * (a regra não gera mais datas).
+   */
   protected estado(r: Recorrencia): string {
     return r.ultimo_erro ? 'erro' : !r.ativa ? 'pausada' : r.proxima_data ? 'ativa' : 'encerrada';
   }
 
+  /** Texto do selo correspondente ao `estado` da série. */
   protected rotuloEstado(r: Recorrencia): string {
     return { erro: 'Pausada por erro', pausada: 'Pausada', ativa: 'Ativa', encerrada: 'Encerrada' }[this.estado(r)] ?? '';
   }
@@ -112,18 +152,26 @@ export class RecorrenciasComponent implements OnInit {
     return `${r.inicio}T${this.form.hora || r.hora_prazo.slice(0, 5)}`;
   }
 
+  /** Cria o tratador de erro padrão (diálogo com `titulo`) para os `subscribe`. */
   private falha(titulo: string) {
     return (e: unknown) => this.dialogos.mostrarErro(e, titulo);
   }
 
+  /** Pausa a série: ela para de gerar tarefas até ser retomada. */
   protected pausar(r: Recorrencia): void {
     this.api.pausarRecorrencia(r.id).subscribe({ next: () => this.carregar(), error: this.falha('Não foi possível pausar') });
   }
 
+  /** Retoma uma série pausada (pelo usuário ou pelo sistema). */
   protected retomar(r: Recorrencia): void {
     this.api.retomarRecorrencia(r.id).subscribe({ next: () => this.carregar(), error: this.falha('Não foi possível retomar') });
   }
 
+  /**
+   * Abre o modal de edição. Converte os responsáveis da série para o formato
+   * de opção do seletor de usuários e copia a regra (spread) para não alterar
+   * a série original antes de salvar.
+   */
   protected editar(r: Recorrencia): void {
     this.form = {
       titulo: r.titulo, prioridade: r.prioridade, hora: r.hora_prazo.slice(0, 5), regra: { ...r.regra },
@@ -132,6 +180,11 @@ export class RecorrenciasComponent implements OnInit {
     this.editando.set(r);
   }
 
+  /**
+   * Envia a série alterada. Campos que o modal não edita (descrição,
+   * checklist, marcadores) são reenviados como estavam, porque a API recebe a
+   * série inteira. O horário ganha ":00" (segundos) no formato que a API espera.
+   */
   protected salvar(): void {
     const r = this.editando();
     if (!r) return;
@@ -141,6 +194,7 @@ export class RecorrenciasComponent implements OnInit {
     }).subscribe({ next: () => { this.editando.set(null); this.carregar(); }, error: this.falha('Não foi possível salvar a recorrência') });
   }
 
+  /** Pede confirmação (com espera de 3 s) e exclui a série; as tarefas já criadas continuam. */
   protected async excluir(r: Recorrencia): Promise<void> {
     const ok = await this.dialogos.confirmar({
       titulo: 'Excluir esta recorrência?', mensagem: `"${r.titulo}" deixa de gerar tarefas. As tarefas já criadas continuam, sem vínculo com a série.`,

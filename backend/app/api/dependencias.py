@@ -1,13 +1,36 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para fornecer às rotas a sessão do banco, o usuário autenticado e as checagens de papel e ACL.
-"""Dependências compartilhadas pelas rotas (banco, autenticação e autorização).
+"""
+===============================================================================
+ARQUIVO: dependencias.py
+AUTOR: José Eduardo Santana Martins
 
-No FastAPI, uma "dependência" é uma função que roda antes da rota e entrega um valor a ela
-(`Depends(...)`). As dependências daqui encadeiam as verificações de acesso:
+FINALIDADE:
+Fornece às rotas a sessão do banco, o usuário autenticado e as checagens de
+papel e de ACL (dependências compartilhadas por toda a API).
 
-    token válido → usuário ativo → perfil em dia → papel exigido / nível de ACL exigido
+RESUMO TÉCNICO:
+No FastAPI, uma "dependência" é uma função que roda antes da rota e entrega um
+valor a ela (Depends(...)). As dependências daqui encadeiam as verificações de
+acesso: token válido, usuário ativo, perfil em dia e, por fim, papel exigido ou
+nível de ACL exigido. Se qualquer etapa falhar, a rota nem é executada e o
+usuário recebe 401 ou 403 no formato {"detalhe", "codigo"}.
 
-Se qualquer etapa falhar, a rota nem é executada e o usuário recebe 401 ou 403.
+Principais funções: obter_usuario_autenticado (token, personificação e
+renovação deslizante do token), obter_usuario_atual (perfil em dia),
+exigir_papeis, exigir_conta_root, exigir_gestao, exigir_rh e exigir_acl
+(fábricas que devolvem a dependência já configurada).
+
+FINALIDADE DE NEGÓCIO:
+Garante que só quem tem permissão use cada módulo do SGI, que o cadastro
+institucional fique atualizado e que a sessão de quem está trabalhando não caia
+no meio do expediente. Na personificação, o SuperRoot vê o sistema como outro
+usuário, mas a auditoria registra quem realmente agiu.
+
+CONTEXTO NO SISTEMA:
+Usa app/core/seguranca.py (JWT), app/core/banco.py (sessão),
+app/services/servico_acl.py, servico_perfil.py e services/rh/papeis.py.
+Importado por praticamente todos os arquivos de app/api/routes.
+
+===============================================================================
 """
 
 from collections.abc import Callable
@@ -50,6 +73,14 @@ def obter_usuario_autenticado(
 ) -> Usuario:
     """Usuário do token, sem verificar o perfil institucional.
 
+    Parâmetros (injetados pelo FastAPI via `Depends`): a resposta HTTP (para
+    gravar cabeçalhos), as credenciais Bearer e a `Session` do SQLAlchemy (a
+    conexão com o banco aberta para esta requisição).
+
+    Retorna o `Usuario` dono do token. Efeitos: na personificação marca
+    `usuario.personificado_por` e `sessao.info`; perto do vencimento grava nos
+    cabeçalhos da resposta um token renovado. Erros: 401 em qualquer falha.
+
     Use apenas nos endpoints que devem funcionar durante a atualização obrigatória do perfil
     (sessão e próprio perfil). Os demais usam `obter_usuario_atual`.
     """
@@ -88,7 +119,12 @@ def obter_usuario_autenticado(
 
 
 def obter_declaracoes(credenciais: HTTPAuthorizationCredentials | None = Depends(esquema_bearer)) -> dict:
-    """Declarações (claims) do token da requisição: `sub`, `ini`, `imp` (SuperRoot real, na personificação)."""
+    """Declarações (claims) do token da requisição: `sub`, `ini`, `imp` (SuperRoot real, na personificação).
+
+    Só decodifica o token (sem ir ao banco); usada por rotas que precisam ler as
+    declarações cruas, como o fim da personificação. Erro 401 se faltar ou for
+    inválido/expirado.
+    """
     if credenciais is None:
         raise _nao_autenticado("Não autenticado.")
     try:
@@ -100,7 +136,12 @@ def obter_declaracoes(credenciais: HTTPAuthorizationCredentials | None = Depends
 
 
 def obter_usuario_atual(usuario: Usuario = Depends(obter_usuario_autenticado)) -> Usuario:
-    """Usuário autenticado com perfil institucional em dia (só a conta root não passa por essa restrição)."""
+    """Usuário autenticado com perfil institucional em dia (só a conta root não passa por essa restrição).
+
+    É a dependência padrão das rotas. O perfil institucional precisa ser revisado
+    periodicamente; enquanto estiver pendente, devolve 403 com o código
+    `revisao_perfil_obrigatoria` e a lista `campos_pendentes`.
+    """
     if servico_perfil.perfil_restrito(usuario):
         # O frontend reconhece este código e leva o usuário para a tela de perfil
         raise ErroApi(
@@ -121,6 +162,7 @@ def exigir_papeis(*papeis: str) -> Callable[..., Usuario]:
     desejados em cada rota.
     """
 
+    # Função interna ("closure"): enxerga a tupla `papeis` recebida acima
     def verificar(usuario: Usuario = Depends(obter_usuario_atual)) -> Usuario:
         if not any(usuario.possui_papel(p) for p in papeis):
             raise ErroApi(status.HTTP_403_FORBIDDEN, "Acesso negado.", "acesso_negado")
@@ -145,8 +187,10 @@ def exigir_gestao(recurso: str) -> Callable[..., Usuario]:
     """
 
     def verificar(usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)) -> Usuario:
+        # SuperRoot (papel administrativo máximo) sempre passa
         if usuario.superusuario:
             return usuario
+        # Recurso sem regras nega; com regras, exige a ação de CONTROLE_TOTAL
         if not servico_acl.possui_regras(sessao, recurso) or not servico_acl.pode_porta(sessao, usuario, recurso, NivelAcl.CONTROLE_TOTAL):
             raise ErroApi(status.HTTP_403_FORBIDDEN, f"Esta operação exige CONTROLE_TOTAL em '{recurso}'.", "acl_negado",
                           recurso=recurso, nivel_exigido=NivelAcl.CONTROLE_TOTAL)
@@ -159,6 +203,7 @@ def exigir_rh(nivel_minimo: str = NivelAcl.MODIFICACAO) -> Callable[..., Usuario
     """Exige pelo menos `nivel_minimo` no módulo RH (ACL `rh`; SuperRoot sempre).
 
     Estrito como `exigir_gestao`: nunca "aberto a todos". Enquanto o recurso `rh` não tem regras, vale o setor `setor_cgp` (veja `services/rh/papeis.py`)."""
+    # Import dentro da função (e não no topo) para evitar importação circular com os serviços do RH
     from app.services.rh import papeis
 
     def verificar(usuario: Usuario = Depends(obter_usuario_atual), sessao: Session = Depends(obter_sessao)) -> Usuario:

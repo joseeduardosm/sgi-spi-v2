@@ -1,10 +1,30 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para criar a coluna que guarda o tema da interface (claro, escuro ou automático) de cada usuário.
-"""usuarios: coluna `tema` (claro, escuro ou auto)
+"""
+===============================================================================
+ARQUIVO: f6b9d4e8a3c2_usuario_tema.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Migração Alembic que cria a coluna que guarda o tema da interface (claro,
+escuro ou automático) de cada usuário.
+
+RESUMO TÉCNICO:
+Cria usuarios.tema (texto de até 10 caracteres, padrão 'auto', não nulo); os
+usuários existentes começam em 'auto'. O downgrade remove a coluna.
+
+FINALIDADE DE NEGÓCIO:
+Cada pessoa escolhe se o SGI aparece claro, escuro ou seguindo o tema do
+sistema operacional, e a escolha a acompanha em qualquer computador.
+
+CONTEXTO NO SISTEMA:
+Tabela usuarios; lida e gravada pelas preferências do usuário e aplicada pelo
+frontend Angular. Aplicada com 'alembic upgrade head' (o instalador e a
+atualização do sistema rodam esse comando).
 
 Revision ID: f6b9d4e8a3c2
 Revises: e5a8c3d7f2b1
 Create Date: 2026-10-04 12:00:00
+
+===============================================================================
 """
 
 from collections.abc import Sequence

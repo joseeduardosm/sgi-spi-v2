@@ -1,5 +1,31 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a CGP lançar férias ou licença-prêmio em nome do servidor (já aprovada ou gozada).
+/**
+ * =============================================================================
+ * ARQUIVO: lancamento-afastamento.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Janela em que a CGP lança férias ou licença-prêmio em nome de um
+ * servidor, já aprovada ou já gozada, inclusive retroativa.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone de modal com template inline e formulário por
+ * ngModel. Escolhe o servidor com app-seletor-usuarios, o tipo, a situação, o
+ * período e o motivo; pode ignorar o saldo. Envia pela RhApiService.lancar e
+ * emite o evento lancado para a tela pai recarregar.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Traz para o sistema os afastamentos combinados ou gozados fora dele (ex.:
+ * registrados em planilha antes do módulo). O lançamento entra no saldo e na
+ * folha de ponto, sem as regras de antecedência, dia vedado e mínimo de dias,
+ * e o servidor é avisado por e-mail.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Aberto pelo painel de afastamentos da CGP (painel-afastamentos). Usa
+ * RhApiService (/api/rh), UsuariosApiService.opcoesGestor para a busca de
+ * pessoas e o tipo TipoAfastamento de rh.models.ts.
+ *
+ * =============================================================================
+ */
 
 import { Component, inject, model, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -61,11 +87,14 @@ import { TipoAfastamento } from './rh.models';
   `,
 })
 export class LancamentoAfastamentoComponent {
+  /** Abre e fecha a janela; model() permite a ligação de mão dupla [(aberta)] com a tela pai. */
   readonly aberta = model(false);
+  /** Evento emitido depois de lançar com sucesso (output() cria um evento que o pai escuta). */
   readonly lancado = output<void>();
   private readonly api = inject(RhApiService);
   private readonly dialogos = inject(DialogosService);
   protected readonly usuariosApi = inject(UsuariosApiService);
+  // Campos do formulário ligados por [(ngModel)]; o seletor devolve lista mesmo no modo de uma pessoa só
   protected pessoa: OpcaoUsuario[] = [];
   protected tipo: TipoAfastamento = 'ferias';
   protected situacao: 'aprovado' | 'gozado' = 'aprovado';
@@ -74,6 +103,10 @@ export class LancamentoAfastamentoComponent {
   protected justificativa = '';
   protected ignorarSaldo = false;
 
+  /**
+   * Envia o lançamento à API. Efeitos no backend: grava o afastamento já aprovado/gozado,
+   * abate o saldo (salvo se ignorar_saldo) e manda e-mail ao servidor.
+   */
   protected lancar(): void {
     const pessoa = this.pessoa[0];
     if (!pessoa) return;

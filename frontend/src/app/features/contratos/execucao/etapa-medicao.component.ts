@@ -347,6 +347,27 @@ export class EtapaMedicaoComponent implements OnChanges {
     });
   }
 
+  /** Observações das diferenças informadas manualmente que esta competência cita (`?? []`: tolera API ainda sem o campo). */
+  protected readonly observacoesManuais = computed(() => this.detalhe().observacoes_manuais ?? []);
+  /** Créditos do fundo do contrato (`?? []`: tolera API ainda sem o campo). */
+  protected readonly creditosDisponiveis = computed(() => this.detalhe().creditos_disponiveis ?? []);
+  // Crédito sendo aplicado ou retirado (botão com o indicador de carregando)
+  protected readonly creditoEmAndamento = signal<string | null>(null);
+
+  /**
+   * Aplica (inteiro) ou retira um crédito de reajuste/repactuação desta medição. Nada é abatido sozinho: é sempre escolha do gestor.
+   * O valor autorizado muda, então as ciências já registradas deixam de valer (o servidor as apaga).
+   */
+  protected alternarCredito(creditoId: string, aplicar: boolean): void {
+    const d = this.detalhe();
+    this.creditoEmAndamento.set(creditoId);
+    const pedido = aplicar ? this.api.aplicarCredito(d.contrato_id, d.id, creditoId) : this.api.retirarCredito(d.contrato_id, d.id, creditoId);
+    pedido.subscribe({
+      next: (novo) => { this.creditoEmAndamento.set(null); this.atualizado.emit(novo); },
+      error: (e) => { this.creditoEmAndamento.set(null); this.dialogos.mostrarErro(e, aplicar ? 'Não foi possível aplicar o crédito' : 'Não foi possível retirar o crédito'); },
+    });
+  }
+
   /** Registra a ciência do usuário logado. */
   protected ciencia(): void {
     const d = this.detalhe();

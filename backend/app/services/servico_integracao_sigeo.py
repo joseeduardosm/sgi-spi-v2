@@ -1,6 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para ler, gravar e testar a configuração da integração com o SIGEO (senha cifrada).
-"""Configuração da integração com o SIGEO: leitura sem expor a senha, gravação com cifra e teste de acesso à análise."""
+"""
+===============================================================================
+ARQUIVO: servico_integracao_sigeo.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Ler, gravar e testar a configuração da integração com o SIGEO (sistema de
+execução orçamentária da Fazenda/SP), com a senha sempre cifrada.
+
+RESUMO TÉCNICO:
+Schemas pydantic do PUT, da leitura (sem a senha) e do teste. obter() garante
+a linha única (id=1); salvar() cifra a senha e audita sem ela;
+hora_de_conferir() decide se a rotina horária já deve rodar a conferência do
+dia; credencial() decifra; baixar_pagamentos() e baixar_empenhos() executam
+as análises salvas no OBIEE (Oracle BI) pelo ClienteObiee; testar() confere
+o acesso e as colunas esperadas.
+
+FINALIDADE DE NEGÓCIO:
+Automatiza a conferência diária das OBs (ordens bancárias = pagamentos
+efetivados) e das NEs (notas de empenho = reserva do valor no orçamento) dos
+contratos, sem a equipe precisar consultar o SIGEO manualmente.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas /api/integracao-sigeo e pela tarefa agendada
+app/tarefas/sigeo.py (conferência das OBs). Modelo IntegracaoSigeo, cliente
+app.services.sigeo.cliente_obiee, criptografia e auditoria.
+
+===============================================================================
+"""
 
 from datetime import datetime
 
@@ -14,6 +40,7 @@ from app.services.servico_auditoria import auditar
 from app.services.sigeo.cliente_obiee import ClienteObiee, ErroSigeo
 
 
+# Schemas pydantic (BaseModel): validam o JSON da API e aparecem no OpenAPI.
 class AlteracaoIntegracaoSigeo(BaseModel):
     """Corpo do `PUT /api/integracao-sigeo`. Senha vazia ou ausente preserva a gravada."""
 
@@ -55,6 +82,7 @@ class ResultadoTesteSigeo(BaseModel):
 def obter(sessao: Session) -> IntegracaoSigeo:
     """A linha única de configuração (criada com os padrões se ainda não existir)."""
     config = sessao.get(IntegracaoSigeo, 1)
+    # Tabela de uma linha só (id=1); flush insere sem commit.
     if config is None:
         config = IntegracaoSigeo(id=1, atualizado_em=agora_utc())
         sessao.add(config)
@@ -63,6 +91,7 @@ def obter(sessao: Session) -> IntegracaoSigeo:
 
 
 def leitura(config: IntegracaoSigeo) -> LeituraIntegracaoSigeo:
+    """Converte a configuração gravada na resposta da API, sem a senha."""
     return LeituraIntegracaoSigeo(
         ativo=config.ativo, url_base=config.url_base, caminho_analise=config.caminho_analise, caminho_analise_empenhado=config.caminho_analise_empenhado, usuario=config.usuario, possui_senha=bool(config.senha_cifrada), hora_conferencia=config.hora_conferencia,
         configurada=bool(config.url_base and config.caminho_analise and config.usuario and config.senha_cifrada),
@@ -73,6 +102,7 @@ def leitura(config: IntegracaoSigeo) -> LeituraIntegracaoSigeo:
 def salvar(sessao: Session, dados: AlteracaoIntegracaoSigeo, autor: str) -> IntegracaoSigeo:
     """Grava a configuração; senha em branco mantém a anterior. Auditada sem a senha."""
     config = obter(sessao)
+    # O endereço é gravado sem a parte "?..." (parâmetros copiados do navegador).
     config.ativo, config.url_base, config.caminho_analise = dados.ativo, dados.url_base.strip().split("?")[0], dados.caminho_analise.strip()
     config.usuario, config.atualizado_por, config.atualizado_em = dados.usuario.strip(), autor, agora_utc()
     config.hora_conferencia = dados.hora_conferencia
@@ -87,10 +117,12 @@ def salvar(sessao: Session, dados: AlteracaoIntegracaoSigeo, autor: str) -> Inte
 
 def hora_de_conferir(config: IntegracaoSigeo, agora=None) -> bool:
     """A rotina de hora em hora só confere uma vez por dia, a partir da hora configurada (horário de Brasília)."""
+    # ZoneInfo dá o fuso de Brasília: a hora configurada é local, não UTC.
     from zoneinfo import ZoneInfo
 
     fuso = ZoneInfo("America/Sao_Paulo")
     agora = (agora or agora_utc()).astimezone(fuso)
+    # Antes da hora configurada não confere; depois, só se ainda não conferiu hoje.
     if agora.hour < config.hora_conferencia:
         return False
     return config.ultima_execucao_em is None or config.ultima_execucao_em.astimezone(fuso).date() < agora.date()
@@ -109,6 +141,7 @@ def credencial(config: IntegracaoSigeo) -> tuple[str, str]:
 def baixar_pagamentos(config: IntegracaoSigeo) -> list[dict[str, str]]:
     """Executa a análise configurada e devolve as linhas (cada uma, uma OB)."""
     usuario, senha = credencial(config)
+    # O "with" faz o login no SIGEO e encerra a sessão no fim, mesmo com erro.
     with ClienteObiee(config.url_base, usuario, senha) as cliente:
         return cliente.executar_analise(config.caminho_analise)
 
@@ -129,6 +162,8 @@ def testar(config: IntegracaoSigeo) -> ResultadoTesteSigeo:
             latencia = cliente.latencia_ms
     except ErroSigeo as erro:
         return ResultadoTesteSigeo(sucesso=False, mensagem=erro.mensagem)
+    # Confere se a análise devolve as colunas que a conferência das OBs usa;
+    # sem elas a rotina diária não conseguiria casar os pagamentos.
     faltam = [c for c in ("COD_PROCESSO", "COD_DOCUMENTO", "DATA_LANCAMENTO", "DESCRICAO_DOCUMENTO", "VALOR_DOCUMENTO") if linhas and c not in linhas[0]]
     if faltam:
         return ResultadoTesteSigeo(sucesso=False, mensagem=f"A análise não tem as colunas {', '.join(faltam)}.", linhas=len(linhas), latencia_ms=latencia)

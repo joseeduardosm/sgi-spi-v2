@@ -114,6 +114,8 @@ class NumeroLeitura(BaseModel):
     pode_alterar_sigilo: bool
     pode_reservar: bool = Field(False, description="Livre e o usuário pode escolher este número (administração; a CGI, nos \"Reservado CGI\").")
     eventos: list[EventoLeitura] = Field(default_factory=list, description="Linha do tempo (só no detalhe de um número).")
+    rdm_situacao: str | None = Field(None, description="Tipo \"RDM SGI\": situação da RDM (pendente, aprovada, reprovada, concluida) — a cor na grade.")
+    tarefa_numero: int | None = Field(None, description="Tipo \"RDM SGI\": a tarefa da RDM (link).")
 
 
 class ListaNumeros(BaseModel):

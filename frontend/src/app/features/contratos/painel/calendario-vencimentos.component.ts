@@ -1,5 +1,34 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a tela "Calendário de vencimentos": vigência, reajuste, NF, validade de documentos, empenho e tarefas dos contratos num só calendário.
+/**
+ * =============================================================================
+ * ARQUIVO: calendario-vencimentos.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Tela "Calendário de vencimentos" do módulo Contratos: reúne num só
+ * calendário vigência, reajuste, pagamento e prazo da NF, validade de
+ * documentos, medição atrasada, empenho insuficiente e tarefas dos contratos.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido sobre o componente genérico
+ * app-calendario-eventos. O calendário avisa o período visível (mês ou semana)
+ * e a tela busca na API só os eventos desse intervalo, com filtros "só meus
+ * contratos" e tipos de evento (chips). Um contador de pedidos descarta
+ * respostas atrasadas. Exporta TIPOS_VENCIMENTO para legenda e filtros.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dá ao gestor e ao fiscal uma visão de prazos: o que vence nos próximos dias
+ * (cor de severidade), evitando perder vigência, reajuste ou pagamento de nota
+ * fiscal. NF é a nota fiscal da empresa; empenho é a reserva orçamentária que
+ * garante o pagamento; medição é a apuração mensal do serviço executado.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota do módulo Contratos. Usa ContratosApiService.calendario, os tipos
+ * EventoVencimento e TipoEventoCalendario de contratos.models e o
+ * CalendarioEventosComponent compartilhado. Clicar num evento navega para a
+ * rota que a própria API informa (evento.rota).
+ *
+ * =============================================================================
+ */
 
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -71,11 +100,17 @@ export class CalendarioVencimentosComponent {
     data: e.data, hora: e.hora, rotulo: `${e.contrato_numero} · ${e.rotulo}`, detalhe: e.contrato_apelido, severidade: e.severidade,
   })));
 
+  /** Liga ou desliga o filtro "Só meus contratos" e recarrega o período. */
   protected mudarMeus(valor: boolean): void {
     this.meus.set(valor);
     this.carregar();
   }
 
+  /**
+   * Marca ou desmarca um tipo de evento no filtro. Um novo Set é criado (em vez
+   * de alterar o atual) para que o signal perceba a mudança e redesenhe os chips.
+   * `delete` devolve false quando o tipo não estava marcado; aí ele é adicionado.
+   */
   protected alternar(tipo: TipoEventoCalendario): void {
     const novo = new Set(this.escolhidos());
     if (!novo.delete(tipo)) novo.add(tipo);
@@ -83,11 +118,18 @@ export class CalendarioVencimentosComponent {
     this.carregar();
   }
 
+  /** Remove todos os tipos escolhidos (sem filtro = todos os tipos) e recarrega. */
   protected limpar(): void {
     this.escolhidos.set(new Set());
     this.carregar();
   }
 
+  /**
+   * Busca os eventos do período visível com os filtros atuais.
+   * Cada chamada ganha um número; se o usuário trocar de mês antes da resposta
+   * chegar, a resposta antiga é ignorada (evita mostrar o mês errado).
+   * Sem período ainda (o calendário não avisou), não faz nada.
+   */
   protected carregar(): void {
     const periodo = this.periodo();
     if (!periodo) return;
@@ -107,6 +149,7 @@ export class CalendarioVencimentosComponent {
     });
   }
 
+  /** Abre a tela ligada ao evento clicado (o índice vem do calendário genérico). */
   protected abrir(indice: number): void {
     const evento = this.eventos()[indice];
     if (evento) void this.roteador.navigateByUrl(evento.rota);

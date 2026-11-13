@@ -1,18 +1,40 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para criar as tabelas do marco 3 dos Chamados: status e sub-status, recorrentes e o registro das tarefas automáticas.
+"""
+===============================================================================
+ARQUIVO: f8b0d2e4a6c9_chamados_m3_parametros_e_tarefas.py
+AUTOR: José Eduardo Santana Martins
 
-"""chamados: status e sub-status, recorrentes e execuções das tarefas automáticas (marco 3)
+FINALIDADE:
+Migração Alembic que cria as tabelas do marco 3 do módulo Chamados: status e
+sub-status, chamados recorrentes e o registro das tarefas automáticas.
 
-- `chamados_status_apresentacao`: nome exibido e cor de cada status-base;
-- `chamados_substatus`: sub-status dentro de um status-base;
-- `chamados_recorrentes`: chamado aberto sozinho a cada período;
-- `chamados_execucoes`: cada rodada das tarefas automáticas (o vigia e o painel de saúde leem daqui);
-- `chamados.substatus_id`, `chamados.recorrente_id` e `chamados.gerado_para` (único por recorrente: rodar duas vezes não duplica).
+RESUMO TÉCNICO:
+- chamados_status_apresentacao: nome exibido e cor de cada status-base;
+- chamados_substatus: sub-status dentro de um status-base;
+- chamados_recorrentes: chamado aberto sozinho a cada período;
+- chamados_execucoes: cada rodada das tarefas automáticas (o vigia e o painel
+  de saúde leem daqui);
+- chamados.substatus_id, chamados.recorrente_id e chamados.gerado_para, com
+  índice único parcial por recorrente (rodar duas vezes não duplica).
+
+O downgrade remove as colunas e as quatro tabelas.
+
+FINALIDADE DE NEGÓCIO:
+Permite à equipe de TI personalizar como os status aparecem, detalhar o
+andamento com sub-status e cadastrar chamados de rotina (ex.: verificação
+semanal) que se abrem sozinhos, com acompanhamento das tarefas automáticas.
+
+CONTEXTO NO SISTEMA:
+Tabelas chamados, chamados_categorias e usuarios; rotas
+app/api/routes/chamados.py e chamados_painel.py. Aplicada com 'alembic upgrade
+head' (o instalador e a atualização do sistema rodam esse comando).
 
 Revision ID: f8b0d2e4a6c9
 Revises: e7a9c1d3f5b8
 Create Date: 2026-11-01
+
+===============================================================================
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -24,7 +46,9 @@ down_revision: str | Sequence[str] | None = "e7a9c1d3f5b8"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# Valor padrão "agora" calculado pelo próprio banco ao inserir a linha
 AGORA = sa.text("CURRENT_TIMESTAMP")
+# Status-base fixos do chamado e cores semânticas aceitas (usadas nas check constraints)
 BASES = "'novo', 'em_atendimento', 'pendente', 'em_aprovacao', 'solucionado'"
 CORES = "'info', 'alerta', 'atencao', 'perigo', 'sucesso', 'neutro'"
 
@@ -72,6 +96,7 @@ def upgrade() -> None:
         sa.CheckConstraint("periodicidade_quantidade > 0", name="ck_chamados_recorrentes_quantidade"),
         sa.CheckConstraint("antecedencia_min >= 0", name="ck_chamados_recorrentes_antecedencia"),
     )
+    # Índice para a tarefa automática achar rápido os recorrentes ativos que já venceram
     op.create_index("ix_chamados_recorrentes_proxima", "chamados_recorrentes", ["ativo", "proxima_em"])
     op.create_table(
         "chamados_execucoes",
@@ -88,6 +113,8 @@ def upgrade() -> None:
     op.add_column("chamados", sa.Column("substatus_id", sa.Uuid, sa.ForeignKey("chamados_substatus.id", ondelete="SET NULL")))
     op.add_column("chamados", sa.Column("recorrente_id", sa.Uuid, sa.ForeignKey("chamados_recorrentes.id", ondelete="SET NULL")))
     op.add_column("chamados", sa.Column("gerado_para", sa.DateTime(timezone=True)))
+    # Índice único parcial (só quando recorrente_id não é nulo): impede gerar duas vezes
+    # o mesmo chamado recorrente para o mesmo período, mesmo que a tarefa rode de novo
     op.create_index("ux_chamados_recorrencia", "chamados", ["recorrente_id", "gerado_para"], unique=True,
                     postgresql_where=sa.text("recorrente_id IS NOT NULL"))
 

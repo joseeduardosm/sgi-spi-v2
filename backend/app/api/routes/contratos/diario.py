@@ -30,7 +30,7 @@ ESCRITA = {**INVALIDO, **SEM_VINCULO}
 
 @roteador.get("", response_model=DiarioContrato, summary="Diário de bordo do contrato",
               description="Ocorrências em ordem de registro (com glosas, competência da data e resultado do e-mail), "
-              "se o usuário pode registrar e os itens do contrato para o combobox da glosa.", responses=NAO_ENCONTRADO)
+              "se o usuário pode registrar, os itens do contrato para o combobox da glosa e os e-mails adicionais salvos do contrato.", responses=NAO_ENCONTRADO)
 def listar_diario(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)):
     """Diário completo do contrato."""
     with traduzir_erros(sessao):
@@ -46,7 +46,8 @@ def listar_diario(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao
         "`multipart/form-data`: `dados` (JSON de `GravacaoOcorrencia`: data não futura, relato, glosas e, se a ocorrência impactar a "
         "avaliação da qualidade, os itens do formulário ativo) e até 5 `arquivos` (PDF, Office/LibreOffice, TXT, CSV, PNG ou JPG, "
         "conferidos pelo conteúdo). As glosas valem na competência cujo período contém a data. Só com `enviar_email = true` (em `dados`; padrão "
-        "`false`) envia, em segundo plano, o registro por e-mail à equipe vigente e aos prepostos ativos, com os anexos (respostas vão para a equipe)."
+        "`false`) envia, em segundo plano, o registro por e-mail à equipe vigente, aos prepostos escolhidos (`prepostos_ids`) e aos `emails_adicionais`, "
+        "com os anexos (respostas vão para a equipe). Os e-mails adicionais ficam salvos no contrato (`emails_salvos` do diário) para as próximas ocorrências."
     ),
     responses={**NAO_ENCONTRADO, **ESCRITA},
 )
@@ -63,7 +64,7 @@ async def registrar_ocorrencia(contrato_id: uuid.UUID, tarefas: BackgroundTasks,
     with traduzir_erros(sessao):
         ocorrencia = servico_diario.registrar(sessao, contrato_id, gravacao, autor, conteudos)
         if gravacao.enviar_email:
-            tarefas.add_task(servico_notificacoes.notificar_ocorrencia, ocorrencia.id, gravacao.prepostos_ids)
+            tarefas.add_task(servico_notificacoes.notificar_ocorrencia, ocorrencia.id)
         return servico_diario.leitura(obter_contrato(sessao, contrato_id), ocorrencia)
 
 
@@ -82,7 +83,8 @@ def baixar_anexo(contrato_id: uuid.UUID, ocorrencia_id: uuid.UUID, anexo_id: uui
 
 
 @roteador.post("/{ocorrencia_id}/reenviar", response_model=LeituraOcorrencia, summary="Reenviar o e-mail da ocorrência",
-               description="Envia de novo o registro à equipe e aos prepostos e devolve a ocorrência com o novo resultado.",
+               description="Envia de novo o registro aos mesmos destinatários escolhidos no registro (equipe vigente, prepostos escolhidos e "
+               "e-mails adicionais; registros antigos sem escolha gravada vão a todos os prepostos ativos) e devolve a ocorrência com o novo resultado.",
                responses={**NAO_ENCONTRADO, **ESCRITA})
 def reenviar_email(contrato_id: uuid.UUID, ocorrencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
                    autor: Usuario = Depends(pode_modificar)):
@@ -93,6 +95,18 @@ def reenviar_email(contrato_id: uuid.UUID, ocorrencia_id: uuid.UUID, sessao: Ses
         sessao.expire_all()
         contrato = obter_contrato(sessao, contrato_id)
         return servico_diario.leitura(contrato, servico_diario.obter_ocorrencia(contrato, ocorrencia_id))
+
+
+@roteador.delete("/emails-salvos/{email_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Remover e-mail salvo do diário",
+                 description="Tira um e-mail adicional da lista de salvos do contrato (oferecidos nas próximas ocorrências). "
+                 "As ocorrências já registradas continuam com os destinatários que tinham.",
+                 responses={**resposta_nao_encontrado("Contrato ou e-mail salvo"), **SEM_VINCULO})
+def remover_email_salvo(contrato_id: uuid.UUID, email_id: int, sessao: Session = Depends(obter_sessao),
+                        autor: Usuario = Depends(pode_modificar)) -> Response:
+    """Quem pode editar o contrato remove o e-mail da lista."""
+    with traduzir_erros(sessao):
+        servico_diario.remover_email_salvo(sessao, contrato_id, email_id, autor)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @roteador.get("/pdf", summary="Diário de bordo em PDF", response_class=Response,

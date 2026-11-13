@@ -1,16 +1,33 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para ler o modelo PPTX da assinatura de e-mail, preencher os textos e desenhar a imagem em alta resolução.
-"""Renderizador do modelo de assinatura em PowerPoint (.pptx).
+"""
+===============================================================================
+ARQUIVO: assinatura_pptx.py
+AUTOR: José Eduardo Santana Martins
 
-O desenho oficial vive no PPTX (`recursos/assinatura/modelo-assinatura.pptx`): para mudar o layout, a TI troca o arquivo e a
-imagem sai nova, sem alterar código. Aqui só se interpreta o que um modelo de assinatura usa:
-- **figuras** (o fundo com marca do Governo, divisores e redes sociais) desenhadas **no tamanho de pixel original** da imagem,
-  sem reamostrar, para não perder nitidez;
-- **caixas de texto** com tamanho, negrito, cor (RGB ou do tema), fonte, espaçamento exato entre linhas e margens internas;
-- **retângulos** preenchidos.
+FINALIDADE:
+Ler o modelo PPTX da assinatura de e-mail, preencher os textos com os dados
+da pessoa e desenhar a imagem final em alta resolução.
 
-O texto é desenhado em 3× e reduzido (suavização). Fontes: se existir `recursos/assinatura/fontes/<nome>.ttf` (ex.: `Verdana.ttf`
-e `Verdana-Bold.ttf`), ela é usada; senão, a Bitstream Vera (que acompanha o reportlab), de proporções parecidas com a Verdana.
+RESUMO TÉCNICO:
+Um PPTX é um ZIP com XMLs (DrawingML). O arquivo lê o primeiro slide com
+zipfile + ElementTree e monta um Modelo em memória com três tipos de
+elemento: Figura (imagens desenhadas no pixel original, sem reamostrar),
+Caixa (texto com tamanho, negrito, cor RGB ou do tema, fonte, espaçamento e
+margens) e Retangulo (preenchido). preencher() troca os textos de exemplo ou
+as fichas {{campo}}; compactar() aproxima as linhas; desenhar() usa Pillow,
+com o texto em 3x e reduzido (suavização). Fontes: `recursos/assinatura/
+fontes/<nome>.ttf`, se existir; senão a Bitstream Vera do reportlab.
+
+FINALIDADE DE NEGÓCIO:
+Manter o desenho oficial da assinatura do Governo dentro de um arquivo que a
+TI pode trocar: para mudar o layout basta substituir o PPTX, sem alterar
+código, e a imagem sai com a nitidez do arquivo original.
+
+CONTEXTO NO SISTEMA:
+Usado somente por `assinatura_email.py` (carregar, marcar_alturas,
+preencher, compactar e desenhar). O modelo fica em
+`app/recursos/assinatura/modelo-assinatura.pptx`.
+
+===============================================================================
 """
 
 import colorsys
@@ -32,6 +49,10 @@ NS = {
     "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
     "rel": "http://schemas.openxmlformats.org/package/2006/relationships",
 }
+# Namespaces XML do formato Office Open XML: no XML as etiquetas aparecem como
+# "a:p", "p:sp" etc.; o ElementTree precisa do endereço completo do prefixo.
+# EMU (English Metric Unit) é a unidade do PowerPoint: 914400 EMU = 1 polegada,
+# 12700 EMU = 1 ponto tipográfico.
 EMU_POR_PT = 12700
 SUPER = 3  # o texto é desenhado em 3× e reduzido
 FONTES_PASTA = Path(__file__).resolve().parents[1] / "recursos" / "assinatura" / "fontes"
@@ -45,6 +66,7 @@ class ErroModelo(Exception):
 
 
 def _etiqueta(nome: str) -> str:
+    """Converte "a:p" no nome completo que o ElementTree usa ("{namespace}p")."""
     prefixo, local = nome.split(":")
     return f"{{{NS[prefixo]}}}{local}"
 
@@ -53,6 +75,7 @@ def _etiqueta(nome: str) -> str:
 
 @dataclass
 class Estilo:
+    """Estilo do texto de um parágrafo (tirado da primeira "corrida" de texto)."""
     tamanho_pt: float = TAMANHO_PADRAO_PT
     negrito: bool = False
     cor: tuple[int, int, int] = (0, 0, 0)
@@ -61,6 +84,7 @@ class Estilo:
 
 @dataclass
 class Paragrafo:
+    """Um parágrafo de uma caixa de texto, com estilo, alinhamento e espaçamento."""
     texto: str
     estilo: Estilo
     alinhamento: str = "l"
@@ -72,6 +96,11 @@ class Paragrafo:
 
 @dataclass
 class Caixa:
+    """Caixa de texto do slide; posição e tamanho em EMU.
+
+    `deslocamento_y` é quanto ela foi empurrada para baixo por uma caixa de
+    cima que cresceu; `altura_original` é a altura antes do preenchimento.
+    """
     x: float
     y: float
     cx: float
@@ -84,6 +113,7 @@ class Caixa:
 
 @dataclass
 class Figura:
+    """Imagem do slide (fundo do Governo, divisores, redes sociais)."""
     x: float
     y: float
     cx: float
@@ -93,6 +123,7 @@ class Figura:
 
 @dataclass
 class Retangulo:
+    """Retângulo de cor sólida do slide."""
     x: float
     y: float
     cx: float
@@ -102,18 +133,25 @@ class Retangulo:
 
 @dataclass
 class Modelo:
+    """O slide inteiro em memória: tamanho (EMU) e elementos na ordem de desenho."""
     largura: int  # EMU
     altura: int
     elementos: list[Figura | Retangulo | Caixa] = field(default_factory=list)
 
     @property
     def caixas(self) -> list[Caixa]:
+        """Só as caixas de texto, na ordem do slide."""
         return [e for e in self.elementos if isinstance(e, Caixa)]
 
 
 # --- Leitura do PPTX --------------------------------------------------------------------------
 
 def _cores_do_tema(zip_: zipfile.ZipFile) -> dict[str, tuple[int, int, int]]:
+    """Lê as cores do tema do PPTX (dk1, lt1, accent1...) como tuplas RGB.
+
+    Textos podem usar "cor do tema" em vez de RGB direto; este mapa permite
+    traduzir. Sem tema no arquivo, devolve só branco (bg1) e preto (tx1).
+    """
     cores: dict[str, tuple[int, int, int]] = {}
     nome = next((n for n in zip_.namelist() if re.fullmatch(r"ppt/theme/theme\d+\.xml", n)), None)
     if nome is None:
@@ -143,6 +181,7 @@ def _cor(elemento: ET.Element | None, tema: dict[str, tuple[int, int, int]], pad
     preenchimento = elemento.find("a:solidFill", NS)
     if preenchimento is None:
         return padrao
+    # A cor pode vir em RGB direto (srgbClr) ou como referência ao tema (schemeClr)
     srgb = preenchimento.find("a:srgbClr", NS)
     if srgb is not None:
         base = tuple(int(srgb.get("val", "000000")[i:i + 2], 16) for i in (0, 2, 4))
@@ -157,12 +196,18 @@ def _cor(elemento: ET.Element | None, tema: dict[str, tuple[int, int, int]], pad
     deslocamento = no_tema.find("a:lumOff", NS)
     if modulo is None and deslocamento is None:
         return base  # type: ignore[return-value]
+    # lumMod/lumOff clareiam ou escurecem a cor base: o PowerPoint multiplica a
+    # luminosidade por lumMod e soma lumOff (valores em milésimos de porcento).
     h, l, s = colorsys.rgb_to_hls(*(c / 255 for c in base))
     l = l * (int(modulo.get("val", "100000")) / 100000 if modulo is not None else 1) + (int(deslocamento.get("val", "0")) / 100000 if deslocamento is not None else 0)
     return tuple(round(c * 255) for c in colorsys.hls_to_rgb(h, min(max(l, 0), 1), s))  # type: ignore[return-value]
 
 
 def _estilo(rpr: ET.Element | None, tema: dict[str, tuple[int, int, int]]) -> Estilo:
+    """Monta o Estilo a partir de um `a:rPr` (propriedades da corrida de texto).
+
+    O tamanho `sz` vem em centésimos de ponto (1800 = 18 pt).
+    """
     if rpr is None:
         return Estilo()
     latin = rpr.find("a:latin", NS)
@@ -175,6 +220,7 @@ def _estilo(rpr: ET.Element | None, tema: dict[str, tuple[int, int, int]]) -> Es
 
 
 def _xfrm(forma: ET.Element) -> tuple[float, float, float, float]:
+    """Posição (x, y) e tamanho (cx, cy) da forma, em EMU; erro se não houver."""
     xfrm = forma.find(".//a:xfrm", NS)
     if xfrm is None:
         raise ErroModelo("Uma forma do modelo não tem posição.")
@@ -183,6 +229,12 @@ def _xfrm(forma: ET.Element) -> tuple[float, float, float, float]:
 
 
 def _paragrafos(corpo: ET.Element, tema: dict[str, tuple[int, int, int]]) -> list[Paragrafo]:
+    """Converte os `a:p` de uma caixa em objetos Paragrafo.
+
+    O texto é a soma das corridas (`a:r`); o estilo vem da primeira corrida
+    (ou do `endParaRPr` num parágrafo vazio). O espaçamento pode ser exato
+    (spcPts, centésimos de ponto) ou proporcional (spcPct, 100000 = simples).
+    """
     resultado = []
     for p in corpo.findall("a:p", NS):
         corridas = p.findall("a:r", NS)
@@ -202,6 +254,11 @@ def _paragrafos(corpo: ET.Element, tema: dict[str, tuple[int, int, int]]) -> lis
 
 @lru_cache(maxsize=4)
 def _carregar_cache(caminho: str, modificado: float) -> Modelo:
+    """Versão com cache de _carregar.
+
+    `lru_cache` guarda o resultado por argumentos; como a data de modificação
+    faz parte da chave, trocar o arquivo gera uma nova leitura.
+    """
     return _carregar(Path(caminho))
 
 
@@ -209,10 +266,19 @@ def carregar(caminho: Path) -> Modelo:
     """Lê o PPTX (com cache por data de modificação: trocar o arquivo vale na próxima geração). Devolve uma cópia editável."""
     if not caminho.exists():
         raise ErroModelo(f"Modelo de assinatura não encontrado: {caminho.name}.")
+    # deepcopy: o chamador altera o modelo (preencher/compactar); sem a cópia,
+    # a alteração estragaria o objeto guardado no cache.
     return copy.deepcopy(_carregar_cache(str(caminho), caminho.stat().st_mtime))
 
 
 def _carregar(caminho: Path) -> Modelo:
+    """Abre o PPTX e monta o Modelo do primeiro slide.
+
+    Passos: tamanho do slide (presentation.xml), descobre o arquivo do
+    primeiro slide pelas relações (.rels), lê as cores do tema e percorre as
+    formas: `p:pic` vira Figura, `p:sp` com texto vira Caixa e `p:sp` só com
+    preenchimento vira Retangulo. Qualquer falha de leitura vira ErroModelo.
+    """
     try:
         zip_ = zipfile.ZipFile(caminho)
         apresentacao = ET.fromstring(zip_.read("ppt/presentation.xml"))
@@ -256,6 +322,11 @@ def _carregar(caminho: Path) -> Modelo:
 
 @lru_cache(maxsize=128)
 def _fonte(nome: str, negrito: bool, pixels: int) -> ImageFont.FreeTypeFont:
+    """Fonte TrueType no tamanho em pixels pedido (com cache).
+
+    Procura em `recursos/assinatura/fontes` algumas grafias comuns do arquivo
+    (ex.: Verdana-Bold.ttf, verdanab.ttf); sem nenhuma, usa a Vera do reportlab.
+    """
     base = re.sub(r"[^A-Za-z0-9]", "", nome)
     candidatos = [f"{base}-Bold.ttf", f"{base}Bold.ttf", f"{base.lower()}bd.ttf", f"{base.lower()}b.ttf"] if negrito else [f"{base}.ttf", f"{base.lower()}.ttf"]
     for arquivo in candidatos:
@@ -265,14 +336,20 @@ def _fonte(nome: str, negrito: bool, pixels: int) -> ImageFont.FreeTypeFont:
 
 
 def _px(emu: float, k: float) -> float:
+    """Converte EMU em pixels usando a escala `k` (pixels por EMU)."""
     return emu * k
 
 
 def _largura(texto: str, fonte: ImageFont.FreeTypeFont) -> float:
+    """Largura do texto em pixels, na fonte dada."""
     return fonte.getlength(texto)
 
 
 def _quebrar(texto: str, fonte: ImageFont.FreeTypeFont, largura: float) -> list[str]:
+    """Quebra o texto em linhas que caibam em `largura` pixels, palavra por palavra.
+
+    Uma palavra sozinha maior que a largura fica numa linha só (não é cortada).
+    """
     linhas, atual = [], ""
     for palavra in texto.split():
         tentativa = f"{atual} {palavra}".strip()
@@ -285,6 +362,7 @@ def _quebrar(texto: str, fonte: ImageFont.FreeTypeFont, largura: float) -> list[
 
 
 def _abreviar(texto: str, fonte: ImageFont.FreeTypeFont, largura: float) -> str:
+    """Corta o texto letra a letra até caber com "…" no fim."""
     cortado = texto
     while cortado and _largura(cortado + "…", fonte) > largura:
         cortado = cortado[:-1]
@@ -292,7 +370,11 @@ def _abreviar(texto: str, fonte: ImageFont.FreeTypeFont, largura: float) -> str:
 
 
 def _passo_pt(p: Paragrafo, tamanho_pt: float) -> float:
-    """Distância entre linhas do parágrafo, em pontos."""
+    """Distância entre linhas do parágrafo, em pontos.
+
+    Espaçamento exato do modelo, se houver; senão 1,2 x o tamanho da fonte
+    (o "simples" do PowerPoint) vezes o fator proporcional.
+    """
     if p.espaco_pt is not None:
         return p.espaco_pt
     return tamanho_pt * 1.2 * (p.espaco_pct or 1.0)
@@ -301,10 +383,14 @@ def _passo_pt(p: Paragrafo, tamanho_pt: float) -> float:
 def _linhas_do_paragrafo(p: Paragrafo, largura_px: float, k: float, avisos: list[str], rotulo: str) -> tuple[ImageFont.FreeTypeFont, float, list[str]]:
     """Fonte (em pixels), tamanho em pontos e linhas do parágrafo. Campo preenchido: uma linha, encolhendo e por fim abreviando."""
     tamanho = p.estilo.tamanho_pt
+    # Converte pontos em pixels na escala atual (mínimo 1 px)
     pixels = lambda pt: max(1, round(pt * EMU_POR_PT * k))  # noqa: E731
     fonte = _fonte(p.estilo.fonte, p.estilo.negrito, pixels(tamanho))
+    # Texto fixo do modelo pode quebrar em várias linhas como no PowerPoint
     if p.campo is None:
         return fonte, tamanho, _quebrar(p.texto, fonte, largura_px)
+    # Campo preenchido fica numa linha: reduz a fonte de 0,25 em 0,25 pt até
+    # caber ou até o limite ENCOLHER_ATE (80%); se ainda não couber, abrevia.
     while _largura(p.texto, fonte) > largura_px and tamanho > p.estilo.tamanho_pt * ENCOLHER_ATE:
         tamanho -= 0.25
         fonte = _fonte(p.estilo.fonte, p.estilo.negrito, pixels(tamanho))
@@ -317,6 +403,7 @@ def _linhas_do_paragrafo(p: Paragrafo, largura_px: float, k: float, avisos: list
 # --- Preenchimento ----------------------------------------------------------------------------
 
 def _normalizar(texto: str) -> str:
+    """Minúsculas e espaços simples, para comparar com os textos de exemplo."""
     return " ".join(texto.casefold().split())
 
 
@@ -328,7 +415,9 @@ EXEMPLOS = {
     "email@sp.gov.br | 11 0000-0000": "contato",
     "av. morumbi, 4.500 - são paulo - sp": "endereco",
 }
+# Nome amigável de cada campo, usado nos avisos ("Cargo muito longo...")
 ROTULOS = {"nome": "Nome", "cargo": "Cargo", "orgao": "Órgão", "contato": "E-mail e telefone", "endereco": "Endereço"}
+# Ficha no texto do modelo, no formato {{nome_do_campo}}
 FICHA = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}")
 
 
@@ -338,6 +427,8 @@ def preencher(modelo: Modelo, campos: dict[str, str], extras: list[str]) -> None
     `campos`: nome, cargo, orgao, contato, endereco (e qualquer outro usado em fichas). `extras`: linhas a acrescentar abaixo
     do endereço (celular, andar/lado). Parágrafo de ficha cujos campos estão todos vazios é removido.
     """
+    # Monta uma lista nova de parágrafos por caixa, pois um parágrafo de
+    # exemplo pode virar vários (ou nenhum, se o campo vier vazio).
     for caixa in modelo.caixas:
         novos: list[Paragrafo] = []
         for p in caixa.paragrafos:
@@ -352,6 +443,8 @@ def preencher(modelo: Modelo, campos: dict[str, str], extras: list[str]) -> None
                     paragrafo.texto, paragrafo.campo = texto, chave
                     novos.append(paragrafo)
                 p = novos[-1]
+                # As linhas extras (celular, andar/lado) entram logo abaixo do
+                # endereço, copiando o estilo da última linha dele.
                 if chave == "endereco":
                     for extra in extras:
                         clone = copy.deepcopy(p)
@@ -371,7 +464,10 @@ def preencher(modelo: Modelo, campos: dict[str, str], extras: list[str]) -> None
 # --- Desenho ----------------------------------------------------------------------------------
 
 def _escala(modelo: Modelo) -> float:
-    """Pixels por EMU: a maior resolução entre as figuras (nenhuma é reduzida), para a imagem sair no pixel original."""
+    """Pixels por EMU: a maior resolução entre as figuras (nenhuma é reduzida), para a imagem sair no pixel original.
+
+    Sem figuras, usa 3 x 96 dpi (288 pixels por polegada de 914400 EMU).
+    """
     razoes = [f.imagem.width / f.cx for f in modelo.elementos if isinstance(f, Figura) and f.cx]
     return max(razoes) if razoes else 3 * 96 / 914400
 
@@ -387,11 +483,14 @@ def _altura_caixa(caixa: Caixa, k: float, largura_px: float, avisos: list[str]) 
 
 def empurrar(modelo: Modelo, k: float) -> None:
     """Caixas que cresceram (mais linhas que no modelo) empurram para baixo as que estão abaixo delas."""
+    # Zera os deslocamentos para recalcular do zero a cada chamada
     for caixa in modelo.caixas:
         caixa.deslocamento_y = 0.0
     for caixa in modelo.caixas:
         largura_px = (caixa.cx - caixa.margens[0] - caixa.margens[2]) * k
         crescimento = _altura_caixa(caixa, k, largura_px, []) - caixa.altura_original
+        # Empurra só as caixas que começam abaixo do meio desta e que se
+        # sobrepõem a ela na horizontal (estão "embaixo" de verdade).
         if crescimento > 1:
             for outra in modelo.caixas:
                 if outra is not caixa and outra.y >= caixa.y + caixa.altura_original * 0.5 and outra.x < caixa.x + caixa.cx and caixa.x < outra.x + outra.cx:
@@ -410,7 +509,11 @@ def fim_do_texto(modelo: Modelo) -> float:
 
 
 def compactar(modelo: Modelo, limite: float) -> bool:
-    """Aproxima as linhas (até 1,2× o tamanho da fonte) até o texto terminar antes de `limite` (EMU). Devolve se coube."""
+    """Aproxima as linhas (até 1,2× o tamanho da fonte) até o texto terminar antes de `limite` (EMU). Devolve se coube.
+
+    Tenta fatores decrescentes sobre o espaçamento original; o último (0.0)
+    equivale a usar o mínimo de 1,2 x a fonte. Altera o modelo recebido.
+    """
     for fator in (1.0, 0.96, 0.92, 0.88, 0.84, 0.8, 0.0):
         for caixa in modelo.caixas:
             for p in caixa.paragrafos:
@@ -424,6 +527,8 @@ def compactar(modelo: Modelo, limite: float) -> bool:
 def desenhar(modelo: Modelo, avisos: list[str], originais: dict[int, float] | None = None, fator: float = 1.0) -> Image.Image:
     """Imagem RGB do slide. `originais`: altura (EMU) de cada caixa no modelo, para empurrar para baixo as que ficam abaixo de uma que cresceu."""
     k = _escala(modelo) * fator
+    # A tela final recebe figuras e retângulos direto; o texto vai para uma
+    # camada transparente SUPER vezes maior, reduzida no fim (antisserrilhado).
     largura, altura = round(modelo.largura * k), round(modelo.altura * k)
     tela = Image.new("RGBA", (largura, altura), (255, 255, 255, 255))
 
@@ -463,7 +568,10 @@ def desenhar(modelo: Modelo, avisos: list[str], originais: dict[int, float] | No
 
 
 def marcar_alturas(modelo: Modelo) -> None:
-    """Guarda a altura que cada caixa tem no modelo (antes de preencher) para detectar o crescimento depois."""
+    """Guarda a altura que cada caixa tem no modelo (antes de preencher) para detectar o crescimento depois.
+
+    Deve ser chamada logo depois de carregar(), antes de preencher().
+    """
     k = _escala(modelo)
     for caixa in modelo.caixas:
         caixa.altura_original = _altura_caixa(caixa, k, (caixa.cx - caixa.margens[0] - caixa.margens[2]) * k, [])

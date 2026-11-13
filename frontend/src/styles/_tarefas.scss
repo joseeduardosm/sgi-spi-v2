@@ -1,6 +1,42 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para os estilos do Módulo Tarefas (navegação, quadro estilo Trello, lista, calendário, janela da tarefa, agenda e linha do tempo).
+/**
+ * =============================================================================
+ * ARQUIVO: _tarefas.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do Módulo Tarefas: selos de situação, prioridade e prazo,
+ * marcadores coloridos, navegação própria do módulo, quadro estilo Trello
+ * (com níveis de densidade e modo tela cheia), lista estilo Asana,
+ * calendário, janela da tarefa, agenda/Gantt da pessoa, linha do tempo,
+ * equipes, visão de pessoas, recorrência, desempenho, subtarefas e
+ * dependências.
+ *
+ * RESUMO TÉCNICO:
+ * Usa o módulo sass:list e mapas Sass ($status, $eventos) com pares
+ * [texto, fundo] percorridos por @each para gerar as cores de cada situação
+ * (data-status) e de cada tipo de evento (data-tipo). O mixin cor-marcador
+ * monta as 12 cores de marcador (.marcador-cor-N). O quadro usa CSS Grid
+ * com colunas por estágio e o atributo data-nivel (1 a 4) para empacotar
+ * mais cartões quando a coluna fica cheia. Várias regras usam :has() para
+ * reagir ao conteúdo (ex.: coluna Concluída recolhida).
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Apoia a gestão das demandas das equipes da SPI: distribuir tarefas,
+ * acompanhar prazos (SLA), entregar e validar trabalho, ver a carga de cada
+ * pessoa e o desempenho da equipe, inclusive as tarefas geradas pelas
+ * etapas das competências de contratos.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelas telas de
+ * frontend/src/app/features/tarefas (quadro, lista, calendário, janela da
+ * tarefa, equipes, desempenho). Algumas classes daqui são globais e usadas
+ * em outros módulos (ex.: .chips-filtro, .selo-status, .linha-do-tempo,
+ * .botao-icone, .avatar, .pilula-evento no calendário de vencimentos).
+ *
+ * =============================================================================
+ */
 
+// @use carrega um módulo nativo do Sass; aqui serve para list.nth(), que pega o N-ésimo item de uma lista
 @use 'sass:list';
 
 $cor-a-fazer: #6a7786;
@@ -8,6 +44,7 @@ $cor-andamento: #2f6fb5;
 $cor-validacao: #b7791f;
 $cor-concluida: #2e8b57;
 
+// Mapa Sass: chave = situação da tarefa (valor vindo da API), valor = par (cor do texto, cor do fundo).
 // Cores por situação: [texto, fundo]
 $status: (
   a_fazer: ($cor-a-fazer, #eef0f2),
@@ -25,6 +62,7 @@ $status: (
   white-space: nowrap;
 
   @each $nome, $par in $status {
+    // @each (linha acima) percorre o mapa e gera uma regra por situação; #{$nome} insere o nome no seletor
     &[data-status='#{$nome}'] { color: list.nth($par, 1); background: list.nth($par, 2); }
   }
 }
@@ -1298,7 +1336,10 @@ a.botao-link { display: inline-flex; align-items: center; text-decoration: none;
   .rotulo-lateral { margin: 0; color: #8e99a6; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
   .titulo-lateral { display: flex; align-items: center; justify-content: space-between; }
   .selo-status.grande { justify-self: start; padding: 5px 12px; font-size: 12px; }
-  .acoes-pipeline { display: grid; gap: 6px; button { width: 100%; justify-content: center; } }
+  .acoes-pipeline { display: grid; gap: 6px; button, a { width: 100%; justify-content: center; text-align: center; } }
+  // Selo da RDM da tarefa (situação colorida + "RDM SGI 00001/2026 - Título"), leva à página da RDM
+  .selo-rdm { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; color: var(--spi-texto); font-size: 12px; text-decoration: none;
+    &:hover { color: var(--spi-vermelho); } }
   .pessoa-lateral { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
   .lista-pessoas-lateral { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; li { display: flex; align-items: center; gap: 8px; } }
   .seletor-lateral { height: 34px; }

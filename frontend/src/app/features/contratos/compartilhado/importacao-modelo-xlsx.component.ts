@@ -1,5 +1,31 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para oferecer o botão "Importar XLSX" de checklists e formulários de avaliação (contrato e modelos globais).
+/**
+ * =============================================================================
+ * ARQUIVO: importacao-modelo-xlsx.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Oferecer o botão "Importar XLSX" de checklists e formulários de avaliação,
+ * tanto do contrato quanto dos modelos globais, com a janela de importação.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido. Mostra o botão só com ACL
+ * contratos em MODIFICACAO ou mais. A janela segue o fluxo baixar modelo,
+ * escolher planilha (validada no navegador), prévia pela API (erros e avisos)
+ * e confirmação, que reenvia o arquivo para gravar e emite "importado".
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite montar checklists de documentos e formulários de avaliação a partir
+ * de uma planilha, sem digitar item por item, conferindo os erros antes de
+ * gravar. No contrato a importação cria uma versão inativa, que o gestor
+ * ativa depois de conferir.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Usado nas abas Checklists e Formulários do contrato e na tela de modelos
+ * globais. Chama ContratosApiService; reaproveita validarPlanilha da
+ * importação de contratos e a trilha de etapas (trilha-importacao.ts).
+ *
+ * =============================================================================
+ */
 
 import { TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { trilhaImportacao } from './trilha-importacao';
@@ -15,6 +41,9 @@ import { PreviaImportacaoModelo } from './contratos.models';
  * Botão "Importar XLSX" (parte de Editar contratos: ACL `contratos` ≥ MODIFICACAO). Sem `contratoId` cria um modelo
  * global; com ele, cria uma versão inativa do checklist/formulário do contrato. Fluxo da janela:
  * baixar o modelo → escolher a planilha → ver a prévia (erros e avisos) → confirmar.
+ *
+ * ACL = lista de controle de acesso do SGI: cada módulo tem níveis (Leitura, Modificação, Controle total).
+ * O `host` escuta a tecla Esc no documento para fechar a janela.
  */
 @Component({
   selector: 'app-importacao-modelo-xlsx',
@@ -96,6 +125,7 @@ import { PreviaImportacaoModelo } from './contratos.models';
   `,
 })
 export class ImportacaoModeloXlsxComponent {
+  /** O que está sendo importado: checklist de documentos ou formulário de avaliação. */
   readonly tipo = input.required<'checklist' | 'formulario'>();
   /** Ausente = modelo global (tela de modelos, só SuperRoot). */
   readonly contratoId = input<string>();
@@ -108,12 +138,14 @@ export class ImportacaoModeloXlsxComponent {
   private readonly dialogos = inject(DialogosService);
   private readonly acesso = inject(AcessoService);
 
+  // Só quem pode editar contratos vê o botão
   protected readonly liberado = computed(() => this.acesso.pode('contratos', 'MODIFICACAO'));
   protected readonly aberta = signal(false);
   protected readonly arquivo = signal<File | null>(null);
   protected readonly erroArquivo = signal<string | null>(null);
   protected readonly previa = signal<PreviaImportacaoModelo | null>(null);
   protected readonly ocupado = signal(false);
+  // Etapas da trilha (modelo, planilha, prévia, confirmação), recalculadas conforme o andamento
   protected readonly trilha = computed(() => trilhaImportacao(!!this.arquivo(), this.previa()));
 
   /** Escala da prévia em uma linha (ex.: "0 Ruim · 5 Regular"). */
@@ -121,6 +153,7 @@ export class ImportacaoModeloXlsxComponent {
     return (this.previa()?.escala ?? []).map((n) => `${n.valor ?? '—'} ${n.legenda}`).join(' · ') || '—';
   }
 
+  /** Abre a janela limpa (sem arquivo, prévia ou erro de uma tentativa anterior). */
   protected abrir(): void {
     this.arquivo.set(null);
     this.previa.set(null);
@@ -133,6 +166,7 @@ export class ImportacaoModeloXlsxComponent {
     if (!this.ocupado()) this.aberta.set(false);
   }
 
+  /** Baixa a planilha-modelo vazia (global ou do contrato) para o usuário preencher. */
   protected baixarModelo(): void {
     this.api.baixarModeloImportacaoModelo(this.tipo(), this.contratoId()).subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível baixar o modelo') });
   }
@@ -140,6 +174,7 @@ export class ImportacaoModeloXlsxComponent {
   /** Ao escolher a planilha: confere extensão e tamanho no navegador e já pede a prévia. */
   protected aoEscolher(campo: HTMLInputElement): void {
     const escolhido = campo.files?.[0] ?? null;
+    // Limpa o campo para permitir escolher o mesmo arquivo de novo (senão o change não dispara)
     campo.value = '';
     this.previa.set(null);
     const problema = validarPlanilha(escolhido);
@@ -148,6 +183,10 @@ export class ImportacaoModeloXlsxComponent {
     if (!problema && escolhido) this.carregarPrevia(escolhido);
   }
 
+  /**
+   * Envia a planilha para a API ler e validar, sem gravar nada. `dialogos.executar` mostra o aviso
+   * "Lendo a planilha…" enquanto a chamada acontece.
+   */
   private carregarPrevia(arquivo: File): void {
     this.ocupado.set(true);
     this.dialogos.executar(this.api.previaImportacaoModelo(this.tipo(), arquivo, this.contratoId()), 'Lendo a planilha…').subscribe({
@@ -165,6 +204,7 @@ export class ImportacaoModeloXlsxComponent {
   /** Confirma: envia a mesma planilha para gravar. */
   protected importar(): void {
     const arquivo = this.arquivo();
+    // Segurança extra: sem prévia válida não grava, mesmo que o botão seja acionado de outro jeito
     if (!arquivo || !this.previa()?.pode_importar) return;
     this.ocupado.set(true);
     this.dialogos.executar(this.api.importarModelo(this.tipo(), arquivo, this.contratoId()), 'Importando…').subscribe({

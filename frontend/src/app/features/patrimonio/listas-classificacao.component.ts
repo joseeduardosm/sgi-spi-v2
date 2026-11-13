@@ -1,5 +1,31 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para as abas de inservíveis e de extraviados (a rota define qual): as listas de classificação (rascunhos, pendentes de aprovação e decididas).
+/**
+ * =============================================================================
+ * ARQUIVO: listas-classificacao.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Telas de Inservíveis e de Extraviados do Patrimônio: mostram as listas de
+ * classificação daquele tipo (rascunhos, pendentes e decididas) e criam uma
+ * lista nova.
+ *
+ * RESUMO TÉCNICO:
+ * Um único componente atende as duas rotas: o tipo vem de data['tipo'] da
+ * rota (ActivatedRoute.snapshot). Carrega todas as classificações pela API e
+ * filtra no navegador pelo tipo. A criação gera um id_cliente com
+ * crypto.randomUUID() e abre a lista recém-criada.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Inservível é o bem sem condição de uso; extraviado, o bem não localizado.
+ * Esta tela é a porta de entrada para montar essas listas, que depois de
+ * aprovadas permitem dar baixa nos bens.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rotas /patrimonio/inserviveis e /patrimonio/extraviados
+ * (patrimonio.routes.ts). Cada cartão abre lista-classificacao.component.ts.
+ * Usa PatrimonioApiService e PatrimonioEstadoService (nível de acesso).
+ *
+ * =============================================================================
+ */
 import { DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -35,6 +61,7 @@ import { Classificacao, COR_STATUS, ROTULOS_STATUS } from './patrimonio.models';
     </section>
   `,
 })
+/** Lista de classificações de um tipo (inservível ou extraviado), com o botão de criar. */
 export class ListasClassificacaoComponent implements OnInit {
   private readonly api = inject(PatrimonioApiService);
   private readonly roteador = inject(Router);
@@ -43,18 +70,25 @@ export class ListasClassificacaoComponent implements OnInit {
   private readonly rota = inject(ActivatedRoute);
   /** Tipo da tela (`inserviveis` ou `extraviados`), vindo da rota. */
   protected readonly tipo: 'inservivel' | 'extraviado' = this.rota.snapshot.data['tipo'] === 'extraviado' ? 'extraviado' : 'inservivel';
+  /** Atalhos derivados do tipo: se é a tela de extraviados e o endereço base dos links. */
   protected readonly extraviado = this.tipo === 'extraviado';
   protected readonly base = this.extraviado ? '/patrimonio/extraviados' : '/patrimonio/inserviveis';
+  /** Listas do tipo da tela, já filtradas. */
   protected readonly listas = signal<Classificacao[]>([]);
   protected readonly marcador = classeMarcador;
   protected readonly cores = COR_STATUS;
   protected readonly rotulos = ROTULOS_STATUS;
 
+  /** Carrega o acesso do usuário e as listas; a API devolve os dois tipos e o filtro é feito aqui. */
   ngOnInit(): void {
     void this.estado.carregar();
     this.api.classificacoes().subscribe({ next: (x) => this.listas.set(x.filter((c) => c.tipo === this.tipo)), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar as listas') });
   }
 
+  /**
+   * Cria uma lista vazia no servidor e abre a página dela. O UUID enviado é o
+   * id_cliente, que evita criar duas listas se o pedido for repetido.
+   */
   protected nova(tipo: 'inservivel' | 'extraviado'): void {
     this.api.criarClassificacao(tipo, crypto.randomUUID()).subscribe({
       next: (c) => void this.roteador.navigate([this.base, c.id]), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível criar a lista'),

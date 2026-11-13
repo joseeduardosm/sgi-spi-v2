@@ -15,6 +15,7 @@ contrato ao ser concluído/registrado. As rotas de escrita devolvem o painel do 
 
 import uuid
 from datetime import date
+from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
@@ -394,6 +395,33 @@ def concluir_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, arquivo: U
         return servico_reajuste.painel(sessao, contrato_id, autor)
 
 
+@roteador.put("/reajustes/{reajuste_id}/diferenca-manual", response_model=PainelReajuste, tags=REAJUSTE,
+              summary="Informar a diferença retroativa manualmente (meses pagos fora do sistema)",
+              description="`multipart/form-data`: `valor` (total da diferença dos meses marcados; negativo = crédito da SPI), `competencias_ids` (repetido, um por mês), "
+               "`justificativa` e `arquivo` (PDF da memória feita fora do sistema). Só meses **encerrados**, a partir da data de efeito, **sem medição "
+               "concluída** no sistema (os de `meses_sem_medicao`). Substitui a anterior. Os meses marcados ficam travados no preço de antes e saem do "
+               "cálculo automático; na conclusão, valor positivo vira competência complementar de uma linha (`AAAA-MM-dif-manual`) e negativo, crédito "
+               "no fundo do contrato. `400` sem meses, sem justificativa, com valor zero ou com mês fora da lista.",
+              responses={**ESCRITA, **ARQUIVO_RECUSADO})
+def diferenca_manual_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, valor: Decimal = Form(...), competencias_ids: list[uuid.UUID] = Form(...),
+                              justificativa: str = Form(..., max_length=4000), arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
+                              autor: Usuario = Depends(pode_modificar)):
+    """Grava a diferença manual do reajuste em elaboração."""
+    with traduzir_erros(sessao):
+        servico_reajuste.gravar_diferenca_manual(sessao, contrato_id, reajuste_id, valor, competencias_ids, justificativa, *arquivo_pdf(arquivo), autor)
+        return servico_reajuste.painel(sessao, contrato_id, autor)
+
+
+@roteador.delete("/reajustes/{reajuste_id}/diferenca-manual", response_model=PainelReajuste, tags=REAJUSTE, summary="Remover a diferença retroativa manual",
+                 description="Só com o reajuste em elaboração; os meses marcados destravam e voltam ao cálculo automático. `400` se não há diferença manual.",
+                 responses=ESCRITA)
+def remover_diferenca_manual_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Remove a diferença manual do reajuste em elaboração."""
+    with traduzir_erros(sessao):
+        servico_reajuste.remover_diferenca_manual(sessao, contrato_id, reajuste_id, autor)
+        return servico_reajuste.painel(sessao, contrato_id, autor)
+
+
 @roteador.post("/reajustes/{reajuste_id}/cancelar", response_model=PainelReajuste, tags=REAJUSTE, summary="Cancelar reajuste", responses=ESCRITA)
 def cancelar_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Cancela o reajuste em elaboração sem alterar o contrato."""
@@ -533,6 +561,35 @@ def finalizar_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, arq
     """Finaliza e aplica a repactuação."""
     with traduzir_erros(sessao):
         servico_repactuacao.finalizar(sessao, contrato_id, repactuacao_id, *arquivo_pdf(arquivo), autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.put("/repactuacoes/{repactuacao_id}/diferenca-manual", response_model=PainelRepactuacao, tags=REPACTUACAO,
+              summary="Informar a diferença retroativa manualmente (meses pagos fora do sistema)",
+              description="`multipart/form-data`: `valor` (total da diferença dos meses marcados; negativo = crédito da SPI), `competencias_ids` (repetido, um por mês), "
+               "`justificativa` e `arquivo` (PDF da memória feita fora do sistema). Só meses **encerrados**, a partir da data de efeito, **sem medição "
+               "concluída** no sistema (os de `meses_sem_medicao`). Substitui a anterior. Os meses marcados ficam travados no preço de antes e saem do "
+               "cálculo automático; na conclusão, valor positivo vira competência complementar de uma linha (`AAAA-MM-dif-repactuacao-manual`) e negativo, crédito "
+               "no fundo do contrato. `400` sem meses, sem justificativa, com valor zero ou com mês fora da lista.",
+              responses={**ESCRITA, **ARQUIVO_RECUSADO})
+def diferenca_manual_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, valor: Decimal = Form(...), competencias_ids: list[uuid.UUID] = Form(...),
+                                 justificativa: str = Form(..., max_length=4000), arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
+                                 autor: Usuario = Depends(pode_modificar)):
+    """Grava a diferença manual da repactuação em elaboração."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.gravar_diferenca_manual(sessao, contrato_id, repactuacao_id, valor, competencias_ids, justificativa, *arquivo_pdf(arquivo), autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
+@roteador.delete("/repactuacoes/{repactuacao_id}/diferenca-manual", response_model=PainelRepactuacao, tags=REPACTUACAO,
+                 summary="Remover a diferença retroativa manual",
+                 description="Só com a repactuação em elaboração; os meses marcados destravam e voltam ao cálculo automático. `400` se não há diferença manual.",
+                 responses=ESCRITA)
+def remover_diferenca_manual_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                                         autor: Usuario = Depends(pode_modificar)):
+    """Remove a diferença manual da repactuação em elaboração."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.remover_diferenca_manual(sessao, contrato_id, repactuacao_id, autor)
         return servico_repactuacao.painel(sessao, contrato_id, autor)
 
 

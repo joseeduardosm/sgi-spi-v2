@@ -17,6 +17,7 @@ import { textoSla } from '../sla/sla.models';
 import { AgendaPessoaComponent } from './agenda-pessoa.component';
 import { AvataresComponent } from './avatares.component';
 import { JanelaTarefaComponent, ModoJanela } from './janela-tarefa.component';
+import { SITUACOES_RDM } from './rdm.models';
 import { TarefasApiService } from './tarefas-api.service';
 import {
   AcaoPipeline, AnexoEvento, duracao, EventoTarefa, Marcador, Pessoa, TarefaResumo, Atividade, Marco, ICONES_TIPO_ATIVIDADE, ROTULOS_TIPO_ATIVIDADE, TipoAtividade, PessoaCarga, prazoRelativo, PrioridadeTarefa, ROTULOS_PRIORIDADE, ROTULOS_STATUS,
@@ -80,6 +81,8 @@ export class JanelaDetalheTarefaComponent {
   protected readonly CLIPE = CLIPE;
   protected readonly textoSla = textoSla;
   protected readonly rotulosStatus = ROTULOS_STATUS;
+  /** Rótulo e cor de cada situação da RDM (amarela, vermelha, laranja, verde). */
+  protected readonly situacoesRdm = SITUACOES_RDM;
   /** Colunas ordenáveis da tabela de subtarefas (ID, descrição, status, responsável e data). */
   protected readonly colunasSub: { chave: ColunaSub; rotulo: string }[] = [
     { chave: 'numero', rotulo: 'ID' }, { chave: 'titulo', rotulo: 'Descrição' }, { chave: 'status', rotulo: 'Status' },

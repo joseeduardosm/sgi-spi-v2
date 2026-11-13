@@ -1,5 +1,33 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a árvore de localizações do Patrimônio (prédio, andar, lado, sala): setor e responsável de cada sala, novas salas e inativação.
+/**
+ * =============================================================================
+ * ARQUIVO: localizacoes.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Tela de Locais do Patrimônio: árvore de localizações (prédio, andar, lado,
+ * sala) com setor e responsável de cada sala, criação de salas e áreas
+ * comuns, inativação e exclusão.
+ *
+ * RESUMO TÉCNICO:
+ * Monta a árvore a partir da lista plana (pai_id) num computed, mostrando só
+ * os nós abertos; com pesquisa, mostra apenas as salas que casam. As
+ * localizações vêm do PatrimonioEstadoService (cache compartilhado), que é
+ * recarregado depois de cada alteração. Nome/número novos são pedidos por
+ * window.prompt.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Mantém o cadastro físico do prédio da SPI: o código da sala (andar + lado +
+ * número, ex.: 05A03) identifica onde cada bem está, e o responsável da sala
+ * passa a ser o responsável pelos bens dela. Só o controle total cria, inativa
+ * ou exclui salas.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota /patrimonio/localizacoes (patrimonio.routes.ts). Usa o seletor de
+ * usuários padrão, a lista de setores da API e o estado do módulo. As salas
+ * aparecem depois no seletor-sala e nas telas de bens e movimentação.
+ *
+ * =============================================================================
+ */
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -12,6 +40,7 @@ import { PatrimonioApiService } from './patrimonio-api.service';
 import { PatrimonioEstadoService } from './patrimonio-estado.service';
 import { Localizacao } from './patrimonio.models';
 
+/** Uma linha da árvore desenhada: o nó, o recuo (nível) e quantos filhos ele tem. */
 interface Linha { no: Localizacao; nivel: number; filhos: number }
 
 /** A árvore sai da lista plana (`pai_id`). Só o controle total cadastra salas e altera setor e responsável de salas que já os têm. */
@@ -64,15 +93,21 @@ interface Linha { no: Localizacao; nivel: number; filhos: number }
     </section>
   `,
 })
+/** Árvore de localizações com as ações de cadastro conforme o nível de acesso. */
 export class LocalizacoesComponent implements OnInit {
   private readonly api = inject(PatrimonioApiService);
   private readonly dialogos = inject(DialogosService);
   protected readonly estado = inject(PatrimonioEstadoService);
+  /** Ids dos nós expandidos na árvore. */
   protected readonly abertos = signal<Set<string>>(new Set());
+  /** Texto da pesquisa de sala. */
   protected readonly busca = signal('');
+  /** Sala com o painel de setor e responsável aberto (null = nenhuma). */
   protected readonly emEdicao = signal<Localizacao | null>(null);
+  /** Opções de setor do painel de edição e o responsável escolhido. */
   protected readonly setores = signal<{ id: number; nome: string }[]>([]);
   protected readonly responsavel = signal<OpcaoUsuario[]>([]);
+  /** Setor escolhido no select do painel (ngModel). */
   protected setorId: number | null = null;
   protected readonly marcador = classeMarcador;
   protected readonly fonteUsuarios = (busca: string) => this.api.opcoesUsuarios(busca);
@@ -98,6 +133,7 @@ export class LocalizacoesComponent implements OnInit {
     return saida;
   });
 
+  /** Carrega as localizações e deixa o prédio (raiz) já aberto. */
   ngOnInit(): void {
     void this.estado.carregar().then(() => {
       const raiz = this.estado.localizacoes().find((l) => l.tipo === 'predio');
@@ -105,10 +141,12 @@ export class LocalizacoesComponent implements OnInit {
     });
   }
 
+  /** Abre ou fecha um nó da árvore (novo Set para o signal perceber a mudança). */
   protected alternar(id: string): void {
     this.abertos.update((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
+  /** Abre o painel de setor e responsável da sala, já preenchido, e busca a lista de setores. */
   protected editar(sala: Localizacao): void {
     this.emEdicao.set(sala);
     this.setorId = sala.setor_id;
@@ -116,12 +154,17 @@ export class LocalizacoesComponent implements OnInit {
     this.api.opcoesSetores().subscribe((s) => this.setores.set(s));
   }
 
+  /** Grava setor e responsável da sala e recarrega as localizações. */
   protected salvar(sala: Localizacao): void {
     this.api.dadosSala(sala.id, this.setorId, this.responsavel()[0]?.id ?? null).subscribe({
       next: () => { this.emEdicao.set(null); void this.estado.carregar(true); }, error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível salvar'),
     });
   }
 
+  /**
+   * Cria uma área comum no andar (hall, copa...), fora da numeração A/B.
+   * Pede nome e sigla; a sigla precisa ter de 1 a 4 letras.
+   */
   protected novaAreaComum(andar: Localizacao): void {
     const nome = window.prompt(`Nome da área comum no ${andar.nome} (ex.: Hall dos elevadores):`, 'Hall dos elevadores')?.trim();
     if (!nome) return;
@@ -130,16 +173,19 @@ export class LocalizacoesComponent implements OnInit {
     this.api.criarAreaComum(andar.id, nome, sigla).subscribe({ next: () => void this.estado.carregar(true), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível criar a área comum') });
   }
 
+  /** Cria uma sala no lado do andar; o número precisa ser inteiro de 1 a 99. */
   protected novaSala(lado: Localizacao): void {
     const numero = Number(window.prompt(`Número da nova sala no lado ${lado.lado} do andar ${lado.andar} (1 a 99):`)?.trim());
     if (!Number.isInteger(numero) || numero < 1 || numero > 99) return;
     this.api.criarSala(lado.id, numero).subscribe({ next: () => void this.estado.carregar(true), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível criar a sala') });
   }
 
+  /** Inativa a sala ativa ou reativa a inativa. */
   protected inativar(sala: Localizacao): void {
     this.api.atualizarLocalizacao(sala.id, { ativo: !sala.ativo }).subscribe({ next: () => void this.estado.carregar(true), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível alterar') });
   }
 
+  /** Exclui a sala depois de confirmar; o servidor recusa se houver bens nela. */
   protected async excluir(sala: Localizacao): Promise<void> {
     if (!(await this.dialogos.confirmar({ titulo: `Excluir a sala ${sala.codigo}?`, mensagem: 'Sala com bens vinculados não pode ser excluída, só inativada.', rotuloConfirmar: 'Excluir', segundos: 3 }))) return;
     this.api.excluirSala(sala.id).subscribe({ next: () => void this.estado.carregar(true), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível excluir') });

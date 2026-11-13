@@ -1,5 +1,32 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para os estilos do Módulo Melhorias (botão flutuante, janela de envio, minhas sugestões e triagem).
+/**
+ * =============================================================================
+ * ARQUIVO: _melhorias.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do Módulo Melhorias: o botão flutuante "sugerir melhoria", o aviso
+ * de envio, a janela de envio com prints, a lista "Minhas sugestões" e a
+ * tela de triagem (filtros, tabela, detalhe, conversão em tarefa e histórico).
+ *
+ * RESUMO TÉCNICO:
+ * .botao-melhorias usa position: fixed e touch-action: none para poder ser
+ * arrastado pela tela sem rolar a página; o "×" de fechar aparece no hover
+ * ou sempre em telas de toque (@media (hover: none)). .selo-sugestao pinta a
+ * situação pelo atributo data-situacao (nova, em_analise, aceita, concluida,
+ * recusada). Na impressão o botão e o aviso somem.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dá aos usuários um canal direto para sugerir melhorias no SGI de qualquer
+ * tela, acompanhar a resposta, e à equipe de TI um painel para triar,
+ * responder e transformar sugestões em tarefas.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelo componente do botão flutuante (no
+ * layout autenticado) e pelas telas do módulo Melhorias; a conversão em
+ * tarefa se liga ao módulo Tarefas. Usa os tokens --spi-* e --cor-*.
+ *
+ * =============================================================================
+ */
 
 /* Botão flutuante: fica sobre o conteúdo, pode ser arrastado e fechado na aba */
 .botao-melhorias {
@@ -7,6 +34,7 @@
   z-index: 150;
   display: flex;
   align-items: flex-start;
+  // touch-action: none impede que o arraste com o dedo role a página; user-select: none evita selecionar texto ao arrastar
   touch-action: none;
   user-select: none;
 
@@ -165,6 +193,7 @@
   background: var(--spi-superficie-alt);
   white-space: nowrap;
 
+  // Cada situação da sugestão (valor vindo da API no atributo data-situacao) ganha sua cor
   &[data-situacao='nova'] { color: #2b4468; background: var(--cor-e6eefb); }
   &[data-situacao='em_analise'] { color: var(--cor-9a6400); background: var(--cor-fff4dc); }
   &[data-situacao='aceita'] { color: var(--cor-1d6b43); background: var(--cor-e5f4ec); }
@@ -246,6 +275,7 @@
 
   .resumo-sugestao {
     display: -webkit-box;
+    // Corta o texto da sugestão em 2 linhas com reticências (o texto inteiro aparece no detalhe)
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;

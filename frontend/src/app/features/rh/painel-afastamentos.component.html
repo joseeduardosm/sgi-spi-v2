@@ -1,6 +1,36 @@
+<!--
+===============================================================================
+ARQUIVO: painel-afastamentos.component.html
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Template do painel de afastamentos da CGP e dos autorizadores: ações da
+CGP, fila "Aguardando você", férias a vencer, filtros, alertas, gráfico
+anual, calendário em faixas e os modais de recusa e de detalhe.
+
+RESUMO TÉCNICO:
+Controle de fluxo do Angular (@if, @for, @defer) sobre os signals do
+PainelAfastamentosComponent. Cada período é uma faixa posicionada em % da
+largura por barra(); o gráfico anual só carrega com @defer (on idle). Os
+filtros recarregam o painel a cada mudança.
+
+FINALIDADE DE NEGÓCIO:
+Concentra numa só tela a decisão sobre férias e licença-prêmio: quem
+precisa dar ciente ou aprovar, quem tem férias prestes a expirar e onde há
+muitas pessoas do mesmo setor afastadas ao mesmo tempo.
+
+CONTEXTO NO SISTEMA:
+Ligado a painel-afastamentos.component.ts. Usa app-cabecalho-rh,
+app-lancamento-afastamento, app-grafico, app-trilha-etapas e app-esqueleto,
+com as classes globais de styles.scss (cartao-dados, tabela-gestao,
+filtros-gestao, modal-portal, acao-*).
+
+===============================================================================
+-->
 <app-cabecalho-rh titulo="Painel de afastamentos" [trilha]="['Painel']"
                   descricao="Férias e licenças-prêmio no calendário. Amarelo: aguardando aprovação; verde: aprovado." />
 
+<!-- Ações exclusivas da CGP: lançar afastamento e relatórios de saldo -->
 @if (painel()?.cgp) {
   <div class="barra-acoes-rh">
     <button type="button" class="acao-primaria" (click)="lancando.set(true)"><span>+</span> Lançar afastamento</button>
@@ -10,6 +40,7 @@
   <app-lancamento-afastamento [(aberta)]="lancando" (lancado)="carregar()" />
 }
 
+<!-- Fila do usuário logado: ciente do superior imediato (etapa 1) ou aprovação (etapa 2) -->
 @if (aprovacoes().length) {
   <section class="cartao-dados" aria-labelledby="titulo-aprovacoes">
     <header><div><h2 id="titulo-aprovacoes">Aguardando você ({{ aprovacoes().length }})</h2></div></header>
@@ -39,6 +70,7 @@
   </section>
 }
 
+<!-- Férias a vencer: saldo não agendado de períodos que terminam em até 90 dias -->
 @if (painel()?.ferias_a_vencer?.length) {
   <section class="cartao-dados" aria-labelledby="titulo-a-vencer">
     <header><div><h2 id="titulo-a-vencer">Férias a vencer ({{ painel()!.ferias_a_vencer.length }})</h2>
@@ -57,6 +89,7 @@
   </section>
 }
 
+<!-- Filtros, alertas, gráfico anual e calendário; @if mostra o bloco só quando há dados -->
 @if (painel(); as p) {
   <form class="filtros-gestao painel-gestao" style="margin-bottom: 18px; border-bottom: 0" (ngSubmit)="carregar()">
     <select name="visao" aria-label="Visão" [(ngModel)]="filtros.visao" (change)="carregar()">
@@ -139,6 +172,7 @@
   <app-esqueleto tipo="painel" [linhas]="4" />
 }
 
+<!-- Modal de recusa: a justificativa é obrigatória -->
 @if (recusando(); as a) {
   <div animate.leave="mov-fundo-sai" class="fundo-modal" role="presentation" (click)="recusando.set(null)"></div>
   <section animate.leave="mov-modal-sai" class="modal-portal janela-mensagem" role="dialog" aria-modal="true" aria-labelledby="titulo-recusa">

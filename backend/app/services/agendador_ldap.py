@@ -1,9 +1,30 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para agendar a sincronização periódica dos usuários do diretório LDAP.
-"""Sincronização periódica do diretório LDAP ativo.
+"""
+===============================================================================
+ARQUIVO: agendador_ldap.py
+AUTOR: José Eduardo Santana Martins
 
-Roda numa thread de cada worker do uvicorn; um advisory lock do PostgreSQL garante que só
-um deles sincronize por vez. Falhas não desativam ninguém (a fotografia incompleta é descartada).
+FINALIDADE:
+Agendar a sincronização periódica dos usuários do diretório LDAP ativo
+(Active Directory do órgão) com as contas do SGI.
+
+RESUMO TÉCNICO:
+AgendadorSincronizacaoLdap roda numa thread em segundo plano em cada worker
+do uvicorn, a cada `intervalo_sincronizacao_ldap_minutos` (0 desliga). Um
+advisory lock do PostgreSQL garante que só um worker sincronize por vez.
+Falhas não desativam ninguém: a fotografia incompleta do diretório é
+descartada e o erro vai para o log.
+
+FINALIDADE DE NEGÓCIO:
+Manter as contas do SGI alinhadas com o diretório da rede: quem entra no
+órgão ganha conta, quem tem dados alterados é atualizado e quem sai é
+desativado, sem trabalho manual do administrador.
+
+CONTEXTO NO SISTEMA:
+Iniciado e parado junto com a API. Chama `servico_ldap.obter_diretorio_ativo`
+e `servico_ldap.sincronizar`, que usam `cliente_ldap.py` para consultar o
+servidor. O diretório é cadastrado em Administração › Diretórios LDAP.
+
+===============================================================================
 """
 
 import logging
@@ -26,6 +47,7 @@ class AgendadorSincronizacaoLdap:
 
     # O Event serve para pedir a parada e, ao mesmo tempo, esperar o intervalo (wait com timeout)
     def __init__(self) -> None:
+        """Prepara o sinal de parada; a thread só é criada em iniciar()."""
         self._parar = threading.Event()
         self._linha_execucao: threading.Thread | None = None
 
@@ -69,6 +91,8 @@ class AgendadorSincronizacaoLdap:
                 if diretorio is None:
                     return
                 try:
+                    # O texto "sistema:..." identifica, no histórico, que a
+                    # sincronização foi automática e não feita por uma pessoa.
                     r = servico_ldap.sincronizar(sessao, diretorio.id, "sistema:sincronizacao-ldap")
                     registro_log.info(
                         "LDAP sincronizado: %s encontrados, %s criados, %s atualizados, %s desativados.",

@@ -1,20 +1,36 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para gerar e importar o backup geral do sistema (banco inteiro + anexos), usado pelo SuperRoot.
-"""Backup geral do SGI SPI: um `.zip` com o banco inteiro e todos os anexos.
+"""
+===============================================================================
+ARQUIVO: servico_backup.py
+AUTOR: José Eduardo Santana Martins
 
-Conteúdo do `.zip`:
-- `manifesto.json`: data, servidor, ambiente, versão do sistema e revisão do banco (Alembic), quem gerou e o motivo;
-- `banco.dump`: `pg_dump` no formato custom (configurações, ACLs, servidores SMTP e LDAP, contratos… tudo do banco);
-- `anexos/…`: os arquivos da pasta de anexos, com o mesmo caminho relativo.
+FINALIDADE:
+Gerar e importar o backup geral do SGI SPI: um .zip com o banco inteiro e
+todos os anexos, operado pelo SuperRoot (papel administrativo máximo).
 
-Gerar e importar levam mais que o tempo de uma requisição: as duas operações rodam em segundo plano e gravam o andamento
-em `dados/backups/andamento.json`, que a tela consulta.
+RESUMO TÉCNICO:
+O .zip traz manifesto.json (data, servidor, ambiente, versão do sistema,
+revisão do banco no Alembic, quem gerou e o motivo), banco.dump (pg_dump no
+formato custom) e a pasta anexos/ com o mesmo caminho relativo. Gerar e
+importar demoram mais que uma requisição: rodam numa thread e gravam o
+andamento em dados/backups/andamento.json, que a tela consulta. Importar
+primeiro faz um backup automático ("antes-da-importacao"), restaura o banco
+numa transação só (pg_restore --single-transaction), troca a pasta de anexos,
+aplica as migrações e reinicia a API.
 
-**Importar substitui tudo.** Antes, gera um backup automático do estado atual ("antes-da-importacao"). A restauração do
-banco é feita numa transação só (`pg_restore --single-transaction`): se falhar, o banco fica como estava. Depois troca a
-pasta de anexos, aplica as migrações (um backup de versão anterior sobe para a atual) e reinicia a API.
+FINALIDADE DE NEGÓCIO:
+Permite guardar uma cópia completa do sistema (configurações, ACL, SMTP,
+LDAP, contratos, RH...) e recuperá-la ou levá-la a outro servidor sem
+depender da equipe de infraestrutura. Atenção: as senhas do LDAP e do SMTP
+vão cifradas com CHAVE_CIFRA_LDAP; restaurar em outro servidor exige a mesma
+chave no .env.
 
-As senhas do LDAP e do SMTP vão cifradas com `CHAVE_CIFRA_LDAP`: restaurar em outro servidor exige a mesma chave no `.env`.
+CONTEXTO NO SISTEMA:
+Chamado pelas rotas de Administração (backup). Usa FabricaSessao e a
+configuração (app.core), a auditoria (servico_auditoria), as ferramentas
+pg_dump/pg_restore, o Alembic e o systemd (reinício de sgi-spi-api.service).
+Nos testes (SQLite) as funções das ferramentas do PostgreSQL são substituídas.
+
+===============================================================================
 """
 
 import json
@@ -41,6 +57,7 @@ from app.services.servico_auditoria import auditar
 
 log = logging.getLogger(__name__)
 
+# Nomes fixos dos itens dentro do .zip e do arquivo de andamento lido pela tela.
 SISTEMA = "SGI SPI"
 MANIFESTO = "manifesto.json"
 DUMP = "banco.dump"
@@ -59,6 +76,7 @@ class ErroBackup(Exception):
 # ---------------------------------------------------------------------------------------------
 
 def pasta() -> Path:
+    """Pasta onde os backups ficam guardados (criada na hora se ainda não existir)."""
     destino = obter_configuracao().backups_diretorio
     destino.mkdir(parents=True, exist_ok=True)
     return destino
@@ -91,6 +109,7 @@ def _mb(quantidade: int) -> str:
 
 
 def ocupado() -> bool:
+    """True se há um backup ou importação marcado como em andamento no arquivo de andamento."""
     return andamento().get("situacao") == "em_andamento"
 
 
@@ -106,6 +125,8 @@ def listar() -> list[dict]:
 
 def caminho_do_backup(nome: str) -> Path:
     """Caminho de um backup pelo nome, sem deixar sair da pasta (nome com barra ou `..` é recusado)."""
+    # Proteção contra "path traversal": um nome como "../../etc/passwd" faria o
+    # download sair da pasta dos backups. Só aceita nome simples terminado em .zip.
     if "/" in nome or "\\" in nome or nome.startswith(".") or not nome.endswith(".zip"):
         raise ErroBackup("Nome de backup inválido.")
     caminho = pasta() / nome
@@ -121,8 +142,11 @@ def caminho_do_backup(nome: str) -> Path:
 def _conexao_libpq() -> tuple[str, dict]:
     """Endereço do banco para as ferramentas do PostgreSQL e o ambiente com a senha (a senha nunca vai na linha de comando)."""
     url = make_url(obter_configuracao().url_banco_dados)
+    # make_url (SQLAlchemy) quebra a URL do banco em usuário, senha, host, porta e base.
     if not url.drivername.startswith("postgresql"):
         raise ErroBackup("O backup geral só funciona com o banco PostgreSQL.")
+    # A senha vai na variável de ambiente PGPASSWORD, lida pelo pg_dump/pg_restore,
+    # para não aparecer na lista de processos do servidor.
     ambiente = {**os.environ, "PGPASSWORD": url.password or ""}
     return f"postgresql://{url.username}@{url.host or 'localhost'}:{url.port or 5432}/{url.database}", ambiente
 
@@ -130,6 +154,8 @@ def _conexao_libpq() -> tuple[str, dict]:
 def despejar_banco(destino: Path) -> None:
     """`pg_dump` do banco inteiro (formato custom, sem dono nem permissões, para restaurar em outro servidor)."""
     endereco, ambiente = _conexao_libpq()
+    # subprocess.run executa o programa externo e espera terminar; capture_output
+    # guarda a saída de erro para montar a mensagem caso falhe.
     r = subprocess.run(["pg_dump", "--format=custom", "--no-owner", "--no-acl", "--dbname", endereco, "--file", str(destino)],
                        env=ambiente, capture_output=True, text=True)
     if r.returncode != 0:
@@ -141,6 +167,8 @@ def restaurar_banco(origem: Path) -> None:
 
     Antes, encerra as outras conexões ao banco (os workers da API), que segurariam as tabelas."""
     endereco, ambiente = _conexao_libpq()
+    # pg_terminate_backend derruba as outras conexões (de outros workers da API);
+    # sem isso o pg_restore ficaria bloqueado esperando as tabelas serem liberadas.
     with FabricaSessao() as sessao:
         sessao.execute(text("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()"))
         sessao.commit()
@@ -159,6 +187,8 @@ def migrar() -> None:
 
 def reiniciar_api() -> None:
     """Reinicia a API logo depois de responder (o sudoers do instalador libera só este comando)."""
+    # Popen (sem esperar) com start_new_session: o comando sobrevive mesmo quando a
+    # própria API é derrubada pelo restart. O "sleep 3" dá tempo de a resposta HTTP sair.
     subprocess.Popen(["sh", "-c", "sleep 3; sudo -n systemctl restart sgi-spi-api.service"], start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -169,6 +199,10 @@ def em_segundo_plano(funcao, *args) -> None:
 
 
 def _revisoes_conhecidas() -> set[str]:
+    """Conjunto de todas as revisões de migração que esta versão do código conhece.
+
+    Usado para recusar backups gerados por uma versão mais nova do sistema.
+    """
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -176,6 +210,7 @@ def _revisoes_conhecidas() -> set[str]:
 
 
 def _revisao_atual() -> str:
+    """Revisão do Alembic gravada no banco atual (vazia se a tabela não existir)."""
     with FabricaSessao() as sessao:
         try:
             return sessao.scalar(text("SELECT version_num FROM alembic_version")) or ""
@@ -192,13 +227,19 @@ def _gerar_arquivo(gerado_por: str, motivo: str, avisar=None) -> Path:
 
     `avisar(etapa, mensagem, fracao)` recebe o andamento: etapa `banco` (cópia do banco), `anexos` (um a um, pelo tamanho)
     e `finalizar`; `fracao` vai de 0 a 1 dentro da geração inteira. Os anexos avisam no máximo uma vez por segundo."""
+    # Quando ninguém quer acompanhar o andamento, usa uma função que não faz nada.
     avisar = avisar or (lambda etapa, mensagem, fracao: None)
     config = obter_configuracao()
     momento = datetime.now().astimezone()
+    # Nome com data e hora; o sufixo do motivo (ex.: "-antes-da-importacao") só
+    # aparece quando não é um backup manual.
     nome = f"backup-sgi-spi-{momento:%Y%m%d-%H%M%S}{'-' + motivo if motivo != 'manual' else ''}.zip"
     destino = pasta() / nome
+    # O .zip é montado com extensão ".parcial" e só renomeado no fim: assim a lista
+    # de backups nunca mostra um arquivo incompleto.
     parcial = destino.with_suffix(".zip.parcial")
     anexos = config.anexos_diretorio
+    # TemporaryDirectory cria uma pasta temporária e a apaga sozinha ao sair do "with".
     with tempfile.TemporaryDirectory(dir=pasta()) as temporaria:
         dump = Path(temporaria) / DUMP
         avisar("banco", "Copiando o banco de dados (configurações, controle de acesso, SMTP, LDAP, contratos, RH…)", 0.02)
@@ -230,9 +271,14 @@ def _gerar_arquivo(gerado_por: str, motivo: str, avisar=None) -> Path:
 
 
 def _executar_geracao(usuario_login: str, usuario_id: int) -> None:
+    """Corpo da geração em segundo plano: gera, audita e grava o resultado no andamento.
+
+    Sempre libera a trava no fim (finally), dando certo ou não.
+    """
     try:
         destino = _gerar_arquivo(usuario_login, "manual",
                                  lambda etapa, mensagem, fracao: _registrar_andamento("gerar", "em_andamento", mensagem, etapa=etapa, percentual=100 * fracao))
+        # Registra na auditoria quem gerou o backup (commit grava de fato no banco).
         with FabricaSessao() as sessao:
             auditar(sessao, usuario_login, "sistema.backup.gerar", destino.name, autor_id=usuario_id, alvo_tipo="backup",
                     dados={"tamanho": destino.stat().st_size})
@@ -249,6 +295,8 @@ def _executar_geracao(usuario_login: str, usuario_id: int) -> None:
 
 def iniciar_geracao(autor: Usuario) -> None:
     """Começa a gerar o backup em segundo plano (um por vez)."""
+    # Duas proteções: o arquivo de andamento (vale entre processos/workers) e a
+    # trava da thread (vale dentro deste processo). acquire(blocking=False) não espera.
     if ocupado() or not _trava.acquire(blocking=False):
         raise ErroBackup("Já há um backup ou uma importação em andamento. Aguarde terminar.")
     _registrar_andamento("gerar", "em_andamento", "Preparando o backup…", etapa="banco", percentual=0)
@@ -275,6 +323,8 @@ def conferir(arquivo: Path) -> dict:
     if manifesto.get("sistema") != SISTEMA:
         raise ErroBackup("O arquivo não é um backup do SGI SPI.")
     revisao = manifesto.get("revisao_banco") or ""
+    # Backup de versão mais nova traria tabelas/colunas que este código não conhece;
+    # o contrário (backup mais antigo) é aceito porque as migrações o atualizam.
     if revisao and revisao not in _revisoes_conhecidas():
         raise ErroBackup("O backup é de uma versão do sistema mais nova que esta. Atualize o sistema antes de importar.")
     return manifesto
@@ -285,6 +335,8 @@ def _trocar_anexos(arquivo: Path, avisar=None) -> int:
 
     `avisar(feitos, total)` recebe o andamento, no máximo uma vez por segundo."""
     anexos = obter_configuracao().anexos_diretorio
+    # Extrai numa pasta ".importando" e só no fim troca pelo nome oficial, para a
+    # pasta de anexos nunca ficar pela metade se a extração falhar.
     nova = anexos.with_name(anexos.name + ".importando")
     velha = anexos.with_name(anexos.name + ".anterior")
     shutil.rmtree(nova, ignore_errors=True)
@@ -295,6 +347,7 @@ def _trocar_anexos(arquivo: Path, avisar=None) -> int:
         for info in itens:
             alvo = nova / info.filename[len(PASTA_ANEXOS):]
             alvo.parent.mkdir(parents=True, exist_ok=True)
+            # copyfileobj copia em blocos de 1 MB, sem carregar o arquivo inteiro na memória.
             with z.open(info) as origem, open(alvo, "wb") as saida:
                 shutil.copyfileobj(origem, saida, 1024 * 1024)
             quantidade += 1
@@ -311,7 +364,14 @@ def _trocar_anexos(arquivo: Path, avisar=None) -> int:
 
 
 def _executar_importacao(arquivo: Path, usuario_login: str, usuario_id: int) -> None:
+    """Corpo da importação em segundo plano, com o andamento em percentuais.
+
+    Ordem: backup do estado atual (0-35%), restauração do banco (35-60%), troca
+    dos anexos (60-90%), migrações (90%) e reinício da API (100%). O arquivo
+    enviado é apagado no fim, e a trava é liberada mesmo em caso de erro.
+    """
     try:
+        # Função auxiliar só para encurtar as chamadas de registro do andamento.
         def passo(etapa: str, mensagem: str, percentual: float, arquivo_anterior: str | None = None) -> None:
             _registrar_andamento("importar", "em_andamento", mensagem, arquivo_anterior, etapa=etapa, percentual=percentual)
 
@@ -328,6 +388,8 @@ def _executar_importacao(arquivo: Path, usuario_login: str, usuario_id: int) -> 
         migrar()
         # A auditoria vai para o banco já restaurado
         with FabricaSessao() as sessao:
+            # autor_id=None porque o usuário (id) pode nem existir no banco restaurado;
+            # o id de quem importou vai nos dados da auditoria.
             auditar(sessao, usuario_login, "sistema.backup.importar", arquivo.name, autor_id=None, alvo_tipo="backup",
                     dados={"backup_anterior": anterior.name, "anexos": quantidade, "importado_por_id": usuario_id})
             sessao.commit()
@@ -344,6 +406,8 @@ def _executar_importacao(arquivo: Path, usuario_login: str, usuario_id: int) -> 
 
 def iniciar_importacao(arquivo: Path, confirmacao: str, autor: Usuario) -> dict:
     """Confere o .zip e começa a importação em segundo plano. Exige a confirmação digitada "SUBSTITUIR"."""
+    # Confirmação digitada evita importar por engano (a importação apaga tudo).
+    # Em todo caminho de erro o arquivo enviado é apagado para não ocupar disco.
     if confirmacao.strip() != "SUBSTITUIR":
         arquivo.unlink(missing_ok=True)
         raise ErroBackup('Para importar, digite SUBSTITUIR na confirmação.')

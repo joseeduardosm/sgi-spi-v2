@@ -1,0 +1,70 @@
+<p>A <strong>repactuação</strong> atualiza os preços do contrato quando uma <strong>Convenção Coletiva de Trabalho (CCT)</strong> muda componentes de custo, como salário, vale-transporte ou plano de saúde (Lei 14.133, art. 135). A diferença de cada componente soma no preço unitário dos itens do contrato ligados a ele, a partir de uma data. Como no reajuste, o SGI SPI guarda a <strong>memória de cálculo</strong>, monta o <strong>documento consolidado</strong>, exige o <strong>apostilamento assinado</strong> e trata a diferença dos meses já pagos.</p>
+<p class="callout info">Exemplos com <strong>dados fictícios</strong> (contrato 900/2026), feitos numa cópia do sistema, nunca em produção.</p>
+
+<h2>Regras importantes</h2>
+<ul>
+<li><strong>Uma repactuação por vez</strong> em elaboração no contrato.</li>
+<li>Os valores de cada componente são informados <strong>já por unidade do item financeiro</strong> (por exemplo, por posto/mês): o cálculo de dias e encargos é feito antes, fora do sistema.</li>
+<li>Um componente pode valer para <strong>vários itens</strong>, e um item pode receber <strong>vários componentes</strong> (as diferenças somam).</li>
+<li>Não dá para repactuar com data anterior a um reajuste ou repactuação já concluído com data de efeito posterior: a linha do tempo de preços é uma só.</li>
+</ul>
+
+<h2>Etapa 1 – Iniciar a repactuação</h2>
+<p>Abra o contrato e entre em <strong>Repactuação</strong>. No cartão <strong>Iniciar repactuação</strong>, informe a <strong>data-base da CCT</strong> (mês e ano), a <strong>data a partir da qual os novos valores valem</strong> e anexe o <strong>PDF da CCT</strong>. Clique em <strong>Abrir repactuação</strong>. A CCT também vai para os <strong>Documentos importantes</strong> do contrato, com o nome "CCT mm/aaaa".</p>
+<p>[[rp01-iniciar-repactuacao]]</p>
+
+<h2>Etapa 2 – Cadastro dos componentes</h2>
+<p>Para cada componente de custo que a CCT mudou, preencha a <strong>descrição</strong>, o <strong>valor vigente</strong> e o <strong>valor repactuado</strong>, e marque os <strong>itens financeiros vinculados</strong> (ao menos um). Use <strong>+ Adicionar item</strong> para incluir outros componentes. A coluna <strong>Diferença</strong> mostra quanto muda por unidade.</p>
+<p><strong>Salvar itens</strong> grava um rascunho; <strong>Finalizar cadastro</strong> libera a memória de cálculo. A trilha no topo mostra as etapas: Cadastro, Memória de cálculo, Checklist, Consolidado e Apostilamento.</p>
+<p>[[rp02-cadastro-das-linhas]]</p>
+
+<h2>Etapa 3 – Memória de cálculo</h2>
+<p>Para cada item financeiro, o sistema mostra o <strong>preço vigente</strong>, o <strong>novo preço</strong> (vigente + diferenças dos componentes vinculados), a diferença, a quantidade mensal e o <strong>impacto mensal</strong>. Abaixo, a base mensal vigente, o total das diferenças e a <strong>nova base mensal</strong>.</p>
+<p>[[rp03-memoria-de-calculo]]</p>
+
+<h2>Etapa 4 – Memória retroativa</h2>
+<p>A memória retroativa lista as competências a partir da data de vigência:</p>
+<ul>
+<li><strong>já medidas no sistema</strong> (pagas ou não): recebem a diferença à parte, calculada pelo sistema;</li>
+<li><strong>ainda não medidas</strong>: usam o novo preço na própria medição.</li>
+</ul>
+<p>Se alguma competência medida começa antes da data de vigência e termina depois (<strong>mês quebrado</strong>), escolha como calcular: <strong>pro rata</strong> (dias antes sem a repactuação, a partir dela com) ou <strong>integral</strong> (mês inteiro repactuado). A escolha vale para todos os meses quebrados.</p>
+<p>[[rp04-retroativo-e-pergunta]]</p>
+
+<h3>Meses pagos fora do sistema: diferença informada manualmente</h3>
+<p>Quando há meses <strong>já encerrados</strong>, a partir da data de vigência, <strong>sem medição concluída</strong> no SGI (por exemplo, pagos antes da implantação do sistema), o sistema pergunta: <em>"Identifiquei que X meses do período de dd/mm/aaaa a dd/mm/aaaa não possuem medições finalizadas. Deseja inserir o valor da diferença manualmente?"</em></p>
+<p>No <strong>Sim</strong>, o preenchimento é igual ao do reajuste: marque os meses pagos fora do sistema e informe o <strong>valor total</strong> da diferença (negativo = crédito da SPI), o <strong>PDF</strong> da sua memória de cálculo e a <strong>justificativa</strong>. Os meses marcados ficam no preço de antes e saem do cálculo automático. Veja o passo a passo com imagens na página <em>Reajuste do contrato</em>.</p>
+<p>[[rp05-diferenca-manual-credito]]</p>
+<p>O valor informado sai com a <strong>observação</strong> (quem informou, quando, os meses e a justificativa) na memória de cálculo, no consolidado e nos documentos da competência em que for pago ou descontado.</p>
+
+<h2>Etapa 5 – Memória em arquivo, checklist e consolidado</h2>
+<ul>
+<li><strong>Gerar e baixar memória (PDF e XLSX)</strong>: cria uma versão numerada da memória (v1, v2…). Com mês quebrado, só depois da escolha do cálculo.</li>
+<li><strong>Checklist de repactuação</strong>: vem do modelo "Checklist Repactuação" ativo (Contratos › Modelos). Os documentos obrigatórios precisam do PDF; dá para incluir outros documentos só nesta repactuação.</li>
+<li><strong>Documento consolidado</strong>: junta capa, CCT, documentos do checklist e memória de cálculo num PDF só. Com diferença manual, a capa traz a observação e a memória externa entra no fim.</li>
+</ul>
+<p class="callout warning">Mudou a memória, o checklist ou a diferença manual? Gere o consolidado de novo: a finalização exige o consolidado atualizado.</p>
+
+<h2>Etapa 6 – Apostilamento e finalização</h2>
+<p>Selecione o <strong>apostilamento assinado</strong> (PDF) e clique em <strong>Finalizar repactuação</strong>. O botão só é liberado com cadastro finalizado, memória e consolidado atualizados, checklist completo e apostilamento.</p>
+<p>[[rp06-consolidado-e-finalizacao]]</p>
+<p>A confirmação final repete a data dos novos preços, a nova base mensal e o destino das diferenças.</p>
+<p>[[rp07-confirmar-finalizacao]]</p>
+<p>Ao finalizar:</p>
+<ul>
+<li>o preço dos itens vinculados recebe a diferença, e as competências ainda não medidas passam a usar o preço novo;</li>
+<li><strong>diferença calculada positiva</strong>: é gerada uma competência de diferença de repactuação, paga pelo fluxo normal;</li>
+<li><strong>diferença informada manualmente positiva</strong>: é gerada outra competência complementar, de uma linha só, com o valor informado;</li>
+<li><strong>diferença negativa</strong> (calculada ou manual): vira um <strong>crédito da SPI</strong> guardado no contrato, que o gestor aplica numa medição (veja abaixo).</li>
+</ul>
+<p>Para desistir antes de finalizar, use <strong>Cancelar repactuação</strong>: nenhum preço muda, os meses marcados na diferença manual são liberados e a CCT continua nos Documentos importantes.</p>
+
+<h2>Depois de finalizada</h2>
+<p>A repactuação vai para o <strong>Histórico</strong>, com a base mensal antes e depois, o retroativo (com o selo "Valor manual", quando houver) e os botões para baixar a memória, o consolidado e o apostilamento.</p>
+<p>[[rp08-historico]]</p>
+
+<h2>Créditos da SPI na medição</h2>
+<p>O crédito de uma repactuação <strong>não é descontado automaticamente</strong>. Na etapa <strong>Medição</strong> de uma competência aberta, o quadro <strong>Créditos disponíveis</strong> mostra os créditos guardados no contrato; clique em <strong>Aplicar nesta medição</strong> para usar o crédito inteiro.</p>
+<p>[[md01-creditos-disponiveis]]</p>
+<p>O crédito aplicado aparece como "Crédito de Repactuação (CCT mm/aaaa…)" e é descontado do valor a faturar. <strong>Retirar</strong> devolve o crédito ao contrato enquanto a medição estiver aberta. Se o crédito for maior que a medição, a sobra volta a ficar disponível para outra medição.</p>
+<p>[[md02-credito-aplicado]]</p>

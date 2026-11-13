@@ -1,14 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para validar e preencher as máscaras (modelos) das minutas e despachos da prorrogação contratual.
-"""Máscaras da prorrogação: HTML do editor rico com placeholders de uma **lista fechada** (`#nome`, `#nome#` ou `##nome##`).
+"""
+===============================================================================
+ARQUIVO: prorrogacao_mascara.py
+AUTOR: José Eduardo Santana Martins
 
-Dois tipos de placeholder:
-- **do SGI**: o sistema sabe o valor (contrato, empresa, nova vigência, valor, autoridades dos parâmetros);
-- **digitados**: a equipe preenche na própria prorrogação (testemunhas, nº dos documentos do SEI, dotação…), guardados em `dados_minuta`.
+FINALIDADE:
+Validar e preencher as máscaras (modelos) das minutas e despachos da
+prorrogação contratual.
 
-Placeholder sem valor **não some**: vira `[rótulo]` no texto e entra na lista de lacunas mostrada na tela. Os **condicionais** (`#se…`) decidem se
-o parágrafo inteiro aparece (cláusulas opcionais do termo aditivo): com a condição desligada o parágrafo é omitido; ligada, só o marcador é retirado.
-Os valores são sempre escapados. Mesma sintaxe do despacho (`despacho_mascara`).
+RESUMO TÉCNICO:
+HTML do editor rico com placeholders de uma lista fechada (`#nome`,
+`#nome#` ou `##nome##`, mesma sintaxe de `despacho_mascara`). Três grupos:
+- `DO_SGI`: o sistema sabe o valor (contrato, empresa, nova vigência,
+  valor, autoridades dos parâmetros);
+- `DIGITADOS`: a equipe preenche na própria prorrogação (testemunhas, nº
+  dos documentos do SEI, dotação...), guardados em `dados_minuta`;
+- `CONDICIONAIS` (`#se...`): decidem se o parágrafo inteiro aparece.
+Placeholder sem valor não some: vira `[rótulo]` e entra na lista de
+lacunas. Valores são sempre escapados.
+
+FINALIDADE DE NEGÓCIO:
+Os documentos da prorrogação (despachos, declarações, minuta do aditivo,
+termos do TCE-SP) saem do modelo oficial já preenchidos; o que falta fica
+visível entre colchetes, para a equipe completar antes de levar ao SEI.
+
+CONTEXTO NO SISTEMA:
+`VARIANTES` lista os documentos; os textos-base estão em
+`modelos_prorrogacao_padrao`. Usado por `prorrogacao_documentos` (geração)
+e pela validação da tela de Modelos.
+
+===============================================================================
 """
 
 from html import escape
@@ -109,6 +129,7 @@ CONDICIONAIS: dict[str, str] = {
     "serepactuacao": "Mantém o parágrafo só se houver resguardo de repactuação (cláusula 2.3)",
 }
 
+# Lista fechada completa (nome → descrição): SGI + digitados + condicionais; usada na validação
 PLACEHOLDERS: dict[str, str] = DO_SGI | {n: d for n, (_r, d, _m) in DIGITADOS.items()} | CONDICIONAIS
 
 _TOKEN = despacho_mascara._TOKEN  # noqa: SLF001 - mesma sintaxe do despacho
@@ -120,13 +141,17 @@ def usados(html: str) -> set[str]:
 
 
 def invalidos(html: str) -> list[str]:
-    """Trechos `#...` que não são placeholders permitidos (inclui `#` solto)."""
+    """Trechos `#...` que não são placeholders permitidos (inclui `#` solto).
+
+    Lista sem repetições; vazia significa que o modelo pode ser salvo.
+    """
     ruins = [m.group(0) or "#" for m in _TOKEN.finditer(html or "") if m.group(1).lower() not in PLACEHOLDERS]
     return list(dict.fromkeys(ruins))
 
 
 def preencher(html: str, valores: dict[str, str], condicoes: dict[str, bool]) -> tuple[str, list[str]]:
     """(HTML preenchido, lacunas). Parágrafo com condicional desligado é omitido; placeholder sem valor vira `[rótulo]` e entra nas lacunas."""
+    # Passo 1: remove os parágrafos (elementos de primeiro nível) com condicional desligado
     raiz = lxml_html.fragment_fromstring(html or "", create_parent="div")
     for el in list(raiz):
         if any(n in CONDICIONAIS and not condicoes.get(n) for n in usados(lxml_html.tostring(el, encoding="unicode"))):
@@ -134,7 +159,14 @@ def preencher(html: str, valores: dict[str, str], condicoes: dict[str, bool]) ->
     corpo = "".join(lxml_html.tostring(el, encoding="unicode") for el in raiz)
     lacunas: list[str] = []
 
+    # Passo 2: troca cada placeholder. Função interna para acumular as lacunas na lista acima.
     def trocar(m) -> str:
+        """Texto que substitui um placeholder encontrado pela regex (`m`).
+
+        Condicional ligado: some (só o marcador sai). Fora da lista: fica como
+        escrito. Com valor: valor escapado, quebras de linha viram <br/>. Sem
+        valor: "[rótulo]" e o rótulo entra nas lacunas (sem repetir).
+        """
         nome = m.group(1).lower()
         if nome in CONDICIONAIS:
             return ""

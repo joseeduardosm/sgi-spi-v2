@@ -1,13 +1,38 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar as regras decididas na revisão do módulo de contratos.
-"""Regras decididas na revisão do módulo de contratos (24/09/2026).
+"""
+===============================================================================
+ARQUIVO: test_contratos_regras.py
+AUTOR: José Eduardo Santana Martins
 
-- 30/360 com início no último dia do mês;
-- nota da avaliação = soma dos grupos (planilha oficial) e faixas por quantidade de notas zero;
-- competência dividida em duas partes na virada da vigência;
-- OB debita NF + NF adicional nas NEs apontadas; saldo comprometido por medições ainda não pagas;
+FINALIDADE:
+Testar as regras decididas na revisão do módulo de contratos (24/09/2026).
+
+RESUMO TÉCNICO:
+Mistura testes de unidade (calculos, servico_competencias, com objetos
+falsos via SimpleNamespace ou modelos sem banco) e testes pela API (rotas
+de execução, notas de empenho, reajustes). Regras cobertas:
+- contagem 30/360 (mês comercial) com início no último dia do mês;
+- nota da avaliação = soma dos grupos (planilha oficial) e faixas limitadas
+  pela quantidade de notas zero;
+- competência na virada da vigência (cheia sem interrupção, dividida com
+  intervalo) e realinhamento ao calendário;
+- OB debita NF + NF adicional nas NEs apontadas; saldo comprometido por
+  medições ainda não pagas; várias NFs na mesma medição;
 - item sob demanda não pode ser medido acima do saldo da vigência;
-- reajuste retroativo gera competência complementar de diferença.
+- reajuste retroativo gera competência complementar de diferença;
+- competências migradas do SGI antigo não são sobrepostas na geração.
+
+FINALIDADE DE NEGÓCIO:
+Protege o dinheiro do contrato: quanto se libera pela avaliação, quanto
+cada NE (nota de empenho, a reserva do orçamento) ainda tem livre, o que a
+OB (ordem bancária, o pagamento) debita e a cobrança da diferença de
+reajuste. Erro aqui vira pagamento a mais ou a menos à empresa.
+
+CONTEXTO NO SISTEMA:
+backend/app/services/contratos/calculos.py e servico_competencias.py,
+modelos de app/models/contratos e rotas de execução do contrato. Usa as
+fixtures de test_contratos_execucao.py e os apoios de apoio_contratos.py.
+
+===============================================================================
 """
 
 from datetime import date
@@ -18,12 +43,15 @@ from app.models.contratos import Competencia, Contrato, ItemMedicao, VigenciaRet
 from app.services.contratos import calculos
 from app.services.contratos.servico_competencias import maximo_de_notas_minimas_por_grupo, nota_final, percentual_da_nota
 from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, juntar_nf
+# Fixtures de outro arquivo: o pytest injeta pelo nome (equipe devolve contrato,
+# gestora e fiscal); _hoje fixa a data. Por isso os noqa F811 nos testes.
 from tests.test_contratos_execucao import _hoje, _preparar_execucao, _url, equipe  # noqa: F401 (fixtures)
 
 # --- 30/360 -----------------------------------------------------------------------------------------
 
 
 def test_30_360_com_inicio_no_ultimo_dia_do_mes():
+    """No mês comercial (30/360), um dia isolado no fim do mês conta 1 dia e fevereiro inteiro conta 30."""
     assert calculos.dias_comerciais(date(2027, 2, 28), date(2027, 2, 28)) == 1
     assert calculos.dias_comerciais(date(2028, 2, 29), date(2028, 2, 29)) == 1
     assert calculos.dias_comerciais(date(2026, 1, 31), date(2026, 1, 31)) == 1
@@ -181,6 +209,7 @@ def test_ob_debita_nf_e_nf_adicional_e_saldo_fica_comprometido(cliente, admin, e
     _preparar_execucao(cliente, contrato, gestora)
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
     notas = {n["numero"]: n["id"] for n in cliente.get(_url(contrato, "/notas-empenho"), headers=gestora).json()}
+    # A ordem da lista define em que NE o valor é debitado primeiro.
     ordem = [notas["2026NE00001"], notas["2026NE00002"]]
 
     base, r = _medir_e_concluir(cliente, contrato, gestora, fiscal, "2026-01", ordem)
@@ -326,6 +355,8 @@ def test_geracao_nao_sobrepoe_competencias_migradas(cliente, admin, equipe):  # 
 
     contrato, gestora, _ = equipe
     _preparar_execucao(cliente, contrato, gestora)
+    # Grava direto no banco uma competência "migrada" (período pelo aniversário,
+    # 15/01 a 14/02), como as que vieram do sistema antigo.
     with FabricaSessao() as sessao:
         sessao.add(ModeloCompetencia(contrato_id=uuid.UUID(contrato["id"]), competencia=date(2026, 1, 1), periodo_inicio=date(2026, 1, 15),
                                      periodo_fim=date(2026, 2, 14), etapa_atual="medicao"))

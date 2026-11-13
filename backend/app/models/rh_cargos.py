@@ -1,12 +1,33 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir as tabelas de cargos, ocupações (quem está em cada cargo) e o histórico do RH.
-"""Cargos do RH.
+"""
+===============================================================================
+ARQUIVO: rh_cargos.py
+AUTOR: José Eduardo Santana Martins
 
-- `TipoCargo`: CCESP (cargo em comissão), FCESP (função de confiança) ou OUTRO, editável.
-- `Cargo`: **uma posição (vaga)** de um setor, com tipo, grupo (1 ou 2), nível (1 a 18) e denominação (ex.: "FCESP 2.16 – Assessor Especial IV").
-  O cargo pertence ao setor; a pessoa que o ocupa passa a fazer parte do setor por ele.
-- `Ocupacao`: histórico de quem ocupou cada cargo (início, fim, ato e motivo do fim). Fim vazio = ocupação vigente.
-- `HistoricoRh`: livro-razão da vida funcional da pessoa (somente inserção): quem registrou, quando e o quê.
+FINALIDADE:
+Definir as tabelas de cargos do RH, das ocupações (quem está em cada cargo)
+e do histórico da vida funcional.
+
+RESUMO TÉCNICO:
+- TipoCargo: CCESP (cargo em comissão), FCESP (função de confiança) ou
+  OUTRO, editável.
+- Cargo: uma posição (vaga) de um setor com tipo, grupo (1 ou 2), nível (1 a
+  18) e denominação; propriedades classificacao, grupo_nivel, rotulo e vigente.
+- Ocupacao: quem ocupou cada cargo (início, fim, ato, motivo do fim). Índices
+  únicos parciais: uma ocupação vigente por cargo e uma por pessoa.
+- HistoricoRh: livro-razão da vida funcional (somente inserção).
+
+FINALIDADE DE NEGÓCIO:
+Controlar o quadro de cargos da SPI: quantas vagas cada setor tem, quem as
+ocupa, desde quando e por qual ato (resolução, portaria, decreto). O
+histórico guarda a trajetória funcional de cada pessoa de forma auditável.
+
+CONTEXTO NO SISTEMA:
+Cargo pertence a um setor (models/setor.py); a pessoa que o ocupa passa a
+fazer parte do setor. O rótulo é gravado em Usuario.cargo. Usado pelos
+serviços e rotas de cargos do RH, pela admissão e pelo organograma; os
+formatos de API estão em schemas/rh_cargos.py.
+
+===============================================================================
 """
 
 import uuid
@@ -17,11 +38,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.banco import Base, agora_utc
 
+# Por que uma ocupação terminou: troca de cargo, exoneração (cargo em comissão), dispensa
+# (função de confiança) ou outro motivo
 MOTIVOS_FIM = ("troca", "exoneracao", "dispensa", "outro")
 
 
 class TipoCargo(Base):
-    """Tipo de cargo (CCESP, FCESP, OUTRO...)."""
+    """Tipo de cargo (CCESP, FCESP, OUTRO...).
+
+    CCESP = cargo em comissão; FCESP = função de confiança. `codigo` é a sigla exibida na
+    classificação; `ordem` define a posição nas listas da tela.
+    """
     __tablename__ = "rh_tipos_cargo"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -32,7 +59,12 @@ class TipoCargo(Base):
 
 
 class Cargo(Base):
-    """Uma posição (vaga) de um setor. Para N vagas do mesmo cargo, N linhas."""
+    """Uma posição (vaga) de um setor. Para N vagas do mesmo cargo, N linhas.
+
+    `ondelete="RESTRICT"` nas chaves estrangeiras impede excluir um setor ou um tipo que ainda
+    tenha cargos. `lazy="joined"` em `tipo` traz o tipo na mesma consulta do cargo, porque as
+    propriedades de rótulo abaixo sempre precisam dele.
+    """
     __tablename__ = "rh_cargos"
     __table_args__ = (Index("ix_rh_cargos_setor", "setor_id"),)
 
@@ -51,6 +83,7 @@ class Cargo(Base):
     tipo: Mapped[TipoCargo] = relationship(lazy="joined")
     ocupacoes: Mapped[list["Ocupacao"]] = relationship(back_populates="cargo", order_by="Ocupacao.inicio")
 
+    # `@property` cria atributos calculados, lidos sem parênteses (cargo.rotulo)
     @property
     def classificacao(self) -> str:
         """"FCESP 2.16", "CCESP 1.07" ou só o tipo (OUTRO, sem nível)."""
@@ -72,12 +105,15 @@ class Cargo(Base):
 
     @property
     def vigente(self) -> "Ocupacao | None":
+        """Ocupação em andamento (sem data de fim) ou `None` quando a vaga está livre."""
         return next((o for o in self.ocupacoes if o.fim is None), None)
 
 
 class Ocupacao(Base):
     """Quem ocupou o cargo e quando. Uma ocupação vigente (fim vazio) por cargo e uma por pessoa."""
     __tablename__ = "rh_ocupacoes"
+    # Índices únicos parciais (só valem nas linhas com fim vazio): impedem duas pessoas vigentes
+    # no mesmo cargo e a mesma pessoa vigente em dois cargos; as ocupações encerradas não contam
     __table_args__ = (
         Index("ux_rh_ocupacao_cargo_vigente", "cargo_id", unique=True, postgresql_where=text("fim IS NULL"), sqlite_where=text("fim IS NULL")),
         Index("ux_rh_ocupacao_usuario_vigente", "usuario_id", unique=True, postgresql_where=text("fim IS NULL"), sqlite_where=text("fim IS NULL")),
@@ -102,7 +138,11 @@ class Ocupacao(Base):
 
 
 class HistoricoRh(Base):
-    """Evento da vida funcional da pessoa. Só se acrescenta: nunca se altera nem se apaga (o sistema não tem rota para isso)."""
+    """Evento da vida funcional da pessoa. Só se acrescenta: nunca se altera nem se apaga (o sistema não tem rota para isso).
+
+    `origem_tipo` + `origem_id` apontam o registro que gerou o evento (ex.: um afastamento) e
+    servem para não gravar o mesmo fato duas vezes. `dados` guarda detalhes extras em JSON.
+    """
     __tablename__ = "rh_historico"
     __table_args__ = (
         Index("ix_rh_historico_usuario", "usuario_id", "ocorrido_em"),

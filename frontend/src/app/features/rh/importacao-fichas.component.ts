@@ -1,5 +1,30 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a janela de carga em lote das fichas de pré-cadastro por planilha XLSX (RH).
+/**
+ * =============================================================================
+ * ARQUIVO: importacao-fichas.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Janela de carga das fichas de pré-cadastro por planilha XLSX: o RH baixa o
+ * formulário, envia à pessoa, recebe o arquivo preenchido e o importa.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone de modal (template inline). Fluxo em três passos com
+ * app-trilha-etapas: baixar o modelo, escolher o arquivo (a API confere e
+ * devolve uma prévia sem gravar) e importar (a API grava como rascunho). O
+ * estado fica em signals; a liberação do botão é um computed.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite que a própria pessoa que vai entrar na SPI preencha os dados num
+ * formulário guiado, evitando redigitação pelo RH e erros de CPF. Cada arquivo
+ * é a ficha de uma pessoa e entra como rascunho para o RH completar.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Aberto pela ficha de pré-cadastro (ficha-pre-cadastro.component.ts). Usa
+ * RhPreCadastroApiService (modeloImportacao, importar) e o tipo
+ * ResultadoImportacaoFichas; a trilha vem de contratos/compartilhado.
+ *
+ * =============================================================================
+ */
 
 import { Component, computed, inject, model, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -80,19 +105,23 @@ import { ResultadoImportacaoFichas } from './rh-pre-cadastro.models';
   `,
 })
 export class ImportacaoFichasComponent {
+  /** Abre e fecha a janela; model() permite ligação de mão dupla [(aberta)] com a tela que a usa. */
   readonly aberta = model(false);
-  /** Avisa a tela para recarregar depois de gravar. */
+  /** Avisa a tela para recarregar depois de gravar (output() cria um evento que o pai escuta com (importado)). */
   readonly importado = output<void>();
   private readonly api = inject(RhPreCadastroApiService);
   private readonly dialogos = inject(DialogosService);
   protected readonly arquivo = signal<File | null>(null);
   protected readonly resultado = signal<ResultadoImportacaoFichas | null>(null);
+  /** Etapas da trilha (arquivo escolhido, prévia, importação), recalculadas pelo computed() quando o estado muda. */
   protected readonly trilha = computed(() => trilhaImportacao(!!this.arquivo(), this.resultado() ? { pode_importar: this.resultado()!.com_erro === 0 } : null));
+  /** Só libera o botão Importar com arquivo, prévia sem nenhum erro e ainda não gravada. */
   protected readonly podeImportar = computed(() => {
     const r = this.resultado();
     return !!this.arquivo() && !!r && !r.gravado && r.com_erro === 0 && r.total > 0;
   });
 
+  /** Baixa o modelo XLSX gerado pela API (o download é disparado pelo serviço). */
   protected baixarModelo(): void {
     this.dialogos.executar(this.api.modeloImportacao(), 'Gerando o modelo…').subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }
@@ -100,6 +129,7 @@ export class ImportacaoFichasComponent {
   /** Ao escolher o arquivo, confere na hora (prévia, sem gravar). */
   protected escolher(campo: HTMLInputElement): void {
     const arquivo = campo.files?.[0] ?? null;
+    // Zera o campo de arquivo para que escolher o mesmo arquivo de novo dispare o (change)
     campo.value = '';
     this.arquivo.set(arquivo);
     this.resultado.set(null);
@@ -110,6 +140,7 @@ export class ImportacaoFichasComponent {
     });
   }
 
+  /** Envia o arquivo de novo, agora gravando, e avisa a tela pai pelo evento importado. */
   protected importar(): void {
     const arquivo = this.arquivo();
     if (!arquivo || !this.podeImportar()) return;

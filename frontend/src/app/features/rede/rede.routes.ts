@@ -8,6 +8,9 @@ export const ROTAS_REDE: Routes = [
   { path: '', title: 'Rede | SGI SPI', loadComponent: () => import('./equipamentos-rede.component').then((m) => m.EquipamentosRedeComponent) },
   { path: 'topologia', title: 'Topologia da rede | SGI SPI', loadComponent: () => import('./topologia-rede.component').then((m) => m.TopologiaRedeComponent) },
   { path: 'cadastros', title: 'Pontos, VLANs e modelos | SGI SPI', loadComponent: () => import('./cadastros-rede.component').then((m) => m.CadastrosRedeComponent) },
+  // Cadastro (passo a passo) e edição do equipamento em página própria; "novo" vem antes de ":id" para não ser lido como um id
+  { path: 'equipamentos/novo', title: 'Novo equipamento | Rede | SGI SPI', loadComponent: () => import('./cadastro-equipamento-rede.component').then((m) => m.CadastroEquipamentoRedeComponent) },
+  { path: 'equipamentos/:id/editar', title: 'Editar equipamento | Rede | SGI SPI', loadComponent: () => import('./cadastro-equipamento-rede.component').then((m) => m.CadastroEquipamentoRedeComponent) },
   { path: 'equipamentos/:id', title: 'Equipamento de rede | SGI SPI', loadComponent: () => import('./equipamento-rede.component').then((m) => m.EquipamentoRedeComponent) },
   { path: 'portas-lista/:filtro', title: 'Portas | Rede | SGI SPI', loadComponent: () => import('./lista-portas-rede.component').then((m) => m.ListaPortasRedeComponent) },
   { path: 'portas/:id', title: 'Porta de rede | SGI SPI', loadComponent: () => import('./porta-rede.component').then((m) => m.PortaRedeComponent) },

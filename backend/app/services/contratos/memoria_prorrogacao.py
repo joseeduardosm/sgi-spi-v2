@@ -1,16 +1,37 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para calcular, mês a mês, o valor da nova vigência de uma prorrogação ainda não registrada e gerar a memória de cálculo.
-"""Memória de cálculo da prorrogação.
+"""
+===============================================================================
+ARQUIVO: memoria_prorrogacao.py
+AUTOR: José Eduardo Santana Martins
 
-A nova vigência ainda não existe no contrato enquanto a prorrogação é um rascunho, então a conta é feita aqui, mês a mês,
-sobre os meses que ela vai cobrir (começa no dia seguinte ao fim atual):
+FINALIDADE:
+Calcular, mês a mês, o valor da nova vigência de uma prorrogação ainda não
+registrada e gerar a memória de cálculo (PDF e XLSX) versionada.
 
-- itens contínuos: quantidade mensal × preço vigente no início do mês × fator do mês;
-- itens sob demanda: a quantidade planejada para o mês no rascunho × preço (a grade já é a quantidade daquele mês).
+RESUMO TÉCNICO:
+Enquanto a prorrogação é rascunho, a nova vigência não existe no contrato;
+a conta é feita aqui sobre os meses que ela vai cobrir (começa no dia
+seguinte ao fim atual):
+- itens contínuos: quantidade mensal x preço vigente no início do mês x
+  fator do mês;
+- itens sob demanda: quantidade planejada para o mês no rascunho x preço.
+Meses quebrados (a vigência começa ou termina no meio do mês) seguem a
+escolha do gestor, uma só para todos: `pro_rata` (dias, conta 30/360) ou
+`integral` (mês cheio). Vale só para a memória e o valor da prorrogação; a
+execução continua seguindo o faturamento de cada item. Um hash dos dados
+decide se é preciso gerar nova versão dos arquivos.
 
-**Meses quebrados** (a nova vigência começa ou termina no meio do mês) usam a escolha do gestor, uma só para todos:
-`pro_rata` cobra os dias da nova vigência (30/360); `integral`, o mês inteiro. Vale para todos os itens contínuos e só
-para a memória e o valor da prorrogação: a execução continua seguindo o faturamento de cada item.
+FINALIDADE DE NEGÓCIO:
+A prorrogação (extensão do prazo do contrato) precisa de memória de cálculo
+que justifique o valor estimado da nova vigência, por mês e por ano
+(exercício orçamentário), para instruir o processo e o empenho.
+
+CONTEXTO NO SISTEMA:
+Usa `calculos` (períodos mensais, 30/360, arredondamento), `valores` (preço
+e quantidade vigentes), `DocumentoPdf` e `gerar_planilha`. Os arquivos são
+guardados por `servico_anexos` e registrados em `MemoriaProrrogacao` (ligada
+a `ProcessoProrrogacao`). Chamado pelas rotas e serviços de prorrogação.
+
+===============================================================================
 """
 
 import hashlib
@@ -32,6 +53,7 @@ from app.services.documentos.pdf import DocumentoPdf
 from app.services.documentos.planilha import FORMATO_MOEDA, Aba, Coluna, gerar_planilha
 
 ZERO = Decimal(0)
+# As duas formas de calcular mês quebrado que o gestor pode escolher
 MODOS = ("pro_rata", "integral")
 ROTULOS_MODO = {"pro_rata": "Pro rata (só os dias da nova vigência no mês)", "integral": "Integral (o mês inteiro)"}
 # Tipo MIME das planilhas .xlsx
@@ -51,12 +73,15 @@ class MesProrrogacao:
     continuos: Decimal
     sob_demanda: Decimal
 
+    # `@property` permite ler `mes.rotulo` como atributo, embora seja calculado
     @property
     def rotulo(self) -> str:
+        """Competência no formato MM/AAAA, usado na tela e nos arquivos."""
         return f"{self.competencia:%m/%Y}"
 
     @property
     def total(self) -> Decimal:
+        """Valor do mês: contínuos + sob demanda planejado."""
         return self.continuos + self.sob_demanda
 
 
@@ -67,15 +92,21 @@ def nova_vigencia(contrato: Contrato, meses: int | None):
 
 
 def _periodos(contrato: Contrato, meses: int | None) -> list[calculos.PeriodoMensal]:
+    """Meses (com fator de dias) da nova vigência; sem prazo informado, lista vazia."""
     inicio, fim = nova_vigencia(contrato, meses)
     if fim is None:
         return []
+    # Número de ordem da nova vigência: a original (1) + retroativas + prorrogações já
+    # registradas + esta. Serve só para identificar a vigência no cálculo.
     sequencia = len(contrato.vigencias_retroativas) + len(contrato.prorrogacoes) + 2
     return list(calculos.meses_da_vigencia(calculos.Vigencia(sequencia, inicio, fim)))
 
 
 def _planejado(plano: list | None) -> dict:
-    """Quantidade planejada de cada item sob demanda por mês: {(item_id, 'AAAA-MM-01'): quantidade}."""
+    """Quantidade planejada de cada item sob demanda por mês: {(item_id, 'AAAA-MM-01'): quantidade}.
+
+    `plano` é o JSON salvo no rascunho: lista de {"item_id", "apontamentos": {mês: quantidade}}.
+    """
     return {(p["item_id"], mes): Decimal(q) for p in (plano or []) for mes, q in p.get("apontamentos", {}).items()}
 
 
@@ -89,6 +120,7 @@ def calcular_meses(contrato: Contrato, meses: int | None, plano: list | None, mo
         # Mês quebrado: pelos dias (pro rata) ou cheio (integral), para todos os contínuos; mês inteiro: 1
         fator = (periodo.fator if modo == "pro_rata" else Decimal(1)) if quebrado else Decimal(1)
         continuos = sob_demanda = ZERO
+        # Soma item a item com o preço vigente no 1º dia do período (considera reajustes já aplicados)
         for item in contrato.itens:
             preco = valores.preco_em(contrato, item, periodo.inicio)
             if item.tipo == "continuo":
@@ -106,6 +138,7 @@ def valor_do_periodo(contrato: Contrato, meses: int | None, plano: list | None, 
 
 
 def _totais_por_ano(meses: list[MesProrrogacao]) -> list[dict]:
+    """Soma os meses por ano civil (exercício), em ordem crescente de ano."""
     anos: dict[int, Decimal] = {}
     for m in meses:
         anos[m.competencia.year] = anos.get(m.competencia.year, ZERO) + m.total
@@ -113,11 +146,16 @@ def _totais_por_ano(meses: list[MesProrrogacao]) -> list[dict]:
 
 
 def resumo(contrato: Contrato, processo: ProcessoProrrogacao | None) -> dict | None:
-    """Memória para a tela: meses, totais por ano e da vigência, e as duas opções dos meses quebrados para comparar."""
+    """Memória para a tela: meses, totais por ano e da vigência, e as duas opções dos meses quebrados para comparar.
+
+    Devolve `None` sem prazo salvo. `precisa_escolher` fica True quando há mês
+    quebrado e o gestor ainda não escolheu entre pro rata e integral.
+    """
     if processo is None or not processo.meses:
         return None
     plano, escolha = processo.plano_sob_demanda, processo.calculo_mes_quebrado
     meses = calcular_meses(contrato, processo.meses, plano, escolha)
+    # Calcula as duas opções para a tela mostrar lado a lado o efeito de cada escolha
     opcoes = {modo: calcular_meses(contrato, processo.meses, plano, modo) for modo in MODOS}
     quebrados = [
         {"competencia": m.rotulo, "inicio": m.inicio, "fim": m.fim,
@@ -140,7 +178,11 @@ def resumo(contrato: Contrato, processo: ProcessoProrrogacao | None) -> dict | N
 
 
 def hash_atual(contrato: Contrato, processo: ProcessoProrrogacao) -> str:
-    """Hash dos dados que formam a memória: muda quando o prazo, a escolha, os preços, as quantidades ou o plano mudam."""
+    """Hash dos dados que formam a memória: muda quando o prazo, a escolha, os preços, as quantidades ou o plano mudam.
+
+    SHA-256 do JSON com prazo, escolha, versão do layout, fim atual e valores de
+    cada mês. Comparado ao `hash_origem` da última versão gerada.
+    """
     meses = calcular_meses(contrato, processo.meses, processo.plano_sob_demanda, processo.calculo_mes_quebrado)
     return hashlib.sha256(json.dumps(
         [processo.meses, processo.calculo_mes_quebrado, FORMATO_MEMORIA, contrato.data_fim.isoformat()]
@@ -154,13 +196,19 @@ def memoria_atualizada(contrato: Contrato, processo: ProcessoProrrogacao) -> boo
 
 
 def gerar_arquivos(sessao: Session, contrato: Contrato, processo: ProcessoProrrogacao, autor: Usuario) -> None:
-    """PDF e XLSX da memória; nova versão só se os dados mudaram. Exige o prazo e, havendo mês quebrado, a escolha."""
+    """PDF e XLSX da memória; nova versão só se os dados mudaram. Exige o prazo e, havendo mês quebrado, a escolha.
+
+    Efeitos: grava os dois arquivos como anexos e acrescenta um `MemoriaProrrogacao`
+    ao processo (o commit fica com quem chamou). Lança `ErroRegraContrato` se faltar
+    prazo ou escolha.
+    """
     dados = resumo(contrato, processo)
     if dados is None:
         raise ErroRegraContrato("Informe e salve o prazo da prorrogação antes de gerar a memória de cálculo.")
     if dados["precisa_escolher"]:
         raise ErroRegraContrato("Escolha como calcular os meses quebrados (pro rata ou integral) antes de gerar a memória de cálculo.")
     origem = hash_atual(contrato, processo)
+    # Nada mudou desde a última versão: não gera arquivo repetido
     if processo.memorias and processo.memorias[-1].hash_origem == origem:
         return
     versao = len(processo.memorias) + 1
@@ -171,6 +219,7 @@ def gerar_arquivos(sessao: Session, contrato: Contrato, processo: ProcessoProrro
 
 
 def _texto_quebrados(processo: ProcessoProrrogacao, dados: dict) -> list[str]:
+    """Frases que explicam os meses quebrados e a escolha feita (usadas no PDF e no XLSX)."""
     if not dados["meses_quebrados"]:
         return ["A nova vigência não tem mês quebrado: todos os meses são cheios."]
     linhas = [f"Cálculo escolhido: {ROTULOS_MODO[processo.calculo_mes_quebrado or 'pro_rata']}."]

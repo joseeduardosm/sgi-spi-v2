@@ -13,6 +13,13 @@ Migrado do Protocolo do SGI SPI antigo (10.23.1.220) com melhorias. A carga dos 
 
 Controla a numeração de documentos (Ofício, Portaria, Resolução…). Cada **tipo** tem uma **sequência por exercício** (a numeração reinicia a cada ano: `005/2026`). A pessoa reserva o **próximo número**, informa a finalidade e, depois, anexa o documento, o que torna o número **utilizado**.
 
+## Tipo "RDM SGI" (numerado pelas Tarefas)
+
+Criado pelo sistema na primeira RDM (ver [tarefas.md](tarefas.md), seção RDM). Os números (`00001/AAAA`, cinco dígitos, reiniciam a cada ano; a
+faixa é ampliada sozinha) são reservados e preenchidos só pelo fluxo da tarefa: reservar, lançar, liberar, anexar ou concluir sem documento à mão
+dá `403 sem_permissao` (`TIPOS_SISTEMICOS` em `servico_protocolo.py`). Na leitura dos números, `rdm_situacao` (pendente, aprovada, reprovada,
+concluida) e `tarefa_numero` mostram a cor da RDM e o link da tarefa; o PDF da RDM aprovada é o documento do número.
+
 ## Permissões (recurso ACL `protocolo`)
 
 Atenção: um recurso ACL **sem nenhuma regra fica aberto a todos**; por isso o recurso `protocolo` deve ter ao menos uma regra (a migração cria uma para quem já usava o Protocolo).

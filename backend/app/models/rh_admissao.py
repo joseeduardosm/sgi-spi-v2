@@ -1,12 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir as tabelas da admissão: modelos editáveis (resolução, e-mail, termo de posse, boas-vindas), checklists de documentos e a trilha da admissão.
-"""Admissão do RH (Fase 3).
+"""
+===============================================================================
+ARQUIVO: rh_admissao.py
+AUTOR: José Eduardo Santana Martins
 
-- `ModeloRh`: máscara editável de um texto do RH (HTML com placeholders `#nome` de lista fechada). Tipos: `resolucao_nomeacao`, `email_nomeacao_publicada`, `termo_posse`, `boas_vindas`.
-- `ChecklistRh`, `ItemChecklistRh` e `ChecklistClassificacao`: documentos exigidos na admissão, por **classificação do cargo** (grupo 1 ou 2 + nível 1 a 18, ex.: 1.15, 1.16, 1.17),
-  uma ou várias por checklist; `aplica_a_outros` cobre os cargos sem classificação (tipo OUTRO).
-- `Admissao`: a trilha de uma pessoa (uma por ficha): chamado no GLPI → documentos → resolução → número no Protocolo → publicação (o e-mail de nomeação sai sozinho) → posse → entrada no SGI.
-- `AdmissaoDocumento`: andamento de cada documento do checklist (envio ao Portal de Indicações, sistema externo: aqui só se registra o envio e o comprovante).
+FINALIDADE:
+Definir as tabelas da admissão do RH (Fase 3): modelos de texto editáveis,
+checklists de documentos por classificação de cargo e a trilha da admissão.
+
+RESUMO TÉCNICO:
+- ModeloRh: máscara HTML editável com placeholders #nome de lista fechada
+  (resolução de nomeação, e-mail de nomeação publicada, termo de posse,
+  boas-vindas).
+- ChecklistRh, ItemChecklistRh e ChecklistClassificacao: documentos exigidos
+  por classificação do cargo (grupo 1 ou 2 + nível 1 a 18, ex.: 1.15);
+  aplica_a_outros cobre os cargos sem classificação (tipo OUTRO).
+- Admissao: trilha de uma pessoa (uma por ficha). Etapas em ETAPAS.
+- AdmissaoDocumento: andamento de cada documento do checklist.
+
+FINALIDADE DE NEGÓCIO:
+Conduzir a entrada de uma pessoa na SPI do começo ao fim: chamado no GLPI,
+documentos, resolução, número no Protocolo, publicação no D.O.E. (o e-mail
+de nomeação sai sozinho), posse e entrada no SGI. O envio de documentos ao
+Portal de Indicações (sistema externo) é só registrado aqui.
+
+CONTEXTO NO SISTEMA:
+Ligado a rh_pre_cadastros (ficha), rh_cargos, anexos e protocolo_numeros.
+Usado pelos serviços e rotas de admissão do RH; os formatos de API estão em
+schemas/rh_admissao.py. A integração com o GLPI usa schemas/chamados_glpi.py.
+
+===============================================================================
 """
 
 import uuid
@@ -18,13 +40,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.banco import Base, agora_utc
 from app.models.anexo import Anexo
 
+# Tipos de texto editável do RH (um ModeloRh por tipo)
 TIPOS_MODELO = ("resolucao_nomeacao", "email_nomeacao_publicada", "termo_posse", "boas_vindas")
 # Etapas da trilha, na ordem; `concluida` fecha a admissão
 ETAPAS = ("chamado", "documentos", "resolucao", "protocolo", "publicacao", "posse", "concluida")
 
 
 class ModeloRh(Base):
-    """Texto editável do RH (um por tipo)."""
+    """Texto editável do RH (um por tipo).
+
+    `html` é a máscara com placeholders `#nome` (lista fechada, trocados pelos dados da pessoa e
+    do cargo na hora de gerar); `assunto` é usado quando o modelo é um e-mail.
+    """
     __tablename__ = "rh_modelos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -37,7 +64,11 @@ class ModeloRh(Base):
 
 
 class ChecklistRh(Base):
-    """Lista de documentos exigidos; vale para os tipos de cargo ligados a ela."""
+    """Lista de documentos exigidos; vale para as classificações de cargo ligadas a ela.
+
+    `lazy="selectin"` nos relacionamentos faz o SQLAlchemy carregar itens e classificações numa
+    consulta extra logo que o checklist é lido, evitando uma consulta por checklist depois.
+    """
     __tablename__ = "rh_checklists"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -52,6 +83,10 @@ class ChecklistRh(Base):
 
 
 class ItemChecklistRh(Base):
+    """Um documento do checklist (descrição, se é obrigatório e a posição na lista).
+
+    Ao iniciar uma admissão, os itens viram linhas de `AdmissaoDocumento`.
+    """
     __tablename__ = "rh_checklist_itens"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -62,7 +97,10 @@ class ItemChecklistRh(Base):
 
 
 class ChecklistClassificacao(Base):
-    """Ligação checklist ↔ classificação do cargo (grupo + nível, ex.: 1.15)."""
+    """Ligação checklist ↔ classificação do cargo (grupo + nível, ex.: 1.15).
+
+    Chave primária composta pelas três colunas: a mesma classificação não se repete no checklist.
+    """
     __tablename__ = "rh_checklist_classificacoes"
 
     checklist_id: Mapped[int] = mapped_column(ForeignKey("rh_checklists.id", ondelete="CASCADE"), primary_key=True)
@@ -71,7 +109,12 @@ class ChecklistClassificacao(Base):
 
 
 class Admissao(Base):
-    """Trilha de admissão de uma ficha de pré-cadastro."""
+    """Trilha de admissão de uma ficha de pré-cadastro.
+
+    As colunas estão agrupadas por etapa (ver `ETAPAS`): as datas mostram quando cada etapa foi
+    registrada. O índice único em `pre_cadastro_id` garante uma admissão por ficha. D.O.E. = Diário
+    Oficial do Estado, onde a resolução de nomeação é publicada.
+    """
     __tablename__ = "rh_admissoes"
     __table_args__ = (UniqueConstraint("pre_cadastro_id", name="ux_rh_admissao_ficha"),)
 

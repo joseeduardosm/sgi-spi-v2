@@ -1,9 +1,38 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar a etapa "Retenção de Tributos", a NF com XML e os e-mails ao Financeiro e à equipe.
-"""Retenção de tributos: leitura do XML (NF-e e NFS-e), etapa de NF com PDF + XML, permissão do Financeiro
-(membro ou Departamento do setor configurado e filhos), conferências automáticas, PDF, e-mails e pendências.
+"""
+===============================================================================
+ARQUIVO: test_contratos_retencao.py
+AUTOR: José Eduardo Santana Martins
 
-O envio usa o servidor SMTP simulado de `tests/test_smtp.py` (sem rede).
+FINALIDADE:
+Testar a etapa "Retenção de Tributos" da execução do contrato, a NF com PDF
++ XML, as conferências automáticas, as permissões do Financeiro e os
+e-mails ao Financeiro e à equipe. Também define fixtures reaproveitadas por
+outros arquivos de teste (_ambiente e cenario).
+
+RESUMO TÉCNICO:
+Testa o leitor de XML (NF-e, NFS-e padrão nacional e NFS-e da prefeitura de
+São Paulo, além de XML inválido ou com DOCTYPE). Depois monta pela API uma
+competência 01/2026 medida, com Financeiro definido por setor (membro do
+setor filho e usuário pelo Departamento) ou pela ACL (recurso financeiro),
+e confere e-mails (servidor SMTP simulado de tests/test_smtp.py, sem rede),
+PDF da retenção, pendências no painel, ordem das etapas (retenção e
+checklist em paralelo, CADIN depois), despacho de pagamento e o pedido do
+Processo Financeiro.
+
+FINALIDADE DE NEGÓCIO:
+Antes de pagar, o Financeiro confere os tributos retidos na nota fiscal
+(IR, INSS, ISS, PIS, COFINS, CSLL). O teste protege quem pode conferir,
+quem é avisado, a leitura correta da nota e a ordem do fluxo até o
+consolidado e a OB. CADIN é o cadastro de inadimplentes consultado antes
+do pagamento; DOF é a Diretoria de Orçamento e Finanças.
+
+CONTEXTO NO SISTEMA:
+app/services/contratos/leitor_nota_xml.py, rotas de execução do contrato
+(nota-fiscal, retencao, checklist, cadin, consolidado, despacho), modelos
+de despacho (Contratos > Modelos), ACL e notificações. Fixtures usadas por
+test_contratos_recusa_nf.py e pelos testes de reajuste.
+
+===============================================================================
 """
 
 import smtplib
@@ -34,6 +63,12 @@ EXEMPLO = Path(__file__).parent / "dados" / "nfe_exemplo.xml"
 
 @pytest.fixture(autouse=True)
 def _ambiente(monkeypatch):
+    """Prepara cada teste: data fixa (15/03/2026) e SMTP falso.
+
+    autouse=True faz a fixture rodar em todos os testes do arquivo sem ser
+    pedida. monkeypatch troca smtplib.SMTP/SMTP_SSL pelas classes simuladas, que
+    guardam as mensagens em SmtpSimulado.enviadas.
+    """
     for modulo in ("servico_contratos", "servico_competencias", "servico_diario"):
         monkeypatch.setattr(f"app.services.contratos.{modulo}.hoje", lambda: HOJE)
     SmtpSimulado.enviadas, SmtpSimulado.conexoes, SmtpSimulado.recusar_remetente = [], [], False
@@ -44,6 +79,7 @@ def _ambiente(monkeypatch):
 # --- Leitura do XML --------------------------------------------------------------------------------
 
 def test_le_a_nfe_real_de_exemplo():
+    """Lê a NF-e real de exemplo (tests/dados) e confere número, chave, emitente, tomador, itens e retenções."""
     dados = ler_nota(EXEMPLO.read_bytes())
     assert (dados.modelo, dados.numero, dados.serie, dados.emissao) == ("nfe", "363", "1", "2026-09-25")
     assert dados.chave == "35260905686994000165550010000003631068862301" and dados.autorizada is True
@@ -54,6 +90,7 @@ def test_le_a_nfe_real_de_exemplo():
 
 
 def test_le_nfse_padrao_nacional():
+    """Lê uma NFS-e do padrão nacional e extrai competência, código de serviço, valores e retenções."""
     xml = f"""<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse"><infNFSe Id="NFS3550308123"><nNFSe>77</nNFSe>
       <emit><CNPJ>11222333000181</CNPJ><xNome>ACME</xNome></emit><valores><vISSQN>50.00</vISSQN><vLiq>1845.00</vLiq></valores>
       <DPS><infDPS><dhEmi>2026-02-03T10:00:00-03:00</dhEmi><dCompet>2026-01-31</dCompet>
@@ -69,6 +106,7 @@ def test_le_nfse_padrao_nacional():
 
 
 def test_le_nfse_da_prefeitura_de_sao_paulo():
+    """Lê uma NFS-e da prefeitura de São Paulo (ISS retido) e extrai número, código e retenções."""
     xml = f"""<RetornoConsulta xmlns="http://www.prefeitura.sp.gov.br/nfe"><NFe xmlns="">
       <ChaveNFe><InscricaoPrestador>12345678</InscricaoPrestador><NumeroNFe>4512</NumeroNFe><CodigoVerificacao>ABCD1234</CodigoVerificacao></ChaveNFe>
       <DataEmissaoNFe>2026-02-03T10:00:00</DataEmissaoNFe><DataFatoGeradorNFe>2026-01-31T00:00:00</DataFatoGeradorNFe>
@@ -83,6 +121,7 @@ def test_le_nfse_da_prefeitura_de_sao_paulo():
     assert dados.tomador.cnpj == CNPJ_SPI and dados.retencoes["iss"] == "100.00" and dados.retencoes["ir"] == "30.00"
 
 
+# parametrize roda o mesmo teste uma vez para cada par (conteúdo, trecho esperado no erro).
 @pytest.mark.parametrize("conteudo, trecho", [
     (b"", "vazio"),
     (b"nao e xml", "XML válido"),
@@ -90,6 +129,10 @@ def test_le_nfse_da_prefeitura_de_sao_paulo():
     (b"<?xml version='1.0'?><!DOCTYPE x [<!ENTITY a 'b'>]><NFe/>", "DOCTYPE"),
 ])
 def test_xml_invalido_e_recusado(conteudo, trecho):
+    """Arquivo vazio, texto que não é XML, XML desconhecido ou com DOCTYPE geram ErroRegraContrato.
+
+    O DOCTYPE é recusado para evitar ataques de entidade XML.
+    """
     with pytest.raises(ErroRegraContrato, match=trecho):
         ler_nota(conteudo)
 
@@ -127,6 +170,8 @@ def cenario(cliente, admin):
 
 
 def test_nf_envia_email_ao_financeiro_com_copia_para_a_equipe(cliente, cenario):
+    """Juntar a NF leva à retenção, sugere o IR do XML, faz as conferências e avisa o Financeiro com a equipe em cópia.
+    """
     contrato, base, gestora = cenario
     r = juntar_nf(cliente, base, gestora, "2105.00", "123", retencoes={"vIRRF": "31.58"})
     assert r.status_code == 200, r.text
@@ -160,6 +205,7 @@ def test_aviso_da_nf_e_obrigatorio_e_vai_a_todo_o_financeiro(cliente, cenario):
 
 
 def test_mesma_nota_nao_entra_em_duas_competencias(cliente, cenario):
+    """A mesma nota (mesma chave) não pode ser juntada em outra competência."""
     contrato, base, gestora = cenario
     assert juntar_nf(cliente, base, gestora, "2105.00", "123").status_code == 200
     fevereiro = cliente.get(_url(contrato, "/competencias/identificador/2026-02"), headers=gestora).json()
@@ -169,6 +215,7 @@ def test_mesma_nota_nao_entra_em_duas_competencias(cliente, cenario):
     from app.models.contratos import Competencia
 
     with FabricaSessao() as sessao:
+        # Altera direto no banco; commit grava a mudança para a API enxergar.
         sessao.get(Competencia, __import__("uuid").UUID(fevereiro["id"])).etapa_atual = "nota_fiscal"
         sessao.commit()
     r = juntar_nf(cliente, outra, gestora, "2105.00", "123")
@@ -176,6 +223,10 @@ def test_mesma_nota_nao_entra_em_duas_competencias(cliente, cenario):
 
 
 def test_financeiro_confere_mesmo_fora_da_equipe_e_outros_nao(cliente, admin, cenario, monkeypatch):
+    """O Financeiro confere a retenção sem ser da equipe; outros usuários levam 403.
+
+    Confere também a pendência no painel, o PDF da retenção e o e-mail à equipe.
+    """
     # A competência do cenário é de 01/2026: sem o corte de pendências antigas (09/2026), ela aparece em "Minhas pendências"
     definir_parametros(corte_alertas_a_partir_de=date(2000, 1, 1))
     contrato, base, gestora = cenario
@@ -225,6 +276,7 @@ def test_com_o_recurso_financeiro_configurado_a_acl_define_quem_e_o_financeiro(c
 
 
 def test_sem_financeiro_cadastrado_o_erro_fica_registrado(cliente, admin, cenario):
+    """Sem nenhum usuário do Financeiro, o envio falha e o erro fica registrado na competência."""
     contrato, base, gestora = cenario
     for setor in cliente.get("/api/setores", headers=admin).json():
         cliente.put(f"/api/setores/{setor['id']}", json={"nome": setor["nome"] + " (antigo)", "setor_pai_id": setor.get("setor_pai_id"),
@@ -235,6 +287,7 @@ def test_sem_financeiro_cadastrado_o_erro_fica_registrado(cliente, admin, cenari
 
 
 def test_reabrir_a_nota_fiscal_desfaz_a_conferencia(cliente, admin, cenario):
+    """Reabrir a etapa da NF apaga a conferência da retenção; a nova nota exige nova conferência."""
     contrato, base, gestora = cenario
     juntar_nf(cliente, base, gestora, "2105.00", "123")
     conferir_retencao(cliente, base, gestora, {"ir": "31.58"})

@@ -1,5 +1,32 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para controlar o painel de contratos (pendências, alertas, execução orçamentária e números).
+/**
+ * =============================================================================
+ * ARQUIVO: painel.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Controla o painel de contratos: pendências do usuário, alertas de risco,
+ * execução orçamentária do exercício (previsto, medido e pago) e os números
+ * gerais da carteira.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template em painel.component.html. Lê exercício,
+ * empresa e contrato da query string, chama ContratosApiService.painel e
+ * transforma a execução mensal em séries do GraficoComponent (pago acima do
+ * previsto vira uma barra vermelha empilhada). Exporta listaExercicios, usada
+ * também pela tela de alertas de risco.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * É a página de entrada da gestão de contratos: mostra ao servidor o que
+ * precisa da ação dele, onde estão os riscos e como o dinheiro do exercício
+ * está sendo usado, apoiando o acompanhamento orçamentário da SPI.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota /contratos/painel. Usa ContratosApiService, PainelContratos
+ * (contratos.models), GraficoComponent, OrcamentoExecutivoComponent e os
+ * pipes de formatação. Leva às telas minhas-pendencias e alertas-de-risco.
+ *
+ * =============================================================================
+ */
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -36,7 +63,9 @@ export class PainelComponent implements OnInit {
   protected empresaId = '';
   protected contratoId = '';
 
-  // Séries do gráfico (em milhares de reais) e rótulos dos meses (AAAA-MM-DD → Jan, Fev…)
+  // Séries do gráfico (em milhares de reais) e rótulos dos meses (AAAA-MM-DD → Jan, Fev…).
+  // Os valores chegam da API como texto decimal (ex.: "1234.56") e são convertidos com Number.
+  // Previsto = previsão mensal; medido = medições concluídas; pago = Ordens Bancárias (OB) pagas.
   protected readonly rotulosMeses = computed(() => (this.painel()?.execucao.meses ?? []).map((m) => MESES[Number(m.competencia.slice(5, 7)) - 1]));
   protected readonly series = computed<SerieGrafico[]>(() => {
     const meses = this.painel()?.execucao.meses ?? [];
@@ -51,13 +80,14 @@ export class PainelComponent implements OnInit {
   });
   // Quantidade de riscos de gravidade alta (destaque no cartão)
   protected readonly alertasAltos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.filter((r) => r.gravidade === 'alta').length, 0) ?? 0);
-  // Quanto do previsto no exercício já foi pago
   /**
-   * Exercícios oferecidos no seletor: lista fixa (não muda ao escolher), do ano do contrato mais antigo
-   * da carteira (ou 8 anos atrás) até 2 anos à frente, do mais recente para o mais antigo.
+   * Exercícios oferecidos no seletor: lista fixa (não muda ao escolher), do ano mais antigo entre o
+   * contrato mais antigo da carteira e 8 anos atrás até 2 anos à frente, do mais recente para o mais antigo.
+   * Exercício é o ano orçamentário (de janeiro a dezembro).
    */
   protected readonly exercicios = computed(() => listaExercicios(this.painel()?.contratos.map((c) => c.rotulo) ?? [], this.exercicio));
 
+  // Quanto do previsto no exercício já foi pago, em % (0 quando não há previsto, para não dividir por zero)
   protected readonly percentualPago = computed(() => {
     const e = this.painel()?.execucao;
     return e && Number(e.total_previsto) ? (Number(e.total_pago) * 100) / Number(e.total_previsto) : 0;
@@ -89,7 +119,13 @@ export class PainelComponent implements OnInit {
   }
 }
 
-/** Anos do seletor de exercício; o ano do contrato vem do rótulo "NNN/AAAA · ...". Inclui sempre o escolhido. */
+/**
+ * Anos do seletor de exercício; o ano do contrato vem do rótulo "NNN/AAAA · ...". Inclui sempre o escolhido.
+ * Exportada porque a tela de alertas de risco usa a mesma lista.
+ * @param rotulosContratos rótulos dos contratos da carteira (o ano é lido pela expressão regular).
+ * @param escolhido exercício selecionado no momento (entra mesmo se estiver fora da faixa).
+ * @returns anos em ordem decrescente, de (ano atual + 2, ou o escolhido) até o mais antigo.
+ */
 export function listaExercicios(rotulosContratos: string[], escolhido: number): number[] {
   const atual = new Date().getFullYear();
   const anos = rotulosContratos.map((r) => Number(/\d{1,4}\/(\d{4})/.exec(r)?.[1])).filter((a) => a > 1990);

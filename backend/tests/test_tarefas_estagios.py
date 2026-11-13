@@ -1,19 +1,48 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar os estágios (colunas) configuráveis das equipes de tarefas.
-"""Estágios da equipe (`/api/tarefas/equipes/{id}/estagios`, `/{numero}/estagio` e `estagio_id` em `mover`)."""
+"""
+===============================================================================
+ARQUIVO: test_tarefas_estagios.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar os estágios (colunas do quadro) configuráveis de cada equipe de
+tarefas e a movimentação das tarefas entre eles.
+
+RESUMO TÉCNICO:
+Usa `GET/PUT /api/tarefas/equipes/{id}/estagios` para ler e regravar a
+lista de estágios, `POST /{numero}/estagio` para trocar de coluna e o campo
+`estagio_id` de `POST /{numero}/mover`. Confere as regras de gravação
+(ordem do pipeline, uma categoria de validação, nomes únicos, mínimo de 4
+estágios) e os códigos 400, 403, 404, 409 e 422.
+
+FINALIDADE DE NEGÓCIO:
+Garante que cada equipe pode adaptar o quadro ao seu jeito de trabalhar
+(ex.: coluna "Aguardando terceiros") sem quebrar o fluxo oficial A fazer,
+Em andamento, Em validação e Concluída, que só a liderança muda a
+configuração e que um estágio com tarefas não some.
+
+CONTEXTO NO SISTEMA:
+Reaproveita `URL`, `_nova` e a fixture `equipe` de `tests/test_tarefas.py`;
+exercita as rotas de `app/api/routes/tarefas.py` e o serviço de estágios em
+`app/services/tarefas/`.
+
+===============================================================================
+"""
 
 from tests.test_tarefas import URL, _nova, equipe  # noqa: F401  (fixture da equipe)
 
 
 def _gravar(cliente, h, equipe_id, estagios):
+    """Regrava a lista completa de estágios da equipe (o PUT substitui a configuração inteira)."""
     return cliente.put(f"{URL}/equipes/{equipe_id}/estagios", json={"estagios": estagios}, headers=h)
 
 
 def _estagio(nome, categoria, cor=0, id=None):
+    """Monta um estágio no formato do corpo da API; `id=None` significa estágio novo."""
     return {"id": id, "nome": nome, "categoria": categoria, "cor_indice": cor}
 
 
 def test_padrao_e_configuracao_com_regras(cliente, equipe):
+    """A equipe nasce com os 4 estágios padrão; só a liderança reconfigura, respeitando as regras."""
     ids, h, equipe_id = equipe
     base = f"{URL}/equipes/{equipe_id}/estagios"
     padrao = cliente.get(base, headers=h["ana"]).json()
@@ -34,6 +63,7 @@ def test_padrao_e_configuracao_com_regras(cliente, equipe):
 
 
 def test_mover_entre_estagios_e_categorias(cliente, equipe):
+    """Troca de coluna livre dentro da mesma categoria; mudar de categoria segue o fluxo (iniciar, pausar...)."""
     ids, h, equipe_id = equipe
     base = f"{URL}/equipes/{equipe_id}/estagios"
     a, b, v, c = [e["id"] for e in cliente.get(base, headers=h["lia"]).json()]
@@ -57,6 +87,7 @@ def test_mover_entre_estagios_e_categorias(cliente, equipe):
     # A lista também traz o estágio; estágio com tarefa não é excluído
     lista = cliente.get(URL, params={"escopo": "equipe", "equipe_id": equipe_id}, headers=h["lia"]).json()["itens"]
     assert lista[0]["estagio_id"] in (a, espera)
+    # Tentar remover "Aguardando terceiros" com a tarefa dentro falha; depois de tirá-la de lá, a remoção passa
     sem_espera = [e for e in novo if e["nome"] != "Aguardando terceiros"]
     r = _gravar(cliente, h["lia"], equipe_id, sem_espera)
     assert r.status_code in (400, 409)

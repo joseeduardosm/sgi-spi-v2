@@ -8,7 +8,7 @@ O GLPI não tem isto: lá as tomadas e os cabos estão vazios e o que existe vem
 - `EquipamentoRede`: switch, patch panel ou roteador, com o modelo de face, o bem do Patrimônio, a sala, o rack e o IP de gerência;
 - `PortaRede`: cada porta, com a configuração lógica (VLAN nativa/access, trunk, descrição, velocidade, duplex, status, erros);
 - `VlanRede` + `PortaVlanRede`: as VLANs e quais passam em cada porta (com ou sem tag);
-- `ConexaoRede`: o que está ligado na porta (outra porta, um bem do Patrimônio ou só uma descrição);
+- `ConexaoRede`: o que está ligado na porta (outra porta, um bem do Patrimônio ou só uma descrição); no patch panel, por lado (fundo/frente);
 - `PontoRede`: o ponto/tomada da sala, ligado à porta do patch panel (e, pela conexão, à porta do switch).
 """
 
@@ -41,6 +41,11 @@ STATUS_PORTA = ("up", "down", "desativada")
 # - roteada (porta L3: `no switchport` na Cisco, `undo portswitch` na Huawei): sem VLAN, com o IP da interface.
 MODOS_PORTA = ("access", "trunk", "hybrid", "dot1q_tunnel", "dinamico_auto", "dinamico_desejavel", "roteada")
 DUPLEX = ("full", "half")
+# Lado físico da porta do patch panel (decisão do usuário): cada porta tem um cabo na frente e outro no fundo, e cada lado tem uma ligação.
+# Em switch e nos demais equipamentos a porta tem uma ligação só e o lado fica vazio.
+LADOS_PATCH = ("fundo", "frente")
+# Texto da descrição de porta sem nada ligado (a descrição é gerada pelo sistema a partir das ligações)
+DESCRICAO_DESLIGADA = "Desligado"
 # Cor do rack (para reconhecer na sala): nomes ligados aos tokens de cor do sistema, nunca hex
 CORES_RACK = ("preto", "cinza", "azul", "verde", "amarelo", "laranja", "vermelho")
 
@@ -119,12 +124,31 @@ class EquipamentoRede(Base):
     ping_falhas: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     ping_verificado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ping_mudou_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Acesso SSH só leitura para a carga do equipamento (decisão do usuário: por equipamento). A senha é cifrada (app.core.criptografia)
+    # e nunca volta na API; `acesso_tipo` é o tipo do Netmiko que funcionou na última leitura (ex.: huawei_vrpv8), para não detectar de novo
+    acesso_usuario: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    acesso_senha: Mapped[str] = mapped_column(Text, default="", server_default="")
+    acesso_porta: Mapped[int] = mapped_column(Integer, default=22, server_default="22")
+    acesso_tipo: Mapped[str] = mapped_column(String(40), default="", server_default="")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
     modelo_face: Mapped[ModeloFaceRede | None] = relationship()
     rack: Mapped[RackRede | None] = relationship()
     portas: Mapped[list["PortaRede"]] = relationship(back_populates="equipamento", cascade="all, delete-orphan", order_by="PortaRede.numero_logico")
+
+
+class LeituraRede(Base):
+    """Uma leitura do equipamento por SSH (carga): o que foi lido (JSON), quando, por quem e se/quando foi aplicada no cadastro."""
+    __tablename__ = "rede_leituras"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    equipamento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rede_equipamentos.id", ondelete="CASCADE"), index=True)
+    lido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+    lido_por: Mapped[str] = mapped_column(String(250), default="", server_default="")
+    resultado: Mapped[dict] = mapped_column(TipoJson)
+    aplicada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    aplicada_por: Mapped[str] = mapped_column(String(250), default="", server_default="")
 
 
 class VlanRede(Base):
@@ -154,8 +178,10 @@ class PortaRede(Base):
     equipamento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rede_equipamentos.id", ondelete="CASCADE"))
     numero_logico: Mapped[int] = mapped_column(Integer)
     nome: Mapped[str] = mapped_column(String(120), default="", server_default="")
-    # Descrição configurada no switch (ifAlias), ex.: "Sala 504 - impressora"
-    descricao: Mapped[str] = mapped_column(String(250), default="", server_default="")
+    # Descrição gerada pelo sistema a partir do "Ligado a" (decisão do usuário): o que está na outra ponta, ou "Desligado"; ninguém digita
+    descricao: Mapped[str] = mapped_column(String(250), default=DESCRICAO_DESLIGADA, server_default=DESCRICAO_DESLIGADA)
+    # Anotação livre e opcional de quem cadastra (ex.: "cabo danificado"); é o único texto da porta digitado à mão
+    observacao: Mapped[str] = mapped_column(Text, default="", server_default="")
     mac: Mapped[str] = mapped_column(String(17), default="", server_default="")
     velocidade_mbps: Mapped[int | None] = mapped_column(Integer)
     duplex: Mapped[str | None] = mapped_column(String(4))
@@ -191,16 +217,23 @@ class ConexaoRede(Base):
     Cada porta aparece em no máximo uma conexão (dos dois lados). Com bem ou texto, pode haver dispositivos **atrás** dele (telefone IP → PC):
     `DispositivoAtrasRede`."""
     __tablename__ = "rede_conexoes"
+    # Uma ligação por porta e lado (no patch panel, a frente e o fundo são lados diferentes da mesma porta). O banco garante cada coluna;
+    # a regra "a mesma porta e lado não aparece nas duas colunas" fica no serviço (conectar)
     __table_args__ = (
         CheckConstraint("porta_b_id IS NULL OR porta_b_id <> porta_a_id", name="ck_rede_conexoes_diferentes"),
-        Index("ux_rede_conexoes_a", "porta_a_id", unique=True),
-        Index("ux_rede_conexoes_b", "porta_b_id", unique=True, postgresql_where=text("porta_b_id IS NOT NULL"),
+        CheckConstraint(f"lado_a IS NULL OR lado_a IN ({_lista(LADOS_PATCH)})", name="ck_rede_conexoes_lado_a"),
+        CheckConstraint(f"lado_b IS NULL OR lado_b IN ({_lista(LADOS_PATCH)})", name="ck_rede_conexoes_lado_b"),
+        Index("ux_rede_conexoes_a", "porta_a_id", text("coalesce(lado_a, '')"), unique=True),
+        Index("ux_rede_conexoes_b", "porta_b_id", text("coalesce(lado_b, '')"), unique=True, postgresql_where=text("porta_b_id IS NOT NULL"),
               sqlite_where=text("porta_b_id IS NOT NULL")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     porta_a_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rede_portas.id", ondelete="CASCADE"))
     porta_b_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rede_portas.id", ondelete="CASCADE"))
+    # Lado de cada ponta quando ela é porta de patch panel ("fundo" ou "frente"); vazio nas demais portas
+    lado_a: Mapped[str | None] = mapped_column(String(6))
+    lado_b: Mapped[str | None] = mapped_column(String(6))
     bem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("patrimonio_bens.id", ondelete="SET NULL"))
     descricao: Mapped[str] = mapped_column(String(250), default="", server_default="")
     origem_glpi_id: Mapped[int | None] = mapped_column(Integer)

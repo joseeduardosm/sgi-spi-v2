@@ -1,14 +1,37 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para ligar o canal Navegador, em todos os eventos que o aceitam, para os usuários que já existem.
-"""notificacoes: navegador ligado para todos
+"""
+===============================================================================
+ARQUIVO: f1a7c3e9b4d6_notificacoes_navegador_para_todos.py
+AUTOR: José Eduardo Santana Martins
 
-Insere em `notificacoes_preferencias` o canal `navegador` de cada usuário para cada evento que aceita esse canal (sem duplicar o que já
-existe). Cada pessoa continua podendo desmarcar na tela de Preferências. Usuários criados depois começam desmarcados, como antes.
+FINALIDADE:
+Migração Alembic que liga o canal Navegador, em todos os eventos que o aceitam,
+para os usuários que já existem (notificacoes: navegador ligado para todos).
+
+RESUMO TÉCNICO:
+Insere em notificacoes_preferencias o canal navegador de cada usuário para cada
+evento da lista fixa EVENTOS (cópia do catálogo na data da migração), em lotes
+de 2000 linhas, com ON CONFLICT DO NOTHING para não duplicar o que já existe. O
+downgrade não desfaz nada, pois não há como separar o que foi inserido aqui do
+que a pessoa marcou depois.
+
+FINALIDADE DE NEGÓCIO:
+Todos passam a receber os avisos do sistema como notificação do navegador. Cada
+pessoa continua podendo desmarcar na tela de Preferências; usuários criados
+depois começam desmarcados, como antes.
+
+CONTEXTO NO SISTEMA:
+Tabelas usuarios e notificacoes_preferencias; o catálogo vivo de eventos e
+canais fica no serviço de notificações e as preferências na rota
+notificacoes_preferencias. Aplicada com 'alembic upgrade head' (o instalador e
+a atualização do sistema rodam esse comando).
 
 Revision ID: f1a7c3e9b4d6
 Revises: e5f9b2d7a3c1
 Create Date: 2026-10-13 16:00:00
+
+===============================================================================
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -42,6 +65,12 @@ EVENTOS = [
 
 
 def upgrade() -> None:
+    """Liga o canal navegador de todos os usuários atuais em todos os EVENTOS.
+
+    Monta o produto cartesiano usuário x evento e insere em lotes de 2000 linhas
+    (evita um único INSERT gigante). O ON CONFLICT ... DO NOTHING pula o que a
+    pessoa já tinha marcado, então a migração pode rodar sem duplicar nada.
+    """
     conexao = op.get_bind()
     usuarios = [linha[0] for linha in conexao.execute(sa.text('SELECT id FROM usuarios'))]
     linhas = [{'usuario_id': u, 'evento': e, 'canal': 'navegador'} for u in usuarios for e in EVENTOS]

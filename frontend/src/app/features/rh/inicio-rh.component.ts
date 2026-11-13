@@ -1,5 +1,29 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para exibir o painel de entrada do Módulo RH: as telas agrupadas por finalidade, com numeração nas sequências reais.
+/**
+ * =============================================================================
+ * ARQUIVO: inicio-rh.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Painel de entrada do Módulo RH (/rh): mostra as telas agrupadas por
+ * finalidade, com numeração nos grupos que são sequências de trabalho.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline. Busca os papéis do usuário no
+ * RH (RhApiService.papeis) e, com eles, filtra os grupos e telas visíveis pela
+ * função gruposVisiveis de menu-rh.ts. Mostra esqueleto enquanto carrega e
+ * mensagem de erro se a API falhar.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Orienta quem usa o RH a achar a tela certa e a seguir a ordem real dos
+ * processos (ex.: pré-cadastro, admissão), mostrando a cada pessoa só o que o
+ * papel dela permite (servidor, autorizador, CGP).
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota raiz do Módulo RH em rh.routes.ts. A definição dos grupos fica em
+ * menu-rh.ts, compartilhada com a sub-navegação do app-cabecalho-rh.
+ *
+ * =============================================================================
+ */
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -50,11 +74,15 @@ import { PapeisRh } from './rh.models';
   `,
 })
 export class InicioRhComponent implements OnInit {
+  // inject() obtém o serviço pela injeção de dependência do Angular.
   private readonly api = inject(RhApiService);
+  // signal(): estado reativo (papéis do usuário e falha na carga).
   protected readonly papeis = signal<PapeisRh | null>(null);
   protected readonly erro = signal(false);
+  /** Grupos que o usuário pode ver; computed() recalcula sozinho quando papeis muda. */
   protected readonly grupos = computed(() => (this.papeis() ? gruposVisiveis(this.papeis()!) : []));
 
+  /** Carrega os papéis do usuário no RH; sem eles não dá para decidir que telas mostrar. */
   ngOnInit(): void {
     this.api.papeis().subscribe({ next: (p) => this.papeis.set(p), error: () => this.erro.set(true) });
   }

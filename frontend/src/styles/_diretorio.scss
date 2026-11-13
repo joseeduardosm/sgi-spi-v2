@@ -1,5 +1,36 @@
-// Estilos do Diretório: cartões de visita dos ramais, lista, avatar, aniversariantes, mural e impressão.
+/**
+ * =============================================================================
+ * ARQUIVO: _diretorio.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos globais do Diretório (ramais): cartões de visita, lista, avatar,
+ * janela de detalhe do contato, preferências, aniversariantes, mural de
+ * parabéns e a versão de impressão da tabela de ramais.
+ *
+ * RESUMO TÉCNICO:
+ * Define o mixin limitar() (corta o texto em N linhas com reticências), a
+ * grade responsiva de cartões (auto-fill com mínimo de 340 px), as cores de
+ * destaque do cartão por variáveis CSS locais (--destaque, verde no trabalho
+ * e vermelho em férias), o layout em duas colunas do detalhe, a regra
+ * @media print que mostra só .so-impressao e os ajustes do tema escuro.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Ajuda os servidores da SPI a achar o ramal, o setor e a chefia de um
+ * colega rapidamente, a ver quem está de férias e a parabenizar os
+ * aniversariantes, além de imprimir a lista completa de ramais.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelas telas do Diretório (app-ramais),
+ * pelo bloco de aniversariantes da página inicial de notícias e pelos
+ * modais .modal-portal. Usa os tokens --spi-* e --cor-* de styles.scss e
+ * _tema.scss.
+ *
+ * =============================================================================
+ */
 
+// Mixin = trecho de CSS reutilizável (chamado com @include limitar(2)): mostra no
+// máximo N linhas e corta o resto com reticências, sem quebrar o tamanho do cartão.
 @mixin limitar($linhas) { display: -webkit-box; -webkit-line-clamp: $linhas; line-clamp: $linhas; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 
 .avatar-diretorio {
@@ -41,6 +72,8 @@
 
 // Nas páginas do diretório o contêiner do portal (1280 px) não limita a largura: cabeçalho e conteúdo
 // acompanham a janela, com uma folga lateral que cresce só até um teto para telas ultralargas.
+// :has() aplica a regra só quando a página contém o componente app-ramais, ou seja,
+// alarga o contêiner apenas nas telas do Diretório sem afetar o portal de notícias.
 body:has(app-ramais) .largura-portal-noticias { width: min(100% - 16px, 3200px); }
 // Layout autenticado (barra lateral): o conteúdo passa do teto de 1840 px; a classe repetida vence o estilo encapsulado do layout
 body:has(app-ramais) .portal-conteudo.portal-conteudo { width: min(100%, 3200px); }
@@ -48,6 +81,8 @@ body:has(app-ramais) .portal-conteudo.portal-conteudo { width: min(100%, 3200px)
 .cartao-visita {
   // Textos longos (setor, cargo) são cortados com reticências; o texto completo aparece ao abrir o cartão
   // Destaque do cartão: verde para quem está no trabalho; vermelho para quem está de férias (o tom suave serve de fundo do avatar e do selo)
+  // Variáveis locais do cartão: trocando só --destaque (ex.: em .em-ferias) mudam juntos a
+  // borda, o avatar e os textos; color-mix() mistura a cor com o fundo para criar o tom suave.
   --destaque: #2f9e6b; --destaque-escuro: #17734a;
   --destaque-suave: color-mix(in srgb, var(--destaque) 14%, var(--cor-ffffff));
   position: relative; display: flex; flex-direction: column; min-height: 250px; background: var(--cor-ffffff); overflow: hidden;
@@ -149,6 +184,8 @@ body:has(app-ramais) .portal-conteudo.portal-conteudo { width: min(100%, 3200px)
 }
 
 // ---- Impressão: só a tabela completa de ramais ----
+// Na tela a tabela de impressão fica escondida; ao imprimir, tudo some (visibility: hidden)
+// e só .so-impressao aparece, posicionada no topo da folha.
 .so-impressao { display: none; }
 @media print {
   body * { visibility: hidden; }

@@ -1,7 +1,28 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para ajudar os testes a ligar canais de notificação (todo usuário novo começa com e-mail, navegador e desktop desmarcados).
-"""Apoio dos testes de Notificações."""
+"""
+===============================================================================
+ARQUIVO: apoio_notificacoes.py
+AUTOR: José Eduardo Santana Martins
 
+FINALIDADE:
+Ajuda os testes a ligar canais de notificação, já que todo usuário novo
+começa com e-mail, navegador e desktop desmarcados.
+
+RESUMO TÉCNICO:
+ligar_canais grava PreferenciaNotificacao para os eventos do catálogo
+(EVENTOS); configurar grava ConfigNotificacaoUsuario (frequência do e-mail,
+não perturbe); a fixture todos_com_email troca, via monkeypatch,
+preferencias.canais_por_destinatario para sempre ligar o e-mail.
+
+FINALIDADE DE NEGÓCIO:
+Permite testar os e-mails de aviso dos fluxos (contratos, chamados, RH etc.)
+sem depender de cada pessoa ter marcado as preferências na tela.
+
+CONTEXTO NO SISTEMA:
+Modelos de notificacao_preferencias, catálogo e serviço de preferências de
+notificações. Importado pelos testes de fluxo dos módulos.
+
+===============================================================================
+"""
 from app.core.banco import FabricaSessao
 from app.models.notificacao_preferencias import ConfigNotificacaoUsuario, PreferenciaNotificacao
 from app.services.notificacoes.catalogo import EVENTOS
@@ -15,6 +36,7 @@ def ligar_canais(usuarios_ids, canais=("email",), eventos=None) -> None:
                 if eventos is not None and chave not in eventos:
                     continue
                 for canal in canais:
+                    # Só grava canais que o evento oferece (nem todo evento tem os três canais).
                     if canal in evento.canais_disponiveis:
                         sessao.add(PreferenciaNotificacao(usuario_id=usuario_id, evento=chave, canal=canal))
         sessao.commit()
@@ -30,6 +52,8 @@ def configurar(usuario_id, **campos) -> None:
         sessao.commit()
 
 
+# O import do pytest fica aqui embaixo (por isso o noqa E402), junto da única fixture do arquivo.
+# Fixture = função que o pytest executa antes do teste que a pede pelo nome no parâmetro.
 import pytest  # noqa: E402
 
 
@@ -38,6 +62,7 @@ def todos_com_email(monkeypatch):
     """Simula que todo mundo ligou o e-mail em todos os eventos (os testes de fluxo dos módulos conferem os e-mails dos avisos)."""
     from app.services.notificacoes import preferencias
 
+    # monkeypatch troca a função só durante o teste e desfaz sozinho ao final.
     original = preferencias.canais_por_destinatario
 
     def com_email(*args, **kwargs):

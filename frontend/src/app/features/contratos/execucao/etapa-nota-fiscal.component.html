@@ -12,7 +12,7 @@
     <div class="resumo-autorizado-nf">
       <span>Valor autorizado pela medição</span>
       <strong>{{ d.valor_autorizado | moeda }}</strong>
-      @if (+d.desconto_reajuste > 0) { <small>já descontado o crédito de reajuste de {{ d.desconto_reajuste | moeda }}</small> }
+      @if (+d.desconto_reajuste > 0) { <small>já descontados os créditos de reajuste/repactuação ({{ d.desconto_reajuste | moeda }})</small> }
       <details class="como-funciona-nf">
         <summary>Como funciona</summary>
         <p>Com o XML, os valores são lidos dele; sem ele, informe o valor bruto. As retenções são conferidas pelo Financeiro na etapa seguinte.</p>

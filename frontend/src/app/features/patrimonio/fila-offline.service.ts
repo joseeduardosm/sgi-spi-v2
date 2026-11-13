@@ -1,5 +1,31 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para guardar no aparelho (IndexedDB) o que foi feito sem sinal e enviar quando a conexão voltar.
+/**
+ * =============================================================================
+ * ARQUIVO: fila-offline.service.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Guardar no aparelho (IndexedDB) as ações do Patrimônio feitas sem sinal e
+ * enviá-las ao servidor, em ordem, quando a conexão voltar.
+ *
+ * RESUMO TÉCNICO:
+ * Serviço raiz com duas "lojas" no IndexedDB: "fila" (ações pendentes) e
+ * "mapa" (id_cliente -> id do servidor das listas criadas offline). Escuta os
+ * eventos online/offline do navegador, expõe signals para a tela e envia cada
+ * item com firstValueFrom. Erro de conexão interrompe o envio; erro 4xx
+ * definitivo marca o item com o motivo e a fila segue.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite fazer inventário, cadastro de bens, pedidos de movimentação e
+ * listas de inservíveis/extraviados/baixa em salas sem internet, sem perder
+ * nem duplicar o trabalho (o servidor ignora id_cliente repetido).
+ *
+ * CONTEXTO NO SISTEMA:
+ * Usado pelas telas do Patrimônio e pela tela de pendências offline
+ * (pendencias-offline.component.ts). Envia por PatrimonioApiService, marcando
+ * a origem "offline". Testado em fila-offline.service.spec.ts.
+ *
+ * =============================================================================
+ */
 import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
@@ -22,6 +48,7 @@ export type AcaoOffline =
 /** `ordem` é um número crescente (milissegundos e um contador): dois itens criados no mesmo instante nunca trocam de lugar na fila. */
 export interface ItemFila { id: string; acao: AcaoOffline; criado_em: string; ordem: number; tentativas: number; erro: string | null; descricao: string }
 
+// Nome do banco IndexedDB e das duas lojas (equivalentes a tabelas) usadas no aparelho
 const BANCO = 'sgi-spi-patrimonio';
 const LOJA_FILA = 'fila';
 const LOJA_MAPA = 'mapa';
@@ -47,13 +74,23 @@ export class FilaOfflineService {
   /** Itens aguardando envio ou parados por erro (indicador na tela). */
   readonly itens = signal<ItemFila[]>([]);
 
+  /**
+   * Liga os avisos de conexão do navegador: ao voltar o sinal, tenta enviar a
+   * fila. Na abertura, lê a fila guardada e já envia se houver conexão.
+   */
   constructor() {
+    // Fora do navegador (ex.: renderização no servidor) não há window nem IndexedDB
     if (typeof window === 'undefined') return;
     window.addEventListener('online', () => { this.online.set(true); void this.sincronizar(); });
     window.addEventListener('offline', () => this.online.set(false));
     void this.atualizar().then(() => { if (navigator.onLine) void this.sincronizar(); });
   }
 
+  /**
+   * Abre (uma única vez) o banco IndexedDB. Na primeira abertura, o evento
+   * onupgradeneeded cria as lojas "fila" e "mapa". A Promise fica guardada e é
+   * reaproveitada nas chamadas seguintes.
+   */
   private abrir(): Promise<IDBDatabase> {
     this.banco ??= new Promise((resolver, rejeitar) => {
       const pedido = indexedDB.open(BANCO, 1);
@@ -67,6 +104,10 @@ export class FilaOfflineService {
     return this.banco;
   }
 
+  /**
+   * Executa uma operação (get, put, delete...) numa loja do IndexedDB e
+   * transforma o pedido baseado em eventos numa Promise com o resultado.
+   */
   private async transacao<T>(loja: string, modo: IDBTransactionMode, operacao: (l: IDBObjectStore) => IDBRequest<T>): Promise<T> {
     const banco = await this.abrir();
     return new Promise<T>((resolver, rejeitar) => {
@@ -76,6 +117,7 @@ export class FilaOfflineService {
     });
   }
 
+  /** Relê a fila do aparelho e publica no signal `itens`, na ordem de criação. */
   async atualizar(): Promise<void> {
     try {
       const todos = await this.transacao<ItemFila[]>(LOJA_FILA, 'readonly', (l) => l.getAll());
@@ -91,6 +133,7 @@ export class FilaOfflineService {
     if (navigator.onLine) void this.sincronizar();
   }
 
+  /** Remove o item da fila sem enviá-lo (o usuário desistiu da ação). */
   async descartar(id: string): Promise<void> {
     await this.transacao(LOJA_FILA, 'readwrite', (l) => l.delete(id));
     await this.atualizar();
@@ -105,16 +148,26 @@ export class FilaOfflineService {
     await this.sincronizar();
   }
 
+  /**
+   * Descobre o id no servidor de uma lista: usa o id direto ou procura no mapa
+   * o id devolvido quando a lista criada offline foi enviada. null = ainda não enviada.
+   */
   private async idDoServidor(ref: ReferenciaLista): Promise<string | null> {
     if (ref.id) return ref.id;
     const registro = await this.transacao<{ id_cliente: string; id: string } | undefined>(LOJA_MAPA, 'readonly', (l) => l.get(ref.id_cliente ?? ''));
     return registro?.id ?? null;
   }
 
+  /** Guarda no mapa a correspondência id_cliente -> id do servidor. */
   private async lembrar(idCliente: string, id: string): Promise<void> {
     await this.transacao(LOJA_MAPA, 'readwrite', (l) => l.put({ id_cliente: idCliente, id }));
   }
 
+  /**
+   * Envia uma ação ao servidor conforme o tipo. firstValueFrom converte o
+   * Observable da API numa Promise (para usar await). Ao criar lista ou baixa,
+   * guarda o id devolvido para as inclusões de chapa que vierem depois.
+   */
   private async enviar(acao: AcaoOffline): Promise<void> {
     switch (acao.tipo) {
       case 'cadastro_bem': await firstValueFrom(this.api.cadastrarBem(acao.corpo, 'offline')); return;
@@ -150,7 +203,9 @@ export class FilaOfflineService {
           await this.enviar(item.acao);
           await this.transacao(LOJA_FILA, 'readwrite', (l) => l.delete(item.id));
         } catch (e) {
+          // status 0 = sem resposta (caiu a conexão): para tudo e tenta depois, mantendo a ordem
           if (e instanceof HttpErrorResponse && e.status === 0) break;
+          // Erro temporário (401, 408, 429, 5xx) também interrompe; só o 4xx definitivo marca o item
           const motivo = e instanceof HttpErrorResponse ? (e.error?.detalhe ?? e.message) : (e as Error).message;
           if (e instanceof HttpErrorResponse && !erroDefinitivo(e)) break;
           await this.transacao(LOJA_FILA, 'readwrite', (l) => l.put({ ...item, tentativas: item.tentativas + 1, erro: String(motivo) }));

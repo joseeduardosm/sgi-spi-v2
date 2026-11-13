@@ -10,6 +10,7 @@ import { RouterLink } from '@angular/router';
 import { debounceTime, forkJoin, Observable, Subject, switchMap } from 'rxjs';
 
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
+import { DiferencaManualComponent } from '../compartilhado/diferenca-manual.component';
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
 import { EtapaTrilha, TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
@@ -19,7 +20,7 @@ import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import {
-  CalculoMesQuebrado, DetalheContrato, DocumentoProrrogacao, GravacaoLinhaRepactuacao, PainelRepactuacao, Repactuacao,
+  CalculoMesQuebrado, DetalheContrato, DocumentoProrrogacao, GravacaoDiferencaManual, GravacaoLinhaRepactuacao, PainelRepactuacao, Repactuacao,
 } from '../compartilhado/contratos.models';
 import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
@@ -37,7 +38,7 @@ interface LinhaEdicao { descricao: string; vigente: string; repactuado: string; 
 @Component({
   selector: 'app-repactuacao',
   imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, LinkificarPipe,
-    ...PIPES_FORMATACAO],
+    DiferencaManualComponent, ...PIPES_FORMATACAO],
   templateUrl: './repactuacao.component.html',
 })
 export class RepactuacaoComponent implements OnInit {
@@ -53,6 +54,8 @@ export class RepactuacaoComponent implements OnInit {
   protected readonly previa = signal<Repactuacao | null>(null);
   protected readonly salvando = signal(false);
   protected readonly escolhendo = signal<CalculoMesQuebrado | null>(null);
+  // Diferença retroativa manual sendo gravada ou removida (botão com o indicador de carregando)
+  protected readonly salvandoManual = signal(false);
   protected readonly incluindoDocumento = signal(false);
   protected readonly enviandoInclusao = signal(false);
   protected readonly calculos: CalculoMesQuebrado[] = ['pro_rata', 'integral'];
@@ -194,6 +197,34 @@ export class RepactuacaoComponent implements OnInit {
     });
   }
 
+  /** Há meses sem medição para perguntar ou uma diferença manual já informada? (`?? []`: tolera API ainda sem os campos) */
+  protected temDiferencaManual(r: Repactuacao): boolean {
+    return (r.meses_sem_medicao ?? []).length > 0 || !!r.diferenca_manual;
+  }
+
+  /** Grava a diferença informada manualmente (meses pagos fora do sistema). A memória e o consolidado precisam ser gerados de novo depois. */
+  protected salvarDiferencaManual(r: Repactuacao, dados: GravacaoDiferencaManual): void {
+    this.salvandoManual.set(true);
+    this.api.salvarDiferencaManual<PainelRepactuacao>(this.id(), 'repactuacoes', r.id, dados).subscribe({
+      next: (p) => { this.salvandoManual.set(false); this.aplicar(p); },
+      error: (e) => { this.salvandoManual.set(false); this.dialogos.mostrarErro(e, 'Não foi possível salvar a diferença manual'); },
+    });
+  }
+
+  /** Remove a diferença manual (os meses voltam ao cálculo normal). */
+  protected async removerDiferencaManual(r: Repactuacao): Promise<void> {
+    const ok = await this.dialogos.confirmar({
+      titulo: 'Remover a diferença manual?', mensagem: 'Os meses marcados voltam a receber o novo preço e entram na medição normalmente.',
+      rotuloConfirmar: 'Remover', segundos: 2,
+    });
+    if (!ok) return;
+    this.salvandoManual.set(true);
+    this.api.removerDiferencaManual<PainelRepactuacao>(this.id(), 'repactuacoes', r.id).subscribe({
+      next: (p) => { this.salvandoManual.set(false); this.aplicar(p); },
+      error: (e) => { this.salvandoManual.set(false); this.dialogos.mostrarErro(e, 'Não foi possível remover a diferença manual'); },
+    });
+  }
+
   /** Gera a memória em PDF e XLSX e já baixa o PDF da versão mais recente. */
   protected gerarMemoria(r: Repactuacao): void {
     this.dialogos.executar(this.api.acaoRepactuacao(this.id(), r.id, 'memoria'), 'Gerando a memória em PDF e XLSX…').subscribe({
@@ -248,8 +279,12 @@ export class RepactuacaoComponent implements OnInit {
   protected async finalizar(r: Repactuacao): Promise<void> {
     if (!this.apostilamento) return;
     const dif = Number(r.total_retroativo);
-    const retro = dif > 0 ? `; a diferença de ${reais(dif)} das competências já medidas vira uma competência de diferença a pagar`
-      : dif < 0 ? `; o crédito de ${reais(-dif)} das competências já medidas será abatido na próxima medição` : '';
+    let retro = dif > 0 ? `; a diferença de ${reais(dif)} das competências já medidas vira uma competência de diferença a pagar`
+      : dif < 0 ? `; o crédito de ${reais(-dif)} das competências já medidas vai para o fundo do contrato (o gestor escolhe a medição)` : '';
+    // Diferença informada à mão (meses pagos fora do sistema): tratada à parte da automática
+    const manual = r.diferenca_manual ? Number(r.diferenca_manual.valor) : 0;
+    if (manual > 0) retro += `; a diferença informada manualmente de ${reais(manual)} vira outra competência de diferença, de uma linha`;
+    if (manual < 0) retro += `; o crédito informado manualmente de ${reais(-manual)} vai para o fundo do contrato`;
     const ok = await this.dialogos.confirmar({
       titulo: 'Finalizar e aplicar a repactuação?',
       mensagem: `Os preços dos ${r.itens.length} item(ns) vinculados passam a valer a partir de ${dataBr(r.data_efeito)} e a base mensal vai de ${reais(r.base_atual)} para ${reais(r.base_repactuada)}${retro}.`,

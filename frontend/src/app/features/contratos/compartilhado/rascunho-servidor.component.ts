@@ -1,5 +1,30 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para o rascunho compartilhado de um formulário do contrato: aviso do rascunho salvo pela equipe e as ações de salvar, carregar e excluir.
+/**
+ * =============================================================================
+ * ARQUIVO: rascunho-servidor.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Gerenciar o rascunho compartilhado de um formulário do contrato: mostra o
+ * aviso do rascunho salvo pela equipe e oferece salvar, carregar e excluir.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido. Ao iniciar, lê o rascunho na
+ * API (ExecucaoApiService). Os métodos públicos salvar(), apagar() e
+ * recarregar() são chamados pela tela que o usa (via referência ao
+ * componente). O salvar envia a versão vista, para a API detectar conflito
+ * quando outra pessoa salvou antes.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite que um membro da equipe de fiscalização comece a preencher o diário,
+ * a avaliação ou a medição e outro continue de onde parou, sem perder o
+ * trabalho, e evita que um sobrescreva o rascunho do outro sem perceber.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Usado pela aba Diário do contrato e pelas etapas de medição e avaliação da
+ * competência. Complementa o rascunho automático salvo no navegador.
+ *
+ * =============================================================================
+ */
 
 import { DatePipe } from '@angular/common';
 import { Component, inject, input, OnInit, output, signal } from '@angular/core';
@@ -29,7 +54,9 @@ import { ExecucaoApiService, RascunhoServidor, TipoRascunho } from './execucao-a
   `,
 })
 export class RascunhoServidorComponent implements OnInit {
+  /** Contrato dono do rascunho. */
   readonly contratoId = input.required<string>();
+  /** Qual formulário (diário, avaliação ou medição). */
   readonly tipo = input.required<TipoRascunho>();
   /** Id da competência (avaliação e medição); vazio no diário. */
   readonly chave = input('');
@@ -37,16 +64,19 @@ export class RascunhoServidorComponent implements OnInit {
   readonly editavel = input(false);
   /** Campos do formulário a guardar; `null` quando não há nada preenchido. */
   readonly obterDados = input.required<() => Record<string, unknown> | null>();
+  /** Frase extra exibida no aviso (ex.: o que acontece ao carregar). */
   readonly observacao = input('');
   /** Pedido de carregar o rascunho no formulário (a tela aplica os campos). */
   readonly carregar = output<Record<string, unknown>>();
 
   private readonly api = inject(ExecucaoApiService);
   private readonly dialogos = inject(DialogosService);
+  /** Rascunho atual no servidor (`null` se não há). */
   protected readonly rascunho = signal<RascunhoServidor | null>(null);
   /** Salvando agora (a tela pode usar para desabilitar o botão). */
   readonly salvando = signal(false);
 
+  /** Lê o rascunho ao montar. Os inputs só estão disponíveis a partir daqui, não no construtor. */
   ngOnInit(): void {
     this.recarregar();
   }
@@ -58,6 +88,7 @@ export class RascunhoServidorComponent implements OnInit {
 
   /** Salva o que está no formulário para a equipe (por cima do rascunho anterior, se a versão for a que a pessoa viu). */
   salvar(): void {
+    // `obterDados` é um input que guarda uma função: o primeiro () lê o input, o segundo executa a função
     const dados = this.obterDados()();
     if (dados === null) {
       this.dialogos.avisar('Nada para salvar', 'Preencha algum campo antes de salvar o rascunho.');
@@ -85,6 +116,7 @@ export class RascunhoServidorComponent implements OnInit {
     this.api.apagarRascunho(this.contratoId(), this.tipo(), this.chave()).subscribe({ next: () => this.rascunho.set(null), error: () => this.rascunho.set(null) });
   }
 
+  /** Exclusão pedida pelo usuário: confirma antes, pois o rascunho some para toda a equipe. */
   protected async excluir(): Promise<void> {
     const ok = await this.dialogos.confirmar({ titulo: 'Excluir o rascunho?', mensagem: 'O rascunho salvo some para toda a equipe.', rotuloConfirmar: 'Excluir', perigo: true });
     if (!ok) return;

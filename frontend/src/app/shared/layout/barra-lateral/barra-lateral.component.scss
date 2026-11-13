@@ -414,3 +414,20 @@
     outline: none;
   }
 }
+
+// Bolinha de novidade não vista (item Changelog): no fim do item aberto; sobre o ícone com a barra recolhida
+.nav-item { position: relative; }
+.ponto-novidade {
+  position: absolute;
+  top: 12px;
+  left: 33px;
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: var(--spi-raio-pilula);
+  background: var(--spi-vermelho-filete);
+}
+:host-context(.barra-lateral-expandida) .ponto-novidade {
+  position: static;
+  margin-left: auto;
+}

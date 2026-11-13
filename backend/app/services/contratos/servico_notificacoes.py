@@ -390,8 +390,11 @@ def anexos_ocorrencia(ocorrencia: OcorrenciaDiario) -> list[AnexoEmail]:
         return []
 
 
-def notificar_ocorrencia(ocorrencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID] | None = None) -> None:
-    """Envia o e-mail da ocorrência e grava o resultado (roda em segundo plano, com sessão própria)."""
+def notificar_ocorrencia(ocorrencia_id: uuid.UUID) -> None:
+    """Envia o e-mail da ocorrência e grava o resultado (roda em segundo plano, com sessão própria).
+
+    Destinatários: equipe vigente + prepostos escolhidos no registro (nulo = todos os ativos) + e-mails adicionais da ocorrência.
+    O reenvio passa por aqui e repete a mesma escolha."""
     with FabricaSessao() as sessao:
         ocorrencia = sessao.get(OcorrenciaDiario, ocorrencia_id)
         if ocorrencia is None:
@@ -403,7 +406,9 @@ def notificar_ocorrencia(ocorrencia_id: uuid.UUID, prepostos_ids: list[uuid.UUID
             aviso = "Os anexos não foram incluídos neste e-mail (tamanho acima do limite); estão disponíveis no SGI SPI."
             texto += "\n\n" + aviso
             html = html.replace("</body>", f"<p>{aviso}</p></body>") if "</body>" in html else html + f"<p>{aviso}</p>"
-        destino = _unicos([*emails_da_equipe(sessao, contrato), *emails_dos_prepostos(contrato, prepostos_ids)])
+        escolhidos = ocorrencia.email_prepostos_ids
+        prepostos_ids = [uuid.UUID(str(i)) for i in escolhidos] if escolhidos is not None else None
+        destino = _unicos([*emails_da_equipe(sessao, contrato), *emails_dos_prepostos(contrato, prepostos_ids), *(ocorrencia.email_adicionais or [])])
         para, resultado = _enviar(sessao, contrato, assunto, texto, html, anexos or None, para=destino)
         ocorrencia.email_enviado_em = agora_utc()
         ocorrencia.email_ok = resultado.sucesso

@@ -1,7 +1,36 @@
+<!--
+===============================================================================
+ARQUIVO: ferias.component.html
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Template da tela de férias e licença-prêmio do próprio servidor: saldos,
+calendário do exercício, lista de pedidos e o modal que pergunta o tipo.
+
+RESUMO TÉCNICO:
+Usa o controle de fluxo do Angular (@if, @for, @let) sobre os signals do
+FeriasComponent. Cada dia é um botão com classes de estado (pendente,
+aprovado, seleção, feriado, vedado); a tabela mostra os pedidos com a trilha
+de etapas (app-trilha-etapas) e os botões Alterar e Cancelar.
+
+FINALIDADE DE NEGÓCIO:
+Deixa visível ao servidor o saldo, as regras da CGP (mínimo de dias,
+antecedência, dias vedados, prazo para cancelar) e o andamento de cada
+pedido, evitando pedidos que seriam recusados.
+
+CONTEXTO NO SISTEMA:
+Ligado a ferias.component.ts. Reaproveita app-cabecalho-rh, app-esqueleto,
+app-trilha-etapas e as classes globais (cartao-dados, tabela-gestao,
+modal-portal, acao-*) definidas em styles.scss.
+
+===============================================================================
+-->
 <app-cabecalho-rh titulo="Férias e licença-prêmio" [trilha]="['Férias e LP']"
                   descricao="Clique no primeiro e no último dia do período; depois escolha férias ou licença-prêmio." />
 
+<!-- @if mostra o bloco só quando a condição é verdadeira; "as d" guarda o valor para usar dentro -->
 @if (dados(); as d) {
+  <!-- Cartão de saldos: regras do exercício, avisos de expiração e indicadores -->
   <section class="cartao-dados" aria-labelledby="titulo-saldos">
     <header>
       <div><h2 id="titulo-saldos">Exercício {{ d.exercicio }}</h2>
@@ -53,6 +82,7 @@
     </div>
   </section>
 
+  <!-- Calendário: 12 meses; @for repete o bloco para cada item, e track diz ao Angular como identificar cada um -->
   <div class="calendario-exercicio">
     @for (m of meses(); track m.nome) {
       <section class="mes-calendario" [attr.aria-label]="m.nome">
@@ -78,6 +108,7 @@
     }
   </div>
 
+  <!-- Pedidos do exercício, cada um com a trilha de etapas (ciente do superior e aprovação) -->
   <section class="cartao-dados" aria-labelledby="titulo-pedidos">
     <header><h2 id="titulo-pedidos">Meus pedidos em {{ d.exercicio }}</h2></header>
     <div class="tabela-gestao-envoltorio">

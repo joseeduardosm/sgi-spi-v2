@@ -1,5 +1,30 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para centralizar as chamadas à API da portaria de designação do contrato e das autoridades signatárias.
+/**
+ * =============================================================================
+ * ARQUIVO: portarias-api.service.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Centralizar as chamadas à API da portaria de designação da equipe do
+ * contrato e do cadastro das autoridades signatárias.
+ *
+ * RESUMO TÉCNICO:
+ * Serviço Angular (providedIn root) com HttpClient. Cada método devolve um
+ * Observable com o painel de portarias atualizado (ou a lista de autoridades
+ * e ciências); a publicação envia o PDF por FormData e a evidência é baixada
+ * com baixarArquivo().
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Apoia o fluxo de designação de gestor e fiscais: nomeações, ciência de cada
+ * nomeado, escolha da autoridade que assina, aceite ou devolução, número
+ * reservado no Protocolo e publicação no Diário Oficial (D.O.E.), com PDF de
+ * evidência para juntar ao processo no SEI.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Usado por portarias-equipe.component.ts, janela-ciencia-nomeacao e pela
+ * tela de autoridades. Contrato da API em docs/endpoints/contratos-portarias.md.
+ *
+ * =============================================================================
+ */
 
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
@@ -16,6 +41,7 @@ export class PortariasApiService {
   private readonly base = `${ambiente.urlApi}/contratos`;
   private readonly baseAutoridades = `${ambiente.urlApi}/portarias/autoridades`;
 
+  /** Painel de portarias do contrato: a em andamento, o histórico e a equipe atual. */
   painel(contratoId: string): Observable<PainelPortarias> {
     return this.http.get<PainelPortarias>(`${this.base}/${contratoId}/portarias`);
   }
@@ -25,6 +51,7 @@ export class PortariasApiService {
     return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias`, { nomeacoes });
   }
 
+  /** Troca as nomeações de uma portaria ainda em andamento. */
   alterarNomeacoes(contratoId: string, portariaId: string, nomeacoes: NomeacaoEntrada[]): Observable<PainelPortarias> {
     return this.http.put<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/nomeacoes`, { nomeacoes });
   }
@@ -34,14 +61,17 @@ export class PortariasApiService {
     return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/autoridade`, { autoridade_id: autoridadeId });
   }
 
+  /** Aceite da portaria pela autoridade escolhida. */
   aceitar(contratoId: string, portariaId: string): Observable<PainelPortarias> {
     return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/aceite`, {});
   }
 
+  /** Devolve a portaria para ajuste, com motivo obrigatório. */
   devolver(contratoId: string, portariaId: string, motivo: string): Observable<PainelPortarias> {
     return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/devolucao`, { motivo });
   }
 
+  /** Cancela a portaria em andamento, com motivo. */
   cancelar(contratoId: string, portariaId: string, motivo: string): Observable<PainelPortarias> {
     return this.http.post<PainelPortarias>(`${this.base}/${contratoId}/portarias/${portariaId}/cancelamento`, { motivo });
   }
@@ -63,10 +93,12 @@ export class PortariasApiService {
     return this.http.get<CienciaPendente[]>(`${ambiente.urlApi}/portarias/ciencias`);
   }
 
+  /** Registra a ciência do usuário logado; devolve as pendências que sobraram. */
   darCiencia(portariaId: string): Observable<CienciaPendente[]> {
     return this.http.post<CienciaPendente[]>(`${ambiente.urlApi}/portarias/${portariaId}/ciencia`, {});
   }
 
+  /** Autoridades cadastradas que podem assinar portarias. */
   autoridades(): Observable<AutoridadePortaria[]> {
     return this.http.get<AutoridadePortaria[]>(this.baseAutoridades);
   }
@@ -76,14 +108,17 @@ export class PortariasApiService {
     return this.http.get<UsuarioAutoridade[]>(`${this.baseAutoridades}/usuarios`, { params: { busca } });
   }
 
+  /** Cadastra uma autoridade; devolve a lista atualizada. */
   criarAutoridade(dados: GravacaoAutoridade): Observable<AutoridadePortaria[]> {
     return this.http.post<AutoridadePortaria[]>(this.baseAutoridades, dados);
   }
 
+  /** Altera os dados de uma autoridade; devolve a lista atualizada. */
   alterarAutoridade(id: string, dados: GravacaoAutoridade): Observable<AutoridadePortaria[]> {
     return this.http.put<AutoridadePortaria[]>(`${this.baseAutoridades}/${id}`, dados);
   }
 
+  /** Exclui uma autoridade; devolve a lista atualizada. */
   excluirAutoridade(id: string): Observable<AutoridadePortaria[]> {
     return this.http.delete<AutoridadePortaria[]>(`${this.baseAutoridades}/${id}`);
   }

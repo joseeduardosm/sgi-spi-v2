@@ -1,12 +1,39 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para as regras de cadastro, consulta e alteração dos bens do Patrimônio (histórico por campo, fotos, ajuste de local).
-"""Bens do Patrimônio.
+"""
+===============================================================================
+ARQUIVO: servico_bens.py
+AUTOR: José Eduardo Santana Martins
 
-- Cadastro com idempotência por `id_cliente` (o reenvio de um cadastro feito offline não duplica o bem).
-- A sala precisa ter setor e responsável (informados no primeiro cadastro ali); o bem herda o responsável da sala.
-- Toda alteração grava um evento por campo (anterior e novo, autor, origem) no histórico, que não se apaga.
-- O local só muda por movimentação; o controle total pode ajustar direto, com motivo obrigatório (também registrado).
-- O bem baixado nunca é excluído, mas não pode mais ser editado nem movimentado.
+FINALIDADE:
+Regras de cadastro, consulta e alteração dos bens do Patrimônio: histórico
+por campo, fotos, garantia, valor atual, busca, ordenação e ajuste de local.
+
+RESUMO TÉCNICO:
+- Cadastro com idempotência por id_cliente (o reenvio de um cadastro feito
+  offline não duplica o bem).
+- A sala precisa ter setor e responsável (informados no primeiro cadastro
+  ali); o bem herda o responsável da sala.
+- Toda alteração grava um evento por campo (anterior, novo, autor, origem)
+  no histórico, que não se apaga (registrar_evento, em base.py).
+- O local só muda por movimentação; o Controle total pode ajustar direto,
+  com motivo obrigatório (também registrado).
+- O bem baixado nunca é excluído, mas não pode mais ser editado nem
+  movimentado. Listagem paginada com busca por palavras e ordenação no SQL
+  (ou em Python, quando a coluna é calculada, como a garantia).
+
+FINALIDADE DE NEGÓCIO:
+Manter o inventário de bens móveis do órgão confiável: cada bem tem chapa
+(número de patrimônio) ou número de série, sala, responsável, valores e
+trilha de auditoria completa de quem mudou o quê, o que sustenta
+levantamentos, prestações de contas e a conferência com o SAM.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas de bens do Patrimônio e pelos demais serviços do módulo
+(movimentações, classificações, baixas, painéis). Modelos: Bem,
+EventoPatrimonio, FotoBem, GrupoMaterial, Localizacao, Movimentacao,
+PrefixoChapa. Depende de servico_localizacoes, servico_parametros,
+depreciacao, servico_anexos e base.py.
+
+===============================================================================
 """
 
 import calendar
@@ -25,8 +52,11 @@ from app.services import servico_anexos
 from app.services.patrimonio import depreciacao, servico_localizacoes, servico_parametros
 from app.services.patrimonio.base import LIMITE_UFESP, ErroPatrimonio, parametro, registrar_evento
 
+# Situações permitidas no cadastro e na edição comum (inservível, extraviado e baixado têm fluxo próprio)
 SITUACOES_CADASTRO = ("ativo", "em_manutencao")
+# Origem do bem: do próprio órgão ou de terceiros (terceiros não deprecia)
 ORIGENS = ("proprio", "terceiros")
+# Limite de fotos por bem e formatos aceitos
 MAXIMO_FOTOS = 3
 EXTENSOES_FOTO = (".png", ".jpg", ".jpeg")
 # Campos que o formulário do bem pode alterar (local, responsável e situação seguem fluxos próprios)
@@ -34,12 +64,16 @@ CAMPOS_EDITAVEIS = (
     "chapa", "descricao", "conservacao", "situacao", "origem", "grupo_id", "uge", "ua", "divisao", "valor_aquisicao", "valor_atual", "data_aquisicao",
     "garantia_meses", "marca", "modelo", "numero_serie", "nota_fiscal", "fornecedor", "observacoes",
 )
+# Campos de texto livre (opcionais)
 CAMPOS_TEXTO = ("uge", "ua", "divisao", "marca", "modelo", "numero_serie", "nota_fiscal", "fornecedor", "observacoes")
+# Relacionamentos carregados junto com o bem (selectinload evita uma consulta por bem)
 OPCOES_AO_CARREGAR = (selectinload(Bem.localizacao).selectinload(Localizacao.setor), selectinload(Bem.grupo), selectinload(Bem.fotos), selectinload(Bem.responsavel))
 
 
 def adicionar_meses(data: date, meses: int) -> date:
     """Soma meses a uma data (o dia vira o último do mês quando o mês de destino é mais curto)."""
+    # Converte a data em "meses desde o ano zero", soma e volta para (ano, mês);
+    # o dia é limitado ao último dia do mês de destino (31/01 + 1 mês = 28 ou 29/02)
     total = data.year * 12 + data.month - 1 + meses
     ano, mes = divmod(total, 12)
     return date(ano, mes + 1, min(data.day, calendar.monthrange(ano, mes + 1)[1]))
@@ -61,6 +95,7 @@ def situacao_garantia(bem: Bem, hoje: date | None = None) -> str:
 
 
 def vence_em_90_dias(bem: Bem, hoje: date | None = None) -> bool:
+    """True se a garantia termina entre hoje e daqui a 90 dias (inclusive); usado no alerta dos painéis."""
     fim = garantia_fim(bem)
     hoje = hoje or hoje_sao_paulo()
     return fim is not None and 0 <= (fim - hoje).days <= 90
@@ -70,8 +105,10 @@ def valor_efetivo(bem: Bem, hoje: date | None = None) -> Decimal | None:
     """Nos painéis vale o valor atual informado no bem (normalmente o do SAM); sem ele, o valor calculado pela depreciação."""
     if bem.valor_atual is not None:
         return bem.valor_atual
+    # Sem grupo de material não há vida útil nem residual: não dá para calcular
     if bem.grupo is None:
         return None
+    # Bem de terceiros não deprecia no patrimônio do órgão
     deprecia = bem.grupo.deprecia and bem.origem != "terceiros"
     return depreciacao.valor_calculado(bem.valor_aquisicao, bem.grupo.residual_percentual, bem.grupo.vida_util_meses, bem.data_aquisicao, hoje or hoje_sao_paulo(), deprecia)
 
@@ -81,6 +118,7 @@ def avisos(sessao: Session, bem: Bem) -> list[str]:
     resultado = []
     if bem.dados_contabeis_pendentes:
         resultado.append("Dados contábeis pendentes: o bem entra na contagem, mas fica fora dos totais de valor.")
+    # UFESP = Unidade Fiscal do Estado de São Paulo; o valor dela é um parâmetro editável do módulo
     if bem.valor_aquisicao is not None and bem.grupo is not None and bem.grupo.vida_util_meses is not None:
         limite = Decimal(parametro(sessao, "ufesp")) * LIMITE_UFESP
         if bem.valor_aquisicao < limite and bem.grupo.vida_util_meses < 24:
@@ -89,12 +127,14 @@ def avisos(sessao: Session, bem: Bem) -> list[str]:
 
 
 def obter(sessao: Session, bem_id: uuid.UUID) -> Bem:
+    """Busca o bem com local, grupo, fotos e responsável; ErroPatrimonio 404 se não existe."""
     bem = sessao.scalar(select(Bem).where(Bem.id == bem_id).options(*OPCOES_AO_CARREGAR))
     if bem is None:
         raise ErroPatrimonio("Bem não encontrado.", 404, "nao_encontrado")
     return bem
 
 
+# Todas as situações que um bem pode ter (usadas para validar o filtro da lista)
 SITUACOES_VALIDAS = {"ativo", "em_manutencao", "inservivel", "extraviado", "baixado"}
 
 
@@ -109,6 +149,7 @@ def montar_chapa(sessao: Session, prefixo: str | None, numero: str | None) -> st
     prefixo = (prefixo or "").strip().upper()
     if not prefixo:
         return numero
+    # O prefixo precisa estar cadastrado e ativo nos parâmetros do módulo
     if not sessao.scalar(select(PrefixoChapa.id).where(PrefixoChapa.codigo == prefixo, PrefixoChapa.ativo.is_(True))):
         raise ErroPatrimonio(f"Prefixo {prefixo} inexistente ou inativo.", 404, "nao_encontrado")
     if numero.upper().startswith(prefixo) and len(numero) > len(prefixo):
@@ -124,11 +165,14 @@ def obter_por_chapa(sessao: Session, chapa: str) -> Bem:
     Só dígitos (etiqueta antiga) tenta antes com o prefixo padrão. O número de série pode se repetir entre bens: com mais de um, pede a chapa (`409 ambiguo`).
     """
     texto = chapa.strip()
+    # 1) Chapa exata (chapa_chave é a chapa em minúsculas, para comparar sem diferenciar maiúsculas)
     bem = sessao.scalar(select(Bem).where(Bem.chapa_chave == texto.lower()).options(*OPCOES_AO_CARREGAR))
+    # 2) Só dígitos: tenta com o prefixo padrão e 6 dígitos
     if bem is None and texto.isdigit():
         padrao = servico_parametros.prefixo_padrao(sessao)
         if padrao:
             bem = sessao.scalar(select(Bem).where(Bem.chapa_chave == (padrao + texto.zfill(6)).lower()).options(*OPCOES_AO_CARREGAR))
+    # 3) Número de série (limit(2) basta para saber se há mais de um)
     if bem is None and texto:
         com_serie = list(sessao.scalars(select(Bem).where(func.lower(Bem.numero_serie) == texto.lower()).options(*OPCOES_AO_CARREGAR).limit(2)))
         if len(com_serie) > 1:
@@ -141,6 +185,7 @@ def obter_por_chapa(sessao: Session, chapa: str) -> Bem:
 
 def _busca_da_palavra(sessao: Session, termo: str):
     """Condição de uma palavra da busca em todas as informações do bem (o local pega a sala e tudo o que está dentro dela: andar, lado, prédio)."""
+    # coalesce troca NULL por "" e lower deixa a comparação sem diferenciar maiúsculas
     texto = lambda c: func.lower(func.coalesce(c, ""))  # noqa: E731
     campos = [texto(Bem.chapa), texto(Bem.descricao), texto(Bem.numero_serie), texto(Bem.marca), texto(Bem.modelo), texto(Bem.fornecedor), texto(Bem.nota_fiscal),
               texto(Bem.uge), texto(Bem.ua), texto(Bem.divisao), texto(Bem.observacoes)]
@@ -148,6 +193,7 @@ def _busca_da_palavra(sessao: Session, termo: str):
     grupos = select(GrupoMaterial.id).where(or_(texto(GrupoMaterial.nome).like(termo), texto(GrupoMaterial.codigo).like(termo)))
     responsaveis = select(Usuario.id).where(or_(texto(Usuario.nome_completo).like(termo), texto(Usuario.login).like(termo)))
     locais = list(sessao.scalars(select(Localizacao.id).where(or_(texto(Localizacao.codigo).like(termo), texto(Localizacao.nome).like(termo))).limit(40)))
+    # Um local encontrado vale também para tudo o que está dentro dele (subárvore)
     ids_locais: set = set()
     for local_id in locais:
         ids_locais |= set(servico_localizacoes.ids_da_subarvore(sessao, local_id))
@@ -161,6 +207,11 @@ def _filtros(
     sessao: Session, *, q: str | None, situacao: str | None, localizacao_id: uuid.UUID | None, grupo_id: uuid.UUID | None, conservacao: int | None,
     garantia: str | None, contabeis_pendentes: bool | None, incluir_baixados: bool,
 ):
+    """Lista de condições SQL (WHERE) da listagem de bens, a partir dos filtros da tela.
+
+    O filtro ``garantia`` é recebido mas aplicado depois, em Python, pela
+    função listar (a situação da garantia é calculada, não é coluna).
+    """
     condicoes = []
     if situacao:
         # Aceita uma situação ou várias separadas por vírgula (ex.: "inservivel,extraviado")
@@ -168,6 +219,7 @@ def _filtros(
         if not situacoes or any(s not in SITUACOES_VALIDAS for s in situacoes):
             raise ErroPatrimonio("Situação inválida.")
         condicoes.append(Bem.situacao.in_(situacoes) if len(situacoes) > 1 else Bem.situacao == situacoes[0])
+    # Sem filtro de situação, os baixados ficam de fora, salvo pedido explícito
     elif not incluir_baixados:
         condicoes.append(Bem.situacao != "baixado")
     if q and q.strip():
@@ -181,6 +233,7 @@ def _filtros(
         condicoes.append(Bem.grupo_id == grupo_id)
     if conservacao:
         condicoes.append(Bem.conservacao == conservacao)
+    # "Dados contábeis pendentes" = falta grupo, valor ou data de aquisição
     if contabeis_pendentes:
         condicoes.append(or_(Bem.grupo_id.is_(None), Bem.valor_aquisicao.is_(None), Bem.data_aquisicao.is_(None)))
     return condicoes
@@ -232,6 +285,7 @@ def listar(
             todos.sort(key=chave, reverse=decrescente)
         inicio = (pagina - 1) * tamanho
         return todos[inicio:inicio + tamanho], len(todos)
+    # Ordenar por sala, grupo ou responsável exige juntar a tabela relacionada à consulta
     if ordenar_por == "sala":
         consulta = consulta.join(Localizacao, Localizacao.id == Bem.localizacao_id)
     elif ordenar_por == "grupo":
@@ -241,6 +295,7 @@ def listar(
     ordem = expressao.desc() if decrescente else expressao.asc()
     # Vazios no fim e, em empate, a chapa decide (a ordem fica estável entre as páginas)
     consulta = consulta.order_by(ordem.nulls_last(), func.lower(Bem.chapa))
+    # Total sem paginação, para a tela montar a navegação entre páginas
     total = sessao.scalar(select(func.count(Bem.id)).where(*condicoes)) or 0
     return list(sessao.scalars(consulta.offset((pagina - 1) * tamanho).limit(tamanho))), total
 
@@ -264,11 +319,13 @@ def sugerir_descricoes(sessao: Session, texto: str, limite: int = 8) -> list[str
         item["usos"] += usos
         if usos > item["melhor"][0]:
             item["melhor"] = (usos, grafia)
+    # Chave de ordenação: primeiro as que começam pelo termo (False vem antes de True), depois mais usadas, depois alfabética
     ordenadas = sorted(por_chave.items(), key=lambda kv: (not kv[0].startswith(termo), -kv[1]["usos"], kv[0]))
     return [i["melhor"][1] for _, i in ordenadas[:limite]]
 
 
 def _normalizar(dados: dict[str, Any]) -> dict[str, Any]:
+    """Tira espaços das pontas dos textos e troca texto vazio por None (campo em branco = sem valor)."""
     limpo = {}
     for campo, valor in dados.items():
         if isinstance(valor, str):
@@ -278,6 +335,7 @@ def _normalizar(dados: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validar(sessao: Session, dados: dict[str, Any]) -> None:
+    """Valida faixas e referências dos campos enviados (só os presentes em ``dados``); ErroPatrimonio se algo estiver errado."""
     if "conservacao" in dados and not (isinstance(dados["conservacao"], int) and 1 <= dados["conservacao"] <= 5):
         raise ErroPatrimonio("O estado de conservação vai de 1 (péssimo) a 5 (ótimo).")
     if "origem" in dados and dados["origem"] not in ORIGENS:
@@ -293,6 +351,7 @@ def _validar(sessao: Session, dados: dict[str, Any]) -> None:
 
 def criar(sessao: Session, dados: dict[str, Any], autor: Usuario, *, origem: str | None = None) -> tuple[Bem, bool]:
     """Cadastra o bem. Devolve `(bem, criado)`: `criado` é falso quando o `id_cliente` já tinha sido enviado (reenvio offline)."""
+    # Idempotência: o app pode reenviar o mesmo cadastro (feito sem rede); o id_cliente evita duplicar
     id_cliente = dados.pop("id_cliente", None)
     if id_cliente:
         existente = sessao.scalar(select(Bem).where(Bem.id_cliente == id_cliente).options(*OPCOES_AO_CARREGAR))
@@ -307,6 +366,7 @@ def criar(sessao: Session, dados: dict[str, Any], autor: Usuario, *, origem: str
     # Sem patrimônio, o bem se identifica pelo número de série
     if not chapa and not dados.get("numero_serie"):
         raise ErroPatrimonio("Informe a chapa ou, se o bem não tem patrimônio, o número de série.")
+    # O bem herda o responsável da sala; por isso a sala precisa ter setor e responsável antes
     sala = servico_localizacoes.exigir_sala(sessao, dados["localizacao_id"])
     if sala.setor_id is None or sala.responsavel_id is None:
         raise ErroPatrimonio("A sala ainda não tem setor e responsável: informe-os antes de cadastrar o primeiro bem.", 409, "sala_sem_responsavel")
@@ -322,6 +382,7 @@ def criar(sessao: Session, dados: dict[str, Any], autor: Usuario, *, origem: str
     bem = Bem(id=uuid.uuid4(), id_cliente=id_cliente, chapa=chapa, chapa_chave=chave, localizacao_id=sala.id, responsavel_id=sala.responsavel_id,
               criado_por_id=autor.id, **campos)
     sessao.add(bem)
+    # flush grava o bem (ainda sem commit) para o evento do histórico poder apontar para ele
     sessao.flush()
     registrar_evento(sessao, bem, "cadastrou", autor, texto=f"Cadastrado na sala {sala.codigo}", origem=origem, dados={"sala_id": str(sala.id), "sala": sala.codigo})
     sessao.commit()
@@ -329,12 +390,17 @@ def criar(sessao: Session, dados: dict[str, Any], autor: Usuario, *, origem: str
 
 
 def _exigir_editavel(bem: Bem) -> None:
+    """Barra qualquer alteração em bem baixado (409 bem_baixado)."""
     if bem.situacao == "baixado":
         raise ErroPatrimonio("O bem baixado não pode mais ser editado.", 409, "bem_baixado")
 
 
 def atualizar(sessao: Session, bem_id: uuid.UUID, dados: dict[str, Any], autor: Usuario, *, origem: str | None = None) -> Bem:
-    """Altera os campos enviados e grava um evento por campo que mudou."""
+    """Altera os campos enviados e grava um evento por campo que mudou.
+
+    Campos fora de CAMPOS_EDITAVEIS são ignorados. ``origem`` indica de onde
+    veio a alteração (ex.: tela, importação) e fica no histórico. Faz commit.
+    """
     bem = obter(sessao, bem_id)
     _exigir_editavel(bem)
     prefixo = dados.get("prefixo")
@@ -355,6 +421,7 @@ def atualizar(sessao: Session, bem_id: uuid.UUID, dados: dict[str, Any], autor: 
     if "descricao" in dados and not dados["descricao"]:
         raise ErroPatrimonio("A descrição é obrigatória.")
     _validar(sessao, dados)
+    # Só grava e registra no histórico o que realmente mudou
     for campo, novo in dados.items():
         antigo = getattr(bem, campo)
         if antigo == novo:
@@ -384,6 +451,7 @@ def exigir_movimentavel(sessao: Session, bem: Bem, destino: Localizacao | None =
         raise ErroPatrimonio(f"O bem {bem.chapa} está com classificação pendente e não pode ser movimentado.", 409, "classificacao_pendente")
     if em_movimentacao(sessao, bem.id):
         raise ErroPatrimonio(f"O bem {bem.chapa} já está em outra movimentação em andamento.", 409, "em_movimentacao")
+    # Regras que dependem do destino (só quando ele é informado)
     if destino is not None:
         if bem.situacao == "inservivel" and not servico_localizacoes.eh_deposito_inservivel(destino):
             raise ErroPatrimonio(f"O bem inservível {bem.chapa} só pode ir para uma sala do setor \"Depósito inservível\".", 409, "destino_invalido")
@@ -396,6 +464,7 @@ def mover_para(sessao: Session, bem: Bem, destino: Localizacao, autor: Usuario, 
     origem_sala = bem.localizacao
     registrar_evento(sessao, bem, tipo_evento, autor, campo="localizacao", anterior=origem_sala.codigo, novo=destino.codigo, texto=texto, origem=origem,
                      dados={**dados, "de": origem_sala.codigo, "de_id": str(origem_sala.id), "para": destino.codigo, "para_id": str(destino.id)})
+    # Ao mudar de sala o bem passa ao responsável da sala nova (e isso também vai ao histórico)
     if bem.responsavel_id != destino.responsavel_id:
         registrar_evento(sessao, bem, "responsavel", autor, campo="responsavel", anterior=bem.responsavel_id, novo=destino.responsavel_id, origem=origem,
                          texto=f"Passou ao responsável da sala {destino.codigo}")
@@ -438,6 +507,7 @@ def localizar(sessao: Session, bem_id: uuid.UUID, destino_id: uuid.UUID, autor: 
 
 
 def adicionar_foto(sessao: Session, bem_id: uuid.UUID, origem_arquivo: BinaryIO, nome: str, autor: Usuario) -> Bem:
+    """Guarda uma foto (PNG/JPG, até MAXIMO_FOTOS por bem) como anexo e registra no histórico. Faz commit."""
     bem = obter(sessao, bem_id)
     _exigir_editavel(bem)
     if len(bem.fotos) >= MAXIMO_FOTOS:
@@ -458,6 +528,7 @@ def adicionar_foto(sessao: Session, bem_id: uuid.UUID, origem_arquivo: BinaryIO,
 
 
 def remover_foto(sessao: Session, bem_id: uuid.UUID, foto_id: uuid.UUID, autor: Usuario) -> Bem:
+    """Apaga a foto (registro e arquivo) e registra a remoção no histórico. Faz commit."""
     bem = obter(sessao, bem_id)
     _exigir_editavel(bem)
     foto = next((f for f in bem.fotos if f.id == foto_id), None)

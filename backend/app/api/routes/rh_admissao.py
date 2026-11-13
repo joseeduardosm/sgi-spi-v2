@@ -1,6 +1,38 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para expor as rotas da admissão do RH: modelos editáveis, checklists de documentos e a trilha (chamado, documentos, resolução, Protocolo, publicação, e-mail, posse).
-"""Admissão (`/api/rh/admissoes`, `/api/rh/modelos`, `/api/rh/checklists`). Dados pessoais sensíveis: só o RH (ACL `rh`, controle total)."""
+"""
+===============================================================================
+ARQUIVO: rh_admissao.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Expor as rotas da admissão do RH: modelos de texto editáveis, checklists de
+documentos e a trilha da admissão (chamado no GLPI, foto, documentos,
+resolução, número no Protocolo, publicação no D.O.E., e-mail, posse e
+conclusão). Prefixos /api/rh/admissoes, /api/rh/modelos e /api/rh/checklists.
+
+RESUMO TÉCNICO:
+Quase todas as rotas exigem Controle total no recurso `rh` da ACL (a
+dependência `rh`), porque lidam com dados pessoais sensíveis; a liberação
+do número do Protocolo aceita qualquer usuário logado e o serviço confere
+quem pode. Cada rota chama o serviço dentro de _traduzir, que desfaz a
+transação e converte os erros (não encontrado = 404, proibido = 403, regra =
+400/409). Arquivos chegam como multipart/form-data (UploadFile, Form) e
+downloads saem por servico_anexos.resposta_download ou _pdf.
+
+FINALIDADE DE NEGÓCIO:
+Conduz a nomeação de um novo servidor da SPI do começo ao fim, num único
+lugar: pedir os acessos pelo formulário de nomeação do GLPI, conferir os
+documentos enviados ao Portal de Indicações, redigir a resolução, reservar o
+número, registrar a publicação no Diário Oficial (D.O.E.), avisar a pessoa
+por e-mail, registrar a posse e dar entrada no SGI.
+
+CONTEXTO NO SISTEMA:
+Regras em app/services/rh/servico_admissao.py, servico_checklists.py,
+servico_modelos.py e rh_mascara.py (placeholders como #nome). Schemas em
+app/schemas/rh_admissao.py. Usa o Protocolo (números da resolução), o GLPI
+(chamados) e os anexos. A ficha de pré-cadastro vem de rh_pre_cadastro.py.
+
+===============================================================================
+"""
 
 import uuid
 from contextlib import contextmanager
@@ -26,8 +58,11 @@ from app.services.rh.servico_admissao import AdmissaoNaoEncontrada, ErroAdmissao
 from app.services.rh.servico_checklists import ChecklistNaoEncontrado, ErroChecklist
 from app.services.rh.servico_modelos import ErroModelo
 
+# APIRouter agrupa as rotas sob /rh (as mesmas do Módulo RH, com outra etiqueta na documentação).
 roteador = APIRouter(prefix="/rh", tags=["Módulo RH: admissão"], responses=RESPOSTAS_AUTENTICADAS)
 
+# Dependência que só deixa passar quem tem Controle total no recurso `rh` da ACL; usada em
+# Depends(rh) em quase todas as rotas.
 rh = exigir_rh(NivelAcl.CONTROLE_TOTAL)
 NAO_ENCONTRADO = resposta_nao_encontrado("Admissão")
 PDF = {status.HTTP_200_OK: {"content": {"application/pdf": {}}}}
@@ -35,7 +70,15 @@ PDF = {status.HTTP_200_OK: {"content": {"application/pdf": {}}}}
 
 @contextmanager
 def _traduzir(sessao: Session):
-    """Erros da admissão no formato padrão da API (desfaz a transação em caso de erro)."""
+    """
+    Gerenciador de contexto (usado com `with`) que converte os erros da admissão para o
+    formato padrão da API.
+
+    Sempre desfaz a transação (rollback) antes. Admissão ou checklist inexistente vira
+    404; ErroAdmissao marcado como proibido vira 403 `sem_permissao`, e os demais viram
+    erro de regra (400 ou 409, conforme `conflito`); erros de modelo e checklist viram
+    400.
+    """
     try:
         yield
     except (AdmissaoNaoEncontrada, ChecklistNaoEncontrado) as erro:
@@ -52,11 +95,17 @@ def _traduzir(sessao: Session):
 
 
 def _pdf(conteudo: bytes, nome: str) -> Response:
+    """
+    Devolve bytes de PDF como download (Content-Disposition: attachment) com o nome
+    informado.
+    """
     return Response(content=conteudo, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 # --- Modelos -----------------------------------------------------------------------------------------------
 
+# Modelos de texto (resolução, e-mail de nomeação, termo de posse, boas-vindas). Rotas sem docstring
+# de propósito: a documentação no OpenAPI vem do description= do decorador.
 @roteador.get("/modelos", response_model=list[LeituraModelo], summary="Modelos do RH",
               description="Resolução de nomeação, e-mail \"Sua nomeação foi publicada\", termo de posse e boas-vindas. Cada um nasce com um texto padrão que o RH edita. Exige **Controle total** no RH.")
 def listar_modelos(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(rh)):
@@ -69,6 +118,7 @@ def placeholders(_: Usuario = Depends(rh)):
     return rh_mascara.PLACEHOLDERS
 
 
+# O serviço recusa (400) placeholders fora da lista permitida.
 @roteador.put("/modelos/{tipo}", response_model=LeituraModelo, summary="Salvar modelo", responses={**INVALIDO, **resposta_nao_encontrado("Modelo")},
               description="Grava o assunto e o HTML do modelo. 400 se houver placeholder fora da lista.")
 def salvar_modelo(tipo: str, dados: GravacaoModelo, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(rh)):
@@ -84,6 +134,8 @@ def restaurar_modelo(tipo: str, sessao: Session = Depends(obter_sessao), autor: 
 
 # --- Checklists --------------------------------------------------------------------------------------------
 
+# Checklists: listas de documentos exigidos por tipo de cargo, copiadas para a admissão quando ela
+# começa.
 @roteador.get("/checklists", response_model=list[LeituraChecklist], summary="Checklists de documentos da admissão",
               description="Cada checklist vale para os tipos de cargo (CCESP, FCESP, OUTRO) ligados a ele. Ao iniciar uma admissão, os documentos do tipo do cargo são copiados para ela.")
 def listar_checklists(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(rh)):
@@ -112,6 +164,8 @@ def excluir_checklist(checklist_id: int, sessao: Session = Depends(obter_sessao)
 
 # --- Admissões ----------------------------------------------------------------------------------------------
 
+# Trilha da admissão. Cada rota abaixo avança ou corrige uma etapa e devolve a admissão inteira
+# (LeituraAdmissao) para a tela redesenhar a trilha.
 @roteador.get("/admissoes/solicitacoes", response_model=dict[str, str], summary="Serviços que o chamado no GLPI pode pedir",
               description="Chave → rótulo (rede, e-mail, SEI, Compras SP, equipamento, estação, crachá, telefone, mobiliário), como no formulário \"CGP – Nomeações\" do GLPI.")
 def solicitacoes(_: Usuario = Depends(rh)):
@@ -152,6 +206,8 @@ def cancelar(admissao_id: int, sessao: Session = Depends(obter_sessao), autor: U
         return servico_admissao.cancelar(sessao, admissao_id, autor)
 
 
+# Envia o formulário de nomeação ao GLPI (sistema de chamados da TI); falhas de comunicação viram
+# 502/503 no serviço.
 @roteador.post("/admissoes/{admissao_id}/chamado", response_model=LeituraAdmissao, summary="Enviar o formulário de nomeação ao GLPI",
                description="Preenche e envia o formulário \"CGP - Nomeações\" do GLPI com os dados da ficha e os serviços marcados; o próprio formulário abre os chamados e dispara os e-mails dos seus destinos (nenhum chamado à parte é criado). "
                            "O login proposto vai junto nas observações. Entra no GLPI pela tela web com a conta de serviço da integração. 502 se o GLPI estiver fora do ar ou recusar; 503 sem integração ativa ou sem login web.",
@@ -161,6 +217,7 @@ def abrir_chamado(admissao_id: int, dados: EntradaChamado, sessao: Session = Dep
         return servico_admissao.abrir_chamado(sessao, admissao_id, dados.solicitacoes, dados.observacoes, autor, dados.usuario_espelho)
 
 
+# Foto opcional da pessoa: vai no formulário do GLPI e depois para o Diretório (intranet).
 @roteador.put("/admissoes/{admissao_id}/foto", response_model=LeituraAdmissao, summary="Foto da pessoa (opcional)",
               description="`multipart/form-data` com `arquivo` (PNG ou JPG, até 5 MB). A foto vai no formulário de nomeação do GLPI (se ainda não foi enviado) e, assim que a conta da pessoa existir "
                           "(ligação com a ficha ou conclusão da admissão), vira a **foto do Diretório (intranet)**. Trocar a foto depois do envio atualiza a intranet, mas não reenvia ao GLPI.",
@@ -218,12 +275,16 @@ def baixar_arquivo_documento(admissao_id: int, documento_id: int, sessao: Sessio
     return servico_anexos.resposta_download(anexo)
 
 
+# Registra que o documento foi enviado ao Portal de Indicações (sistema externo); o comprovante é
+# opcional.
 @roteador.post("/admissoes/{admissao_id}/documentos/{documento_id}", response_model=LeituraAdmissao, summary="Registrar o envio de um documento ao Portal de Indicações",
                description="`multipart/form-data` com `enviado_em` (data), `observacao` e, opcionalmente, o `comprovante` (PDF, imagem ou Office). O Portal de Indicações é externo: aqui só se registra o envio.",
                responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
 def registrar_documento(admissao_id: int, documento_id: int, enviado_em: date = Form(...), observacao: str = Form(""), comprovante: UploadFile | None = File(None),
                         sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(rh)):
     with _traduzir(sessao):
+        # Só considera comprovante se veio um arquivo de verdade (com nome); o serviço recebe
+        # (arquivo, nome) ou None.
         arquivo = (comprovante.file, comprovante.filename or "comprovante") if comprovante is not None and comprovante.filename else None
         return servico_admissao.registrar_documento(sessao, admissao_id, documento_id, enviado_em, observacao, arquivo, autor)
 
@@ -243,6 +304,8 @@ def baixar_comprovante(admissao_id: int, documento_id: int, sessao: Session = De
     return servico_anexos.resposta_download(anexo)
 
 
+# Resolução de nomeação: o texto guarda os placeholders; número, nomes e datas são trocados só na
+# hora de gerar o PDF ou o texto para o SEI.
 @roteador.post("/admissoes/{admissao_id}/resolucao", response_model=LeituraAdmissao, summary="Gerar o texto da resolução",
                description="Copia o modelo \"Resolução de nomeação\" para a admissão (ou, com `html` no corpo de `PUT`, grava o texto editado). O texto guarda os placeholders: número, datas e nomes entram na hora do PDF.",
                responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
@@ -275,6 +338,7 @@ def resolucao_para_copiar(admissao_id: int, sessao: Session = Depends(obter_sess
     return TextoParaCopiar(html=html, texto=texto)
 
 
+# Número da resolução reservado no módulo Protocolo.
 @roteador.post("/admissoes/{admissao_id}/protocolo", response_model=LeituraAdmissao, summary="Reservar o número da resolução no Protocolo",
                description="Reserva o próximo número livre do tipo de Resolução definido nos Parâmetros do RH (`tipo_protocolo_id` só vale se os Parâmetros não definirem um), na faixa do ano atual. `409` se a admissão é de resolução sem número.", responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
 def reservar_numero(admissao_id: int, dados: EntradaProtocolo, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(rh)):
@@ -282,6 +346,8 @@ def reservar_numero(admissao_id: int, dados: EntradaProtocolo, sessao: Session =
         return servico_admissao.reservar_numero(sessao, admissao_id, dados.tipo_protocolo_id, autor)
 
 
+# Aqui a dependência é só o login (não Controle total no RH): o serviço confere se é quem reservou,
+# o Serviço de Apoio Administrativo ou o SuperRoot.
 @roteador.post("/admissoes/{admissao_id}/protocolo/liberar", response_model=LeituraAdmissao, summary="Liberar o número da resolução no Protocolo",
                description="Devolve o número ao Protocolo (livre de novo), **mesmo com o PDF da publicação já subido**: o PDF é excluído logicamente, a publicação deixa de estar registrada e a trilha volta à etapa do número. "
                            "Quem reservou o número, o Serviço de Apoio Administrativo (parâmetro do RH) e o SuperRoot (`403 sem_permissao` nos demais). `motivo` obrigatório; `409` sem número reservado ou depois da posse. O e-mail de nomeação já enviado não é desfeito.",
@@ -291,6 +357,8 @@ def liberar_numero(admissao_id: int, dados: EntradaMotivo, sessao: Session = Dep
         return servico_admissao.liberar_numero(sessao, admissao_id, dados.motivo, autor)
 
 
+# Publicação no D.O.E. (Diário Oficial do Estado): o PDF fica anexado ao número do Protocolo e
+# dispara o e-mail de nomeação.
 @roteador.post("/admissoes/{admissao_id}/publicacao", response_model=LeituraAdmissao, summary="Registrar a publicação no D.O.E.",
                description="`multipart/form-data` com o `arquivo` (PDF da publicação) e `publicado_em`. O PDF fica anexado ao número do Protocolo. Se o Protocolo anexar o PDF direto, a publicação também fica registrada (data de hoje; ajuste em `PUT .../publicacao`).",
                responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
@@ -320,6 +388,7 @@ def reenviar_email(admissao_id: int, sessao: Session = Depends(obter_sessao), au
         return servico_admissao.reenviar_email(sessao, admissao_id, autor)
 
 
+# Posse e termo de posse.
 @roteador.post("/admissoes/{admissao_id}/posse", response_model=LeituraAdmissao, summary="Registrar a posse",
                description="Grava a data da posse (não anterior à publicação) e prepara o texto do termo a partir do modelo.", responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})
 def registrar_posse(admissao_id: int, dados: EntradaPosse, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(rh)):
@@ -340,6 +409,7 @@ def termo_pdf(admissao_id: int, sessao: Session = Depends(obter_sessao), autor: 
     return _pdf(conteudo, nome)
 
 
+# Última etapa: a pessoa entra no SGI ocupando o cargo a partir da data da posse.
 @roteador.post("/admissoes/{admissao_id}/concluir", response_model=LeituraAdmissao, summary="Concluir a admissão (entrada no SGI)",
                description="Exige a posse registrada e a conta da pessoa já vinculada à ficha (a TI cria o login no AD). A pessoa assume o cargo na data da posse e o histórico funcional registra o fato.",
                responses={**INVALIDO, **CONFLITO, **NAO_ENCONTRADO})

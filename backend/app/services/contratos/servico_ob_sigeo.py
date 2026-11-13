@@ -1,17 +1,46 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para conferir no SIGEO se as competências que só esperam a ordem bancária já foram pagas e, se sim, concluir a etapa sozinho.
-"""Conferência diária das ordens bancárias no SIGEO.
+"""
+===============================================================================
+ARQUIVO: servico_ob_sigeo.py
+AUTOR: José Eduardo Santana Martins
 
-Para cada competência na etapa "ordem bancária" (sem OB juntada) de um contrato com **Processo Financeiro** preenchido:
+FINALIDADE:
+Conferir todo dia no SIGEO se as competências que só esperam a ordem bancária
+(OB) já foram pagas e, quando a conferência é exata, concluir a etapa sozinho.
+SIGEO é o sistema de execução orçamentária e financeira do Estado; OB é o
+documento que efetiva o pagamento à contratada.
 
-1. pega as OBs do SIGEO do(s) mesmo(s) processo(s) (`COD_PROCESSO`; o contrato pode ter mais de um, separados por vírgula), lançadas a partir do início do período e ainda não usadas por outra competência;
-2. lê a competência paga no texto livre `DESCRICAO_DOCUMENTO` (`REF NOV/25`, `JUL26`, `SETEMBRO/2026`, `REF. 09/2026`…; ver `competencia_do_texto`);
-3. soma as OBs do mês da competência (o pagamento pode vir em partes) e compara com o **líquido** a pagar: valor a pagar (notas fiscais brutas + despesas
-   variáveis) menos as retenções conferidas. A OB do SIGEO paga o líquido; os tributos retidos saem em outros documentos.
+RESUMO TÉCNICO:
+Para cada competência na etapa "ordem_bancaria" (sem OB juntada) de contrato
+com Processo Financeiro preenchido:
+1. pega as OBs do mesmo processo (COD_PROCESSO; o contrato pode ter mais de
+   um, separados por vírgula), lançadas a partir do início do período e ainda
+   não usadas por outra competência;
+2. lê o mês pago no texto livre DESCRICAO_DOCUMENTO ("REF NOV/25", "JUL26",
+   "SETEMBRO/2026", "REF. 09/2026"...; ver competencia_do_texto);
+3. soma as OBs do mês (o pagamento pode vir em partes) e compara com o
+   líquido a pagar: notas brutas + despesas variáveis menos as retenções
+   conferidas (a OB paga o líquido; os tributos saem em outros documentos).
+Igual ao centavo: gera o PDF "Comprovante de pagamento (SIGEO)" no lugar do
+PDF da OB, debita as NEs como no lançamento manual e manda o e-mail de
+pagamento. Qualquer dúvida (sem mês, valor parcial ou acima, duas
+competências do mesmo mês) não conclui e grava o motivo em
+ob_sigeo_pendencia, que aparece na etapa. Também cadastra os empenhos do
+SIGEO (servico_empenho_sigeo) e sugere processo para contratos sem ele.
 
-Igual ao centavo → conclui a etapa: gera o "Comprovante de pagamento (SIGEO)" em PDF no lugar do PDF da OB, debita as NEs (como no lançamento manual) e
-manda o e-mail de pagamento. Qualquer dúvida (texto sem mês, valor parcial ou acima, mais de uma competência do mês) → não conclui e grava o motivo em
-`ob_sigeo_pendencia`, que aparece na etapa. Sem mês legível no texto nunca conclui: os contratos de valor fixo repetem o mesmo valor todo mês.
+FINALIDADE DE NEGÓCIO:
+Tira da equipe do contrato o trabalho repetitivo de baixar a OB e juntá-la à
+competência, sem risco de concluir errado: sem mês legível no texto nunca
+conclui, porque contratos de valor fixo repetem o mesmo valor todo mês. A
+pendência gravada explica ao usuário por que a etapa não andou sozinha.
+
+CONTEXTO NO SISTEMA:
+Chamado pela rotina agendada (executar) e pelo botão da tela da execução
+(buscar_da_competencia). Usa servico_integracao_sigeo (download das análises
+OBIEE), servico_competencias (valor_a_pagar, concluir_ordem_bancaria),
+servico_anexos (guarda o PDF), documentos.pdf (DocumentoPdf),
+servico_notificacoes (e-mail da OB) e os modelos Competencia e Contrato.
+
+===============================================================================
 """
 
 import logging
@@ -29,9 +58,12 @@ from app.models.contratos import Competencia, Contrato
 from app.services import servico_anexos
 from app.services.contratos.erros import ErroRegraContrato
 
+# Logger próprio da integração: as falhas da rotina aparecem no log do servidor com o nome "sgi_spi.sigeo"
 log = logging.getLogger("sgi_spi.sigeo")
 ZERO = Decimal(0)
+# Tributos retidos na nota fiscal; cada um vira a coluna `retencao_<sigla>` da nota (ver servico_retencao)
 TRIBUTOS = ("ir", "inss", "iss", "pis", "cofins", "csll")
+# Nomes e siglas dos meses já sem acento (o texto da OB passa por _normalizar antes da busca)
 MESES = {"JANEIRO": 1, "FEVEREIRO": 2, "MARCO": 3, "ABRIL": 4, "MAIO": 5, "JUNHO": 6, "JULHO": 7, "AGOSTO": 8, "SETEMBRO": 9, "OUTUBRO": 10,
          "NOVEMBRO": 11, "DEZEMBRO": 12, "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6, "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12}
 # Nome do mês (completo antes da sigla) sem letra colada antes ou depois; ano opcional logo depois (2 ou 4 dígitos). Colado num dia antes
@@ -42,6 +74,7 @@ _MES_NUMERO = re.compile(r"(?:REF|COMP|COMPET\w*)[^0-9A-Z]{0,4}(\d{1,2})\s*[/\-.
 
 
 def _normalizar(texto: str) -> str:
+    """Tira os acentos (NFD + descarta o que não é ASCII) e passa para maiúsculas, para comparar "MARÇO" com "MARCO"."""
     return unicodedata.normalize("NFD", texto or "").encode("ascii", "ignore").decode().upper()
 
 
@@ -52,15 +85,18 @@ def competencia_do_texto(texto: str, lancamento: date) -> date | None:
     daquele mês até o lançamento ("REF JUL" lançado em agosto/2026 = julho/2026; "REF DEZ" lançado em janeiro/2027 = dezembro/2026).
     """
     t = _normalizar(texto)
+    # Primeiro tenta o nome do mês; só se não achar nenhum usa o formato numérico depois de REF/COMP
     achados = [(MESES[m.group(1)], m.group(2)) for m in _MES_NOME.finditer(t)] or [(int(m.group(1)), m.group(2)) for m in _MES_NUMERO.finditer(t)]
     meses = set()
     for mes, ano_texto in achados:
         if not 1 <= mes <= 12:
             continue
+        # Ano de 2 dígitos vira 20xx; ano ausente ou distante demais do lançamento é deduzido pelo próprio lançamento
         ano = int(ano_texto) + (2000 if ano_texto and len(ano_texto) == 2 else 0) if ano_texto else None
         if ano is None or abs(ano - lancamento.year) > 1:
             ano = lancamento.year if mes <= lancamento.month else lancamento.year - 1
         meses.add(date(ano, mes, 1))
+    # Mais de um mês diferente no texto é ambíguo: devolve None para não concluir errado
     return meses.pop() if len(meses) == 1 else None
 
 
@@ -80,9 +116,10 @@ def numero_ob(codigo: str) -> str:
     return m.group(1) if m else (codigo or "")
 
 
+# @dataclass gera sozinho o __init__ e o __repr__ a partir dos campos anotados abaixo
 @dataclass
 class Pagamento:
-    """Uma OB do SIGEO."""
+    """Uma OB do SIGEO já interpretada: código, processo (só dígitos), data, valor, texto livre e o mês pago lido do texto."""
     codigo: str
     processo: str
     lancamento: date
@@ -93,6 +130,10 @@ class Pagamento:
 
 @dataclass
 class Resultado:
+    """Resumo de uma rodada de conferência: contagens, competências concluídas, pendências, sugestões e erros.
+
+    `field(default_factory=list)` cria uma lista nova para cada instância (uma lista como valor padrão seria compartilhada).
+    """
     verificadas: int = 0
     # Sem OB do mês no SIGEO ainda: é o normal até o pagamento sair (não é pendência)
     aguardando: int = 0
@@ -105,6 +146,7 @@ class Resultado:
     empenhos: dict | None = None
 
     def como_dict(self) -> dict:
+        """Versão em dicionário, gravada em `ultimo_resultado` da configuração do SIGEO e devolvida pela API."""
         return {"verificadas": self.verificadas, "aguardando": self.aguardando, "concluidas": self.concluidas, "pendencias": self.pendencias,
                 "sugestoes_processo": self.sugestoes_processo, "erros": self.erros, "empenhos": self.empenhos}
 
@@ -113,6 +155,7 @@ def pagamentos(linhas: list[dict[str, str]]) -> list[Pagamento]:
     """Converte as linhas da análise em OBs (ignora as que não são OB ou que vêm sem processo, data ou valor)."""
     resultado = []
     for linha in linhas:
+        # A análise pode trazer outros documentos; sem a coluna, assume que é OB
         if (linha.get("TIPO_DOCUMENTO") or "OB") != "OB":
             continue
         try:
@@ -130,13 +173,16 @@ def pagamentos(linhas: list[dict[str, str]]) -> list[Pagamento]:
 
 def liquido_a_pagar(competencia: Competencia) -> Decimal:
     """O que a OB paga: valor a pagar (notas brutas + despesas variáveis) menos as retenções conferidas."""
+    # Import dentro da função para evitar import circular entre os serviços de contratos
     from app.services.contratos.servico_competencias import valor_a_pagar
 
+    # Soma, em todas as notas da competência, os seis tributos retidos (campo vazio conta como zero)
     retencoes = sum((getattr(n, f"retencao_{t}") or ZERO for n in competencia.notas_fiscais for t in TRIBUTOS), ZERO)
     return valor_a_pagar(competencia) - retencoes
 
 
 def _moeda(valor: Decimal) -> str:
+    """Formata em reais no padrão brasileiro (R$ 1.234,56), trocando os separadores do formato americano."""
     return "R$ " + f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
@@ -160,6 +206,10 @@ def _comprovante(contrato: Contrato, competencia: Competencia, obs: list[Pagamen
 
 
 def _ja_usadas(sessao: Session) -> set[str]:
+    """Códigos de OB já gravados em alguma competência (`ob_numero` guarda vários separados por vírgula).
+
+    Serve para que a mesma OB nunca conclua duas competências.
+    """
     usadas: set[str] = set()
     for numeros in sessao.scalars(select(Competencia.ob_numero).where(Competencia.ob_numero.is_not(None))):
         usadas |= {n.strip() for n in numeros.split(",") if n.strip()}
@@ -175,6 +225,7 @@ def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False
 
     hoje = hoje or hoje_sao_paulo()
     resultado = Resultado()
+    # Prepara: OBs válidas da análise, OBs já usadas e o usuário "sistema" que assina as conclusões automáticas
     todas = pagamentos(linhas)
     usadas = _ja_usadas(sessao)
     autor = servico_tarefas_contratos.usuario_sistema(sessao)
@@ -184,11 +235,13 @@ def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False
         .order_by(Competencia.periodo_inicio)))
     if competencia_id is not None:
         candidatas = [c for c in candidatas if c.id == competencia_id]
+    # Guarda (contrato, competência) concluídos para mandar os e-mails só depois do commit final
     concluir: list[tuple] = []
     for competencia in candidatas:
         contrato = obter_contrato(sessao, competencia.contrato_id)
         competencia = next(c for c in contrato.competencias if c.id == competencia.id)
         resultado.verificadas += 1
+        # Filtra as OBs: mesmo processo, ainda não usadas, lançadas a partir do início do período; depois só as do mês da competência
         processos = processos_do_contrato(contrato.processo_financeiro)
         rotulo = f"{contrato.numero} · {competencia.numero_competencia}"
         do_processo = [p for p in todas if p.processo in processos and p.codigo not in usadas and p.lancamento >= competencia.periodo_inicio]
@@ -196,6 +249,7 @@ def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False
         irmas = [c for c in contrato.competencias if c.competencia == competencia.competencia and c.id != competencia.id and c.etapa_atual == "ordem_bancaria"]
         liquido = liquido_a_pagar(competencia)
         soma = sum((p.valor for p in do_mes), ZERO)
+        # Decide entre: pendência (motivo preenchido), "aguardando" (nada do mês ainda) ou conclusão (soma igual ao líquido)
         motivo = None
         if irmas:
             motivo = "Há mais de uma competência deste mês esperando OB: confira e junte a OB manualmente."
@@ -217,11 +271,13 @@ def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False
             if not ensaio:
                 competencia.ob_sigeo_pendencia, competencia.ob_sigeo_verificado_em = motivo, agora_utc()
             continue
+        # Chegou aqui: soma igual ao líquido ao centavo. Marca as OBs como usadas para não servirem a outra competência
         numeros = ", ".join(numero_ob(p.codigo) for p in do_mes)
         resultado.concluidas.append({"competencia": rotulo, "contrato_id": str(contrato.id), "ob": numeros, "valor": str(soma)})
         usadas |= {p.codigo for p in do_mes}
         if ensaio:
             continue
+        # Cada conclusão tem o seu commit: se uma falhar (rollback), as anteriores continuam gravadas
         try:
             conteudo = _comprovante(contrato, competencia, do_mes, liquido)
             anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, f"comprovante-sigeo-{contrato.numero_arquivo}-{competencia.competencia:%Y-%m}.pdf",
@@ -239,6 +295,7 @@ def conferir(sessao: Session, linhas: list[dict[str, str]], ensaio: bool = False
     if competencia_id is None:
         resultado.sugestoes_processo = _sugestoes_processo(sessao, linhas)
     if not ensaio:
+        # Grava as pendências/verificações e só então envia os e-mails de pagamento
         sessao.commit()
         from app.services.contratos.servico_notificacoes import notificar_ob
 
@@ -254,6 +311,7 @@ def _sugestoes_processo(sessao: Session, linhas: list[dict[str, str]]) -> list[d
     """Contratos sem processo financeiro com competência esperando OB: o(s) processo(s) que o SIGEO usa para o CNPJ da contratada."""
     from collections import Counter
 
+    # Conta, para cada CNPJ (CGC_CPF), quantas OBs usam cada processo; o mais frequente vem primeiro na sugestão
     por_cnpj: dict[str, Counter] = {}
     for linha in linhas:
         cnpj = re.sub(r"\D", "", linha.get("CGC_CPF") or "")
@@ -276,6 +334,7 @@ def executar(sessao: Session, ensaio: bool = False) -> Resultado:
     from app.services.sigeo.cliente_obiee import ErroSigeo
 
     config = servico_integracao_sigeo.obter(sessao)
+    # Falha de acesso ao SIGEO não derruba a rotina: vira erro no resultado
     try:
         linhas = servico_integracao_sigeo.baixar_pagamentos(config)
         resultado = conferir(sessao, linhas, ensaio=ensaio)
@@ -296,6 +355,7 @@ def executar(sessao: Session, ensaio: bool = False) -> Resultado:
         resultado.erros.append("Empenhos: erro inesperado (veja o log do servidor).")
     resultado.empenhos = empenhos
     if not ensaio:
+        # Relê a configuração (pode ter havido rollback acima) e guarda o resumo da rodada para a tela de integração
         config = servico_integracao_sigeo.obter(sessao)
         config.ultima_execucao_em, config.ultimo_resultado = agora_utc(), resultado.como_dict()
         sessao.commit()
@@ -312,6 +372,7 @@ def buscar_da_competencia(sessao: Session, contrato, competencia) -> dict:
     from app.services.sigeo.cliente_obiee import ErroSigeo
 
     if not (contrato.processo_financeiro or "").strip():
+        # DOF = Diretoria de Orçamento e Finanças (o Financeiro), que cadastra o Processo Financeiro
         raise ErroRegraContrato("O contrato não tem Processo Financeiro: peça ao DOF para preenchê-lo ou junte a OB à mão.")
     if competencia.etapa_atual != "ordem_bancaria" or competencia.ob_anexo_id is not None:
         raise ErroRegraContrato("A competência não está esperando a OB.")

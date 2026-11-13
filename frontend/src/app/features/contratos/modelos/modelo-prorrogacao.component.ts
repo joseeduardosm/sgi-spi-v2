@@ -1,5 +1,34 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a página de detalhe de uma máscara da prorrogação (Contratos → Modelos): qual documento ela escreve, o texto e os placeholders permitidos.
+/**
+ * =============================================================================
+ * ARQUIVO: modelo-prorrogacao.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Página de detalhe de uma máscara da prorrogação (Contratos > Modelos):
+ * escolhe qual documento do processo ela escreve, guarda o texto-base e mostra
+ * os placeholders (#nome) que podem ser usados nesse texto.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template e estilos embutidos. Lê o id da URL
+ * (input), carrega a lista de placeholders da prorrogação e, quando não é
+ * "novo", procura a máscara na lista de modelos do tipo prorrogacao. O editor
+ * rico (carregado com @defer) recebe os placeholders clicados no cursor. Ao
+ * salvar, envia nome, ativo, variante e html para ContratosApiService.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Padroniza os sete documentos que o SGI gera no processo de prorrogação
+ * (despachos, declarações, minuta do aditivo e termos do TCE-SP), evitando que
+ * cada gestor redija do zero e garantindo que só dados conhecidos do contrato
+ * sejam preenchidos automaticamente.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota filha de /contratos/modelos (ver modelos.component.ts). Usa
+ * ContratosApiService (modelos, placeholdersProrrogacao, salvarModelo),
+ * EditorRicoComponent do módulo Contratações e semAcento das Tarefas. O texto
+ * salvo é usado pelo backend ao gerar os documentos da prorrogação.
+ *
+ * =============================================================================
+ */
 
 import { Component, inject, input, OnInit, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -83,14 +112,18 @@ import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esquel
   `,
 })
 export class ModeloProrrogacaoComponent implements OnInit {
-  /** `novo` ou o id da máscara (vem da URL). */
+  /** `novo` ou o id da máscara (vem da URL). `input` declara uma entrada do componente; com o roteador configurado, o parâmetro da rota chega aqui. */
   readonly id = input.required<string>();
 
+  // `inject` pega do Angular as instâncias dos serviços (injeção de dependência),
+  // sem precisar declará-las no construtor.
   private readonly api = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
   private readonly editor = viewChild(EditorRicoComponent);
 
+  // `signal` guarda um valor reativo: quando muda com `.set`, o template que o lê
+  // é redesenhado. Os campos simples (nome, ativo, variante, html) usam ngModel.
   protected readonly carregando = signal(true);
   protected readonly salvando = signal(false);
   protected readonly placeholders = signal<PlaceholderPortaria[]>([]);
@@ -110,6 +143,15 @@ export class ModeloProrrogacaoComponent implements OnInit {
   ];
   protected html = '';
 
+  /**
+   * Carrega os dados da tela ao abrir.
+   * - Sempre busca a lista de placeholders permitidos (a API recusa outros).
+   * - Para "novo", não há o que carregar: só libera o formulário.
+   * - Para um id, procura a máscara na lista de modelos da prorrogação; se não
+   *   existir (id inválido ou apagado), volta para a lista de modelos.
+   * `subscribe` é como se "assina" um Observable do HttpClient: a requisição só
+   * sai quando alguém assina, e `next`/`error` recebem a resposta ou a falha.
+   */
   ngOnInit(): void {
     this.api.placeholdersProrrogacao().subscribe({ next: (p) => this.placeholders.set(p), error: (e) => this.dialogos.mostrarErro(e) });
     if (this.id() === 'novo') {
@@ -127,6 +169,7 @@ export class ModeloProrrogacaoComponent implements OnInit {
     });
   }
 
+  /** Copia os dados da máscara carregada para os campos do formulário (variante padrão: minuta do aditivo). */
   private aplicar(modelo: Modelo): void {
     this.nome = modelo.nome;
     this.ativo = modelo.ativo;
@@ -140,10 +183,16 @@ export class ModeloProrrogacaoComponent implements OnInit {
     return this.placeholders().filter((p) => !termo || semAcento(`${p.nome} ${p.descricao}`).includes(termo));
   }
 
+  /** Insere `#nome` do placeholder clicado na posição do cursor do editor rico (se o editor já tiver sido carregado). */
   protected inserir(placeholder: PlaceholderPortaria): void {
     this.editor()?.inserir(`#${placeholder.nome}`);
   }
 
+  /**
+   * Grava a máscara: cria uma nova (id "novo") ou atualiza a existente.
+   * Em caso de sucesso volta para a lista de modelos; em erro, mostra a mensagem
+   * da API (por exemplo, placeholder não permitido) e libera o botão.
+   */
   protected salvar(): void {
     this.salvando.set(true);
     const dados = { tipo: 'prorrogacao', nome: this.nome.trim(), ativo: this.ativo, variante: this.variante, html: this.html };

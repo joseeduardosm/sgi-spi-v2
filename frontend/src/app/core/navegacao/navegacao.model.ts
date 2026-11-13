@@ -36,6 +36,8 @@ export interface ItemNavegacao {
   chamados?: boolean;
   /** Só quem tem algum papel no plano de face da rede (a API decide; sem regras na ACL, apenas o SuperRoot). */
   rede?: boolean;
+  /** Mostra a bolinha de "novidade não vista" (item Changelog). */
+  novidades?: boolean;
   filhos?: ItemNavegacao[];
   /** Só no editor do menu: o administrador ocultou o item (no menu real ele nem chega a existir). */
   oculto?: boolean;

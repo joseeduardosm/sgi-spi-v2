@@ -1,12 +1,33 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para concentrar as regras do Diretório: ramais em cartões, aniversariantes, favoritos, fotos e mural de parabéns.
-"""Regras do Diretório (`/api/diretorio`).
+"""
+===============================================================================
+ARQUIVO: servico_diretorio.py
+AUTOR: José Eduardo Santana Martins
 
-- **Ramais:** usuários ativos com nome e ramal. A busca ignora acentos e maiúsculas (feita em Python: são poucas centenas de pessoas
-  e o SQLite dos testes não tem `unaccent`). Quem está de férias aprovadas hoje ganha o selo automaticamente, calculado pela data atual.
-- **Aniversariantes:** dia, semana (hoje + 6 dias) ou mês; o ano de nascimento nunca sai. Quem optou por ocultar não aparece.
-- **Mural:** um recado por autor e por ano; aberto para novos recados só no dia do aniversário (depois fica só para leitura). O aniversariante é avisado pelas mensagens internas.
-- **Foto:** upload (reduzida a 400 px, JPEG) ou importada do LDAP; o upload do usuário nunca é sobrescrito pelo AD.
+FINALIDADE:
+Concentrar as regras do Diretório (/api/diretorio): ramais em cartões,
+aniversariantes, favoritos, curtidas, fotos e mural de parabéns.
+
+RESUMO TÉCNICO:
+Ramais: usuários ativos com nome e ramal; a busca ignora acentos e
+maiúsculas e é feita em Python (são poucas centenas de pessoas e o SQLite dos
+testes não tem unaccent). Quem está de férias aprovadas hoje ganha o selo.
+Aniversariantes: dia, semana (hoje + 6 dias) ou mês, sem expor o ano. Mural:
+um recado por autor e por ano, aberto só no dia do aniversário. Foto: upload
+reduzido a 400 px em JPEG (Pillow) ou importada do LDAP; o upload do usuário
+nunca é sobrescrito pelo AD (Active Directory).
+
+FINALIDADE DE NEGÓCIO:
+Substitui a antiga lista de ramais da SPI por um diretório vivo: achar um
+colega, ligar, mandar WhatsApp, salvar o contato (vCard) e manter a
+integração da equipe com aniversários e recados.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas do Diretório e pela busca global (servico_busca). Lê
+Usuario e Afastamento (férias do RH), grava FavoritoDiretorio, CurtidaContato
+e ParabensAniversario, guarda fotos por servico_anexos e avisa pelas
+notificações internas. A sincronização LDAP chama importar_foto_ldap.
+
+===============================================================================
 """
 
 import hashlib
@@ -27,6 +48,7 @@ from app.models.usuario import OrigemUsuario, Usuario
 from app.schemas.diretorio import Aniversariante, Contato, ContatoDetalhe, ContatoResumo, OpcoesFiltro, PaginaContatos, Parabens
 from app.services import servico_anexos, notificacoes
 
+# Categoria do anexo das fotos, lado do quadrado em pixels e limite do upload.
 CATEGORIA_FOTO = "usuario-foto"
 LADO_FOTO = 400
 TAMANHO_MAXIMO_FOTO = 5 * 1024 * 1024
@@ -42,6 +64,8 @@ class ErroDiretorio(Exception):
 
 def normalizar(texto: str) -> str:
     """Minúsculas e sem acentos, para a busca."""
+    # NFKD separa a letra do acento ("é" vira "e" + acento); depois os acentos
+    # (caracteres "combining") são descartados e casefold deixa tudo minúsculo.
     return "".join(c for c in unicodedata.normalize("NFKD", texto or "") if not unicodedata.combining(c)).casefold().strip()
 
 
@@ -51,10 +75,12 @@ def foto_url(usuario: Usuario) -> str | None:
 
 
 def _nome(usuario: Usuario) -> str:
+    """Nome para exibição: o nome completo ou, se faltar, o login."""
     return usuario.nome_completo or usuario.login
 
 
 def _whatsapp(celular: str) -> str:
+    """Link do WhatsApp (wa.me) a partir do celular; acrescenta o DDI 55 quando faltar."""
     digitos = "".join(c for c in celular or "" if c.isdigit())
     if not digitos:
         return ""
@@ -64,6 +90,7 @@ def _whatsapp(celular: str) -> str:
 
 
 def _local(usuario: Usuario) -> str:
+    """Texto "andar - prédio" do cartão (ex.: "5º andar - Bloco A", "Térreo")."""
     andar = (usuario.andar or "").strip()
     if andar.casefold() in ("terreo", "térreo"):
         andar = "Térreo"
@@ -79,6 +106,7 @@ def _local(usuario: Usuario) -> str:
 
 
 def _ativos_com_ramal(sessao: Session) -> list[Usuario]:
+    """Usuários que aparecem no diretório: ativos, com nome completo e ramal preenchidos."""
     consulta = select(Usuario).where(Usuario.ativo.is_(True), Usuario.nome_completo != "", Usuario.ramal != "")
     return list(sessao.scalars(consulta))
 
@@ -91,6 +119,7 @@ def _ferias_hoje(sessao: Session, ids: list[int], hoje: date) -> dict[int, tuple
         Afastamento.tipo == "ferias", Afastamento.status == "aprovado", Afastamento.inicio <= hoje, Afastamento.fim >= hoje,
         Afastamento.usuario_id.in_(ids),
     )
+    # Se houver mais de um período de férias cobrindo hoje, fica o que termina depois.
     ferias: dict[int, tuple[date, date]] = {}
     for usuario_id, inicio, fim in sessao.execute(consulta):
         if usuario_id not in ferias or fim > ferias[usuario_id][1]:
@@ -99,6 +128,7 @@ def _ferias_hoje(sessao: Session, ids: list[int], hoje: date) -> dict[int, tuple
 
 
 def _contato(u: Usuario, favoritos: set[int], ferias: dict[int, tuple[date, date]]) -> Contato:
+    """Converte o usuário no cartão de contato (Contato) usado pela tela."""
     inicio, fim = ferias.get(u.id, (None, None))
     return Contato(
         id=u.id, nome=_nome(u), cargo=u.cargo, ramal=u.ramal, foto_url=foto_url(u), setor=u.departamento, email=u.email, celular=u.celular,
@@ -108,11 +138,16 @@ def _contato(u: Usuario, favoritos: set[int], ferias: dict[int, tuple[date, date
 
 
 def _favoritos(sessao: Session, usuario: Usuario) -> set[int]:
+    """Ids dos colegas que o usuário marcou como favoritos."""
     return set(sessao.scalars(select(FavoritoDiretorio.favorito_id).where(FavoritoDiretorio.usuario_id == usuario.id)))
 
 
 @dataclass
 class FiltrosRamais:
+    """Filtros da tela de ramais (busca livre, setor, andar, prédio, favoritos, férias).
+
+    Dataclass: classe simples só com dados; o Python gera o construtor sozinho.
+    """
     busca: str = ""
     setor: str | None = None
     andar: str | None = None
@@ -130,6 +165,7 @@ def listar_ramais(sessao: Session, usuario: Usuario, filtros: FiltrosRamais, pag
     termos = normalizar(filtros.busca).split()
 
     def confere(p: Usuario) -> bool:
+        """True se a pessoa passa em todos os filtros e contém todas as palavras da busca."""
         if filtros.setor and p.departamento != filtros.setor:
             return False
         if filtros.andar and p.andar != filtros.andar:
@@ -140,9 +176,13 @@ def listar_ramais(sessao: Session, usuario: Usuario, filtros: FiltrosRamais, pag
             return False
         if filtros.em_ferias and p.id not in ferias:
             return False
+        # "Palheiro" = todos os campos pesquisáveis num só texto normalizado; cada
+        # palavra digitada precisa aparecer em algum lugar dele.
         palheiro = normalizar(" ".join((p.nome_completo, p.cargo, p.departamento, p.ramal, p.email, p.andar, p.predio, p.login)))
         return all(t in palheiro for t in termos)
 
+    # Ordenação: "p.id not in favoritos" é False para favoritos, e False vem antes
+    # de True; dentro de cada grupo, ordem alfabética sem acentos.
     selecionadas = sorted((p for p in pessoas if confere(p)), key=lambda p: (p.id not in favoritos, normalizar(_nome(p))))
     inicio = (pagina - 1) * tamanho
     return PaginaContatos(
@@ -151,6 +191,7 @@ def listar_ramais(sessao: Session, usuario: Usuario, filtros: FiltrosRamais, pag
 
 
 def opcoes_filtro(sessao: Session) -> OpcoesFiltro:
+    """Valores distintos de setor, andar e prédio para preencher os filtros da tela."""
     pessoas = _ativos_com_ramal(sessao)
     def valores(campo: str) -> list[str]:
         return sorted({getattr(p, campo) for p in pessoas if getattr(p, campo)}, key=normalizar)
@@ -158,6 +199,7 @@ def opcoes_filtro(sessao: Session) -> OpcoesFiltro:
 
 
 def _resumo(u: Usuario) -> ContatoResumo:
+    """Versão curta do contato (usada em chefia, equipe e lista de quem curtiu)."""
     return ContatoResumo(id=u.id, nome=_nome(u), cargo=u.cargo, ramal=u.ramal, foto_url=foto_url(u))
 
 
@@ -170,6 +212,7 @@ def obter_contato(sessao: Session, usuario: Usuario, contato_id: int, hoje: date
 
 
 def detalhe_contato(sessao: Session, usuario: Usuario, contato_id: int, hoje: date | None = None) -> ContatoDetalhe:
+    """Cartão completo: dados do contato, chefia, equipe, biografia (se visível) e curtidas."""
     hoje = hoje or hoje_sao_paulo()
     alvo = obter_contato(sessao, usuario, contato_id)
     base = _contato(alvo, _favoritos(sessao, usuario), _ferias_hoje(sessao, [alvo.id], hoje))
@@ -198,6 +241,7 @@ def alternar_curtida(sessao: Session, usuario: Usuario, contato_id: int, curtir:
     alvo = obter_contato(sessao, usuario, contato_id)
     if alvo.id == usuario.id:
         raise ErroDiretorio("Você não pode curtir o seu próprio cartão.", 400, "invalido")
+    # A chave composta (contato, autor) identifica a curtida; get() procura por ela.
     existe = sessao.get(CurtidaContato, (alvo.id, usuario.id))
     if curtir and existe is None:
         sessao.add(CurtidaContato(contato_id=alvo.id, autor_id=usuario.id))
@@ -211,6 +255,7 @@ def alternar_curtida(sessao: Session, usuario: Usuario, contato_id: int, curtir:
 
 
 def alternar_favorito(sessao: Session, usuario: Usuario, contato_id: int, favoritar: bool) -> None:
+    """Marca ou desmarca o colega como favorito (idempotente: repetir não muda nada)."""
     obter_contato(sessao, usuario, contato_id)
     existe = sessao.get(FavoritoDiretorio, (usuario.id, contato_id))
     if favoritar and existe is None:
@@ -222,6 +267,7 @@ def alternar_favorito(sessao: Session, usuario: Usuario, contato_id: int, favori
 
 def vcard(alvo: Usuario) -> str:
     """Cartão no formato vCard 3.0 (abre em celulares e no Outlook)."""
+    # Escapa os caracteres especiais do formato vCard (barra invertida, ponto e vírgula, vírgula e quebra de linha).
     def esc(t: str) -> str:
         return (t or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
     nome = _nome(alvo)
@@ -263,6 +309,7 @@ def ocorrencia_mais_proxima(nascimento: date, hoje: date) -> date:
 
 
 def _proximo(nascimento: date, hoje: date) -> date:
+    """Próximo aniversário a partir de hoje (o deste ano, se ainda não passou; senão o do ano que vem)."""
     esta = data_no_ano(nascimento, hoje.year)
     return esta if esta >= hoje else data_no_ano(nascimento, hoje.year + 1)
 
@@ -274,6 +321,8 @@ def listar_aniversariantes(sessao: Session, usuario: Usuario, periodo: str, hoje
         select(Usuario).where(Usuario.ativo.is_(True), Usuario.data_nascimento.is_not(None), Usuario.ocultar_aniversario.is_(False))
     )
     escolhidos: list[tuple[Usuario, date, int]] = []
+    # "mes": todos do mês corrente, inclusive quem já fez aniversário (dias negativos).
+    # "dia"/"semana": próximo aniversário daqui a 0 dias, ou até 6 dias.
     for p in pessoas:
         if periodo == "mes":
             data = data_no_ano(p.data_nascimento, hoje.year)
@@ -288,6 +337,8 @@ def listar_aniversariantes(sessao: Session, usuario: Usuario, periodo: str, hoje
     ids = [p.id for p, _, _ in escolhidos]
     totais: dict[tuple[int, int], int] = {}
     meus: set[tuple[int, int]] = set()
+    # Duas consultas para a tela: total de recados por (aniversariante, ano) e em
+    # quais murais o usuário já deixou recado.
     if ids:
         for alvo, ano, qtd in sessao.execute(
             select(ParabensAniversario.aniversariante_id, ParabensAniversario.ano, func.count()).where(ParabensAniversario.aniversariante_id.in_(ids))
@@ -313,6 +364,7 @@ def _mural_aberto(alvo: Usuario, hoje: date) -> bool:
 
 
 def _aniversariante(sessao: Session, alvo_id: int) -> Usuario:
+    """Aniversariante visível (ativo, com data e sem opção de ocultar), ou 404."""
     alvo = sessao.get(Usuario, alvo_id)
     if alvo is None or not alvo.ativo or alvo.data_nascimento is None or alvo.ocultar_aniversario:
         raise ErroDiretorio("Aniversariante não encontrado.", 404, "nao_encontrado")
@@ -320,6 +372,7 @@ def _aniversariante(sessao: Session, alvo_id: int) -> Usuario:
 
 
 def mural(sessao: Session, usuario: Usuario, alvo_id: int, hoje: date | None = None) -> list[Parabens]:
+    """Recados do mural do aniversário mais próximo (o ano é o dessa ocorrência)."""
     hoje = hoje or hoje_sao_paulo()
     alvo = _aniversariante(sessao, alvo_id)
     ano = ocorrencia_mais_proxima(alvo.data_nascimento, hoje).year
@@ -333,6 +386,8 @@ def parabenizar(sessao: Session, usuario: Usuario, alvo_id: int, texto: str, hoj
     """Grava o recado e avisa o aniversariante por mensagem interna."""
     hoje = hoje or hoje_sao_paulo()
     alvo = _aniversariante(sessao, alvo_id)
+    # Validações: não escrever no próprio mural, só no dia do aniversário, texto
+    # não vazio e um recado por autor e por ano.
     if alvo.id == usuario.id:
         raise ErroDiretorio("Você não pode deixar recado no seu próprio mural.")
     if not _mural_aberto(alvo, hoje):
@@ -354,6 +409,7 @@ def parabenizar(sessao: Session, usuario: Usuario, alvo_id: int, texto: str, hoj
 
 
 def apagar_parabens(sessao: Session, usuario: Usuario, alvo_id: int, hoje: date | None = None) -> None:
+    """Apaga o recado do próprio usuário no mural do ano corrente do aniversário."""
     hoje = hoje or hoje_sao_paulo()
     alvo = _aniversariante(sessao, alvo_id)
     ano = ocorrencia_mais_proxima(alvo.data_nascimento, hoje).year
@@ -379,6 +435,8 @@ def enviar_parabens_do_dia(sessao: Session, hoje: date | None = None) -> list:
     """Mensagem interna (com e-mail) para quem faz aniversário hoje. Sem repetir no mesmo dia. Devolve as mensagens criadas (já com commit)."""
     hoje = hoje or hoje_sao_paulo()
     criadas = []
+    # Executado pela tarefa diária de notificações. A chave com a data impede
+    # mandar duas vezes no mesmo dia (notificar devolve None se a chave já existe).
     pessoas = sessao.scalars(select(Usuario).where(
         Usuario.ativo.is_(True), Usuario.data_nascimento.is_not(None), Usuario.ocultar_aniversario.is_(False)))
     for p in pessoas:
@@ -402,12 +460,15 @@ def enviar_parabens_do_dia(sessao: Session, hoje: date | None = None) -> list:
 
 def _reduzir(dados: bytes) -> bytes:
     """Recorta em quadrado, reduz a 400 px e regrava em JPEG (descarta metadados e qualquer conteúdo estranho)."""
+    # Pillow (PIL): exif_transpose corrige a rotação de fotos de celular e
+    # convert("RGB") tira transparência, que o JPEG não aceita.
     try:
         imagem = Image.open(BytesIO(dados))
         imagem = ImageOps.exif_transpose(imagem).convert("RGB")
     except (UnidentifiedImageError, OSError, ValueError) as erro:
         raise ErroDiretorio("O arquivo não é uma imagem válida (envie PNG ou JPG).") from erro
     saida = BytesIO()
+    # ImageOps.fit recorta o centro em quadrado e redimensiona para 400 x 400.
     ImageOps.fit(imagem, (LADO_FOTO, LADO_FOTO)).save(saida, "JPEG", quality=85)
     return saida.getvalue()
 
@@ -416,17 +477,20 @@ def definir_foto(sessao: Session, alvo: Usuario, dados: bytes, origem: str, envi
     """Grava a foto do usuário (sem commit). O anexo antigo sofre exclusão lógica."""
     if len(dados) > TAMANHO_MAXIMO_FOTO:
         raise ErroDiretorio("A foto excede 5 MB.")
+    # Confere a "assinatura" dos primeiros bytes: PNG ou JPEG verdadeiros.
     if dados[:8] != b"\x89PNG\r\n\x1a\n" and dados[:3] != b"\xff\xd8\xff":
         raise ErroDiretorio("Formato não aceito. Envie PNG ou JPG.")
     anexo = servico_anexos.guardar_arquivo_gerado(sessao, _reduzir(dados), f"foto-{alvo.id}.jpg", "image/jpeg", CATEGORIA_FOTO, enviado_por_id)
     antigo = sessao.get(Anexo, alvo.foto_anexo_id) if alvo.foto_anexo_id else None
     if antigo is not None:
         servico_anexos.descartar(antigo)
+    # flush grava o novo anexo no banco (sem commit) antes de apontar o usuário para ele.
     sessao.flush()
     alvo.foto_anexo_id, alvo.foto_origem = anexo.id, origem
 
 
 def remover_foto(sessao: Session, alvo: Usuario) -> None:
+    """Remove a foto do usuário (o anexo sofre exclusão lógica) e grava na hora."""
     antigo = sessao.get(Anexo, alvo.foto_anexo_id) if alvo.foto_anexo_id else None
     if antigo is not None:
         servico_anexos.descartar(antigo)
@@ -444,6 +508,7 @@ def importar_foto_ldap(sessao: Session, alvo: Usuario, dados: bytes) -> bool:
     except ErroDiretorio:
         return False  # foto inválida no AD não derruba a sincronização
     atual = sessao.get(Anexo, alvo.foto_anexo_id) if alvo.foto_anexo_id else None
+    # sha256 é a "impressão digital" do arquivo: igual significa a mesma foto.
     if atual is not None and atual.excluido_em is None and atual.sha256 == hashlib.sha256(reduzida).hexdigest():
         return False  # mesma foto da última sincronização: não grava de novo
     definir_foto(sessao, alvo, dados, "ldap", None)
@@ -451,6 +516,7 @@ def importar_foto_ldap(sessao: Session, alvo: Usuario, dados: bytes) -> bool:
 
 
 def anexo_da_foto(sessao: Session, contato_id: int) -> Anexo:
+    """Anexo da foto do contato, para a rota que serve a imagem; 404 se não houver."""
     alvo = sessao.get(Usuario, contato_id)
     anexo = sessao.get(Anexo, alvo.foto_anexo_id) if alvo is not None and alvo.foto_anexo_id else None
     if anexo is None or anexo.excluido_em is not None:

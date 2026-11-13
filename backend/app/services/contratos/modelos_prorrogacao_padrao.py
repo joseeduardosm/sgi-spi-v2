@@ -1,32 +1,62 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para guardar os sete modelos padrão da prorrogação contratual (texto-base semeado em Contratos › Modelos).
-"""Modelos padrão da prorrogação, a partir dos documentos de `apoio/Prorrogações` (Parecer Referencial NLC nº 1/2026).
+"""
+===============================================================================
+ARQUIVO: modelos_prorrogacao_padrao.py
+AUTOR: José Eduardo Santana Martins
 
-São a **semente** da migração: depois de semeados, quem manda é a tela de Modelos (SuperRoot ou controle total em Contratos). Já saem com as
-correções dos originais: nome da empresa, ano e autoridades viram placeholders (nada de nome de outra empresa nem de ano fixo), "sediada
-sediado" e "prestação de contínuos" corrigidos, parágrafo repetido removido e as notas de orientação (OBS) trocadas por parágrafos condicionais
-(`#se…`), que o sistema liga ou desliga sozinho.
+FINALIDADE:
+Guardar os sete modelos padrão (texto-base em HTML) dos documentos da
+prorrogação contratual, semeados em Contratos > Modelos.
+
+RESUMO TÉCNICO:
+Cada modelo é uma string HTML montada com pequenos auxiliares (`_p`, `_b`,
+`_centro`, `_direita`, `_lista`, `_declaracao`) e placeholders `#nome` que o
+sistema preenche na geração. O dicionário `MODELOS` liga a variante (chave
+técnica) ao nome exibido e ao HTML. Os modelos vêm dos documentos de apoio
+(Parecer Referencial NLC nº 1/2026), já corrigidos: nome da empresa, ano e
+autoridades viraram placeholders; erros de digitação e parágrafo repetido
+foram removidos; as notas de orientação (OBS) viraram parágrafos
+condicionais (`#se...`), que o sistema liga ou desliga sozinho.
+
+FINALIDADE DE NEGÓCIO:
+Padroniza os documentos que instruem a prorrogação (despachos, declarações
+dos Anexos II e III, minuta do termo aditivo, termo de ciência e declaração
+ao TCE-SP), evitando retrabalho e erros de cópia de processos antigos.
+
+CONTEXTO NO SISTEMA:
+São só a semente da migração: depois de semeados, vale o que for editado na
+tela de Modelos (SuperRoot, o papel administrativo, ou controle total em
+Contratos). Os placeholders são definidos e preenchidos em
+`prorrogacao_mascara` e os documentos gerados em `prorrogacao_documentos`.
+
+===============================================================================
 """
 
 
 def _p(texto: str, alinhamento: str = "justify") -> str:
+    """Parágrafo HTML com o alinhamento pedido (padrão: justificado, como em peça oficial)."""
     return f'<p style="text-align: {alinhamento}">{texto}</p>'
 
 
 def _b(texto: str) -> str:
+    """Texto em negrito."""
     return f"<strong>{texto}</strong>"
 
 
 def _centro(texto: str) -> str:
+    """Parágrafo centralizado e em negrito (títulos e nomes de quem assina)."""
     return _p(_b(texto), "center")
 
 
 def _direita(texto: str) -> str:
+    """Parágrafo alinhado à direita (local e data)."""
     return _p(texto, "right")
 
 
+# Bloco de assinatura do Subsecretário de Gestão Corporativa (SSGC), repetido nas declarações
 _ASSINATURA_SSGC = _centro("#ssgcnome") + _p("Subsecretário de Gestão Corporativa", "center")
 
+# Anexo I do Parecer Referencial: minuta do termo aditivo que prorroga o contrato.
+# Os parágrafos que começam com `#se...` só aparecem quando a condição se aplica ao caso.
 MINUTA_ADITIVO = "".join([
     _centro("MINUTA DE TERMO DE ADITAMENTO"),
     _p(_b("Processo Administrativo nº #numeroprocesso")),
@@ -85,6 +115,7 @@ MINUTA_ADITIVO = "".join([
     _p(f"Nome: {_b('#testemunhabnome')}<br/>CPF: #testemunhabcpf"),
 ])
 
+# Termo de Ciência e de Notificação exigido pelo Tribunal de Contas do Estado (TCE-SP)
 TERMO_CIENCIA = "".join([
     _centro("ANEXO I"),
     _centro("ANEXO LC-01 - TERMO DE CIÊNCIA E DE NOTIFICAÇÃO"),
@@ -123,6 +154,10 @@ TERMO_CIENCIA = "".join([
 
 
 def _declaracao(titulo: str, itens: list[str]) -> str:
+    """Monta uma declaração do SSGC: título, abertura, itens a), b), c)... e assinatura.
+
+    Cada item termina com ";" e o último com ".", como em texto jurídico.
+    """
     letras = "abcdefghijklmnopqrstuvwxyz"
     return "".join([
         _centro(titulo),
@@ -134,6 +169,7 @@ def _declaracao(titulo: str, itens: list[str]) -> str:
     ])
 
 
+# Itens finais iguais nas duas declarações de atendimento (licitação e contratação direta)
 _COMUNS_FINAIS = [
     "foi providenciada a reserva orçamentária dos valores referentes ao exercício corrente",
     "se ultrapassar 1 (um) exercício financeiro, há previsão no plano plurianual, e será observado o disposto no inciso II do “caput” do artigo 106 da Lei "
@@ -143,6 +179,7 @@ _COMUNS_FINAIS = [
     "orientações jurídicas nele contidas",
 ]
 
+# Anexo II: declaração de que a prorrogação atende aos requisitos, para contrato vindo de licitação
 DECLARACAO_LICITACAO = _declaracao("ANEXO II - DECLARAÇÃO DE ATENDIMENTO PARA CONTRATO DECORRENTE DE LICITAÇÃO", [
     "o contrato SPI nº #nrocontrato está em vigor",
     "a prorrogação está prevista no edital, e está formalmente demonstrado no processo que a forma de prestação dos serviços tem natureza continuada",
@@ -155,6 +192,7 @@ DECLARACAO_LICITACAO = _declaracao("ANEXO II - DECLARAÇÃO DE ATENDIMENTO PARA 
     *_COMUNS_FINAIS,
 ])
 
+# Anexo III: mesma declaração para contrato de dispensa ou inexigibilidade (contratação direta)
 DECLARACAO_DIRETA = _declaracao("ANEXO III - DECLARAÇÃO DE ATENDIMENTO PARA CONTRATO FORMALIZADO MEDIANTE DISPENSA OU INEXIGIBILIDADE DE LICITAÇÃO", [
     "o contrato SPI nº #nrocontrato está em vigor",
     "a prorrogação está prevista no aviso de contratação direta ou contrato, e está formalmente demonstrado no processo que a forma de prestação dos serviços "
@@ -169,6 +207,7 @@ DECLARACAO_DIRETA = _declaracao("ANEXO III - DECLARAÇÃO DE ATENDIMENTO PARA CO
     *_COMUNS_FINAIS,
 ])
 
+# Declaração de que os documentos da contratação estão à disposição do TCE-SP
 DECLARACAO_TCE = "".join([
     _centro("DECLARAÇÃO DE DOCUMENTOS À DISPOSIÇÃO DO TCE-SP"),
     _p(f"{_b('CONTRATANTE:')} SECRETARIA DE PARCERIAS EM INVESTIMENTOS<br/>{_b('CNPJ Nº:')} 96.480.850/0001-03<br/>{_b('CONTRATADA:')} #razaosocialempresa"
@@ -187,9 +226,11 @@ DECLARACAO_TCE = "".join([
 
 
 def _lista(*itens: str) -> str:
+    """Um parágrafo por item (encaminhamentos do despacho)."""
     return "".join(_p(i) for i in itens)
 
 
+# Despacho da Diretoria de Gestão Administrativa (DGA) que instrui o processo e o encaminha ao SSGC
 DESPACHO_INSTRUCAO = "".join([
     _p(f"{_b('PROCESSO nº:')} #numeroprocesso<br/>{_b('INTERESSADO:')} Secretaria de Parcerias em Investimentos<br/>{_b('ASSUNTO:')} #objetodocontrato "
        "(Contrato #nrocontrato)", "left"),
@@ -291,6 +332,7 @@ DESPACHO_INSTRUCAO = "".join([
     _centro("#diretornome") + _p("Diretoria de Gestão Administrativa", "center"),
 ])
 
+# Despacho da autoridade competente que autoriza a prorrogação
 DESPACHO_AUTORIZACAO = "".join([
     _p(f"{_b('PROCESSO nº:')} #numeroprocesso<br/>{_b('INTERESSADO:')} Secretaria de Parcerias em Investimentos<br/>{_b('ASSUNTO:')} #objetodocontrato "
        "(Contrato #nrocontrato)", "left"),
@@ -333,6 +375,7 @@ DESPACHO_AUTORIZACAO = "".join([
 ])
 
 # variante → (nome do modelo, HTML)
+# A chave (variante) é o identificador técnico gravado no banco; o nome aparece na tela de Modelos.
 MODELOS: dict[str, tuple[str, str]] = {
     "despacho_instrucao": ("Despacho de instrução da prorrogação (CCC/DGA → SSGC)", DESPACHO_INSTRUCAO),
     "declaracao_atendimento_licitacao": ("Declaração de Atendimento — contrato de licitação (Anexo II)", DECLARACAO_LICITACAO),

@@ -8,7 +8,10 @@ percentual: positivo reajusta, negativo dá desconto, zero mantém o preço.
 Competências já medidas mantêm os preços antigos (princípio da fotografia). Na conclusão, a diferença
 líquida delas (quantidade medida × (preço novo − preço pago)):
 - positiva: vira uma competência complementar ("diferença de reajuste") a pagar;
-- negativa: vira um crédito da SPI, abatido no valor autorizado das próximas medições.
+- negativa: vira um crédito da SPI no fundo do contrato, que o gestor aplica numa medição.
+
+Meses pagos fora do sistema (sem medição concluída no SGI) podem ter a diferença informada à mão
+(`diferenca_manual`): ficam travados no preço de antes e fora do cálculo automático.
 """
 
 import hashlib
@@ -39,11 +42,11 @@ from app.schemas.contratos.alteracoes import (
 )
 from app.schemas.contratos.execucao import LeituraArquivo
 from app.services import servico_anexos
-from app.services.contratos import calculos, valores
+from app.services.contratos import calculos, diferenca_manual, valores
 from app.services.contratos.documentos_execucao import moeda, moeda_unitaria, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist
-from app.services.contratos.servico_competencias import proxima_competencia_a_medir, registrar_credito_reajuste, sincronizar_competencia
+from app.services.contratos.servico_competencias import registrar_credito_reajuste, sincronizar_competencia
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf
 from app.services.documentos.planilha import FORMATO_MOEDA, FORMATO_MOEDA_UNITARIA, FORMATO_QUANTIDADE, Aba, Coluna, gerar_planilha
@@ -114,6 +117,8 @@ def _competencias_afetadas(contrato: Contrato, reajuste: Reajuste) -> list[Compe
         c for c in contrato.competencias
         if c.tipo == "regular" and c.sequencia_vigencia == reajuste.sequencia_vigencia
         and (reajuste.retroativo or c.competencia >= reajuste.mes_referencia) and c.medicao_concluida_em is None
+        # Mês pago fora do sistema (diferença manual): fica no preço de antes
+        and not c.diferencas_manuais
     ]
 
 
@@ -135,6 +140,8 @@ def _competencias_medidas(contrato: Contrato, reajuste: Reajuste) -> list[Compet
             and c.competencia >= reajuste.mes_referencia
             and c.diferenca_coberta_por_reajuste_id is None
             and c.medicao_concluida_em is not None
+            # Mês coberto por diferença manual (pago fora do sistema): a diferença dele é a informada à mão
+            and not c.diferencas_manuais
         ),
         key=lambda c: c.periodo_inicio,
     )
@@ -405,14 +412,13 @@ def leitura(contrato: Contrato, reajuste: Reajuste, anexos: dict) -> LeituraReaj
     """Converte o reajuste para o formato de leitura (as contagens de competências só valem em elaboração)."""
     rascunho = reajuste.situacao == "rascunho"
     diferenca = diferenca_retroativa(contrato, reajuste) if rascunho else (reajuste.diferenca_retroativa or ZERO)
-    # Prévia do destino do crédito (rascunho) ou onde ele foi abatido (concluído)
-    destino = proxima_competencia_a_medir(contrato) if rascunho and diferenca < 0 else None
+    # Onde o gestor aplicou o crédito (concluído); antes disso ele fica no fundo do contrato
     abatimentos = [a for a in reajuste.abatimentos if a.valor > 0]
     resumo = resumo_meses(contrato, reajuste) if rascunho else None
     return LeituraReajuste(
         resumo_meses=ResumoMesesReajuste(**{k: v for k, v in resumo.items() if k != "diferenca_retroativa"}) if resumo else None,
         diferenca_retroativa=diferenca,
-        competencia_credito=destino.numero_competencia if destino else None,
+        competencia_credito=None,
         abatimentos=[
             AbatimentoLeitura(competencia=a.competencia.numero_competencia, identificador=a.competencia.identificador,
                               medida=a.competencia.medicao_concluida_em is not None, valor=a.valor)
@@ -424,8 +430,10 @@ def leitura(contrato: Contrato, reajuste: Reajuste, anexos: dict) -> LeituraReaj
         competencias_recalculadas=len(_competencias_afetadas(contrato, reajuste)) if reajuste.situacao == "rascunho" else 0,
         competencias_com_diferenca=len(_competencias_medidas(contrato, reajuste)) if reajuste.situacao == "rascunho" else 0,
         competencia_diferenca=next(
-            (c.identificador for c in contrato.competencias if c.tipo == "diferenca_reajuste" and c.reajuste_id == reajuste.id), None
+            (c.identificador for c in contrato.competencias if c.tipo == "diferenca_reajuste" and c.reajuste_id == reajuste.id and c.diferenca_manual_id is None), None
         ),
+        meses_sem_medicao=diferenca_manual.meses_sem_medicao(contrato, reajuste),
+        diferenca_manual=diferenca_manual.leitura(contrato, reajuste),
         itens=[
             ItemReajusteLeitura(
                 item_id=i.item_id, ordem=i.ordem, descricao=i.descricao, tipo=i.tipo, quantidade_mensal=i.quantidade_mensal,
@@ -639,6 +647,8 @@ def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id:
         + [str(reajuste.mes_referencia), str(reajuste.efeito), str(reajuste.calculo_mes_quebrado), FORMATO_MEMORIA]
         # A memória mês a mês também entra: medição, preço pago e OB concluída de cada mês mudam o que está em haver
         + [[m.identificador, m.paga, str(m.pago), str(m.em_haver)] for m in detalhe_meses(contrato, reajuste)]
+        # A diferença informada manualmente também (valor, meses, justificativa e PDF)
+        + diferenca_manual.origem_hash(reajuste)
     ).encode()).hexdigest()
     if reajuste.memorias and reajuste.memorias[-1].hash_origem == origem:
         return
@@ -678,9 +688,7 @@ def _texto_diferenca(contrato: Contrato, reajuste: Reajuste) -> str:
     if diferenca > 0:
         return f"{moeda(diferenca)} a pagar em competência de diferença de reajuste"
     if diferenca < 0:
-        destino = proxima_competencia_a_medir(contrato)
-        onde = f"na medição de {destino.numero_competencia}" if destino else "na próxima competência gerada"
-        return f"crédito de {moeda(-diferenca)} da SPI, abatido {onde}"
+        return f"crédito de {moeda(-diferenca)} da SPI, no fundo do contrato (o gestor aplica numa medição)"
     return "sem diferença (nenhuma competência medida a partir da referência)"
 
 
@@ -708,9 +716,11 @@ def _pdf_memoria(contrato: Contrato, reajuste: Reajuste, versao: int, autor: Usu
         ("Base atual", moeda(reajuste.base_atual)), ("Nova base por competência", moeda(reajuste.base_reajustada)),
         ("Valor global atual", moeda(reajuste.valor_global_atual)), ("Novo valor global", moeda(reajuste.valor_global_reajustado)),
         ("Competências já medidas", _texto_diferenca(contrato, reajuste)),
+        *([("Meses pagos fora do sistema", diferenca_manual.texto_destino(reajuste.diferenca_manual))] if reajuste.diferenca_manual else []),
     ])
     _secao_quebrados_pdf(documento, contrato, reajuste)
     _secoes_meses_pdf(documento, contrato, reajuste)
+    diferenca_manual.secao_pdf(documento, reajuste)
     return documento.gerar()
 
 
@@ -729,12 +739,14 @@ def _ob(mes: dict | MesDetalhe) -> str:
 
 
 def _texto_resumo(contrato: Contrato, reajuste: Reajuste) -> list[str]:
-    """Texto do resumo executivo quando não há mês medido (ou no retroativo), e a linha do destino da diferença."""
+    """Texto do resumo executivo quando não há mês medido (ou no retroativo), a linha do destino da diferença e a da diferença manual."""
     if reajuste.retroativo:
         return ["Não há meses medidos nesta vigência retroativa: nada em haver."]
+    manual = reajuste.diferenca_manual
+    extra = [f"Meses pagos fora do sistema ({manual.texto_meses}): {diferenca_manual.texto_destino(manual)}. {manual.texto_observacao}"] if manual else []
     if not resumo_meses(contrato, reajuste)["meses"]:
-        return ["Nenhum mês medido a partir da referência: nada em haver."]
-    return [f"Diferença retroativa total: {_texto_diferenca(contrato, reajuste)}"]
+        return ["Nenhum mês medido no sistema a partir da referência: nada em haver pelo cálculo automático."] + extra
+    return [f"Diferença retroativa total (cálculo automático): {_texto_diferenca(contrato, reajuste)}"] + extra
 
 
 ROTULOS_MODO = {"pro_rata": "Pro rata (dias antes do efeito sem reajuste, a partir dele reajustados)", "integral": "Integral (mês inteiro reajustado)"}
@@ -820,6 +832,9 @@ def _xlsx_memoria(contrato: Contrato, reajuste: Reajuste) -> bytes:
             observacoes=[f"Cálculo escolhido: {ROTULOS_MODO[reajuste.calculo_mes_quebrado or 'pro_rata']}."]
             + [f"{m['rotulo']}: devido {moeda(m['devido'])} − pago {moeda(m['valor_pago'])} = em haver {moeda(m['em_haver'])}" for m in meses_q],
         ))
+    aba_manual = diferenca_manual.aba_planilha(contrato, reajuste)
+    if aba_manual is not None:
+        abas.append(aba_manual)
     resumo = resumo_meses(contrato, reajuste)
     if reajuste.retroativo or not resumo["meses"]:
         abas.append(Aba("Resumo", [Coluna("Memória de cálculo executiva", largura=110)], [[t] for t in _texto_resumo(contrato, reajuste)],
@@ -864,6 +879,10 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ar
         raise ErroRegraContrato("Gere a memória de cálculo (PDF/XLSX) antes de concluir.")
     if reajuste.retroativo and competencias_medidas_na_vigencia(contrato, reajuste):
         raise ErroRegraContrato("A vigência retroativa já tem competência medida: o reajuste retroativo precisa vir antes das medições.")
+    # A diferença manual precisa estar na memória: memória gerada antes dela (ou da última troca) não vale
+    if reajuste.diferenca_manual is not None and reajuste.memorias[-1].criado_em < reajuste.diferenca_manual.informado_em:
+        raise ErroRegraContrato("Gere a memória de cálculo de novo: a diferença informada manualmente ainda não está nela.")
+    diferenca_manual.conferir_antes_de_concluir(contrato, reajuste)
     anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-reajuste-apostilamento", autor.id, contrato_id=contrato.id)
     sessao.flush()
     reajuste.apostilamento_anexo_id = anexo.id
@@ -889,12 +908,16 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ar
     diferenca = gerar_competencia_diferenca(contrato, reajuste, novos)
     if reajuste.diferenca_retroativa < 0:
         registrar_credito_reajuste(sessao, contrato, reajuste, -reajuste.diferenca_retroativa)
+    # Diferença informada manualmente (meses pagos fora do sistema): complementar de uma linha ou crédito no fundo, independente da automática
+    complementar_manual = diferenca_manual.aplicar_na_conclusao(sessao, contrato, reajuste)
     reajuste.situacao, reajuste.concluido_em = "concluido", agora_utc()
     contrato.versao += 1
     auditar(sessao, autor.login, "contrato.reajuste.concluir", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id,
             dados={"mes_referencia": reajuste.mes_referencia, "data_efeito": reajuste.efeito, "competencias_recalculadas": len(afetadas),
                    "competencia_diferenca": diferenca.identificador if diferenca else None,
                    "diferenca_retroativa": reajuste.diferenca_retroativa,
+                   "diferenca_manual": reajuste.diferenca_manual.valor if reajuste.diferenca_manual else None,
+                   "competencia_diferenca_manual": complementar_manual.identificador if complementar_manual else None,
                    "campos": {"valor_global": {"de": reajuste.valor_global_atual, "para": reajuste.valor_global_reajustado}}})
     from app.services.contratos import avisos
     texto_aviso = (
@@ -911,6 +934,9 @@ def cancelar(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, au
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
     reajuste.situacao, reajuste.cancelado_em = "cancelado", agora_utc()
+    # Os meses marcados na diferença manual destravam (o registro fica no histórico do reajuste cancelado)
+    if reajuste.diferenca_manual is not None:
+        reajuste.diferenca_manual.competencias = []
     auditar(sessao, autor.login, "contrato.reajuste.cancelar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id)
     sessao.commit()
 
@@ -922,6 +948,27 @@ def arquivo(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ane
     if reajuste is None:
         raise RegistroNaoEncontrado("Reajuste")
     permitidos = {reajuste.evidencia_anexo_id, reajuste.apostilamento_anexo_id} | {m.pdf_anexo_id for m in reajuste.memorias} | {m.xlsx_anexo_id for m in reajuste.memorias}
+    if reajuste.diferenca_manual is not None:
+        permitidos.add(reajuste.diferenca_manual.anexo_id)
     if anexo_id not in permitidos:
         raise RegistroNaoEncontrado("Arquivo")
     return servico_anexos.resposta_download(sessao.get(Anexo, anexo_id))
+
+
+def gravar_diferenca_manual(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, valor: Decimal, competencias_ids: list[uuid.UUID],
+                            justificativa: str, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
+    """Grava (ou substitui) a diferença retroativa informada manualmente para meses pagos fora do sistema."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    reajuste = _em_andamento(sessao, contrato, reajuste_id)
+    diferenca_manual.gravar(sessao, contrato, reajuste, valor, competencias_ids, justificativa, arquivo, nome, autor)
+    sessao.commit()
+
+
+def remover_diferenca_manual(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, autor: Usuario) -> None:
+    """Remove a diferença manual do reajuste em elaboração."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    reajuste = _em_andamento(sessao, contrato, reajuste_id)
+    diferenca_manual.remover(sessao, contrato, reajuste, autor)
+    sessao.commit()

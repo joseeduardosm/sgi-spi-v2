@@ -1,13 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para criar a tabela de configuração dos servidores SMTP.
-"""servidores SMTP
+"""
+===============================================================================
+ARQUIVO: 3486e80ca434_servidores_smtp.py
+AUTOR: José Eduardo Santana Martins
 
-Cadastro dos servidores de envio de e-mail (SuperRoot), no mesmo molde dos diretórios LDAP:
-senha cifrada, no máximo um servidor ativo e o resultado do último teste e do último envio de teste.
+FINALIDADE:
+Criar a tabela de configuração dos servidores SMTP (envio de e-mail),
+cadastrados pelo SuperRoot no mesmo molde dos diretórios LDAP.
+
+RESUMO TÉCNICO:
+Cria `servidores_smtp` com endereço, porta, tipo de segurança (nenhuma,
+starttls, ssl), usuário, senha cifrada, remetente, tempo limite e o resultado
+do último teste de conexão e do último envio de teste. Um índice único parcial
+(`WHERE ativo`) garante no máximo um servidor ativo.
+
+FINALIDADE DE NEGÓCIO:
+Todos os avisos por e-mail do SGI (prazos, notificações, documentos) saem pelo
+servidor ativo. Guardar o resultado dos testes ajuda o administrador a
+diagnosticar falhas de envio sem acessar o servidor.
+
+CONTEXTO NO SISTEMA:
+Modelo de servidores SMTP em `app/models`, serviço de e-mail e rotas de
+configuração (SuperRoot = administrador com a coluna `superusuario`).
 
 Revision ID: 3486e80ca434
 Revises: 9f9b0de79c5a
 Create Date: 2026-09-25 17:17:43
+
+===============================================================================
 """
 
 from collections.abc import Sequence
@@ -22,8 +41,15 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+# upgrade() aplica esta mudança no banco (alembic upgrade) e downgrade() a
+# desfaz (alembic downgrade), voltando à revisão anterior.
+#
+# As funções op.* do Alembic executam comandos de estrutura (DDL) no banco:
+# create_table, add_column, alter_column, create_index, drop_* etc.
 def upgrade() -> None:
-    """Cria a tabela `servidores_smtp` e o índice que garante um único servidor ativo."""
+    """Cria a tabela `servidores_smtp` e o índice que garante um único servidor
+    ativo.
+    """
     op.create_table(
         "servidores_smtp",
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -51,6 +77,9 @@ def upgrade() -> None:
         sa.CheckConstraint("seguranca IN ('nenhuma', 'starttls', 'ssl')", name="ck_servidores_smtp_seguranca"),
         sa.PrimaryKeyConstraint("id", name="servidores_smtp_pkey"),
     )
+    # Índice único parcial: só entram no índice as linhas com ativo verdadeiro,
+    # então duas linhas ativas violam a unicidade, mas várias inativas
+    # convivem.
     op.create_index(
         "ux_servidores_smtp_unico_ativo", "servidores_smtp", ["ativo"], unique=True,
         postgresql_where=sa.text("ativo"), sqlite_where=sa.text("ativo"),
@@ -58,6 +87,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove a tabela (e o índice) dos servidores SMTP."""
+    """Remove o índice e a tabela dos servidores SMTP."""
     op.drop_index("ux_servidores_smtp_unico_ativo", table_name="servidores_smtp")
     op.drop_table("servidores_smtp")

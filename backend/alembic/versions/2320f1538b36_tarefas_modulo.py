@@ -1,14 +1,38 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para criar as tabelas do Módulo Tarefas.
-"""tarefas: equipes, tarefas, participantes, linha do tempo, anexos da linha do tempo, marcadores e checklist
+"""
+===============================================================================
+ARQUIVO: 2320f1538b36_tarefas_modulo.py
+AUTOR: José Eduardo Santana Martins
 
-- `tarefas_equipes` (+ `_membros`, `_lideres`): equipes próprias do módulo, com dono, líderes e equipe pai.
-- `tarefas`: pipeline a_fazer → em_andamento → em_validacao → concluida, prazo e prazo original, datas de cada etapa.
-- `tarefas_participantes`, `tarefas_eventos` (+ `_anexos`), `tarefas_marcadores` (+ `_vinculos`), `tarefas_checklist`.
+FINALIDADE:
+Criar as tabelas do Módulo Tarefas: equipes, tarefas, participantes, linha do
+tempo (eventos e seus anexos), marcadores e checklist.
+
+RESUMO TÉCNICO:
+- `tarefas_equipes` (+ `_membros`, `_lideres`): equipes próprias do módulo, com
+  dono, líderes e equipe pai (hierarquia).
+- `tarefas`: fluxo a_fazer, em_andamento, em_validacao, concluida; prazo e
+  prazo original, datas de cada etapa, tempo acumulado em andamento e `versao`
+  (controle de edição concorrente). Número sequencial único.
+- `tarefas_participantes`, `tarefas_eventos` (+ `_anexos`),
+  `tarefas_marcadores` (+ `_vinculos`) e `tarefas_checklist`.
+- Restrições CHECK limitam prioridade, status e tipos de evento.
+
+FINALIDADE DE NEGÓCIO:
+Organiza o trabalho das equipes da SPI em quadros de tarefas com prazos,
+responsável, validação por líder e histórico completo, dando visibilidade do
+que está atrasado e de quem está com cada demanda.
+
+CONTEXTO NO SISTEMA:
+Relaciona-se com `usuarios` e `anexos`. Usado pelos modelos em
+`app/models/tarefas.py`, pelo serviço `app/services/tarefas/` e pelas rotas
+`app/api/routes/tarefas.py`. Migrações seguintes acrescentam subtarefas,
+recorrência, estágios, RDM etc.
 
 Revision ID: 2320f1538b36
 Revises: b2e4f6a8c0d1
 Create Date: 2026-09-30 10:00:00
+
+===============================================================================
 """
 from typing import Sequence, Union
 
@@ -23,8 +47,18 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# upgrade() aplica esta mudança no banco (alembic upgrade) e downgrade() a
+# desfaz (alembic downgrade), voltando à revisão anterior.
+#
+# As funções op.* do Alembic executam comandos de estrutura (DDL) no banco:
+# create_table, add_column, alter_column, create_index, drop_* etc.
+#
+# op.f(nome) marca o nome do índice/restrição como definitivo, sem aplicar a
+# convenção automática de nomes.
 def upgrade() -> None:
-    """Cria as tabelas do módulo."""
+    """Cria as tabelas do módulo Tarefas, na ordem das dependências (equipes
+    antes de tarefas, tarefas antes de eventos), com índices e restrições.
+    """
     op.create_table('tarefas_equipes',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('nome', sa.String(length=150), nullable=False),
@@ -66,6 +100,8 @@ def upgrade() -> None:
     sa.UniqueConstraint('numero')
     )
     op.create_index(op.f('ix_tarefas_equipe_id'), 'tarefas', ['equipe_id'], unique=False)
+    # Índices compostos para os quadros: tarefas de uma equipe por status e
+    # tarefas de um responsável por status.
     op.create_index('ix_tarefas_equipe_status', 'tarefas', ['equipe_id', 'status'], unique=False)
     op.create_index('ix_tarefas_responsavel_status', 'tarefas', ['responsavel_id', 'status'], unique=False)
     op.create_table('tarefas_equipes_lideres',
@@ -130,6 +166,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_tarefas_eventos_tarefa_em', 'tarefas_eventos', ['tarefa_id', 'criado_em'], unique=False)
+    # Tabela de ligação muitos-para-muitos entre tarefas e marcadores; a chave
+    # primária é o próprio par (tarefa, marcador).
     op.create_table('tarefas_marcadores_vinculos',
     sa.Column('tarefa_id', sa.Uuid(), nullable=False),
     sa.Column('marcador_id', sa.Uuid(), nullable=False),
@@ -160,7 +198,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove as tabelas do módulo (os dados se perdem)."""
+    """Remove as tabelas do módulo na ordem inversa (dependentes primeiro). Os
+    dados se perdem.
+    """
     op.drop_index(op.f('ix_tarefas_eventos_anexos_evento_id'), table_name='tarefas_eventos_anexos')
     op.drop_table('tarefas_eventos_anexos')
     op.drop_index(op.f('ix_tarefas_participantes_usuario_id'), table_name='tarefas_participantes')

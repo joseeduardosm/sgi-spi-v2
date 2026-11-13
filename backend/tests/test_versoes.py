@@ -1,6 +1,35 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar a tela Administração › Versões: homologação acompanha o ramo e aprova (tag no GitHub), produção instala.
-"""Testes da atualização do SGI pelo GitHub, com repositórios Git temporários (um "GitHub" local e um clone fazendo o papel do servidor)."""
+"""
+===============================================================================
+ARQUIVO: test_versoes.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar a tela Administração, Versões: na homologação o sistema acompanha o
+ramo e aprova a versão (tag no GitHub); na produção só aparecem e são
+instaladas as versões aprovadas.
+
+RESUMO TÉCNICO:
+A fixture `repos` cria três repositórios Git temporários (um "GitHub" bare,
+o computador de desenvolvimento e o clone que faz o papel do servidor) e
+usa `monkeypatch` para apontar `servico_versoes` e a configuração para eles
+e para não disparar a unidade systemd de verdade. Os testes chamam
+`/api/admin/versoes` (painel, buscar, atualizar, aprovar) e rodam o script
+`scripts/atualizar-versao.py` em modo ensaio.
+
+FINALIDADE DE NEGÓCIO:
+Garante que a atualização do sistema em produção é segura: só versões
+testadas e aprovadas são instaladas, há confirmação explícita, uma operação
+por vez, nada roda com backup em andamento ou alteração local, e o processo
+volta à versão anterior se falhar.
+
+CONTEXTO NO SISTEMA:
+Exercita `app/services/servico_versoes.py`,
+`app/services/servico_backup.py` (bloqueio), a configuração
+(`app/core/configuracao.py`) e o orquestrador
+`scripts/atualizar-versao.py`.
+
+===============================================================================
+"""
 
 import importlib.util
 import json
@@ -20,6 +49,7 @@ RAMO = "estado-atual-servidor"
 
 
 def _git(pasta: Path, *args: str) -> str:
+    """Roda `git -C <pasta> ...` e devolve a saída sem espaços nas pontas; falha o teste se o git der erro."""
     return subprocess.run(["git", "-C", str(pasta), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
@@ -37,6 +67,7 @@ def repos(tmp_path, monkeypatch):
     """GitHub (bare), o computador de desenvolvimento e o servidor (clone em que a API roda)."""
     for var, valor in (("GIT_AUTHOR_NAME", "Dev"), ("GIT_AUTHOR_EMAIL", "dev@x"), ("GIT_COMMITTER_NAME", "Dev"), ("GIT_COMMITTER_EMAIL", "dev@x")):
         monkeypatch.setenv(var, valor)
+    # `tmp_path` é uma fixture do pytest: pasta temporária exclusiva deste teste, apagada depois.
     github, trabalho, servidor = tmp_path / "github.git", tmp_path / "trabalho", tmp_path / "servidor"
     subprocess.run(["git", "init", "-q", "--bare", "-b", RAMO, str(github)], check=True)
     subprocess.run(["git", "init", "-q", "-b", RAMO, str(trabalho)], check=True)
@@ -46,6 +77,8 @@ def repos(tmp_path, monkeypatch):
     _git(trabalho, "remote", "add", "origin", str(github))
     _git(trabalho, "push", "-q", "origin", RAMO)
     subprocess.run(["git", "clone", "-q", "-b", RAMO, str(github), str(servidor)], check=True)
+    # Aponta o serviço para o clone "servidor" e as pastas de trabalho para o temporário;
+    # `disparar_unidade` (que iniciaria o serviço systemd de atualização) só é anotado em `disparos`.
     config = obter_configuracao()
     monkeypatch.setattr(servico_versoes, "raiz", lambda: servidor)
     monkeypatch.setattr(config, "atualizacao_diretorio", tmp_path / "atualizacao")
@@ -57,11 +90,13 @@ def repos(tmp_path, monkeypatch):
 
 
 def test_so_superroot(cliente, repos):
+    """Usuário comum não acessa a tela de versões (403)."""
     criar_usuario("comum")
     assert cliente.get(BASE, headers=cabecalho(cliente, "comum")).status_code == 403
 
 
 def test_homologacao_acompanha_o_ramo_e_pede_a_atualizacao(cliente, admin, repos, monkeypatch):
+    """Na homologação, os commits novos do ramo aparecem e a atualização grava o pedido e dispara o serviço."""
     monkeypatch.setattr(repos["config"], "modo_homologacao", True)
     _commit(repos["trabalho"], "- Nova tela de Rede")
     painel = cliente.post(f"{BASE}/buscar", headers=admin).json()
@@ -80,6 +115,7 @@ def test_homologacao_acompanha_o_ramo_e_pede_a_atualizacao(cliente, admin, repos
 
 
 def test_aprovar_cria_a_tag_no_github_so_na_homologacao(cliente, admin, repos, monkeypatch):
+    """Aprovar cria a tag `vAAAA.MM.DD` anotada no GitHub; só na homologação e uma vez por versão."""
     assert cliente.post(f"{BASE}/aprovar", headers=admin).status_code == 400  # produção não aprova
     monkeypatch.setattr(repos["config"], "modo_homologacao", True)
     r = cliente.post(f"{BASE}/aprovar", headers=admin)
@@ -96,6 +132,7 @@ def test_aprovar_cria_a_tag_no_github_so_na_homologacao(cliente, admin, repos, m
 
 
 def test_producao_so_ve_e_instala_versoes_aprovadas_mais_novas(cliente, admin, repos):
+    """Na produção só aparecem tags aprovadas mais novas que a instalada; commit sem tag não aparece."""
     # Versão aprovada na homologação: uma tag no GitHub (feita aqui pelo computador de desenvolvimento)
     _commit(repos["trabalho"], "- Cores nas VLANs")
     _git(repos["trabalho"], "tag", "-a", "v2026.11.06", "-m", "Aprovada em homologação por Fulano em 06/11/2026 10:00")
@@ -117,6 +154,7 @@ def test_producao_so_ve_e_instala_versoes_aprovadas_mais_novas(cliente, admin, r
 
 
 def test_alteracao_local_ou_backup_em_andamento_bloqueiam(cliente, admin, repos, monkeypatch):
+    """Backup em andamento ou arquivo alterado no servidor impedem a atualização (e nada é disparado)."""
     monkeypatch.setattr(repos["config"], "modo_homologacao", True)
     _commit(repos["trabalho"], "- Algo")
     monkeypatch.setattr(servico_backup, "ocupado", lambda: True)
@@ -134,6 +172,7 @@ def test_script_em_ensaio_troca_o_codigo_e_volta(cliente, admin, repos, monkeypa
     novo = _commit(repos["trabalho"], "- Algo novo")
     assert cliente.post(f"{BASE}/atualizar", json={"alvo": RAMO, "confirmacao": "ATUALIZAR"}, headers=admin).status_code == 202
     antes = _git(repos["servidor"], "rev-parse", "HEAD")
+    # O nome do script tem hífen e não é um pacote: por isso é carregado com importlib a partir do caminho
     caminho = Path(__file__).resolve().parents[2] / "scripts" / "atualizar-versao.py"
     especificacao = importlib.util.spec_from_file_location("atualizar_versao", caminho)
     modulo = importlib.util.module_from_spec(especificacao)

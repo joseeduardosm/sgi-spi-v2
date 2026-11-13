@@ -11,7 +11,9 @@ Regras (decisões do usuário, 03/11/2026):
   (só os contínuos entram na base; o sob demanda muda só o preço).
 - Vale a partir da **data de vigência** (`data_efeito`). Mês quebrado igual ao reajuste: uma escolha (pro rata ou integral) para todos.
 - Retroativo igual ao reajuste: as competências já **medidas** (pagas ou não) entram na diferença — positiva vira competência de diferença
-  a pagar, negativa vira crédito abatido nas próximas medições; as **não medidas** recebem o novo preço na medição.
+  a pagar, negativa vira crédito no fundo do contrato (o gestor aplica numa medição); as **não medidas** recebem o novo preço na medição.
+- Meses pagos fora do sistema (sem medição concluída no SGI) podem ter a diferença informada à mão (`diferenca_manual`): ficam travados
+  no preço de antes, fora do cálculo automático, e o valor vira complementar de uma linha (positivo) ou crédito no fundo (negativo).
   A diferença de cada medida é a própria diferença do item × quantidade medida × fração do mês a partir do efeito (não "preço novo −
   preço pago"), para que uma repactuação seguinte nunca cobre de novo a diferença desta.
 - A CCT vai para os Documentos importantes como "CCT mm/aaaa" (data-base da CCT).
@@ -43,10 +45,10 @@ from app.schemas.contratos.alteracoes import (
 )
 from app.schemas.contratos.execucao import LeituraArquivo
 from app.services import servico_anexos
-from app.services.contratos import calculos, valores
+from app.services.contratos import calculos, diferenca_manual, valores
 from app.services.contratos.documentos_execucao import moeda, moeda_unitaria, quantidade
 from app.services.contratos.erros import ErroRegraContrato, RegistroNaoEncontrado
-from app.services.contratos.servico_competencias import proxima_competencia_a_medir, registrar_credito_reajuste, sincronizar_competencia
+from app.services.contratos.servico_competencias import registrar_credito_reajuste, sincronizar_competencia
 from app.services.contratos.servico_configuracao_execucao import checklist_ativo, copiar_checklist
 from app.services.contratos.servico_contratos import exigir_edicao, obter_contrato, pode_editar, vigencias
 from app.services.documentos.pdf import DocumentoPdf, mesclar_pdfs
@@ -155,14 +157,16 @@ def _fracao(inicio: date, fim: date, efeito: date, modo: str) -> Decimal:
 
 def _medidas(contrato: Contrato, repactuacao: Repactuacao) -> list[Competencia]:
     """Competências já medidas (regulares e adicionais) que terminam no efeito ou depois: a diferença delas é paga à parte."""
+    # Mês coberto por diferença manual (pago fora do sistema) fica de fora: a diferença dele é a informada à mão
     return sorted((c for c in contrato.competencias if c.tipo in ("regular", "adicional") and c.medicao_concluida_em is not None
-                   and c.periodo_fim >= repactuacao.efeito), key=lambda c: (c.periodo_inicio, c.numero_adicional))
+                   and c.periodo_fim >= repactuacao.efeito and not c.diferencas_manuais), key=lambda c: (c.periodo_inicio, c.numero_adicional))
 
 
 def _nao_medidas(contrato: Contrato, repactuacao: Repactuacao) -> list[Competencia]:
     """Competências regulares ainda não medidas a partir do efeito: recebem o novo preço na medição."""
-    return sorted((c for c in contrato.competencias if c.tipo == "regular" and c.medicao_concluida_em is None and c.periodo_fim >= repactuacao.efeito),
-                  key=lambda c: c.periodo_inicio)
+    # Mês coberto por diferença manual fica no preço de antes (travado): não recebe o novo
+    return sorted((c for c in contrato.competencias if c.tipo == "regular" and c.medicao_concluida_em is None and c.periodo_fim >= repactuacao.efeito
+                   and not c.diferencas_manuais), key=lambda c: c.periodo_inicio)
 
 
 @dataclass
@@ -224,6 +228,8 @@ def _hash(contrato: Contrato, repactuacao: Repactuacao) -> str:
         + [[str(i.item_id), str(i.valor_unitario_atual), str(i.valor_unitario_repactuado), str(i.quantidade_mensal)] for i in repactuacao.itens]
         + [str(repactuacao.data_base_cct), str(repactuacao.efeito), str(repactuacao.calculo_mes_quebrado)]
         + [[x.identificador, x.paga, str(x.valor_pago), str(x.diferenca)] for x in r.linhas]
+        # A diferença informada manualmente também (valor, meses, justificativa e PDF)
+        + diferenca_manual.origem_hash(repactuacao)
     ).encode()).hexdigest()
 
 
@@ -239,8 +245,10 @@ def leitura(contrato: Contrato, repactuacao: Repactuacao) -> LeituraRepactuacao:
     documentos = sorted(repactuacao.documentos, key=lambda d: (d.incluido_no_processo, d.ordem))
     ultima = repactuacao.memorias[-1] if repactuacao.memorias else None
     consolidado = repactuacao.consolidado_anexo
-    marcos = [m.criado_em for m in repactuacao.memorias] + [d.enviado_em for d in documentos if d.enviado_em]
-    competencia_dif = next((c for c in contrato.competencias if c.tipo == "diferenca_repactuacao" and c.repactuacao_id == repactuacao.id), None)
+    marcos = ([m.criado_em for m in repactuacao.memorias] + [d.enviado_em for d in documentos if d.enviado_em]
+              + ([repactuacao.diferenca_manual.informado_em] if repactuacao.diferenca_manual else []))
+    competencia_dif = next((c for c in contrato.competencias if c.tipo == "diferenca_repactuacao" and c.repactuacao_id == repactuacao.id
+                            and c.diferenca_manual_id is None), None)
     return LeituraRepactuacao(
         id=repactuacao.id, situacao=repactuacao.situacao, data_base_cct=repactuacao.data_base_cct, mes_referencia=repactuacao.mes_referencia,
         data_efeito=repactuacao.data_efeito, cadastro_concluido=repactuacao.cadastro_concluido_em is not None,
@@ -264,6 +272,8 @@ def leitura(contrato: Contrato, repactuacao: Repactuacao) -> LeituraRepactuacao:
         consolidado_atualizado=consolidado is not None and all(consolidado.criado_em >= m for m in marcos),
         apostilamento=_arquivo(repactuacao.apostilamento_anexo), diferenca_retroativa=repactuacao.diferenca_retroativa,
         competencia_diferenca=competencia_dif.identificador if competencia_dif else None,
+        meses_sem_medicao=diferenca_manual.meses_sem_medicao(contrato, repactuacao),
+        diferenca_manual=diferenca_manual.leitura(contrato, repactuacao),
         criado_em=repactuacao.criado_em, concluido_em=repactuacao.concluido_em, cancelado_em=repactuacao.cancelado_em,
     )
 
@@ -390,9 +400,7 @@ def _texto_destino(contrato: Contrato, total: Decimal) -> str:
     if total > 0:
         return f"{moeda(total)} a pagar em competência de diferença de repactuação"
     if total < 0:
-        destino = proxima_competencia_a_medir(contrato)
-        onde = f"na medição de {destino.numero_competencia}" if destino else "na próxima competência gerada"
-        return f"crédito de {moeda(-total)} da SPI, abatido {onde}"
+        return f"crédito de {moeda(-total)} da SPI, no fundo do contrato (o gestor aplica numa medição)"
     return "sem diferença (nenhuma competência medida a partir da data de vigência)"
 
 
@@ -438,7 +446,9 @@ def _pdf_memoria(contrato: Contrato, repactuacao: Repactuacao, versao: int, auto
         ("Diferença total das competências medidas", _sinal(l.total_retroativo)),
         ("Destino", _texto_destino(contrato, l.total_retroativo)),
         *([("Meses quebrados", ROTULOS_MODO[repactuacao.calculo_mes_quebrado or "pro_rata"])] if l.opcoes_mes_quebrado else []),
+        *([("Meses pagos fora do sistema", diferenca_manual.texto_destino(repactuacao.diferenca_manual))] if repactuacao.diferenca_manual else []),
     ])
+    diferenca_manual.secao_pdf(documento, repactuacao)
     return documento.gerar()
 
 
@@ -464,6 +474,9 @@ def _xlsx_memoria(contrato: Contrato, repactuacao: Repactuacao) -> bytes:
             observacoes=[f"Diferença das competências pagas: {moeda(l.total_retroativo_pagas)}", f"Diferença total das medidas: {moeda(l.total_retroativo)}",
                          f"Destino: {_texto_destino(contrato, l.total_retroativo)}"]),
     ]
+    aba_manual = diferenca_manual.aba_planilha(contrato, repactuacao)
+    if aba_manual is not None:
+        abas.append(aba_manual)
     return gerar_planilha(abas)
 
 
@@ -571,8 +584,14 @@ def _capa(contrato: Contrato, repactuacao: Repactuacao, autor: Usuario) -> bytes
         ("CCT (data-base)", f"{repactuacao.data_base_cct:%m/%Y}"), ("Novos valores a partir de", f"{repactuacao.efeito:%d/%m/%Y}"),
         ("Itens repactuados", str(len(l.linhas))), ("Base mensal vigente", moeda(l.base_atual)), ("Nova base mensal", moeda(l.base_repactuada)),
         ("Diferença retroativa", _texto_destino(contrato, l.total_retroativo)),
+        *([("Meses pagos fora do sistema", diferenca_manual.texto_destino(repactuacao.diferenca_manual))] if repactuacao.diferenca_manual else []),
     ])
-    documento.secao("Conteúdo").campos([("1", "Convenção Coletiva de Trabalho"), ("2", "Checklist de repactuação (documentos)"), ("3", "Memória de cálculo")])
+    conteudo = [("1", "Convenção Coletiva de Trabalho"), ("2", "Checklist de repactuação (documentos)"), ("3", "Memória de cálculo")]
+    if repactuacao.diferenca_manual is not None:
+        conteudo.append(("4", "Memória da diferença informada manualmente"))
+    documento.secao("Conteúdo").campos(conteudo)
+    if repactuacao.diferenca_manual is not None:
+        documento.paragrafo(f"Observação: {repactuacao.diferenca_manual.texto_observacao}")
     return documento.gerar()
 
 
@@ -586,6 +605,9 @@ def gerar_consolidado(sessao: Session, contrato_id: uuid.UUID, repactuacao_id: u
     partes: list = [_capa(contrato, repactuacao, autor), servico_anexos.caminho(repactuacao.cct_anexo)]
     partes += [servico_anexos.caminho(d.anexo) for d in sorted(repactuacao.documentos, key=lambda d: (d.incluido_no_processo, d.ordem)) if d.anexo]
     partes.append(servico_anexos.caminho(repactuacao.memorias[-1].pdf_anexo))
+    # A memória feita fora do sistema para a diferença manual vem por último
+    if repactuacao.diferenca_manual is not None:
+        partes.append(servico_anexos.caminho(repactuacao.diferenca_manual.anexo))
     nome = f"consolidado-repactuacao-{contrato.numero_arquivo}-{repactuacao.data_base_cct:%Y-%m}.pdf"
     anexo = servico_anexos.guardar_pdf_gerado(sessao, mesclar_pdfs(partes), nome, "contrato-repactuacao-consolidado", autor.id, contrato_id=contrato.id)
     sessao.flush()
@@ -637,6 +659,9 @@ def finalizar(sessao: Session, contrato_id: uuid.UUID, repactuacao_id: uuid.UUID
         raise ErroRegraContrato("Anexe os documentos obrigatórios do checklist antes de finalizar.")
     if repactuacao.consolidado_anexo_id is None:
         raise ErroRegraContrato("Gere o documento consolidado antes de finalizar.")
+    if repactuacao.diferenca_manual is not None and repactuacao.consolidado_anexo.criado_em < repactuacao.diferenca_manual.informado_em:
+        raise ErroRegraContrato("Gere o documento consolidado de novo: a diferença informada manualmente ainda não está nele.")
+    diferenca_manual.conferir_antes_de_concluir(contrato, repactuacao)
     anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-repactuacao-apostilamento", autor.id, contrato_id=contrato.id)
     sessao.flush()
     repactuacao.apostilamento_anexo_id = anexo.id
@@ -655,6 +680,8 @@ def finalizar(sessao: Session, contrato_id: uuid.UUID, repactuacao_id: uuid.UUID
     diferenca = _competencia_diferenca(contrato, repactuacao, r)
     if repactuacao.diferenca_retroativa < 0:
         registrar_credito_reajuste(sessao, contrato, None, -repactuacao.diferenca_retroativa, repactuacao=repactuacao)
+    # Diferença informada manualmente (meses pagos fora do sistema): complementar de uma linha ou crédito no fundo, independente da automática
+    complementar_manual = diferenca_manual.aplicar_na_conclusao(sessao, contrato, repactuacao)
     ultima = vigencias(contrato)[-1]
     if contrato.valor_global_reajustado is not None or repactuacao.efeito <= ultima.fim:
         contrato.valor_global_reajustado = valores.valor_global_vigencia(contrato, ultima)
@@ -663,6 +690,8 @@ def finalizar(sessao: Session, contrato_id: uuid.UUID, repactuacao_id: uuid.UUID
     auditar(sessao, autor.login, "contrato.repactuacao.finalizar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id,
             dados={"data_efeito": repactuacao.efeito, "diferenca_retroativa": repactuacao.diferenca_retroativa,
                    "competencia_diferenca": diferenca.identificador if diferenca else None,
+                   "diferenca_manual": repactuacao.diferenca_manual.valor if repactuacao.diferenca_manual else None,
+                   "competencia_diferenca_manual": complementar_manual.identificador if complementar_manual else None,
                    "itens": {str(k): str(v) for k, v in deltas.items()}})
     from app.services.contratos import avisos
     avisos.alteracao_concluida(sessao, contrato, "repactuacao", repactuacao.id, f"repactuação (CCT {repactuacao.data_base_cct:%m/%Y}) aplicada a partir de "
@@ -676,6 +705,9 @@ def cancelar(sessao: Session, contrato_id: uuid.UUID, repactuacao_id: uuid.UUID,
     exigir_edicao(sessao, contrato, autor)
     repactuacao = _em_andamento(sessao, contrato, repactuacao_id)
     repactuacao.situacao, repactuacao.cancelado_em = "cancelado", agora_utc()
+    # Os meses marcados na diferença manual destravam (o registro fica no histórico da repactuação cancelada)
+    if repactuacao.diferenca_manual is not None:
+        repactuacao.diferenca_manual.competencias = []
     auditar(sessao, autor.login, "contrato.repactuacao.cancelar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato", alvo_id=contrato.id)
     sessao.commit()
 
@@ -688,7 +720,27 @@ def arquivo(sessao: Session, contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, 
         raise RegistroNaoEncontrado("Repactuação")
     permitidos = ({repactuacao.cct_anexo_id, repactuacao.consolidado_anexo_id, repactuacao.apostilamento_anexo_id}
                   | {m.pdf_anexo_id for m in repactuacao.memorias} | {m.xlsx_anexo_id for m in repactuacao.memorias}
-                  | {d.anexo_id for d in repactuacao.documentos if d.anexo_id})
+                  | {d.anexo_id for d in repactuacao.documentos if d.anexo_id}
+                  | ({repactuacao.diferenca_manual.anexo_id} if repactuacao.diferenca_manual else set()))
     if anexo_id not in permitidos:
         raise RegistroNaoEncontrado("Arquivo")
     return servico_anexos.resposta_download(sessao.get(Anexo, anexo_id))
+
+
+def gravar_diferenca_manual(sessao: Session, contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, valor: Decimal, competencias_ids: list[uuid.UUID],
+                            justificativa: str, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
+    """Grava (ou substitui) a diferença retroativa informada manualmente para meses pagos fora do sistema."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    repactuacao = _em_andamento(sessao, contrato, repactuacao_id)
+    diferenca_manual.gravar(sessao, contrato, repactuacao, valor, competencias_ids, justificativa, arquivo, nome, autor)
+    sessao.commit()
+
+
+def remover_diferenca_manual(sessao: Session, contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, autor: Usuario) -> None:
+    """Remove a diferença manual da repactuação em elaboração."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    repactuacao = _em_andamento(sessao, contrato, repactuacao_id)
+    diferenca_manual.remover(sessao, contrato, repactuacao, autor)
+    sessao.commit()

@@ -1,6 +1,31 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para ler, gravar e testar a configuração da integração com o BookStack (token cifrado).
-"""Configuração da integração com o BookStack: leitura sem expor o token, gravação com cifra e teste de conexão."""
+"""
+===============================================================================
+ARQUIVO: servico_integracao_bookstack.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Ler, gravar e testar a configuração da integração com o BookStack (wiki onde
+ficam os manuais), guardando o token de API sempre cifrado.
+
+RESUMO TÉCNICO:
+Define os schemas pydantic do PUT (AlteracaoIntegracaoBookstack), da leitura
+(LeituraIntegracaoBookstack, que nunca devolve o token) e do teste. obter()
+garante a linha única (id=1) da tabela; salvar() cifra o token com
+cifrar_segredo e audita sem o valor; tokens() decifra; testar() faz uma
+listagem mínima com o ClienteBookstack e mede a latência.
+
+FINALIDADE DE NEGÓCIO:
+Permite ao administrador ligar a leitura dos manuais do SGI dentro do
+portal, escolhendo quais livros do BookStack aparecem, sem expor a
+credencial da conta de serviço.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas /api/integracao-bookstack (Administração) e pelo
+servico_manuais, que lê os livros. Grava no modelo IntegracaoBookstack, usa
+app.core.criptografia e registra na auditoria.
+
+===============================================================================
+"""
 
 from datetime import datetime
 
@@ -13,6 +38,8 @@ from app.services.bookstack.cliente_bookstack import ClienteBookstack, ErroBooks
 from app.services.servico_auditoria import auditar
 
 
+# Schemas pydantic (BaseModel): validam o JSON recebido/enviado pela API e
+# aparecem na documentação OpenAPI. Field(...) com "..." = campo obrigatório.
 class AlteracaoIntegracaoBookstack(BaseModel):
     """Corpo do `PUT /api/integracao-bookstack`. Token vazio ou ausente preserva o que já está gravado."""
 
@@ -49,6 +76,8 @@ class ResultadoTesteBookstack(BaseModel):
 def obter(sessao: Session) -> IntegracaoBookstack:
     """A linha única de configuração (criada vazia se a migração ainda não a trouxe)."""
     config = sessao.get(IntegracaoBookstack, 1)
+    # Tabela de uma linha só (id=1). flush insere a linha sem fazer commit, para
+    # quem chamou decidir quando gravar de vez.
     if config is None:
         config = IntegracaoBookstack(id=1)
         sessao.add(config)
@@ -57,6 +86,7 @@ def obter(sessao: Session) -> IntegracaoBookstack:
 
 
 def leitura(config: IntegracaoBookstack) -> LeituraIntegracaoBookstack:
+    """Converte a configuração gravada na resposta da API, trocando os tokens por "possui_token"."""
     possui = bool(config.token_id_cifrado and config.token_segredo_cifrado)
     return LeituraIntegracaoBookstack(
         ativo=config.ativo, url_base=config.url_base, possui_token=possui, configurada=bool(config.url_base and possui), livros_permitidos=config.livros_permitidos,
@@ -72,6 +102,7 @@ def salvar(sessao: Session, dados: AlteracaoIntegracaoBookstack, autor: str) -> 
         config.token_id_cifrado = cifrar_segredo(dados.token_id.strip())
     if dados.token_segredo:
         config.token_segredo_cifrado = cifrar_segredo(dados.token_segredo.strip())
+    # Normaliza a lista de livros: tira espaços e itens vazios ("147, ,12" vira "147,12").
     if dados.livros_permitidos is not None:
         config.livros_permitidos = ",".join(parte.strip() for parte in dados.livros_permitidos.split(",") if parte.strip())
     auditar(sessao, autor, "integracao_bookstack.salvar", "Integração BookStack",
@@ -90,6 +121,7 @@ def tokens(config: IntegracaoBookstack) -> tuple[str, str]:
 
 def testar(config: IntegracaoBookstack, transporte=None) -> ResultadoTesteBookstack:
     """Faz uma listagem mínima no BookStack com a configuração gravada."""
+    # Sem endereço ou sem token não há o que testar: responde sem chamar o BookStack.
     if not (config.url_base and config.token_id_cifrado and config.token_segredo_cifrado):
         return ResultadoTesteBookstack(sucesso=False, mensagem="Informe o endereço e o token e salve antes de testar.")
     try:

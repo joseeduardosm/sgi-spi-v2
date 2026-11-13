@@ -1,6 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para ler, gravar e testar a configuração da integração com o GLPI (tokens cifrados).
-"""Configuração da integração com o GLPI: leitura sem expor tokens, gravação com cifra e teste de conexão."""
+"""
+===============================================================================
+ARQUIVO: servico_integracao_glpi.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Ler, gravar e testar a configuração da integração com o GLPI (sistema de
+chamados de TI), mantendo tokens e senha web sempre cifrados.
+
+RESUMO TÉCNICO:
+Schemas pydantic do PUT (AlteracaoIntegracaoGlpi), da leitura
+(LeituraIntegracaoGlpi, que só diz se cada segredo existe) e do teste.
+obter() garante a linha única (id=1); salvar() cifra App-Token, user_token e
+senha web, trata 0 como "nenhum" nos ids de grupo/SLA/modelo e audita sem
+valores secretos; tokens() e credencial_web() decifram; testar() abre e
+fecha uma sessão na API REST do GLPI.
+
+FINALIDADE DE NEGÓCIO:
+Configura como o SGI abre chamados em nome dos servidores (grupo
+atribuído, SLAs = prazos de atendimento e solução, modelo de chamado) e
+como envia o formulário "CGP - Nomeações" usado nas admissões do RH.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas /api/integracao-glpi, por servico_chamados_glpi (abertura
+de chamados) e pelo fluxo de admissão do RH (formulário web). Modelo
+IntegracaoGlpi, cliente app.services.glpi.cliente_glpi e auditoria.
+
+===============================================================================
+"""
 
 from datetime import datetime
 
@@ -13,6 +39,8 @@ from app.services.glpi.cliente_glpi import ClienteGlpi, ErroGlpi
 from app.services.servico_auditoria import auditar
 
 
+# Schemas pydantic (BaseModel): validam o JSON da API e aparecem no OpenAPI.
+# Campos None ("nulo") significam "manter o valor atual".
 class AlteracaoIntegracaoGlpi(BaseModel):
     """Corpo do `PUT /api/integracao-glpi`. Token vazio ou ausente preserva o que já está gravado."""
 
@@ -62,6 +90,7 @@ class ResultadoTesteGlpi(BaseModel):
 def obter(sessao: Session) -> IntegracaoGlpi:
     """A linha única de configuração (criada vazia se a migração ainda não a trouxe)."""
     config = sessao.get(IntegracaoGlpi, 1)
+    # Tabela de uma linha só (id=1); flush insere sem commit.
     if config is None:
         config = IntegracaoGlpi(id=1)
         sessao.add(config)
@@ -70,6 +99,7 @@ def obter(sessao: Session) -> IntegracaoGlpi:
 
 
 def leitura(config: IntegracaoGlpi) -> LeituraIntegracaoGlpi:
+    """Converte a configuração gravada na resposta da API, sem nenhum segredo."""
     return LeituraIntegracaoGlpi(
         ativo=config.ativo, url_base=config.url_base, possui_app_token=bool(config.app_token_cifrado), possui_user_token=bool(config.user_token_cifrado),
         configurada=bool(config.url_base and config.user_token_cifrado), prefixo_titulo=config.prefixo_titulo,
@@ -83,6 +113,7 @@ def salvar(sessao: Session, dados: AlteracaoIntegracaoGlpi, autor: str) -> Integ
     """Grava a configuração; token em branco mantém o anterior. A conta de serviço é auditada sem os valores dos tokens."""
     config = obter(sessao)
     config.ativo, config.url_base, config.atualizado_por = dados.ativo, dados.url_base.strip().rstrip("/"), autor
+    # Segredos só são trocados quando vierem preenchidos (vazio preserva o atual).
     if dados.app_token:
         config.app_token_cifrado = cifrar_segredo(dados.app_token.strip())
     if dados.user_token:

@@ -1,23 +1,49 @@
 #!/usr/bin/env python3
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para migrar o módulo de tarefas do SGI SPI (10.23.1.220) para o Módulo Tarefas do SGI SPI.
 """Migra o módulo de tarefas do SGI SPI (10.23.1.220) para o Módulo Tarefas.
+===============================================================================
+ARQUIVO: migrar-tarefas-sgi.py
+AUTOR: José Eduardo Santana Martins
 
-Lê o pacote gerado por `scripts/extrair-tarefas-sgi.py` e carrega equipes, marcadores, tarefas, responsáveis,
-linha do tempo (com o nome do autor preservado), remoções lógicas e anexos dos comentários.
+(A 1ª linha acima precisa continuar sendo a frase-resumo: o argparse usa a
+primeira linha desta docstring como descrição do --help.)
 
-- usuários (`*UserId`) são convertidos pelo `usuarios.csv`, casando login ou id externo (AD); quem não existe aqui
-  é criado inativo, sem senha;
-- o número público (`Number`) é preservado; uma tarefa criada aqui com o mesmo número recebe o próximo livre;
-- situação: Pending → a_fazer, InProgress → em_andamento, Completed → concluida (AwaitingApproval, que o SGI
-  desligou, → em_validacao nos eventos antigos);
-- o prazo original é o "anterior" da primeira mudança de prazo (ou o prazo da criação);
+FINALIDADE:
+Migrar o módulo de tarefas do SGI SPI antigo (10.23.1.220) para o Módulo
+Tarefas deste sistema.
+
+RESUMO TÉCNICO:
+Lê o pacote gerado por `scripts/extrair-tarefas-sgi.py` e carrega equipes,
+marcadores, tarefas, responsáveis, linha do tempo (com o nome do autor
+preservado), remoções lógicas, checklists e anexos dos comentários.
+- usuários (*UserId) são convertidos pelo usuarios.csv, casando login ou id
+  externo (AD); quem não existe aqui é criado inativo, sem senha;
+- o número público (Number) é preservado; uma tarefa criada aqui com o
+  mesmo número recebe o próximo livre;
+- situação: Pending vira a_fazer, InProgress vira em_andamento, Completed
+  vira concluida (AwaitingApproval, que o SGI desligou, vira em_validacao
+  nos eventos antigos);
+- o prazo original é o "anterior" da primeira mudança de prazo (ou o prazo
+  da criação);
 - nenhum aviso ou e-mail é disparado.
+Depois da carga, `conferir` compara as contagens e `relatorio` mostra o
+resumo por responsável; só grava com --gravar e sem divergências.
 
 Uso (na pasta backend):
-    .venv/bin/python ../scripts/migrar-tarefas-sgi.py <pacote>                 # ensaio: carrega, confere e desfaz
-    .venv/bin/python ../scripts/migrar-tarefas-sgi.py <pacote> --gravar        # grava de verdade
-    ... --gravar --substituir   # apaga antes o que veio de uma carga anterior (mesmos ids) e recarrega
+    .venv/bin/python ../scripts/migrar-tarefas-sgi.py <pacote>           # ensaio
+    .venv/bin/python ../scripts/migrar-tarefas-sgi.py <pacote> --gravar  # grava
+    ... --gravar --substituir   # apaga antes a carga anterior (mesmos ids)
+
+FINALIDADE DE NEGÓCIO:
+Leva para o sistema novo o trabalho em andamento e o histórico das equipes
+da SPI (quem fez o quê, prazos e mudanças de prazo, comentários e anexos),
+mantendo os números de tarefa que as pessoas já conhecem.
+
+CONTEXTO NO SISTEMA:
+Usa os modelos de app.models.tarefas (EquipeTarefas, Tarefa, EventoTarefa,
+MarcadorTarefa, ResponsavelTarefa, ItemChecklistTarefa e vínculos), Anexo +
+servico_anexos e Usuario. Roda uma vez, fora da API, na pasta backend.
+
+===============================================================================
 """
 
 import argparse
@@ -32,6 +58,8 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
+# Coloca a pasta backend/ no caminho de importação para usar os modelos do sistema;
+# os CSVs do SGI têm campos muito grandes, por isso o limite do leitor CSV é ampliado.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 csv.field_size_limit(sys.maxsize)
 
@@ -48,6 +76,7 @@ from app.services import servico_anexos  # noqa: E402
 
 # --- De-para de valores ------------------------------------------------------------------------
 
+# O SGI exportou a situação e a prioridade às vezes como nome do enum, às vezes como número.
 STATUS = {"Pending": "a_fazer", "InProgress": "em_andamento", "Completed": "concluida", "AwaitingApproval": "em_validacao",
           "0": "a_fazer", "1": "em_andamento", "2": "concluida", "3": "em_validacao"}
 PRIORIDADES = {"Low": "baixa", "Normal": "normal", "High": "alta", "Critical": "critica",
@@ -59,10 +88,12 @@ avisos: list[str] = []
 # --- Leitura do pacote -------------------------------------------------------------------------
 
 class Pacote:
+    """Pacote extraído do SGI: uma pasta com dados/*.csv, anexos/ e usuarios.csv."""
     def __init__(self, pasta: Path):
         self.pasta = pasta
 
     def tabela(self, nome: str) -> list[dict[str, str]]:
+        """Lê a tabela `nome` do pacote (arquivo dados/*_<nome>.csv) como lista de dicionários; vazia se não existir."""
         arquivos = glob.glob(str(self.pasta / "dados" / f"*_{nome}.csv"))
         if not arquivos:
             return []
@@ -71,29 +102,36 @@ class Pacote:
 
 
 def texto(v: str | None) -> str:
+    """Devolve o texto ou string vazia quando a célula é nula."""
     return v or ""
 
 
 def nulo(v: str | None) -> str | None:
+    """Devolve None para célula vazia; caso contrário, o próprio texto."""
     return v if v not in (None, "") else None
 
 
 def id_(v: str | None) -> uuid.UUID | None:
+    """Converte o texto em UUID (ou None se vazio); os ids do SGI são mantidos aqui."""
     return uuid.UUID(v) if nulo(v) else None
 
 
 def inteiro(v: str | None) -> int | None:
+    """Converte o texto em inteiro (ou None se vazio)."""
     return int(v) if nulo(v) else None
 
 
 def booleano(v: str | None) -> bool:
+    """Interpreta os booleanos do PostgreSQL exportado ('t', 'true', '1')."""
     return (v or "").lower() in ("t", "true", "1")
 
 
 def instante(v: str | None) -> datetime | None:
+    """Converte a data/hora exportada do PostgreSQL ('2024-01-02 10:00:00-03') em datetime com fuso."""
     if not nulo(v):
         return None
     v = v.replace(" ", "T", 1)
+    # Fuso no formato curto (ex.: '-03') vira '-03:00', que o fromisoformat aceita.
     if v[-3] in "+-" and v[-6] != ":" and ":" not in v[-3:]:
         v += ":00"
     return datetime.fromisoformat(v)
@@ -106,10 +144,12 @@ def iso(v) -> str | None:
 
 
 def status_(v) -> str | None:
+    """Converte a situação do SGI (nome ou número) na situação daqui; None se ausente."""
     return STATUS.get(str(v)) if v is not None else None
 
 
 def ids_por_tarefa(linhas: list[dict], campo: str) -> dict[str, list[str]]:
+    """Agrupa os valores de `campo` por TaskId (ex.: participantes ou marcadores de cada tarefa)."""
     resultado = defaultdict(list)
     for r in linhas:
         resultado[r["TaskId"]].append(r[campo])
@@ -119,6 +159,12 @@ def ids_por_tarefa(linhas: list[dict], campo: str) -> dict[str, list[str]]:
 # --- Carga -------------------------------------------------------------------------------------
 
 def migrar(pacote: Pacote, sessao) -> dict:
+    """Carrega equipes, marcadores, anexos, tarefas, eventos e checklists na sessão.
+
+    Usa só flush (nada é confirmado aqui); quem decide entre commit e rollback é o
+    main. Devolve as contagens do que foi carregado.
+    """
+    # Atalho para ler uma tabela do pacote; contador acumula o resumo da carga.
     t = pacote.tabela
     contador = Counter()
 
@@ -131,6 +177,8 @@ def migrar(pacote: Pacote, sessao) -> dict:
     mapa: dict[str, int | None] = {}
     criados: list[str] = []
 
+    # Converte o Id de usuário do SGI no id local (com cache em `mapa`), criando o
+    # usuário inativo quando ele não existe aqui.
     def usuario(v: str | None) -> int | None:
         if not nulo(str(v) if v is not None else None):
             return None
@@ -175,6 +223,7 @@ def migrar(pacote: Pacote, sessao) -> dict:
                                  criado_em=instante(r["CreatedAt"])))
         contador["equipes"] += 1
     sessao.flush()
+    # Segunda passada: a equipe pai só é ligada depois que todas as equipes existem.
     for r in t("task_teams"):
         if nulo(r["ParentTeamId"]):
             sessao.get(EquipeTarefas, id_(r["Id"])).equipe_pai_id = id_(r["ParentTeamId"])
@@ -185,6 +234,7 @@ def migrar(pacote: Pacote, sessao) -> dict:
     for equipe_id, ids in lideres.items():
         for u in sorted(ids):
             sessao.add(LiderEquipeTarefas(equipe_id=id_(equipe_id), usuario_id=u))
+    # Quem já é líder não entra de novo como membro.
     for r in t("task_team_members"):
         u = usuario(r["UserId"])
         if u is not None and u not in lideres[r["TeamId"]]:
@@ -193,6 +243,7 @@ def migrar(pacote: Pacote, sessao) -> dict:
     # Marcadores (no SGI eram globais)
     marcadores: dict[str, MarcadorTarefa] = {}
     for r in t("task_markers"):
+        # Cor inválida (que não seja #rrggbb) vira a cor padrão.
         cor = r["Color"] if len(texto(r["Color"])) == 7 else "#5364ce"
         m = MarcadorTarefa(id=id_(r["Id"]), equipe_id=None, nome=" ".join(r["Name"].split())[:120], cor=cor.lower())
         sessao.add(m)
@@ -235,6 +286,7 @@ def migrar(pacote: Pacote, sessao) -> dict:
             avisos.append(f"tarefa #{r['Number']}: {len(responsaveis)} participantes no SGI (esperado 1)")
         prazo = instante(r["Deadline"])
         prazo_original = None
+        # Procura o prazo original na primeira mudança de prazo (ou transferência com prazo novo).
         for e in eventos:
             p = e["_payload"]
             if e["Type"] == "DeadlineChanged" and p.get("previous"):
@@ -243,9 +295,11 @@ def migrar(pacote: Pacote, sessao) -> dict:
             if e["Type"] == "Transferred" and p.get("previousDeadline") and p.get("newDeadline") and p["previousDeadline"] != p["newDeadline"]:
                 prazo_original = instante(p["previousDeadline"])
                 break
+        # Sem mudança de prazo: o prazo original é o da criação (ou o atual).
         if prazo_original is None:
             criada = next((e for e in eventos if e["Type"] == "Created"), None)
             prazo_original = instante(criada["_payload"].get("deadline")) if criada and criada["_payload"].get("deadline") else prazo
+        # Início do trabalho: o primeiro evento que levou a tarefa para em_andamento.
         iniciada = next((instante(e["CreatedAt"]) for e in eventos if status_(e["_payload"].get("current", e["_payload"].get("currentStatus"))) == "em_andamento"), None)
         status = STATUS[r["Status"]]
         tarefa = Tarefa(
@@ -257,6 +311,7 @@ def migrar(pacote: Pacote, sessao) -> dict:
             segundos_em_andamento=inteiro(r["OperationalSeconds"]) or 0, concluida_em=instante(r["CompletedAt"]) if status == "concluida" else None,
             versao=inteiro(r["Version"]) or 1, criado_em=instante(r["CreatedAt"]), atualizado_em=instante(r["UpdatedAt"]),
         )
+        # dict.fromkeys tira repetidos mantendo a ordem.
         tarefa.responsaveis = [ResponsavelTarefa(usuario_id=u) for u in dict.fromkeys(usuario(x) for x in responsaveis) if u is not None]
         tarefa.marcadores = [marcadores[m] for m in dict.fromkeys(vinculos.get(r["Id"], [])) if m in marcadores]
         sessao.add(tarefa)
@@ -310,6 +365,7 @@ def _evento(e: dict, anterior: dict, nome, marcadores: dict) -> tuple[str, str, 
             dados |= {"prazo_de": iso(p.get("previousDeadline")), "prazo_para": iso(p.get("newDeadline"))}
         return "transferida", f"Transferida de {de} para {para}", texto(p.get("justification")) or descricao, dados
     if tipo_sgi == "Edited":
+        # Monta o 'de/para' de cada campo comparando com a edição anterior desta tarefa.
         campos: dict = {}
         novo = {"titulo": p.get("Title"), "prioridade": PRIORIDADES.get(str(p.get("Priority"))) if p.get("Priority") is not None else None,
                 "marcadores": sorted(marcadores[m].nome for m in p.get("markerIds") or [] if m in marcadores) if "markerIds" in p else None}
@@ -354,6 +410,7 @@ def conferir(pacote: Pacote, sessao) -> list[str]:
         if aqui != la:
             problemas.append(f"{nome_tabela}: {aqui} aqui × {la} no SGI")
     # Situação e número de cada tarefa
+    # (tarefa a tarefa: divergência de situação ou número também impede gravar)
     for r in t("work_tasks"):
         tarefa = sessao.get(Tarefa, id_(r["Id"]))
         if tarefa.status != STATUS[r["Status"]] or tarefa.numero != int(r["Number"]):
@@ -377,8 +434,10 @@ def relatorio(pacote: Pacote, sessao) -> None:
 # --- Arquivos ----------------------------------------------------------------------------------
 
 def copiar_arquivos(pacote: Pacote) -> tuple[int, list[str]]:
+    """Copia os arquivos de anexos/ para o armazenamento do sistema; devolve (copiados, problemas)."""
     destino = servico_anexos.diretorio_anexos()
     copiados, problemas = 0, []
+    # Copia cada arquivo do pacote para a pasta de anexos, só se o SHA-256 bater.
     for r in pacote.tabela("stored_attachments"):
         origem = pacote.pasta / "anexos" / r["StorageKey"]
         if not origem.is_file():
@@ -408,6 +467,7 @@ def limpar_carga(pacote: Pacote, sessao) -> int:
 
 
 def main() -> None:
+    """Lê os argumentos, carrega, confere, mostra o relatório e grava (ou desfaz, no ensaio)."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("pacote", type=Path)
     parser.add_argument("--gravar", action="store_true", help="grava; sem esta opção é só um ensaio (tudo é desfeito)")
@@ -416,6 +476,7 @@ def main() -> None:
     pacote = Pacote(args.pacote)
 
     with FabricaSessao() as sessao:
+        # Uma carga anterior do mesmo pacote é reconhecida pelos ids das tarefas.
         ids = [id_(r["Id"]) for r in pacote.tabela("work_tasks")]
         existentes = sessao.scalar(select(func.count()).select_from(Tarefa).where(Tarefa.id.in_(ids)))
         if existentes and args.substituir:
@@ -435,12 +496,14 @@ def main() -> None:
                 print("  -", p)
         else:
             print("Conferência: tarefas, eventos, participantes, marcadores, anexos e equipes batem com o SGI.")
+        # Ensaio (sem --gravar) ou divergência: rollback desfaz tudo o que foi enviado com flush.
         if not args.gravar or problemas:
             sessao.rollback()
             if args.gravar:
                 sys.exit("Nada foi gravado por causa das divergências.")
             print("Ensaio: nada foi gravado.")
             return
+        # Os arquivos só são copiados depois da conferência; o commit vem por último.
         copiados, falhas = copiar_arquivos(pacote)
         if falhas:
             sessao.rollback()

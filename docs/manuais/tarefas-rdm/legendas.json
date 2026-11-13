@@ -1,0 +1,160 @@
+{
+ "r01-gerar": [
+  {
+   "n": 1,
+   "texto": "Entregar para validação: o caminho de sempre, só com um comentário"
+  },
+  {
+   "n": 2,
+   "texto": "Gerar RDM: quando a entrega é uma mudança no ambiente, abre o formulário da Requisição de Mudança"
+  }
+ ],
+ "r02-identificacao": [
+  {
+   "n": 1,
+   "texto": "Situação da RDM: Rascunho enquanto não for enviada"
+  },
+  {
+   "n": 2,
+   "texto": "Assunto: vira o título da RDM (\"RDM SGI 00001/2026 - Assunto\")"
+  },
+  {
+   "n": 3,
+   "texto": "Tipo: programada, pré-aprovada (rotineira) ou emergencial"
+  },
+  {
+   "n": 4,
+   "texto": "Requisitante, área e data já vêm preenchidos com os seus dados"
+  }
+ ],
+ "r03-objetivo": [
+  {
+   "n": 1,
+   "texto": "Objetivo: o que a mudança vai fazer"
+  },
+  {
+   "n": 2,
+   "texto": "Justificativa: por que ela é necessária"
+  },
+  {
+   "n": 3,
+   "texto": "Risco da mudança (alto, médio ou baixo)"
+  },
+  {
+   "n": 4,
+   "texto": "Impacto nos serviços (alto, médio ou baixo)"
+  }
+ ],
+ "r04-janela-plano": [
+  {
+   "n": 1,
+   "texto": "Início da janela de implantação (data e hora)"
+  },
+  {
+   "n": 2,
+   "texto": "Fim da janela"
+  },
+  {
+   "n": 3,
+   "texto": "Cada atividade do plano: o que será feito, quem faz e em que etapa"
+  },
+  {
+   "n": 4,
+   "texto": "Adicionar atividade: uma linha por passo, na ordem"
+  }
+ ],
+ "r05-rollback": [
+  {
+   "n": 1,
+   "texto": "Plano de retorno (rollback): como voltar ao estado anterior se algo der errado, quanto tempo leva e quem faz"
+  },
+  {
+   "n": 2,
+   "texto": "Justificativa do rollback"
+  }
+ ],
+ "r06-complementares": [
+  {
+   "n": 1,
+   "texto": "Informações complementares: vão num anexo do PDF da RDM"
+  },
+  {
+   "n": 2,
+   "texto": "Riscos identificados (e, logo abaixo, as medidas preventivas, a validação e os critérios de sucesso)"
+  }
+ ],
+ "r07-enviar": [
+  {
+   "n": 1,
+   "texto": "Salvar rascunho: guarda sem enviar (dá para continuar depois)"
+  },
+  {
+   "n": 2,
+   "texto": "Enviar para aprovação: a RDM ganha o número do Protocolo e a tarefa vai para Em validação"
+  }
+ ],
+ "r08-analisar": [
+  {
+   "n": 1,
+   "texto": "Analisar RDM: abre o formulário para ler e decidir (no lugar de Validar e Devolver)"
+  },
+  {
+   "n": 2,
+   "texto": "O selo amarelo: RDM aguardando aprovação, com o número e o assunto"
+  }
+ ],
+ "r09-decisao": [
+  {
+   "n": 1,
+   "texto": "Motivo: obrigatório para reprovar"
+  },
+  {
+   "n": 2,
+   "texto": "Reprovar: a tarefa volta para Em andamento com o motivo; não gera PDF"
+  },
+  {
+   "n": 3,
+   "texto": "Aprovar: gera o PDF, anexa à tarefa, envia o e-mail e a tarefa volta para Em andamento para executar a mudança"
+  }
+ ],
+ "r12-lista": [
+  {
+   "n": 1,
+   "texto": "Filtre pela situação"
+  },
+  {
+   "n": 2,
+   "texto": "Cada cor é uma situação: amarela aguardando, laranja aprovada, vermelha reprovada, verde concluída"
+  },
+  {
+   "n": 3,
+   "texto": "Clique no título da coluna para ordenar"
+  }
+ ],
+ "r10-aprovada": [
+  {
+   "n": 1,
+   "texto": "Aprovada (laranja): quem aprovou e quando"
+  },
+  {
+   "n": 2,
+   "texto": "Baixar PDF: o formulário da RDM no modelo da Prodesp (também anexado à tarefa e enviado por e-mail)"
+  }
+ ],
+ "r11-reprovada": [
+  {
+   "n": 1,
+   "texto": "Reprovada (vermelha)"
+  },
+  {
+   "n": 2,
+   "texto": "O motivo de quem reprovou: corrija o que foi pedido e envie de novo (o número continua o mesmo)"
+  }
+ ],
+ "r06b-prerequisitos": [
+  {
+   "n": 1,
+   "texto": "Marque os pré-requisitos já atendidos (backup, configurações registradas, equipes comunicadas…)"
+  }
+ ]
+}

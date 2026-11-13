@@ -1,12 +1,39 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para testar os grupos do Módulo RH: quem vê cada tela, a numeração das sequências e o grupo de cada URL.
+/**
+ * =============================================================================
+ * ARQUIVO: menu-rh.spec.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Testes unitários do menu do Módulo RH: quem vê cada tela, quais grupos
+ * são numerados e a que grupo pertence cada URL.
+ *
+ * RESUMO TÉCNICO:
+ * Usa Jasmine (describe/it/expect) sobre as funções puras gruposVisiveis e
+ * grupoDaRota de menu-rh.ts, variando os papéis do usuário (cgp, autorizador
+ * e nivel_rh da ACL). Não precisa de TestBed porque não há componente.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Protege a regra de visibilidade do RH: o servidor comum vê só o que é de
+ * todos; quem tem acesso ao recurso "rh" da ACL (controle de acesso) vê
+ * Setores e Cargos; só a CGP vê a entrada de pessoas; autorizadores veem o
+ * painel de aprovação; e a numeração só aparece em sequências reais.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Cobre menu-rh.ts, usado pelo inicio-rh.component.ts e pela sub-navegação
+ * do app-cabecalho-rh. Roda com "npx ng test".
+ *
+ * =============================================================================
+ */
 
 import { grupoDaRota, gruposVisiveis } from './menu-rh';
 import { PapeisRh } from './rh.models';
 
+/** Papéis de um servidor comum, sem acesso ao módulo nem papel de autorizador ou CGP. */
 const comum: PapeisRh = { cgp: false, autorizador: false, nivel_rh: null };
+/** Lista plana das rotas visíveis para os papéis, na ordem do menu. */
 const rotas = (p: PapeisRh): string[] => gruposVisiveis(p).flatMap((g) => g.telas.map((t) => t.rota));
 
+// describe agrupa os casos; cada it é um caso de teste com as suas expectativas (expect)
 describe('menu do RH', () => {
   it('quem não tem acesso ao módulo vê só o que é de todos', () => {
     expect(rotas(comum)).toEqual(['/rh/organograma', '/rh/ferias', '/rh/meu-cadastro', '/rh/feriados']);

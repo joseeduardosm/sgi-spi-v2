@@ -1,6 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar o cadastro e a consulta de usuários.
-"""Testes de usuários: cadastro pelo SuperRoot, proteções, listagem e o perfil institucional."""
+"""
+===============================================================================
+ARQUIVO: test_usuarios.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar o cadastro e a consulta de usuários pelo SuperRoot e as restrições
+do perfil institucional (revalidação mensal).
+
+RESUMO TÉCNICO:
+Usa `/api/usuarios` (criar, editar, excluir, listar com busca e paginação)
+e `/api/autenticacao/perfil` e `/sessao`. Confere códigos HTTP e o formato
+de erro `{"detalhe", "codigo"}`, o registro em `RegistroAuditoria`, a
+proteção da conta root e a origem `local_ldap` quando uma conta LDAP ganha
+senha local.
+
+FINALIDADE DE NEGÓCIO:
+Protege a gestão de acessos do órgão: só o SuperRoot (administrador geral)
+cria contas, a conta principal não pode ser apagada, toda exclusão fica
+auditada e todo servidor precisa manter o perfil (cargo, ramal, superior
+imediato) confirmado no mês, sob pena de ter o acesso restrito.
+
+CONTEXTO NO SISTEMA:
+Usa `criar_usuario`, `cabecalho` e `PERFIL_COMPLETO` de
+`tests/conftest.py`, os modelos `Usuario` e `RegistroAuditoria` e as rotas
+de usuários, setores e autenticação.
+
+===============================================================================
+"""
 
 from datetime import timedelta
 
@@ -18,6 +44,9 @@ def _nova_conta(cliente, admin, login="ana", **extra):
 
 
 # --- Cadastro pelo SuperRoot -------------------------------------------------
+# SuperRoot é o papel de administrador geral do SGI (coluna `superusuario`).
+# `cliente` e `admin` são fixtures de tests/conftest.py: o cliente HTTP de teste
+# e o cabeçalho de autenticação da conta root.
 
 def test_superroot_cria_conta_local(cliente, admin):
     """O SuperRoot cria uma conta local, que consegue fazer login."""
@@ -95,6 +124,8 @@ def test_usuario_comum_nao_administra(cliente, admin):
 
 
 # --- Perfil institucional e revalidação --------------------------------------
+# Todo usuário precisa manter o perfil (cargo, ramal, superior imediato...)
+# confirmado; enquanto não confirma, só as rotas do próprio perfil respondem.
 
 def test_perfil_incompleto_restringe_acesso(cliente):
     """Perfil incompleto: só as rotas do próprio perfil funcionam; as demais respondem 403."""
@@ -112,6 +143,7 @@ def test_perfil_incompleto_restringe_acesso(cliente):
 def test_opcoes_de_departamento_sao_os_setores_institucionais(cliente, admin):
     """O combobox "Departamento" lista os setores ativos e não sistêmicos, pai antes dos filhos."""
     def setor(nome, pai=None, **extras):
+        """Cria um setor pela API (opcionalmente filho de `pai`) e devolve o id."""
         r = cliente.post("/api/setores", json={"nome": nome, "setor_pai_id": pai, "membros_ids": [], **extras}, headers=admin)
         assert r.status_code == 201, r.text
         return r.json()["id"]

@@ -1,10 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para abrir chamados no GLPI em nome do usuário, com os dados do cadastro dele.
-"""Abertura de chamado pelo SGI.
+"""
+===============================================================================
+ARQUIVO: servico_chamados_glpi.py
+AUTOR: José Eduardo Santana Martins
 
-O usuário escreve só o assunto e a descrição; o resto vem do cadastro (nome, setor, superior imediato, e-mail, telefone,
-celular se houver, andar e lado). O chamado é criado no GLPI pela API REST, com o próprio usuário como solicitante
-(achado pelo login, depois pelo e-mail), e termina com a assinatura "Aberto pelo SGI".
+FINALIDADE:
+Abrir chamados no GLPI (sistema de chamados de TI) em nome do usuário, com os
+dados do cadastro dele, e listar os chamados que ele já abriu pelo SGI.
+
+RESUMO TÉCNICO:
+O usuário escreve só o assunto e a descrição; nome, setor, superior imediato,
+e-mail, telefone, celular, andar e lado vêm do cadastro. O chamado é criado
+pela API REST do GLPI (ClienteGlpi) com o próprio usuário como solicitante
+(achado pelo login, depois pelo e-mail) e assinatura "Aberto pelo SGI".
+Valida anexos (quantidade, extensão, tamanho e assinatura do conteúdo),
+limita 5 chamados por hora e grava cada abertura em ChamadoGlpi e na auditoria.
+
+FINALIDADE DE NEGÓCIO:
+Facilita pedir suporte de informática: o servidor não precisa preencher de
+novo os próprios dados nem conhecer o formulário do GLPI, e a TI recebe o
+chamado completo, no grupo e com os SLAs certos.
+
+CONTEXTO NO SISTEMA:
+Chamado pelas rotas de chamados GLPI. Usa a configuração de
+servico_integracao_glpi (tokens cifrados, grupo, SLAs, modelo), o cliente
+app.services.glpi.cliente_glpi, FORMATOS_GERAIS de servico_anexos e os
+valores pendentes do cadastro do RH (servico_cadastro).
+
+===============================================================================
 """
 
 import re
@@ -41,6 +63,7 @@ def validar_anexos(arquivos: list[tuple[str, bytes]]) -> list[tuple[str, bytes, 
         raise ErroApi(422, f"Anexe no máximo {MAXIMO_ANEXOS} arquivos.", "anexo_invalido")
     saida = []
     for nome, conteudo in arquivos:
+        # Path(...).name tira qualquer pasta do nome enviado; o nome é cortado em 120 caracteres.
         nome = Path(nome or "anexo").name[:120]
         extensao = Path(nome).suffix.lower()
         if extensao not in EXTENSOES_ANEXO:
@@ -50,6 +73,8 @@ def validar_anexos(arquivos: list[tuple[str, bytes]]) -> list[tuple[str, bytes, 
         if len(conteudo) > TAMANHO_MAXIMO_ANEXO:
             raise ErroApi(422, f"O arquivo {nome} passa de {TAMANHO_MAXIMO_ANEXO // (1024 * 1024)} MB.", "anexo_invalido")
         tipo, assinaturas = FORMATOS_GERAIS[extensao]
+        # Além da extensão, confere os primeiros bytes ("assinatura" do formato):
+        # um .exe renomeado para .pdf é recusado.
         if assinaturas and not any(conteudo.startswith(a) for a in assinaturas):
             raise ErroApi(422, f"O conteúdo de {nome} não corresponde a um arquivo {extensao[1:].upper()}.", "anexo_invalido")
         saida.append((nome, conteudo, tipo.split(";")[0]))
@@ -72,10 +97,13 @@ def dados_do_solicitante(sessao: Session, usuario: Usuario) -> DadosSolicitante:
     """
     from app.services.rh.servico_cadastro import valores_pendentes  # import local: o RH importa o serviço de usuários
 
+    # Os campos propostos e ainda não validados pela CGP (Coordenadoria de Gestão
+    # de Pessoas) entram na lista "aguardando" para a tela avisar.
     propostos = valores_pendentes(sessao, usuario.id)
     aguardando: list[str] = []
 
     def valor(campo: str) -> str:
+        """Valor do campo: o proposto (se houver e não for vazio) ou o do cadastro em vigor."""
         if campo in propostos and str(propostos[campo] or "").strip():
             aguardando.append(campo)
             return str(propostos[campo]).strip()
@@ -101,6 +129,8 @@ def dados_do_solicitante(sessao: Session, usuario: Usuario) -> DadosSolicitante:
 def montar_conteudo(assunto: str, descricao: str, local: str, dados: DadosSolicitante, sem_cadastro: bool = False) -> str:
     """HTML do chamado no formato do formulário "Informática" do GLPI (`1) Assunto`, `2) Descrição de Problema`, `3) Local do Problema`),
     seguido dos dados do solicitante e da assinatura "Aberto pelo SGI". Todo texto digitado é escapado."""
+    # escape() troca < > & por entidades HTML: impede que o texto digitado vire
+    # código HTML dentro do chamado.
     paragrafos = "\n".join(f"<p>{escape(linha)}</p>" for linha in descricao.splitlines() if linha.strip())
     formulario = (f"<p><b>1) Assunto</b>: {escape(assunto)}<br><b>2) Descrição de Problema</b>: {paragrafos}"
                   f"<br><b>3) Local do Problema</b>: {escape(local)}<br></p>")
@@ -117,6 +147,7 @@ def montar_conteudo(assunto: str, descricao: str, local: str, dados: DadosSolici
 def _exigir_limite(sessao: Session, usuario: Usuario) -> None:
     """Recusa (429) se o usuário já abriu `LIMITE_POR_HORA` chamados na última hora."""
     desde = agora_utc() - timedelta(hours=1)
+    # Conta os chamados abertos pelo usuário na última hora (tabela chamados_glpi).
     abertos = sessao.scalar(select(func.count()).select_from(ChamadoGlpi).where(ChamadoGlpi.usuario_id == usuario.id, ChamadoGlpi.aberto_em >= desde)) or 0
     if abertos >= LIMITE_POR_HORA:
         raise ErroApi(429, f"Você já abriu {LIMITE_POR_HORA} chamados na última hora. Aguarde um pouco ou acompanhe os que já abriu.", "limite_excedido")
@@ -128,9 +159,13 @@ def local_do_usuario(locais: list[tuple[int, str]], andar_lado: str) -> tuple[in
     Devolve (id da localização no GLPI ou None, texto do local). Sem a localização exata, tenta o andar; sem nenhuma, o chamado abre sem
     localização e o texto do cadastro vai no conteúdo.
     """
+    # Expressão regular: captura o número do andar e, se houver, a letra do lado.
+    # Texto fora desse formato vai como está (ou "Não informado").
     m = re.match(r"^(\d+)º andar(?: - (\w+))?$", (andar_lado or "").strip(), re.IGNORECASE)
     if not m:
         return None, (andar_lado or "").strip() or "Não informado"
+    # Os nomes no GLPI usam dois dígitos ("05º Andar"). Primeiro tenta andar + lado,
+    # depois só o andar.
     andar = f"{int(m.group(1)):02d}º Andar"
     por_nome = {nome: id_ for id_, nome in locais}
     candidatos = ([f"{andar} > Lado {m.group(2).upper()}"] if m.group(2) else []) + [andar]
@@ -144,14 +179,17 @@ def abrir(sessao: Session, usuario: Usuario, assunto: str, descricao: str, arqui
     """Cria o chamado no GLPI como o formulário "Informática" faz: título `<prefixo> | <assunto>`, usuário como requerente, grupo atribuído,
     SLAs, localização (a do cadastro do usuário) e conteúdo `1) Assunto … 2) Descrição … 3) Local`. Falha do GLPI vira 502 (o texto não se perde: a tela continua aberta)."""
     config = integracao.obter(sessao)
+    # Sem a integração ativa e configurada, responde 503 e a tela orienta abrir no GLPI.
     if not config.ativo or not (config.url_base and config.user_token_cifrado):
         raise ErroApi(503, "A abertura de chamados pelo SGI não está disponível no momento. Abra o chamado direto no GLPI.", "integracao_desativada")
+    # Ordem: valida anexos e o limite por hora antes de falar com o GLPI.
     anexos = validar_anexos(arquivos or [])
     _exigir_limite(sessao, usuario)
     dados = dados_do_solicitante(sessao, usuario)
     falhas: list[str] = []
     try:
         app_token, user_token = integracao.tokens(config)
+        # O "with" abre a sessão na API do GLPI e a encerra no fim (mesmo com erro).
         with ClienteGlpi(config.url_base, app_token, user_token) as glpi:
             # O local do problema é sempre o do cadastro do usuário (não é preenchido no modal)
             local_id, local = local_do_usuario(glpi.listar_localizacoes(), dados.andar_lado)
@@ -159,6 +197,7 @@ def abrir(sessao: Session, usuario: Usuario, assunto: str, descricao: str, arqui
             titulo = f"{config.prefixo_titulo} | {assunto}" if config.prefixo_titulo else assunto
             entrada: dict = {
                 "name": titulo, "content": montar_conteudo(assunto, descricao, local, dados, sem_cadastro=glpi_usuario is None),
+                # "type", "urgency" e "impact" seguem os códigos numéricos do GLPI.
                 "type": config.tipo_padrao, "urgency": config.urgencia_padrao, "impact": 3, "requesttypes_id": config.origem_id,
                 "entities_id": 0,
             }
@@ -193,6 +232,7 @@ def abrir(sessao: Session, usuario: Usuario, assunto: str, descricao: str, arqui
     except ErroGlpi as erro:
         raise ErroApi(502, f"Não foi possível abrir o chamado agora: {erro.mensagem} Seu texto foi mantido; tente de novo em instantes.", "glpi_indisponivel") from erro
     url = f"{config.url_base.rstrip('/')}/front/ticket.form.php?id={numero}"
+    # Só depois do GLPI aceitar: grava o chamado no SGI e na auditoria.
     sessao.add(ChamadoGlpi(usuario_id=usuario.id, glpi_id=numero, assunto=assunto, url=url))
     auditar(sessao, usuario.login, "chamado.abrir", f"Chamado GLPI #{numero}", f"{assunto} (local: {local}; anexos: {len(anexos) - len(falhas)}/{len(anexos)})", autor_id=usuario.id, alvo_tipo="chamado", alvo_id=str(numero))
     sessao.commit()

@@ -1,17 +1,38 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para criar a etapa "Retenção de Tributos" e guardar o XML da nota fiscal nas competências.
-"""execução: etapa de retenção de tributos e XML da nota fiscal
+"""
+===============================================================================
+ARQUIVO: 508822e8dedd_retencao_de_tributos.py
+AUTOR: José Eduardo Santana Martins
 
-- nova etapa `retencao` entre `nota_fiscal` e `cadin` (CHECK das etapas refeito);
-- XML da NF principal e da adicional (anexo, dados lidos e chave), retenção de CSLL;
-- quem conferiu a retenção, quando, e o PDF gerado; resultado dos e-mails da NF e da retenção.
+FINALIDADE:
+Criar a etapa "Retenção de Tributos" no fluxo de pagamento das competências e
+guardar o XML da nota fiscal (principal e adicional).
 
-Competências que já passaram da nota fiscal no fluxo antigo (retenções lançadas junto com a NF) ficam com a
-retenção dada como conferida na mesma data da NF.
+RESUMO TÉCNICO:
+- Nova etapa `retencao` entre `nota_fiscal` e `cadin` (CHECK das etapas refeito
+  com a lista nova).
+- Colunas em `contratos_competencias`: XML da NF principal e da adicional
+  (anexo, dados lidos e chave de acesso, com índice), retenção de CSLL, quem
+  conferiu a retenção e quando, PDF gerado, e o resultado dos e-mails da NF e
+  da retenção.
+- Competências que já passaram da NF no fluxo antigo ficam com a retenção dada
+  como conferida na mesma data da NF.
+
+FINALIDADE DE NEGÓCIO:
+O órgão precisa reter tributos (IR, CSLL etc.) sobre o valor da nota fiscal
+antes de pagar. A etapa própria garante que o Financeiro confira a retenção
+antes do CADIN (consulta de pendências da empresa com o setor público) e que o
+XML oficial da NF fique arquivado.
+
+CONTEXTO NO SISTEMA:
+Tabela `contratos_competencias` (fluxo de execução/pagamento), `anexos` e
+`usuarios`. Usado por `app/services/contratos/` (execução, documentos) e pela
+tela de execução do contrato.
 
 Revision ID: 508822e8dedd
 Revises: 7566f71dd5a5
 Create Date: 2026-09-25 19:00:00
+
+===============================================================================
 """
 
 from collections.abc import Sequence
@@ -26,8 +47,12 @@ down_revision: str | Sequence[str] | None = "7566f71dd5a5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# Tipo JSON que vira JSONB (binário e indexável) no PostgreSQL e JSON comum nos
+# outros bancos (SQLite dos testes).
 JSON = sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql")
 TABELA = "contratos_competencias"
+# Listas de etapas usadas no CHECK de `etapa_atual`, antes e depois desta
+# migração.
 ETAPAS_ANTIGAS = "'medicao', 'avaliacao', 'nota_fiscal', 'cadin', 'checklist', 'consolidado', 'ordem_bancaria', 'concluida'"
 ETAPAS_NOVAS = "'medicao', 'avaliacao', 'nota_fiscal', 'retencao', 'cadin', 'checklist', 'consolidado', 'ordem_bancaria', 'concluida'"
 # (coluna, tabela de destino, ação ao excluir)
@@ -39,8 +64,25 @@ CHAVES = (
 )
 
 
+# upgrade() aplica esta mudança no banco (alembic upgrade) e downgrade() a
+# desfaz (alembic downgrade), voltando à revisão anterior.
+#
+# As funções op.* do Alembic executam comandos de estrutura (DDL) no banco:
+# create_table, add_column, alter_column, create_index, drop_* etc.
+#
+# server_default é o valor padrão gravado pelo próprio banco; serve também para
+# preencher as linhas que já existiam quando a coluna é criada.
+#
+# op.execute() roda um comando SQL escrito à mão, em geral para ajustar ou
+# semear dados.
+#
+# sa.JSON().with_variant(JSONB, 'postgresql') usa o tipo JSONB (binário e
+# indexável) no PostgreSQL e JSON comum nos demais bancos, como o SQLite dos
+# testes.
 def upgrade() -> None:
-    """Colunas novas, chaves, índices, CHECK das etapas e a retenção das competências antigas."""
+    """Cria as colunas novas, as chaves estrangeiras, os índices, refaz o CHECK
+    das etapas e marca a retenção das competências antigas.
+    """
     colunas = [
         sa.Column("nf_retencao_csll", sa.Numeric(18, 2), server_default=sa.text("0"), nullable=False),
         sa.Column("nf_xml_anexo_id", sa.Uuid(), nullable=True),
@@ -64,12 +106,16 @@ def upgrade() -> None:
         sa.Column("email_retencao_destinatarios", JSON, server_default=sa.text("'[]'"), nullable=False),
         sa.Column("email_retencao_erro", sa.Text(), nullable=True),
     ]
+    # Colunas com server_default (0, false, '[]') já nascem preenchidas nas
+    # competências existentes; as demais ficam nulas.
     for coluna in colunas:
         op.add_column(TABELA, coluna)
     op.create_index("ix_contratos_competencias_nf_chave", TABELA, ["nf_chave"])
     op.create_index("ix_contratos_competencias_nf_adicional_chave", TABELA, ["nf_adicional_chave"])
     for coluna, destino, acao in CHAVES:
         op.create_foreign_key(f"{TABELA}_{coluna}_fkey", TABELA, destino, [coluna], ["id"], ondelete=acao)
+    # Um CHECK não pode ser alterado: apaga-se e cria-se de novo com a lista de
+    # etapas atualizada.
     op.drop_constraint("ck_contratos_competencias_etapa", TABELA, type_="check")
     op.create_check_constraint("ck_contratos_competencias_etapa", TABELA, f"etapa_atual IN ({ETAPAS_NOVAS})")
     # Fluxo antigo: as retenções foram lançadas junto com a NF; quem já passou da NF tem a retenção cumprida
@@ -80,7 +126,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Volta ao fluxo sem a etapa de retenção (quem está nela segue para o CADIN)."""
+    """Volta ao fluxo sem a etapa de retenção.
+
+    Quem está na etapa `retencao` avança para `cadin` antes de o CHECK
+    antigo voltar (senão a restrição falharia); depois remove chaves,
+    índices e colunas. Os XML e dados da retenção se perdem.
+    """
     op.execute(f"UPDATE {TABELA} SET etapa_atual = 'cadin' WHERE etapa_atual = 'retencao'")
     op.drop_constraint("ck_contratos_competencias_etapa", TABELA, type_="check")
     op.create_check_constraint("ck_contratos_competencias_etapa", TABELA, f"etapa_atual IN ({ETAPAS_ANTIGAS})")

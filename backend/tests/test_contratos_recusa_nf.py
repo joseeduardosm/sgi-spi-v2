@@ -1,6 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar a recusa da nota fiscal pelo Financeiro, o ciclo de nova nota e a trilha no consolidado.
-"""Recusa da NF na retenção: justificativa, e-mail com PDF à equipe e a todos os prepostos, etapa NF reaberta, ciclo ilimitado e consolidado."""
+"""
+===============================================================================
+ARQUIVO: test_contratos_recusa_nf.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar a recusa da nota fiscal pelo Financeiro na etapa de retenção, o
+ciclo de nova nota após a recusa e a trilha das notas no consolidado.
+
+RESUMO TÉCNICO:
+Usa o cenário de test_contratos_retencao.py (competência medida) e o
+SmtpSimulado de test_smtp.py para capturar e-mails. Confere: justificativa
+obrigatória (422) e permissão (403); a etapa nota_fiscal reaberta; o PDF da
+recusa (lido com pypdf); o e-mail com o PDF anexo para a equipe e todos os
+prepostos; o reenvio do e-mail; o ciclo ilimitado de recusas; e a ordem dos
+documentos no índice do PDF consolidado.
+
+FINALIDADE DE NEGÓCIO:
+Quando a nota fiscal vem com erro (ex.: ISS retido errado), o Financeiro a
+recusa com justificativa, a empresa é avisada (pelos prepostos, os
+representantes dela no contrato) e manda nova nota. Todo o histórico de
+notas recusadas fica registrado no consolidado (o PDF único que vai ao
+processo de pagamento).
+
+CONTEXTO NO SISTEMA:
+Rotas de execução do contrato (retencao/recusar, recusas, consolidado,
+cadin), servico de notificações por e-mail e geração de PDF. CADIN é o
+cadastro de inadimplentes consultado antes do pagamento.
+
+===============================================================================
+"""
 
 from io import BytesIO
 
@@ -9,6 +37,7 @@ from pypdf import PdfReader
 from tests.apoio_contratos import PDF, conferir_retencao, juntar_nf
 from tests.conftest import cabecalho
 from tests.test_contratos_retencao import _ambiente, cenario  # noqa: F401 — fixtures
+# SmtpSimulado: servidor SMTP falso que guarda as mensagens em uma lista, sem enviar e-mail de verdade.
 from tests.test_smtp import SmtpSimulado
 
 JUSTIFICATIVA = "Valor do ISS retido incorreto para o município do prestador."
@@ -23,6 +52,7 @@ def _prepostos(cliente, admin, contrato):
 
 
 def test_recusa_envia_email_com_pdf_a_equipe_e_prepostos_e_reabre_a_nf(cliente, admin, cenario):
+    """A recusa exige justificativa e permissão, reabre a etapa da NF, gera o PDF e manda e-mail a todos."""
     contrato, base, gestora = cenario
     _prepostos(cliente, admin, contrato)
     fin = cabecalho(cliente, "financeiro1")
@@ -58,6 +88,7 @@ def test_recusa_envia_email_com_pdf_a_equipe_e_prepostos_e_reabre_a_nf(cliente, 
 
 
 def test_ciclo_recusa_nova_nota_recusa_e_aprovacao_com_trilha_no_consolidado(cliente, admin, cenario):
+    """Duas recusas seguidas de aprovação: o checklist não se perde e o consolidado lista a trilha em ordem."""
     contrato, base, gestora = cenario
     fin = cabecalho(cliente, "financeiro1")
     # Antes da retenção, o checklist já fica pronto (corre em paralelo): a recusa não o apaga
@@ -98,6 +129,7 @@ def test_ciclo_recusa_nova_nota_recusa_e_aprovacao_com_trilha_no_consolidado(cli
 
 
 def test_recusa_so_com_a_retencao_aberta(cliente, admin, cenario):
+    """Só há recusa com a retenção aberta: antes da NF ou depois da conferência dá 400."""
     contrato, base, gestora = cenario
     fin = cabecalho(cliente, "financeiro1")
     # Antes da nota fiscal e depois da retenção conferida: não há o que recusar

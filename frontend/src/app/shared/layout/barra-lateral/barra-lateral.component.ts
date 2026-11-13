@@ -7,6 +7,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/ro
 import { filter } from 'rxjs';
 
 import { AutenticacaoService } from '../../../core/autenticacao/autenticacao.service';
+import { NovidadesVistasService } from '../../../core/changelog/novidades-vistas.service';
 import { ChamadoService } from '../../../core/chamados/chamado.service';
 import { AtalhosService } from '../../../core/navegacao/atalhos.service';
 import { MenuConfigService } from '../../../core/navegacao/menu-config.service';
@@ -37,6 +38,8 @@ export class BarraLateralComponent {
   protected readonly navegacao = inject(NavegacaoService);
   protected readonly autenticacao = inject(AutenticacaoService);
   protected readonly atalhos = inject(AtalhosService);
+  /** Bolinha do item Changelog: há novidade que o usuário ainda não abriu. */
+  protected readonly novidadesVistas = inject(NovidadesVistasService);
   /** Seção "Recentes" da barra: desativada temporariamente (os favoritos continuam). */
   protected readonly mostrarRecentes = false;
   private readonly menuConfig = inject(MenuConfigService);

@@ -1,5 +1,30 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para montar a regra de repetição de uma tarefa recorrente, com o resumo e as próximas datas calculados pela API.
+/**
+ * =============================================================================
+ * ARQUIVO: seletor-recorrencia.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Montar a regra de repetição de uma tarefa recorrente, com o resumo e as
+ * próximas datas calculados pela API.
+ *
+ * RESUMO TÉCNICO:
+ * Componente com input regra/prazo e output regraChange (o pai guarda a
+ * regra). Cada mudança da regra ou do prazo dispara, por um effect, um pedido
+ * de prévia; o Subject com debounceTime(250) junta mudanças rápidas e chama
+ * POST /api/tarefas/recorrencias/previa, que devolve o texto e as datas.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Deixa quem cria a rotina ver, antes de salvar, exatamente quando as tarefas
+ * vão nascer (incluindo a troca de fim de semana e feriado pelo próximo dia
+ * útil), evitando séries configuradas errado.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Usado na criação de tarefa e no modal de edição de recorrencias.component.ts.
+ * Usa regraPadrao e DIAS_SEMANA_CURTOS de tarefas.models.ts e o
+ * TarefasApiService. O cálculo real das datas é do backend.
+ *
+ * =============================================================================
+ */
 
 import { DatePipe } from '@angular/common';
 import { Component, effect, inject, input, OnDestroy, output, signal } from '@angular/core';
@@ -9,6 +34,7 @@ import { debounceTime, Subject, Subscription } from 'rxjs';
 import { TarefasApiService } from './tarefas-api.service';
 import { DIAS_SEMANA_CURTOS, FrequenciaRecorrencia, RegraRecorrencia, regraPadrao } from './tarefas.models';
 
+/** Texto da unidade mostrado no select "A cada N ...", por frequência. */
 const UNIDADES: Record<FrequenciaRecorrencia, string> = { diaria: 'dia(s)', semanal: 'semana(s)', mensal: 'mês(es)', anual: 'ano(s)' };
 
 /**
@@ -63,6 +89,11 @@ const UNIDADES: Record<FrequenciaRecorrencia, string> = { diaria: 'dia(s)', sema
 export class SeletorRecorrenciaComponent implements OnDestroy {
   /** Prazo da primeira tarefa (ISO ou valor do campo datetime-local): define a data inicial e o horário. */
   readonly prazo = input.required<string>();
+  /**
+   * Regra atual (`null` = não repete). `input()` recebe o valor do pai e
+   * `output()` (regraChange) devolve a nova regra; o componente nunca altera
+   * a regra sozinho, sempre emite uma cópia nova.
+   */
   readonly regra = input<RegraRecorrencia | null>(null);
   readonly regraChange = output<RegraRecorrencia | null>();
   readonly desabilitado = input(false);
@@ -74,9 +105,15 @@ export class SeletorRecorrenciaComponent implements OnDestroy {
   protected readonly resumo = signal('');
   protected readonly proximas = signal<string[]>([]);
   protected readonly erro = signal('');
+  // Pedidos de prévia: cada mudança empurra um aviso; debounceTime(250) junta
+  // mudanças seguidas (ex.: digitar "12") numa única chamada à API.
   private readonly pedidos = new Subject<void>();
   private readonly assinatura: Subscription = this.pedidos.pipe(debounceTime(250)).subscribe(() => this.atualizarPrevia());
 
+  /**
+   * `effect()` roda a função sempre que um signal lido dentro dela muda (aqui,
+   * `regra` e `prazo`), pedindo uma nova prévia.
+   */
   constructor() {
     // Qualquer mudança da regra ou do prazo recalcula a prévia
     effect(() => {
@@ -86,21 +123,29 @@ export class SeletorRecorrenciaComponent implements OnDestroy {
     });
   }
 
+  /** Cancela a inscrição dos pedidos de prévia ao sair. */
   ngOnDestroy(): void {
     this.assinatura.unsubscribe();
   }
 
+  /** Qual opção de término está marcada: deduzida de `fim` (data) ou `max_ocorrencias` (vezes). */
   protected termino(): 'nunca' | 'data' | 'vezes' {
     const r = this.regra();
     return r?.fim ? 'data' : r?.max_ocorrencias ? 'vezes' : 'nunca';
   }
 
+  /**
+   * Liga ou desliga a repetição. Ao ligar, a regra padrão usa o dia da semana
+   * do prazo. `getDay()` do JavaScript conta domingo = 0, mas a regra usa
+   * segunda = 0 ... domingo = 6; daí a conversão.
+   */
   protected ligar(ligado: boolean): void {
     if (!ligado) return this.regraChange.emit(null);
     const dia = new Date(this.prazo()).getDay();
     this.regraChange.emit(regraPadrao(dia === 0 ? 6 : dia - 1));
   }
 
+  /** Junta a alteração parcial à regra atual e emite a regra nova para o pai. */
   protected mudar(parcial: Partial<RegraRecorrencia>): void {
     const r = this.regra();
     if (!r) return;
@@ -113,6 +158,7 @@ export class SeletorRecorrenciaComponent implements OnDestroy {
     this.regraChange.emit(nova);
   }
 
+  /** Marca ou desmarca um dia da semana (mantém a lista ordenada). */
   protected alternarDia(dia: number): void {
     const r = this.regra();
     if (!r) return;
@@ -120,6 +166,10 @@ export class SeletorRecorrenciaComponent implements OnDestroy {
     this.regraChange.emit({ ...r, dias_semana: dias });
   }
 
+  /**
+   * Escolhe como a série termina. Para "Em" sugere a data do prazo + 3 meses
+   * (formato AAAA-MM-DD do campo date); para "Após" sugere 10 vezes.
+   */
   protected definirTermino(tipo: 'nunca' | 'data' | 'vezes'): void {
     const hoje = new Date(this.prazo());
     hoje.setMonth(hoje.getMonth() + 3);
@@ -127,6 +177,10 @@ export class SeletorRecorrenciaComponent implements OnDestroy {
     this.mudar({ fim: tipo === 'data' ? sugestao : null, max_ocorrencias: tipo === 'vezes' ? 10 : null });
   }
 
+  /**
+   * Pede à API o resumo em texto e as próximas datas. Em caso de regra
+   * inválida, mostra a mensagem `detalhe` devolvida pelo backend.
+   */
   private atualizarPrevia(): void {
     const r = this.regra();
     if (!r || !this.prazo()) { this.resumo.set(''); this.proximas.set([]); this.erro.set(''); return; }

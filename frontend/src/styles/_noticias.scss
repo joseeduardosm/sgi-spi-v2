@@ -1,5 +1,34 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para os estilos do portal de notícias (página inicial, arquivo, notícia) e da gestão editorial.
+/**
+ * =============================================================================
+ * ARQUIVO: _noticias.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do portal de notícias (layout público, página inicial com slider,
+ * cartões e atalhos, arquivo de notícias e leitura da notícia) e da gestão
+ * editorial (lista, situação, editor de texto, recorte da capa, prévia,
+ * histórico e configuração do portal).
+ *
+ * RESUMO TÉCNICO:
+ * O slider usa um trilho flex deslocado por transform (sem animação com
+ * prefers-reduced-motion) em proporção 2:1. Cartões em grade auto-fill;
+ * .chip-categoria e os chips de filtro recebem a cor da categoria pela
+ * variável --cor. .selo-noticia e .faixa-situacao usam data-situacao
+ * (em_revisao, aprovada, devolvida). .moldura-capa permite arrastar e dar
+ * zoom na imagem da capa. Quebras de layout em 980 px e 640 px.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dá à SPI um portal interno para divulgar notícias, avisos e atalhos aos
+ * servidores, e à equipe de comunicação o fluxo de redação, revisão e
+ * publicação com capa recortada no formato certo.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelo layout público do portal, pelas
+ * telas do Módulo Notícias (portal e gestão) e reaproveitado em outras telas
+ * (ex.: .largura-portal-noticias no Diretório, .grade-formulario.uma-coluna).
+ *
+ * =============================================================================
+ */
 
 /* --- Layout do portal para visitantes ------------------------------------------------------------ */
 .largura-portal-noticias { width: min(1280px, 100%); margin: 0 auto; padding: 0 16px; }
@@ -50,6 +79,7 @@
   
   aspect-ratio: 2 / 1;
 }
+/* Os slides ficam lado a lado no trilho; o componente troca de slide aplicando translateX(-N * 100%) */
 .trilho-slider { display: flex; height: 100%; transition: transform 0.45s var(--ease-move); }
 .slide {
   position: relative; flex: 0 0 100%; height: 100%; display: block; color: #fff; text-decoration: none;
@@ -76,6 +106,7 @@
 @media (prefers-reduced-motion: reduce) { .trilho-slider { transition: none; } }
 
 .chip-categoria {
+  /* --cor é a cor padrão; o template sobrescreve com a cor cadastrada da categoria ([style.--cor]) */
   --cor: #c82331;
   display: inline-block; padding: 3px 9px; border-radius: var(--spi-raio-m); color: #fff; background: var(--cor);
   font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; text-decoration: none;
@@ -212,6 +243,8 @@
   label small { grid-column: 2; color: #8e99a6; font-size: 11px; font-weight: 400; }
   label.ativo { border-color: var(--spi-vermelho); background: var(--cor-fff7f8); }
 }
+/* Recorte da capa: a imagem é arrastada/ampliada dentro da moldura 2:1 (transform calculado no componente);
+   no modo "inteira" a imagem cabe toda e o fundo é a mesma imagem desfocada. */
 .moldura-capa {
   position: relative; overflow: hidden; aspect-ratio: 2 / 1; border-radius: var(--spi-raio-m); background: #1b2330; cursor: grab; touch-action: none; user-select: none;
   &:active { cursor: grabbing; }

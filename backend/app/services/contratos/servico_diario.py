@@ -22,10 +22,11 @@ from sqlalchemy.orm import Session
 
 from app.services.tarefas.descricao import texto_da_descricao
 from app.core.banco import agora_utc
-from app.models.contratos import AnexoOcorrencia, Competencia, Contrato, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
+from app.models.contratos import AnexoOcorrencia, Competencia, Contrato, EmailSalvoDiario, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
 from app.models.usuario import Usuario
 from app.schemas.contratos.diario import (
     DiarioContrato,
+    EmailSalvoDiario as LeituraEmailSalvo,
     EnvioEmail,
     GravacaoOcorrencia,
     LeituraAnexoOcorrencia,
@@ -173,19 +174,44 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, dados: GravacaoOcorrencia
         registrada_por_id=autor.id, registrada_por_nome=autor.nome_completo or autor.login, registrada_por_papel=_papel(contrato, autor),
         criado_em=agora_utc(),
         glosas=[GlosaOcorrencia(item_id=g.item_id, descricao_item=itens[g.item_id].descricao, quantidade=g.quantidade) for g in dados.glosas],
+        # Quem recebe fica gravado para o reenvio repetir a mesma escolha (nulo = todos os prepostos ativos)
+        email_prepostos_ids=[str(i) for i in dados.prepostos_ids] if dados.prepostos_ids is not None else None,
+        email_adicionais=dados.emails_adicionais,
     )
     contrato.ocorrencias.append(ocorrencia)
+    _salvar_emails(contrato, dados.emails_adicionais)
     sessao.flush()
     auditar(
         sessao, autor.login, "contrato.diario.registrar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
         alvo_id=contrato.id,
         dados={"ocorrencia": ocorrencia.id, "data": dados.data_ocorrencia, "glosas": [{"item": str(g.item_id), "quantidade": g.quantidade} for g in dados.glosas],
-               "anexos": [nome for nome, _ in arquivos], "itens_avaliacao": dados.itens_avaliacao},
+               "anexos": [nome for nome, _ in arquivos], "itens_avaliacao": dados.itens_avaliacao, "emails_adicionais": dados.emails_adicionais},
     )
     from app.services.contratos import avisos
     avisos.ocorrencia_registrada(sessao, contrato, ocorrencia, autor)
     sessao.commit()
     return ocorrencia
+
+
+def _salvar_emails(contrato: Contrato, emails: list[str]) -> None:
+    """Guarda no contrato os e-mails adicionais ainda não salvos (já chegam em minúsculas e sem repetição)."""
+    salvos = {e.email for e in contrato.emails_salvos_diario}
+    for email in emails:
+        if email not in salvos:
+            contrato.emails_salvos_diario.append(EmailSalvoDiario(email=email, criado_em=agora_utc()))
+
+
+def remover_email_salvo(sessao: Session, contrato_id: uuid.UUID, email_id: int, autor: Usuario) -> None:
+    """Tira um e-mail da lista de salvos do contrato (quem pode editar o contrato). As ocorrências já registradas não mudam."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    salvo = next((e for e in contrato.emails_salvos_diario if e.id == email_id), None)
+    if salvo is None:
+        raise RegistroNaoEncontrado("E-mail salvo")
+    contrato.emails_salvos_diario.remove(salvo)
+    auditar(sessao, autor.login, "contrato.diario.remover_email_salvo", f"Contrato {contrato.numero}", salvo.email, autor_id=autor.id,
+            alvo_tipo="contrato", alvo_id=contrato.id, dados={"email": salvo.email})
+    sessao.commit()
 
 
 def registrar_pendencia_cadin(sessao: Session, contrato: Contrato, competencia: Competencia, consulta, autor: Usuario) -> OcorrenciaDiario:
@@ -239,6 +265,7 @@ def leitura(contrato: Contrato, ocorrencia: OcorrenciaDiario) -> LeituraOcorrenc
         competencia_rotulo=competencia.numero_competencia if competencia else None,
         competencia_afetada=f"{competencia.competencia:%Y-%m}" if competencia else None,
         # Só avisa quando a glosa chegou depois da conclusão (as anteriores já entraram na medição)
+        emails_adicionais=list(ocorrencia.email_adicionais or []),
         medicao_ja_concluida=bool(
             ocorrencia.possui_glosa and competencia and competencia.medicao_concluida_em
             and ocorrencia.criado_em > competencia.medicao_concluida_em
@@ -259,6 +286,7 @@ def diario(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> DiarioC
         competencias=[OpcaoCompetenciaDiario(identificador=f"{c.competencia:%Y-%m}", rotulo=c.numero_competencia, periodo_inicio=c.periodo_inicio,
                                              periodo_fim=c.periodo_fim, medicao_concluida=c.medicao_concluida_em is not None)
                       for c in sorted((c for c in contrato.competencias if c.tipo == "regular"), key=lambda c: c.competencia, reverse=True)],
+        emails_salvos=[LeituraEmailSalvo(id=e.id, email=e.email) for e in contrato.emails_salvos_diario],
     )
 
 

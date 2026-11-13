@@ -4,6 +4,7 @@
 import { DatePipe } from '@angular/common';
 import { RascunhoServidorComponent } from '../compartilhado/rascunho-servidor.component';
 import { OpcaoEmailComponent } from '../compartilhado/opcao-email.component';
+import { CampoEmailsAdicionaisComponent } from '../compartilhado/campo-emails-adicionais.component';
 import { Component, computed, DestroyRef, inject, input, OnInit, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -14,7 +15,7 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import { ExecucaoApiService } from '../compartilhado/execucao-api.service';
 import { ParametrosContratosService } from '../compartilhado/parametros-contratos.service';
-import { AnexoOcorrencia, DiarioContrato, OcorrenciaDiario } from '../compartilhado/contratos.models';
+import { AnexoOcorrencia, DiarioContrato, EmailSalvoDiario, OcorrenciaDiario } from '../compartilhado/contratos.models';
 import { paraDecimalApi, ROTULOS_PAPEL } from '../compartilhado/rotulos';
 import { EditorRicoComponent } from '../../contratacoes/editor-rico.component';
 import { DescricaoTarefaPipe } from '../../tarefas/descricao-tarefa.pipe';
@@ -30,6 +31,8 @@ interface RascunhoOcorrencia {
   impactaAvaliacao: boolean;
   itensMarcados: string[];
   enviarEmail: boolean;
+  /** Outros e-mails digitados (opcional: rascunhos antigos não têm). */
+  emailsAdicionais?: string[];
 }
 
 interface LinhaGlosa {
@@ -40,7 +43,7 @@ interface LinhaGlosa {
 /** Aba "Diário de bordo": a equipe relata ocorrências; cada uma é enviada por e-mail à equipe e ao preposto. */
 @Component({
   selector: 'app-aba-diario',
-  imports: [EsqueletoComponent, DescricaoTarefaPipe, EditorRicoComponent, FormsModule, DatePipe, OpcaoEmailComponent, ...PIPES_FORMATACAO, AvisoRascunhoComponent, RascunhoServidorComponent],
+  imports: [EsqueletoComponent, DescricaoTarefaPipe, EditorRicoComponent, FormsModule, DatePipe, OpcaoEmailComponent, CampoEmailsAdicionaisComponent, ...PIPES_FORMATACAO, AvisoRascunhoComponent, RascunhoServidorComponent],
   template: `
     <section class="cartao-dados diario" aria-labelledby="titulo-diario">
       <header>
@@ -145,7 +148,11 @@ interface LinhaGlosa {
             }
           </div>
           @if (erro()) { <p class="aviso-formulario erro" role="alert">{{ erro() }}</p> }
-          <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Registro e anexos à equipe e aos prepostos escolhidos" />
+          <app-opcao-email [(marcado)]="enviarEmail" [(selecionados)]="prepostosIds" [fonte]="fontePrepostos" rotuloLista="Prepostos" vazio="Nenhum preposto ativo com e-mail: só a equipe receberá." descricao="Registro e anexos à equipe, aos prepostos escolhidos e aos outros e-mails" />
+          <!-- Outros e-mails (além da equipe e dos prepostos): só faz sentido quando a ocorrência vai por e-mail -->
+          @if (enviarEmail()) {
+            <app-campo-emails-adicionais [(escolhidos)]="emailsAdicionais" [salvos]="diario()?.emails_salvos ?? []" (removerSalvo)="removerEmailSalvo($event)" />
+          }
           <div class="barra-envio-nf barra-medicao">
             <div class="texto-envio"><span class="dica-formulario">Ocorrências não podem ser editadas depois.</span></div>
             <button type="button" class="acao-secundaria" [disabled]="rascunhoServidor.salvando()" (click)="rascunhoServidor.salvar()" title="Salva este rascunho para a equipe do contrato ver e continuar">Salvar rascunho</button>
@@ -259,6 +266,8 @@ export class AbaDiarioComponent implements OnInit {
   // "Enviar por e-mail" começa desmarcado: só envia quem marcar
   protected readonly enviarEmail = signal(false);
   protected readonly prepostosIds = signal<(string | number)[] | null>(null);
+  /** Outros e-mails desta ocorrência (além da equipe e dos prepostos). Vão para a API em `emails_adicionais`. */
+  protected readonly emailsAdicionais = signal<string[]>([]);
   protected readonly fontePrepostos = () => this.execucao.gruposPrepostos(this.contratoId());
   protected readonly reenviando = signal<string | null>(null);
   protected readonly erro = signal<string | null>(null);
@@ -390,7 +399,7 @@ export class AbaDiarioComponent implements OnInit {
     if (!texto && !glosas.length && !itens.length && !this.possuiGlosa && !this.impactaAvaliacao) return null;
     return {
       data: this.data, competenciaAfetada: this.competenciaAfetada, descricao: this.descricao, possuiGlosa: this.possuiGlosa, glosas: this.glosas(),
-      impactaAvaliacao: this.impactaAvaliacao, itensMarcados: itens, enviarEmail: this.enviarEmail(),
+      impactaAvaliacao: this.impactaAvaliacao, itensMarcados: itens, enviarEmail: this.enviarEmail(), emailsAdicionais: this.emailsAdicionais(),
     };
   }
 
@@ -414,6 +423,7 @@ export class AbaDiarioComponent implements OnInit {
     this.impactaAvaliacao = r.impactaAvaliacao;
     this.itensMarcados.set(new Set(r.itensMarcados ?? []));
     this.enviarEmail.set(!!r.enviarEmail);
+    this.emailsAdicionais.set(r.emailsAdicionais ?? []);
     this.formularioAberto.set(true);
   }
 
@@ -442,6 +452,7 @@ export class AbaDiarioComponent implements OnInit {
     this.data = this.hoje;
     this.competenciaEscolhida = false;
     this.enviarEmail.set(false);
+    this.emailsAdicionais.set([]);
     this.sugerirCompetencia();
   }
 
@@ -527,6 +538,8 @@ export class AbaDiarioComponent implements OnInit {
       itens_avaliacao: this.impactaAvaliacao ? [...this.itensMarcados()] : [],
       enviar_email: this.enviarEmail(),
       prepostos_ids: this.enviarEmail() ? (this.prepostosIds() as string[] | null) : null,
+      // Sem "Enviar por e-mail" não há a quem mandar: a lista vai vazia (a API também descarta)
+      emails_adicionais: this.enviarEmail() ? this.emailsAdicionais() : [],
     };
     this.api
       .registrarOcorrencia(this.contratoId(), dados, this.arquivos())
@@ -548,6 +561,24 @@ export class AbaDiarioComponent implements OnInit {
           this.dialogos.mostrarErro(e, 'Não foi possível registrar a ocorrência');
         },
       });
+  }
+
+  /**
+   * Tira um e-mail da lista de "Usados antes neste contrato". Pede confirmação porque vale para
+   * todas as próximas ocorrências do contrato (as já registradas não mudam).
+   */
+  protected async removerEmailSalvo(salvo: EmailSalvoDiario): Promise<void> {
+    const confirmou = await this.dialogos.confirmar({
+      titulo: 'Remover e-mail da lista do contrato',
+      mensagem: `${salvo.email} deixa de aparecer em "Usados antes neste contrato". As ocorrências já registradas não mudam.`,
+      rotuloConfirmar: 'Remover', perigo: true,
+    });
+    if (!confirmou) return;
+    this.api.removerEmailSalvoDiario(this.contratoId(), salvo.id).subscribe({
+      // Atualiza só a lista na tela, sem recarregar o diário inteiro
+      next: () => this.diario.update((d) => (d ? { ...d, emails_salvos: d.emails_salvos.filter((e) => e.id !== salvo.id) } : d)),
+      error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível remover o e-mail da lista'),
+    });
   }
 
   protected reenviar(ocorrencia: OcorrenciaDiario): void {

@@ -2,6 +2,8 @@
 
 **Leia e siga `AGENTS.md`**: código em pt-BR (nomes e comentários), documentação obrigatória da API e escopo.
 
+- **Cabeçalho e comentários (obrigatório):** todo arquivo de programação (`.py`, `.ts`, `.html`, `.scss`, `.sh`, `.mjs`, `.js`) começa com o bloco ARQUIVO/AUTOR/FINALIDADE/RESUMO TÉCNICO/FINALIDADE DE NEGÓCIO/CONTEXTO NO SISTEMA, e os comentários são didáticos, no nível de um estagiário. Modelos e regras em "Cabeçalho obrigatório e comentários didáticos" no `AGENTS.md`; o teste `test_cabecalho_arquivos.py` confere.
+
 - **Regra de negócio: NUNCA crie ou altere sem perguntar.** Como o sistema escolhe, calcula, prioriza, ordena, bloqueia, atribui ou classifica algo é decisão minha. Quando surgir essa necessidade (inclusive ao explicar um comportamento estranho), explique a regra atual, proponha 2 ou 3 alternativas com a recomendação e **espere eu escolher** antes de escrever código.
 
 - **Elemento ou tela que ainda não existe no SGI:** se não houver tela equivalente para copiar, **não implemente direto**. Consulte as referências da seção "Referências para elementos novos" do `DESIGN.md`, proponha 2 ou 3 opções e **espere eu escolher** antes de escrever código.
@@ -10,6 +12,7 @@
 
 - Backend FastAPI em `backend/` (venv em `backend/.venv`, testes `backend/.venv/bin/pytest -q -n 8`, em paralelo; evite rodar a suíte inteira sem necessidade, prefira os testes afetados). Frontend Angular em `frontend/` (`npx ng test --watch=false`, `npx ng build`).
 - **Regra obrigatória:** toda criação, alteração ou remoção de endpoint, parâmetro, schema, resposta, código HTTP, autenticação/autorização ou funcionalidade consumida pelo frontend deve atualizar `docs/` (em português) **na mesma alteração**. Siga o modelo de `docs/endpoints/autenticacao.md` e o índice de `docs/api.md`. Atualize também `test_openapi_documenta_endpoints`.
+- **Changelog do usuário final (tela "Changelog", obrigatório):** toda mudança de **negócio** (o que muda no trabalho de quem usa: tela, regra, fluxo, documento gerado) ganha, **na mesma alteração**, a notícia do dia em `frontend/src/app/features/changelog/novidades.ts`, em linguagem de usuário (sem rotas, migrações, arquivos ou termos técnicos), e a data em `frontend/src/app/core/changelog/ultima-novidade.ts`. Mudança só técnica (refatoração, script, infraestrutura, teste) não entra. É diferente do `CHANGELOG.md` técnico abaixo.
 - **CHANGELOG, BookStack e GitHub (commit/push) só quando o usuário mandar**; até lá, as alterações ficam no working tree e o foco é o que foi pedido (ver `AGENTS.md`).
 - Fluxo: implementação → endpoint → schemas e regras → docs/ → OpenAPI (summary, description, response_model, responses) → Angular → testes.
 

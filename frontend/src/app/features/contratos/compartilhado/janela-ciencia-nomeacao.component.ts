@@ -1,5 +1,30 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para pedir a ciência de quem foi nomeado em uma portaria de designação (modal ao entrar no sistema).
+/**
+ * =============================================================================
+ * ARQUIVO: janela-ciencia-nomeacao.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Pedir a ciência de quem foi nomeado em uma portaria de designação de
+ * contrato, por meio de uma janela (modal) que aparece ao usar o sistema.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido. Busca as ciências pendentes
+ * na API ao iniciar e a cada navegação (eventos NavigationEnd do Router),
+ * mostra a primeira não adiada e registra a ciência no "Sim". As adiadas
+ * ficam num Set em memória; o parâmetro ?ciencia= na URL reabre uma delas.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * A designação de gestor e fiscais de contrato só se completa com a ciência
+ * do servidor nomeado. A janela garante que a pessoa seja avisada mesmo sem
+ * acesso ao módulo de contratos, e registra quem deu ciência e quando.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Fica no layout autenticado (vale para todas as telas). Usa
+ * PortariasApiService (ciencias, darCiencia); o aviso no sino de
+ * notificações aponta para cá com ?ciencia=<id da portaria>.
+ *
+ * =============================================================================
+ */
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -42,13 +67,17 @@ export class JanelaCienciaNomeacaoComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   private readonly roteador = inject(Router);
 
+  /** Nomeações do usuário logado aguardando ciência, como vieram da API. */
   private readonly pendentes = signal<CienciaPendente[]>([]);
   /** Portarias adiadas nesta sessão (não reabrem a cada navegação). */
   private readonly adiadas = signal<Set<string>>(new Set());
+  /** Chamada de registro da ciência em andamento (trava os botões). */
   protected readonly ocupado = signal(false);
+  /** Nomeação exibida agora: a primeira pendente que não foi adiada nesta sessão (ou nenhuma). */
   protected readonly atual = computed(() => this.pendentes().find((c) => !this.adiadas().has(c.portaria_id)) ?? null);
 
   constructor() {
+    // `takeUntilDestroyed()` encerra a assinatura sozinho quando o componente é destruído (evita vazamento de memória).
     // Confere de novo a cada navegação, para a janela aparecer logo depois de o pedido de ciência ser gerado
     this.roteador.events.pipe(filter((e) => e instanceof NavigationEnd), takeUntilDestroyed()).subscribe(() => {
       // Abrir o aviso do sino (link com ?ciencia=<portaria>) reabre o pedido de ciência que tinha sido adiado
@@ -58,18 +87,25 @@ export class JanelaCienciaNomeacaoComponent implements OnInit {
     });
   }
 
+  /** Primeira busca, ao montar o componente. */
   ngOnInit(): void {
     this.carregar();
   }
 
+  /** Busca as ciências pendentes; um erro aqui é ignorado para não atrapalhar o uso do sistema. */
   private carregar(): void {
     this.api.ciencias().subscribe({ next: (lista) => this.pendentes.set(lista), error: () => undefined });
   }
 
+  /**
+   * "Ainda não": só esconde a janela nesta sessão; nada é gravado e a nomeação continua pendente.
+   * Cria um Set novo para o signal perceber a mudança.
+   */
   protected adiar(c: CienciaPendente): void {
     this.adiadas.update((s) => new Set(s).add(c.portaria_id));
   }
 
+  /** "Sim, estou ciente": registra a ciência na API, que devolve a lista atualizada de pendências. */
   protected ciente(c: CienciaPendente): void {
     this.ocupado.set(true);
     this.api.darCiencia(c.portaria_id).subscribe({

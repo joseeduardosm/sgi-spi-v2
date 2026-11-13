@@ -1,11 +1,29 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para padronizar as respostas de erro das rotas e a documentação delas no OpenAPI.
-"""Respostas de erro padronizadas, reutilizadas pelas rotas e pelo OpenAPI.
+"""
+===============================================================================
+ARQUIVO: respostas.py
+AUTOR: José Eduardo Santana Martins
 
-Dois tipos de coisa moram aqui:
-- funções que criam erros (`erro_regra`, `nao_encontrado`), usadas dentro das rotas;
-- dicionários que descrevem os erros possíveis de cada rota (`CONFLITO`, `INVALIDO`...), passados
-  no parâmetro `responses=` dos decoradores para aparecerem na documentação Swagger.
+FINALIDADE:
+Padroniza as respostas de erro das rotas e a documentação desses erros no
+OpenAPI (Swagger).
+
+RESUMO TÉCNICO:
+Dois tipos de coisa moram aqui: - funções que criam erros (erro_regra,
+nao_encontrado), usadas dentro das rotas e levantadas como ErroApi; -
+dicionários que descrevem os erros possíveis de cada rota (VALIDACAO,
+RESPOSTAS_AUTENTICADAS, INVALIDO, CONFLITO e resposta_nao_encontrado), passados
+no parâmetro responses= dos decoradores.
+
+FINALIDADE DE NEGÓCIO:
+O frontend e as integrações recebem sempre o mesmo formato de erro, com
+mensagem em português e um código estável, e a documentação da API mostra quais
+erros cada operação pode devolver.
+
+CONTEXTO NO SISTEMA:
+Usa app/core/erros.py (ErroApi) e os schemas de erro de app/schemas/comum.py.
+Importado pelos arquivos de app/api/routes.
+
+===============================================================================
 """
 
 from fastapi import status
@@ -26,6 +44,9 @@ def nao_encontrado(o_que: str) -> ErroApi:
     return ErroApi(status.HTTP_404_NOT_FOUND, f"{o_que} não encontrado.", "nao_encontrado")
 
 
+# Os dicionários abaixo seguem o formato do parâmetro `responses=` do FastAPI:
+# {código HTTP: {"model": schema do corpo, "description": texto do Swagger}}.
+# Eles só documentam; quem gera o erro de fato é o `ErroApi` levantado na rota.
 # Erro 422 (dados fora do formato), presente em toda rota que recebe dados
 VALIDACAO = {status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": RespostaErroValidacao, "description": "Dados inválidos (`codigo = validacao`)."}}
 

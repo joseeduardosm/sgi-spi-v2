@@ -1,7 +1,7 @@
 @let d = detalhe();
 <section class="cartao-dados" aria-labelledby="titulo-medicao">
   <header>
-    <div><h2 id="titulo-medicao">Medição do serviço</h2><small>{{ detalhe().tipo === 'regular' ? 'Prevista: pró-rata 30/360 nos itens com pró-rata; sob demanda pela previsão.' : 'Quantidades já medidas desde o mês de referência do reajuste; valor unitário = preço reajustado − preço pago.' }}</small></div>
+    <div><h2 id="titulo-medicao">Medição do serviço</h2><small>{{ detalhe().tipo === 'regular' ? 'Prevista: pró-rata 30/360 nos itens com pró-rata; sob demanda pela previsão.' : detalhe().diferenca_manual ? 'Valor da diferença informado manualmente para meses pagos fora do sistema (quantidade 1).' : 'Quantidades já medidas desde o mês de referência do reajuste; valor unitário = preço reajustado − preço pago.' }}</small></div>
     @if (d.medicao_concluida_em) { <span class="selo-situacao">Concluída em {{ d.medicao_concluida_em | date: 'dd/MM/yyyy HH:mm' }}</span> }
     @else if (alterado()) { <span class="selo-situacao alerta">Alterações não salvas</span> }
     @if (editavel() && detalhe().tipo === 'regular') { <button type="button" class="acao-secundaria" (click)="usarPrevista()">Usar o saldo líquido</button> }
@@ -11,7 +11,7 @@
   @if (rascunhoRestaurado(); as r) { <div class="corpo"><app-aviso-rascunho [salvoEm]="r.salvoEm" observacao="A medição ainda não está salva: confira e salve." (descartar)="descartarRascunho()" /></div> }
   <!-- Resumo: o que importa de relance, antes e depois de salvar -->
   <div class="resumo-medicao" aria-label="Resumo da medição">
-    <div><span>Total medido</span><strong>{{ total() | moeda }}</strong>@if (+d.desconto_reajuste > 0) { <small>após o desconto: {{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</small> }</div>
+    <div><span>Total medido</span><strong>{{ total() | moeda }}</strong>@if (+d.desconto_reajuste > 0) { <small>após os créditos: {{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</small> }</div>
     <div [class.alerta]="notas().length > 0 && saldoNotas() < total()" [class.ok]="notas().length > 0 && saldoNotas() >= total()">
       <span>Saldo livre das NEs</span><strong>{{ saldoNotas() | moeda }}</strong>
       <small>{{ !notas().length ? 'nenhuma NE selecionada' : saldoNotas() >= total() ? 'cobre o total medido' : 'não cobre o total medido' }}</small></div>
@@ -68,14 +68,19 @@
           <tr><td colspan="9">Total medido</td><td class="num"><span class="valor-com-copia"><app-botao-copiar class="copiar-extenso" [valor]="extenso(total())" titulo="Copiar o valor por extenso" tamanho="pequeno" />{{ total() | moeda }}</span></td></tr>
         }
         @if (+d.desconto_reajuste > 0) {
-          <!-- Crédito de um reajuste com desconto retroativo: abatido do valor autorizado desta competência -->
-          <tr class="linha-desconto-reajuste">
-            <td colspan="9">Desconto de reajuste
-              @for (x of d.descontos_reajuste; track x.reajuste_id) { <small>(crédito do reajuste com referência {{ x.mes_referencia | competencia }})</small> }
-            </td>
-            <td class="num">− {{ d.desconto_reajuste | moeda }}</td>
-          </tr>
-          <tr><td colspan="9">Valor após o desconto</td><td class="num"><span class="valor-com-copia"><app-botao-copiar class="copiar-extenso" [valor]="extenso(total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0)" titulo="Copiar o valor por extenso" tamanho="pequeno" /><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></span></td></tr>
+          <!-- Créditos de reajuste/repactuação que o gestor aplicou nesta medição: abatidos do valor autorizado -->
+          @for (x of d.descontos_reajuste; track x.id) {
+            <tr class="linha-desconto-reajuste">
+              <td colspan="9">{{ x.rotulo }}
+                @if (editavel() && !d.medicao_concluida_em) {
+                  <button type="button" class="acao-secundaria acao-pequena" style="margin-left: 10px" [class.carregando]="creditoEmAndamento() === x.id" [disabled]="!!creditoEmAndamento()"
+                          (click)="alternarCredito(x.id, false)">Retirar</button>
+                }
+              </td>
+              <td class="num">− {{ x.valor | moeda }}</td>
+            </tr>
+          }
+          <tr><td colspan="9">Valor após os créditos</td><td class="num"><span class="valor-com-copia"><app-botao-copiar class="copiar-extenso" [valor]="extenso(total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0)" titulo="Copiar o valor por extenso" tamanho="pequeno" /><strong>{{ (total() - +d.desconto_reajuste > 0 ? total() - +d.desconto_reajuste : 0) | moeda }}</strong></span></td></tr>
         }
       </tfoot>
     </table>
@@ -92,6 +97,33 @@
         }
       </ul>
     </details>
+  }
+
+  <!-- Créditos do fundo do contrato (descontos retroativos de reajuste/repactuação): o gestor aplica cada um, inteiro, ou não -->
+  @if (creditosDisponiveis().length) {
+    <div class="corpo">
+      <p class="secao-formulario" style="margin-top: 0">Créditos disponíveis</p>
+      <p class="dica-formulario">Créditos da SPI ainda não aplicados. Nenhum é abatido sozinho: aplique o crédito inteiro nesta medição ou deixe-o para outra. Se passar do valor da medição, a sobra volta ao fundo.</p>
+      <ul class="lista-ciencias">
+        @for (c of creditosDisponiveis(); track c.id) {
+          <li>
+            <span>{{ c.rotulo }} · <strong>{{ c.valor | moeda }}</strong>
+              @if (c.manual) { <br /><small class="dica-formulario">{{ c.observacao }}</small> }
+            </span>
+            @if (editavel()) {
+              <span class="acoes-linha">
+                <button type="button" class="acao-secundaria acao-pequena" [class.carregando]="creditoEmAndamento() === c.id" [disabled]="!!creditoEmAndamento() || alterado()"
+                        [title]="alterado() ? 'Salve a medição antes de aplicar o crédito' : ''" (click)="alternarCredito(c.id, true)">Aplicar nesta medição</button>
+              </span>
+            }
+          </li>
+        }
+      </ul>
+    </div>
+  }
+  <!-- Observação das diferenças informadas manualmente (complementar manual e créditos manuais aplicados), como sai nos documentos -->
+  @for (texto of observacoesManuais(); track texto) {
+    <div class="corpo"><p class="aviso-bloco informativo"><b>Observação:</b> {{ texto }}</p></div>
   }
 
   <div class="corpo">

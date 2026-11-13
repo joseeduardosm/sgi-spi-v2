@@ -1,12 +1,35 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir as tabelas do Módulo RH (cadastro validado pela CGP, férias e licença-prêmio).
-"""Módulo RH.
+"""
+===============================================================================
+ARQUIVO: rh.py
+AUTOR: José Eduardo Santana Martins
 
-- `AlteracaoCadastral`: cada campo do perfil alterado pelo usuário fica pendente até a CGP (Coordenadoria
-  de Gestão de Pessoas) validar ou recusar (com correção). É também o histórico do cadastro.
-- `DadosFuncionais`: campos exclusivos da CGP, invisíveis ao usuário (autorizador, substituto, saldos).
-- `Afastamento` e `EventoAfastamento`: férias e licença-prêmio, com o histórico de status.
-- `ParametrosRh`: regras de agendamento, editáveis pela CGP (linha única).
+FINALIDADE:
+Definir as tabelas do Módulo RH: alterações cadastrais validadas pela CGP,
+dados funcionais, férias e licença-prêmio, períodos aquisitivos,
+parâmetros de agendamento e feriados.
+
+RESUMO TÉCNICO:
+- AlteracaoCadastral: cada campo do perfil alterado pelo usuário fica
+  pendente até a CGP validar ou recusar (com correção); é também o histórico.
+- DadosFuncionais: campos exclusivos da CGP (autorizador, substituto,
+  jornada, horários, documentos, saldo de LP).
+- Afastamento e EventoAfastamento: férias e licença-prêmio com histórico.
+- PeriodoAquisitivo: 12 meses de férias, com crédito e expiração.
+- ParametrosRh (linha única) e Feriado (um por data).
+CheckConstraints no banco garantem os valores válidos de status e datas.
+
+FINALIDADE DE NEGÓCIO:
+Apoiar a Coordenadoria de Gestão de Pessoas (CGP): manter o cadastro do
+servidor confiável, controlar o agendamento de férias e licença-prêmio com
+as regras do órgão e registrar quem aprovou cada afastamento.
+
+CONTEXTO NO SISTEMA:
+Usado pelos serviços do RH (servico_afastamentos e afins), pelas rotas do
+módulo RH e pelos schemas de schemas/rh.py. ParametrosRh aponta setores e o
+tipo de documento do Protocolo usado na resolução de nomeação. Os feriados
+também entram no cálculo de dias úteis do SLA.
+
+===============================================================================
 """
 
 import uuid
@@ -17,17 +40,30 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.banco import Base, agora_utc
 
+# Valores permitidos nas colunas de status e tipo. As tuplas são repetidas no banco pelos
+# CheckConstraint de cada tabela (montados com `_lista`), então valem também fora da API.
+# "substituida": a proposta pendente perdeu a vez antes da análise da CGP (outra alteração do
+# mesmo campo foi registrada, ou o usuário voltou o campo ao valor em vigor).
 STATUS_ALTERACAO = ("pendente", "validada", "recusada", "substituida")
 TIPOS_AFASTAMENTO = ("ferias", "licenca_premio")
 STATUS_AFASTAMENTO = ("pendente", "aprovado", "recusado", "cancelado", "gozado")
 
 
 def _lista(valores: tuple[str, ...]) -> str:
+    """Monta o trecho SQL `'a', 'b', 'c'` usado dentro de `IN (...)` nos CheckConstraint.
+
+    Ex.: `_lista(("ferias", "licenca_premio"))` devolve `"'ferias', 'licenca_premio'"`.
+    """
     return ", ".join(f"'{v}'" for v in valores)
 
 
 class AlteracaoCadastral(Base):
-    """Alteração de um campo do perfil: proposta pelo usuário e analisada pela CGP."""
+    """Alteração de um campo do perfil: proposta pelo usuário e analisada pela CGP.
+
+    CGP = Coordenadoria de Gestão de Pessoas (o RH da SPI). A linha guarda o valor anterior e o
+    proposto; na recusa, a CGP pode informar `valor_corrigido` e a justificativa. Como nada é
+    apagado, a tabela também serve de histórico do cadastro.
+    """
     __tablename__ = "rh_alteracoes_cadastrais"
     __table_args__ = (
         CheckConstraint(f"status IN ({_lista(STATUS_ALTERACAO)})", name="ck_rh_alteracoes_cadastrais_status"),
@@ -53,8 +89,13 @@ class AlteracaoCadastral(Base):
 
 
 class DadosFuncionais(Base):
-    """Campos exclusivos da CGP (o usuário não vê): autorizador de férias/LP, substituto, período aquisitivo e saldo de LP."""
+    """Campos exclusivos da CGP (o usuário não vê): autorizador de férias/LP, substituto, período aquisitivo e saldo de LP.
+
+    LP = licença-prêmio. Uma linha por usuário (a chave primária é o próprio usuario_id).
+    """
     __tablename__ = "rh_dados_funcionais"
+    # Regras no banco: dia/mês do início aquisitivo formam uma data possível (fevereiro até 29),
+    # jornada entre 1 e 80 horas e, nos horários, início e fim preenchidos juntos ou ambos vazios
     __table_args__ = (
         CheckConstraint(
             "(inicio_aquisitivo_dia IS NULL AND inicio_aquisitivo_mes IS NULL) OR "
@@ -99,7 +140,11 @@ class DadosFuncionais(Base):
 
 
 class Afastamento(Base):
-    """Férias ou licença-prêmio agendada por um usuário."""
+    """Férias ou licença-prêmio agendada por um usuário.
+
+    Fluxo de status: pendente → aprovado ou recusado; depois pode virar cancelado ou gozado.
+    Cada mudança gera um `EventoAfastamento`. `exercicio` é o ano a que o pedido se refere.
+    """
     __tablename__ = "rh_afastamentos"
     __table_args__ = (
         CheckConstraint(f"tipo IN ({_lista(TIPOS_AFASTAMENTO)})", name="ck_rh_afastamentos_tipo"),
@@ -132,13 +177,15 @@ class Afastamento(Base):
     # Alteração: o novo pedido aponta o anterior (cancelado quando o novo é aprovado)
     substitui_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rh_afastamentos.id", ondelete="SET NULL"))
 
+    # `relationship` não cria coluna: dá acesso à lista de eventos (afastamento.eventos), já em
+    # ordem cronológica; `cascade="all, delete-orphan"` apaga os eventos junto com o afastamento
     eventos: Mapped[list["EventoAfastamento"]] = relationship(
         back_populates="afastamento", cascade="all, delete-orphan", order_by="EventoAfastamento.ocorrido_em"
     )
 
 
 class EventoAfastamento(Base):
-    """Mudança de status de um afastamento (histórico)."""
+    """Mudança de status de um afastamento (histórico): de qual status, para qual, quem e quando."""
     __tablename__ = "rh_afastamentos_eventos"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -154,7 +201,11 @@ class EventoAfastamento(Base):
 
 
 class PeriodoAquisitivo(Base):
-    """Período aquisitivo de férias (12 meses): os dias creditados no início valem até o fim e depois expiram."""
+    """Período aquisitivo de férias (12 meses): os dias creditados no início valem até o fim e depois expiram.
+
+    `origem`: "automatico" (gerado pelo sistema a partir do início aquisitivo dos dados
+    funcionais) ou "ajuste_cgp" (criado ou corrigido manualmente pela CGP).
+    """
     __tablename__ = "rh_periodos_aquisitivos"
     __table_args__ = (
         UniqueConstraint("usuario_id", "inicio", name="uq_rh_periodos_aquisitivos_usuario_inicio"),
@@ -176,7 +227,11 @@ class PeriodoAquisitivo(Base):
 
 
 class ParametrosRh(Base):
-    """Regras de agendamento (linha única, id = 1), editáveis pela CGP."""
+    """Regras de agendamento (linha única, id = 1), editáveis pela CGP.
+
+    Os serviços do RH leem estes valores ao validar cada pedido de férias ou licença-prêmio
+    (mínimo de dias, dia da semana vedado, antecedência, prazo para cancelar etc.).
+    """
     __tablename__ = "rh_parametros"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
@@ -209,12 +264,17 @@ class ParametrosRh(Base):
     atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+# Classificação dos dias sem expediente cadastrados pela CGP
 TIPOS_FERIADO = ("feriado", "ponto_facultativo")
 ABRANGENCIAS_FERIADO = ("nacional", "estadual", "municipal")
 
 
 class Feriado(Base):
-    """Feriado ou ponto facultativo (um por data), cadastrado pela CGP."""
+    """Feriado ou ponto facultativo (um por data), cadastrado pela CGP.
+
+    Além do RH (início de período em feriado), a lista entra na contagem de dias úteis
+    de outros módulos, como os prazos de SLA.
+    """
     __tablename__ = "rh_feriados"
     __table_args__ = (
         CheckConstraint(f"tipo IN ({_lista(TIPOS_FERIADO)})", name="ck_rh_feriados_tipo"),

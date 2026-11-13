@@ -1,3 +1,33 @@
+"""
+===============================================================================
+ARQUIVO: textos_novos.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Guardar o HTML das duas páginas novas do manual criadas na atualização de
+outubro de 2026: a portaria de designação da equipe do contrato e os perfis
+de acesso.
+
+RESUMO TÉCNICO:
+Só define duas constantes de texto (PORTARIA e ACESSO) com HTML pronto para
+o BookStack. Não executa nada; o publicar_final.py lê este arquivo com
+exec() e insere as imagens ([[marcadores]]) depois de cada título.
+
+FINALIDADE DE NEGÓCIO:
+Explica aos servidores da SPI o rito da portaria de designação (nomeações,
+conferência do RH, ciência, aceite da autoridade e publicação no D.O.E.) e
+como o SuperRoot (administrador do sistema) organiza as permissões em
+perfis de acesso (ACL, controle de acesso por módulo).
+
+CONTEXTO NO SISTEMA:
+Ferramenta de documentação, fora do sistema. Usado por publicar_final.py;
+descreve as telas da aba Equipe dos Contratos, do Protocolo e da
+Administração › Controle de acesso.
+
+===============================================================================
+"""
+
+# Página nova 'Equipe e portaria de designação' (capítulo de Contratos).
 PORTARIA = '''
 <p>Desde outubro, <strong>a equipe de gestão e fiscalização de um contrato só muda por portaria de designação</strong>. O botão Editar do contrato não altera mais gestor e fiscais; a designação segue o rito formal, do pedido à publicação, e o sistema conduz cada passo. Tudo acontece na aba <strong>Equipe</strong> do contrato.</p>
 <p class="callout info"><strong>Quem pode criar a portaria:</strong> a equipe vigente do contrato e quem tem controle total em Contratos (perfil <em>Administrador de Contratos</em>). <strong>Quem aceita:</strong> a autoridade signatária escolhida. <strong>Quem publica:</strong> o Protocolo, ao anexar o Diário Oficial.</p>
@@ -15,6 +45,7 @@ PORTARIA = '''
 <p>Quando o <strong>Protocolo anexa o PDF do D.O.E.</strong> ao número da portaria, ela passa a <em>Publicada</em>: a nova equipe vale no contrato, os nomeados ganham acesso e o PDF entra em <strong>Documentos Importantes</strong>. O histórico de todas as portarias do contrato fica na própria aba Equipe.</p>
 <p class="callout warning">Para cancelar uma portaria antes da publicação, use <strong>Cancelar</strong> na aba Equipe: o número reservado volta sozinho ao Protocolo. Se você é <strong>RH</strong>, mantenha atualizados RS/PV, RG/CIN e cargo de quem pode ser nomeado: é o que mais atrasa o rito.</p>
 '''
+# Página nova 'Perfis de acesso' (capítulo de administração do controle de acesso).
 ACESSO = '''
 <p>Esta página é para quem administra o sistema (SuperRoot). Em <strong>Administração › Controle de acesso</strong>, as permissões agora são organizadas em <strong>perfis</strong>: conjuntos de ações que podem ser dados a pessoas, a setores ou a grupos sistêmicos.</p>
 <h2>Perfis e ações</h2>

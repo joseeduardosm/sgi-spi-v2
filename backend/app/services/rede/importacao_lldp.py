@@ -90,6 +90,9 @@ AUTOR_CARGA = "sistema:carga-lldp"
 
 def carregar(sessao: Session, inventario: dict) -> Relatorio:
     """Aplica o inventário. Sem commit (o script decide entre ensaio e gravação)."""
+    # Desativada (decisão do usuário, 12/11/2026): a rede passou a ser cadastrada só pela tela, em cadeia (core → distribuição → acesso → APs),
+    # com o lado do patch panel e a configuração das portas; esta carga criaria equipamentos e cabos fora dessa regra.
+    raise servico.ErroRede("A carga por LLDP está desativada: a rede é cadastrada pela tela, em cadeia (core, distribuição, acesso, APs).", 409, "carga_desativada")
     r = Relatorio()
     # Portas que a carga alterou (situação, interface ou cabo novo), auditadas no fim
     alteradas: list = []
@@ -154,7 +157,7 @@ def carregar(sessao: Session, inventario: dict) -> Relatorio:
             r.contagem["cabo_existente"] += 1
             continue
         try:
-            servico.conectar(sessao, a.id, b.id, None, "", forcar=True, descrever_salto=False)
+            servico.conectar(sessao, a.id, b.id, None, "")
             alteradas.extend([a.id, b.id])
             r.contagem["cabo_criado"] += 1
         except ErroRede as erro:

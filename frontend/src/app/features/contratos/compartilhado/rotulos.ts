@@ -1,5 +1,29 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para reunir os textos exibidos para os códigos da API e os conversores de números e documentos.
+/**
+ * =============================================================================
+ * ARQUIVO: rotulos.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Reunir os textos exibidos para os códigos devolvidos pela API do módulo de
+ * contratos e os conversores de números (decimal) e documentos (CNPJ, CPF).
+ *
+ * RESUMO TÉCNICO:
+ * Apenas constantes (mapas código para texto e listas de opções) e funções
+ * puras, sem estado nem chamadas HTTP. Os mapas são tipados com os tipos de
+ * contratos.models.ts, então o compilador acusa se faltar um código novo.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Garante que situação do contrato, papéis da equipe (gestor, fiscais e
+ * suplentes), etapas da competência, pendências e riscos apareçam com o mesmo
+ * nome em todas as telas, e que valores digitados no padrão brasileiro
+ * cheguem corretos à API.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por quase todas as telas e componentes de contratos (detalhe,
+ * formulário, painel, execução, reajuste, repactuação).
+ *
+ * =============================================================================
+ */
 
 import { Etapa, Papel, Situacao, SituacaoCompetencia, TipoItem } from './contratos.models';
 
@@ -13,7 +37,10 @@ export const ROTULOS_SITUACAO: Record<Situacao, string> = {
   suspenso: 'Suspenso',
 };
 
-/** Os seis papéis da equipe, na ordem de exibição. */
+/**
+ * Os seis papéis da equipe, na ordem de exibição. Gestor coordena o contrato; fiscal administrativo
+ * cuida de documentos e obrigações; fiscal técnico confere a entrega do serviço; cada um tem suplente.
+ */
 export const PAPEIS: { papel: Papel; rotulo: string }[] = [
   { papel: 'gestor', rotulo: 'Gestor' },
   { papel: 'gestor_suplente', rotulo: 'Suplente do gestor' },
@@ -48,7 +75,11 @@ export const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-/** Etapa da competência → texto (a etapa "consolidado" aparece como "Download" na tela). */
+/**
+ * Etapa da competência → texto (a etapa "consolidado" aparece como "Download" na tela).
+ * Competência = mês (ou período) de execução que passa por estas etapas até o pagamento.
+ * CADIN = cadastro federal de inadimplentes, consultado antes de pagar a empresa.
+ */
 export const ROTULOS_ETAPA: Record<Etapa, string> = {
   medicao: 'Medição',
   avaliacao: 'Avaliação',
@@ -95,7 +126,7 @@ export const ROTULOS_CAMPO: Record<string, string> = {
   ...Object.fromEntries(PAPEIS.map((p) => [`equipe.${p.papel}`, p.rotulo])),
 };
 
-/** Máscara de CNPJ (00.000.000/0000-00) e CPF (000.000.000-00) para exibição. */
+/** Máscara de CNPJ (00.000.000/0000-00) para exibição; se não tiver 14 dígitos, devolve como veio. */
 export function formatarCnpj(cnpj: string): string {
   return cnpj?.length === 14 ? cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : cnpj;
 }
@@ -118,6 +149,7 @@ export function paraDecimalApi(valor: string | number | null | undefined): strin
 /** Texto da API ("1234.5000") para edição no padrão brasileiro ("1234,5"). */
 export function paraDecimalTela(valor: string | null | undefined): string {
   if (valor === null || valor === undefined || valor === '') return '';
+  // Number() descarta os zeros à direita ("1234.5000" vira 1234.5); texto inválido volta sem mudança
   const numero = Number(valor);
   return Number.isFinite(numero) ? String(numero).replace('.', ',') : valor;
 }

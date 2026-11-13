@@ -1,5 +1,32 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a janela de carga em lote dos dados funcionais do RH por planilha (CGP).
+/**
+ * =============================================================================
+ * ARQUIVO: importacao-funcionais.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Janela de carga em lote dos dados funcionais do RH (autorizador,
+ * substituto, período aquisitivo, saldo de licença-prêmio, jornada, horários)
+ * por planilha XLSX, usada pela CGP.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone de modal com template inline. Três passos em
+ * app-trilha-etapas: baixar o modelo já preenchido com os servidores ativos,
+ * enviar a planilha para prévia (a API diz o que muda e os erros de cada
+ * linha) e importar, só quando não há nenhum erro. ROTULOS traduz os nomes
+ * técnicos dos campos alterados.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Evita cadastrar servidor por servidor: a CGP (Coordenação de Gestão de
+ * Pessoas) ajusta todos de uma vez, vendo antes o que mudará. A regra "tudo ou
+ * nada" impede gravação parcial de uma planilha com problemas.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Aberto pela tela de dados funcionais do RH. Usa RhApiService
+ * (modeloFuncionais, importarFuncionais em /api/rh) e o tipo
+ * ResultadoImportacaoRh de rh.models.ts.
+ *
+ * =============================================================================
+ */
 
 import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { trilhaImportacao } from '../contratos/compartilhado/trilha-importacao';
@@ -93,20 +120,25 @@ const ROTULOS: Record<string, string> = {
   `,
 })
 export class ImportacaoFuncionaisComponent {
+  /** Abre e fecha a janela; model() permite ligação de mão dupla [(aberta)] com a tela que a usa. */
   readonly aberta = model(false);
-  /** Avisa a tela para recarregar depois de gravar. */
+  /** Avisa a tela para recarregar depois de gravar (output() cria um evento que o pai escuta com (importado)). */
   readonly importado = output<void>();
   private readonly api = inject(RhApiService);
   private readonly dialogos = inject(DialogosService);
   protected readonly arquivo = signal<File | null>(null);
   protected readonly resultado = signal<ResultadoImportacaoRh | null>(null);
+  /** Etapas da trilha (arquivo escolhido, prévia, importação), recalculadas pelo computed() quando o estado muda. */
   protected readonly trilha = computed(() => trilhaImportacao(!!this.arquivo(), this.resultado() ? { pode_importar: this.resultado()!.com_erro === 0 } : null));
+  /** Só as linhas com erro ou com alteração (as que não mudam nada não aparecem na prévia). */
   protected readonly linhasRelevantes = computed(() => (this.resultado()?.linhas ?? []).filter((l) => l.erros.length || l.mudancas.length));
+  /** Só libera o botão Importar com arquivo, prévia sem nenhum erro e ainda não gravada. */
   protected readonly podeImportar = computed(() => {
     const r = this.resultado();
     return !!this.arquivo() && !!r && !r.gravado && r.com_erro === 0 && r.com_mudanca > 0;
   });
 
+  /** Baixa o modelo XLSX gerado pela API (o download é disparado pelo serviço). */
   protected baixarModelo(): void {
     this.dialogos.executar(this.api.modeloFuncionais(), 'Gerando o modelo…').subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }
@@ -114,6 +146,7 @@ export class ImportacaoFuncionaisComponent {
   /** Ao escolher o arquivo, confere na hora (prévia, sem gravar). */
   protected escolher(campo: HTMLInputElement): void {
     const arquivo = campo.files?.[0] ?? null;
+    // Zera o campo de arquivo para que escolher o mesmo arquivo de novo dispare o (change)
     campo.value = '';
     this.arquivo.set(arquivo);
     this.resultado.set(null);
@@ -124,6 +157,7 @@ export class ImportacaoFuncionaisComponent {
     });
   }
 
+  /** Envia de novo a planilha, agora gravando, e avisa a tela pai pelo evento importado. */
   protected importar(): void {
     const arquivo = this.arquivo();
     if (!arquivo || !this.podeImportar()) return;
@@ -136,6 +170,7 @@ export class ImportacaoFuncionaisComponent {
     });
   }
 
+  /** Converte os campos alterados em nomes legíveis, sem repetir (horário início e fim viram um só). */
   protected rotular(campos: string[]): string {
     return [...new Set(campos.map((c) => ROTULOS[c] ?? c))].join(', ');
   }

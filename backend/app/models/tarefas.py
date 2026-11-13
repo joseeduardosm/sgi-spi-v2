@@ -1,14 +1,42 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir as tabelas do Módulo Tarefas (equipes, tarefas, responsáveis, linha do tempo, marcadores e checklist).
-"""Módulo Tarefas.
+"""
+===============================================================================
+ARQUIVO: tarefas.py
+AUTOR: José Eduardo Santana Martins
 
-- `EquipeTarefas`: equipe própria do módulo (independente dos setores), com dono, líderes, membros e equipe pai.
-- `Tarefa`: a tarefa, com pipeline A fazer → Em andamento → Em validação → Concluída, prazo atual e **prazo original**,
-  datas de cada etapa e `versao` (concorrência otimista).
-- `ResponsavelTarefa`: todos os responsáveis da tarefa (um ou mais, com os mesmos poderes; `Tarefa.responsavel_id` é o principal, o primeiro); a carga conta para cada um.
-- `EventoTarefa`: linha do tempo append-only (criação, edição, status, prazo, transferência, comentário…). Guarda o
-  nome do autor como retrato (o histórico continua legível se o usuário sair) e `dados` com de/para e justificativas.
-- `MarcadorTarefa`: etiqueta por equipe (ou global, sem equipe); `ItemChecklistTarefa`: checklist da tarefa.
+FINALIDADE:
+Definir as tabelas do Módulo Tarefas: equipes, tarefas, responsáveis,
+linha do tempo, marcadores, checklist, recorrências, dependências, quadro
+(estágios), atividades, seguidores, marcos, status da equipe e RDM.
+
+RESUMO TÉCNICO:
+- EquipeTarefas (+ membros e líderes): equipe própria do módulo,
+  independente dos setores, com dono, líderes, membros e equipe pai.
+- Tarefa: pipeline A fazer, Em andamento, Em validação, Concluída; prazo
+  atual e prazo original, datas de cada etapa e versao (concorrência
+  otimista: quem salva com versão antiga recebe conflito).
+- ResponsavelTarefa: todos os responsáveis (o principal é
+  Tarefa.responsavel_id, o primeiro); a carga conta para cada um.
+- EventoTarefa: linha do tempo somente de inclusão, com o nome do autor
+  gravado como retrato e dados com de/para e justificativas.
+- MarcadorTarefa, ItemChecklistTarefa, RecorrenciaTarefa, DependenciaTarefa,
+  EstagioTarefa, AtividadeTarefa, SeguidorTarefa, MarcoTarefa,
+  AtualizacaoStatusEquipe e RdmTarefa completam o módulo.
+Os valores permitidos ficam nas tuplas do topo e em CheckConstraints.
+
+FINALIDADE DE NEGÓCIO:
+Organizar o trabalho das equipes da SPI: quem faz o quê, até quando, com
+validação da liderança, histórico completo e prazos acompanhados (SLA).
+Também recebe tarefas criadas por outros módulos (ex.: etapas de uma
+competência de contrato) e registra a RDM (Requisição de Mudança) exigida
+nas mudanças de sistemas.
+
+CONTEXTO NO SISTEMA:
+Usado por app/services/tarefas, pelas rotas de api/routes/tarefas.py e pelos
+schemas de schemas/tarefas.py. Liga-se a usuarios, anexos, protocolo_numeros
+(número da RDM) e aos contratos (origem_tipo/origem_id). O prazo de SLA vem
+de models/sla.py.
+
+===============================================================================
 """
 
 import uuid
@@ -353,3 +381,42 @@ class AtualizacaoStatusEquipe(Base):
     autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     autor_nome: Mapped[str] = mapped_column(String(200), default="")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+
+SITUACOES_RDM = ("rascunho", "pendente", "aprovada", "reprovada", "concluida")
+
+
+class RdmTarefa(Base):
+    """RDM (Requisição de Mudança) de uma tarefa: formulário da matriz da Prodesp (FORM_RDM-V2.2_CAS1) + informações complementares.
+
+    Uma por tarefa. O número vem do Protocolo (tipo "RDM SGI", `RDM SGI 00001/AAAA`), reservado no primeiro envio e mantido nos reenvios.
+    Situação: rascunho (salvo, não enviado) → pendente (amarela, aguardando a liderança) → aprovada (laranja, PDF gerado) ou reprovada
+    (vermelha, com motivo; corrigida volta a pendente com o mesmo número) → concluída (verde, quando a tarefa é concluída).
+    """
+    __tablename__ = "tarefas_rdms"
+    __table_args__ = (CheckConstraint(f"situacao IN ({_lista(SITUACOES_RDM)})", name="ck_tarefas_rdms_situacao"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tarefa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tarefas.id", ondelete="CASCADE"), unique=True)
+    numero_protocolo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("protocolo_numeros.id", ondelete="SET NULL"), unique=True)
+    # Retrato do número formatado ("00001/2026"), para listar sem ir ao Protocolo
+    numero: Mapped[str] = mapped_column(String(20), default="")
+    titulo: Mapped[str] = mapped_column(String(300), default="")
+    situacao: Mapped[str] = mapped_column(String(10), default="rascunho")
+    # Campos do formulário (seções da matriz e as informações complementares), como enviados pela tela
+    dados: Mapped[dict] = mapped_column(JSON, default=dict)
+    enviada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    enviada_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    enviada_por_nome: Mapped[str] = mapped_column(String(200), default="")
+    # Decisão da liderança (retrato de nome, cargo e setor, para o rodapé do PDF)
+    decidida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decidida_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    decidida_por_nome: Mapped[str] = mapped_column(String(200), default="")
+    decidida_por_cargo: Mapped[str] = mapped_column(String(150), default="")
+    decidida_por_setor: Mapped[str] = mapped_column(String(150), default="")
+    motivo_reprovacao: Mapped[str] = mapped_column(Text, default="")
+    pdf_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="SET NULL"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
+
+    tarefa: Mapped[Tarefa] = relationship()

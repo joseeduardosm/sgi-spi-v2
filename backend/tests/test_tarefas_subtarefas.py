@@ -1,6 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar as subtarefas e as dependências entre tarefas.
-"""Subtarefas (`POST /{numero}/subtarefas`) e dependências (`PUT /{numero}/dependencias`)."""
+"""
+===============================================================================
+ARQUIVO: test_tarefas_subtarefas.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar subtarefas (`POST /{numero}/subtarefas`), dependências entre tarefas
+(`PUT /{numero}/dependencias`) e o memorial da tarefa em PDF e XLSX.
+
+RESUMO TÉCNICO:
+Pela API de `/api/tarefas`, cria tarefas mãe e subtarefas e confere herança
+(equipe, marcadores, prazo, responsáveis), registros na linha do tempo,
+quadro próprio de subtarefas, bloqueio por dependência, detecção de ciclo,
+exclusão em cascata, conclusão das filhas ao validar a mãe e os indicadores
+de subtarefas em validação. O memorial XLSX é aberto com openpyxl para
+conferir o conteúdo.
+
+FINALIDADE DE NEGÓCIO:
+Garante que o trabalho dividido em partes fica coerente com a tarefa
+principal, que uma tarefa só começa depois das que a bloqueiam, que não se
+cria dependência circular e que o histórico completo pode ser emitido como
+documento.
+
+CONTEXTO NO SISTEMA:
+Reaproveita `URL`, `_nova`, `_prazo` e a fixture `equipe` de
+`tests/test_tarefas.py`; exercita `app/api/routes/tarefas.py` e
+`app/services/tarefas/servico_tarefas.py`, além da busca global
+(`/api/busca`).
+
+===============================================================================
+"""
 
 from datetime import datetime, timedelta, timezone
 
@@ -8,10 +36,12 @@ from tests.test_tarefas import URL, _nova, _prazo, equipe  # noqa: F401  (fixtur
 
 
 def _mover(cliente, h, numero, acao, **extra):
+    """Atalho para `POST /{numero}/mover` (iniciar, entregar, validar, concluir, reabrir...)."""
     return cliente.post(f"{URL}/{numero}/mover", json={"acao": acao, **extra}, headers=h)
 
 
 def test_subtarefa_herda_da_mae_e_a_mae_se_move_sem_depender_dela(cliente, equipe):
+    """A subtarefa herda equipe, marcadores, responsáveis e prazo; só há um nível; a mãe anda sem esperar a filha."""
     ids, h, equipe_id = equipe
     marcador = cliente.post(f"{URL}/equipes/{equipe_id}/marcadores", json={"nome": "Urgente"}, headers=h["lia"]).json()
     mae = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"], ids["beto"]], marcadores_ids=[marcador["id"]])
@@ -45,6 +75,7 @@ def test_subtarefa_herda_da_mae_e_a_mae_se_move_sem_depender_dela(cliente, equip
 
 
 def test_subtarefas_ficam_fora_das_listas_e_tem_quadro_proprio(cliente, equipe):
+    """Listas e busca global mostram só a mãe; as subtarefas têm o escopo próprio "subtarefas"."""
     ids, h, equipe_id = equipe
     mae = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
     sub = cliente.post(f"{URL}/{mae['numero']}/subtarefas", json={"titulo": "Parte 1"}, headers=h["lia"]).json()
@@ -67,6 +98,7 @@ def test_subtarefas_ficam_fora_das_listas_e_tem_quadro_proprio(cliente, equipe):
 
 
 def test_mudar_estagio_da_mae_registra_nas_subtarefas(cliente, equipe):
+    """Trocar a coluna da mãe gera um registro na linha do tempo da filha, mas a filha fica onde está."""
     ids, h, equipe_id = equipe
     mae = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
     sub = cliente.post(f"{URL}/{mae['numero']}/subtarefas", json={"titulo": "Parte 1"}, headers=h["lia"]).json()
@@ -85,6 +117,7 @@ def test_mudar_estagio_da_mae_registra_nas_subtarefas(cliente, equipe):
 
 
 def test_dependencias_bloqueiam_o_inicio_e_impedem_ciclos(cliente, equipe):
+    """Tarefa bloqueada só inicia com as bloqueadoras concluídas; auto-dependência e ciclos são recusados."""
     ids, h, equipe_id = equipe
     a = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
     b = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
@@ -111,6 +144,7 @@ def test_dependencias_bloqueiam_o_inicio_e_impedem_ciclos(cliente, equipe):
 
 
 def test_excluir_a_mae_leva_as_subtarefas(cliente, equipe):
+    """Excluir a tarefa mãe exclui junto as subtarefas."""
     ids, h, equipe_id = equipe
     mae = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
     sub = cliente.post(f"{URL}/{mae['numero']}/subtarefas", json={"titulo": "Parte 1"}, headers=h["lia"]).json()
@@ -119,6 +153,7 @@ def test_excluir_a_mae_leva_as_subtarefas(cliente, equipe):
 
 
 def test_memorial_da_tarefa_pdf_e_xlsx_com_todos_os_acontecimentos(cliente, equipe):
+    """O memorial (PDF ou planilha com abas Resumo e Acontecimentos) traz todo o histórico da tarefa."""
     import io
 
     from openpyxl import load_workbook
@@ -144,6 +179,7 @@ def test_memorial_da_tarefa_pdf_e_xlsx_com_todos_os_acontecimentos(cliente, equi
 
 
 def test_subtarefa_em_validacao_aparece_na_mae_e_nos_indicadores_sem_mudar_a_mae(cliente, equipe):
+    """Subtarefa aguardando validação aparece em contador próprio, sem mexer nos contadores normais nem na mãe."""
     ids, h, equipe_id = equipe
     mae = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
     sub = cliente.post(f"{URL}/{mae['numero']}/subtarefas", json={"titulo": "Conferir"}, headers=h["lia"]).json()
@@ -164,6 +200,7 @@ def test_subtarefa_em_validacao_aparece_na_mae_e_nos_indicadores_sem_mudar_a_mae
 
 
 def test_resumo_traz_os_numeros_das_tarefas_que_bloqueiam(cliente, equipe):
+    """A lista traz os números das bloqueadoras (para desenhar as setas), mesmo depois de concluídas."""
     ids, h, equipe_id = equipe
     a = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], titulo="A")
     b = _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"], titulo="B")
@@ -198,6 +235,7 @@ def test_subtarefa_pode_depender_da_anterior_aberta(cliente, equipe):
 
 
 def test_subtarefa_nasce_com_varias_dependencias_e_valida_antes_de_criar(cliente, equipe):
+    """Dependências informadas na criação são validadas antes: se alguma for inválida, nada é criado."""
     ids, h, equipe_id = equipe
     mae = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"]])
     outra = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"]])
@@ -214,6 +252,7 @@ def test_subtarefa_nasce_com_varias_dependencias_e_valida_antes_de_criar(cliente
 
 
 def test_subtarefa_herda_responsaveis_da_mae_e_acompanha_as_mudancas(cliente, equipe):
+    """Responsáveis da mãe estão sempre na filha (entram e saem junto); a filha pode ter extras."""
     ids, h, equipe_id = equipe
     mae = _nova(cliente, h["lia"], equipe_id, responsaveis_ids=[ids["ana"]])
     # Na criação, os da mãe vêm sempre; o informado entra além deles
@@ -221,9 +260,11 @@ def test_subtarefa_herda_responsaveis_da_mae_e_acompanha_as_mudancas(cliente, eq
     assert [p["id"] for p in sub["responsaveis"]] == [ids["ana"], ids["lia"]] and sub["responsavel"]["id"] == ids["ana"]
 
     def ler(n):
+        """Detalhe atual da tarefa `n` (a `versao` muda a cada edição e é exigida no PUT)."""
         return cliente.get(f"{URL}/{n}", headers=h["lia"]).json()
 
     def editar_mae(responsaveis):
+        """Edita a mãe trocando só os responsáveis, com a versão atual (controle de edição concorrente)."""
         corpo = {"titulo": mae["titulo"], "prioridade": "normal", "responsaveis_ids": responsaveis, "versao": ler(mae["numero"])["versao"]}
         return cliente.put(f"{URL}/{mae['numero']}", json=corpo, headers=h["lia"])
 

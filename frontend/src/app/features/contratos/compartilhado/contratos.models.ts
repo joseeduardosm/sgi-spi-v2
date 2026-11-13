@@ -835,9 +835,16 @@ export interface DetalheCompetencia extends ResumoCompetencia {
   avaliacao: Avaliacao | null;
   percentual_autorizado: Decimal;
   valor_autorizado: Decimal;
-  /** Crédito de desconto de reajuste abatido do valor autorizado (0 quando não há). */
+  /** Soma dos créditos de reajuste/repactuação que o gestor aplicou nesta medição (0 quando não há). */
   desconto_reajuste: Decimal;
-  descontos_reajuste: { reajuste_id: string; mes_referencia: string; valor: Decimal }[];
+  /** Créditos aplicados nesta medição. */
+  descontos_reajuste: CreditoReajuste[];
+  /** Créditos no fundo do contrato, ainda não aplicados (só com a medição regular ou adicional aberta). */
+  creditos_disponiveis: CreditoReajuste[];
+  /** Complementar gerada por uma diferença retroativa informada manualmente. */
+  diferenca_manual: boolean;
+  /** Observações das diferenças informadas manualmente que esta competência cita (como saem nos documentos). */
+  observacoes_manuais: string[];
   valor_a_pagar: Decimal;
   avisos: string[];
   reaberturas_permitidas: boolean;
@@ -1108,6 +1115,55 @@ export interface ResumoMesesReajuste {
   precisa_escolher: boolean;
 }
 
+/** Crédito de reajuste/repactuação (desconto retroativo): no fundo do contrato até o gestor aplicá-lo, inteiro, numa medição. */
+export interface CreditoReajuste {
+  id: string;
+  reajuste_id: string | null;
+  repactuacao_id: string | null;
+  mes_referencia: string;
+  /** "Crédito de Reajuste (ref. MM/AAAA)" ou "Crédito de Repactuação (CCT MM/AAAA, …)", como sai nos documentos. */
+  rotulo: string;
+  /** Veio de uma diferença retroativa informada manualmente. */
+  manual: boolean;
+  /** Observação da diferença manual (quem, quando, meses e justificativa); vazia no crédito calculado. */
+  observacao: string;
+  valor: Decimal;
+}
+
+/** Competência encerrada, desde a data de efeito, sem medição concluída no sistema (candidata à diferença manual). */
+export interface MesSemMedicao {
+  competencia_id: string;
+  identificador: string;
+  rotulo: string;
+  periodo_inicio: string;
+  periodo_fim: string;
+  /** Já coberta pela diferença manual de outro reajuste/repactuação (continua candidata a esta). */
+  coberta_por_outra: boolean;
+}
+
+/** Diferença retroativa informada manualmente para meses pagos fora do sistema (reajuste ou repactuação). */
+export interface DiferencaManual {
+  /** Total dos meses marcados: positivo a pagar; negativo crédito da SPI. */
+  valor: Decimal;
+  justificativa: string;
+  meses: MesSemMedicao[];
+  arquivo: Arquivo;
+  informado_por: string;
+  informado_em: string;
+  /** Texto que acompanha o valor nos documentos. */
+  observacao: string;
+  /** Depois de concluído com valor positivo: identificador da competência complementar. */
+  competencia_diferenca: string | null;
+}
+
+/** Dados enviados ao gravar a diferença manual. */
+export interface GravacaoDiferencaManual {
+  valor: string;
+  competencias_ids: string[];
+  justificativa: string;
+  arquivo: File;
+}
+
 export interface Reajuste {
   id: string;
   /** Só em elaboração: a memória mês a mês resumida (os arquivos PDF/XLSX trazem o detalhe item a item). */
@@ -1126,11 +1182,15 @@ export interface Reajuste {
   competencia_diferenca: string | null;
   /** Diferença líquida das competências já medidas: > 0 a pagar (competência "-dif"); < 0 crédito da SPI. */
   diferenca_retroativa: Decimal;
-  /** Rascunho com desconto retroativo: competência (MM/AAAA) que receberá o crédito. */
+  /** Sempre nulo: o crédito vai para o fundo do contrato e o gestor escolhe a medição. */
   competencia_credito: string | null;
-  /** Concluído com desconto retroativo: onde o crédito foi (ou será) abatido. */
+  /** Concluído com desconto retroativo: medições em que o gestor aplicou o crédito. */
   abatimentos: { competencia: string; identificador: string; medida: boolean; valor: Decimal }[];
+  /** Parte do crédito ainda no fundo do contrato. */
   credito_pendente: Decimal;
+  /** Em elaboração: meses encerrados sem medição concluída (para a pergunta da diferença manual). */
+  meses_sem_medicao: MesSemMedicao[];
+  diferenca_manual: DiferencaManual | null;
   itens: ItemReajuste[];
   base_atual: Decimal;
   base_reajustada: Decimal;
@@ -1174,6 +1234,7 @@ export interface Repactuacao {
   memorias: { versao: number; criada_em: string; pdf: Arquivo; xlsx: Arquivo }[]; memoria_atualizada: boolean;
   checklist: DocumentoProrrogacao[]; obrigatorios_pendentes: number; cct: Arquivo; consolidado: Arquivo | null; consolidado_atualizado: boolean;
   apostilamento: Arquivo | null; diferenca_retroativa: string | null; competencia_diferenca: string | null;
+  meses_sem_medicao: MesSemMedicao[]; diferenca_manual: DiferencaManual | null;
   criado_em: string; concluido_em: string | null; cancelado_em: string | null;
 }
 export interface PainelRepactuacao {
@@ -1432,7 +1493,15 @@ export interface OcorrenciaDiario {
   competencia_rotulo: string | null;
   competencia_afetada: string | null;
   medicao_ja_concluida: boolean;
+  /** Outros e-mails escolhidos no registro (além da equipe e dos prepostos). O reenvio repete esta escolha. */
+  emails_adicionais: string[];
   email: EnvioEmail;
+}
+
+/** E-mail adicional já usado numa ocorrência do contrato (oferecido, desmarcado, nas próximas). */
+export interface EmailSalvoDiario {
+  id: number;
+  email: string;
 }
 
 export interface DiarioContrato {
@@ -1443,6 +1512,8 @@ export interface DiarioContrato {
   itens_avaliacao: { id: string; nome: string; grupo: string }[];
   /** Competências regulares do contrato (mais recente primeiro) para apontar a afetada. */
   competencias: { identificador: string; rotulo: string; periodo_inicio: string; periodo_fim: string; medicao_concluida: boolean }[];
+  /** E-mails adicionais já usados nas ocorrências deste contrato (ordem alfabética). */
+  emails_salvos: EmailSalvoDiario[];
 }
 
 export interface GravacaoOcorrencia {
@@ -1458,6 +1529,8 @@ export interface GravacaoOcorrencia {
   enviar_email?: boolean;
   /** Prepostos que recebem (nulo = todos os ativos; vazio = só a equipe). */
   prepostos_ids?: string[] | null;
+  /** Outros e-mails que recebem a ocorrência (só com `enviar_email`); ficam salvos no contrato. */
+  emails_adicionais?: string[];
 }
 
 // --- Importação por XLSX ----------------------------------------------------------------------

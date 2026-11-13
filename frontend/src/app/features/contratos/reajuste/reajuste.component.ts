@@ -9,12 +9,13 @@ import { RouterLink } from '@angular/router';
 import { forkJoin, switchMap } from 'rxjs';
 
 import { EnvioPdfComponent } from '../../../shared/componentes/envio-pdf/envio-pdf.component';
+import { DiferencaManualComponent } from '../compartilhado/diferenca-manual.component';
 import { DialogosService } from '../../../shared/servicos/dialogos.service';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { CalculoMesQuebrado, DetalheContrato, ItemReajuste, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
+import { CalculoMesQuebrado, DetalheContrato, GravacaoDiferencaManual, ItemReajuste, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
 import { MESES, paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
@@ -24,7 +25,7 @@ const INDICE = /^-?\d+(\.\d{1,8})?$/;
 /** Tela 6: reajuste (evidência do índice, memória, apostilamento e conclusão). Percentual por item: positivo reajusta, negativo dá desconto. */
 @Component({
   selector: 'app-reajuste',
-  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, DiferencaManualComponent, ...PIPES_FORMATACAO],
   templateUrl: './reajuste.component.html',
 })
 export class ReajusteComponent implements OnInit {
@@ -68,6 +69,8 @@ export class ReajusteComponent implements OnInit {
   // PDFs escolhidos: evidência do índice e apostilamento assinado
   protected evidencia: File | null = null;
   protected apostilamento: File | null = null;
+  // Diferença retroativa manual sendo gravada ou removida (botão com o indicador de carregando)
+  protected readonly salvandoManual = signal(false);
 
   /** Carrega o contrato e o painel de reajuste em paralelo. */
   ngOnInit(): void {
@@ -272,15 +275,44 @@ export class ReajusteComponent implements OnInit {
     if (ok) this.tratar(this.api.enviarReajuste(this.id(), r.id, 'concluir', this.apostilamento), 'Não foi possível concluir o reajuste', 'Aplicando o reajuste…');
   }
 
-  /** Efeito nas competências já medidas: competência de diferença a pagar ou crédito abatido nas próximas medições. */
+  /** Efeito nas competências já medidas (e na diferença manual): competência de diferença a pagar ou crédito no fundo do contrato. */
   private textoRetroativo(r: Reajuste): string {
     const diferenca = Number(r.diferenca_retroativa);
-    if (diferenca > 0) return `; a diferença de ${reais(diferenca)} das competências já medidas vira uma competência complementar a pagar`;
-    if (diferenca < 0) {
-      const onde = r.competencia_credito ? `na medição de ${r.competencia_credito}` : 'na próxima competência gerada';
-      return `; o crédito de ${reais(-diferenca)} das competências já medidas será abatido ${onde}`;
+    let texto = '';
+    if (diferenca > 0) texto = `; a diferença de ${reais(diferenca)} das competências já medidas vira uma competência complementar a pagar`;
+    if (diferenca < 0) texto = `; o crédito de ${reais(-diferenca)} das competências já medidas vai para o fundo do contrato (o gestor escolhe a medição)`;
+    // Diferença informada à mão (meses pagos fora do sistema): tratada à parte da automática
+    const manual = r.diferenca_manual;
+    if (manual) {
+      const valor = Number(manual.valor);
+      texto += valor > 0
+        ? `; a diferença informada manualmente de ${reais(valor)} vira outra competência complementar, de uma linha`
+        : `; o crédito informado manualmente de ${reais(-valor)} vai para o fundo do contrato`;
     }
-    return '';
+    return texto;
+  }
+
+  /** Grava a diferença informada manualmente (meses pagos fora do sistema). A memória precisa ser gerada de novo depois. */
+  protected salvarDiferencaManual(r: Reajuste, dados: GravacaoDiferencaManual): void {
+    this.salvandoManual.set(true);
+    this.api.salvarDiferencaManual<PainelReajuste>(this.id(), 'reajustes', r.id, dados).subscribe({
+      next: (p) => { this.salvandoManual.set(false); this.aplicar(p); },
+      error: (e) => { this.salvandoManual.set(false); this.dialogos.mostrarErro(e, 'Não foi possível salvar a diferença manual'); },
+    });
+  }
+
+  /** Remove a diferença manual (os meses voltam ao cálculo normal). */
+  protected async removerDiferencaManual(r: Reajuste): Promise<void> {
+    const ok = await this.dialogos.confirmar({
+      titulo: 'Remover a diferença manual?', mensagem: 'Os meses marcados voltam a receber o preço novo e entram na medição normalmente.',
+      rotuloConfirmar: 'Remover', segundos: 2,
+    });
+    if (!ok) return;
+    this.salvandoManual.set(true);
+    this.api.removerDiferencaManual<PainelReajuste>(this.id(), 'reajustes', r.id).subscribe({
+      next: (p) => { this.salvandoManual.set(false); this.aplicar(p); },
+      error: (e) => { this.salvandoManual.set(false); this.dialogos.mostrarErro(e, 'Não foi possível remover a diferença manual'); },
+    });
   }
 
   /** Pede confirmação e cancela o reajuste em elaboração. */

@@ -1,17 +1,35 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para ler o XML da nota fiscal (NF-e e NFS-e) e extrair os dados usados na conferência de tributos.
-"""Leitura do XML da nota fiscal, com detecção automática do formato.
+"""
+===============================================================================
+ARQUIVO: leitor_nota_xml.py
+AUTOR: José Eduardo Santana Martins
 
-Formatos aceitos:
-- **NF-e** (modelo 55, `http://www.portalfiscal.inf.br/nfe`), com ou sem o protocolo de autorização (`nfeProc`);
-- **NFS-e Padrão Nacional** (`http://www.sped.fazenda.gov.br/nfse`);
-- **NFS-e da Prefeitura de São Paulo** (`http://www.prefeitura.sp.gov.br/nfe`).
+FINALIDADE:
+Ler o XML da nota fiscal (NF-e ou NFS-e) enviado pela contratada e extrair
+os dados usados na conferência de tributos da competência.
 
-O resultado (`DadosNota`) é normalizado: os mesmos campos para qualquer formato. Campo que não existe no
-formato fica `None` e a tela mostra "não informado na nota". Valores monetários vêm como texto com 2 casas.
+RESUMO TÉCNICO:
+`ler_nota` detecta o formato pelo namespace (ou por uma tag típica) e chama
+o leitor certo: `_ler_nfe` (NF-e modelo 55, com ou sem `nfeProc`),
+`_ler_nfse_nacional` (NFS-e Padrão Nacional) ou `_ler_nfse_sp` (NFS-e da
+Prefeitura de São Paulo). O resultado (`DadosNota`) é normalizado: mesmos
+campos para qualquer formato; campo inexistente fica `None` (a tela mostra
+"não informado na nota"); valores monetários vêm como texto com 2 casas.
+Segurança: XML com DOCTYPE ou ENTITY é recusado (é por ali que entram
+entidades externas e expansões maliciosas); o expat não busca entidades.
 
-Segurança: o XML vem da contratada. Documentos com `DOCTYPE` são recusados (nenhuma nota fiscal usa, e é por ali
-que entram entidades externas e expansões maliciosas); o expat da biblioteca padrão não busca entidades externas.
+FINALIDADE DE NEGÓCIO:
+Na execução do contrato, a equipe confere se a nota da empresa está
+autorizada, se o valor bate e se os tributos retidos na fonte (IR, INSS,
+ISS, PIS, COFINS, CSLL) estão corretos antes do pagamento. Ler o XML evita
+digitação manual e erros nessa conferência.
+
+CONTEXTO NO SISTEMA:
+Chamado pelo serviço de competências na anexação da nota fiscal. O limite
+de tamanho vem de `servico_parametros` (`xml_tamanho_maximo_mb`). Os dados
+(via `DadosNota.como_dict`) são gravados na competência e devolvidos à tela.
+Erros viram `ErroRegraContrato` (resposta 400 na API).
+
+===============================================================================
 """
 
 from dataclasses import asdict, dataclass, field
@@ -23,14 +41,18 @@ from xml.etree import ElementTree
 from app.services.contratos import servico_parametros
 from app.services.contratos.erros import ErroRegraContrato
 
+# Namespaces (endereço que identifica o "dialeto" do XML) de cada formato aceito
 NS_NFE = "http://www.portalfiscal.inf.br/nfe"
 NS_NFSE_NACIONAL = "http://www.sped.fazenda.gov.br/nfse"
 NS_NFSE_SP = "http://www.prefeitura.sp.gov.br/nfe"
+# Tributos retidos na fonte que a conferência acompanha (chaves de `DadosNota.retencoes`)
 TRIBUTOS = ("ir", "inss", "iss", "pis", "cofins", "csll")
 
 
+# `@dataclass` gera automaticamente o construtor (__init__) a partir dos campos anotados.
 @dataclass
 class Participante:
+    """Emitente (empresa) ou tomador (órgão) da nota: CNPJ/CPF só com dígitos."""
     cnpj: str | None = None
     razao_social: str | None = None
     inscricao_municipal: str | None = None
@@ -38,6 +60,7 @@ class Participante:
 
 @dataclass
 class ItemNota:
+    """Linha de produto/serviço da NF-e (as NFS-e trazem só a discriminação em texto)."""
     descricao: str
     quantidade: str | None = None
     valor_unitario: str | None = None
@@ -46,7 +69,13 @@ class ItemNota:
 
 @dataclass
 class DadosNota:
-    """Dados da nota fiscal lidos do XML, iguais para NF-e e NFS-e."""
+    """Dados da nota fiscal lidos do XML, iguais para NF-e e NFS-e.
+
+    `autorizada` é `None` quando o XML não traz a situação; `retencoes` sempre
+    tem as seis chaves de `TRIBUTOS`, com "0.00" quando não houve retenção.
+    `field(default_factory=...)` cria um objeto novo para cada nota (evita que
+    todas compartilhem a mesma lista/dicionário).
+    """
     modelo: str  # "nfe", "nfse_nacional" ou "nfse_sp"
     modelo_rotulo: str
     numero: str | None = None
@@ -74,6 +103,7 @@ class DadosNota:
 # --- Utilitários (ignoram o namespace: comparam só o nome local das tags) -------------------------
 
 def _local(tag: str) -> str:
+    """Nome da tag sem o namespace: "{http://...}infNFe" vira "infNFe"."""
     return tag.rsplit("}", 1)[-1]
 
 
@@ -94,6 +124,7 @@ def _busca(no: ElementTree.Element | None, nome: str) -> ElementTree.Element | N
 
 
 def _texto(no: ElementTree.Element | None, *caminho: str) -> str | None:
+    """Texto do nó (ou do filho no `caminho`), com espaços repetidos reduzidos; vazio vira `None`."""
     alvo = _filho(no, *caminho) if caminho else no
     if alvo is None or alvo.text is None:
         return None
@@ -101,6 +132,7 @@ def _texto(no: ElementTree.Element | None, *caminho: str) -> str | None:
 
 
 def _texto_busca(no: ElementTree.Element | None, nome: str) -> str | None:
+    """Texto do primeiro descendente com o nome, em qualquer profundidade."""
     return _texto(_busca(no, nome))
 
 
@@ -115,6 +147,7 @@ def _valor(texto: str | None) -> str | None:
 
 
 def _quantidade(texto: str | None) -> str | None:
+    """Número do XML como texto sem zeros à direita (ex.: "2.5000" vira "2.5"); ilegível vira `None`."""
     if texto is None:
         return None
     try:
@@ -127,6 +160,8 @@ def _data(texto: str | None) -> str | None:
     """Data AAAA-MM-DD a partir de data ou data/hora ISO (com ou sem fuso)."""
     if not texto:
         return None
+    # Primeiro tenta data/hora completa ("Z" = UTC, que o fromisoformat antigo não aceita);
+    # se falhar, aproveita só os 10 primeiros caracteres (AAAA-MM-DD)
     try:
         return datetime.fromisoformat(texto.strip().replace("Z", "+00:00")).date().isoformat()
     except ValueError:
@@ -137,10 +172,16 @@ def _data(texto: str | None) -> str | None:
 
 
 def _digitos(texto: str | None) -> str | None:
+    """Só os dígitos do texto (tira pontos, barras e traços do CNPJ/CPF); sem dígitos vira `None`."""
     return "".join(c for c in texto if c.isdigit()) or None if texto else None
 
 
 def _participante(no: ElementTree.Element | None, *, nome: str = "xNome") -> Participante:
+    """Monta o `Participante` a partir do grupo do emitente/tomador.
+
+    O documento pode estar em CNPJ, CPF ou dentro de CPFCNPJ, conforme o formato;
+    usa o primeiro que existir.
+    """
     documento = _texto(_filho(no, "CNPJ")) or _texto(_filho(no, "CPF")) or _texto(_filho(no, "CPFCNPJ", "CNPJ")) or _texto(_filho(no, "CPFCNPJ", "CPF"))
     return Participante(cnpj=_digitos(documento), razao_social=_texto(_filho(no, nome)), inscricao_municipal=_texto(_filho(no, "IM")))
 
@@ -149,6 +190,8 @@ def _participante(no: ElementTree.Element | None, *, nome: str = "xNome") -> Par
 
 def ler_nota(conteudo: bytes) -> DadosNota:
     """Lê o XML e devolve os dados normalizados. Lança `ErroRegraContrato` se não for uma nota reconhecida."""
+    # 1) Validações antes de interpretar: vazio, tamanho máximo (parâmetro do sistema) e
+    #    DOCTYPE/ENTITY (proteção contra XML malicioso; nota fiscal real não usa)
     if not conteudo or not conteudo.strip():
         raise ErroRegraContrato("O XML da nota fiscal está vazio.")
     limite_mb = servico_parametros.valor("xml_tamanho_maximo_mb")
@@ -160,6 +203,8 @@ def ler_nota(conteudo: bytes) -> DadosNota:
         raiz = ElementTree.fromstring(conteudo)
     except ElementTree.ParseError as erro:
         raise ErroRegraContrato(f"O arquivo não é um XML válido ({erro}).") from erro
+    # 2) Detecta o formato pelo namespace da raiz; se a raiz não tiver namespace,
+    #    procura uma tag característica de cada formato
     namespace = raiz.tag[1:].split("}", 1)[0] if raiz.tag.startswith("{") else ""
     if namespace == NS_NFE or _busca(raiz, "infNFe") is not None:
         return _ler_nfe(raiz)
@@ -171,6 +216,10 @@ def ler_nota(conteudo: bytes) -> DadosNota:
 
 
 def _ler_nfe(raiz: ElementTree.Element) -> DadosNota:
+    """Lê a NF-e (modelo 55). A autorização vem do protocolo (infProt): cStat 100 = autorizada.
+
+    Retenções ficam no grupo retTrib (federais) e no ISSQNtot (ISS retido).
+    """
     inf = _busca(raiz, "infNFe")
     if inf is None:
         raise ErroRegraContrato("XML de NF-e sem o grupo infNFe.")
@@ -178,6 +227,7 @@ def _ler_nfe(raiz: ElementTree.Element) -> DadosNota:
     total = _filho(inf, "total")
     ret = _filho(total, "retTrib")
     protocolo = _busca(raiz, "infProt")
+    # Chave de acesso: do protocolo ou, sem ele, do atributo Id da infNFe sem o prefixo "NFe"
     chave = _texto(protocolo, "chNFe") or (inf.get("Id") or "").removeprefix("NFe") or None
     status = _texto(protocolo, "cStat")
     itens = [
@@ -213,6 +263,10 @@ def _ler_nfe(raiz: ElementTree.Element) -> DadosNota:
 
 
 def _ler_nfse_nacional(raiz: ElementTree.Element) -> DadosNota:
+    """Lê a NFS-e Padrão Nacional: infNFSe (dados da nota emitida) e infDPS (declaração do prestador).
+
+    Só existe XML de NFS-e emitida, por isso `autorizada` é sempre True.
+    """
     inf = _busca(raiz, "infNFSe")
     dps = _busca(raiz, "infDPS")
     if inf is None:
@@ -223,6 +277,7 @@ def _ler_nfse_nacional(raiz: ElementTree.Element) -> DadosNota:
     piscofins = _filho(federal, "piscofins")
     # PIS/COFINS só contam como retidos quando tpRetPisCofins indica retenção (1)
     pis_cofins_retidos = _texto(piscofins, "tpRetPisCofins") == "1"
+    # ISS retido pelo tomador: tpRetISSQN 2 ou 3 no leiaute nacional
     iss_retido = _texto(_filho(trib, "tribMun"), "tpRetISSQN") in ("2", "3")
     retencoes = {
         "ir": _valor(_texto(federal, "vRetIRRF")), "inss": _valor(_texto(federal, "vRetCP")), "csll": _valor(_texto(federal, "vRetCSLL")),
@@ -231,6 +286,7 @@ def _ler_nfse_nacional(raiz: ElementTree.Element) -> DadosNota:
         "iss": _valor(_texto(_filho(inf, "valores"), "vISSQN")) if iss_retido else None,
     }
     emitente = _participante(_filho(inf, "emit"))
+    # Sem CNPJ no emitente da nota, usa o prestador declarado na DPS
     if not emitente.cnpj:
         emitente = _participante(_filho(dps, "prest"))
     return DadosNota(
@@ -249,6 +305,11 @@ def _ler_nfse_nacional(raiz: ElementTree.Element) -> DadosNota:
 
 
 def _ler_nfse_sp(raiz: ElementTree.Element) -> DadosNota:
+    """Lê a NFS-e da Prefeitura de São Paulo.
+
+    StatusNFe: N = normal, C = cancelada (não autorizada), E = extraviada. O ISS só
+    conta como retido quando ISSRetido é "true".
+    """
     nota = raiz if _local(raiz.tag) == "NFe" else _busca(raiz, "NFe")
     if nota is None:
         raise ErroRegraContrato("XML da NFS-e de São Paulo sem o grupo NFe.")

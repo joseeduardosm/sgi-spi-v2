@@ -22,6 +22,8 @@ def _aparar(valor: str) -> str:
     return valor.strip()
 
 
+from app.schemas.tarefas_rdm import RdmResumo  # noqa: E402 - selo da RDM no resumo da tarefa
+
 class Pessoa(BaseModel):
     id: int
     nome: str
@@ -78,6 +80,7 @@ class TarefaResumo(BaseModel):
     marco_id: uuid.UUID | None = Field(None, description="Marco (milestone) da equipe a que a tarefa pertence.")
     origem_tipo: str | None = Field(None, description="Módulo de origem da tarefa (`contrato_competencia` = etapa de uma competência de contrato).")
     sla: SlaItem | None = Field(None, description="SLA de prazos (resposta e resolução em dias úteis, pela prioridade); vazio nas tarefas controladas por outro módulo.")
+    rdm: "RdmResumo | None" = Field(None, description="RDM da tarefa (selo colorido: rascunho, pendente, aprovada, reprovada, concluída), se houver.")
     controlada_externamente: bool = Field(False, description="O módulo de origem move e conclui a tarefa: o usuário só comenta, anexa e segue (a liderança ajusta responsáveis e prazo).")
 
 

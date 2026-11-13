@@ -1,6 +1,8 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para definir os tipos de dados do Módulo Protocolo (numeração institucional).
 
+import type { SituacaoRdm } from '../tarefas/rdm.models';
+
 export interface SequenciaProtocolo { id: string; exercicio: number; inicio: number; fim: number; /** Do início até este número (exclusive): "Reservado CGI". */ liberar_a_partir_de: number | null }
 export interface TipoProtocolo {
   id: string; nome: string;
@@ -35,6 +37,9 @@ export interface NumeroProtocolo {
   usado_em: string | null;
   contrato_id: string | null;
   contrato_numero: string | null;
+  /** Tipo "RDM SGI": situação da RDM (cor) e a tarefa dela. */
+  rdm_situacao?: SituacaoRdm | null;
+  tarefa_numero?: number | null;
   sigiloso: boolean;
   anulado_em: string | null;
   motivo_anulacao: string | null;

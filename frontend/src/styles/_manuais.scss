@@ -1,5 +1,31 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para os estilos do módulo Manuais (estantes, sumário e conteúdo vindo do BookStack).
+/**
+ * =============================================================================
+ * ARQUIVO: _manuais.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do módulo Manuais: busca, estantes de livros, resultados da busca,
+ * sumário, leitura com índice lateral e o conteúdo das páginas que vem do
+ * BookStack (wiki onde os manuais são escritos).
+ *
+ * RESUMO TÉCNICO:
+ * Classes com prefixo manuais-* para a grade de livros (auto-fill de 240 px),
+ * a leitura em duas colunas (índice lateral fixo com position: sticky e o
+ * artigo) e a navegação anterior/próximo. .conteudo-manual dá a identidade do
+ * portal ao HTML do BookStack (títulos, tabelas roláveis, código, citações e
+ * os destaques .callout do editor). Abaixo de 900 px vira uma coluna.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite que os servidores da SPI consultem os manuais de uso do SGI dentro
+ * do próprio sistema, com a mesma aparência das demais telas.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelas telas do módulo Manuais no
+ * frontend, que leem o conteúdo pela API (o HTML já chega sanitizado do
+ * servidor). Depende dos tokens --spi-* e --cor-* do tema.
+ *
+ * =============================================================================
+ */
 
 .manuais-busca {
   display: flex;
@@ -64,6 +90,7 @@
 }
 
 .manuais-lateral {
+  // Índice lateral "grudado" (sticky): acompanha a rolagem do artigo e rola sozinho se for maior que a tela
   position: sticky;
   top: 12px;
   max-height: calc(100vh - 40px);
@@ -115,6 +142,7 @@
   pre { padding: 12px 14px; overflow-x: auto; }
   code { padding: 1px 5px; }
   pre code { padding: 0; background: none; }
+  // display: block na tabela permite a rolagem horizontal quando ela é mais larga que o artigo
   table { width: 100%; margin: 0 0 1em; border-collapse: collapse; display: block; overflow-x: auto; }
   th, td { padding: 8px 10px; border: 1px solid var(--spi-borda); vertical-align: top; }
   th { background: var(--cor-f9f9fa); }

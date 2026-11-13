@@ -1,5 +1,5 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para a lista aberta pelos cards do topo da Rede: portas alteradas nos últimos 7 dias ou portas ativas sem descrição,
+// Este arquivo serve para a lista aberta pelos cards do topo da Rede: portas alteradas nos últimos 7 dias ou portas de patch panel com um lado só,
 // com equipamento | porta | descrição | quem alterou e quando (a última alteração da porta).
 
 import { DatePipe } from '@angular/common';
@@ -13,7 +13,7 @@ import { CabecalhoRedeComponent } from './cabecalho-rede.component';
 import { RedeApiService } from './rede-api.service';
 import { PortaListada } from './rede.models';
 
-type FiltroLista = 'alteradas' | 'sem-descricao';
+type FiltroLista = 'alteradas' | 'patch-um-lado';
 type ColunaOrdem = 'equipamento' | 'porta' | 'descricao' | 'alterado';
 interface Ordenacao { coluna: ColunaOrdem; direcao: 'asc' | 'desc' }
 
@@ -34,10 +34,10 @@ const TEXTOS: Record<FiltroLista, { titulo: string; descricao: string; vazio: st
     descricao: 'Qualquer alteração na porta: configuração, ligação, dispositivo atrás, ponto de rede ou carga LLDP. Mostra a última de cada porta.',
     vazio: 'Nenhuma porta alterada nos últimos 7 dias.',
   },
-  'sem-descricao': {
-    titulo: 'Portas ativas sem descrição',
-    descricao: 'Portas ligadas sem descrição, com a última alteração de cada uma (se houver). Abra a porta para descrevê-la.',
-    vazio: 'Nenhuma porta ligada sem descrição.',
+  'patch-um-lado': {
+    titulo: 'Patch panel com um lado só',
+    descricao: 'Portas de patch panel com o fundo ou a frente ligado e o outro lado vazio: o cabo para no meio do caminho. Abra a porta para ligar o outro lado.',
+    vazio: 'Nenhuma porta de patch panel com um lado só.',
   },
 };
 
@@ -94,8 +94,8 @@ function normalizar(texto: string): string {
 export class ListaPortasRedeComponent implements OnInit {
   private readonly api = inject(RedeApiService);
   private readonly dialogos = inject(DialogosService);
-  /** Qual card abriu a lista (`alteradas` ou `sem-descricao`); outro valor cai em "alteradas". */
-  protected readonly filtro: FiltroLista = inject(ActivatedRoute).snapshot.paramMap.get('filtro') === 'sem-descricao' ? 'sem-descricao' : 'alteradas';
+  /** Qual card abriu a lista (`alteradas` ou `patch-um-lado`); outro valor cai em "alteradas". */
+  protected readonly filtro: FiltroLista = inject(ActivatedRoute).snapshot.paramMap.get('filtro') === 'patch-um-lado' ? 'patch-um-lado' : 'alteradas';
   protected readonly textos = signal(TEXTOS[this.filtro]);
   protected readonly itens = signal<PortaListada[] | null>(null);
   protected readonly busca = signal('');
@@ -110,7 +110,7 @@ export class ListaPortasRedeComponent implements OnInit {
     const achados = termo ? lista.filter((p) => normalizar(`${p.equipamento_nome} ${p.porta} ${p.descricao} ${p.alterado_por ?? ''}`).includes(termo)) : lista;
     const { coluna, direcao } = this.ordem();
     const sinal = direcao === 'asc' ? 1 : -1;
-    // Vazio (sem descrição, nunca alterada) fica sempre no fim; empate: equipamento e número da porta
+    // Vazio (nunca alterada) fica sempre no fim; empate: equipamento e número da porta
     return [...achados].sort((a, b) => {
       const va = valorDaColuna(a, coluna), vb = valorDaColuna(b, coluna);
       if (va === null || vb === null) {

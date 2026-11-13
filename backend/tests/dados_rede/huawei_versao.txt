@@ -1,0 +1,16 @@
+Huawei YunShan OS
+Version 1.25.0.1 (S5700 V600R025C00SPC500)
+Copyright (C) 2021-2025 Huawei Technologies Co., Ltd.
+HUAWEI CloudEngine S5755-H uptime is 6 days, 6 hours, 18 minutes
+Patch Version: V600R025SPH150
+
+S5755-H48UM4Y2CZ(Master) 1 : uptime is  6 days, 6 hours, 17 minutes
+        StartupTime 2026/11/06   19:59:46
+Memory      Size    : 4096 M bytes
+Flash       Size    : 2048 M bytes
+S5755-H48UM4Y2CZ version information:
+1.PCB       Version : ES5D2V54C003 VER A
+2.MAB       Version : 0
+3.Board     Type    : S5755-H48UM4Y2CZ
+4.BIOS      Version : 1696
+5.CPLD      Version : 256

@@ -1,13 +1,33 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para preparar o ambiente dos testes (banco temporário, LDAP simulado e usuários).
-"""Configuração compartilhada dos testes (o pytest carrega este arquivo automaticamente).
-
-- Variáveis de ambiente de teste são definidas ANTES de importar a aplicação, para que ela use
-  um SQLite temporário e chaves falsas, sem tocar no PostgreSQL nem no .env reais.
-- Fixtures (`@pytest.fixture`) são recursos que os testes pedem pelo nome do parâmetro: banco
-  limpo, cliente HTTP, token do root, AD simulado etc.
 """
+===============================================================================
+ARQUIVO: conftest.py
+AUTOR: José Eduardo Santana Martins
 
+FINALIDADE:
+Configuração compartilhada dos testes: o pytest carrega este arquivo
+automaticamente e prepara banco temporário, LDAP (AD) simulado e usuários.
+
+RESUMO TÉCNICO:
+Define as variáveis de ambiente de teste ANTES de importar a aplicação, para
+ela usar um SQLite temporário e chaves falsas, sem tocar no PostgreSQL nem no
+.env reais. Fixtures (@pytest.fixture) são recursos que os testes pedem pelo
+nome do parâmetro: _esquema (cria tabelas uma vez), _banco (limpa as linhas a
+cada teste), ad (Active Directory simulado com ldap3 MOCK_SYNC), cliente
+(TestClient), token e admin (root). Funções: entrar, cabecalho,
+dados_diretorio e criar_usuario.
+
+FINALIDADE DE NEGÓCIO:
+Garante que cada teste rode isolado e repetível, com a conta root
+(SuperRoot, papel administrativo) e usuários com perfil institucional em dia,
+para que as regras do SGI SPI sejam verificadas sem dados reais do órgão.
+
+CONTEXTO NO SISTEMA:
+Usa app.main (a API FastAPI), app.core.banco (motor, Base, FabricaSessao),
+app.core.seguranca, o modelo Usuario, o cliente_ldap e o serviço de
+parâmetros de contratos. Base de todos os test_*.py de backend/tests.
+
+===============================================================================
+"""
 import os
 import tempfile
 import uuid
@@ -25,6 +45,7 @@ os.environ["LOGIN_ADMIN"] = "root"
 # Hash com rounds=4: bcrypt mais rápido, suficiente para testes
 os.environ["HASH_SENHA_ADMIN"] = bcrypt.hashpw(b"senha-teste", bcrypt.gensalt(rounds=4)).decode()
 os.environ["MINUTOS_EXPIRACAO_TOKEN"] = "60"
+# Chave Fernet nova a cada execução: cifra as senhas de bind LDAP gravadas no banco de teste.
 os.environ["CHAVE_CIFRA_LDAP"] = Fernet.generate_key().decode()
 os.environ["INTERVALO_SINCRONIZACAO_LDAP_MINUTOS"] = "0"
 os.environ["ANEXOS_DIRETORIO"] = f"{_diretorio_temporario}/anexos"
@@ -103,6 +124,7 @@ class AdSimulado:
         """Substitui a fábrica de conexões do `cliente_ldap`; o servidor "fora-do-ar" simula falha de rede."""
         if parametros.servidor == "fora-do-ar":
             raise LDAPSocketOpenError("servidor fora do ar")
+        # Conexão simulada: o bind confere usuário e senha contra as entradas adicionadas acima.
         return Connection(self.servidor, user=usuario, password=senha, client_strategy=MOCK_SYNC, raise_exceptions=False)
 
 
@@ -117,6 +139,8 @@ def _esquema():
 def _banco(_esquema):
     """Banco limpo em todo teste (`autouse=True`): apaga as linhas de todas as tabelas, sem recriar o esquema."""
     with motor.connect() as conexao:
+        # Desliga as chaves estrangeiras do SQLite para apagar as tabelas sem se preocupar com a ordem
+        # e apaga em ordem reversa de dependência (filhas antes das mães).
         conexao.exec_driver_sql("PRAGMA foreign_keys=OFF")
         for tabela in reversed(Base.metadata.sorted_tables):
             conexao.execute(tabela.delete())
@@ -193,6 +217,7 @@ def dados_diretorio(**alteracoes) -> dict:
 
 def criar_usuario(login: str, senha: str = "senha-local-1", superusuario: bool = False, completo: bool = True, **perfil) -> int:
     """Cria usuário local direto no banco. `completo` preenche e revalida o perfil."""
+    # Perfil revisado agora = usuário "em dia" com a revalidação de 30 dias do perfil institucional.
     campos = {**(PERFIL_COMPLETO if completo else {}), **perfil}
     with FabricaSessao() as sessao:
         usuario = Usuario(login=login, hash_senha=gerar_hash_senha(senha), superusuario=superusuario, **campos)

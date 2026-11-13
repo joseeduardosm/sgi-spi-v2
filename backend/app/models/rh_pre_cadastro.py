@@ -1,12 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir as tabelas da ficha de pré-cadastro de quem vai entrar na SPI (dados pessoais, formações e experiências).
-"""Pré-cadastro do RH.
+"""
+===============================================================================
+ARQUIVO: rh_pre_cadastro.py
+AUTOR: José Eduardo Santana Martins
 
-- `PreCadastro`: ficha de quem ainda vai ganhar conta no SGI. Guarda o **login proposto** (único), que segue para a TI no chamado do GLPI; quando a conta aparece
-  no Active Directory (sincronização ou primeiro login), a ficha é vinculada ao usuário (`usuario_id`) e o status vira `vinculado`.
-- `FichaFormacao` e `FichaExperiencia`: de 1 a N por ficha.
+FINALIDADE:
+Definir as tabelas da ficha de pré-cadastro de quem vai entrar na SPI:
+dados pessoais, documentos, contato, endereço, formações e experiências.
 
-Dados sensíveis (CPF, RG, endereço, PIS...): só o RH acessa (ACL `rh`, controle total).
+RESUMO TÉCNICO:
+- PreCadastro: ficha de quem ainda vai ganhar conta no SGI. Guarda o login
+  proposto (único entre fichas não canceladas, sem diferenciar maiúsculas).
+  Quando a conta aparece no Active Directory, a ficha é vinculada ao usuário
+  (usuario_id) e o status vira "vinculado".
+- FichaFormacao e FichaExperiencia: de 1 a N por ficha.
+STATUS_FICHA lista as situações possíveis.
+
+FINALIDADE DE NEGÓCIO:
+Reunir num só lugar os dados de admissão da pessoa, antes mesmo de ela ter
+conta de rede, e encaminhar o login desejado à TI pelo chamado do GLPI.
+Dados sensíveis (CPF, RG, endereço, PIS) só o RH acessa (ACL "rh",
+controle total).
+
+CONTEXTO NO SISTEMA:
+A ficha dá origem à admissão (models/rh_admissao.py) e aponta o cargo
+previsto (rh_cargos). O vínculo com o usuário acontece na sincronização LDAP
+ou no primeiro login. Formatos de API em schemas/rh_pre_cadastro.py.
+
+===============================================================================
 """
 
 from datetime import date, datetime
@@ -21,7 +41,12 @@ STATUS_FICHA = ("rascunho", "aguardando_conta", "vinculado", "cancelado")
 
 
 class PreCadastro(Base):
-    """Ficha de pré-cadastro de emprego preenchida pelo RH."""
+    """Ficha de pré-cadastro de emprego preenchida pelo RH.
+
+    Quase todos os textos têm padrão "" (vazio) em vez de nulo, para a tela não precisar tratar
+    `None`. `lazy="selectin"` carrega formações e experiências junto com a ficha, numa consulta
+    extra, evitando uma consulta por ficha na listagem.
+    """
     __tablename__ = "rh_pre_cadastros"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -97,7 +122,8 @@ class PreCadastro(Base):
     experiencias: Mapped[list["FichaExperiencia"]] = relationship(cascade="all, delete-orphan", order_by="FichaExperiencia.id", lazy="selectin")
 
 
-# Login proposto único (sem diferenciar maiúsculas) entre as fichas não canceladas
+# Login proposto único (sem diferenciar maiúsculas) entre as fichas não canceladas.
+# Índice parcial: fichas canceladas ficam de fora, liberando o login para uma nova ficha.
 Index("ux_rh_pre_cadastros_login", func.lower(PreCadastro.login_proposto), unique=True, postgresql_where=PreCadastro.status != "cancelado",
       sqlite_where=PreCadastro.status != "cancelado")
 

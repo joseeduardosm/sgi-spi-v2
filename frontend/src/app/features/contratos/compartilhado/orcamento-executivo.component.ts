@@ -1,5 +1,32 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para exibir o cartão executivo do orçamento do exercício: saldo remanescente dos meses concluídos e as decisões de empenho.
+/**
+ * =============================================================================
+ * ARQUIVO: orcamento-executivo.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Exibir o cartão executivo do orçamento do exercício: saldo remanescente dos
+ * meses concluídos e as decisões sobre o empenho (cobertura, reforço,
+ * cancelamento ou transferência).
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido. Recebe os dados prontos de um
+ * contrato (input contrato) ou da carteira inteira (input carteira) e só monta
+ * os textos; os valores já vêm calculados pela API. Funções auxiliares
+ * mesAno() e moeda() formatam mês e reais.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Responde de forma direta ao gestor e à área orçamentária quanto sobrou do
+ * previsto, por quantos meses a nota de empenho (NE) cobre, quanto falta
+ * reforçar e até quando pedir, e quanto pode ser cancelado ou transferido
+ * sem faltar para os meses restantes.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Usado no detalhe do contrato (com botão para a aba Notas de Empenho) e no
+ * painel da carteira de contratos. Tipos OrcamentoExecutivo e
+ * OrcamentoCarteira em contratos.models.ts.
+ *
+ * =============================================================================
+ */
 
 import { Component, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -7,6 +34,7 @@ import { RouterLink } from '@angular/router';
 import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes';
 import { OrcamentoCarteira, OrcamentoExecutivo } from './contratos.models';
 
+/** Abreviações dos meses, na ordem, para montar textos como "nov/2026". */
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
 /** `AAAA-MM-DD` → `nov/2026`. */
@@ -72,17 +100,24 @@ function mesAno(data: string | null): string {
   `,
 })
 export class OrcamentoExecutivoComponent {
+  /** Orçamento de um contrato (tela de detalhe). Só um dos dois inputs é usado por vez. */
   readonly contrato = input<OrcamentoExecutivo | null>(null);
+  /** Orçamento somado da carteira (painel), com as listas de contratos que precisam de reforço ou têm sobra. */
   readonly carteira = input<OrcamentoCarteira | null>(null);
   /** Data de hoje (AAAA-MM-DD), para saber se o prazo do reforço já passou. */
   readonly hoje = input<string>(new Date().toISOString().slice(0, 10));
+  /** Pedido para abrir a aba Notas de Empenho do contrato. */
   readonly verNotas = output<void>();
 
+  // Dados exibidos: os do contrato, ou os da carteira quando não há contrato
   protected readonly dados = computed(() => this.contrato() ?? this.carteira());
+  // Data-limite para pedir reforço: a do contrato ou, na carteira, a do primeiro da lista de reforço
   protected readonly pedirAte = computed(() => this.contrato()?.pedir_reforco_ate ?? this.carteira()?.precisam_reforco[0]?.pedir_reforco_ate ?? null);
+  // Comparação de textos AAAA-MM-DD funciona como comparação de datas
   protected readonly reforcoAtrasado = computed(() => !!this.pedirAte() && this.pedirAte()! < this.hoje());
   protected readonly coberturaTotal = computed(() => Number(this.dados()?.reforco ?? 0) <= 0);
 
+  /** Período dos meses concluídos considerados no saldo (ex.: "meses concluídos: jan/2026 a mar/2026"). */
   protected textoConcluidos(): string {
     const c = this.contrato();
     if (!c) return 'meses concluídos';
@@ -91,6 +126,10 @@ export class OrcamentoExecutivoComponent {
     return meses.length === 1 ? `mês concluído: ${mesAno(meses[0].competencia)}` : `meses concluídos: ${mesAno(meses[0].competencia)} a ${mesAno(meses[meses.length - 1].competencia)}`;
   }
 
+  /**
+   * Frase sobre a cobertura do empenho. Na carteira compara saldo livre com a necessidade;
+   * no contrato diz até que mês o empenho cobre ou o primeiro mês descoberto.
+   */
   protected textoCobertura(): string {
     const c = this.contrato();
     const d = this.dados();
@@ -107,6 +146,7 @@ export class OrcamentoExecutivoComponent {
   }
 }
 
+/** Formata um valor decimal (texto da API) como moeda brasileira, ex.: "R$ 1.234,56". */
 function moeda(valor: string): string {
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }

@@ -1,11 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para aplicar as regras de previsão orçamentária e de Notas de Empenho.
-"""Previsão orçamentária (mensal, por vigência) e Notas de Empenho.
+"""
+===============================================================================
+ARQUIVO: servico_orcamento.py
+AUTOR: José Eduardo Santana Martins
 
-- Previsão: quanto o contrato deve custar em cada mês. Itens contínuos entram sozinhos (com
-  pró-rata 30/360 nos meses parciais); itens sob demanda entram pelos apontamentos da equipe.
-- Notas de Empenho (NE): o orçamento reservado. As ordens bancárias debitam as NEs; o saldo é
-  sempre calculado pelo extrato, nunca gravado.
+FINALIDADE:
+Aplicar as regras da previsão orçamentária (mensal, por vigência) e das Notas
+de Empenho (NE) de cada contrato, além do orçamento executivo do exercício.
+
+RESUMO TÉCNICO:
+- Previsão: quanto o contrato deve custar em cada mês. Itens contínuos entram
+  sozinhos (pró-rata 30/360 nos meses parciais); itens sob demanda entram pelos
+  apontamentos da equipe, gravados e "selados" por vigência (salvar_previsao).
+- NE: o orçamento reservado. As ordens bancárias debitam as NEs; o saldo é
+  sempre calculado pelo extrato (movimentos e cancelamentos), nunca gravado.
+- Relatório Executivo de NEs em XLSX/PDF e orcamento_executivo, que cruza
+  previsto, pago, empenhado e comprometido para indicar reforço ou sobra.
+
+FINALIDADE DE NEGÓCIO:
+Dá à equipe do contrato e ao Financeiro a visão de quanto o contrato vai
+custar mês a mês, quanto já está empenhado e quanto falta empenhar no ano,
+evitando medir sem saldo e permitindo pedir reforço ou cancelar empenho a tempo.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas de contratos (previsão, notas de empenho, relatórios), pelo
+painel (servico_painel) e pela execução mensal (servico_competencias, que
+debita as NEs). Depende de valores (preço/quantidade/limite no tempo),
+calculos, servico_contratos (permissões), documentos.pdf/planilha e
+servico_auditoria. Tabelas: notas_empenho, previsoes e apontamentos.
+
+===============================================================================
 """
 
 import uuid
@@ -65,7 +88,11 @@ def apontamentos_da_vigencia(contrato: Contrato, sequencia: int) -> dict[tuple[u
 
 
 def meses_previstos(contrato: Contrato) -> list[MesPrevisao]:
-    """Tabela mensal consolidada: contínuos em todos os meses (pró-rata 30/360), sob demanda pelos apontamentos."""
+    """Tabela mensal consolidada: contínuos em todos os meses (pró-rata 30/360), sob demanda pelos apontamentos.
+
+    Percorre cada vigência e cada mês dela, calcula o subtotal de cada item e acumula o valor ao longo da vigência
+    (o acumulado recomeça em cada vigência). Não grava nada: é cálculo puro sobre o contrato carregado.
+    """
     meses: list[MesPrevisao] = []
     for vigencia in vigencias(contrato):
         apontados = apontamentos_da_vigencia(contrato, vigencia.sequencia)
@@ -120,6 +147,7 @@ def montar_previsao(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -
     """Monta a resposta do `GET /previsao`: grade por vigência e a tabela mensal consolidada."""
     contrato = obter_contrato(sessao, contrato_id)
     meses = meses_previstos(contrato)
+    # Quem pode editar o contrato também pode reabrir a previsão já selada (administrador recebe o mesmo valor)
     editor = pode_editar(sessao, contrato, usuario)
     administrador = editor
     # Nomes dos usuários para exibir quem selou cada previsão
@@ -198,6 +226,7 @@ def salvar_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int, dad
     # Guarda o "antes" para a auditoria e substitui a grade inteira
     anteriores = {(a.item_id, a.competencia): a.quantidade for a in previsao.apontamentos}
     previsao.apontamentos.clear()
+    # flush envia os DELETEs ao banco já (sem commit), para os novos apontamentos não colidirem com os antigos
     sessao.flush()
     # Quantidade zero não é gravada (célula vazia)
     for (item_id, mes), quantidade in grade.items():
@@ -220,6 +249,7 @@ def planilha_previsao(sessao: Session, contrato_id: uuid.UUID, sequencia: int) -
     contrato = obter_contrato(sessao, contrato_id)
     if not any(v.sequencia == sequencia for v in vigencias(contrato)):
         raise RegistroNaoEncontrado("Vigência")
+    # Monta as linhas das duas abas a partir da mesma tabela mensal da tela
     meses = [m for m in meses_previstos(contrato) if m.sequencia_vigencia == sequencia]
     linhas_mes = [[f"{m.competencia:%m/%Y}", f"{m.inicio:%d/%m} a {m.fim:%d/%m}", m.base_mensal, m.valor, m.acumulado] for m in meses]
     linhas_itens = [
@@ -264,6 +294,7 @@ def previsao_salva_em_todas(contrato: Contrato) -> bool:
 
 def carregar_notas(sessao: Session, contrato_id: uuid.UUID) -> list[NotaEmpenho]:
     """NEs do contrato com o extrato já carregado, em ordem de cadastro."""
+    # selectinload carrega movimentos e cancelamentos em consultas extras de uma vez (evita uma consulta por NE)
     return list(
         sessao.scalars(
             select(NotaEmpenho)
@@ -331,7 +362,11 @@ def listar_notas(sessao: Session, contrato_id: uuid.UUID) -> list[LeituraNotaEmp
 
 
 def _numero_em_uso(sessao: Session, contrato_id: uuid.UUID, numero: str, nota_id: uuid.UUID | None) -> bool:
-    """Indica se o número de NE já existe em outra nota do mesmo contrato."""
+    """Indica se o número de NE já existe em outra nota do mesmo contrato.
+
+    A comparação ignora maiúsculas e vale também para os números das NEs de cancelamento.
+    `nota_id` é a própria nota em edição, que não conta como repetida.
+    """
     existente = sessao.scalar(
         select(NotaEmpenho.id).where(NotaEmpenho.contrato_id == contrato_id, func.lower(NotaEmpenho.numero) == numero.lower())
     )
@@ -384,6 +419,7 @@ def cancelar_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, d
     nota = _obter_nota(sessao, contrato_id, nota_id)
     if _numero_em_uso(sessao, contrato.id, dados.numero, None):
         raise ErroRegraContrato("Já existe uma Nota de Empenho ou de cancelamento com este número no contrato.", conflito=True)
+    # O cancelamento é limitado ao saldo da NE (o que ainda não foi debitado nem cancelado)
     if dados.valor > nota.saldo:
         raise ErroRegraContrato(f"O cancelamento não pode passar do saldo da NE (R$ {nota.saldo:.2f}).")
     sessao.add(CancelamentoNotaEmpenho(
@@ -397,6 +433,7 @@ def cancelar_nota(sessao: Session, contrato_id: uuid.UUID, nota_id: uuid.UUID, d
 def exigir_saldo_para_medir(sessao: Session, contrato: Contrato) -> None:
     """Bloqueia medir/concluir medições quando NEs de cancelamento deixaram o contrato sem saldo em todas as NEs."""
     notas = carregar_notas(sessao, contrato.id)
+    # Só bloqueia se houver NE de cancelamento: sem cancelamentos, a falta de saldo é tratada na própria medição
     if notas and any(n.cancelamentos for n in notas) and saldo_notas(notas) <= 0:
         raise ErroRegraContrato("As NEs de cancelamento consumiram todo o saldo de empenho do contrato. Cadastre uma nova NE para continuar as medições.")
 
@@ -520,6 +557,7 @@ def orcamento_executivo(contrato: Contrato, exercicio: int) -> OrcamentoExecutiv
     """
     from app.services.contratos.servico_competencias import compromissos, corte_do_contrato  # import tardio: evita ciclo
 
+    # Remanescente: previsto x pago nos meses cuja competência regular já concluiu todas as etapas
     previsto = {m.competencia: m.valor for m in meses_previstos(contrato) if m.competencia.year == exercicio}
     do_ano = [c for c in contrato.competencias if c.competencia.year == exercicio]
     regulares = {c.competencia: c for c in do_ano if c.tipo == "regular"}
@@ -531,6 +569,7 @@ def orcamento_executivo(contrato: Contrato, exercicio: int) -> OrcamentoExecutiv
     previsto_concluido = sum((m.previsto for m in meses), ZERO)
     pago_concluido = sum((m.pago for m in meses), ZERO)
 
+    # Empenho do exercício: só as NEs daquele ano; o livre desconta o que medições ainda não pagas já reservaram
     notas = [n for n in contrato.notas_empenho if ano_da_nota(n) == exercicio]
     reservado = compromissos(contrato)
     empenhado = sum((n.valor_original for n in notas), ZERO)
@@ -543,6 +582,7 @@ def orcamento_executivo(contrato: Contrato, exercicio: int) -> OrcamentoExecutiv
     restantes = sorted(m for m, v in previsto.items()
                        if v > 0 and fim_do_mes(m) >= corte and not (m in regulares and regulares[m].medicao_concluida_em is not None))
     necessidade = sum((previsto[m] for m in restantes), ZERO)
+    # O saldo livre vai cobrindo os meses restantes em ordem; o primeiro que não couber é o "descoberto"
     saldo, cobertos, coberto_ate, descoberto = livre, 0, None, None
     for mes in restantes:
         if saldo >= previsto[mes]:
@@ -561,4 +601,5 @@ def orcamento_executivo(contrato: Contrato, exercicio: int) -> OrcamentoExecutiv
 
 
 def consultar_orcamento_executivo(sessao: Session, contrato_id: uuid.UUID, exercicio: int) -> OrcamentoExecutivo:
+    """Carrega o contrato pelo id e devolve o orçamento executivo do exercício (ver `orcamento_executivo`)."""
     return orcamento_executivo(obter_contrato(sessao, contrato_id), exercicio)

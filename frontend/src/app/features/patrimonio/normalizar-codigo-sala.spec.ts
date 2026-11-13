@@ -1,10 +1,34 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para testar a leitura do código da porta da sala (variações de escrita viram o mesmo código).
+/**
+ * =============================================================================
+ * ARQUIVO: normalizar-codigo-sala.spec.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Testes da função normalizarCodigoSala, que lê o código da porta da sala.
+ *
+ * RESUMO TÉCNICO:
+ * Testes com vitest (describe/it/expect): confere que variações de escrita
+ * (minúsculas, espaços, hífens, zeros faltando) viram o código padrão, que
+ * subsolo (-1) e térreo (00) são tratados e que códigos fora do padrão
+ * (áreas comuns) passam só em maiúsculas.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Protege a localização correta dos bens: o servidor pode digitar "5a3" ou
+ * "05-A-03" e o sistema precisa achar a mesma sala 05A03, sem criar códigos
+ * diferentes para o mesmo lugar.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Cobre a função exportada por seletor-sala.component.ts, usada no campo de
+ * sala das telas do Patrimônio.
+ *
+ * =============================================================================
+ */
 
 import { describe, expect, it } from 'vitest';
 
 import { normalizarCodigoSala } from './seletor-sala.component';
 
+// describe agrupa os casos; cada it é um cenário e expect compara o resultado.
 describe('código da porta da sala', () => {
   it('aceita o código como está e com variações de escrita', () => {
     expect(normalizarCodigoSala('05A03')).toBe('05A03');

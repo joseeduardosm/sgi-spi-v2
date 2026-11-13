@@ -1,5 +1,5 @@
 // Criado por José Eduardo Santana Martins
-// Este arquivo serve para a tela principal da rede: os racks (com os equipamentos na posição) e a lista, com o cadastro de racks e equipamentos.
+// Este arquivo serve para a tela principal da rede: os racks (com os equipamentos na posição) e a lista, com o cadastro de racks; o de equipamentos tem página própria.
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, NgForm } from '@angular/forms';
@@ -14,14 +14,8 @@ import { SeletorSalaComponent } from '../patrimonio/seletor-sala.component';
 import { RackRedeComponent } from './rack-rede.component';
 import { RedeApiService } from './rede-api.service';
 import {
-  CORES_RACK, ehPassivo, EquipamentoResumo, FuncaoEquipamento, GravacaoEquipamento, GravacaoRack, ModeloFace, Rack, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_PING,
-  ROTULOS_TIPO_EQUIPAMENTO, TipoEquipamento, IndicadoresRede,
+  CORES_RACK, EquipamentoResumo, GravacaoRack, Rack, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_PING, ROTULOS_TIPO_EQUIPAMENTO, TipoEquipamento, IndicadoresRede,
 } from './rede.models';
-
-function equipamentoVazio(): GravacaoEquipamento {
-  return { nome: '', tipo: 'switch', modelo_face_id: null, bem_id: null, localizacao_id: null, rack_id: null, posicao_u: null, ip_gerencia: '', funcao: null, numero_serie: '',
-    observacao: '', ativo: true };
-}
 
 function rackVazio(): GravacaoRack {
   return { nome: '', cor: 'preto', localizacao_id: null, altura_u: 42, observacao: '' };
@@ -51,8 +45,8 @@ function rackVazio(): GravacaoRack {
         <nav class="indicadores-rede" aria-label="Indicadores da rede">
           <a routerLink="/rede/portas-lista/alteradas">
             <span class="rotulo-indicador">Portas alteradas nos últimos 7 dias</span><span class="numero-indicador">{{ ind.portas_alteradas }}</span></a>
-          <a routerLink="/rede/portas-lista/sem-descricao" [attr.data-destaque]="ind.portas_ativas_sem_descricao ? 'atencao' : null">
-            <span class="rotulo-indicador">Portas ativas sem descrição</span><span class="numero-indicador">{{ ind.portas_ativas_sem_descricao }}</span></a>
+          <a routerLink="/rede/portas-lista/patch-um-lado" [attr.data-destaque]="ind.portas_patch_um_lado ? 'atencao' : null">
+            <span class="rotulo-indicador">Patch panel com um lado só</span><span class="numero-indicador">{{ ind.portas_patch_um_lado }}</span></a>
         </nav>
       } @else {
         <app-esqueleto tipo="cartao" />
@@ -66,7 +60,8 @@ function rackVazio(): GravacaoRack {
           <span class="espacador"></span>
           @if (papeis()?.administrar) {
             <button type="button" class="acao-secundaria" (click)="abrirRack(null)">Novo rack</button>
-            <button type="button" class="acao-primaria" (click)="formulario.set(formulario() === 'equipamento' ? null : 'equipamento')">Novo equipamento</button>
+            <!-- Cadastro em página própria, passo a passo (dados, conexão e revisão) -->
+            <a class="acao-primaria" routerLink="/rede/equipamentos/novo">Novo equipamento</a>
           }
         </div>
 
@@ -85,40 +80,6 @@ function rackVazio(): GravacaoRack {
             <div class="ocupa-duas acoes-formulario">
               <button type="button" class="acao-secundaria" (click)="fecharFormulario(fr)">Cancelar</button>
               <button type="submit" class="acao-primaria" [class.carregando]="salvando()" [disabled]="fr.invalid || salvando()">{{ editandoRack() ? 'Salvar rack' : 'Cadastrar rack' }}</button>
-            </div>
-          </form>
-        }
-
-        @if (formulario() === 'equipamento') {
-          <form class="grade-formulario" (ngSubmit)="criar(fe)" #fe="ngForm">
-            <div><label for="re-nome">Novo equipamento</label>
-              <input id="re-nome" name="nome" required minlength="2" maxlength="150" placeholder="Ex.: SW-5A" [(ngModel)]="novo.nome" /></div>
-            <div><label for="re-tipo">Tipo</label>
-              <select id="re-tipo" name="tipo" [(ngModel)]="novo.tipo">@for (t of tipos; track t[0]) { <option [value]="t[0]">{{ t[1] }}</option> }</select></div>
-            @if (!passivo(novo.tipo)) {
-              <div><label for="re-funcao">Função na topologia</label>
-                <select id="re-funcao" name="funcao" required [(ngModel)]="novo.funcao">
-                  <option [ngValue]="null" disabled>Escolha</option>
-                  @for (f of funcoes; track f[0]) { <option [ngValue]="f[0]">{{ f[1] }}</option> }
-                </select></div>
-            }
-            <div><label for="re-modelo">Modelo de face</label>
-              <select id="re-modelo" name="modelo" [(ngModel)]="novo.modelo_face_id">
-                <option [ngValue]="null">Sem modelo (cadastro as portas depois)</option>
-                @for (m of modelos(); track m.id) { <option [ngValue]="m.id">{{ m.nome }} ({{ m.linhas * m.colunas + m.portas_extras.length }} portas, {{ m.altura_u }}U)</option> }
-              </select></div>
-            <div><label for="re-ip">IP de gerência @if (passivo(novo.tipo)) { <small>(opcional)</small> }</label>
-              <input id="re-ip" name="ip" maxlength="45" placeholder="Ex.: 10.23.5.2" [required]="!passivo(novo.tipo)" [(ngModel)]="novo.ip_gerencia" /></div>
-            <div><label for="re-rack">Rack</label>
-              <select id="re-rack" name="rack" [(ngModel)]="novo.rack_id">
-                <option [ngValue]="null">Fora de rack</option>
-                @for (r of racks(); track r.id) { <option [ngValue]="r.id">{{ r.nome }} ({{ r.altura_u }}U)</option> }
-              </select></div>
-            <div><label for="re-u">Posição no rack (U)</label>
-              <input id="re-u" name="u" type="number" min="1" max="60" [disabled]="!novo.rack_id" placeholder="U mais baixo que ocupa (U1 = embaixo)" [(ngModel)]="novo.posicao_u" /></div>
-            <div class="ocupa-duas acoes-formulario">
-              <button type="button" class="acao-secundaria" (click)="fecharFormulario(fe)">Cancelar</button>
-              <button type="submit" class="acao-primaria" [class.carregando]="salvando()" [disabled]="fe.invalid || salvando()">Cadastrar equipamento</button>
             </div>
           </form>
         }
@@ -188,35 +149,29 @@ export class EquipamentosRedeComponent implements OnInit {
   protected readonly papeis = inject(AcessoService).rede;
 
   protected readonly filtros: [string, string][] = [['', 'Todos'], ['switch', 'Switches'], ['patch_panel', 'Patch panels'], ['roteador', 'Roteadores'], ['outro', 'Outros']];
-  protected readonly tipos = Object.entries(ROTULOS_TIPO_EQUIPAMENTO) as [TipoEquipamento, string][];
-  protected readonly funcoes = Object.entries(ROTULOS_FUNCAO_EQUIPAMENTO) as [FuncaoEquipamento, string][];
-  protected readonly passivo = ehPassivo;
   protected readonly rotulosFuncao = ROTULOS_FUNCAO_EQUIPAMENTO;
   protected readonly rotulosPing = ROTULOS_PING;
   protected readonly cores = CORES_RACK;
   protected readonly tipo = signal('');
   protected readonly itens = signal<EquipamentoResumo[]>([]);
   protected readonly racks = signal<Rack[]>([]);
-  protected readonly modelos = signal<ModeloFace[]>([]);
   /** Todas as salas ativas, no formato do campo de sala (carregadas uma vez, ao abrir o formulário do rack). */
   protected readonly salas = signal<OpcaoSala[]>([]);
   protected readonly carregando = signal(true);
-  /** Números dos cards do topo (portas alteradas nos últimos 7 dias e ativas sem descrição). */
+  /** Números dos cards do topo (portas alteradas nos últimos 7 dias e portas de patch panel com um lado só). */
   protected readonly indicadores = signal<IndicadoresRede | null>(null);
   protected readonly salvando = signal(false);
   /** Visão padrão: os racks (decisão do usuário); a lista continua para busca e filtro. */
   protected readonly visao = signal<'racks' | 'lista'>('racks');
-  protected readonly formulario = signal<'rack' | 'equipamento' | null>(null);
+  protected readonly formulario = signal<'rack' | null>(null);
   protected readonly editandoRack = signal<Rack | null>(null);
   protected readonly foraDeRack = computed(() => this.itens().filter((x) => !x.rack_id));
   protected busca = '';
-  protected novo = equipamentoVazio();
   protected rack = rackVazio();
 
   ngOnInit(): void {
     this.carregar();
     this.api.indicadores().subscribe({ next: (x) => this.indicadores.set(x), error: () => undefined });
-    this.api.modelos().subscribe({ next: (x) => this.modelos.set(x), error: () => undefined });
   }
 
   protected carregar(): void {
@@ -257,7 +212,6 @@ export class EquipamentosRedeComponent implements OnInit {
 
   protected fecharFormulario(form?: NgForm): void {
     form?.resetForm();
-    this.novo = equipamentoVazio();
     this.rack = rackVazio();
     this.editandoRack.set(null);
     this.formulario.set(null);
@@ -275,14 +229,6 @@ export class EquipamentosRedeComponent implements OnInit {
     const ok = await this.dialogos.confirmar({ titulo: `Excluir o rack ${r.nome}?`, mensagem: 'Só sai se não tiver equipamento.', rotuloConfirmar: 'Excluir rack', segundos: 3 });
     if (!ok) return;
     this.api.excluirRack(r.id).subscribe({ next: () => this.carregar(), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível excluir o rack') });
-  }
-
-  protected criar(form: NgForm): void {
-    this.salvando.set(true);
-    this.api.salvarEquipamento(null, { ...this.novo, posicao_u: this.novo.rack_id ? this.novo.posicao_u : null }).subscribe({
-      next: () => { this.salvando.set(false); this.fecharFormulario(form); this.carregar(); },
-      error: (e) => { this.salvando.set(false); this.dialogos.mostrarErro(e, 'Não foi possível cadastrar o equipamento'); },
-    });
   }
 
   protected rotuloTipo(t: TipoEquipamento): string {

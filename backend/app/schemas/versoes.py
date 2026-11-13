@@ -1,6 +1,30 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir os formatos de entrada e saída da tela Administração › Versões (atualização do SGI pelo GitHub).
-"""Schemas das versões do sistema (homologação aprova, produção instala)."""
+"""
+===============================================================================
+ARQUIVO: versoes.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Definir os formatos de entrada e saída da tela Administração › Versões, que
+atualiza o SGI a partir do GitHub (homologação aprova, produção instala).
+
+RESUMO TÉCNICO:
+Schemas pydantic: CommitVersao (um commit), VersaoAprovada (tag aprovada com
+novidades e commits), AndamentoAtualizacao (etapa e percentual da atualização
+em curso), PainelVersoes (tudo que a tela mostra), PedidoAtualizacao (corpo
+do pedido, com confirmação digitada) e VersaoAprovadaAgora (tag criada).
+
+FINALIDADE DE NEGÓCIO:
+Permitir que o administrador atualize o sistema pela própria tela, com
+controle: só versões aprovadas na homologação chegam à produção, e cada
+atualização mostra o que muda (CHANGELOG e commits) antes de ser instalada.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas de versões da administração. A atualização em si roda na
+unidade systemd `sgi-spi-atualizar`, fora da API; estes schemas apenas
+descrevem o painel e o andamento lido por ela.
+
+===============================================================================
+"""
 
 from datetime import datetime
 from typing import Literal
@@ -56,9 +80,11 @@ class PainelVersoes(BaseModel):
 
 
 class PedidoAtualizacao(BaseModel):
+    """Pedido para atualizar o sistema (exige digitar a confirmação)."""
     alvo: str = Field(..., max_length=120, description="Produção: a tag aprovada. Homologação: o nome do ramo acompanhado.")
     confirmacao: str = Field(..., description="Precisa ser `ATUALIZAR`.")
 
 
 class VersaoAprovadaAgora(BaseModel):
+    """Resposta da aprovação de uma versão na homologação."""
     tag: str = Field(..., description="Tag criada e enviada ao GitHub.")

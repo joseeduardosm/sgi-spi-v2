@@ -1,5 +1,32 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para montar, enviar e aprovar uma baixa de bens (motivo e processo por grupo, termo em PDF na aprovação).
+/**
+ * =============================================================================
+ * ARQUIVO: lista-baixa.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Página de uma baixa de bens (/patrimonio/baixas/:baixaId): montar o
+ * rascunho, definir motivo e processo por grupo de bens, enviar e gerar o
+ * termo, compartilhar, e concluir ou recusar com o de acordo da autoridade.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline e signals. computed() calcula se
+ * o usuário pode editar (rascunho do dono ou de colaborador). As ações chamam
+ * PatrimonioApiService e substituem a baixa exibida pela resposta. A conclusão
+ * envia o PDF do de acordo; relatórios e termo são baixados como arquivo.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Formaliza a retirada de bens inservíveis ou extraviados do acervo: cada bem
+ * tem motivo e número de processo, o termo vai à autoridade (via SEI) e o
+ * aceite publicado no D.O.E. (Diário Oficial) encerra a baixa. Não baixa no
+ * SAM (sistema patrimonial do Estado): o termo serve para fazer isso lá.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota do módulo Patrimônio; a baixa nasce de uma lista de classificação
+ * aprovada (lista-classificacao.component.ts). Usa o seletor de usuários
+ * padrão, a trilha de etapas (trilhas-patrimonio.ts) e o estado de acesso.
+ *
+ * =============================================================================
+ */
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -122,12 +149,18 @@ export class ListaBaixaComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   protected readonly estado = inject(PatrimonioEstadoService);
 
+  /** Id da baixa, vindo da rota. */
   readonly baixaId = input.required<string>();
+  /** Baixa exibida; null enquanto carrega. */
   protected readonly baixa = signal<Baixa | null>(null);
+  /** Ids dos itens marcados para receber motivo e processo de uma vez. */
   protected readonly marcados = signal<Set<string>>(new Set());
+  /** PDF do de acordo da autoridade escolhido para concluir. */
   protected readonly pdfConclusao = signal<File | null>(null);
+  /** Envio do PDF em andamento (deixa o botão em estado "carregando"). */
   protected readonly enviandoConclusao = signal(false);
   protected readonly trilha = trilhaBaixa;
+  // computed() é um valor derivado de outros signals: recalcula sozinho quando eles mudam.
   // Edita a baixa (rascunho) quem a montou e quem recebeu a baixa compartilhada: os poderes são os mesmos
   protected readonly rascunho = computed(() => {
     const b = this.baixa();
@@ -136,9 +169,13 @@ export class ListaBaixaComponent implements OnInit {
   });
   /** Só quem montou a baixa escolhe com quem compartilhá-la. */
   protected readonly souDono = computed(() => this.baixa()?.status === 'rascunho' && this.baixa()?.solicitante_id === this.estado.acesso()?.usuario_id);
+  /** Modal de compartilhamento aberto. */
   protected readonly compartilhando = signal(false);
+  /** Pessoas escolhidas no modal de compartilhamento. */
   protected readonly colaboradoresEscolhidos = signal<OpcaoUsuario[]>([]);
+  /** Função de busca de usuários usada pelo app-seletor-usuarios. */
   protected readonly fonteUsuarios = (busca: string) => this.api.opcoesUsuarios(busca);
+  // Campos do painel "Motivo e processo" e da recusa (ligados por ngModel)
   protected motivo: MotivoBaixa | '' = '';
   protected processo = '';
   protected motivoRecusa = '';
@@ -148,6 +185,7 @@ export class ListaBaixaComponent implements OnInit {
   protected readonly motivos = ROTULOS_MOTIVO_BAIXA;
   protected readonly listaMotivos = Object.entries(ROTULOS_MOTIVO_BAIXA);
 
+  /** Carrega o acesso do usuário e a baixa; se a baixa não abrir, volta para a lista de baixas. */
   ngOnInit(): void {
     void this.estado.carregar();
     this.api.baixa(this.baixaId()).subscribe({
@@ -156,19 +194,23 @@ export class ListaBaixaComponent implements OnInit {
     });
   }
 
+  /** Troca a baixa exibida pela versão mais recente devolvida pela API. */
   private definir(b: Baixa): void {
     this.baixa.set(b);
   }
 
+  /** Nomes de quem recebeu a baixa compartilhada, separados por vírgula. */
   protected nomesColaboradores(b: Baixa): string {
     return (b.colaboradores ?? []).map((x) => x.nome).join(', ');
   }
 
+  /** Abre o modal de compartilhamento já com as pessoas atuais pré-selecionadas. */
   protected abrirCompartilhar(b: Baixa): void {
     this.colaboradoresEscolhidos.set((b.colaboradores ?? []).map((x) => ({ id: x.id, login: '', nome_completo: x.nome, cargo: '', ativo: true })));
     this.compartilhando.set(true);
   }
 
+  /** Grava no servidor a nova lista de colaboradores (substitui a anterior). */
   protected salvarCompartilhamento(b: Baixa): void {
     this.api.compartilharBaixa(b.id, this.colaboradoresEscolhidos().map((u) => u.id)).subscribe({
       next: (x) => { this.definir(x); this.compartilhando.set(false); },
@@ -176,44 +218,53 @@ export class ListaBaixaComponent implements OnInit {
     });
   }
 
+  /** Diz se o usuário logado é quem montou a baixa. */
   protected souSolicitante(b: Baixa): boolean {
     return b.solicitante_id === this.estado.acesso()?.usuario_id;
   }
 
+  /** Quantos bens ainda estão sem motivo ou sem processo (o envio só libera quando é zero). */
   protected semMotivo(b: Baixa): number {
     return b.itens.filter((i) => !i.motivo || !i.processo).length;
   }
 
-  /** Bem escolhido na lista de sugestões: entra pelo id (vale também para bem sem chapa ou com número de série repetido). */
-  /** Inclui os bens de uma sala, um a um; os que a API recusar (já em outra baixa etc.) viram um aviso único. */
+  /** Tira um bem do rascunho da baixa (a tela só oferece quando sobra mais de um). */
   protected tirar(id: string, itemId: string): void {
     this.api.tirarDaBaixa(id, itemId).subscribe({ next: (x) => this.definir(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível tirar o bem') });
   }
 
+  /**
+   * Marca ou desmarca um item. Cria um Set novo em vez de alterar o atual
+   * para que o signal perceba a mudança e atualize a tela.
+   */
   protected alternar(id: string): void {
     this.marcados.update((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
+  /** Marca todos os itens da baixa. */
   protected marcarTodos(b: Baixa): void {
     this.marcados.set(new Set(b.itens.map((i) => i.id)));
   }
 
+  /** Aplica o motivo e o número do processo aos itens marcados e limpa a marcação. */
   protected definirMotivo(b: Baixa): void {
     this.api.motivoBaixa(b.id, [...this.marcados()], this.motivo as MotivoBaixa, this.processo.trim()).subscribe({
       next: (x) => { this.definir(x); this.marcados.set(new Set()); }, error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível aplicar o motivo'),
     });
   }
 
+  /** Envia a baixa: sai do rascunho, gera o termo em PDF e passa a aguardar o aceite. */
   protected enviar(b: Baixa): void {
     this.api.enviarBaixa(b.id).subscribe({ next: (x) => this.definir(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível enviar') });
   }
 
+  /** Apaga o rascunho depois de confirmar e volta para a lista de baixas. */
   protected async descartar(): Promise<void> {
     if (!(await this.dialogos.confirmar({ titulo: 'Descartar o rascunho?', mensagem: 'A lista da baixa será apagada.', rotuloConfirmar: 'Descartar', segundos: 2 }))) return;
     this.api.descartarBaixa(this.baixaId()).subscribe({ next: () => void this.roteador.navigate(['/patrimonio/baixas']), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível descartar') });
   }
 
-  /** Recusa a lista inteira (nenhum item aprovado), com o motivo informado. */
+  /** Guarda o PDF do de acordo escolhido no campo de arquivo (ou null se nada foi escolhido). */
   protected escolherConclusao(evento: Event): void {
     this.pdfConclusao.set((evento.target as HTMLInputElement).files?.[0] ?? null);
   }
@@ -230,18 +281,22 @@ export class ListaBaixaComponent implements OnInit {
     });
   }
 
+  /** Registra que a autoridade não deu o aceite, com o motivo digitado. */
   protected recusar(b: Baixa): void {
     this.api.recusarBaixa(b.id, this.motivoRecusa.trim()).subscribe({ next: (x) => this.definir(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível registrar a recusa') });
   }
 
+  /** Baixa o PDF do de acordo anexado na conclusão. */
   protected baixarConclusao(b: Baixa): void {
     this.api.baixarConclusaoBaixa(b.id).subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível baixar o PDF') });
   }
 
+  /** Gera o relatório da baixa em PDF ou Excel, com o aviso de andamento enquanto o servidor monta o arquivo. */
   protected relatorio(b: Baixa, formato: 'pdf' | 'xlsx'): void {
     this.dialogos.executar(this.api.relatorioBaixa(b.id, formato), 'Gerando o relatório…').subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o relatório') });
   }
 
+  /** Baixa o termo de baixa em PDF gerado no envio. */
   protected termo(b: Baixa): void {
     this.api.baixarTermo(b.id).subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível baixar o termo') });
   }

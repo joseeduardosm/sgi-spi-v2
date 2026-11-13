@@ -138,7 +138,13 @@ def _exigir_visibilidade(sessao: Session, tipo: TipoProtocolo, usuario: Usuario 
         raise ErroProtocolo("Tipo de documento não encontrado.", 404, "nao_encontrado")
 
 
+# Tipos numerados só pelo sistema (o fluxo de outro módulo reserva e anexa): ninguém reserva nem lança à mão
+TIPOS_SISTEMICOS = {"rdm sgi": "As RDMs são numeradas pelas Tarefas (botão \"Gerar RDM\" na tarefa): o número não é reservado à mão."}
+
+
 def _exigir_consumo(sessao: Session, tipo: TipoProtocolo, usuario: Usuario) -> None:
+    if tipo.nome_chave in TIPOS_SISTEMICOS:
+        raise ErroProtocolo(TIPOS_SISTEMICOS[tipo.nome_chave], 403, "sem_permissao")
     if not pode_consumir_tipo(sessao, tipo, usuario):
         raise ErroProtocolo(f"Os números de {tipo.nome} são restritos ao setor {tipo.setor.nome}.", 403, "sem_permissao")
 
@@ -380,6 +386,8 @@ def liberar(sessao: Session, numero_id: uuid.UUID, motivo: str, autor: Usuario, 
     `ignorar_dono=True` é para módulos que reservam o número por trás de um fluxo próprio (portarias dos contratos, admissão do RH) e já conferiram a permissão.
     `com_documento=True` (também só para esses módulos) aceita liberar um número já utilizado: o documento é excluído logicamente (o arquivo continua em disco para a auditoria)."""
     numero = _numero(sessao, numero_id)
+    if not ignorar_dono and numero.sequencia.tipo.nome_chave in TIPOS_SISTEMICOS:
+        raise ErroProtocolo(TIPOS_SISTEMICOS[numero.sequencia.tipo.nome_chave], 403, "sem_permissao")
     if numero.estado != "reservado" and not (com_documento and numero.estado == "utilizado"):
         raise ErroProtocolo("Só é possível liberar um número reservado e sem documento.", 409, "conflito")
     if not ignorar_dono and not _dono_ou_admin(sessao, numero, autor):
@@ -423,6 +431,8 @@ def anexar(sessao: Session, numero_id: uuid.UUID, origem: BinaryIO, nome_arquivo
 
     `ignorar_dono=True` é para módulos que reservam o número por trás de um fluxo próprio (portarias dos contratos) e já conferiram a permissão."""
     numero = _numero(sessao, numero_id)
+    if not ignorar_dono and numero.sequencia.tipo.nome_chave in TIPOS_SISTEMICOS:
+        raise ErroProtocolo(TIPOS_SISTEMICOS[numero.sequencia.tipo.nome_chave], 403, "sem_permissao")
     if numero.anulado_em is not None:
         raise ErroProtocolo("Este número foi anulado.", 409, "conflito")
     if numero.reservado_em is None:
@@ -469,6 +479,8 @@ def concluir_sem_documento(sessao: Session, numero_id: uuid.UUID, motivo: str, a
     Só quem reservou ou a administração. Números de portaria de designação ou de admissão do RH dependem do PDF do D.O.E. e não podem ser concluídos assim.
     O documento ainda pode ser anexado depois."""
     numero = _numero(sessao, numero_id)
+    if numero.sequencia.tipo.nome_chave in TIPOS_SISTEMICOS:
+        raise ErroProtocolo(TIPOS_SISTEMICOS[numero.sequencia.tipo.nome_chave], 403, "sem_permissao")
     if numero.estado != "reservado":
         raise ErroProtocolo("Só é possível concluir sem documento um número reservado e ainda sem documento.", 409, "conflito")
     if not _dono_ou_admin(sessao, numero, autor):

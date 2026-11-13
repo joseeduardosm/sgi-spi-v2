@@ -29,7 +29,9 @@ from app.services import servico_anexos
 from app.services.sla import servico_sla
 from app.services.tarefas.descricao import texto_da_descricao
 from app.services.tarefas import desempenho_tarefas, memorial_tarefa, servico_atividade_diaria, paleta, relatorio_tarefas, servico_atividades, servico_estagios, servico_marcos, servico_recorrencias, servico_subtarefas
+from app.services.tarefas import servico_rdm
 from app.services.tarefas import servico_tarefas as servico
+from app.schemas.tarefas_rdm import FormularioRdm, RdmLeitura, RdmListada, RdmResumo, ReprovacaoRdm
 from app.services.tarefas.servico_tarefas import ROTULOS_STATUS, ErroTarefa
 
 roteador = APIRouter(prefix="/tarefas", tags=["Módulo Tarefas"], responses=RESPOSTAS_AUTENTICADAS)
@@ -104,6 +106,9 @@ def _contagens(sessao: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[st
     for tarefa_id, numero in sessao.execute(select(DependenciaTarefa.tarefa_id, bloqueadora.numero).join(bloqueadora, bloqueadora.id == DependenciaTarefa.bloqueada_por_id)
                                             .where(DependenciaTarefa.tarefa_id.in_(ids)).order_by(bloqueadora.numero)):
         resultado[tarefa_id]["bloqueada_por_numeros"].append(numero)
+    # RDM de cada tarefa (selo no cartão e no detalhe)
+    for tarefa_id, (rotulo, situacao) in servico_rdm.resumos(sessao, ids).items():
+        resultado[tarefa_id]["rdm"] = RdmResumo(rotulo=rotulo, situacao=situacao)
     return resultado
 
 
@@ -155,6 +160,7 @@ def _resumo(sessao: Session, t: Tarefa, contagens: dict, agora: datetime, pais: 
         "subtarefas_em_validacao": numeros.get("subtarefas_em_validacao", 0), "bloqueada": bool(numeros.get("bloqueada", 0)), "bloqueada_por_numeros": numeros.get("bloqueada_por_numeros", []),
         "estagio_id": t.estagio_id or (padroes or {}).get((t.equipe_id, t.status)), "marco_id": t.marco_id,
         "origem_tipo": t.origem_tipo, "controlada_externamente": bool(t.controlada_externamente), "sla": servico_sla.da_tarefa(sessao, t),
+        "rdm": numeros.get("rdm"),
     }
 
 
@@ -859,6 +865,97 @@ async def criar_com_anexos(dados: str = Form(...), arquivos: list[UploadFile] = 
     with _traduzir():
         t = _criar(sessao, usuario, nova, [(a.filename or "arquivo", a.file) for a in arquivos if a.filename])
     return _detalhe(sessao, usuario, t)
+
+
+# ---------------------------------------------------------------------------------------------
+# RDM (Requisição de Mudança) — regras em `servico_rdm`
+# ---------------------------------------------------------------------------------------------
+
+def _rdm_leitura(sessao: Session, usuario: Usuario, t: Tarefa) -> RdmLeitura:
+    rdm = servico_rdm.da_tarefa(sessao, t)
+    formulario = FormularioRdm.model_validate(rdm.dados) if rdm is not None else servico_rdm.formulario_inicial(t, usuario)
+    return RdmLeitura(
+        tarefa_numero=t.numero, tarefa_titulo=t.titulo, existe=rdm is not None, numero=rdm.numero if rdm else "",
+        rotulo=servico_rdm.rotulo(rdm) if rdm else f"RDM SGI (sem número) - {formulario.titulo}", situacao=rdm.situacao if rdm else "rascunho",
+        formulario=formulario, enviada_em=_utc(rdm.enviada_em) if rdm else None, enviada_por_nome=rdm.enviada_por_nome if rdm else "",
+        decidida_em=_utc(rdm.decidida_em) if rdm else None, decidida_por_nome=rdm.decidida_por_nome if rdm else "",
+        motivo_reprovacao=rdm.motivo_reprovacao if rdm else "", tem_pdf=bool(rdm and rdm.pdf_anexo_id),
+        pode_editar=servico_rdm.pode_editar(sessao, usuario, t, rdm), pode_decidir=servico_rdm.pode_decidir(sessao, usuario, t, rdm),
+    )
+
+
+@roteador.get("/rdms", response_model=list[RdmListada], summary="RDMs (Requisições de Mudança)",
+              description="RDMs já enviadas das tarefas que a pessoa enxerga, da mais recente para a mais antiga; `situacao` filtra "
+                          "(pendente, aprovada, reprovada, concluida).")
+def listar_rdms(situacao: str | None = Query(None, pattern="^(pendente|aprovada|reprovada|concluida)$"), sessao: Session = Depends(obter_sessao),
+                usuario: Usuario = Depends(obter_usuario_atual)) -> list[RdmListada]:
+    return [RdmListada(id=r.id, numero=r.numero, titulo=r.titulo, rotulo=servico_rdm.rotulo(r), situacao=r.situacao, tarefa_numero=t.numero,
+                       tarefa_titulo=t.titulo, equipe=t.equipe.nome if t.equipe else None, enviada_em=_utc(r.enviada_em), enviada_por_nome=r.enviada_por_nome,
+                       decidida_em=_utc(r.decidida_em), decidida_por_nome=r.decidida_por_nome)
+            for r, t in servico_rdm.listar(sessao, usuario, situacao)]
+
+
+@roteador.get("/{numero}/rdm", response_model=RdmLeitura, summary="RDM da tarefa",
+              description="A RDM da tarefa (ou, se ainda não houver, o formulário com os valores iniciais), a situação e se a pessoa pode editar ou decidir.",
+              responses={**NAO_ENCONTRADA})
+def ler_rdm(numero: int, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> RdmLeitura:
+    with _traduzir():
+        return _rdm_leitura(sessao, usuario, servico.obter(sessao, usuario, numero))
+
+
+@roteador.put("/{numero}/rdm", response_model=RdmLeitura, summary="Salvar rascunho da RDM",
+              description="Responsáveis (e liderança), com a tarefa em andamento e a RDM em rascunho ou reprovada. Não envia.",
+              responses={**SEM_PERMISSAO, **INVALIDO, **NAO_ENCONTRADA})
+def salvar_rdm(numero: int, dados: FormularioRdm, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> RdmLeitura:
+    with _traduzir():
+        t = servico.obter(sessao, usuario, numero)
+        servico_rdm.salvar(sessao, usuario, t, dados)
+        return _rdm_leitura(sessao, usuario, t)
+
+
+@roteador.post("/{numero}/rdm/enviar", response_model=RdmLeitura, summary="Enviar a RDM para aprovação",
+               description="Salva, confere os obrigatórios (título, tipo, objetivo, justificativa, janela, 1 atividade de execução e 1 de rollback), "
+                           "reserva o número no Protocolo (tipo \"RDM SGI\", só no 1º envio: `00001/AAAA`) e leva a tarefa a Em validação. "
+                           "Reenvio de RDM reprovada mantém o número. Só tarefa com equipe.", responses={**SEM_PERMISSAO, **INVALIDO, **NAO_ENCONTRADA})
+def enviar_rdm(numero: int, dados: FormularioRdm, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> RdmLeitura:
+    with _traduzir():
+        t = servico.obter(sessao, usuario, numero)
+        servico_rdm.enviar(sessao, usuario, t, dados)
+        return _rdm_leitura(sessao, usuario, servico.obter(sessao, usuario, numero))
+
+
+@roteador.post("/{numero}/rdm/aprovar", response_model=RdmLeitura, summary="Aprovar a RDM",
+               description="Liderança, RDM pendente: gera o PDF (matriz FORM_RDM-V2.2_CAS1 + anexo de informações complementares; rodapé "
+                           "\"Preenchido via SGI SPI - Aprovado por …\"), anexa à tarefa e ao número do Protocolo, envia o e-mail "
+                           "\"RDM Tarefa #N - aprovada\" (responsáveis, seguidores e quem aprovou) e devolve a tarefa a Em andamento.",
+               responses={**SEM_PERMISSAO, **CONFLITO, **NAO_ENCONTRADA})
+def aprovar_rdm(numero: int, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> RdmLeitura:
+    with _traduzir():
+        t = servico.obter(sessao, usuario, numero)
+        servico_rdm.aprovar(sessao, usuario, t)
+        return _rdm_leitura(sessao, usuario, servico.obter(sessao, usuario, numero))
+
+
+@roteador.post("/{numero}/rdm/reprovar", response_model=RdmLeitura, summary="Reprovar a RDM",
+               description="Liderança, RDM pendente, com motivo: não gera PDF; a tarefa volta a Em andamento e a RDM pode ser corrigida e reenviada "
+                           "(mesmo número).", responses={**SEM_PERMISSAO, **INVALIDO, **CONFLITO, **NAO_ENCONTRADA})
+def reprovar_rdm(numero: int, corpo: ReprovacaoRdm, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> RdmLeitura:
+    with _traduzir():
+        t = servico.obter(sessao, usuario, numero)
+        servico_rdm.reprovar(sessao, usuario, t, corpo.motivo)
+        return _rdm_leitura(sessao, usuario, servico.obter(sessao, usuario, numero))
+
+
+@roteador.get("/{numero}/rdm/pdf", summary="PDF da RDM aprovada", response_class=FileResponse,
+              description="O PDF gerado na aprovação. `404` se a RDM ainda não foi aprovada.", responses={**NAO_ENCONTRADA})
+def pdf_rdm(numero: int, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> FileResponse:
+    with _traduzir():
+        t = servico.obter(sessao, usuario, numero)
+        rdm = servico_rdm.da_tarefa(sessao, t)
+        anexo = sessao.get(Anexo, rdm.pdf_anexo_id) if rdm is not None and rdm.pdf_anexo_id else None
+        if anexo is None:
+            raise ErroTarefa("Esta RDM ainda não tem PDF (é gerado na aprovação).", 404, "nao_encontrado")
+        return FileResponse(servico_anexos.caminho(anexo), media_type="application/pdf", filename=anexo.nome_original)
 
 
 @roteador.get("/{numero}", response_model=TarefaDetalhe, summary="Detalhe da tarefa",

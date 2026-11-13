@@ -428,6 +428,28 @@ class ResumoMesesReajuste(BaseModel):
     precisa_escolher: bool = Field(False, description="`true` quando há mês quebrado sem escolha: a memória (PDF/XLSX) só é gerada depois dela.")
 
 
+class MesSemMedicao(BaseModel):
+    """Competência encerrada, a partir da data de efeito, sem medição concluída no sistema (candidata à diferença manual)."""
+    competencia_id: uuid.UUID
+    identificador: str = Field(..., description="Identificador da rota da execução (`AAAA-MM`).")
+    rotulo: str = Field(..., description="Competência por extenso (ex.: `03/2025`).")
+    periodo_inicio: date
+    periodo_fim: date
+    coberta_por_outra: bool = Field(False, description="`true` quando o mês já está coberto pela diferença manual de outro reajuste/repactuação (continua candidato a esta).")
+
+
+class DiferencaManualLeitura(BaseModel):
+    """Diferença retroativa informada manualmente para meses pagos fora do sistema."""
+    valor: ValorMonetario = Field(..., description="Valor total dos meses marcados: > 0 a pagar à contratada; < 0 crédito da SPI.")
+    justificativa: str
+    meses: list[MesSemMedicao] = Field(..., description="Meses cobertos (ficam travados no preço de antes).")
+    arquivo: LeituraArquivo = Field(..., description="Memória de cálculo feita fora do sistema (PDF).")
+    informado_por: str
+    informado_em: datetime
+    observacao: str = Field(..., description="Texto que acompanha o valor nos documentos (quem, quando, meses e justificativa).")
+    competencia_diferenca: str | None = Field(None, description="Concluído com valor positivo: identificador da competência complementar (`AAAA-MM-dif-manual`).")
+
+
 class LeituraReajuste(BaseModel):
     """Reajuste completo, em elaboração ou já encerrado."""
     resumo_meses: ResumoMesesReajuste | None = Field(None, description="Memória mês a mês resumida (só em elaboração).")
@@ -445,16 +467,20 @@ class LeituraReajuste(BaseModel):
     )
     diferenca_retroativa: ValorMonetario = Field(
         Decimal(0), description="Soma de quantidade medida × (preço novo − preço pago) das competências já medidas: prévia no "
-        "rascunho, valor gravado depois de concluído. > 0: competência de diferença a pagar; < 0: crédito da SPI abatido nas próximas medições.",
+        "rascunho, valor gravado depois de concluído. > 0: competência de diferença a pagar; < 0: crédito da SPI no fundo do contrato, aplicado pelo gestor numa medição.",
     )
     competencia_credito: str | None = Field(
-        None, description="Rascunho com diferença negativa: rótulo (MM/AAAA) da competência que receberá o crédito; nulo se não houver competência a medir."
+        None, description="Sempre nulo: o crédito vai para o fundo do contrato e o gestor escolhe a medição (campo mantido por compatibilidade)."
     )
-    abatimentos: list[AbatimentoLeitura] = Field(default_factory=list, description="Concluído com desconto retroativo: onde o crédito foi (ou será) abatido.")
-    credito_pendente: ValorMonetario = Field(Decimal(0), description="Parte do crédito ainda sem competência a medir (vai para a próxima gerada).")
+    abatimentos: list[AbatimentoLeitura] = Field(default_factory=list, description="Concluído com desconto retroativo: medições em que o gestor aplicou o crédito.")
+    credito_pendente: ValorMonetario = Field(Decimal(0), description="Parte do crédito ainda no fundo do contrato (não aplicada em nenhuma medição).")
     competencia_diferenca: str | None = Field(
         None, description="Identificador (`AAAA-MM-dif`) da competência complementar gerada na conclusão, se houver."
     )
+    meses_sem_medicao: list[MesSemMedicao] = Field(
+        default_factory=list, description="Em elaboração: competências encerradas desde a data de efeito sem medição concluída, para a pergunta "
+        "\"Deseja inserir o valor da diferença manualmente?\" (vazia no reajuste retroativo e depois de concluído).")
+    diferenca_manual: DiferencaManualLeitura | None = Field(None, description="Diferença retroativa informada manualmente, se houver.")
     itens: list[ItemReajusteLeitura]
     base_atual: ValorMonetario
     base_reajustada: ValorMonetario
@@ -653,6 +679,9 @@ class LeituraRepactuacao(BaseModel):
     apostilamento: LeituraArquivo | None
     diferenca_retroativa: ValorMonetario | None = Field(None, description="Gravada na conclusão.")
     competencia_diferenca: str | None = Field(None, description="Identificador da competência de diferença gerada na conclusão.")
+    meses_sem_medicao: list[MesSemMedicao] = Field(
+        default_factory=list, description="Em elaboração: competências encerradas desde a data de efeito sem medição concluída (candidatas à diferença manual).")
+    diferenca_manual: DiferencaManualLeitura | None = Field(None, description="Diferença retroativa informada manualmente, se houver.")
     criado_em: datetime
     concluido_em: datetime | None
     cancelado_em: datetime | None

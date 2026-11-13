@@ -1,0 +1,80 @@
+<p>A <strong>RDM (Requisição de Mudança)</strong> é o registro formal de uma mudança no ambiente de tecnologia, feito dentro da própria tarefa. Ela segue o modelo de formulário da Prodesp (<strong>FORM_RDM-V2.2_CAS1</strong>): o que vai mudar, por quê, quando, com que risco, o passo a passo e como voltar atrás se algo der errado. A liderança da equipe <strong>aprova ou reprova</strong> antes da execução, e a RDM aprovada vira um <strong>PDF</strong> anexado à tarefa e enviado por e-mail aos envolvidos.</p>
+
+<h2>Quando usar a RDM</h2>
+<p>Use a RDM quando a tarefa vai <strong>mexer no ambiente em produção</strong> e isso pode afetar outras pessoas. Alguns exemplos:</p>
+<ul>
+<li>Instalar, atualizar ou trocar algo em <strong>servidores, máquinas virtuais, rede, firewall, switches, storage ou sistemas</strong> (ex.: drivers numa VM, firmware de um switch, troca de um firewall).</li>
+<li>Qualquer trabalho com <strong>indisponibilidade prevista</strong>, mesmo que curta (ex.: desligar a infraestrutura para o teste do gerador).</li>
+<li>Mudanças de configuração que, se derem errado, <strong>param um serviço</strong> (DNS, domínio, e-mail, acesso à internet, compartilhamentos).</li>
+<li>Mudanças que dependem de <strong>janela combinada</strong> com outras equipes ou com a Prodesp.</li>
+</ul>
+<p><strong>Não precisa de RDM</strong> o que não muda o ambiente: atender um usuário, trocar um mouse, levantar uma informação, escrever um documento, uma reunião. Nesses casos, entregue a tarefa como sempre, com um comentário.</p>
+<p>O <strong>tipo</strong> da RDM diz a urgência:</p>
+<ul>
+<li><strong>Programada</strong>: planejada com antecedência, com janela combinada (o caso mais comum).</li>
+<li><strong>Pré-aprovada</strong>: rotineira, de baixo risco, feita sempre do mesmo jeito.</li>
+<li><strong>Emergencial</strong>: precisa ser feita já, para corrigir uma falha. Mesmo assim, registre: a liderança aprova e o histórico fica.</li>
+</ul>
+<p class="callout info">Na dúvida, pergunte à liderança da equipe. Ela é quem aprova as RDMs.</p>
+
+<h2>Como a RDM anda (a cor de cada situação)</h2>
+<ul>
+<li><strong>Rascunho</strong> (cinza): você está preenchendo; ainda não foi enviada.</li>
+<li><strong>Aguardando aprovação</strong> (amarela): enviada; a tarefa está em <em>Em validação</em> esperando a liderança.</li>
+<li><strong>Reprovada</strong> (vermelha): a liderança pediu ajustes; a tarefa voltou para <em>Em andamento</em> com o motivo.</li>
+<li><strong>Aprovada</strong> (laranja): pode executar a mudança; o PDF já está na tarefa.</li>
+<li><strong>Concluída e implantada</strong> (verde): a mudança foi feita e a tarefa foi concluída.</li>
+</ul>
+<p>Cada RDM recebe um número do <strong>Protocolo</strong>, no formato <strong>RDM SGI 00001/2026</strong> (a numeração recomeça a cada ano). O número sai no primeiro envio e <strong>continua o mesmo</strong> se a RDM for reprovada e reenviada.</p>
+
+<h2>Para quem executa a tarefa</h2>
+<h3>1. Gerar a RDM</h3>
+<p>Com a tarefa em <strong>Em andamento</strong> (e numa equipe), abra a tarefa. Na lateral aparecem duas formas de levar a tarefa para validação:</p>
+[[r01-gerar]]
+<h3>2. Preencher o formulário</h3>
+<p>O formulário segue a ordem da matriz da Prodesp. Os campos com <strong>*</strong> são obrigatórios para enviar; o restante ajuda quem aprova e deixa o PDF completo. Você pode <strong>salvar o rascunho</strong> e continuar depois.</p>
+[[r02-identificacao]]
+<p>Conte o objetivo e a justificativa, e classifique a mudança (ação, finalidade, prioridade, risco e impacto):</p>
+[[r03-objetivo]]
+<p>Depois vêm a <strong>abrangência</strong> (quem e o que é afetado, se há indisponibilidade e por quanto tempo), o <strong>cronograma</strong> (homologação, execução e validação), a <strong>janela de implantação</strong> e o <strong>plano de execução</strong>, um passo por linha:</p>
+[[r04-janela-plano]]
+<p>O <strong>plano de comunicação</strong> diz quem será avisado, quando e por qual meio. O <strong>plano de remediação (rollback)</strong> diz como voltar ao estado anterior se a mudança der errado. Ele é obrigatório: <strong>toda mudança precisa de um caminho de volta</strong>.</p>
+[[r05-rollback]]
+<p>Na <strong>gestão do conhecimento</strong>, marque quais documentos a mudança cria ou altera (inventário, procedimento, base de conhecimento etc.). Por fim, as <strong>informações complementares</strong>: elas não têm campo na matriz da Prodesp e vão num <strong>anexo</strong> do PDF.</p>
+[[r06-complementares]]
+[[r06b-prerequisitos]]
+<h3>3. Enviar para aprovação</h3>
+[[r07-enviar]]
+<p>Ao enviar, a RDM recebe o número, a tarefa vai para <strong>Em validação</strong> e a liderança é avisada no sino (e por e-mail, para quem ligou esse aviso). Se faltar algum campo obrigatório, o SGI diz qual.</p>
+
+<h2>Para a liderança: analisar, aprovar ou reprovar</h2>
+<p>Com a RDM aguardando aprovação, a tarefa mostra <strong>Analisar RDM</strong> no lugar de <em>Validar</em> e <em>Devolver</em>:</p>
+[[r08-analisar]]
+<p>A RDM abre com todo o formulário para leitura. No fim da página fica a decisão:</p>
+[[r09-decisao]]
+<ul>
+<li><strong>Aprovar</strong>: o SGI gera o <strong>PDF da RDM</strong>, anexa o arquivo à tarefa e ao número do Protocolo e envia o e-mail <strong>"RDM Tarefa #N - aprovada"</strong>, com o PDF, aos responsáveis, a quem segue a tarefa e a quem aprovou. A tarefa <strong>volta para Em andamento</strong>, para a equipe executar a mudança.</li>
+<li><strong>Reprovar</strong>: escreva o motivo (obrigatório). Não sai PDF. A tarefa volta para <strong>Em andamento</strong> e quem executa é avisado com o seu motivo.</li>
+</ul>
+
+<h2>Depois da decisão</h2>
+<h3>Aprovada</h3>
+[[r10-aprovada]]
+<p>O PDF tem as <strong>13 seções da matriz</strong> da Prodesp (identificação, objetivo, justificativa, categorização, abrangência, cronograma, janela, plano de execução e validação, comunicação, remediação, gestão do conhecimento, aprovação e resultado pós-implementação), mais o anexo de informações complementares. No rodapé de todas as páginas: <em>"Preenchido via SGI SPI - Aprovado por [nome] - [cargo] - [setor] - dd/mm/aaaa hh:mm:ss"</em>.</p>
+<p>Execute a mudança na janela combinada. Terminado, <strong>entregue a tarefa para validação</strong> como sempre. Quando a liderança validar, a RDM fica <strong>verde: concluída e implantada</strong>.</p>
+<h3>Reprovada</h3>
+[[r11-reprovada]]
+<p>Corrija o que foi pedido no próprio formulário e clique em <strong>Reenviar para aprovação</strong>. A RDM volta a <em>Aguardando aprovação</em> com o <strong>mesmo número</strong>.</p>
+
+<h2>Acompanhar as RDMs</h2>
+<p>No menu das Tarefas, <strong>RDMs</strong> lista as requisições das tarefas que você acompanha, com a cor de cada uma:</p>
+[[r12-lista]]
+<p>O selo <strong>RDM</strong> também aparece no cartão da tarefa no quadro, e o número aparece no <strong>Protocolo</strong> (tipo "RDM SGI"), com a cor da situação e o link para a tarefa. O número da RDM não é reservado à mão no Protocolo: quem numera é a tarefa.</p>
+
+<h2>Perguntas frequentes</h2>
+<ul>
+<li><strong>Uma tarefa pode ter mais de uma RDM?</strong> Não. Se a tarefa tem duas mudanças independentes, divida em duas tarefas (ou subtarefas).</li>
+<li><strong>A tarefa não tem equipe. Posso gerar RDM?</strong> Não: quem aprova é a liderança da equipe. Coloque a tarefa numa equipe antes.</li>
+<li><strong>Mudei de ideia antes de enviar.</strong> O rascunho fica salvo; é só não enviar, ou entregar a tarefa pelo caminho de sempre.</li>
+<li><strong>A mudança deu errado.</strong> Siga o plano de remediação (rollback) da RDM e registre o que aconteceu nos comentários da tarefa.</li>
+</ul>

@@ -154,10 +154,16 @@ def acoes(sessao: Session, usuario: Usuario, tarefa: Tarefa) -> list[str]:
         lista.append("comentar")
     if executor and s == "a_fazer":
         lista.append("iniciar")
+    # RDM (Requisição de Mudança): só em tarefa com equipe; com a RDM pendente, a validação vira aprovar/reprovar a RDM
+    from app.services.tarefas import servico_rdm
+
+    rdm = servico_rdm.da_tarefa(sessao, tarefa) if tarefa.equipe is not None and s in ("em_andamento", "em_validacao") else None
     if executor and s == "em_andamento":
         lista += ["pausar", "entregar"]
+        if tarefa.equipe is not None and (rdm is None or rdm.situacao in ("rascunho", "reprovada")):
+            lista.append("gerar_rdm")
     if lider and s == "em_validacao":
-        lista += ["validar", "devolver"]
+        lista += ["aprovar_rdm", "reprovar_rdm"] if rdm is not None and rdm.situacao == "pendente" else ["validar", "devolver"]
     if lider and s in OPERACIONAIS:
         lista.append("concluir")
     if lider and s == "concluida":
@@ -550,6 +556,10 @@ def mover(sessao: Session, autor: Usuario, tarefa: Tarefa, acao: str, texto: str
     tarefa.status, tarefa.versao = para, tarefa.versao + 1
     tarefa.estagio_id = estagio_da_categoria(sessao, tarefa.equipe_id, para, estagio_id)
     reavaliar_marco(sessao, tarefa.marco_id)
+    # RDM: concluir a tarefa leva a RDM aprovada a "concluída e implantada"; reabrir a devolve a "aprovada"
+    from app.services.tarefas import servico_rdm
+
+    servico_rdm.ao_mudar_status(sessao, tarefa, para)
     tipo = {"entregar": "entregue", "validar": "validada", "devolver": "devolvida", "reabrir": "reaberta"}.get(acao, "status")
     titulos = {
         "iniciar": "Tarefa iniciada", "pausar": "Tarefa voltou para A fazer", "entregar": "Entregue para validação",

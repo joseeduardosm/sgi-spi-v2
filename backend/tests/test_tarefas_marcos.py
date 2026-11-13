@@ -1,6 +1,33 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar os marcos (milestones) e as atualizações de status das equipes de tarefas.
-"""Marcos e status da equipe."""
+"""
+===============================================================================
+ARQUIVO: test_tarefas_marcos.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar os marcos (metas com data-alvo) das equipes de tarefas e o registro
+de status da equipe, incluindo o lembrete semanal de atualização de status.
+
+RESUMO TÉCNICO:
+Cria marcos por `/api/tarefas/equipes/{id}/marcos`, liga tarefas com `PUT
+/{numero}/marco` e confere a situação calculada (no_prazo, em_risco,
+atrasado, atingido), o atingimento automático e manual, a edição e a
+exclusão. Também testa `/equipes/{id}/status` e a função
+`servico_marcos.lembrar`. O SMTP é simulado por `simular_smtp` e os avisos
+são lidos nas tabelas de notificação.
+
+FINALIDADE DE NEGÓCIO:
+Protege o acompanhamento de entregas da equipe: a liderança define metas, o
+sistema avisa quando o marco é atingido ou está em risco, e lembra toda
+segunda-feira quem precisa publicar o status da equipe, sem repetir o
+lembrete.
+
+CONTEXTO NO SISTEMA:
+Usa `tests/apoio_rh.py` (SMTP falso), `tests/test_tarefas.py` (fixture
+`equipe`), os modelos `Notificacao`/`EntregaNotificacao` e o serviço
+`app/services/tarefas/servico_marcos.py`.
+
+===============================================================================
+"""
 
 from datetime import date, timedelta
 
@@ -16,21 +43,29 @@ from tests.test_tarefas import URL, _nova, equipe  # noqa: F401  (fixture da equ
 
 @pytest.fixture(autouse=True)
 def _smtp(monkeypatch):
+    """Fixture automática (`autouse=True`): vale para todos os testes do arquivo sem ser pedida.
+
+    `monkeypatch` é a fixture do pytest que troca funções/atributos só durante o teste;
+    aqui ela substitui o envio real de e-mail por um SMTP simulado.
+    """
     simular_smtp(monkeypatch)
 
 
 def _avisos(prefixo: str) -> list[int]:
+    """Lista os ids de quem recebeu notificações cuja chave começa com `prefixo` (ex.: "tarefa-marco:")."""
     with FabricaSessao() as s:
         return [e.destinatario_id for e in s.scalars(select(EntregaNotificacao).join(Notificacao).where(Notificacao.chave.startswith(prefixo)))]
 
 
 def _concluir(cliente, h, numero, responsavel="ana"):
+    """Leva a tarefa até "Concluída" pelo fluxo normal: iniciar, entregar (executor) e validar (liderança)."""
     cliente.post(f"{URL}/{numero}/mover", json={"acao": "iniciar"}, headers=h[responsavel])
     assert cliente.post(f"{URL}/{numero}/mover", json={"acao": "entregar"}, headers=h[responsavel]).status_code == 200
     assert cliente.post(f"{URL}/{numero}/mover", json={"acao": "validar"}, headers=h["lia"]).status_code == 200
 
 
 def test_marco_progresso_situacao_e_atingimento(cliente, equipe):
+    """Ciclo completo de um marco: criar, ligar tarefas, atingir (automático e manual), reabrir, alterar e excluir."""
     ids, h, equipe_id = equipe
     base = f"{URL}/equipes/{equipe_id}/marcos"
     assert cliente.post(base, json={"nome": "Entrega", "data_alvo": "2026-12-31"}, headers=h["ana"]).status_code == 403  # só a liderança
@@ -69,6 +104,7 @@ def test_marco_progresso_situacao_e_atingimento(cliente, equipe):
 
 
 def test_marco_atrasado_e_em_risco(cliente, equipe):
+    """Data-alvo vencida = "atrasado"; tarefa ligada com prazo depois da data-alvo = "em_risco"."""
     ids, h, equipe_id = equipe
     base = f"{URL}/equipes/{equipe_id}/marcos"
     atrasado = cliente.post(base, json={"nome": "Já passou", "data_alvo": (date.today() - timedelta(days=2)).isoformat()}, headers=h["lia"]).json()
@@ -81,6 +117,7 @@ def test_marco_atrasado_e_em_risco(cliente, equipe):
 
 
 def test_status_da_equipe_e_lembrete_semanal(cliente, equipe):
+    """Só a liderança publica o status; a equipe é avisada; o lembrete sai às segundas e uma vez só."""
     ids, h, equipe_id = equipe
     base = f"{URL}/equipes/{equipe_id}/status"
     assert cliente.post(base, json={"situacao": "em_risco", "texto": "Atraso do fornecedor"}, headers=h["ana"]).status_code == 403
@@ -97,6 +134,7 @@ def test_status_da_equipe_e_lembrete_semanal(cliente, equipe):
     assert d["status_atual"]["situacao"] == "no_prazo" and d["marcos"] == []
     # Lembrete: só às segundas, com tarefa aberta e sem atualização há 7 dias
     _nova(cliente, h["lia"], equipe_id, responsavel_id=ids["ana"])
+    # Próxima segunda-feira (weekday() == 0) estritamente depois de hoje
     segunda = date.today() + timedelta(days=(7 - date.today().weekday()) % 7 or 7)
     with FabricaSessao() as s:
         assert servico_marcos.lembrar(s, segunda + timedelta(days=1)) == 0  # terça-feira não lembra

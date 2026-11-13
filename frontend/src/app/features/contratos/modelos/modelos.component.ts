@@ -1,5 +1,35 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para controlar a tela de modelos globais: checklists e formulários (SuperRoot) e máscaras de portaria (SuperRoot ou controle total).
+/**
+ * =============================================================================
+ * ARQUIVO: modelos.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Tela de modelos globais do módulo Contratos: checklists, formulários de
+ * avaliação, máscaras de portaria, despacho, e-mails e documentos da
+ * prorrogação, além dos checklists de processo (prorrogação e repactuação).
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido. Carrega todos os modelos
+ * (ativos e inativos) e agrupa por tipo em cartões. Um computed decide quais
+ * tipos aparecem conforme o papel (SuperRoot vê tudo; controle total vê só
+ * máscaras e checklists de processo). A janela de checklist é editada aqui; o
+ * formulário usa EditorFormularioComponent; máscaras navegam para página
+ * própria. Também permite importar modelos por planilha XLSX.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Centraliza os textos e listas-padrão que as equipes copiam para cada
+ * contrato, garantindo uniformidade nos documentos exigidos, nas avaliações e
+ * nas comunicações (portarias, despacho de pagamento, avisos de CADIN, que é o
+ * cadastro de inadimplentes do Estado, e de OB, a Ordem Bancária).
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota /contratos/modelos. Usa ContratosApiService (modelos, salvarModelo,
+ * excluirModelo), AutenticacaoService (papel SuperRoot), DialogosService,
+ * ImportacaoModeloXlsxComponent e EditorFormularioComponent. As máscaras são
+ * editadas em modelo-prorrogacao.component.ts e telas irmãs.
+ *
+ * =============================================================================
+ */
 
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
@@ -14,7 +44,13 @@ import { DefinicaoFormulario, Modelo } from '../compartilhado/contratos.models';
 import { ImportacaoModeloXlsxComponent } from '../compartilhado/importacao-modelo-xlsx.component';
 import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-formulario.component';
 
-/** Modelos globais (SuperRoot): checklists e formulários clonados nos contratos. */
+/**
+ * Modelos globais (SuperRoot): checklists e formulários clonados nos contratos.
+ * Cada tipo de modelo vira um cartão. Os tipos "máscara" (portaria, despacho,
+ * e-mails de CADIN e OB, prorrogação) abrem uma página própria com editor e
+ * placeholders; checklists abrem uma janela nesta tela e formulários abrem o
+ * editor de formulário.
+ */
 @Component({
   selector: 'app-modelos',
   imports: [FormsModule, DatePipe, CabecalhoModuloComponent, EditorFormularioComponent, ImportacaoModeloXlsxComponent, RouterLink],
@@ -97,6 +133,7 @@ import { definicaoVazia, EditorFormularioComponent } from '../detalhe/editor-for
   `,
 })
 export class ModelosComponent implements OnInit {
+  // `inject` obtém os serviços do Angular (injeção de dependência) sem construtor.
   private readonly api = inject(ContratosApiService);
   private readonly dialogos = inject(DialogosService);
   private readonly autenticacao = inject(AutenticacaoService);
@@ -109,6 +146,8 @@ export class ModelosComponent implements OnInit {
   protected ehMascara(tipo: string): boolean {
     return ['portaria', 'despacho', 'email_cadin', 'email_ob', 'prorrogacao'].includes(tipo);
   }
+  // `computed` deriva um valor de outros signals e só recalcula quando eles mudam.
+  // SuperRoot é o papel administrativo máximo do sistema.
   protected readonly tiposVisiveis = computed(() => (this.autenticacao.possuiPapel('SuperRoot') ? this.tipos : this.tipos.filter((t) => this.ehMascara(t.id) || this.ehChecklistDeProcesso(t.id))));
   // Modelos carregados e o estado das janelas de edição
   protected readonly modelos = signal<Modelo[]>([]);
@@ -160,7 +199,11 @@ export class ModelosComponent implements OnInit {
     }
   }
 
-  /** Salva o modelo de checklist. */
+  /**
+   * Salva o modelo de checklist (cria se não há modelo em edição, senão atualiza).
+   * Regra aplicada no envio: "documento da empresa" (vale para outros contratos)
+   * só é gravado como verdadeiro quando o item também tem validade.
+   */
   protected salvarChecklist(): void {
     const dados = { tipo: this.tipoChecklist, nome: this.nome.trim(), ativo: this.ativo, itens: this.itens.map((i) => ({ nome: i.nome.trim(), observacao: i.observacao.trim(), obrigatorio: i.obrigatorio, com_validade: i.com_validade, vale_outros_contratos: i.com_validade && i.vale_outros_contratos })) };
     this.api.salvarModelo(dados, this.emEdicao?.id).subscribe({
@@ -183,7 +226,7 @@ export class ModelosComponent implements OnInit {
     });
   }
 
-  /** Pede confirmação e exclui o modelo. */
+  /** Pede confirmação e exclui o modelo. As cópias já feitas nos contratos não são afetadas. */
   protected async excluir(modelo: Modelo): Promise<void> {
     const ok = await this.dialogos.confirmar({ titulo: `Excluir o modelo "${modelo.nome}"?`, mensagem: 'As cópias já feitas nos contratos não mudam.', rotuloConfirmar: 'Excluir' });
     if (ok) this.api.excluirModelo(modelo.id).subscribe({ next: () => this.carregar(), error: (e) => this.dialogos.mostrarErro(e) });

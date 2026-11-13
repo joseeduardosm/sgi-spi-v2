@@ -9,7 +9,7 @@ import { ambiente } from '../../../environments/ambiente';
 import {
   BemResumo, CaminhoRede, EquipamentoDetalhe, EquipamentoResumo, GravacaoEquipamento, GravacaoModelo, GravacaoPonto, GravacaoPorta, GravacaoRack, ModeloFace, PontoRede, PortaDetalhe,
   ParametrosRede, PortaDoBem, Rack, SalaResumo, TopologiaRede, Vlan,
-  IndicadoresRede, PortaListada,
+  AplicacaoLeitura, CriacaoEquipamento, IndicadoresRede, LadoPatch, PortaListada, ResultadoTesteLeitura, ResumoLeitura,
 } from './rede.models';
 
 @Injectable({ providedIn: 'root' })
@@ -41,8 +41,28 @@ export class RedeApiService {
     return this.http.get<EquipamentoDetalhe>(`${this.base}/equipamentos/${id}`);
   }
 
-  salvarEquipamento(id: string | null, dados: GravacaoEquipamento): Observable<EquipamentoDetalhe> {
+  /** Cria (com o cabo do cadastro em cadeia, `ligacao`) ou altera um equipamento (na alteração, a ligação não vai). */
+  salvarEquipamento(id: string | null, dados: GravacaoEquipamento | CriacaoEquipamento): Observable<EquipamentoDetalhe> {
     return id ? this.http.put<EquipamentoDetalhe>(`${this.base}/equipamentos/${id}`, dados) : this.http.post<EquipamentoDetalhe>(`${this.base}/equipamentos`, dados);
+  }
+
+  /** Entra por SSH só leitura num equipamento ainda não cadastrado e devolve o que leu (nada é gravado). */
+  testarLeitura(dados: { ip: string; usuario: string; senha: string; porta: number; modelo_face_id: string | null; tipo: string; funcao: string | null }):
+    Observable<ResultadoTesteLeitura> {
+    return this.http.post<ResultadoTesteLeitura>(`${this.base}/leitura/testar`, dados);
+  }
+
+  /** Lê o equipamento (com o acesso gravado), liga sozinho os vizinhos LLDP e devolve o resumo do resto. */
+  lerEquipamento(id: string): Observable<ResumoLeitura> {
+    return this.http.post<ResumoLeitura>(`${this.base}/equipamentos/${id}/leitura`, {});
+  }
+
+  ultimaLeitura(id: string): Observable<ResumoLeitura | null> {
+    return this.http.get<ResumoLeitura | null>(`${this.base}/equipamentos/${id}/leitura`);
+  }
+
+  aplicarLeitura(id: string, dados: AplicacaoLeitura): Observable<EquipamentoDetalhe> {
+    return this.http.post<EquipamentoDetalhe>(`${this.base}/equipamentos/${id}/leitura/aplicar`, dados);
   }
 
   excluirEquipamento(id: string): Observable<void> {
@@ -57,16 +77,23 @@ export class RedeApiService {
     return this.http.put<PortaDetalhe>(`${this.base}/portas/${id}`, dados);
   }
 
-  ligar(id: string, dados: { porta_id?: string | null; bem_id?: string | null; descricao?: string; forcar?: boolean }): Observable<PortaDetalhe> {
+  /** Liga a porta (no patch panel, o `lado`) a outra porta (com `outro_lado` se ela for de patch panel), a um bem ou a uma descrição. */
+  ligar(id: string, dados: { lado?: LadoPatch | null; porta_id?: string | null; outro_lado?: LadoPatch | null; bem_id?: string | null; descricao?: string }): Observable<PortaDetalhe> {
     return this.http.post<PortaDetalhe>(`${this.base}/portas/${id}/conexao`, dados);
   }
 
-  desligar(id: string): Observable<PortaDetalhe> {
-    return this.http.delete<PortaDetalhe>(`${this.base}/portas/${id}/conexao`);
+  /** Troca o que está ligado na porta (ou no lado) numa operação só; `religar_antigo` põe um patch panel no meio do cabo. */
+  trocar(id: string, dados: { lado?: LadoPatch | null; porta_id?: string | null; outro_lado?: LadoPatch | null; bem_id?: string | null; descricao?: string;
+    religar_antigo?: boolean }): Observable<PortaDetalhe> {
+    return this.http.post<PortaDetalhe>(`${this.base}/portas/${id}/conexao/trocar`, dados);
+  }
+
+  desligar(id: string, lado: LadoPatch | null = null): Observable<PortaDetalhe> {
+    return this.http.delete<PortaDetalhe>(`${this.base}/portas/${id}/conexao`, lado ? { params: { lado } } : {});
   }
 
   /** Põe um dispositivo atrás do último da porta (ex.: o PC ligado no telefone IP). */
-  adicionarAtras(id: string, dados: { bem_id?: string | null; descricao?: string }): Observable<PortaDetalhe> {
+  adicionarAtras(id: string, dados: { lado?: LadoPatch | null; bem_id?: string | null; descricao?: string }): Observable<PortaDetalhe> {
     return this.http.post<PortaDetalhe>(`${this.base}/portas/${id}/conexao/atras`, dados);
   }
 
@@ -140,13 +167,13 @@ export class RedeApiService {
     return this.http.get<PortaDoBem[]>(`${this.base}/bens/${bemId}/portas`);
   }
 
-  /** Cards do topo da Rede: portas alteradas nos últimos 7 dias e portas ligadas sem descrição. */
+  /** Cards do topo da Rede: portas alteradas nos últimos 7 dias e portas de patch panel com um lado só. */
   indicadores(): Observable<IndicadoresRede> {
     return this.http.get<IndicadoresRede>(`${this.base}/indicadores`);
   }
 
-  /** Lista de um card: `alteradas` (últimos 7 dias) ou `sem-descricao` (ligadas sem descrição). */
-  portasListadas(filtro: 'alteradas' | 'sem-descricao'): Observable<PortaListada[]> {
-    return this.http.get<PortaListada[]>(`${this.base}/${filtro === 'alteradas' ? 'portas-alteradas' : 'portas-sem-descricao'}`);
+  /** Lista de um card: `alteradas` (últimos 7 dias) ou `patch-um-lado` (portas de patch panel com um lado só ligado). */
+  portasListadas(filtro: 'alteradas' | 'patch-um-lado'): Observable<PortaListada[]> {
+    return this.http.get<PortaListada[]>(`${this.base}/${filtro === 'alteradas' ? 'portas-alteradas' : 'portas-patch-um-lado'}`);
   }
 }

@@ -1,16 +1,51 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para definir os tipos do Módulo Tarefas (espelham os schemas de /api/tarefas).
+/**
+ * =============================================================================
+ * ARQUIVO: tarefas.models.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Definir os tipos do Módulo Tarefas (espelham os schemas de /api/tarefas) e
+ * as funções puras usadas pelas visões do quadro, lista, calendário e Gantt.
+ *
+ * RESUMO TÉCNICO:
+ * Tipos e interfaces (tarefa, equipe, evento, recorrência, desempenho,
+ * atividade, marco), mapas de rótulos e funções sem efeito colateral:
+ * prazoRelativo, duracao, tamanhoLegivel, acaoEntre, iniciais, corAvatar,
+ * situacaoPrazo, prazoPadrao, agruparRaias, semanasDoMes, porDiaDoPrazo,
+ * barraGantt e regraPadrao. Por serem puras, são testadas isoladamente.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Garante que todas as telas de tarefas usem os mesmos nomes de situação,
+ * prioridade e prazo, e as mesmas regras visuais (cor do prazo, raias,
+ * calendário). As regras de verdade (permissões, cálculo de recorrência) ficam
+ * no backend; aqui só se apresenta o que a API devolve.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por todos os componentes de features/tarefas e por
+ * TarefasApiService. Depende de rdm.models.ts e de sla/sla.models.ts. Os
+ * campos devem bater com backend/app/schemas/tarefas.py.
+ *
+ * =============================================================================
+ */
 
+/**
+ * Situações do fluxo da tarefa: a fazer → em andamento → em validação
+ * (aguarda a liderança) → concluída.
+ */
 export type StatusTarefa = 'a_fazer' | 'em_andamento' | 'em_validacao' | 'concluida';
+/** Prioridades possíveis de uma tarefa. */
 export type PrioridadeTarefa = 'baixa' | 'normal' | 'alta' | 'critica';
+/** Ações que movem a tarefa no fluxo (enviadas a POST /tarefas/{numero}/mover). */
 export type AcaoPipeline = 'iniciar' | 'pausar' | 'entregar' | 'validar' | 'devolver' | 'concluir' | 'reabrir';
 
+/** Situações na ordem das colunas do quadro, com o texto mostrado ao usuário. */
 export const STATUS: { valor: StatusTarefa; rotulo: string }[] = [
   { valor: 'a_fazer', rotulo: 'A fazer' },
   { valor: 'em_andamento', rotulo: 'Em andamento' },
   { valor: 'em_validacao', rotulo: 'Em validação' },
   { valor: 'concluida', rotulo: 'Concluída' },
 ];
+// Mapas valor → rótulo, montados a partir da lista acima para não repetir os textos.
 export const ROTULOS_STATUS: Record<StatusTarefa, string> = Object.fromEntries(STATUS.map((s) => [s.valor, s.rotulo])) as Record<StatusTarefa, string>;
 export const ROTULOS_PRIORIDADE: Record<PrioridadeTarefa, string> = { baixa: 'Baixa', normal: 'Normal', alta: 'Alta', critica: 'Crítica' };
 
@@ -20,7 +55,9 @@ export interface EquipeResumo { id: string; nome: string }
 export interface Marcador { id: string; nome: string; cor: string; cor_indice: number; equipe_id: string | null; usos?: number }
 
 import type { SlaItem } from '../sla/sla.models';
+import type { RdmResumo } from './rdm.models';
 
+/** Tarefa como aparece em listas e cartões (resumo devolvido pela API). */
 export interface TarefaResumo {
   /** Dias corridos desde a criação, enquanto a tarefa não está concluída (null se concluída). */
   dias_em_aberto: number | null;
@@ -67,6 +104,8 @@ export interface TarefaResumo {
   controlada_externamente?: boolean;
   /** SLA de prazos (vazio nas tarefas controladas por outro módulo). */
   sla?: SlaItem | null;
+  /** RDM da tarefa (selo colorido), se houver. */
+  rdm?: RdmResumo | null;
 }
 
 /** Coluna do quadro da equipe; a `categoria` é a situação do pipeline que ela representa. */
@@ -75,6 +114,7 @@ export interface Estagio { id: string; nome: string; categoria: StatusTarefa; po
 /** Tarefa relacionada (mãe, subtarefa, bloqueadora ou bloqueada). */
 export interface TarefaLigada { numero: number; titulo: string; status: StatusTarefa; prazo: string; responsavel: Pessoa | null }
 
+/** Contadores mostrados no topo do quadro (atrasadas, vencem hoje, carga etc.). */
 export interface Indicadores {
   operacionais: number;
   atrasadas: number;
@@ -88,11 +128,21 @@ export interface Indicadores {
   faixa: string;
 }
 
+/**
+ * Contexto da lista: de quem são as tarefas, o título da tela e se o
+ * usuário é líder (libera ações de liderança na tela).
+ */
 export interface Contexto { tipo: 'minhas' | 'equipe' | 'pessoa' | 'subtarefas'; titulo: string; tarefa_numero: number | null; tarefa_titulo: string | null; equipe_id: string | null; login: string | null; pessoa_id: number | null; lider: boolean }
 export interface ListaTarefas { contexto: Contexto; indicadores: Indicadores; itens: TarefaResumo[] }
 
+/** Passo da trilha de etapas da tarefa, com quando e por quem foi alcançado. */
 export interface Etapa { status: StatusTarefa; rotulo: string; em: string | null; por: string | null; atual: boolean; alcancada: boolean }
 
+/**
+ * Tarefa completa (tela da tarefa). `versao` serve para o controle de
+ * concorrência ao salvar; `acoes` lista o que o usuário pode fazer agora,
+ * calculado pela API.
+ */
 export interface TarefaDetalhe extends TarefaResumo {
   /** Série a que a tarefa pertence (tarefa recorrente). */
   recorrencia: RecorrenciaResumo | null;
@@ -118,6 +168,7 @@ export interface TarefaDetalhe extends TarefaResumo {
   acoes: string[];
 }
 
+/** Anexo de um evento da linha do tempo; `removido` mantém o registro sem o arquivo. */
 export interface AnexoEvento { id: string; nome: string; tamanho: number; tipo: string; removido: boolean }
 export interface EventoTarefa {
   id: string;
@@ -145,6 +196,10 @@ export interface AtividadeDiaria { de: string; ate: string; equipe_id: string; d
 
 export interface LinhaDoTempo { total: number; itens: EventoTarefa[]; tem_mais: boolean }
 
+/**
+ * Pessoa com a carga de trabalho calculada pela API (`carga` e a `faixa`,
+ * como "Alta ocupação"), usada para escolher a quem atribuir.
+ */
 export interface PessoaCarga {
   id: number;
   nome: string;
@@ -159,6 +214,7 @@ export interface PessoaCarga {
   na_equipe: { a_fazer: number; em_andamento: number; em_validacao: number; concluidas: number; atrasadas: number } | null;
 }
 
+/** Equipe com líderes, membros, indicadores e as permissões do usuário nela. */
 export interface Equipe {
   id: string;
   nome: string;
@@ -189,6 +245,7 @@ export interface ItemAgenda {
 
 export interface AgendaPessoa { pessoa: PessoaCarga; de: string; ate: string; itens: ItemAgenda[] }
 
+/** Filtros da lista de tarefas, enviados como parâmetros de consulta. */
 export interface FiltrosTarefas {
   status: StatusTarefa[];
   prioridade: PrioridadeTarefa | '';
@@ -198,6 +255,11 @@ export interface FiltrosTarefas {
 }
 
 /** "Atrasada há 3 dias", "Vence hoje às 17:00", "Vence em 5 dias". */
+/**
+ * Concluída não mostra texto. Atrasada conta dias inteiros (ou horas, se for
+ * menos de um dia). No mesmo dia mostra a hora; senão arredonda para cima os
+ * dias que faltam.
+ */
 export function prazoRelativo(prazo: string, concluida = false): string {
   const alvo = new Date(prazo).getTime();
   const agora = Date.now();
@@ -239,9 +301,12 @@ export function tamanhoLegivel(bytes: number): string {
 // Funções puras das visões (quadro, lista, calendário e Gantt). Ficam aqui para serem testadas.
 // ---------------------------------------------------------------------------------------------
 
+// Um dia em milissegundos (24 × 60 × 60 × 1000).
 const DIA_MS = 86_400_000;
 
 /** Movimento entre colunas → ação do pipeline. Sem equipe, "concluir" é a própria entrega; com equipe, a API confere a liderança. */
+// A chave "origem>destino" aponta para a ação; movimentos sem ação (ex.:
+// a fazer → em validação) devolvem null e a tela desfaz o arrasto.
 export function acaoEntre(de: StatusTarefa, para: StatusTarefa, semEquipe: boolean): AcaoPipeline | null {
   const mapa: Record<string, AcaoPipeline> = {
     'a_fazer>em_andamento': 'iniciar',
@@ -276,6 +341,7 @@ export function corAvatar(id: number): string {
 export type SituacaoPrazo = 'concluida' | 'atrasada' | 'proxima' | 'normal';
 
 /** Cor do chip de prazo: atrasada (vermelho), vence hoje ou amanhã (âmbar), no prazo (cinza), concluída (verde). */
+// "Próxima" vale até 23:59:59 de amanhã; `Pick` pega só os campos usados.
 export function situacaoPrazo(t: Pick<TarefaResumo, 'status' | 'prazo'>, agora = new Date()): SituacaoPrazo {
   if (t.status === 'concluida') return 'concluida';
   const prazo = new Date(t.prazo);
@@ -298,6 +364,8 @@ export function prazoPadrao(agora = new Date()): Date {
 export interface Raia { pessoa: Pessoa | null; itens: TarefaResumo[] }
 
 /** Agrupa por responsável, em ordem de nome; "Sem responsável" vai por último. */
+// Usa um Map (id da pessoa → raia) para juntar as tarefas de cada pessoa
+// numa passada só; depois ordena pelo nome com localeCompare (respeita acento).
 export function agruparRaias(itens: TarefaResumo[]): Raia[] {
   const mapa = new Map<number, Raia>();
   const sem: TarefaResumo[] = [];
@@ -318,6 +386,8 @@ export function chaveDia(d: Date): string {
 }
 
 /** Semanas (domingo a sábado) que cobrem o mês `mes` (0 = janeiro) do ano. */
+// Começa no domingo da semana do dia 1 (pode ser do mês anterior) e vai
+// adicionando semanas de 7 dias até o cursor sair do mês.
 export function semanasDoMes(ano: number, mes: number): Date[][] {
   const primeiro = new Date(ano, mes, 1);
   const inicio = new Date(ano, mes, 1 - primeiro.getDay());
@@ -335,6 +405,7 @@ export function semanasDoMes(ano: number, mes: number): Date[][] {
 }
 
 /** Tarefas agrupadas pelo dia do prazo (chave de `chaveDia`), cada dia em ordem de horário. */
+// Ordena por prazo antes de agrupar, assim cada dia já fica em ordem de horário.
 export function porDiaDoPrazo<T extends { prazo: string }>(itens: T[]): Map<string, T[]> {
   const mapa = new Map<string, T[]>();
   for (const t of [...itens].sort((a, b) => a.prazo.localeCompare(b.prazo))) {
@@ -351,6 +422,8 @@ export interface BarraGantt { esquerda: number; largura: number; cortadaInicio: 
  * Posição da barra de uma tarefa numa janela de `dias` dias a partir de `inicioJanela` (meia-noite local).
  * A barra tem ao menos meio dia de largura, para ficar visível; partes fora da janela são cortadas.
  */
+// Converte tudo para milissegundos, recorta a barra nos limites da janela
+// e devolve posição e largura em porcentagem (o CSS usa left/width em %).
 export function barraGantt(item: Pick<ItemAgenda, 'inicio' | 'prazo' | 'concluida_em'>, inicioJanela: Date, dias: number): BarraGantt | null {
   const janelaIni = inicioJanela.getTime();
   const janelaFim = janelaIni + dias * DIA_MS;
@@ -384,8 +457,14 @@ export interface RegraRecorrencia {
   max_ocorrencias: number | null;
 }
 
+/** Resumo da série a que uma tarefa pertence (mostrado na tela da tarefa). */
 export interface RecorrenciaResumo { id: string; resumo: string; ativa: boolean; proxima_data: string | null; ocorrencia_em: string | null }
 
+/**
+ * Série de tarefa recorrente: o modelo (título, responsáveis, checklist) e a
+ * regra que gera as tarefas. `ultimo_erro` preenchido indica que o sistema
+ * pausou a série por falha na geração.
+ */
 export interface Recorrencia {
   id: string;
   equipe: EquipeResumo | null;
@@ -408,6 +487,7 @@ export interface Recorrencia {
   pode_gerir: boolean;
 }
 
+/** Nomes curtos dos dias, no índice da regra (0 = segunda … 6 = domingo). */
 export const DIAS_SEMANA_CURTOS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
 /** Regra padrão ao ligar "Repetir": toda semana, no dia da semana do prazo. */
@@ -429,6 +509,12 @@ export interface ResumoSlaDesempenho {
   abertas_em_risco: number;
 }
 
+/**
+ * Indicadores da tela Desempenho. Burndown: quanto falta a fazer por dia;
+ * vazão: tarefas criadas e concluídas por semana; ciclo: tempo de em
+ * andamento até conclusão; lead: da criação até a conclusão; p85: valor que
+ * 85% das tarefas não ultrapassam.
+ */
 export interface DesempenhoEquipe {
   /** `equipe` (padrão) ou `pessoa`: neste caso `equipe_id` vem vazio e `equipe_nome` traz o nome da pessoa. */
   escopo?: 'equipe' | 'pessoa';
@@ -450,6 +536,7 @@ export interface DesempenhoEquipe {
 
 // --- Atividades agendadas ---------------------------------------------------------------------------
 
+/** Tipos de atividade agendada numa tarefa (com rótulo e ícone abaixo). */
 export type TipoAtividade = 'fazer' | 'ligar' | 'email' | 'reuniao' | 'revisar' | 'enviar_documento';
 
 export const ROTULOS_TIPO_ATIVIDADE: Record<TipoAtividade, string> = {
@@ -457,6 +544,7 @@ export const ROTULOS_TIPO_ATIVIDADE: Record<TipoAtividade, string> = {
 };
 export const ICONES_TIPO_ATIVIDADE: Record<TipoAtividade, string> = { fazer: '✔', ligar: '☎', email: '✉', reuniao: '👥', revisar: '🔍', enviar_documento: '📎' };
 
+/** Atividade agendada (lembrete com prazo e responsável) ligada a uma tarefa. */
 export interface Atividade {
   id: string;
   tarefa_numero: number;
@@ -476,9 +564,11 @@ export interface Atividade {
 
 // --- Marcos e status da equipe ---------------------------------------------------------------------
 
+/** Situação de um marco e do status publicado da equipe (calculadas pela API / escolhidas pela liderança). */
 export type SituacaoMarco = 'no_prazo' | 'em_risco' | 'atrasado' | 'atingido';
 export type SituacaoStatusEquipe = 'no_prazo' | 'em_risco' | 'atrasado' | 'em_espera' | 'concluido';
 
+/** Marco (milestone): entrega com data-alvo e contagem das tarefas ligadas a ele. */
 export interface Marco {
   id: string;
   nome: string;
@@ -491,6 +581,7 @@ export interface Marco {
   atrasadas: number;
 }
 
+/** Atualização de status publicada pela liderança da equipe. */
 export interface AtualizacaoStatus { id: string; situacao: SituacaoStatusEquipe; texto: string; autor_nome: string; criado_em: string }
 
 export const ROTULOS_SITUACAO_MARCO: Record<SituacaoMarco, string> = { no_prazo: 'No prazo', em_risco: 'Em risco', atrasado: 'Atrasado', atingido: 'Atingido' };

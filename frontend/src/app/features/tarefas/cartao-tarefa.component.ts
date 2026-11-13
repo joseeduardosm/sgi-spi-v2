@@ -8,6 +8,7 @@ import { RouterLink } from '@angular/router';
 
 import { AvataresComponent } from './avatares.component';
 import { textoSla } from '../sla/sla.models';
+import { SITUACOES_RDM } from './rdm.models';
 import { ROTULOS_PRIORIDADE, situacaoPrazo, TarefaResumo } from './tarefas.models';
 
 /** "Fabiana Tucilio Fanizzi de Morais" → "Fabiana Morais" (primeiro e último nome, sem partículas como "de"). */
@@ -82,6 +83,10 @@ export function nomeCurto(nome: string): string {
         @if (t.status !== 'concluida' && t.sla && (t.sla.situacao_resolucao === 'em_risco' || t.sla.situacao_resolucao === 'estourado')) {
           <span class="selo-sla" [attr.data-situacao]="t.sla.situacao_resolucao" [title]="textoSla(t.sla, 'resolucao')">SLA</span>
         }
+        @if (t.rdm; as r) {
+          <!-- RDM: "RDM" na cor da situação (amarela, vermelha, laranja, verde); o rótulo completo no title -->
+          <span class="selo-status" [attr.data-chamado]="situacoesRdm[r.situacao].cor" [title]="r.rotulo + ' · ' + situacoesRdm[r.situacao].rotulo">RDM</span>
+        }
         @if (t.prioridade === 'alta' || t.prioridade === 'critica') {
           <span class="selo-prioridade-tarefa" [attr.data-prioridade]="t.prioridade">{{ rotulosPrioridade[t.prioridade] }}</span>
         }
@@ -102,6 +107,7 @@ export class CartaoTarefaComponent {
 
   protected readonly rotulosPrioridade = ROTULOS_PRIORIDADE;
   protected readonly textoSla = textoSla;
+  protected readonly situacoesRdm = SITUACOES_RDM;
   protected readonly situacao = computed(() => situacaoPrazo(this.tarefa()));
   /** Sigla da criticidade para a versão reduzida: B, N, A ou C. */
   protected readonly siglaPrioridade = computed(() => ({ baixa: 'B', normal: 'N', alta: 'A', critica: 'C' })[this.tarefa().prioridade]);

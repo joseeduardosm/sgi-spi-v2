@@ -1,11 +1,37 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para testar os utilitários do Módulo Tarefas (textos, avatares, prazo, raias, calendário e Gantt).
+/**
+ * =============================================================================
+ * ARQUIVO: tarefas.models.spec.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Testar os utilitários do Módulo Tarefas: textos de prazo, duração, tamanho
+ * de arquivo, avatares, chip de prazo, raias, calendário e Gantt.
+ *
+ * RESUMO TÉCNICO:
+ * Testes de funções puras de tarefas.models.ts (sem TestBed). Usa datas fixas
+ * para que o resultado não dependa do dia em que o teste roda, exceto em
+ * prazoRelativo, que usa Date.now() com margens de segundos.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Protege o que o usuário lê no quadro: "Atrasada há 3 dias", a cor do prazo
+ * (atrasada, próxima, normal, concluída), o prazo padrão de 7 dias às 18:00,
+ * a ordem das raias por pessoa, o calendário do mês, as barras do Gantt e a
+ * tradução de arrastar entre colunas para a ação certa do fluxo.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Testa frontend/src/app/features/tarefas/tarefas.models.ts. Roda com o
+ * Vitest via "npx ng test".
+ *
+ * =============================================================================
+ */
 
 import {
   acaoEntre, agruparRaias, barraGantt, corAvatar, duracao, iniciais, porDiaDoPrazo, prazoPadrao, prazoRelativo, semanasDoMes, situacaoPrazo,
   tamanhoLegivel, TarefaResumo,
 } from './tarefas.models';
 
+// `describe` agrupa os casos; `it` é cada caso; `expect(...).toBe(...)`
+// compara o resultado com o esperado.
 describe('utilitários de tarefas', () => {
   it('descreve o prazo relativo', () => {
     const dia = 86_400_000;
@@ -23,6 +49,8 @@ describe('utilitários de tarefas', () => {
 });
 
 describe('funções das visões do quadro', () => {
+  // Fábricas de dados falsos: só os campos que as funções testadas leem.
+  // O "as unknown as TarefaResumo" engana o TypeScript para não preencher todos.
   const pessoa = (id: number, nome: string) => ({ id, nome, login: nome.toLowerCase() });
   const tarefa = (numero: number, responsavel: ReturnType<typeof pessoa> | null, prazo = '2026-10-05T15:00:00') =>
     ({ numero, responsavel, prazo, status: 'a_fazer' }) as unknown as TarefaResumo;
@@ -54,6 +82,7 @@ describe('funções das visões do quadro', () => {
   });
 
   it('monta as semanas do mês e distribui as tarefas pelo dia do prazo', () => {
+    // Mês 8 = setembro (o JavaScript conta os meses a partir de 0).
     const semanas = semanasDoMes(2026, 8); // setembro de 2026 começa numa terça
     expect(semanas[0][0].getDate()).toBe(30);
     expect(semanas[0][2].getDate()).toBe(1);

@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../../environments/ambiente';
 import { baixarArquivo } from '../../../shared/utilitarios/download';
-import { CalculoMesQuebrado, GravacaoLinhaRepactuacao, GravacaoPosAssinatura, PainelAlteracao, PainelReajuste, PainelRepactuacao, Repactuacao, ProcessoProrrogacao, Prorrogacao, Reajuste, RegraSobDemanda, VigenciaRetroativa } from './contratos.models';
+import { CalculoMesQuebrado, GravacaoDiferencaManual, GravacaoLinhaRepactuacao, GravacaoPosAssinatura, PainelAlteracao, PainelReajuste, PainelRepactuacao, Repactuacao, ProcessoProrrogacao, Prorrogacao, Reajuste, RegraSobDemanda, VigenciaRetroativa } from './contratos.models';
 
 /** Corpo do rascunho da prorrogação (prazo, plano dos itens sob demanda e o cálculo dos meses quebrados; nulo mantém a escolha). */
 export interface GravacaoProrrogacao {
@@ -149,6 +149,24 @@ export class AlteracoesApiService {
   /** Gera os arquivos da memória ou cancela o reajuste. */
   acaoReajuste(id: string, reajusteId: string, acao: 'memoria/arquivos' | 'cancelar'): Observable<PainelReajuste> {
     return this.http.post<PainelReajuste>(`${this.base}/${id}/reajustes/${reajusteId}/${acao}`, {});
+  }
+
+  /**
+   * Grava (ou substitui) a diferença retroativa informada manualmente de um reajuste ou de uma repactuação em elaboração
+   * (meses pagos fora do sistema): valor total, meses marcados (um campo por mês), justificativa e o PDF da memória externa.
+   */
+  salvarDiferencaManual<T>(id: string, procedimento: 'reajustes' | 'repactuacoes', procedimentoId: string, dados: GravacaoDiferencaManual): Observable<T> {
+    const corpo = new FormData();
+    corpo.append('valor', dados.valor);
+    for (const competencia of dados.competencias_ids) corpo.append('competencias_ids', competencia);
+    corpo.append('justificativa', dados.justificativa);
+    corpo.append('arquivo', dados.arquivo);
+    return this.http.put<T>(`${this.base}/${id}/${procedimento}/${procedimentoId}/diferenca-manual`, corpo);
+  }
+
+  /** Remove a diferença manual (os meses destravam). */
+  removerDiferencaManual<T>(id: string, procedimento: 'reajustes' | 'repactuacoes', procedimentoId: string): Observable<T> {
+    return this.http.delete<T>(`${this.base}/${id}/${procedimento}/${procedimentoId}/diferenca-manual`);
   }
 
   /** Baixa um arquivo do reajuste. */

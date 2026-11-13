@@ -1,10 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir a tabela de usuários do portal e seus papéis.
-"""Usuário do portal: conta local, corporativa (LDAP) ou ambas.
+"""
+===============================================================================
+ARQUIVO: usuario.py
+AUTOR: José Eduardo Santana Martins
 
-- Conta **local**: tem senha própria guardada como hash bcrypt.
-- Conta **ldap**: a senha é conferida no Active Directory; os dados vêm da sincronização.
-- Conta **local_ldap**: aceita as duas formas de login.
+FINALIDADE:
+Definir a tabela de usuários do portal e os papéis especiais.
+
+RESUMO TÉCNICO:
+- Papel: constantes de papéis (hoje só SuperRoot, coluna superusuario).
+- OrigemUsuario: como a conta autentica. Conta local tem senha própria
+  (hash bcrypt); conta ldap confere a senha no Active Directory e recebe os
+  dados da sincronização; local_ldap aceita as duas formas.
+- Usuario: identificação, vínculo LDAP (diretório, objectGUID, DN), perfil
+  institucional, foto, tema, bio e datas de acesso e boas-vindas.
+- Índice único em lower(login): login sem diferenciar maiúsculas.
+
+FINALIDADE DE NEGÓCIO:
+Representar cada pessoa que usa o SGI e os dados do perfil institucional
+(ramal, cargo, setor, aniversário), que o próprio usuário revalida a cada
+30 dias para manter o diretório de pessoas atualizado.
+
+CONTEXTO NO SISTEMA:
+Tabela central: referenciada por quase todos os módulos (autoria,
+responsáveis, ACL, RH, setores). Usada na autenticação (local e LDAP), na
+sincronização com diretorios_ldap e nas dependências de autorização
+(possui_papel). Os formatos de API ficam em schemas/autenticacao.py e afins.
+
+===============================================================================
 """
 
 import uuid
@@ -29,7 +51,12 @@ class OrigemUsuario:
 
 
 class Usuario(Base):
-    """Tabela `usuarios`: identificação, vínculo com o LDAP e perfil institucional."""
+    """Tabela `usuarios`: identificação, vínculo com o LDAP e perfil institucional.
+
+    Cada classe que herda de `Base` vira uma tabela. `Mapped[...]` declara o tipo da coluna em
+    Python (com `| None` quando aceita nulo) e `mapped_column(...)` os detalhes no banco.
+    LDAP é o protocolo usado para consultar o Active Directory (AD), o cadastro de contas de rede.
+    """
     __tablename__ = "usuarios"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -43,7 +70,7 @@ class Usuario(Base):
     conta_integracao: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     origem: Mapped[str] = mapped_column(String(20), default=OrigemUsuario.LOCAL)
 
-    # Vínculo LDAP
+    # Vínculo LDAP (preenchido pela sincronização com o AD; vazio nas contas só locais)
     # Diretório de onde a conta veio; se o diretório for excluído, o usuário continua existindo
     diretorio_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("diretorios_ldap.id", ondelete="SET NULL"), index=True
@@ -87,6 +114,7 @@ class Usuario(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
+    # `@property` cria um atributo calculado, lido sem parênteses (usuario.papeis)
     @property
     def papeis(self) -> list[str]:
         """Lista de papéis do usuário, derivada da coluna `superusuario`."""

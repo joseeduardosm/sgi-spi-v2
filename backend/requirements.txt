@@ -17,6 +17,8 @@ reportlab==5.0.1
 pypdf==6.19.0
 openpyxl==3.1.5
 paramiko==5.0.0
+# Leitura dos equipamentos de rede por SSH (só comandos display/show): vários fabricantes (Huawei, Dell, H3C, Cisco)
+netmiko==4.4.0
 pillow==12.3.0
 nh3==0.3.7
 python-docx==1.2.0

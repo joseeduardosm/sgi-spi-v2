@@ -1,13 +1,37 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para gerar o relatório (PDF consolidado e Excel) das listas de inservíveis, extraviados e das baixas, com fotos e anexos.
-"""Relatório das listas de classificação (inservíveis e extraviados) e das baixas.
+"""
+===============================================================================
+ARQUIVO: relatorio_listas.py
+AUTOR: José Eduardo Santana Martins
 
-PDF no formato **consolidado**, como os documentos de Contratos: índice clicável na primeira página, o relatório (item, chapa, descrição com marca e
-modelo, local, últimas fotos com data, hora e quem registrou, justificativa e a coluna do anexo), as páginas das fotos em tamanho grande e, por fim,
-o anexo de cada item (boletim de ocorrência, e-mail ou foto), cada um precedido de uma contracapa. A coluna do anexo e a das fotos são hiperlinks para
-essas páginas. Todas as páginas são numeradas em sequência ("Página X de N").
+FINALIDADE:
+Gerar o relatório (PDF consolidado e Excel) das listas de classificação de
+bens (inservíveis e extraviados) e das baixas do Patrimônio, com fotos e
+anexos de cada item.
 
-Excel: as mesmas colunas, com a miniatura da última foto na célula, a aba **Fotos** (fotos grandes, com data, hora e quem registrou) e o nome do anexo.
+RESUMO TÉCNICO:
+Duas etapas: (1) montar os dados (da_classificacao, da_baixa) em dataclasses
+Relatorio/ItemRelatorio/Arquivo; (2) desenhar a saída. O PDF é no formato
+consolidado, como os documentos de Contratos: índice clicável na primeira
+página, o relatório (item, chapa, descrição com marca e modelo, local,
+últimas fotos com data, hora e quem registrou, justificativa e anexo), as
+páginas das fotos grandes e o anexo de cada item (boletim de ocorrência,
+e-mail ou foto) precedido de contracapa. As colunas de fotos e de anexo são
+hiperlinks para essas páginas, todas numeradas ("Página X de N"). O Excel
+(openpyxl) tem as mesmas colunas, a miniatura da última foto na célula, a
+aba "Fotos" com as fotos grandes e o nome do anexo.
+
+FINALIDADE DE NEGÓCIO:
+Dá à autoridade que decide (Controle total) e ao solicitante um documento
+único para instruir o processo de desfazimento ou de apuração de extravio,
+com a prova visual (fotos) e documental (anexos) de cada bem.
+
+CONTEXTO NO SISTEMA:
+Chamado pelas rotas de Patrimônio que baixam o relatório de uma lista ou de
+uma baixa. Usa os modelos Classificacao, ItemClassificacao, Baixa e Bem, o
+serviço de anexos (servico_anexos) e as peças de PDF compartilhadas em
+app.services.documentos.pdf (DocumentoPdf, contracapa, índice consolidado).
+
+===============================================================================
 """
 
 from dataclasses import dataclass, field
@@ -40,8 +64,11 @@ from app.services.patrimonio.base import ErroPatrimonio, nome_do_autor
 from app.services.patrimonio.servico_baixas import MOTIVOS
 from app.services.patrimonio.servico_localizacoes import rotulo_curto
 
+# Tipo MIME (Content-Type) de planilha do Excel, usado na resposta HTTP do download
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+# Quantas fotos de cada bem entram no relatório (as mais recentes)
 MAXIMO_FOTOS = 3
+# Situação da lista/baixa (valor gravado no banco) -> texto mostrado ao usuário
 STATUS = {"rascunho": "Rascunho", "pendente": "Aguardando aprovação", "aguardando_aceite": "Aguardando aceite da autoridade", "concluida": "Concluída", "aprovada": "Aprovada", "parcial": "Aprovada em parte", "recusada": "Recusada"}
 
 
@@ -52,7 +79,11 @@ def _local(valor: datetime) -> datetime:
 
 @dataclass
 class Arquivo:
-    """Arquivo guardado (foto ou anexo) com quando e por quem foi registrado."""
+    """Arquivo guardado (foto ou anexo) com quando e por quem foi registrado.
+
+    ``@dataclass`` gera automaticamente o construtor (__init__) a partir dos
+    campos declarados abaixo; é só um "pacote" de dados, sem acesso a banco.
+    """
 
     nome: str
     caminho: Path
@@ -61,15 +92,19 @@ class Arquivo:
     quem: str
 
     def legenda(self) -> str:
+        """Texto "dd/mm/aaaa hh:mm · Nome" usado sob as fotos e na lista de anexos."""
         data = _local(self.quando).strftime("%d/%m/%Y %H:%M") if self.quando else "—"
         return f"{data} · {self.quem or '—'}"
 
     def existe(self) -> bool:
+        """True se o arquivo ainda está no disco (pode ter sido apagado ou perdido)."""
         return self.caminho.is_file()
 
 
 @dataclass
 class ItemRelatorio:
+    """Uma linha do relatório: um bem da lista/baixa com fotos, justificativa e anexo."""
+
     numero: int
     rotulo: str
     descricao: str
@@ -81,6 +116,13 @@ class ItemRelatorio:
 
 @dataclass
 class Relatorio:
+    """Tudo o que o PDF e o Excel precisam, já independente de ser lista ou baixa.
+
+    ``campos`` são os pares (rótulo, valor) do quadro de cabeçalho;
+    ``assinaturas`` são pares (nome, papel) das linhas de assinatura;
+    ``contexto`` aparece no rodapé das contracapas e do índice.
+    """
+
     titulo: str
     nome_arquivo: str
     subtitulo: str
@@ -94,6 +136,7 @@ class Relatorio:
 # --- Montagem dos dados ------------------------------------------------------------------------------
 
 def _arquivo(sessao: Session, anexo) -> Arquivo | None:
+    """Converte um registro de anexo do banco em ``Arquivo`` (com o nome de quem enviou); None se não há anexo."""
     if anexo is None:
         return None
     autor = sessao.get(Usuario, anexo.enviado_por_id) if anexo.enviado_por_id else None
@@ -102,23 +145,33 @@ def _arquivo(sessao: Session, anexo) -> Arquivo | None:
 
 def _fotos(sessao: Session, bem: Bem) -> list[Arquivo]:
     """As últimas fotos do bem (a mais recente primeiro), com quem registrou e quando."""
+    # Descarta fotos cujo arquivo sumiu do disco, para o relatório não quebrar
     fotos = [a for a in (_arquivo(sessao, f.anexo) for f in bem.fotos) if a is not None and a.existe()]
+    # Ordena da mais nova para a mais antiga (sem data vai para o fim) e corta em MAXIMO_FOTOS
     return sorted(fotos, key=lambda a: _local(a.quando) if a.quando else datetime.min.replace(tzinfo=UTC), reverse=True)[:MAXIMO_FOTOS]
 
 
 def _descricao(bem: Bem) -> str:
+    """Texto no formato Descrição - Marca - Modelo, pulando as partes vazias."""
     return " - ".join(p for p in (bem.descricao, bem.marca, bem.modelo) if p)
 
 
 def _sala(bem: Bem) -> str:
+    """Rótulo curto da localização do bem, ou "—" quando não tem local."""
     return rotulo_curto(bem.localizacao) if bem.localizacao else "—"
 
 
 def _quando(valor: datetime | None) -> str:
+    """Data e hora de Brasília em "dd/mm/aaaa hh:mm", ou "—" quando vazia."""
     return _local(valor).strftime("%d/%m/%Y %H:%M") if valor else "—"
 
 
 def da_classificacao(sessao: Session, lista: Classificacao) -> Relatorio:
+    """Monta o ``Relatorio`` de uma lista de inservíveis ou de extraviados.
+
+    A justificativa de cada item vem prefixada pela categoria (quando há) e o
+    anexo é o do próprio item da lista. Só lê o banco.
+    """
     extraviado = lista.tipo == "extraviado"
     nome = "extraviados" if extraviado else "inserviveis"
     itens = [
@@ -136,6 +189,11 @@ def da_classificacao(sessao: Session, lista: Classificacao) -> Relatorio:
 
 
 def da_baixa(sessao: Session, baixa: Baixa) -> Relatorio:
+    """Monta o ``Relatorio`` de uma baixa: a coluna de justificativa traz o motivo e o processo.
+
+    A baixa em si não tem anexo; por isso cada item usa o anexo da lista de
+    classificação mais recente daquele bem (ver o comentário no laço).
+    """
     itens: list[ItemRelatorio] = []
     for i, item in enumerate(baixa.itens, start=1):
         # O anexo da baixa é o do extravio ou do inservível (a classificação aprovada mais recente do bem)
@@ -158,6 +216,8 @@ def da_baixa(sessao: Session, baixa: Baixa) -> Relatorio:
 
 def _jpeg(caminho: Path, maior_lado: int) -> tuple[bytes, int, int] | None:
     """Foto reduzida para o relatório (JPEG), na orientação correta; None se o arquivo não for uma imagem legível."""
+    # exif_transpose gira a imagem conforme a orientação gravada pela câmera do celular;
+    # thumbnail reduz mantendo a proporção, para o PDF/Excel não ficarem enormes
     try:
         with ImagemPil.open(caminho) as origem:
             imagem = ImageOps.exif_transpose(origem).convert("RGB")
@@ -170,6 +230,7 @@ def _jpeg(caminho: Path, maior_lado: int) -> tuple[bytes, int, int] | None:
 
 
 def _imagem_pdf(caminho: Path, caixa_largura: float, caixa_altura: float, maior_lado: int) -> Image | None:
+    """Imagem do ReportLab que cabe na caixa informada sem distorcer; None se a foto não pôde ser lida."""
     dados = _jpeg(caminho, maior_lado)
     if dados is None:
         return None
@@ -179,10 +240,12 @@ def _imagem_pdf(caminho: Path, caixa_largura: float, caixa_altura: float, maior_
 
 
 def _eh_imagem(arquivo: Arquivo) -> bool:
+    """True se o anexo é imagem (pelo tipo informado no envio ou pela extensão)."""
     return arquivo.tipo.startswith("image/") or arquivo.caminho.suffix.lower() in (".png", ".jpg", ".jpeg")
 
 
 def _eh_pdf(arquivo: Arquivo) -> bool:
+    """True se o anexo é PDF (pelo tipo informado no envio ou pela extensão)."""
     return arquivo.tipo == "application/pdf" or arquivo.caminho.suffix.lower() == ".pdf"
 
 
@@ -196,13 +259,15 @@ class _Link(Paragraph):
         self._chave, self._registro = chave, registro
 
     def draw(self) -> None:
+        """Desenha o texto e guarda (chave, página, retângulo) em ``registro`` para criar o link depois."""
         super().draw()
         x, y = self.canv.absolutePosition(0, 0)
         self._registro.append((self._chave, self.canv.getPageNumber(), (x, y, x + self.width, y + self.height)))
 
 
 def _pagina_de_fotos(rel: Relatorio, item: ItemRelatorio, autor: str) -> bytes:
-    documento = DocumentoPdf(f"Fotos do item {item.numero}", f"{item.rotulo} · {item.descricao}", autor=autor)
+    """PDF com as fotos de um item lado a lado, em tamanho grande, cada uma com nome, data e autor."""
+    documento =DocumentoPdf(f"Fotos do item {item.numero}", f"{item.rotulo} · {item.descricao}", autor=autor)
     util = documento._largura_util()
     n = len(item.fotos)
     largura = util / n - 4 * mm
@@ -217,7 +282,8 @@ def _pagina_de_fotos(rel: Relatorio, item: ItemRelatorio, autor: str) -> bytes:
 
 
 def _pagina_de_imagem(titulo: str, subtitulo: str, arquivo: Arquivo, autor: str) -> bytes | None:
-    documento = DocumentoPdf(titulo, subtitulo, autor=autor)
+    """PDF de uma página com um anexo que é imagem (ex.: foto do boletim); None se a imagem for ilegível."""
+    documento =DocumentoPdf(titulo, subtitulo, autor=autor)
     imagem = _imagem_pdf(arquivo.caminho, documento._largura_util(), 135 * mm, 2000)
     if imagem is None:
         return None
@@ -241,6 +307,8 @@ def _tabela_relatorio(rel: Relatorio, documento: DocumentoPdf, registro: list, c
     larguras = [util * p / sum(proporcoes) for p in proporcoes]
     linhas = [[Paragraph(f"<b>{c}</b>", ESTILO_PEQUENO) for c in cabecalho]]
     for item in rel.itens:
+        # Célula das fotos: miniaturas, legenda da última foto e o link "Ampliar fotos"
+        # (o link só aparece se a página de fotos do item entrou no consolidado)
         if item.fotos:
             miniaturas = [_imagem_pdf(f.caminho, 16 * mm, 16 * mm, 300) for f in item.fotos]
             miniaturas = [m for m in miniaturas if m is not None]
@@ -270,11 +338,13 @@ def gerar_pdf(rel: Relatorio, autor: str, com_anexo: bool) -> bytes:
     # (etapa, título, item, partes como (conteúdo, gerado_pelo_sistema)): só o PDF enviado pelo usuário mantém o layout original
     documentos: list[tuple[str, str, int, list[tuple[bytes, bool]]]] = []
     fotos_ok, anexos_ok = set(), set()
+    # Primeiro as páginas de fotos de cada item (na ordem dos itens)
     for item in rel.itens:
         if item.fotos:
             documentos.append(("Fotos", f"Fotos do item {item.numero} — {item.rotulo}", item.numero, [(_pagina_de_fotos(rel, item, autor), True)]))
             fotos_ok.add(item.numero)
     total_docs = len(documentos) + sum(1 for i in rel.itens if com_anexo and i.anexo and i.anexo.existe())
+    # Depois os anexos: PDF entra como está, imagem vira uma página; outros formatos ficam só com a contracapa
     for item in rel.itens:
         if not (com_anexo and item.anexo and item.anexo.existe()):
             continue
@@ -322,9 +392,11 @@ def gerar_pdf(rel: Relatorio, autor: str, com_anexo: bool) -> bytes:
         if contar_paginas(indice) == deslocamento:
             break
         deslocamento = contar_paginas(indice)
+    # 3) Liga cada área clicável do relatório à página de destino (somando as páginas do índice)
     for chave, pagina_origem, retangulo in registro:
         if chave in destinos:
             links.append(AlvoLink(deslocamento + pagina_origem, retangulo, destinos[chave]))
+    # 4) Junta tudo num só PDF, com marcadores (a "árvore" lateral do leitor de PDF)
     partes_finais: list[tuple[bytes, bool]] = [(indice, True), (relatorio, True)]
     for _, _, _, partes in documentos:
         partes_finais.extend(partes)
@@ -335,6 +407,12 @@ def gerar_pdf(rel: Relatorio, autor: str, com_anexo: bool) -> bytes:
 # --- Excel -------------------------------------------------------------------------------------------
 
 def gerar_xlsx(rel: Relatorio, com_anexo: bool) -> bytes:
+    """Planilha do relatório: aba "Relatório" (uma linha por bem) e aba "Fotos" (fotos grandes).
+
+    Na aba principal, a coluna de fotos mostra a miniatura da última foto e é
+    um hiperlink interno para o bloco do item na aba "Fotos". Devolve os
+    bytes do .xlsx (nada é gravado em disco).
+    """
     livro = Workbook()
     folha = livro.active
     folha.title = "Relatório"
@@ -374,6 +452,7 @@ def gerar_xlsx(rel: Relatorio, com_anexo: bool) -> bytes:
             fotos.add_image(imagem, f"A{linha_foto}")
             linha_foto += int(imagem.height / 20) + 2
         linha_foto += 1
+    # Linhas da aba principal (uma por bem); ancora_fotos diz em que linha da aba "Fotos" está cada item
     linha = linha_cab
     for item in rel.itens:
         linha += 1
@@ -407,20 +486,24 @@ def gerar_xlsx(rel: Relatorio, com_anexo: bool) -> bytes:
 # --- Entradas públicas -------------------------------------------------------------------------------
 
 def _nome(rel: Relatorio, sufixo: str, hoje: str) -> str:
+    """Nome do arquivo baixado, ex.: "relatorio-inserviveis-2026-11-11.pdf"."""
     return f"relatorio-{rel.nome_arquivo}-{hoje}.{sufixo}"
 
 
 def relatorio_da_classificacao(sessao: Session, lista: Classificacao, formato: str, autor: Usuario, hoje: str) -> tuple[bytes, str, str]:
+    """Relatório de uma lista de inservíveis/extraviados. Devolve (conteúdo, nome do arquivo, tipo MIME)."""
     rel = da_classificacao(sessao, lista)
     return _saida(rel, formato, autor, hoje)
 
 
 def relatorio_da_baixa(sessao: Session, baixa: Baixa, formato: str, autor: Usuario, hoje: str) -> tuple[bytes, str, str]:
+    """Relatório de uma baixa. Devolve (conteúdo, nome do arquivo, tipo MIME)."""
     rel = da_baixa(sessao, baixa)
     return _saida(rel, formato, autor, hoje)
 
 
 def _saida(rel: Relatorio, formato: str, autor: Usuario, hoje: str) -> tuple[bytes, str, str]:
+    """Gera o PDF ou o Excel; qualquer outro formato levanta ``ErroPatrimonio`` (vira erro 4xx na rota)."""
     if formato not in ("pdf", "xlsx"):
         raise ErroPatrimonio("Formato inválido: use pdf ou xlsx.")
     if formato == "xlsx":

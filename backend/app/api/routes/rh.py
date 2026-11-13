@@ -1,13 +1,42 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para expor as rotas do Módulo RH (cadastro validado pela CGP, férias e licença-prêmio).
-"""Módulo RH (`/api/rh`).
+"""
+===============================================================================
+ARQUIVO: rh.py
+AUTOR: José Eduardo Santana Martins
 
-- `papeis`: o que o usuário é no RH (CGP, autorizador).
-- `cadastro/*`: validação das alterações de cadastro e dados funcionais (só CGP).
-- `afastamentos/*`: férias e licença-prêmio (usuário, autorizador e CGP).
-- `parametros`: regras de agendamento (leitura para todos; gravação só CGP).
+FINALIDADE:
+Expor as rotas principais do Módulo RH (/api/rh): papéis do usuário no RH,
+validação de cadastro e dados funcionais pela CGP, feriados, relatório de
+saldos, folha de ponto, parâmetros e o ciclo de férias e licença-prêmio.
 
-Todas as rotas exigem login com perfil em dia. Sem o papel exigido: `403 sem_permissao`.
+RESUMO TÉCNICO:
+Grupos de rotas:
+- papeis: o que o usuário é no RH (CGP, autorizador);
+- cadastro/*: validação das alterações de cadastro, dados funcionais,
+  carga por planilha e ajuste do período aquisitivo (só CGP);
+- feriados e relatorios/saldos (gravação e relatório só CGP);
+- folha-ponto: PDF do próprio usuário por competência (AAAA-MM);
+- parametros: regras de agendamento (leitura para todos; gravação só CGP);
+- afastamentos/*: pedir, alterar, cancelar, dar ciência, aprovar, recusar,
+  lançar pela CGP, painel e exportação.
+Todas exigem login com perfil em dia. As regras estão em app/services/rh/;
+_traduzir converte SemPermissaoRh (403 sem_permissao) e os erros de cadastro
+e afastamento para o formato padrão da API.
+
+FINALIDADE DE NEGÓCIO:
+Leva para o sistema o trabalho da CGP (Coordenadoria de Gestão de Pessoas):
+o servidor pede férias ou licença-prêmio (LP) e acompanha os saldos; o
+superior imediato dá o ciente; o autorizador aprova; a CGP valida o cadastro,
+mantém feriados e regras e acompanha tudo pelo painel. A folha de ponto sai
+pronta, já com feriados e afastamentos.
+
+CONTEXTO NO SISTEMA:
+Serviços em app/services/rh/ (servico_afastamentos, servico_cadastro,
+servico_periodos, servico_feriados, folha_ponto, importacao_funcionais,
+relatorio_saldos, papeis), modelos em app/models/rh.py e schemas em
+app/schemas/rh.py. Outras rotas do RH ficam em rh_admissao.py, rh_cargos.py,
+rh_pessoal.py e rh_pre_cadastro.py. Telas em frontend/src/app/features/rh.
+
+===============================================================================
 """
 
 import uuid
@@ -68,6 +97,8 @@ from app.services.rh import folha_ponto, importacao_funcionais, relatorio_saldos
 from app.services.servico_auditoria import auditar
 from app.services.rh.papeis import SemPermissaoRh, dados_funcionais, eh_cgp, setor_do_usuario, usuarios_cgp
 
+# APIRouter agrupa as rotas sob /rh. As respostas padrão de rota autenticada (401 etc.) entram em
+# todas as rotas na documentação.
 roteador = APIRouter(prefix="/rh", tags=["Módulo RH"], responses=RESPOSTAS_AUTENTICADAS)
 SEM_PERMISSAO = {status.HTTP_403_FORBIDDEN: {"description": "Sem o papel exigido no RH (`sem_permissao`)."}}
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -75,7 +106,13 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @contextmanager
 def _traduzir():
-    """Erros do RH no formato padrão da API."""
+    """
+    Gerenciador de contexto (usado com `with`) que converte os erros do RH para o
+    formato padrão da API.
+
+    SemPermissaoRh vira 403 `sem_permissao`; ErroCadastro e ErroAfastamento viram
+    ErroApi com o status e o código que o serviço definiu.
+    """
     try:
         yield
     except SemPermissaoRh as erro:
@@ -85,6 +122,10 @@ def _traduzir():
 
 
 def _nome(u: Usuario | None) -> str:
+    """
+    Nome para exibir: nome completo, o login se não houver nome, ou um travessão se o
+    usuário não existir.
+    """
     return (u.nome_completo or u.login) if u else "—"
 
 
@@ -97,6 +138,13 @@ def meus_papeis(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depe
 # --- Cadastro (CGP) -----------------------------------------------------------------------------
 
 def _alteracao(sessao: Session, a: AlteracaoCadastral) -> AlteracaoLeitura:
+    """
+    Converte uma alteração de cadastro (pedido de troca de um campo do perfil) para a
+    resposta.
+
+    Inclui os rótulos legíveis dos valores (ex.: nome do setor no lugar do id). O valor
+    corrigido pela CGP só aparece quando a alteração foi recusada.
+    """
     return AlteracaoLeitura(
         id=a.id, campo=a.campo, rotulo=cadastro.ROTULOS.get(a.campo, a.campo),
         valor_anterior=a.valor_anterior, valor_anterior_rotulo=cadastro.rotulo_valor(sessao, a.campo, a.valor_anterior),
@@ -108,6 +156,14 @@ def _alteracao(sessao: Session, a: AlteracaoCadastral) -> AlteracaoLeitura:
 
 
 def _cadastro(sessao: Session, usuario: Usuario) -> CadastroRh:
+    """
+    Monta o cadastro completo de um servidor para a CGP: perfil em vigor, alterações
+    pendentes, histórico e dados funcionais.
+
+    Dados funcionais são os que só a CGP vê e mantém: autorizador de férias/LP e
+    substituto, períodos aquisitivos, saldo de LP, jornada e horários, documentos. Sem
+    dados funcionais cadastrados, os campos voltam vazios.
+    """
     dados = dados_funcionais(sessao, usuario.id)
     autorizador = sessao.get(Usuario, dados.autorizador_id) if dados and dados.autorizador_id else None
     substituto = sessao.get(Usuario, dados.substituto_id) if dados and dados.substituto_id else None
@@ -155,6 +211,7 @@ def _periodos(sessao: Session, usuario_id: int) -> list[PeriodoLeitura]:
 
 
 def _usuario(sessao: Session, usuario_id: int) -> Usuario:
+    """Busca o usuário pelo id ou responde 404 `nao_encontrado`."""
     usuario = sessao.get(Usuario, usuario_id)
     if usuario is None:
         raise ErroApi(status.HTTP_404_NOT_FOUND, "Usuário não encontrado.", "nao_encontrado")
@@ -170,6 +227,8 @@ def listar_pendencias(sessao: Session = Depends(obter_sessao), autor: Usuario = 
                             alteracoes=[_alteracao(sessao, a) for a in lista]) for u, lista in grupos]
 
 
+# Consulta do cadastro de outra pessoa: só a CGP. O erro SemPermissaoRh é convertido em 403 por
+# _traduzir.
 @roteador.get("/cadastro/usuarios/{usuario_id}", response_model=CadastroRh, summary="Cadastro de um usuário (CGP)",
               description="Valores em vigor, pendências, histórico completo e dados funcionais. Só CGP.",
               responses={**SEM_PERMISSAO, **resposta_nao_encontrado("Usuário")})
@@ -181,6 +240,10 @@ def detalhar_cadastro(usuario_id: int, sessao: Session = Depends(obter_sessao), 
 
 
 def _resultado_importacao(linhas, gravado: bool) -> ResultadoImportacaoRh:
+    """
+    Converte as linhas conferidas da planilha de dados funcionais no resumo da resposta:
+    total, quantas mudam, quantas têm erro e se foi gravado.
+    """
     return ResultadoImportacaoRh(
         total=len(linhas), com_mudanca=sum(1 for l in linhas if l.mudancas and not l.erros), com_erro=sum(1 for l in linhas if l.erros),
         gravado=gravado, linhas=[LinhaImportacaoRh(linha=l.linha, login=l.login, nome=l.nome, mudancas=l.mudancas, erros=l.erros) for l in linhas],
@@ -188,6 +251,13 @@ def _resultado_importacao(linhas, gravado: bool) -> ResultadoImportacaoRh:
 
 
 async def _planilha(arquivo: UploadFile) -> bytes:
+    """
+    Lê a planilha enviada (só .xlsx; outro formato dá 400).
+
+    Lê no máximo TAMANHO_MAXIMO + 1 bytes: o byte a mais permite ao serviço perceber que
+    o arquivo passou do limite sem carregar tudo na memória. Função assíncrona (async)
+    porque a leitura do UploadFile é assíncrona.
+    """
     if not (arquivo.filename or "").lower().endswith(".xlsx"):
         raise ErroApi(status.HTTP_400_BAD_REQUEST, "Envie a planilha no formato .xlsx.", "invalido")
     return await arquivo.read(importacao_funcionais.TAMANHO_MAXIMO + 1)
@@ -202,6 +272,8 @@ def modelo_importacao_funcionais(sessao: Session = Depends(obter_sessao), autor:
     return Response(conteudo, media_type=XLSX, headers={"Content-Disposition": 'attachment; filename="dados-funcionais-rh.xlsx"'})
 
 
+# Prévia e importação da carga de dados funcionais: a prévia só confere; a importação confere de
+# novo e grava tudo ou nada.
 @roteador.post("/cadastro/funcionais/importacao/previa", response_model=ResultadoImportacaoRh, summary="Prévia da carga de dados funcionais",
                description="`multipart/form-data` com a planilha em `arquivo`. Confere sem gravar: por linha, o que muda e os erros. "
                            "Célula vazia mantém o valor atual. Só CGP.", responses={**SEM_PERMISSAO, **INVALIDO})
@@ -224,6 +296,7 @@ async def importar_funcionais(arquivo: UploadFile = File(..., description="Plani
         return _resultado_importacao(importacao_funcionais.importar(sessao, conteudo, autor), gravado=True)
 
 
+# Validação em lote: as alterações que falham voltam em `erros` sem impedir as demais.
 @roteador.post("/cadastro/alteracoes/validar-lote", response_model=ResultadoValidacaoLote, summary="Validar alterações em lote",
                description="Valida várias alterações de uma vez. As que não puderem ser validadas (já analisadas, superior em ciclo) "
                            "voltam em `erros`, sem impedir as demais. Só CGP.", responses={**SEM_PERMISSAO})
@@ -274,6 +347,8 @@ def ajustar_periodo(usuario_id: int, dados: AjustePeriodo, sessao: Session = Dep
 
 # --- Feriados e pontos facultativos ------------------------------------------------------------
 
+# Feriados e pontos facultativos: base do cálculo de dias úteis das férias e da folha de ponto.
+# model_validate(..., from_attributes=True) converte o objeto do banco no schema de resposta.
 @roteador.get("/feriados", response_model=list[FeriadoLeitura], summary="Feriados e pontos facultativos do ano",
               description="Todos os usuários leem. Em ordem de data.")
 def listar_feriados(ano: int = Query(..., ge=2000, le=2100), sessao: Session = Depends(obter_sessao),
@@ -310,6 +385,7 @@ def excluir_feriado(feriado_id: uuid.UUID, sessao: Session = Depends(obter_sessa
 
 # --- Relatório de saldos -----------------------------------------------------------------------
 
+# Relatório de saldos de férias e LP de todos os servidores ativos (só CGP), em XLSX ou PDF.
 @roteador.get("/relatorios/saldos", response_class=Response, summary="Relatório de saldos de férias e licença-prêmio (CGP)",
               description="Uma linha por servidor ativo: setor, autorizador, período aquisitivo vigente (creditados, agendados, "
                           "disponíveis, fim, data-limite para pedir) e licença-prêmio do ano. Quem não tem o início do período aquisitivo "
@@ -324,12 +400,16 @@ def relatorio_de_saldos(formato: Literal["pdf", "xlsx"] = "xlsx", sessao: Sessio
 
 # --- Folha de ponto -----------------------------------------------------------------------------
 
+# Janela de competências (meses) em que a folha de ponto pode ser gerada: 12 meses para trás e 2
+# para frente.
 MESES_ANTERIORES_FOLHA, MESES_SEGUINTES_FOLHA = 12, 2
 
 
 def _competencias_folha() -> list[tuple[int, int]]:
     """Do mês atual (São Paulo) 12 meses para trás e 2 para frente, do mais recente ao mais antigo."""
     hoje = afastamentos.hoje()
+    # Conta os meses como um número único (ano * 12 + mês) para andar para trás e para frente sem
+    # tratar a virada de ano à parte.
     base = hoje.year * 12 + hoje.month - 1
     return [(n // 12, n % 12 + 1) for n in range(base + MESES_SEGUINTES_FOLHA, base - MESES_ANTERIORES_FOLHA - 1, -1)]
 
@@ -352,10 +432,14 @@ def competencias_folha(_: Usuario = Depends(obter_usuario_atual)) -> list[Compet
                          status.HTTP_409_CONFLICT: {"description": "Dados funcionais incompletos ou cadastro aguardando validação."}})
 def gerar_folha_ponto(competencia: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="`AAAA-MM`."),
                       sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(obter_usuario_atual)) -> Response:
+    # A competência já chega validada pelo pattern AAAA-MM; aqui confere se está dentro da janela
+    # permitida.
     ano, mes = int(competencia[:4]), int(competencia[5:])
     if (ano, mes) not in _competencias_folha():
         raise ErroApi(status.HTTP_400_BAD_REQUEST, "Competência fora do período disponível (últimos 12 meses e próximos 2).", "invalido")
     try:
+        # Bloqueia a folha (409) se faltar dado funcional ou houver alteração de cadastro aguardando
+        # a CGP; o serviço também avisa a CGP.
         folha_ponto.verificar(sessao, usuario, afastamentos.hoje())
     except folha_ponto.FolhaBloqueada as erro:
         raise ErroApi(status.HTTP_409_CONFLICT, str(erro), erro.codigo) from erro
@@ -368,6 +452,8 @@ def gerar_folha_ponto(competencia: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0
 
 # --- Parâmetros ---------------------------------------------------------------------------------
 
+# A leitura dos parâmetros pode criar a linha padrão no primeiro acesso, por isso há commit mesmo
+# numa rota GET.
 @roteador.get("/parametros", response_model=ParametrosLeitura, summary="Regras de agendamento",
               description="Parâmetros de férias e licença-prêmio em vigor (todos podem ler).")
 def ler_parametros(sessao: Session = Depends(obter_sessao), _: Usuario = Depends(obter_usuario_atual)) -> ParametrosLeitura:
@@ -393,6 +479,14 @@ def gravar_parametros(dados: GravacaoParametros, sessao: Session = Depends(obter
 
 def _afastamento(sessao: Session, a: Afastamento, usuario: Usuario | None, autor: Usuario, pode_decidir: bool = False,
                  eventos: bool = False) -> AfastamentoLeitura:
+    """
+    Converte um afastamento (férias ou licença-prêmio) para a resposta, com as
+    permissões calculadas.
+
+    `usuario` é o dono do pedido e `autor` quem está vendo. `pode_alterar` só vale para
+    o próprio dono, com o pedido pendente ou aprovado e ainda dentro do prazo de
+    cancelamento definido nos parâmetros da CGP. `eventos` inclui o histórico de status.
+    """
     prazo = afastamentos.parametros(sessao).prazo_cancelamento_dias
     no_prazo = (a.inicio - afastamentos.hoje()).days >= prazo
     return AfastamentoLeitura(
@@ -414,6 +508,8 @@ def meus_afastamentos(exercicio: int | None = Query(None, ge=2000, le=2100), ses
     saldos, lista = afastamentos.meus(sessao, usuario, ano)
     p = afastamentos.parametros(sessao)
     hoje = afastamentos.hoje()
+    # Período aquisitivo vigente (o ano de trabalho que dá direito a férias) e o próximo, com o
+    # saldo de cada um. O vigente pode ser criado nesta leitura, por isso há commit adiante.
     periodo = servico_periodos.vigente(sessao, usuario.id, hoje)
     atual = proximo = None
     if periodo:
@@ -454,6 +550,8 @@ def lancar_afastamento(dados: LancamentoAfastamento, sessao: Session = Depends(o
     return _afastamento(sessao, a, dono, autor, eventos=True)
 
 
+# Pedido de férias/LP em duas etapas: ciente do superior imediato e depois aprovação do autorizador
+# (ou CGP). As regras e os e-mails ficam no serviço.
 @roteador.post("/afastamentos", response_model=AfastamentoLeitura, status_code=status.HTTP_201_CREATED, summary="Agendar férias ou licença-prêmio",
                description="Valida as regras da CGP (mínimo de dias, início vedado, antecedência, exercício, saldo do tipo, sobreposição e "
                "emenda). Em duas etapas: o superior imediato recebe o pedido para o ciente e de acordo; só depois o autorizador (ou substituto) e a CGP "
@@ -521,6 +619,7 @@ def listar_aprovacoes(sessao: Session = Depends(obter_sessao), autor: Usuario = 
     return [_afastamento(sessao, a, u, autor, pode_decidir=afastamentos.pode_decidir(sessao, autor, a)) for a, u in afastamentos.aprovacoes(sessao, autor)]
 
 
+# Janela do painel de afastamentos: um mês ou o ano inteiro.
 Visao = Literal["mensal", "anual"]
 
 
@@ -531,6 +630,8 @@ def _exigir_painel(sessao: Session, autor: Usuario) -> None:
         raise ErroApi(status.HTTP_403_FORBIDDEN, "O painel de afastamentos é do RH e dos autorizadores.", "sem_permissao")
 
 
+# Painel de férias e LP: confere o acesso, pede os dados ao serviço e converte cada parte para os
+# schemas da resposta.
 @roteador.get("/afastamentos/painel", response_model=PainelAfastamentos, summary="Painel de férias e licenças-prêmio",
               description="Pendentes, aprovados e gozados na janela (mês ou ano), com filtros por pessoa, setor (inclui os filhos) e tipo, e "
               "alertas de setor. **Só para quem está no recurso ACL `rh` (qualquer nível) ou é autorizador de alguém**; 403 para os demais. Escopo: CGP vê todos; autorizador vê os autorizados e a si mesmo.")

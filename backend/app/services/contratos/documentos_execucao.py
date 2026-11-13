@@ -83,6 +83,27 @@ def _cabecalho_contrato(documento: DocumentoPdf, contrato: Contrato, competencia
     )
 
 
+def observacoes_diferenca_manual(competencia: Competencia) -> list[str]:
+    """Observações das diferenças informadas manualmente que esta competência cita: a complementar gerada por uma e os créditos manuais aplicados."""
+    textos = []
+    if competencia.diferenca_manual is not None:
+        textos.append(competencia.diferenca_manual.texto_observacao)
+    for abatimento in competencia.abatimentos_reajuste:
+        if abatimento.valor > 0 and abatimento.diferenca_manual is not None:
+            textos.append(f"{abatimento.rotulo_origem}: {abatimento.diferenca_manual.texto_observacao}")
+    return list(dict.fromkeys(textos))
+
+
+def _secao_observacoes_manuais(documento: DocumentoPdf, competencia: Competencia) -> None:
+    """Seção "Observações" com o texto das diferenças manuais (quando houver)."""
+    textos = observacoes_diferenca_manual(competencia)
+    if not textos:
+        return
+    secao = documento.secao("Observações")
+    for texto in textos:
+        secao.paragrafo(texto)
+
+
 def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[NotaEmpenho], versao: int, autor: str) -> bytes:
     """PDF da memória de cálculo: itens medidos, NEs escolhidas e ciências."""
     documento = DocumentoPdf(
@@ -105,6 +126,7 @@ def memoria_medicao(contrato: Contrato, competencia: Competencia, notas: list[No
 
         total = total_medido(competencia)
     _secao_desconto_reajuste(documento, competencia, arredondar(total))
+    _secao_observacoes_manuais(documento, competencia)
     # Glosas do diário de bordo das ocorrências que afetam esta competência (a apontada no registro; a data pode ser de outro mês)
     glosas = [
         [f"{o.data_ocorrencia:%d/%m/%Y}", o.registrada_por_nome, (texto_da_descricao(o.descricao) if len(texto_da_descricao(o.descricao)) <= 300 else texto_da_descricao(o.descricao)[:297] + "…"),
@@ -145,9 +167,11 @@ def documento_executivo(contrato: Contrato, competencia: Competencia, versao: in
         nota = nota_final(competencia.avaliacao)
         linhas += [("Nota da avaliação de qualidade", str(nota) if nota is not None else "—"), ("Pagamento liberado pela avaliação", f"{quantidade(percentual)}%")]
     if reajuste:
-        linhas.append(("Desconto de reajuste", moeda(reajuste)))
+        # Um por crédito aplicado pelo gestor, com a origem ("Crédito de Reajuste (ref. MM/AAAA)")
+        linhas += [(a.rotulo_origem, "-" + moeda(a.valor)) for a in competencia.abatimentos_reajuste if a.valor > 0]
     documento.secao("Valor a faturar").campos(linhas, colunas=1)
     documento.espaco(2).paragrafo(f"<b>Valor líquido a faturar: {moeda(a_faturar)}</b>")
+    _secao_observacoes_manuais(documento, competencia)
     saldos = saldos_da_medicao(contrato, competencia)
     documento.secao("Itens medidos (com as glosas do período)").tabela(
         ["Item", "Medido", "Glosa no período", "Subtotal"],
@@ -309,16 +333,16 @@ def _quadro_total_notas(documento: DocumentoPdf, competencia: Competencia, pagin
 
 
 def _secao_desconto_reajuste(documento: DocumentoPdf, competencia: Competencia, total: Decimal) -> None:
-    """Crédito de desconto de reajuste retroativo abatido nesta competência (se houver)."""
+    """Créditos de reajuste/repactuação que o gestor aplicou nesta competência (se houver)."""
     abatimentos = [a for a in competencia.abatimentos_reajuste if a.valor > 0]
     if not abatimentos:
         return
     desconto = sum((a.valor for a in abatimentos), Decimal(0))
-    documento.secao("Desconto de reajuste (crédito de competências já medidas)").tabela(
-        ["Origem", "Valor abatido"],
+    documento.secao("Créditos de reajuste/repactuação aplicados").tabela(
+        ["Crédito", "Valor abatido"],
         [[a.rotulo_origem, moeda(a.valor)] for a in abatimentos],
         larguras=[6, 2], alinhar_direita=[1],
-        rodape=[f"Total medido {moeda(total)} − desconto", moeda(max(Decimal(0), total - desconto))],
+        rodape=[f"Total medido {moeda(total)} − créditos", moeda(max(Decimal(0), total - desconto))],
     )
 
 
@@ -339,8 +363,7 @@ def relatorio_retencao(contrato: Contrato, competencia: Competencia, conferencia
             ("Conferido por", competencia.retencao_por_nome or "—"),
             ("Em", data_hora(competencia.retencao_concluida_em)),
             ("Discriminação compatível com o objeto", "Sim (confirmado)" if competencia.retencao_discriminacao_conferida else "Não confirmado"),
-            *([("Desconto de reajuste abatido", moeda(sum((a.valor for a in competencia.abatimentos_reajuste), Decimal(0))))]
-              if any(a.valor > 0 for a in competencia.abatimentos_reajuste) else []),
+            *[(a.rotulo_origem, "-" + moeda(a.valor)) for a in competencia.abatimentos_reajuste if a.valor > 0],
             ("Recebimento da NF / vencimento",
              f"{competencia.nf_recebida_em:%d/%m/%Y}" + (f" · prazo {competencia.prazo_pagamento_dias} dia(s)" if competencia.prazo_pagamento_dias else "")
              if competencia.nf_recebida_em else "—"),
@@ -575,7 +598,8 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             *([("Subtotal - Medição", moeda(detalhe.subtotal_medicao)), ("Subtotal - Despesas Variáveis", moeda(detalhe.subtotal_despesas_variaveis))] if detalhe.tem_despesas_variaveis else []),
             ("Total medido", moeda(detalhe.total_medido)),
             ("% autorizado pela avaliação", f"{detalhe.percentual_autorizado}%"),
-            *([("Desconto de reajuste", "-" + moeda(detalhe.desconto_reajuste))] if detalhe.desconto_reajuste > 0 else []),
+            # Um por crédito aplicado pelo gestor, com a origem ("Crédito de Reajuste (ref. MM/AAAA)")
+            *[(d.rotulo, "-" + moeda(d.valor)) for d in detalhe.descontos_reajuste],
             ("Valor autorizado", moeda(detalhe.valor_autorizado)),
             ("Nota(s) fiscal(is)", ", ".join(n.numero or str(n.ordem) for n in detalhe.notas_fiscais) or "—"),
             ("Valor líquido das NFs", moeda(sum((n.valor_liquido for n in detalhe.notas_fiscais), Decimal(0))) if detalhe.notas_fiscais else "—"),
@@ -584,6 +608,8 @@ def consolidado(contrato: Contrato, competencia: Competencia, detalhe, anexos: d
             ("Avaliação (nota final)", f"{detalhe.avaliacao.nota_final}" if detalhe.avaliacao and detalhe.avaliacao.nota_final is not None else "Sem avaliação"),
         ]
     )
+    # Valor informado manualmente (complementar manual ou crédito manual aplicado): a observação de quem, quando e por quê
+    _secao_observacoes_manuais(resumo, competencia)
     if competencia.recusas:
         # Trilha: nota → recusa → outra nota → recusa → … → aprovação
         trilha = []

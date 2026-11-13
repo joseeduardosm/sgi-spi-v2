@@ -55,6 +55,8 @@ export const NAVEGACAO: SecaoNavegacao[] = [
         textoVazio: 'Nenhum módulo disponível ainda',
       },
       { id: 'notificacoes', rotulo: 'Notificações', icone: 'sino', rota: '/notificacoes' },
+      // Changelog: novidades do sistema em linguagem de usuário, por dia; bolinha vermelha enquanto houver novidade não vista
+      { id: 'changelog', rotulo: 'Changelog', icone: 'megafone', rota: '/changelog', novidades: true },
       // Abrir Chamado: abre o modal que cria o chamado no GLPI (ACL `abrir-chamado`, sem regras: todos os usuários)
       { id: 'abrir-chamado', rotulo: 'Abrir Chamado', icone: 'ajuda', acao: 'abrir-chamado', acl: 'abrir-chamado' },
       { id: 'usuarios', rotulo: 'Usuários', icone: 'usuarios', rota: '/usuarios', acl: 'usuarios' },

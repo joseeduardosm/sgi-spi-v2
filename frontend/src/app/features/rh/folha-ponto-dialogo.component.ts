@@ -1,5 +1,30 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a janela "Folha de ponto": o usuário escolhe a competência e baixa o PDF.
+/**
+ * =============================================================================
+ * ARQUIVO: folha-ponto-dialogo.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Janela "Folha de ponto": o usuário escolhe a competência (mês) e baixa a
+ * folha de ponto em PDF, pronta para imprimir e assinar.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline e o estado de abertura em
+ * model() (ligação de mão dupla com o menu do usuário). Ao iniciar, busca as
+ * competências disponíveis e pré-seleciona a atual; ao enviar, chama a API que
+ * gera o PDF. Erros de dados funcionais incompletos viram aviso, não erro.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dispensa o preenchimento manual da folha: o PDF já sai com fins de semana,
+ * feriados, pontos facultativos e férias/licença-prêmio aprovadas do mês, que o
+ * servidor entrega assinada ao superior imediato.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Aberto pelo menu do usuário (abaixo de "Meu perfil"). Usa RhApiService
+ * (competenciasFolha e folhaPonto em /api/rh) e o tipo CompetenciaFolha de
+ * rh.models.ts. Os dados funcionais vêm do cadastro validado pela CGP.
+ *
+ * =============================================================================
+ */
 
 import { Component, inject, model, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -46,13 +71,18 @@ import { CompetenciaFolha } from './rh.models';
   `,
 })
 export class FolhaPontoDialogoComponent implements OnInit {
-  /** Controle de abertura (ligado ao menu do usuário). */
+  /**
+   * Controle de abertura (ligado ao menu do usuário).
+   * model() é um input com saída: quem usa escreve [(aberta)] e o componente também pode alterá-lo com set().
+   */
   readonly aberta = model(false);
   private readonly api = inject(RhApiService);
   private readonly dialogos = inject(DialogosService);
   protected readonly competencias = signal<CompetenciaFolha[]>([]);
+  /** Competência escolhida no combo, no formato devolvido pela API (CompetenciaFolha.valor). */
   protected competencia = '';
 
+  /** Busca os meses disponíveis e pré-seleciona o atual (ou o primeiro da lista). */
   ngOnInit(): void {
     this.api.competenciasFolha().subscribe({
       next: (lista) => {
@@ -63,6 +93,10 @@ export class FolhaPontoDialogoComponent implements OnInit {
     });
   }
 
+  /**
+   * Gera e baixa o PDF da competência escolhida. DialogosService.executar mostra o aviso de espera
+   * enquanto a requisição roda. Fecha a janela no sucesso.
+   */
   protected gerar(): void {
     if (!this.competencia) return;
     this.dialogos.executar(this.api.folhaPonto(this.competencia), 'Gerando a folha de ponto…').subscribe({

@@ -1,5 +1,32 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para centralizar as chamadas à API de checklists, formulários de avaliação e competências.
+/**
+ * =============================================================================
+ * ARQUIVO: execucao-api.service.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Centralizar as chamadas HTTP do frontend à API de checklists, formulários de
+ * avaliação, correção de itens, rascunhos e competências (execução mensal) dos
+ * contratos.
+ *
+ * RESUMO TÉCNICO:
+ * Serviço Angular (providedIn root) que usa HttpClient. Cada método monta a URL
+ * em /contratos/{id}/..., envia JSON ou FormData (multipart, quando há PDF/XML)
+ * e devolve um Observable com o tipo da resposta. Também exporta os tipos
+ * TipoRascunho e RascunhoServidor.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dá suporte ao fluxo mensal de fiscalização e pagamento: medição, avaliação,
+ * nota fiscal, retenção de tributos, CADIN, checklist de documentos,
+ * consolidado e ordem bancária (OB), além dos e-mails a prepostos e ao
+ * Financeiro (DOF).
+ *
+ * CONTEXTO NO SISTEMA:
+ * Consumido pela aba Execução, pela tela de competência e pelas etapas
+ * (etapa-*.component.ts), além das abas de checklists, formulários e
+ * correções. O contrato da API está em docs/endpoints/contratos-execucao.md.
+ *
+ * =============================================================================
+ */
 
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
@@ -23,9 +50,17 @@ import {
 } from './contratos.models';
 import { GrupoDestinatarios } from './opcao-email.component';
 
-/** Checklists, formulários de avaliação e competências (docs/endpoints/contratos-execucao.md). */
+/**
+ * Checklists, formulários de avaliação e competências (docs/endpoints/contratos-execucao.md).
+ *
+ * Para iniciantes: os métodos devolvem um `Observable` (fluxo do RxJS). A requisição HTTP só sai quando
+ * alguém chama `subscribe()` nele; por isso as telas fazem `api.metodo(...).subscribe({ next, error })`.
+ * Termos: competência = mês de execução do contrato; medição = levantamento do que foi entregue no mês;
+ * NE = nota de empenho (reserva do orçamento); OB = ordem bancária (o pagamento efetivo).
+ */
 @Injectable({ providedIn: 'root' })
 export class ExecucaoApiService {
+  // `inject()` pede ao Angular a instância do HttpClient (injeção de dependência sem construtor)
   private readonly http = inject(HttpClient);
   private readonly base = `${ambiente.urlApi}/contratos`;
 
@@ -40,6 +75,7 @@ export class ExecucaoApiService {
    */
   private formulario(campos: Record<string, string | boolean | number | File | null | undefined>): FormData {
     const dados = new FormData();
+    // Nulos e indefinidos ficam de fora para a API usar o valor padrão; arquivos vão como arquivo e o resto vira texto
     for (const [chave, valor] of Object.entries(campos)) {
       if (valor === null || valor === undefined) continue;
       dados.append(chave, valor instanceof File ? valor : String(valor));
@@ -97,6 +133,7 @@ export class ExecucaoApiService {
     return this.http.put<RascunhoServidor>(this.url(contratoId, `/rascunhos/${tipo}`), { dados, versao }, { params: { chave } });
   }
 
+  /** Apaga o rascunho da tela (depois de gravar de verdade ou ao descartar). */
   apagarRascunho(contratoId: string, tipo: TipoRascunho, chave = ''): Observable<void> {
     return this.http.delete<void>(this.url(contratoId, `/rascunhos/${tipo}`), { params: { chave } });
   }
@@ -117,22 +154,27 @@ export class ExecucaoApiService {
   }
 
   // --- Correção de itens ---
+  /** Lista as correções de itens do contrato (propostas, confirmadas, recusadas). */
   correcoes(id: string): Observable<ListaCorrecoes> {
     return this.http.get<ListaCorrecoes>(this.url(id, '/itens/correcoes'));
   }
 
+  /** Histórico das alterações dos itens do contrato. */
   historicoItens(id: string): Observable<HistoricoItemContrato[]> {
     return this.http.get<HistoricoItemContrato[]>(this.url(id, '/itens/historico'));
   }
 
+  /** Simula a correção sem gravar, para o usuário conferir o efeito antes de propor. */
   previaCorrecao(id: string, dados: { justificativa: string; itens: Record<string, string>[] }): Observable<PreviaCorrecao> {
     return this.http.post<PreviaCorrecao>(this.url(id, '/itens/correcoes/previa'), dados);
   }
 
+  /** Registra a proposta de correção, que fica aguardando a decisão de outra pessoa. */
   proporCorrecao(id: string, dados: { justificativa: string; itens: Record<string, string>[] }): Observable<CorrecaoItens> {
     return this.http.post<CorrecaoItens>(this.url(id, '/itens/correcoes'), dados);
   }
 
+  /** Confirma, recusa (motivo obrigatório, só enviado nesse caso) ou cancela uma correção proposta. */
   decidirCorrecao(id: string, correcaoId: string, acao: 'confirmar' | 'recusar' | 'cancelar', motivo = ''): Observable<CorrecaoItens> {
     return this.http.post<CorrecaoItens>(this.url(id, `/itens/correcoes/${correcaoId}/${acao}`), acao === 'recusar' ? { motivo } : {});
   }
@@ -191,12 +233,14 @@ export class ExecucaoApiService {
    * autenticado chega, passa a mostrá-lo; em erro, a aba é fechada e `aoErro` recebe o erro.
    */
   abrirEmNovaAba(id: string, competenciaId: string, anexoId: string, aoErro: (erro: unknown) => void): void {
+    // A aba vazia precisa nascer dentro do clique; aberta depois do download, o navegador a bloquearia como pop-up
     const aba = window.open('', '_blank');
     this.http.get(this.competencia(id, competenciaId, `/arquivos/${anexoId}`), { responseType: 'blob' }).subscribe({
       next: (corpo) => {
         const endereco = URL.createObjectURL(new Blob([corpo], { type: corpo.type || 'application/pdf' }));
         if (aba) aba.location.href = endereco;
         else window.open(endereco, '_blank');
+        // Libera a memória do endereço temporário (blob:) depois de 2 minutos, tempo de a aba carregar
         setTimeout(() => URL.revokeObjectURL(endereco), 120000);
       },
       error: (erro) => {
@@ -214,6 +258,16 @@ export class ExecucaoApiService {
   /** Etapa 1: registra a ciência do usuário logado. */
   cienciaMedicao(id: string, c: string): Observable<DetalheCompetencia> {
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, '/medicao/ciencia'), {});
+  }
+
+  /** Etapa 1: aplica, inteiro, um crédito de reajuste/repactuação do fundo do contrato nesta medição aberta. */
+  aplicarCredito(id: string, c: string, creditoId: string): Observable<DetalheCompetencia> {
+    return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/creditos/${creditoId}`), {});
+  }
+
+  /** Etapa 1: devolve ao fundo do contrato um crédito aplicado nesta medição aberta. */
+  retirarCredito(id: string, c: string, creditoId: string): Observable<DetalheCompetencia> {
+    return this.http.delete<DetalheCompetencia>(this.competencia(id, c, `/creditos/${creditoId}`));
   }
 
   /** Etapa 1: conclui a medição (as NEs precisam ser as mesmas da última gravação). */
@@ -235,6 +289,7 @@ export class ExecucaoApiService {
 
   /** Etapa 2: ciência no ateste ou geração do PDF. */
   acaoAvaliacao(id: string, c: string, acao: 'ciencia' | 'pdf', enviarEmail = false, prepostosIds: string[] | null = null): Observable<DetalheCompetencia> {
+    // Só a geração do PDF pode enviar e-mail; os prepostos escolhidos vão na query string (sem lista = todos)
     const params: Record<string, string | string[]> = acao === 'pdf' && enviarEmail ? { enviar_email: 'true', ...(prepostosIds ? { prepostos_ids: prepostosIds } : {}) } : {};
     return this.http.post<DetalheCompetencia>(this.competencia(id, c, `/avaliacao/${acao}`), {}, { params });
   }
@@ -259,6 +314,8 @@ export class ExecucaoApiService {
     /** Documentos de despesas variáveis (obrigatórios com item marcado na medição) e seus PDFs. */
     despesas?: { id: string | null; tipo: string; numero: string | null; valor: string; arquivo: number | null }[]; arquivosDespesas?: File[];
   }): Observable<DetalheCompetencia> {
+    // Multipart: listas de notas e despesas vão como JSON em texto; os arquivos vão em campos repetidos,
+    // e a posição de cada arquivo na lista é a referência usada em `arquivo`/`xml`
     const corpo = this.formulario({ recebida_em: dados.recebida_em, prazo_pagamento_dias: dados.prazo_pagamento_dias, notas: JSON.stringify(dados.notas) });
     if (dados.despesas?.length) corpo.append('despesas', JSON.stringify(dados.despesas));
     dados.arquivosDespesas?.forEach((a) => corpo.append('arquivos_despesas', a));

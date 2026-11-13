@@ -297,6 +297,13 @@ class Competencia(Base):
     abatimentos_reajuste: Mapped[list["AbatimentoReajuste"]] = relationship(  # noqa: F821
         back_populates="competencia", order_by="AbatimentoReajuste.criado_em"
     )
+    # Diferenças retroativas informadas à mão que cobrem este mês (pago fora do sistema): com alguma, o mês fica travado no preço de antes
+    diferencas_manuais: Mapped[list["DiferencaManual"]] = relationship(  # noqa: F821
+        secondary="contratos_diferencas_manuais_competencias", back_populates="competencias"
+    )
+    # Competência complementar gerada por uma diferença manual positiva (tipos diferenca_reajuste/diferenca_repactuacao com uma linha só)
+    diferenca_manual_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_diferencas_manuais.id", ondelete="SET NULL"), index=True)
+    diferenca_manual: Mapped["DiferencaManual | None"] = relationship(foreign_keys=[diferenca_manual_id])  # noqa: F821
     # Os anexos têm várias FKs para a mesma tabela `anexos`; `foreign_keys` diz qual coluna usar em cada uma
     retencao_pdf_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[retencao_pdf_anexo_id])
     documento_executivo_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[documento_executivo_anexo_id])
@@ -320,6 +327,10 @@ class Competencia(Base):
     @property
     def identificador(self) -> str:
         """Chave da rota da tela: `AAAA-MM`, `AAAA-MM-1`/`AAAA-MM-2` (mês dividido) ou `AAAA-MM-dif` (diferença de reajuste)."""
+        if self.tipo in ("diferenca_reajuste", "diferenca_repactuacao") and self.diferenca_manual_id is not None:
+            # Complementar da diferença retroativa informada manualmente (uma por reajuste/repactuação)
+            base = "dif-manual" if self.tipo == "diferenca_reajuste" else "dif-repactuacao-manual"
+            return f"{self.competencia:%Y-%m}-{base}" + (f"-{self.numero_adicional}" if self.numero_adicional > 1 else "")
         if self.tipo == "diferenca_reajuste":
             return f"{self.competencia:%Y-%m}-dif"
         if self.tipo == "diferenca_repactuacao":
@@ -332,6 +343,9 @@ class Competencia(Base):
     @property
     def numero_competencia(self) -> str:
         """Rótulo exibido: `01/2027`, `01/2027 · 1ª parte` ou `Diferença de reajuste 01/2026 a 04/2026`."""
+        if self.tipo in ("diferenca_reajuste", "diferenca_repactuacao") and self.diferenca_manual_id is not None:
+            origem = "reajuste" if self.tipo == "diferenca_reajuste" else "repactuação"
+            return f"Diferença de {origem} informada manualmente {self.periodo_inicio:%m/%Y} a {self.periodo_fim:%m/%Y}"
         if self.tipo == "diferenca_reajuste":
             return f"Diferença de reajuste {self.periodo_inicio:%m/%Y} a {self.periodo_fim:%m/%Y}"
         if self.tipo == "diferenca_repactuacao":

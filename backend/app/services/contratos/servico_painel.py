@@ -1,9 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para montar o painel de contratos (pendências, alertas, execução orçamentária e números).
-"""Painel executivo de contratos e exportação consolidada da previsão orçamentária.
+"""
+===============================================================================
+ARQUIVO: servico_painel.py
+AUTOR: José Eduardo Santana Martins
 
-O painel responde duas perguntas: "o que eu preciso fazer?" (pendências do usuário) e "onde está o
-risco?" (alertas da carteira), com a execução orçamentária do exercício e os números da carteira.
+FINALIDADE:
+Montar o painel de contratos: pendências do usuário, alertas de risco da
+carteira, execução orçamentária do exercício, orçamento executivo somado,
+números da carteira e o painel de vigências.
+
+RESUMO TÉCNICO:
+O painel responde duas perguntas: "o que eu preciso fazer?"
+(pendencias_do_usuario) e "onde está o risco?" (alertas_da_carteira: vigência,
+reajuste, empenho, pagamentos e atrasos). execucao_orcamentaria soma previsto x
+medido x pago por mês; orcamento_da_carteira soma o orcamento_executivo de cada
+contrato; numeros conta ativos, a vencer e encerrados. montar_painel junta tudo
+aplicando os filtros de empresa e contrato. Tudo é calculado na hora, sem gravar.
+
+FINALIDADE DE NEGÓCIO:
+É a primeira tela de quem trabalha com contratos: mostra o que cada integrante
+da equipe precisa fazer e quais contratos correm risco (vencer sem prorrogação,
+faltar empenho, pagamento atrasado), para agir antes do problema.
+
+CONTEXTO NO SISTEMA:
+Chamado pelas rotas do painel de contratos e reaproveitado pelo Painel
+Executivo (painel_executivo.slides). Usa servico_competencias (etapas,
+ciências, compromissos), servico_contratos (situação, equipe, vigências),
+servico_orcamento, servico_prorrogacao, servico_retencao (quem é Financeiro)
+e servico_parametros (prazos dos alertas). Schemas em schemas.contratos.painel.
+
+===============================================================================
 """
 
 import uuid
@@ -57,6 +82,7 @@ from app.services.contratos.servico_orcamento import meses_previstos
 from app.services.contratos.servico_prorrogacao import meses_disponiveis
 from app.services.contratos.servico_retencao import eh_financeiro
 
+# Atalho para Decimal(0), usado como valor inicial das somas
 ZERO = Decimal(0)
 # Nomes das etapas como aparecem nas pendências
 ETAPAS_ROTULO = {
@@ -92,6 +118,7 @@ def _medir_desde(competencia: Competencia) -> date:
     return competencia.periodo_fim if competencia.tipo == "regular" else competencia.criado_em.date()
 
 
+# Apelido local: competência anterior ao corte de pendências (tratada fora do SGI) não gera pendência nem alerta
 _anterior_ao_corte = anterior_ao_corte
 
 
@@ -187,6 +214,7 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato], usuario: Usu
     alertas: o que lhe cabe é a tarefa de conferir a retenção de tributos, que chega em "Minhas pendências" e nas notificações quando a competência
     chega a essa etapa. Sem `usuario` (painel executivo) vale a carteira inteira.
     """
+    # Uma consulta só para saber quais contratos já têm prorrogação em elaboração
     rascunhos_prorrogacao = set(sessao.scalars(select(ProcessoProrrogacao.contrato_id).where(ProcessoProrrogacao.situacao == "rascunho")))
     referencia = hoje()
     grupos: list[AlertasContrato] = []
@@ -321,6 +349,7 @@ def orcamento_da_carteira(contratos: list[Contrato], exercicio: int) -> Orcament
     """Orçamento executivo somado dos contratos ativos (e a vencer): remanescente, saldo livre, reforços e sobras, com os contratos que pedem ação."""
     from app.services.contratos.servico_orcamento import orcamento_executivo
 
+    # Soma os campos do orçamento executivo de cada contrato ativo e separa os que precisam de reforço dos que têm sobra
     soma = dict.fromkeys(("previsto_concluido", "pago_concluido", "remanescente", "livre", "necessidade", "reforco", "disponivel_cancelar"), ZERO)
     reforcos, sobras = [], []
     for contrato in contratos:
@@ -335,6 +364,7 @@ def orcamento_da_carteira(contratos: list[Contrato], exercicio: int) -> Orcament
             reforcos.append(linha)
         elif o.disponivel_cancelar > 0:
             sobras.append(linha)
+    # Reforços: o prazo mais próximo primeiro; sobras: a maior primeiro
     reforcos.sort(key=lambda l: (l.pedir_reforco_ate or date.max, -l.reforco))
     sobras.sort(key=lambda l: -l.disponivel_cancelar)
     return OrcamentoCarteira(exercicio=exercicio, precisam_reforco=reforcos, com_sobra=sobras, **soma)
@@ -359,6 +389,7 @@ def montar_painel(sessao: Session, usuario: Usuario, exercicio: int | None, empr
     Contratos (controle total na ACL) e o SuperRoot veem a carteira inteira.
     """
     todos = carregar_contratos(sessao)
+    # "meus": a carteira inteira para o administrador; para os demais, só os contratos em que é criador ou da equipe
     meus = todos if eh_administrador(sessao, usuario) else [
         c for c in todos if c.criador_id == usuario.id or any(d.usuario_id == usuario.id for d in designacoes_vigentes(c))]
     filtrados = [c for c in meus if (empresa_id is None or c.empresa_id == empresa_id) and (contrato_id is None or c.id == contrato_id)]
@@ -386,6 +417,7 @@ def vigencias_da_carteira(sessao: Session, empresa_id: uuid.UUID | None) -> Pain
     contratos = list(sessao.scalars(select(Contrato).options(
         selectinload(Contrato.empresa), selectinload(Contrato.prorrogacoes), selectinload(Contrato.vigencias_retroativas), selectinload(Contrato.reajustes),
     )))
+    # As opções do filtro de empresa saem de todos os vigentes, antes de aplicar o filtro
     vigentes = [c for c in contratos if situacao(c) in ("ativo", "a_vencer")]
     empresas = {c.empresa.id: c.empresa.razao_social for c in vigentes}
     dia = hoje()

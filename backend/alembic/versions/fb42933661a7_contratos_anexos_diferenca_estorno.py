@@ -1,16 +1,41 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para vincular anexos aos contratos e registrar competências de diferença de reajuste e estornos de NE.
-"""contratos: vínculo dos anexos, competência de diferença de reajuste e estorno na NE
+"""
+===============================================================================
+ARQUIVO: fb42933661a7_contratos_anexos_diferenca_estorno.py
+AUTOR: José Eduardo Santana Martins
 
-- `anexos.contrato_id`: contrato dono do arquivo (a exclusão do contrato descarta todos os arquivos dele).
-- `contratos_competencias.tipo` e `reajuste_id`: competência complementar que paga a diferença de um
-  reajuste retroativo; a unicidade passa a ser (contrato, início do período, tipo).
-- `contratos_notas_empenho_movimentos`: lançamentos de estorno (débito negativo), com autor e
-  justificativa; deixa de haver um único lançamento por (NE, competência).
+FINALIDADE:
+Migração Alembic que vincula anexos aos contratos e registra competências de
+diferença de reajuste e estornos de Nota de Empenho (NE).
+
+RESUMO TÉCNICO:
+- anexos.contrato_id: contrato dono do arquivo (a exclusão do contrato descarta
+  todos os arquivos dele).
+- contratos_competencias.tipo e reajuste_id: competência complementar que paga
+  a diferença de um reajuste retroativo; a unicidade passa a ser (contrato,
+  início do período, tipo).
+- contratos_notas_empenho_movimentos: lançamentos de estorno (débito negativo),
+  com autor e justificativa; deixa de haver um único lançamento por (NE,
+  competência).
+
+O downgrade apaga estornos e competências de diferença, que não cabem no
+formato antigo.
+
+FINALIDADE DE NEGÓCIO:
+Quando um reajuste é concedido com efeito retroativo, a diferença dos meses já
+pagos vira uma competência própria; e o extrato da NE passa a aceitar estornos
+justificados, mantendo o saldo correto e auditável.
+
+CONTEXTO NO SISTEMA:
+Tabelas anexos, contratos_competencias, contratos_reajustes,
+contratos_notas_empenho_movimentos e usuarios; serviços de reajuste e execução
+dos contratos. Aplicada com 'alembic upgrade head' (o instalador e a
+atualização do sistema rodam esse comando).
 
 Revision ID: fb42933661a7
 Revises: 84d049d7fa1a
 Create Date: 2026-09-24 10:35:38
+
+===============================================================================
 """
 
 from collections.abc import Sequence
@@ -44,7 +69,9 @@ def upgrade() -> None:
         "contratos_competencias_reajuste_id_fkey", "contratos_competencias", "contratos_reajustes", ["reajuste_id"], ["id"], ondelete="SET NULL"
     )
 
-    # 3) Estornos no extrato: justificativa, autor e fim da regra de um lançamento por (NE, competência)
+    # 3) NE = Nota de Empenho (reserva do orçamento que paga o contrato); o extrato dela
+    # registra cada pagamento e, agora, os estornos (devoluções de saldo).
+    # Estornos no extrato: justificativa, autor e fim da regra de um lançamento por (NE, competência)
     op.add_column("contratos_notas_empenho_movimentos", sa.Column("justificativa", sa.String(length=2000), server_default="", nullable=False))
     op.add_column("contratos_notas_empenho_movimentos", sa.Column("criado_por_id", sa.Integer(), nullable=True))
     op.drop_constraint("contratos_notas_empenho_movimentos_nota_id_competencia_id_key", "contratos_notas_empenho_movimentos", type_="unique")

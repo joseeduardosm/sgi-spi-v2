@@ -223,13 +223,14 @@ def gerar_competencias(contrato_id: uuid.UUID, sessao: Session = Depends(obter_s
 
 @roteador.get("/competencias/identificador/{identificador}", response_model=DetalheCompetencia, summary="Competência pelo identificador",
               description="`identificador` = `AAAA-MM`, `AAAA-MM-1`/`AAAA-MM-2` (mês dividido entre vigências), `AAAA-MM-dif` "
-              "(diferença de reajuste), `AAAA-MM-dif-repactuacao` (diferença de repactuação) ou `AAAA-MM-adicional-N` (medição adicional). É a chave da tela `/contratos/:id/execucao/:identificador`.", responses=NAO_ENCONTRADA)
+              "(diferença de reajuste), `AAAA-MM-dif-repactuacao` (diferença de repactuação), `AAAA-MM-dif-manual` / `AAAA-MM-dif-repactuacao-manual` "
+              "(diferença retroativa informada manualmente) ou `AAAA-MM-adicional-N` (medição adicional). É a chave da tela `/contratos/:id/execucao/:identificador`.", responses=NAO_ENCONTRADA)
 def competencia_por_identificador(
     contrato_id: uuid.UUID, identificador: str, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(pode_ler)
 ):
     """Busca a competência pelo identificador legível usado na URL da tela (ex.: `2026-03`)."""
     # Recusa formatos inválidos logo aqui, como 404, sem consultar o banco
-    if not re.fullmatch(r"\d{4}-\d{2}(-(\d|dif|dif-repactuacao(-\d{1,3})?|adicional-\d{1,3}))?", identificador):
+    if not re.fullmatch(r"\d{4}-\d{2}(-(\d|dif|dif-repactuacao(-\d{1,3})?|dif-manual(-\d{1,3})?|dif-repactuacao-manual(-\d{1,3})?|adicional-\d{1,3}))?", identificador):
         raise ErroApi(status.HTTP_404_NOT_FOUND, "Competência não encontrada.", "nao_encontrado")
     with traduzir_erros():
         competencia_id = competencias.localizar_competencia(sessao, contrato_id, identificador)
@@ -793,4 +794,29 @@ def reabrir(contrato_id: uuid.UUID, competencia_id: uuid.UUID, dados: Reabertura
     """Volta a competência para uma etapa anterior, com justificativa registrada na auditoria."""
     with traduzir_erros(sessao):
         competencias.reabrir(sessao, contrato_id, competencia_id, dados, autor)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.post("/competencias/{competencia_id}/creditos/{credito_id}", response_model=DetalheCompetencia, summary="Aplicar crédito de reajuste/repactuação na medição",
+               description="O gestor aplica, **inteiro**, um crédito do fundo do contrato (desconto retroativo de reajuste ou repactuação, calculado ou "
+               "informado manualmente; os de `creditos_disponiveis`) nesta medição regular ou adicional ainda aberta. Cada crédito é independente; nada é "
+               "aplicado sozinho. Se o crédito passar do valor da medição, a sobra volta ao fundo na conclusão da medição. Apaga as ciências já registradas. "
+               "`400` com a medição concluída, em competência de diferença ou com o crédito já aplicado; `404` se o crédito não é do contrato.",
+               responses={**NAO_ENCONTRADA, **ESCRITA})
+def aplicar_credito(contrato_id: uuid.UUID, competencia_id: uuid.UUID, credito_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                    autor: Usuario = Depends(pode_modificar)):
+    """Aplica um crédito do fundo nesta medição."""
+    with traduzir_erros(sessao):
+        competencias.aplicar_credito(sessao, contrato_id, competencia_id, credito_id, autor)
+        return _depois(sessao, contrato_id, competencia_id, autor)
+
+
+@roteador.delete("/competencias/{competencia_id}/creditos/{credito_id}", response_model=DetalheCompetencia, summary="Retirar crédito da medição",
+                 description="Devolve ao fundo do contrato um crédito aplicado nesta medição ainda aberta. Apaga as ciências já registradas. "
+                 "`400` com a medição concluída; `404` se o crédito não está nesta medição.", responses={**NAO_ENCONTRADA, **ESCRITA})
+def retirar_credito(contrato_id: uuid.UUID, competencia_id: uuid.UUID, credito_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
+                    autor: Usuario = Depends(pode_modificar)):
+    """Devolve o crédito ao fundo."""
+    with traduzir_erros(sessao):
+        competencias.retirar_credito(sessao, contrato_id, competencia_id, credito_id, autor)
         return _depois(sessao, contrato_id, competencia_id, autor)

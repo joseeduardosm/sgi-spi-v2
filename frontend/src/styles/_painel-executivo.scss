@@ -1,4 +1,33 @@
-// Estilos do Painel Executivo: carrossel, indicadores, grades de gráficos e modo tela cheia (TV).
+/**
+ * =============================================================================
+ * ARQUIVO: _painel-executivo.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do Painel Executivo: carrossel genérico de slides, indicadores
+ * numéricos, grades de gráficos e listas, selo de risco e o modo tela cheia
+ * pensado para exibição em TV.
+ *
+ * RESUMO TÉCNICO:
+ * O carrossel é um trilho flex movido por transform (parado com
+ * prefers-reduced-motion), com setas que aparecem no hover e pontos de
+ * navegação. Cada slide tem uma grade de 2 colunas que divide a altura
+ * disponível. Fora da home (.compacto) o painel ocupa a altura útil da
+ * janela; em .tela-cheia a fonte base cresce com a largura da tela (clamp)
+ * e todos os tamanhos internos em "em" acompanham.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dá à direção da SPI uma visão rápida dos números principais (contratos,
+ * riscos e prazos) na tela inicial, numa página própria ou numa TV de
+ * acompanhamento, sem precisar abrir cada módulo.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelo componente do Painel Executivo (na
+ * página inicial e na página própria) e pelo componente app-grafico. Usa
+ * --ease-move de _movimento.scss e os tokens --spi-* do tema.
+ *
+ * =============================================================================
+ */
 
 // ---- Carrossel genérico ----
 .carrossel { position: relative; overflow: hidden; border-radius: var(--spi-raio-g); outline-offset: 2px; }
@@ -40,6 +69,7 @@
   h3 { margin: 0 0 6px; font-size: 0.85rem; font-weight: 700; color: var(--spi-vermelho-destaque); text-transform: uppercase; letter-spacing: 0.05em; }
 }
 .caixa-grafico { position: relative; width: 100%; &.preencher { height: 100%; min-height: 150px; } }
+// Esconde visualmente, mas mantém para leitores de tela (ex.: a tabela de dados por trás de um gráfico)
 .somente-leitor-tela { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; list-style: none; }
 
 .grade-slide section > app-grafico { display: block; flex: 1; min-height: 0; }

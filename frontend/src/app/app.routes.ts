@@ -77,6 +77,17 @@ export const rotas: Routes = [
       { path: 'mensagens', redirectTo: 'notificacoes', pathMatch: 'full' },
       { path: 'admin/mensageria', redirectTo: 'admin/notificacoes-sistema', pathMatch: 'full' },
       {
+        // Changelog: novidades do sistema para o usuário final, por dia (todo usuário autenticado, sem ACL)
+        path: 'changelog',
+        title: 'Changelog | SGI SPI',
+        loadComponent: () => import('./features/changelog/changelog.component').then((m) => m.ChangelogComponent),
+      },
+      {
+        path: 'changelog/:data',
+        title: 'Changelog | SGI SPI',
+        loadComponent: () => import('./features/changelog/changelog.component').then((m) => m.ChangelogComponent),
+      },
+      {
         // Notificações: todo usuário autenticado (sem ACL)
         path: 'notificacoes',
         title: 'Notificações | SGI SPI',

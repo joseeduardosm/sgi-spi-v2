@@ -1,6 +1,31 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir o formato dos dados de entrada e saída de usuários.
-"""Formatos de entrada e saída das rotas de usuários e do perfil institucional."""
+"""
+===============================================================================
+ARQUIVO: usuarios.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Definir o formato dos dados de entrada e saída das rotas de usuários e do
+perfil institucional (dados de contato, cargo, andar, gestor etc.).
+
+RESUMO TÉCNICO:
+Schemas pydantic com validadores: DadosPerfil apara os textos e valida e-mail
+e LinkedIn; RevisaoPerfil exige os campos obrigatórios na revalidação;
+PerfilLeitura acrescenta gestor, data da revalidação e a situação de cada
+campo no fluxo da CGP; CriacaoUsuario/AlteracaoUsuario são usados pelo
+SuperRoot; DetalheUsuario, PaginaUsuarios e OpcaoUsuario são as leituras.
+
+FINALIDADE DE NEGÓCIO:
+Manter o cadastro das pessoas da SPI correto e atualizado: o perfil precisa
+ser revalidado a cada 30 dias e alimenta aniversários, assinatura de e-mail,
+seletores de pessoas e o fluxo de validação da CGP (RH).
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas de usuários (administração) e de autenticação/perfil.
+Depende de CAMPOS_OBRIGATORIOS de `app/services/servico_perfil.py`. A
+SituacaoCampo vem do Módulo RH (validação das alterações pela CGP).
+
+===============================================================================
+"""
 
 import re
 from urllib.parse import urlsplit, urlunsplit
@@ -16,6 +41,10 @@ PADRAO_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 class DadosPerfil(BaseModel):
     """Perfil institucional. Textos são aparados; vazios são permitidos (exceto na revalidação)."""
+
+    # Os métodos com @field_validator abaixo são validadores do pydantic: rodam
+    # automaticamente ao montar o objeto a partir do JSON. O que eles devolvem
+    # substitui o valor recebido; um ValueError vira resposta 422 na API.
 
     nome_completo: str = Field("", max_length=200, description="Nome completo.")
     email: str = Field("", max_length=254, description="E-mail institucional.")
@@ -38,13 +67,24 @@ class DadosPerfil(BaseModel):
     @field_validator("linkedin")
     @classmethod
     def _validar_linkedin(cls, valor: str) -> str:
-        """Vazio é permitido; preenchido, precisa ser um endereço do domínio linkedin.com (guardado com https://)."""
+        """Vazio é permitido; preenchido, precisa ser um endereço do domínio linkedin.com (guardado com https://).
+
+        Exemplo: "linkedin.com/in/fulano/" vira "https://linkedin.com/in/fulano".
+        Levanta ValueError (o pydantic transforma em 422) para outro domínio ou
+        para um link sem caminho (só "linkedin.com").
+        """
         if not valor:
             return valor
+        # Sem esquema ("linkedin.com/in/x"), o urlsplit não reconhece o domínio;
+        # por isso acrescentamos "https://" antes de quebrar o endereço em partes.
         url = urlsplit(valor if "://" in valor else "https://" + valor)
         host = (url.hostname or "").lower()
+        # Aceita só http/https, o domínio linkedin.com (ou subdomínio, como
+        # www.linkedin.com) e exige um caminho (o perfil em si).
         if url.scheme not in ("http", "https") or not (host == "linkedin.com" or host.endswith(".linkedin.com")) or not url.path.strip("/"):
             raise ValueError("informe o link do seu perfil, como https://www.linkedin.com/in/seu-nome")
+        # Remonta sempre com https, sem query/fragmento e sem barra final; corta
+        # em 200 caracteres para caber na coluna do banco.
         return urlunsplit(("https", url.netloc.lower(), url.path.rstrip("/"), "", ""))[:200]
 
     @field_validator("email")
@@ -59,6 +99,8 @@ class DadosPerfil(BaseModel):
 class RevisaoPerfil(DadosPerfil):
     """Revalidação do próprio perfil: todos os campos obrigatórios devem estar preenchidos."""
 
+    # @model_validator(mode="after") roda depois que todos os campos já foram
+    # validados, então consegue olhar o objeto inteiro de uma vez.
     @model_validator(mode="after")
     def _exigir_obrigatorios(self) -> "RevisaoPerfil":
         """Lista os rótulos dos campos obrigatórios vazios e recusa a revalidação se houver algum."""
@@ -70,6 +112,8 @@ class RevisaoPerfil(DadosPerfil):
 
 class PerfilLeitura(DadosPerfil):
     """Perfil devolvido pela API, com o nome do gestor e a data da última revalidação."""
+    # from_attributes=True permite montar este schema direto de um objeto do
+    # SQLAlchemy (lê os atributos do modelo em vez de exigir um dicionário).
     model_config = ConfigDict(from_attributes=True)
 
     gestor_nome: str | None = Field(None, description="Nome do gestor imediato.")
@@ -156,5 +200,7 @@ class OpcaoUsuario(BaseModel):
     ativo: bool = True
 
 
-# SituacaoCampo é declarada depois de PerfilLeitura
+# SituacaoCampo é declarada depois de PerfilLeitura; por isso PerfilLeitura usa
+# o nome entre aspas ("SituacaoCampo") e precisa ser "reconstruída" aqui, quando
+# a classe já existe, para o pydantic resolver essa referência adiantada.
 PerfilLeitura.model_rebuild()

@@ -1,5 +1,34 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a tela RH > Modelos: textos editáveis (resolução, e-mail de nomeação, termo de posse, boas-vindas) e checklists de documentos por tipo de cargo.
+/**
+ * =============================================================================
+ * ARQUIVO: modelos.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Tela RH > Modelos: o RH edita os textos que o sistema usa (resolução,
+ * e-mail de nomeação, termo de posse, boas-vindas) e os checklists de
+ * documentos exigidos por classificação de cargo.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline e duas abas. Na aba Textos,
+ * cada modelo abre um editor rico (carregado com @defer quando o navegador
+ * fica ocioso) com a lista de placeholders (#CAMPO) e as ações salvar e
+ * restaurar o padrão. Na aba Checklists, uma tabela e um modal para criar e
+ * editar checklists, marcando grupo.nível de cargo (ex.: 1.15) e documentos.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Tira do código os textos oficiais das admissões: o RH ajusta a redação
+ * sem depender da TI. Os checklists definem que documentos cada tipo de cargo
+ * precisa entregar; admissões já iniciadas guardam a própria cópia e não
+ * mudam quando o checklist é alterado.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota /rh/modelos (rh.routes.ts), visível só à CGP (menu-rh.ts). Usa
+ * RhAdmissaoApiService e os tipos de rh-admissao.models.ts; reaproveita o
+ * app-editor-rico do módulo de contratações. O modelo "boas-vindas" é o texto
+ * exibido por janela-boas-vindas.component.ts.
+ *
+ * =============================================================================
+ */
 
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -11,6 +40,7 @@ import { CabecalhoRhComponent } from './cabecalho-rh.component';
 import { RhAdmissaoApiService } from './rh-admissao-api.service';
 import { Checklist, ClassificacaoChecklist, GravacaoChecklist, ModeloRh, rotuloClassificacao } from './rh-admissao.models';
 
+/** Abas da tela: textos dos modelos ou checklists de documentos. */
 type Aba = 'modelos' | 'checklists';
 
 /** RH > Modelos: o RH edita os textos que o sistema usa nas admissões e nas boas-vindas, e os documentos exigidos por tipo de cargo. */
@@ -129,45 +159,56 @@ type Aba = 'modelos' | 'checklists';
   `,
 })
 export class ModelosRhComponent implements OnInit {
+  // inject() obtém os serviços pela injeção de dependência do Angular.
   private readonly api = inject(RhAdmissaoApiService);
   private readonly dialogos = inject(DialogosService);
 
+  // signal(): estado reativo da tela (aba ativa, listas, carregamento, modelo aberto e checklist em edição)
   protected readonly aba = signal<Aba>('modelos');
   protected readonly modelos = signal<ModeloRh[]>([]);
   protected readonly checklists = signal<Checklist[]>([]);
+  /** Grupos de classificação de cargo (1 = direção e chefia, 2 = assessoria) e os níveis 1 a 18. */
   protected readonly grupos: (1 | 2)[] = [1, 2];
   protected readonly niveis = Array.from({ length: 18 }, (_, i) => i + 1);
   protected readonly placeholders = signal<[string, string][]>([]);
   protected readonly carregando = signal(true);
   protected readonly aberto = signal<string | null>(null);
   protected readonly edicaoChecklist = signal<GravacaoChecklist | null>(null);
+  /** Id do checklist em edição (null = novo). */
   protected idChecklist: number | null = null;
+  /** Assunto e HTML do modelo aberto no editor (cópia de trabalho, só vai à API ao salvar). */
   protected assunto = '';
   protected html = '';
 
+  /** Carrega os modelos, a lista de placeholders aceitos e os checklists. */
   ngOnInit(): void {
     this.carregar();
     this.api.placeholders().subscribe((p) => this.placeholders.set(Object.entries(p)));
     this.carregarChecklists();
   }
 
+  /** Busca os modelos de texto e desliga o esqueleto de carregamento. */
   private carregar(): void {
     this.api.modelos().subscribe({ next: (m) => { this.modelos.set(m); this.carregando.set(false); }, error: (e) => { this.carregando.set(false); this.dialogos.mostrarErro(e, 'Não foi possível carregar os modelos'); } });
   }
 
+  /** Busca os checklists de documentos. */
   private carregarChecklists(): void {
     this.api.checklists().subscribe({ next: (c) => this.checklists.set(c), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar os checklists') });
   }
 
+  /** Data e hora ISO para "DD/MM/AAAA HH:MM" no fuso do navegador. */
   protected dataHora(iso: string): string {
     const d = new Date(iso), p = (n: number) => String(n).padStart(2, '0');
     return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
+  /** Só os modelos enviados por e-mail (nomeação publicada e boas-vindas) têm campo de assunto. */
   protected temAssunto(m: ModeloRh): boolean {
     return m.tipo === 'email_nomeacao_publicada' || m.tipo === 'boas_vindas';
   }
 
+  /** Abre o modelo no editor (copiando assunto e texto) ou fecha se já estava aberto. */
   protected alternar(m: ModeloRh): void {
     if (this.aberto() === m.tipo) { this.aberto.set(null); return; }
     this.assunto = m.assunto;
@@ -175,6 +216,7 @@ export class ModelosRhComponent implements OnInit {
     this.aberto.set(m.tipo);
   }
 
+  /** Grava o novo texto do modelo na API; vale para os próximos documentos e e-mails gerados. */
   protected salvar(m: ModeloRh): void {
     this.dialogos.executar(this.api.salvarModelo(m.tipo, this.assunto, this.html), 'Salvando…').subscribe({
       next: () => { this.dialogos.avisar('Modelo salvo', 'O novo texto vale a partir de agora.'); this.aberto.set(null); this.carregar(); },
@@ -182,6 +224,7 @@ export class ModelosRhComponent implements OnInit {
     });
   }
 
+  /** Após confirmação, volta o modelo ao texto padrão do sistema. */
   protected async restaurar(m: ModeloRh): Promise<void> {
     if (!(await this.dialogos.confirmar({ titulo: 'Restaurar o texto padrão?', mensagem: 'O texto atual deste modelo será substituído pelo padrão do sistema.', rotuloConfirmar: 'Restaurar', perigo: true }))) return;
     this.dialogos.executar(this.api.restaurarModelo(m.tipo), 'Restaurando…').subscribe({
@@ -191,20 +234,24 @@ export class ModelosRhComponent implements OnInit {
   }
 
   // --- Checklists ---
+  /** Abre o modal com um checklist em branco (com um documento vazio para começar). */
   protected novoChecklist(): void {
     this.idChecklist = null;
     this.edicaoChecklist.set({ nome: '', ativo: true, classificacoes: [], aplica_a_outros: false, itens: [{ descricao: '', obrigatorio: true }] });
   }
 
+  /** Abre o modal com uma cópia do checklist (os spreads evitam alterar a lista antes de salvar). */
   protected editarChecklist(c: Checklist): void {
     this.idChecklist = c.id;
     this.edicaoChecklist.set({ nome: c.nome, ativo: c.ativo, classificacoes: c.classificacoes.map((x) => ({ ...x })), aplica_a_outros: c.aplica_a_outros, itens: c.itens.map((i) => ({ ...i })) });
   }
 
+  /** Indica se a classificação grupo.nível está marcada no checklist em edição. */
   protected marcada(e: GravacaoChecklist, grupo: 1 | 2, nivel: number): boolean {
     return e.classificacoes.some((c) => c.grupo === grupo && c.nivel === nivel);
   }
 
+  /** Marca ou desmarca uma classificação grupo.nível. */
   protected alternarClassificacao(e: GravacaoChecklist, grupo: 1 | 2, nivel: number): void {
     e.classificacoes = this.marcada(e, grupo, nivel) ? e.classificacoes.filter((c) => !(c.grupo === grupo && c.nivel === nivel)) : [...e.classificacoes, { grupo, nivel }];
   }
@@ -220,6 +267,7 @@ export class ModelosRhComponent implements OnInit {
     const partes: string[] = [];
     for (const g of this.grupos) {
       const niveis = c.classificacoes.filter((x) => x.grupo === g).map((x) => x.nivel).sort((a, b) => a - b);
+      // Percorre os níveis ordenados achando sequências contíguas (i..j); três ou mais viram faixa "de–até"
       let i = 0;
       while (i < niveis.length) {
         let j = i;
@@ -233,6 +281,7 @@ export class ModelosRhComponent implements OnInit {
     return partes.join(', ') || '—';
   }
 
+  /** Cria ou altera o checklist na API, descartando documentos em branco e espaços nas pontas. */
   protected salvarChecklist(e: GravacaoChecklist): void {
     const dados: GravacaoChecklist = { ...e, nome: e.nome.trim(), itens: e.itens.filter((i) => i.descricao.trim()).map((i) => ({ ...i, descricao: i.descricao.trim() })) };
     const chamada = this.idChecklist ? this.api.alterarChecklist(this.idChecklist, dados) : this.api.criarChecklist(dados);
@@ -242,6 +291,7 @@ export class ModelosRhComponent implements OnInit {
     });
   }
 
+  /** Após confirmação, exclui o checklist (admissões em andamento mantêm a cópia delas). */
   protected async excluirChecklist(c: Checklist): Promise<void> {
     if (!(await this.dialogos.confirmar({ titulo: `Excluir o checklist "${c.nome}"?`, mensagem: 'Admissões já iniciadas guardam a própria cópia dos documentos e não são afetadas.', rotuloConfirmar: 'Excluir', perigo: true }))) return;
     this.api.excluirChecklist(c.id).subscribe({ next: () => this.carregarChecklists(), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível excluir o checklist') });

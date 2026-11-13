@@ -31,13 +31,58 @@
 <p>[[rj05-confirmar-conclusao]]</p>
 
 <h2>Competências que já foram medidas</h2>
-<p>Se o reajuste vale a partir de uma data em que <strong>já existem competências medidas e pagas com o preço antigo</strong>, o sistema mostra um aviso no topo e age conforme o sinal da diferença:</p>
+<p>Se o reajuste vale a partir de uma data em que <strong>já existem competências medidas no sistema com o preço antigo</strong>, o sistema mostra um aviso no topo e age conforme o sinal da diferença:</p>
 <ul>
 <li><strong>Diferença a pagar</strong> (índice positivo): ao concluir, é gerada uma <strong>competência de diferença de reajuste</strong> (quantidades medidas × (preço novo − preço pago)), paga pelo fluxo normal da execução.</li>
-<li><strong>Desconto</strong> (índice negativo): o <strong>crédito</strong> da SPI é <strong>abatido do valor autorizado</strong> da próxima competência gerada (e, se não couber, das seguintes).</li>
+<li><strong>Desconto</strong> (índice negativo): vira um <strong>crédito da SPI</strong>, que fica guardado no contrato até o gestor aplicá-lo numa medição (veja <em>Créditos da SPI</em>, abaixo).</li>
 <li><strong>Sem diferença</strong>: nada a acertar.</li>
 </ul>
 <p>As competências <strong>ainda não medidas</strong> são simplesmente recalculadas com os preços novos.</p>
+
+<h2>Meses pagos fora do sistema: diferença informada manualmente</h2>
+<p>O cálculo automático da diferença só enxerga os meses com <strong>medição concluída no SGI</strong>. Em muitos contratos, os meses anteriores à implantação do sistema foram pagos fora dele e não têm medição; sem tratamento, eles ficariam sem a diferença do reajuste e passariam a usar o preço novo.</p>
+<p>Por isso, quando há meses <strong>já encerrados</strong>, a partir da data de efeito, <strong>sem medição concluída</strong>, a memória de cálculo pergunta:</p>
+<p><em>"Identifiquei que X meses do período de dd/mm/aaaa a dd/mm/aaaa não possuem medições finalizadas. Deseja inserir o valor da diferença manualmente?"</em></p>
+<p>[[rj07-pergunta-diferenca-manual]]</p>
+<p>Ao responder <strong>Sim</strong>, preencha:</p>
+<ul>
+<li>os <strong>meses que foram pagos fora do sistema</strong> (marque só esses; os outros seguem o fluxo normal e serão medidos com o preço novo);</li>
+<li>o <strong>valor total da diferença</strong> desses meses (use valor <strong>negativo</strong> quando for crédito da SPI);</li>
+<li>o <strong>PDF da memória de cálculo</strong> feita fora do sistema;</li>
+<li>a <strong>justificativa</strong>.</li>
+</ul>
+<p>Todos os campos são obrigatórios.</p>
+<p>[[rj08-formulario-diferenca-manual]]</p>
+<p>Depois de salvar, o cartão mostra os meses, o valor e a <strong>observação</strong> que acompanha esse valor em todos os documentos: <em>"O valor de R$ X foi inserido manualmente por [nome] em dd/mm/aaaa às hh:mm:ss devido à falta de medições de mm/aaaa … mm/aaaa, não tendo sido utilizada a função do sistema para cálculo automático. Justificativa: …"</em>. Enquanto o reajuste estiver em elaboração, dá para <strong>Alterar</strong> (envie o PDF de novo) ou <strong>Remover</strong>.</p>
+<p>[[rj09-diferenca-manual-salva]]</p>
+<p class="callout warning">Depois de informar (ou alterar) a diferença manual, clique de novo em <strong>Gerar e baixar PDF e XLSX</strong>: a memória precisa trazer a diferença manual para o reajuste poder ser concluído.</p>
+<p>O que acontece com os meses marcados:</p>
+<ul>
+<li>ficam <strong>no preço de antes</strong> (o que foi pago de fato), mesmo que sejam medidos no sistema depois;</li>
+<li>saem do <strong>cálculo automático</strong>, para a diferença não ser cobrada duas vezes;</li>
+<li>se algum deles for medido no sistema antes da conclusão, o SGI pede para revisar a diferença manual;</li>
+<li>cancelar o reajuste libera os meses.</li>
+</ul>
+<p>Na conclusão, a confirmação final também informa o destino da diferença manual, que é tratada <strong>à parte da diferença automática</strong>:</p>
+<p>[[rj10-confirmar-com-diferenca-manual]]</p>
+<ul>
+<li><strong>Valor positivo:</strong> é gerada uma <strong>competência complementar de uma linha só</strong> ("Diferença de reajuste informada manualmente"), com o valor informado. Ela segue o fluxo normal: NE, nota fiscal, retenção, checklist, consolidado e OB, sem avaliação.</li>
+<li><strong>Valor negativo:</strong> vira um <strong>crédito da SPI</strong> guardado no contrato, marcado como "valor manual".</li>
+</ul>
+<p>[[rj11-complementar-diferenca-manual]]</p>
+
+<h2>Créditos da SPI: o gestor escolhe a medição</h2>
+<p>Os créditos da SPI (desconto retroativo de reajuste ou de repactuação, calculado pelo sistema ou informado manualmente) <strong>não são mais descontados automaticamente</strong>. Eles ficam guardados no contrato até o gestor decidir onde usar.</p>
+<p>Na etapa <strong>Medição</strong> de qualquer competência regular ou medição adicional ainda aberta, o quadro <strong>Créditos disponíveis</strong> lista os créditos guardados.</p>
+<p>[[md01-creditos-disponiveis]]</p>
+<p>Para cada crédito, você pode:</p>
+<ul>
+<li><strong>Aplicar nesta medição</strong>: o crédito entra <strong>inteiro</strong>, sem fracionar. Cada crédito é independente dos outros.</li>
+<li><strong>Retirar</strong>: o crédito volta para o contrato, enquanto a medição estiver aberta.</li>
+</ul>
+<p>O crédito aplicado aparece com a origem (por exemplo, "Crédito de Reajuste (ref. 01/2026)") e é descontado do valor a faturar. Se for maior que o valor da medição, o SGI desconta o que couber na conclusão e <strong>a sobra volta a ficar disponível</strong>.</p>
+<p>[[md02-credito-aplicado]]</p>
+<p class="callout info">Aplicar ou retirar um crédito apaga as ciências já registradas na medição, porque o valor muda.</p>
 
 <h2>Depois de concluído</h2>
 <p>O reajuste passa para o <strong>Histórico</strong> da tela, com a situação <em>Concluído</em>, a base e o valor global antes e depois, e os botões <strong>Baixar memória</strong> e <strong>Baixar apostilamento</strong>.</p>

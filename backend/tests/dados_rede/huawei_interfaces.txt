@@ -1,0 +1,303 @@
+100GE1/0/1 current state : DOWN (ifindex: 54)
+Line protocol current state : DOWN 
+Description: 
+Speed:                 AUTO,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                        -
+100GE1/0/2 current state : DOWN (ifindex: 55)
+Line protocol current state : DOWN 
+Description: 
+Speed:                 AUTO,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                        -
+25GE1/0/1 current state : DOWN (ifindex: 50)
+Line protocol current state : DOWN 
+Description: UPLINK SPI-SWAC-13B
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                        -
+25GE1/0/2 current state : DOWN (ifindex: 51)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                        -
+25GE1/0/3 current state : DOWN (ifindex: 52)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                        -
+25GE1/0/4 current state : DOWN (ifindex: 53)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                        -
+Eth-Trunk1 current state : UP (ifindex: 74)
+Line protocol current state : UP 
+Description: LINK FW-A
+Eth-Trunk2 current state : UP (ifindex: 76)
+Line protocol current state : UP 
+Description: LINK FW-B
+Eth-Trunk100 current state : DOWN (ifindex: 61)
+Line protocol current state : DOWN 
+Description: 
+MEth0/0/0 current state : DOWN (ifindex: 58)
+Line protocol current state : DOWN 
+Description: 
+MultiGE1/0/1 current state : DOWN (ifindex: 2)
+Line protocol current state : DOWN 
+Description: FW-A PORTA 1
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/2 current state : UP (ifindex: 3)
+Line protocol current state : UP 
+Description: FW-A PORTA 2
+Speed:                 1000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/3 current state : UP (ifindex: 4)
+Line protocol current state : UP 
+Description: FW-B PORTA 1
+Speed:                 1000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/4 current state : DOWN (ifindex: 5)
+Line protocol current state : DOWN 
+Description: FW-B PORTA 2
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/5 current state : DOWN (ifindex: 6)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/6 current state : DOWN (ifindex: 7)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/7 current state : DOWN (ifindex: 8)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/8 current state : DOWN (ifindex: 9)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/9 current state : DOWN (ifindex: 10)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/10 current state : DOWN (ifindex: 11)
+Line protocol current state : DOWN 
+Description: Porta de Acesso
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/11 current state : UP (ifindex: 12)
+Line protocol current state : UP 
+Description: LINK SAI_BL
+Speed:                 1000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/12 current state : DOWN (ifindex: 13)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/13 current state : DOWN (ifindex: 14)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/14 current state : DOWN (ifindex: 15)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/15 current state : DOWN (ifindex: 16)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/16 current state : DOWN (ifindex: 17)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/17 current state : DOWN (ifindex: 18)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/18 current state : DOWN (ifindex: 19)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/19 current state : DOWN (ifindex: 20)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/20 current state : DOWN (ifindex: 21)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/21 current state : DOWN (ifindex: 22)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/22 current state : DOWN (ifindex: 23)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/23 current state : DOWN (ifindex: 24)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/24 current state : DOWN (ifindex: 25)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/25 current state : DOWN (ifindex: 26)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/26 current state : DOWN (ifindex: 27)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/27 current state : DOWN (ifindex: 28)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/28 current state : DOWN (ifindex: 29)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/29 current state : DOWN (ifindex: 30)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/30 current state : DOWN (ifindex: 31)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/31 current state : DOWN (ifindex: 32)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/32 current state : DOWN (ifindex: 33)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/33 current state : DOWN (ifindex: 34)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/34 current state : DOWN (ifindex: 35)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/35 current state : DOWN (ifindex: 36)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/36 current state : DOWN (ifindex: 37)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/37 current state : DOWN (ifindex: 38)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/38 current state : DOWN (ifindex: 39)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/39 current state : DOWN (ifindex: 40)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/40 current state : DOWN (ifindex: 41)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/41 current state : DOWN (ifindex: 42)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/42 current state : DOWN (ifindex: 43)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/43 current state : DOWN (ifindex: 44)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/44 current state : DOWN (ifindex: 45)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/45 current state : DOWN (ifindex: 46)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/46 current state : DOWN (ifindex: 47)
+Line protocol current state : DOWN 
+Description: 
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/47 current state : Administratively DOWN (ifindex: 48)
+Line protocol current state : DOWN 
+Description: SPI-SWDIST-06
+Speed:                10000,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+MultiGE1/0/48 current state : UP (ifindex: 49)
+Line protocol current state : UP 
+Description: UPLINK SPI-SWDIST-01
+Speed:                 2500,     Loopback:                        NONE
+Duplex:                FULL,     Negotiation:                   ENABLE
+NULL0 current state : UP (ifindex: 56)
+Line protocol current state : UP (spoofing) 
+Description: 
+Vlanif172 current state : UP (ifindex: 62)
+Line protocol current state : UP 
+Description: 
+Vlanif301 current state : UP (ifindex: 66)
+Line protocol current state : UP 
+Description: INSIDE
+Vlanif303 current state : Administratively DOWN (ifindex: 68)
+Line protocol current state : DOWN 
+Description: Gerencia Switch
+Vlanif2468 current state : UP (ifindex: 71)
+Line protocol current state : UP 
+Description: 
+Vlanif2476 current state : UP (ifindex: 72)
+Line protocol current state : UP 
+Description: MGMT-LAN
+Vlanif2479 current state : UP (ifindex: 73)
+Line protocol current state : UP 
+Description: 

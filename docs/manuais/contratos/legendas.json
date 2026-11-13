@@ -266,5 +266,179 @@
    "n": 1,
    "texto": "Depois da assinatura: informe a publicação no PNCP (condição de eficácia), no DOE e no Contratos.gov; se o contrato exigir garantia, os campos de dados para a planilha da DOF aparecem aqui"
   }
+ ],
+ "rj07-pergunta-diferenca-manual": [
+  {
+   "n": 1,
+   "texto": "O sistema encontrou meses já encerrados, a partir da data de efeito, sem medição concluída"
+  },
+  {
+   "n": 2,
+   "texto": "Sim: abre o formulário para informar a diferença desses meses"
+  },
+  {
+   "n": 3,
+   "texto": "Não: os meses seguem o fluxo normal e serão medidos com o preço novo"
+  }
+ ],
+ "rj08-formulario-diferenca-manual": [
+  {
+   "n": 1,
+   "texto": "Marque os meses que foram pagos fora do sistema"
+  },
+  {
+   "n": 2,
+   "texto": "Valor total da diferença desses meses (negativo = crédito da SPI)"
+  },
+  {
+   "n": 3,
+   "texto": "PDF com a memória de cálculo feita fora do sistema"
+  },
+  {
+   "n": 4,
+   "texto": "Justificativa: sai na observação dos documentos"
+  },
+  {
+   "n": 5,
+   "texto": "Salvar: todos os campos são obrigatórios"
+  }
+ ],
+ "rj09-diferenca-manual-salva": [
+  {
+   "n": 1,
+   "texto": "Meses pagos fora do sistema e o valor informado"
+  },
+  {
+   "n": 2,
+   "texto": "Observação que acompanha o valor em todos os documentos"
+  },
+  {
+   "n": 3,
+   "texto": "Alterar ou remover enquanto o reajuste estiver em elaboração"
+  }
+ ],
+ "rj11-complementar-diferenca-manual": [
+  {
+   "n": 1,
+   "texto": "Uma linha só, com o valor informado: segue o fluxo normal (NE, nota fiscal, consolidado e OB)"
+  },
+  {
+   "n": 2,
+   "texto": "A observação da diferença manual aparece na tela e nos documentos da competência"
+  }
+ ],
+ "rp01-iniciar-repactuacao": [
+  {
+   "n": 1,
+   "texto": "Data-base da CCT (mês e ano)"
+  },
+  {
+   "n": 2,
+   "texto": "Data a partir da qual os novos valores valem"
+  },
+  {
+   "n": 3,
+   "texto": "PDF da Convenção Coletiva: vai também para os Documentos importantes"
+  },
+  {
+   "n": 4,
+   "texto": "Abrir repactuação: cria a elaboração"
+  }
+ ],
+ "rp02-cadastro-das-linhas": [
+  {
+   "n": 1,
+   "texto": "Componente de custo que a CCT mudou (ex.: vale-transporte, plano de saúde)"
+  },
+  {
+   "n": 2,
+   "texto": "Valor vigente e valor repactuado, já por unidade do item financeiro"
+  },
+  {
+   "n": 3,
+   "texto": "Itens do contrato que recebem a diferença (um ou mais)"
+  },
+  {
+   "n": 4,
+   "texto": "Finalizar cadastro: libera a memória de cálculo"
+  }
+ ],
+ "rp03-memoria-de-calculo": [
+  {
+   "n": 1,
+   "texto": "Preço vigente de cada item + as diferenças das linhas vinculadas, e a nova base mensal"
+  }
+ ],
+ "rp04-retroativo-e-pergunta": [
+  {
+   "n": 1,
+   "texto": "Memória retroativa: competências a partir da data de vigência"
+  },
+  {
+   "n": 2,
+   "texto": "Meses encerrados sem medição: o sistema pergunta se você quer informar a diferença"
+  }
+ ],
+ "rp05-diferenca-manual-credito": [
+  {
+   "n": 1,
+   "texto": "Valor negativo: vira crédito da SPI no fundo do contrato"
+  },
+  {
+   "n": 2,
+   "texto": "Observação que acompanha o valor na memória e no consolidado"
+  }
+ ],
+ "rp06-consolidado-e-finalizacao": [
+  {
+   "n": 1,
+   "texto": "Consolidado: capa, CCT, checklist, memória e a memória externa da diferença manual, num PDF só"
+  },
+  {
+   "n": 2,
+   "texto": "Finalizar: exige cadastro finalizado, memória e consolidado atualizados e o apostilamento assinado"
+  }
+ ],
+ "rp08-historico": [
+  {
+   "n": 1,
+   "texto": "Histórico: cada repactuação com o retroativo (e o valor manual) e os arquivos para baixar"
+  }
+ ],
+ "md01-creditos-disponiveis": [
+  {
+   "n": 1,
+   "texto": "Créditos da SPI ainda não aplicados (de reajuste ou repactuação, calculados ou informados à mão)"
+  },
+  {
+   "n": 2,
+   "texto": "Aplicar nesta medição: o crédito entra inteiro; cada crédito é independente"
+  }
+ ],
+ "md02-credito-aplicado": [
+  {
+   "n": 1,
+   "texto": "O crédito aplicado aparece com a origem e é descontado do total medido"
+  },
+  {
+   "n": 2,
+   "texto": "Retirar: devolve o crédito ao fundo enquanto a medição estiver aberta"
+  },
+  {
+   "n": 3,
+   "texto": "Crédito informado manualmente: a observação acompanha a medição e os documentos"
+  }
+ ],
+ "rj10-confirmar-com-diferenca-manual": [
+  {
+   "n": 1,
+   "texto": "A confirmação final também avisa o que acontece com a diferença informada manualmente (complementar a pagar ou crédito)"
+  }
+ ],
+ "rp07-confirmar-finalizacao": [
+  {
+   "n": 1,
+   "texto": "Confirmação final: novos preços, nova base mensal e o destino da diferença (calculada ou informada manualmente)"
+  }
  ]
 }

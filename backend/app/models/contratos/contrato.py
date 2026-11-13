@@ -169,6 +169,10 @@ class Contrato(Base):
     ocorrencias: Mapped[list["OcorrenciaDiario"]] = relationship(  # noqa: F821
         back_populates="contrato", cascade="all, delete-orphan", order_by="OcorrenciaDiario.criado_em"
     )
+    # E-mails adicionais já usados nas ocorrências, oferecidos (desmarcados) nas próximas
+    emails_salvos_diario: Mapped[list["EmailSalvoDiario"]] = relationship(  # noqa: F821
+        back_populates="contrato", cascade="all, delete-orphan", order_by="EmailSalvoDiario.email"
+    )
 
     @property
     def numero_arquivo(self) -> str:

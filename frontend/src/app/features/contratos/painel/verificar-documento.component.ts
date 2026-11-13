@@ -1,5 +1,34 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a tela "Verificar documento": confere um PDF gerado pelo sistema pelo código de verificação ou pelo próprio arquivo.
+/**
+ * =============================================================================
+ * ARQUIVO: verificar-documento.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Tela "Verificar documento": confere se um PDF gerado pelo sistema (relatório
+ * de avaliação ou memória de cálculo) é autêntico, pelo código de verificação
+ * impresso na Folha de autenticação ou pelo envio do próprio arquivo.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido. Tem duas entradas: o campo de
+ * código (chama ContratosApiService.verificarCodigo) e o envio de PDF via
+ * app-envio-pdf (verificarArquivo). As duas usam o mesmo método executar, que
+ * liga o indicador de carregamento e guarda o resultado num signal. O
+ * resultado mostra se é válido, o motivo e os dados do registro.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite que qualquer pessoa (servidor, empresa ou controle externo) confirme
+ * que um documento de avaliação ou cálculo não foi alterado depois de gerado,
+ * e veja quem o gerou e quem deu ciência, dando segurança jurídica ao processo.
+ * Não confere assinatura digital (essa é feita no gov.br).
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota do módulo Contratos. Depende de ContratosApiService, do tipo
+ * VerificacaoDocumento (contratos.models) e do componente compartilhado
+ * EnvioPdfComponent. No backend, a Folha de autenticação é acrescentada aos
+ * PDFs pelo serviço de documentos.
+ *
+ * =============================================================================
+ */
 
 import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
@@ -64,15 +93,23 @@ export class VerificarDocumentoComponent {
   protected readonly resultado = signal<VerificacaoDocumento | null>(null);
   protected readonly carregando = signal(false);
 
+  /** Verifica pelo código digitado (sem espaços nas pontas). */
   protected verificarCodigo(): void {
     this.executar(this.api.verificarCodigo(this.codigo.trim()));
   }
 
+  /** Verifica pelo PDF escolhido; null significa que o usuário cancelou a seleção. */
   protected verificarArquivo(arquivo: File | null): void {
     if (!arquivo) return;
     this.executar(this.api.verificarArquivo(arquivo));
   }
 
+  /**
+   * Executa a verificação (por código ou por arquivo) e exibe o resultado.
+   * Recebe o Observable já montado; o tipo é o mesmo nas duas chamadas da API,
+   * por isso o parâmetro usa ReturnType do método verificarCodigo.
+   * A requisição HTTP só é disparada no `subscribe`.
+   */
   private executar(chamada: ReturnType<ContratosApiService['verificarCodigo']>): void {
     this.carregando.set(true);
     chamada.subscribe({

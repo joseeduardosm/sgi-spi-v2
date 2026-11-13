@@ -16,6 +16,7 @@ Este arquivo reexporta as classes para que o restante do código importe de um l
 from app.models.contratos.autenticacao import DocumentoAutenticado
 from app.models.contratos.alteracoes import (
     AbatimentoReajuste,
+    DiferencaManual,
     DocumentoRepactuacao,
     ItemRepactuacao,
     LinhaRepactuacao,
@@ -45,7 +46,7 @@ from app.models.contratos.contrato import (
 from app.models.contratos.correcoes import CorrecaoItens, HistoricoItemContrato
 from app.models.contratos.parametros import PADROES as PADROES_PARAMETROS, ParametrosContratos
 from app.models.contratos.rascunho import RascunhoContrato
-from app.models.contratos.diario import AnexoOcorrencia, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
+from app.models.contratos.diario import AnexoOcorrencia, EmailSalvoDiario, GlosaOcorrencia, ItemAvaliacaoOcorrencia, OcorrenciaDiario
 from app.models.contratos.empresa import EmpresaContratada, PrepostoEmpresa
 from app.models.contratos.execucao import (
     ETAPAS,
@@ -77,6 +78,7 @@ from app.models.contratos.orcamento import (
 
 __all__ = [
     "AbatimentoReajuste",
+    "DiferencaManual",
     "DocumentoRepactuacao",
     "ItemRepactuacao",
     "LinhaRepactuacao",
@@ -87,6 +89,7 @@ __all__ = [
     "PortariaContrato",
     "NomeacaoPortaria",
     "AnexoOcorrencia",
+    "EmailSalvoDiario",
     "ItemAvaliacaoOcorrencia",
     "ETAPAS",
     "PAPEIS_EQUIPE",

@@ -1,9 +1,35 @@
-/* ==========================================================================
- * Movimento (design-motion-principles): tokens, entrada/saída, esqueleto e progresso.
- * Regras: abaixo de 300 ms (ideal ~180 ms), só transform e opacity, ease-out para chegar, ease-in para sair,
- * linear para progresso; nada de scale(0). Ações muito frequentes ou feitas pelo teclado não animam.
- * prefers-reduced-motion: tudo vira estado final imediato (regra global em styles.scss).
- * ========================================================================== */
+/**
+ * =============================================================================
+ * ARQUIVO: _movimento.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Concentrar todo o movimento da interface (design-motion-principles):
+ * tokens de duração e curva, entrada e saída de blocos, modais e menus,
+ * esqueleto de carregamento, troca de rota e o anel dos botões em andamento.
+ *
+ * RESUMO TÉCNICO:
+ * Regras: abaixo de 300 ms (ideal ~180 ms), só transform e opacity, ease-out
+ * para chegar, ease-in para sair, linear para progresso; nada de scale(0).
+ * Ações muito frequentes ou feitas pelo teclado não animam. Define as
+ * variáveis --mov-* e --ease-*, os @keyframes, as classes .mov-* (usadas com
+ * animate.enter/animate.leave do Angular), .esq (esqueleto com brilho) e
+ * button.carregando. Com prefers-reduced-motion tudo vira estado final
+ * imediato (aqui e na regra global de styles.scss).
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Deixa claro para o usuário que algo está carregando ou sendo salvo, sem
+ * animações que atrasem o trabalho, e respeita quem pede menos movimento
+ * no sistema operacional (acessibilidade).
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelo componente app-esqueleto, por todos
+ * os modais (.fundo-modal, .modal-portal) e pelos botões de salvar com
+ * [class.carregando]. Detalhes em docs/movimento.md; o script
+ * frontend/scripts/verificar-movimento.mjs fiscaliza o uso.
+ *
+ * =============================================================================
+ */
 
 :root {
   --mov-rapido: 120ms;
@@ -16,6 +42,8 @@
   --mov-desloca: 8px;
 }
 
+/* @keyframes descreve os quadros de uma animação (de "from" para "to"); a classe que a usa
+   escolhe a duração e a curva pela propriedade animation. */
 @keyframes mov-entra {
   from { opacity: 0; transform: translateY(var(--mov-desloca)); }
   to { opacity: 1; transform: none; }
@@ -59,6 +87,8 @@
 .mov-lista > * { animation: mov-entra var(--mov-padrao) var(--ease-entra) backwards; animation-delay: calc(min(var(--i, 0), 7) * 25ms); }
 
 /* Troca de rota (View Transitions): conteúdo novo sobe de leve; o antigo some rápido */
+/* ::view-transition-old/new são pseudo-elementos que o navegador cria durante a troca de rota
+   (View Transitions API): "old" é o retrato da tela antiga e "new" o da nova. */
 ::view-transition-old(root) { animation: mov-fundo-sai var(--mov-rapido) var(--ease-sai) both; }
 ::view-transition-new(root) { animation: mov-entra var(--mov-padrao) var(--ease-entra) both; }
 
@@ -72,6 +102,7 @@
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
   animation: esq-brilho 1.4s linear infinite;
 }
+/* O brilho sai de fora pela esquerda (-100%) e atravessa até a direita, em laço (infinite) */
 @keyframes esq-brilho { to { transform: translateX(100%); } }
 
 /* Imagem a caminho: mostra o esqueleto no lugar e aparece com fade quando chega (só opacidade) */

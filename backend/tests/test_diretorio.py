@@ -1,6 +1,35 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar o Diretório: ramais em cartões, aniversariantes, mural, favoritos, foto, vCard e parabéns automático.
-"""Módulo Diretório (`/api/diretorio`)."""
+"""
+===============================================================================
+ARQUIVO: test_diretorio.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar o módulo Diretório (/api/diretorio): ramais em cartões, busca e
+filtros, favoritos, chefia e equipe, selo de férias, vCard e QR code,
+aniversariantes, mural de parabéns, foto, LinkedIn, curtidas e o parabéns
+automático do dia.
+
+RESUMO TÉCNICO:
+A fixture equipe cria a chefe Célia e liderados com aniversários relativos
+a hoje (_nasc). Os testes chamam a API e, em alguns casos, as funções de
+app/services/servico_diretorio.py direto (datas de aniversário, foto do
+LDAP, parabéns do dia), lendo o banco com FabricaSessao para conferir
+notificações e afastamentos. Imagens de teste são geradas com Pillow (PIL).
+
+FINALIDADE DE NEGÓCIO:
+O Diretório é a lista de contatos interna da SPI. O teste protege a
+privacidade (ano de nascimento nunca exposto, opt-out do aniversário, só o
+dono vê quem curtiu), a lista só com pessoas ativas e com ramal, o selo de
+férias que some sozinho e os avisos de aniversário sem repetição.
+
+CONTEXTO NO SISTEMA:
+Rotas de backend/app/api/routes (diretório), servico_diretorio, modelos de
+notificação (Notificacao, EntregaNotificacao), Afastamento do RH e o perfil
+institucional (/api/autenticacao/perfil). A foto pode vir do LDAP/AD
+(Active Directory) ou de upload do próprio usuário.
+
+===============================================================================
+"""
 
 from datetime import date, timedelta
 from io import BytesIO
@@ -19,6 +48,7 @@ URL = "/api/diretorio"
 
 
 def _png(lado=900, cor=(200, 60, 60)) -> bytes:
+    """Gera uma imagem PNG retangular (lado x lado/2) em memória, na cor indicada."""
     saida = BytesIO()
     Image.new("RGB", (lado, lado // 2), cor).save(saida, "PNG")
     return saida.getvalue()
@@ -51,6 +81,8 @@ def equipe(cliente):
 
 
 def test_ramais_exigem_login_e_listam_so_ativos_com_ramal(cliente, equipe):
+    """Sem login dá 401; a lista vem em ordem alfabética, sem inativos, sem quem não tem ramal e sem data de nascimento.
+    """
     ids, h = equipe
     assert cliente.get(f"{URL}/ramais").status_code == 401
     criar_usuario("sem_ramal", nome_completo="Sem Ramal", ramal="")
@@ -67,6 +99,8 @@ def test_ramais_exigem_login_e_listam_so_ativos_com_ramal(cliente, equipe):
 
 
 def test_busca_sem_acento_filtros_e_paginacao(cliente, equipe):
+    """Busca ignora acento, filtra por setor, pagina e monta o link de WhatsApp e o local; celular não entra na busca.
+    """
     _, h = equipe
     assert [c["nome"] for c in cliente.get(f"{URL}/ramais", params={"q": "celia coordenadora"}, headers=h["bia"]).json()["itens"]] == ["Célia Chefe"]
     assert {c["nome"] for c in cliente.get(f"{URL}/ramais", params={"setor": "Contratos"}, headers=h["bia"]).json()["itens"]} == {"Célia Chefe", "Davi Lima"}
@@ -81,6 +115,7 @@ def test_busca_sem_acento_filtros_e_paginacao(cliente, equipe):
 
 
 def test_favoritos_vem_primeiro_e_e_por_usuario(cliente, equipe):
+    """Favoritar é idempotente, por usuário, coloca o cartão no topo e aceita filtro só de favoritos."""
     ids, h = equipe
     assert cliente.put(f"{URL}/favoritos/{ids['eva']}", headers=h["bia"]).status_code == 204
     assert cliente.put(f"{URL}/favoritos/{ids['eva']}", headers=h["bia"]).status_code == 204  # idempotente
@@ -93,6 +128,7 @@ def test_favoritos_vem_primeiro_e_e_por_usuario(cliente, equipe):
 
 
 def test_detalhe_com_chefia_e_equipe(cliente, equipe):
+    """O detalhe do cartão mostra a chefia (gestor_id) e a equipe de liderados; id inexistente dá 404."""
     ids, h = equipe
     chefe = cliente.get(f"{URL}/ramais/{ids['celia']}", headers=h["bia"]).json()
     assert [e["nome"] for e in chefe["equipe"]] == ["Bia Souza", "Davi Lima"] and chefe["chefia"] is None
@@ -101,15 +137,18 @@ def test_detalhe_com_chefia_e_equipe(cliente, equipe):
 
 
 def test_selo_de_ferias_aparece_e_some_sozinho(cliente, equipe):
+    """Só férias aprovadas e em curso mostram o selo; depois do último dia ele some sem ação de ninguém."""
     ids, h = equipe
     hoje = date.today()
 
     def agendar(inicio, fim, status="aprovado"):
+        """Grava um afastamento de férias do Davi direto no banco, com o status indicado."""
         with FabricaSessao() as s:
             s.add(Afastamento(usuario_id=ids["davi"], tipo="ferias", inicio=inicio, fim=fim, dias=(fim - inicio).days + 1, exercicio=hoje.year, status=status))
             s.commit()
 
     def davi():
+        """Cartão do Davi na lista de ramais vista pela Bia."""
         return next(c for c in cliente.get(f"{URL}/ramais", headers=h["bia"]).json()["itens"] if c["nome"] == "Davi Lima")
 
     agendar(hoje + timedelta(days=5), hoje + timedelta(days=15))  # agendada: ainda sem selo
@@ -127,6 +166,7 @@ def test_selo_de_ferias_aparece_e_some_sozinho(cliente, equipe):
 
 
 def test_vcard_e_qrcode(cliente, equipe):
+    """Baixa o contato em vCard (text/vcard) e o QR code em PNG."""
     ids, h = equipe
     r = cliente.get(f"{URL}/ramais/{ids['bia']}/vcard", headers=h["davi"])
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/vcard")
@@ -136,6 +176,7 @@ def test_vcard_e_qrcode(cliente, equipe):
 
 
 def test_aniversariantes_dia_semana_mes_sem_ano(cliente, equipe):
+    """Lista aniversariantes do dia, da semana e do mês, com dias restantes e sem o ano; período inválido dá 422."""
     ids, h = equipe
     dia = cliente.get(f"{URL}/aniversariantes", params={"periodo": "dia"}, headers=h["davi"]).json()
     assert [a["nome"] for a in dia] == ["Bia Souza"] and dia[0]["e_hoje"] and dia[0]["dias_restantes"] == 0
@@ -148,6 +189,7 @@ def test_aniversariantes_dia_semana_mes_sem_ano(cliente, equipe):
 
 
 def test_semana_na_virada_de_ano_e_29_de_fevereiro():
+    """Cálculo das datas: próximo aniversário na virada do ano e 29/02 em ano não bissexto (vira 28/02)."""
     nasc = date(1990, 1, 2)
     hoje = date(2026, 12, 28)
     assert servico_diretorio._proximo(nasc, hoje) == date(2027, 1, 2)
@@ -158,6 +200,7 @@ def test_semana_na_virada_de_ano_e_29_de_fevereiro():
 
 
 def test_opt_out_oculta_da_lista_e_do_mural(cliente, equipe):
+    """Quem escolhe ocultar o aniversário some da lista e não pode receber recado no mural."""
     ids, h = equipe
     r = cliente.patch(f"{URL}/preferencias", json={"ocultar_aniversario": True}, headers=h["bia"])
     assert r.status_code == 200 and r.json()["ocultar_aniversario"] is True
@@ -166,6 +209,8 @@ def test_opt_out_oculta_da_lista_e_do_mural(cliente, equipe):
 
 
 def test_mural_de_parabens(cliente, equipe):
+    """Regras do mural: texto não vazio, um recado por pessoa, não para si mesmo, só no dia, e aviso à aniversariante.
+    """
     ids, h = equipe
     url = f"{URL}/aniversariantes/{ids['bia']}/parabens"
     assert cliente.post(url, json={"texto": "  "}, headers=h["davi"]).status_code == 400  # só espaços
@@ -192,6 +237,7 @@ def test_mural_de_parabens(cliente, equipe):
 
 
 def test_foto_upload_reduz_serve_e_remove(cliente, equipe):
+    """Recusa arquivo que não é imagem, reduz a foto para 400x400, serve só com login e remove."""
     ids, h = equipe
     assert cliente.put(f"{URL}/foto", files={"arquivo": ("x.png", b"<html>nao</html>", "image/png")}, headers=h["bia"]).status_code == 400
     r = cliente.put(f"{URL}/foto", files={"arquivo": ("eu.png", _png(), "image/png")}, headers=h["bia"])
@@ -206,6 +252,7 @@ def test_foto_upload_reduz_serve_e_remove(cliente, equipe):
 
 
 def test_foto_do_ldap_nao_sobrescreve_upload_e_nao_duplica(cliente, equipe):
+    """Foto do LDAP só é regravada quando muda, recusa arquivo inválido e não substitui a foto enviada pelo usuário."""
     ids, h = equipe
     from app.models.usuario import Usuario
     with FabricaSessao() as s:
@@ -223,6 +270,7 @@ def test_foto_do_ldap_nao_sobrescreve_upload_e_nao_duplica(cliente, equipe):
 
 
 def test_parabens_automatico_do_dia_sem_repetir(cliente, equipe):
+    """O parabéns do dia é enviado uma vez só, abre em janela e vai por e-mail com o texto padrão da SPI."""
     ids, h = equipe
     with FabricaSessao() as s:
         criadas = servico_diretorio.enviar_parabens_do_dia(s)
@@ -240,6 +288,7 @@ def test_parabens_automatico_do_dia_sem_repetir(cliente, equipe):
 
 
 def test_linkedin_no_perfil_normaliza_e_aparece_no_cartao(cliente, equipe):
+    """Só aceita endereço do LinkedIn (recusa outros domínios e javascript:), normaliza e mostra no cartão."""
     ids, h = equipe
     base = cliente.get("/api/autenticacao/perfil", headers=h["bia"]).json()
     corpo = {k: base[k] for k in ("nome_completo", "email", "ramal", "celular", "cargo", "departamento", "andar", "predio", "data_nascimento", "gestor_id")}
@@ -254,6 +303,7 @@ def test_linkedin_no_perfil_normaliza_e_aparece_no_cartao(cliente, equipe):
 
 
 def test_curtir_cartao_so_o_dono_ve_quem_curtiu_e_avisa_so_na_primeira_vez(cliente, equipe):
+    """Curtida é idempotente, só o dono vê quem curtiu, ninguém curte o próprio cartão e o aviso sai uma vez só."""
     ids, h = equipe[0], equipe[1] if isinstance(equipe, tuple) else None
     h = {login: cabecalho(cliente, login) for login in ("celia", "bia", "davi")}
     # Bia curte o cartão da Célia (idempotente); o dono recebe a janela e o item no sino
@@ -278,6 +328,7 @@ def test_curtir_cartao_so_o_dono_ve_quem_curtiu_e_avisa_so_na_primeira_vez(clien
 
 
 def test_conta_local_de_sistema_nao_aparece_na_equipe(cliente, equipe):
+    """Conta local (de sistema, não LDAP) com chefia definida não aparece na equipe da chefe."""
     ids, h = equipe
     sistema = criar_usuario("tv-ti", nome_completo="TV TI", email="tv@sp.gov.br", ramal="999")
     with FabricaSessao() as s:

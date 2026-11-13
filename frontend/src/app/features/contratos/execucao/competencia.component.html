@@ -26,8 +26,13 @@
   @if (!d.liberada || d.tipo === 'diferenca_reajuste' || d.tipo === 'diferenca_repactuacao' || d.tipo === 'adicional' || d.avisos.length) {
     <div class="painel-avisos" role="status">
       @if (!d.liberada) { <p>O período desta competência termina em <b>{{ d.periodo_fim | dataBr }}</b>. A medição será liberada após o encerramento.</p> }
-      @if (d.tipo === 'diferenca_reajuste') { <p><b>Competência complementar:</b> paga a diferença de preço do reajuste sobre as quantidades já medidas. As quantidades não podem ser alteradas e não há avaliação.</p> }
-      @if (d.tipo === 'diferenca_repactuacao') { <p><b>Competência complementar:</b> paga a diferença da repactuação (CCT) sobre as quantidades já medidas. As quantidades não podem ser alteradas e não há avaliação.</p> }
+      @if (d.diferenca_manual) {
+        <!-- Complementar da diferença informada à mão (meses pagos fora do sistema): uma linha com o valor informado -->
+        <p><b>Competência complementar:</b> paga a diferença {{ d.tipo === 'diferenca_reajuste' ? 'do reajuste' : 'da repactuação (CCT)' }} informada manualmente para meses pagos fora do sistema. O valor não pode ser alterado e não há avaliação.</p>
+      } @else {
+        @if (d.tipo === 'diferenca_reajuste') { <p><b>Competência complementar:</b> paga a diferença de preço do reajuste sobre as quantidades já medidas. As quantidades não podem ser alteradas e não há avaliação.</p> }
+        @if (d.tipo === 'diferenca_repactuacao') { <p><b>Competência complementar:</b> paga a diferença da repactuação (CCT) sobre as quantidades já medidas. As quantidades não podem ser alteradas e não há avaliação.</p> }
+      }
       @if (d.tipo === 'adicional') {
         <p><b>Medição adicional</b> incluída por {{ d.adicional_por_nome }}: {{ d.adicional_justificativa }}
           @if (d.adicional_anexo; as anexo) { · <a href="javascript:void(0)" (click)="abrirAnexoAdicional(anexo.anexo_id)">{{ anexo.nome }}</a> }

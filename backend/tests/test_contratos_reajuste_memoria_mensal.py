@@ -1,6 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar a memória de cálculo mês a mês do reajuste (meses pagos, em haver, resumo executivo e nova versão pela OB).
-"""Reajuste: memória por mês medido (com a situação da OB), resumo executivo e planilha com uma aba por mês."""
+"""
+===============================================================================
+ARQUIVO: test_contratos_reajuste_memoria_mensal.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar a memória de cálculo mês a mês do reajuste: meses pagos e em haver,
+resumo executivo, nova versão da memória quando sai a OB e a prévia de
+cálculo (calculadora ao vivo) que não grava nada.
+
+RESUMO TÉCNICO:
+Reaproveita o cenário de test_contratos_retencao.py (competência 01/2026
+com medição concluída e data fixa de 15/03/2026). Abre o reajuste, junta NF
+e OB, gera os arquivos da memória (PDF e XLSX) e lê o conteúdo com pypdf e
+openpyxl para conferir seções, abas e totais. Também chama a rota
+/memoria/previa e confere que o banco continua igual.
+
+FINALIDADE DE NEGÓCIO:
+Garante que a memória de cálculo entregue ao processo mostre, por mês, o
+valor pago, o valor reajustado e o que está em haver (diferença a receber),
+e que a memória seja refeita quando a situação de pagamento muda (OB, ordem
+bancária, emitida). A prévia deixa o gestor simular índices sem alterar o
+reajuste salvo.
+
+CONTEXTO NO SISTEMA:
+Rotas de reajustes do contrato (backend/app/api/routes/contratos), serviço
+servico_reajuste e geração de documentos (PDF/planilha). Usa os apoios de
+tests/apoio_contratos.py (PDF, definir_parametros, juntar_nf).
+
+===============================================================================
+"""
 
 import io
 from datetime import date
@@ -9,11 +37,17 @@ from decimal import Decimal
 import openpyxl
 
 from tests.apoio_contratos import PDF, definir_parametros, juntar_nf
+# Fixtures importadas de outro arquivo de teste: o pytest as encontra pelo nome
+# nos parâmetros dos testes (por isso o noqa F811 nos testes abaixo).
 from tests.test_contratos_retencao import _ambiente, cenario  # noqa: F401 - fixtures (competência 01/2026 com medição concluída, data fixa de 15/03/2026)
 from tests.test_contratos_execucao import _url
 
 
 def _reajustar(cliente, contrato, h):
+    """Abre o reajuste da vigência 1 (referência 01/2026) e grava 5% em todos os itens.
+
+    Devolve (url do reajuste, dados do reajuste em andamento após salvar a memória).
+    """
     painel = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": "2026-01-01"}, headers=h).json()
     reajuste = painel["em_andamento"]
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
@@ -22,6 +56,11 @@ def _reajustar(cliente, contrato, h):
 
 
 def test_memoria_mes_a_mes_com_mes_pago_e_resumo_executivo(cliente, cenario):  # noqa: F811
+    """Mês medido entra como "aguardando OB"; com a OB, vira pago e a memória ganha a versão 2.
+
+    Confere também o conteúdo do PDF (seção do mês pago e resumo executivo) e da
+    planilha (abas Reajuste, uma por mês pago e Resumo).
+    """
     contrato, base, gestora = cenario
     definir_parametros(corte_alertas_a_partir_de=date(2026, 9, 1))  # competência retroativa: medição → NF → OB
     assert juntar_nf(cliente, base, gestora, "2105.00", "123").status_code == 200
@@ -60,6 +99,7 @@ def test_memoria_mes_a_mes_com_mes_pago_e_resumo_executivo(cliente, cenario):  #
 
 
 def test_mes_medido_sem_ob_entra_na_memoria(cliente, cenario):  # noqa: F811
+    """Sem OB, o mês medido já entra na memória e no total em haver, marcado como não pago."""
     contrato, base, gestora = cenario
     # Sem OB concluída o mês medido entra na memória e no total, marcado como aguardando a OB
     url, r = _reajustar(cliente, contrato, gestora)
@@ -75,6 +115,7 @@ def test_reajuste_comum_esta_disponivel_em_todas_as_vigencias(cliente, cenario):
 
 
 def test_pdf_da_memoria_tem_uma_pagina_para_itens_cada_mes_e_o_resumo(cliente, cenario):  # noqa: F811
+    """O PDF da memória separa identificação, itens, cada mês pago e o resumo executivo em páginas próprias."""
     from pypdf import PdfReader
 
     contrato, base, gestora = cenario

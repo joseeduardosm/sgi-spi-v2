@@ -1,17 +1,35 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para montar e enviar o e-mail de changelog (novidades do SGI SPI) a partir do CHANGELOG.md.
-"""E-mail de changelog das notificações (exclusivo da conta root).
+"""
+===============================================================================
+ARQUIVO: servico_changelog.py
+AUTOR: José Eduardo Santana Martins
 
-Fluxo:
-1. `rascunho` lê o `CHANGELOG.md` da raiz do projeto e junta as entradas **posteriores à última data já enviada a
-   todos** (na primeira vez, só a entrada mais recente). O texto sai num formato simples, editável na tela:
-   `## Título` (subtítulo), `- item` (lista; dois espaços por nível) e `**negrito**`.
-2. A conta root edita o assunto e o texto; `html_email` gera a prévia no layout oficial (brasão, cabeçalho
-   institucional, botão de acesso e rodapé).
-3. `registrar_envio` grava o envio e `processar_envio` (em segundo plano) manda um e-mail por destinatário: todos os
-   usuários ativos com e-mail, os usuários e setores escolhidos (sistêmicos ou institucionais; um setor inclui os
-   membros, quem o tem como Departamento e os setores filhos) ou só um endereço de teste. Só o envio a todos muda a
-   data do próximo rascunho.
+FINALIDADE:
+Montar e enviar o e-mail de changelog (novidades do SGI SPI) a partir do
+CHANGELOG.md, funcionalidade exclusiva da conta root nas Notificações.
+
+RESUMO TÉCNICO:
+1) rascunho() lê o CHANGELOG.md da raiz e junta as entradas posteriores à
+última data já enviada a todos (na primeira vez, só a mais recente), num
+formato simples e editável: "## Título", "- item" (dois espaços por nível) e
+"**negrito**". 2) html_email() gera a prévia no layout oficial (brasão,
+cabeçalho, botão de acesso, rodapé). 3) registrar_envio() grava o envio
+(imediato ou agendado) e processar_envio() manda um e-mail por destinatário
+em segundo plano. processar_agendados() dispara os agendamentos vencidos.
+
+FINALIDADE DE NEGÓCIO:
+Comunica aos servidores as novidades do sistema numa linguagem de usuário,
+para todos (quem ligou a preferência "Novidades do SGI SPI"), para usuários
+e setores escolhidos (um setor inclui membros, quem o tem como Departamento e
+os setores filhos) ou para um endereço de teste. Só o envio a todos muda a
+data de partida do próximo rascunho.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas de notificações/changelog e pelo timer de agendamentos.
+Grava no modelo EnvioChangelog, envia pelo servico_smtp com o layout de
+modelo_email, consulta as preferências de notificação e os papéis do RH
+(setores com descendentes) e registra tudo na auditoria.
+
+===============================================================================
 """
 
 import re
@@ -35,11 +53,13 @@ from app.services.cliente_smtp import Mensagem as EmailSmtp
 from app.services.servico_auditoria import auditar
 from app.services.servico_smtp import SemServidorAtivo
 
+# parents[3] sobe de backend/app/services até a raiz do projeto.
 # backend/app/services → raiz do projeto
 ARQUIVO_CHANGELOG = Path(__file__).resolve().parents[3] / "CHANGELOG.md"
 
 # Seções do CHANGELOG com o nome usado no e-mail (linguagem de usuário)
 SECOES = {"adicionado": "Novidades", "alterado": "Melhorias", "corrigido": "Correções", "removido": "Removido"}
+# Expressões regulares: título de data ("## 2026-11-11") e a data AAAA-MM-DD dentro dele.
 TITULO_DATA = re.compile(r"^##\s+(.+)$")
 DATA = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 
@@ -61,6 +81,7 @@ class Entrada:
 
 @dataclass
 class Rascunho:
+    """Texto sugerido para o e-mail: assunto, corpo e o intervalo de datas que ele cobre."""
     assunto: str
     corpo: str
     desde: date | None
@@ -72,6 +93,9 @@ def ler_entradas(texto: str) -> list[Entrada]:
     """Entradas do CHANGELOG, da mais recente para a mais antiga. Um título "A a B" vale pela última data."""
     entradas: list[Entrada] = []
     atual: Entrada | None = None
+    # Percorre linha a linha: cada "## data" abre uma nova entrada; as linhas
+    # seguintes pertencem a ela até o próximo título. Linhas antes do primeiro
+    # título (cabeçalho do arquivo) são ignoradas.
     for linha in texto.splitlines():
         titulo = TITULO_DATA.match(linha)
         if titulo:
@@ -89,6 +113,7 @@ def _texto_amigavel(linhas: list[str]) -> list[str]:
     """Converte a seção do CHANGELOG no formato do e-mail: seções renomeadas, sem crases, migrações e endpoints."""
     saida: list[str] = []
     for linha in linhas:
+        # "### Adicionado" e afins viram um subtítulo com nome amigável ("Novidades").
         secao = re.match(r"^###\s+(.+)$", linha)
         if secao:
             nome = SECOES.get(secao.group(1).strip().lower(), secao.group(1).strip())
@@ -113,6 +138,7 @@ def _texto_amigavel(linhas: list[str]) -> list[str]:
 
 
 def _ultimo_envio_geral(sessao: Session) -> date | None:
+    """Data (ate_data) do último envio a todos que já saiu, ou None se nunca houve."""
     # Agendamento que ainda não saiu (ou foi cancelado) não avança a data do próximo rascunho
     return sessao.scalar(select(func.max(EnvioChangelog.ate_data)).where(
         EnvioChangelog.destino == "todos", EnvioChangelog.cancelado_em.is_(None),
@@ -124,6 +150,8 @@ def rascunho(sessao: Session, arquivo: Path | None = None) -> Rascunho:
     caminho = arquivo or ARQUIVO_CHANGELOG
     entradas = ler_entradas(caminho.read_text(encoding="utf-8")) if caminho.exists() else []
     desde = _ultimo_envio_geral(sessao)
+    # Só entram as entradas posteriores ao último envio geral; na primeira vez
+    # (desde=None) fica apenas a mais recente, para não mandar o histórico inteiro.
     novas = [e for e in entradas if desde is None or e.data > desde]
     if desde is None:
         novas = novas[:1]
@@ -165,6 +193,8 @@ def html_previa(assunto: str, corpo: str) -> str:
 
 def _emails(usuarios) -> list[str]:
     """E-mails dos usuários (sem repetição, na ordem do nome; quem não tem e-mail fica de fora)."""
+    # Dicionário pela versão minúscula do e-mail: evita mandar duas vezes para o
+    # mesmo endereço escrito com maiúsculas diferentes.
     vistos: dict[str, str] = {}
     for usuario in sorted(usuarios, key=lambda u: (u.nome_completo or u.login).lower()):
         email = (usuario.email or "").strip()
@@ -175,6 +205,7 @@ def _emails(usuarios) -> list[str]:
 
 def _quem_optou(sessao: Session, usuarios) -> list:
     """Só quem ligou o e-mail do evento "Novidades do SGI SPI" nas Preferências (ou o recebe por obrigatoriedade)."""
+    # Import local para evitar import circular com o módulo de notificações.
     from app.services.notificacoes import preferencias
 
     usuarios = list(usuarios)
@@ -195,6 +226,8 @@ def selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: list[int
     a preferência só filtra o envio a `todos`."""
     from app.services.rh.papeis import setor_com_descendentes, usuarios_dos_setores
 
+    # Junta numa só lista (dicionário por id) as pessoas escolhidas uma a uma e as
+    # dos setores escolhidos com todos os setores filhos.
     usuarios = list(sessao.scalars(select(Usuario).where(Usuario.id.in_(usuarios_ids), Usuario.ativo.is_(True)))) if usuarios_ids else []
     escolhidos = list(sessao.scalars(select(Setor).where(Setor.id.in_(setores_ids)))) if setores_ids else []
     pessoas = {u.id: u for u in usuarios}
@@ -219,6 +252,7 @@ def total_selecionados(sessao: Session, usuarios_ids: list[int], setores_ids: li
 
 def _lista(sessao: Session, destino: str, email_teste: str | None, usuarios_ids: list[int], setores_ids: list[int]) -> tuple[list[str], str | None]:
     """Monta a lista de e-mails do destino (e a descrição da seleção); levanta `ErroChangelog` se ninguém receberia."""
+    # Três destinos possíveis: "todos", "selecionados" ou (qualquer outro) só o e-mail de teste.
     descricao = None
     if destino == "todos":
         lista = destinatarios(sessao)
@@ -242,12 +276,15 @@ def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, d
     aqui é uma estimativa. Devolve lista vazia, e o chamador não dispara o envio.
     """
     agora = agora_utc()
+    # Limites do agendamento: pelo menos 1 minuto e no máximo 1 ano à frente.
     if agendar_para is not None:
         if agendar_para < agora + timedelta(minutes=1):
             raise ErroChangelog("Escolha um horário pelo menos 1 minuto à frente.")
         if agendar_para > agora + timedelta(days=366):
             raise ErroChangelog("O agendamento pode ser feito para no máximo 1 ano à frente.")
     lista, descricao = _lista(sessao, destino, email_teste, list(usuarios_ids), list(setores_ids))
+    # ate_data só é gravado no envio a todos: é ele que define o ponto de partida do
+    # próximo rascunho. No agendamento, a seleção é guardada para montar a lista na hora.
     envio = EnvioChangelog(
         assunto=assunto, corpo=corpo, destino=destino, destino_descricao=descricao, ate_data=ate_data if destino == "todos" else None,
         total=len(lista), enviados=0, falhas=0, enviado_por_id=autor.id, enviado_por_nome=autor.nome_completo or autor.login,
@@ -255,6 +292,8 @@ def registrar_envio(sessao: Session, autor: Usuario, assunto: str, corpo: str, d
         selecao={"usuarios_ids": list(usuarios_ids), "setores_ids": list(setores_ids), "email_teste": email_teste} if agendar_para else None,
     )
     sessao.add(envio)
+    # flush envia o INSERT ao banco sem encerrar a transação, para o envio ganhar
+    # id antes da auditoria; o commit no fim grava tudo de uma vez.
     sessao.flush()
     auditar(sessao, autor.login, "notificacoes.changelog.agendar" if agendar_para else "notificacoes.changelog", assunto,
             f"destino={destino} total={len(lista)} {('para ' + agendar_para.isoformat() + ' ') if agendar_para else ''}{descricao or ''}".strip(),
@@ -279,10 +318,13 @@ def cancelar_agendamento(sessao: Session, autor: Usuario, envio_id: uuid.UUID) -
 def processar_agendados(sessao: Session) -> int:
     """Envia os agendamentos que já venceram (chamado pelo timer de 2 em 2 minutos). Cada envio é "reservado" antes de sair, para nunca sair duas vezes."""
     agora = agora_utc()
+    # Agendamentos já vencidos, ainda não iniciados nem cancelados.
     ids = list(sessao.scalars(select(EnvioChangelog.id).where(
         EnvioChangelog.agendado_para <= agora, EnvioChangelog.iniciado_em.is_(None), EnvioChangelog.cancelado_em.is_(None)).order_by(EnvioChangelog.agendado_para)))
     feitos = 0
     for envio_id in ids:
+        # "Reserva" atômica: o UPDATE só altera a linha se ainda não foi iniciada.
+        # Se outro processo já pegou o envio, rowcount é 0 e ele é pulado.
         reservado = sessao.execute(update(EnvioChangelog).where(EnvioChangelog.id == envio_id, EnvioChangelog.iniciado_em.is_(None), EnvioChangelog.cancelado_em.is_(None))
                                    .values(iniciado_em=agora)).rowcount
         sessao.commit()
@@ -309,9 +351,12 @@ def processar_envio(envio_id: uuid.UUID, lista: list[str]) -> None:
         envio = sessao.get(EnvioChangelog, envio_id)
         if envio is None:
             return
+        # Monta o HTML e o texto puro uma vez só e reaproveita para todos os destinatários.
         html, texto = html_email(envio.assunto, envio.corpo), corpo_texto(envio.corpo)
         erros: list[str] = []
         for email in lista:
+            # Um e-mail por pessoa, para ninguém ver o endereço dos outros; a falha de um
+            # destinatário é anotada e não interrompe os demais.
             try:
                 resultado = servico_smtp.enviar_email(sessao, EmailSmtp(para=[email], assunto=envio.assunto, texto=texto, html=html))
                 ok, motivo = resultado.sucesso, resultado.mensagem

@@ -306,7 +306,18 @@
               @if (pode('concluir')) { <button type="button" class="acao-positiva" (click)="executar('concluir')">Concluir</button> }
               @if (pode('pausar')) { <button type="button" class="acao-secundaria" (click)="executar('pausar')">Voltar para A fazer</button> }
               @if (pode('reabrir')) { <button type="button" class="acao-secundaria" (click)="executar('reabrir')">Reabrir</button> }
+              <!-- RDM (Requisição de Mudança): preencher/enviar e, para a liderança, analisar (aprovar ou reprovar) na página da RDM -->
+              @if (pode('gerar_rdm')) {
+                <a class="acao-secundaria" [routerLink]="['/tarefas', t.numero, 'rdm']" (click)="fechar.emit()">{{ t.rdm?.situacao === 'reprovada' ? 'Corrigir e reenviar RDM' : t.rdm ? 'Continuar RDM' : 'Gerar RDM' }}</a>
+              }
+              @if (pode('aprovar_rdm')) {
+                <a class="acao-primaria" [routerLink]="['/tarefas', t.numero, 'rdm']" (click)="fechar.emit()">Analisar RDM (aprovar ou reprovar)</a>
+              }
             </div>
+            @if (t.rdm; as r) {
+              <a class="selo-rdm" [routerLink]="['/tarefas', t.numero, 'rdm']" (click)="fechar.emit()" [title]="situacoesRdm[r.situacao].rotulo">
+                <span class="selo-status" [attr.data-chamado]="situacoesRdm[r.situacao].cor">{{ situacoesRdm[r.situacao].rotulo }}</span> {{ r.rotulo }}</a>
+            }
           </div>
 
           <div class="grupo-lateral">

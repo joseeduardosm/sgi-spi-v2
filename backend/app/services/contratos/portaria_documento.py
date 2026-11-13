@@ -1,12 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para montar o texto da portaria de designação e o PDF de evidência das ciências e do aceite.
-"""Texto e evidência da portaria de designação de gestão e fiscalização.
+"""
+===============================================================================
+ARQUIVO: portaria_documento.py
+AUTOR: José Eduardo Santana Martins
 
-O texto da portaria é o HTML da máscara já preenchido (`dados["texto_html"]`, veja `servico_portaria.montar_dados`): a tela mostra e
-oferece o botão copiar, como o despacho da última etapa da execução; não há minuta em Word.
+FINALIDADE:
+Montar o texto da portaria de designação de gestão e fiscalização e gerar
+os dois PDFs do fluxo: a minuta (com marca d'água) e a evidência das
+ciências e do aceite.
 
-Há dois PDFs: a **minuta** (o texto da portaria com marca d'água "MINUTA", anexa ao e-mail que pede o aceite da autoridade) e a **evidência**: função, nomeado e data da ciência de cada um, mais o aceite da autoridade. Ele é juntado ao SEI antes da
-publicação no Diário Oficial.
+RESUMO TÉCNICO:
+O texto é o HTML da máscara já preenchido (`dados["texto_html"]`, montado
+por `servico_portaria.montar_dados`): a tela o mostra com botão copiar,
+como o despacho da última etapa da execução; não há minuta em Word.
+`gerar_minuta` converte esse HTML em elementos do ReportLab (`_flowables`)
+com a marca d'água "MINUTA"; `gerar_evidencia` monta um PDF com função,
+nomeado e data da ciência de cada designado, mais o aceite da autoridade.
+
+FINALIDADE DE NEGÓCIO:
+A portaria nomeia gestor e fiscais do contrato. A minuta vai anexa ao
+e-mail que pede o aceite da autoridade; a evidência é juntada ao processo
+SEI antes da publicação no Diário Oficial (D.O.E.), comprovando que todos
+tomaram ciência. A designação só vale no sistema após a publicação.
+
+CONTEXTO NO SISTEMA:
+Usado por `servico_portaria` (fluxo da portaria no contrato). Converte o HTML
+com `contratacoes.html_blocos` e gera o PDF com `documentos.pdf.DocumentoPdf`.
+
+===============================================================================
 """
 
 from datetime import datetime
@@ -20,7 +40,9 @@ from app.services.contratacoes import html_blocos
 from app.services.contratacoes.html_blocos import Trecho
 from app.services.documentos.pdf import ESTILO_TEXTO, FUSO_SAO_PAULO, DocumentoPdf
 
+# Nomes dos meses por extenso (datas no texto da portaria)
 MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+# Papel técnico na equipe do contrato → rótulo exibido no PDF de evidência
 ROTULOS_PAPEL = {
     "gestor": "Gestor",
     "gestor_suplente": "Gestor suplente",
@@ -29,6 +51,7 @@ ROTULOS_PAPEL = {
     "fiscal_tecnico": "Fiscal técnico",
     "fiscal_tecnico_suplente": "Fiscal técnico suplente",
 }
+# Orientação impressa no fim da evidência (o que fazer com o documento)
 RODAPE_EVIDENCIA = (
     "Este documento deverá ser juntado ao processo SEI como evidência da ciência dos servidores designados e do aceite da autoridade "
     "competente, para que, em seguida, seja providenciada a publicação da portaria no Diário Oficial do Estado (D.O.E.). "
@@ -37,6 +60,7 @@ RODAPE_EVIDENCIA = (
 
 
 def titulo(dados: dict) -> str:
+    """Título da portaria, ex.: "Portaria SPI SSGC nº 015, de 2026" (número com 3 dígitos)."""
     return f"Portaria {dados['sigla']} nº {dados['numero']:03d}, de {dados['exercicio']}"
 
 
@@ -46,11 +70,17 @@ def blocos(dados: dict) -> list[tuple]:
 
 
 def _data_hora(instante: datetime | None) -> str:
+    """Data e hora no horário de São Paulo ("dd/mm/aaaa às hh:mm"); sem data, travessão."""
     return instante.astimezone(FUSO_SAO_PAULO).strftime("%d/%m/%Y às %H:%M") if instante else "—"
 
 
 def gerar_evidencia(dados: dict, contrato_rotulo: str, nomeacoes: list[dict], autoridade: dict, solicitante: str, gerado_por: str) -> bytes:
-    """PDF de evidência. `nomeacoes` = [{papel, nome, ciente_em}]; `autoridade` = {nome, cargo, aceita_em}."""
+    """PDF de evidência. `nomeacoes` = [{papel, nome, ciente_em}]; `autoridade` = {nome, cargo, aceita_em}.
+
+    Também recebe o rótulo do contrato, quem elaborou a portaria (`solicitante`) e
+    quem gerou o arquivo (`gerado_por`, gravado como autor do PDF). Devolve os
+    bytes do PDF; não grava nada (quem chama decide onde anexar).
+    """
     documento = DocumentoPdf(titulo=f"Evidência de ciência e aceite — {titulo(dados)}", subtitulo=contrato_rotulo, paisagem=False, autor=gerado_por)
     documento.campos([
         ("Portaria", titulo(dados)), ("Contrato", contrato_rotulo),
@@ -76,12 +106,14 @@ def gerar_evidencia(dados: dict, contrato_rotulo: str, nomeacoes: list[dict], au
 
 # --- Minuta (texto da portaria com marca d'água) -------------------------------------------------
 
+# Alinhamento do HTML (text-align) → constante do ReportLab
 _ALINHAMENTO = {"center": TA_CENTER, "right": TA_RIGHT, "justify": TA_JUSTIFY, "left": TA_LEFT}
 
 
 def _marcado(trechos: list[Trecho]) -> str:
     """Trechos formatados → marcação do ReportLab (negrito, itálico, sublinhado), com o texto escapado."""
     partes = []
+    # O texto é escapado primeiro (evita que "<" ou "&" quebrem o PDF) e depois recebe as tags de formatação
     for t in trechos:
         texto = escape(t.texto).replace("\n", "<br/>")
         if t.negrito:
@@ -97,6 +129,8 @@ def _marcado(trechos: list[Trecho]) -> str:
 def _flowables(blocos_texto: list[tuple]) -> list:
     """Blocos do HTML da portaria (parágrafos, itens e tabelas) → elementos do PDF."""
     saida = []
+    # Cada bloco é (tipo, conteúdo, extra): "p" = parágrafo (extra = alinhamento),
+    # "li" = item de lista (extra = marcador ou número), "tabela" = linhas de células
     for tipo, conteudo, extra in blocos_texto:
         if tipo == "p":
             estilo = ParagraphStyle("portaria", parent=ESTILO_TEXTO, alignment=_ALINHAMENTO.get(extra or "", TA_JUSTIFY), spaceAfter=6, leading=14)

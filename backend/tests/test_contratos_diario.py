@@ -120,6 +120,46 @@ def test_sem_servidor_smtp_ativo_grava_o_erro_e_permite_reenviar(cliente, admin,
     assert r.status_code == 200 and r.json()["email"]["ok"] is True
 
 
+def test_emails_adicionais_vao_no_email_ficam_salvos_no_contrato_e_o_reenvio_repete_a_escolha(cliente, admin, cenario):
+    """E-mails adicionais recebem a ocorrência e ficam salvos só naquele contrato; o reenvio repete prepostos e adicionais do registro."""
+    contrato, gestora, _ = cenario
+    r = _ocorrencia(cliente, contrato, gestora, prepostos_ids=[], emails_adicionais=[" Obra@Acme.com ", "obra@acme.com", "fiscal@orgao.sp.gov.br"])
+    assert r.status_code == 201, r.text
+    ocorrencia = r.json()
+    assert ocorrencia["emails_adicionais"] == ["obra@acme.com", "fiscal@orgao.sp.gov.br"]
+    diario = cliente.get(_url(contrato, "/diario"), headers=gestora).json()
+    # Sem preposto escolhido: equipe + adicionais
+    assert sorted(diario["ocorrencias"][0]["email"]["destinatarios"]) == ["fiscal@orgao.sp.gov.br", "fiscal@sp.gov.br", "gestora@sp.gov.br", "obra@acme.com"]
+    assert [e["email"] for e in diario["emails_salvos"]] == ["fiscal@orgao.sp.gov.br", "obra@acme.com"]
+
+    # O reenvio repete a escolha: o preposto, que não foi escolhido, continua de fora
+    SmtpSimulado.enviadas = []
+    r = cliente.post(_url(contrato, f"/diario/{ocorrencia['id']}/reenviar"), headers=gestora)
+    assert r.status_code == 200 and "paulo@acme.com" not in r.json()["email"]["destinatarios"]
+    assert "obra@acme.com" in SmtpSimulado.enviadas[0][2]
+
+    # Outro contrato não vê os salvos deste
+    outro = criar_contrato(cliente, admin, numero="002/2026", empresa_id=contrato["empresa"]["id"])
+    assert cliente.get(f"/api/contratos/{outro['id']}/diario", headers=admin).json()["emails_salvos"] == []
+
+    # Sem "enviar por e-mail", nada é salvo
+    _ocorrencia(cliente, contrato, gestora, enviar_email=False, emails_adicionais=["novo@acme.com"])
+    salvos = cliente.get(_url(contrato, "/diario"), headers=gestora).json()["emails_salvos"]
+    assert "novo@acme.com" not in [e["email"] for e in salvos]
+
+    # E-mail inválido é recusado
+    assert _ocorrencia(cliente, contrato, gestora, emails_adicionais=["sem-arroba"]).status_code == 422
+
+    # Remover da lista: só quem edita o contrato; o histórico da ocorrência não muda
+    alvo = salvos[1]["id"]
+    assert cliente.delete(_url(contrato, f"/diario/emails-salvos/{alvo}"), headers=cabecalho(cliente, "outro")).status_code == 403
+    assert cliente.delete(_url(contrato, f"/diario/emails-salvos/{alvo}"), headers=gestora).status_code == 204
+    assert cliente.delete(_url(contrato, f"/diario/emails-salvos/{alvo}"), headers=gestora).status_code == 404
+    diario = cliente.get(_url(contrato, "/diario"), headers=gestora).json()
+    assert [e["email"] for e in diario["emails_salvos"]] == ["fiscal@orgao.sp.gov.br"]
+    assert diario["ocorrencias"][0]["emails_adicionais"] == ["obra@acme.com", "fiscal@orgao.sp.gov.br"]
+
+
 def test_ocorrencia_em_rich_text_e_sanitizada_e_vira_texto_nos_pdfs(cliente, admin, cenario):
     """O relato vem do editor rico: scripts saem, a formatação fica e o PDF do diário e o e-mail usam o texto puro."""
     from pypdf import PdfReader

@@ -1,5 +1,31 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para definir, num só lugar, os grupos e as telas do Módulo RH (painel de entrada e sub-navegação do cabeçalho).
+/**
+ * =============================================================================
+ * ARQUIVO: menu-rh.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Define, num só lugar, os grupos e as telas do Módulo RH, usados pelo
+ * painel de entrada e pela sub-navegação do cabeçalho do RH.
+ *
+ * RESUMO TÉCNICO:
+ * Exporta as interfaces TelaRh e GrupoRh, a constante GRUPOS_RH e duas
+ * funções puras: gruposVisiveis (filtra telas pelos papéis e ajusta a
+ * numeração) e grupoDaRota (descobre o grupo de uma URL, inclusive subpáginas
+ * e com query string).
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Organiza o RH pela forma como o trabalho é feito (estrutura, entrada de
+ * pessoas, vida funcional, configuração) e esconde de cada pessoa as telas que
+ * o papel dela não usa. A visibilidade aqui é só de menu: a API continua
+ * validando cada acesso.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Consumido por inicio-rh.component.ts e pelo app-cabecalho-rh; testado em
+ * menu-rh.spec.ts. Os papéis (PapeisRh) vêm de RhApiService.papeis e as rotas
+ * correspondem a rh.routes.ts.
+ *
+ * =============================================================================
+ */
 
 import { PapeisRh } from './rh.models';
 
@@ -21,10 +47,14 @@ export interface GrupoRh {
   telas: TelaRh[];
 }
 
+// Regras de visibilidade reaproveitadas nas telas:
+// todos = qualquer usuário; temAcessoAoModulo = tem algum nível no recurso "rh" da ACL
+// (controle de acesso por módulo); ehRh = é da CGP (Coordenação de Gestão de Pessoas).
 const todos = (): boolean => true;
 const temAcessoAoModulo = (p: PapeisRh): boolean => !!p.nivel_rh;
 const ehRh = (p: PapeisRh): boolean => p.cgp;
 
+/** Catálogo dos grupos e telas do RH, na ordem em que aparecem no painel de entrada. */
 export const GRUPOS_RH: GrupoRh[] = [
   {
     id: 'estrutura', titulo: 'Estrutura', numerado: true,
@@ -74,6 +104,7 @@ export function gruposVisiveis(papeis: PapeisRh): GrupoRh[] {
 
 /** Grupo ao qual a URL pertence (a tela ou uma subpágina dela, ex.: `/rh/admissoes/12`); undefined fora dos grupos. */
 export function grupoDaRota(url: string): GrupoRh | undefined {
+  // Descarta a consulta (?...) e a âncora (#...) para comparar só o caminho
   const caminho = url.split('?')[0].split('#')[0];
   return GRUPOS_RH.find((g) => g.telas.some((t) => caminho === t.rota || caminho.startsWith(t.rota + '/')));
 }

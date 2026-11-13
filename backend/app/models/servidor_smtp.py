@@ -1,10 +1,29 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir a tabela de configuração dos servidores SMTP (envio de e-mail).
-"""Configuração de um servidor SMTP.
+"""
+===============================================================================
+ARQUIVO: servidor_smtp.py
+AUTOR: José Eduardo Santana Martins
 
-Guarda como o portal se conecta ao servidor de e-mail para enviar mensagens (endereço, porta,
-segurança da conexão, conta de autenticação e remetente), além do resultado do último teste de
-conexão e do último e-mail de teste enviado.
+FINALIDADE:
+Definir a tabela de configuração dos servidores SMTP, usados pelo portal
+para enviar e-mails.
+
+RESUMO TÉCNICO:
+Modelo ServidorSmtp (tabela servidores_smtp): endereço, porta, segurança
+(nenhuma, STARTTLS ou SSL), conta de autenticação com senha cifrada (Fernet),
+remetente, tempo limite e o resultado do último teste de conexão e do último
+e-mail de teste. Um índice único parcial garante no máximo um servidor
+ativo. A propriedade possui_senha expõe só se há senha, nunca o valor.
+
+FINALIDADE DE NEGÓCIO:
+Permitir que o SuperRoot (administrador) troque o servidor de e-mail pela
+tela, sem mexer em código, e comprove que o envio funciona antes de usar.
+Notificações, avisos e e-mails dos módulos dependem desta configuração.
+
+CONTEXTO NO SISTEMA:
+Usado pelo serviço de e-mail e pelas rotas de servidores SMTP; o formato da
+API está em schemas/smtp.py. A cifra da senha usa app.core.criptografia.
+
+===============================================================================
 """
 
 import uuid
@@ -20,11 +39,16 @@ SEGURANCAS_SMTP = ("nenhuma", "starttls", "ssl")
 
 
 class ServidorSmtp(Base):
-    """Um servidor SMTP cadastrado pelo SuperRoot. O ativo é o usado pelo sistema para enviar e-mails."""
+    """Um servidor SMTP cadastrado pelo SuperRoot. O ativo é o usado pelo sistema para enviar e-mails.
+
+    SMTP é o protocolo de envio de e-mail. SuperRoot é o papel de administrador do portal.
+    Podem existir vários cadastrados (ex.: um de reserva), mas só um fica ativo por vez.
+    """
     __tablename__ = "servidores_smtp"
     __table_args__ = (
         CheckConstraint("seguranca IN ('nenhuma', 'starttls', 'ssl')", name="ck_servidores_smtp_seguranca"),
-        # No máximo um servidor ativo (índice único parcial)
+        # No máximo um servidor ativo (índice único parcial: a unicidade só vale nas linhas em que
+        # ativo é verdadeiro, então os inativos podem se repetir à vontade)
         Index("ux_servidores_smtp_unico_ativo", "ativo", unique=True, postgresql_where=text("ativo"), sqlite_where=text("ativo")),
     )
 
@@ -60,6 +84,8 @@ class ServidorSmtp(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
+    # `@property` cria um atributo calculado (lido como servidor.possui_senha, sem parênteses),
+    # que o schema de leitura da API usa no lugar da senha
     @property
     def possui_senha(self) -> bool:
         """Há senha gravada (a API mostra só isso, nunca o valor)."""

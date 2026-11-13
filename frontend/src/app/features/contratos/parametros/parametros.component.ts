@@ -1,5 +1,35 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para quem tem controle total em Contratos ajustar os cortes de alertas, prazos, regras e limites do módulo.
+/**
+ * =============================================================================
+ * ARQUIVO: parametros.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Tela "Parâmetros de Contratos": quem tem controle total no módulo (ou é
+ * SuperRoot) ajusta os cortes de alertas, prazos, regras, limites de arquivos
+ * e os dados das autoridades da prorrogação.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido. A constante GRUPOS descreve
+ * os cartões e campos (tipo, mínimo, máximo e ajuda); o template gera os
+ * inputs a partir dela. O formulário edita uma cópia dos valores; cada cartão
+ * pode voltar ao valor de fábrica (x.padroes). Ao salvar, envia tudo à API e,
+ * se o corte de alertas foi antecipado, pede confirmação antes.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Evita deixar prazos e limites fixos no código: a própria SPI ajusta quando
+ * uma pendência vira alerta, prazos de nota fiscal e PNCP, limites de
+ * aditamento e quem assina os documentos da prorrogação, e a mudança vale na
+ * hora para todos os contratos, painéis e e-mails.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota de parâmetros do módulo Contratos. Usa ContratosApiService
+ * (parametros, salvarParametros), ParametrosContratosService (cache
+ * compartilhado dos valores) e os tipos ParametrosContratos e
+ * ValoresParametrosContratos. Os valores são lidos pelo backend nos alertas,
+ * pendências, e-mails e minutas da prorrogação.
+ *
+ * =============================================================================
+ */
 
 import { DatePipe } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
@@ -22,6 +52,7 @@ interface CampoParametro {
   max?: number;
 }
 
+/** Um cartão da tela: agrupa campos relacionados e tem seu próprio botão "Restaurar padrão". */
 interface GrupoParametros {
   id: string;
   titulo: string;
@@ -29,6 +60,12 @@ interface GrupoParametros {
   campos: CampoParametro[];
 }
 
+/**
+ * Os quatro cartões da tela e seus campos. O texto de ajuda de cada campo explica, em linguagem
+ * de usuário, onde o valor é usado; as regras em si ficam no backend.
+ * Siglas: PNCP = Portal Nacional de Contratações Públicas; PGE = Procuradoria Geral do Estado;
+ * SSGC = Subsecretaria de Gestão Corporativa; TCE = Tribunal de Contas do Estado.
+ */
 const GRUPOS: GrupoParametros[] = [
   {
     id: 'alertas',
@@ -144,10 +181,15 @@ export class ParametrosContratosComponent implements OnInit {
   /** Cópia editável dos valores (o que a pessoa digita só vale depois de salvar). */
   protected valores = {} as Record<keyof ValoresParametrosContratos, string | number>;
 
+  /** Carrega os parâmetros atuais (com os valores de fábrica em `padroes`). */
   ngOnInit(): void {
     this.api.parametros().subscribe({ next: (x) => this.receber(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar os parâmetros') });
   }
 
+  /**
+   * Guarda os parâmetros recebidos da API: copia para o formulário, atualiza o signal da tela
+   * e avisa o serviço compartilhado, para que as outras telas (ex.: Vigências) usem os novos valores.
+   */
   private receber(x: ParametrosContratos): void {
     this.valores = { ...x } as unknown as Record<keyof ValoresParametrosContratos, string | number>;
     this.p.set(x);
@@ -164,6 +206,12 @@ export class ParametrosContratosComponent implements OnInit {
     for (const c of g.campos) this.valores[c.nome] = x.padroes[c.nome];
   }
 
+  /**
+   * Grava todos os parâmetros do formulário.
+   * Se a data de corte de alertas foi antecipada (comparação de texto AAAA-MM-DD funciona como
+   * comparação de datas), pede uma confirmação forte antes, pois isso reabre pendências antigas.
+   * O servidor valida os valores e só aceita de quem tem controle total em Contratos.
+   */
   protected salvar(x: ParametrosContratos): void {
     // A data de corte antecipada reabre pendências antigas: pede confirmação antes de gravar
     const antecipou = String(this.valores.corte_alertas_a_partir_de) < x.corte_alertas_a_partir_de;

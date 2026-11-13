@@ -1,12 +1,35 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para permitir ocupações de cargo sem data de posse e limpar a data inventada dos vínculos automáticos do cadastro anterior.
+"""
+===============================================================================
+ARQUIVO: f9a5b1c7d3e6_rh_ocupacao_sem_data_de_posse.py
+AUTOR: José Eduardo Santana Martins
 
-"""rh: ocupação sem data de posse (vínculos automáticos)
+FINALIDADE:
+Migração Alembic que permite ocupações de cargo sem data de posse e limpa a
+data inventada dos vínculos automáticos do cadastro anterior.
+
+RESUMO TÉCNICO:
+Torna rh_ocupacoes.inicio anulável e zera (NULL) o início das ocupações cujo
+ato é "Vínculo do cadastro anterior". O downgrade preenche as datas vazias com
+a data de registro da ocupação e volta a exigir a coluna.
+
+FINALIDADE DE NEGÓCIO:
+No RH, a data de posse é informação oficial. Os vínculos criados
+automaticamente na migração do cadastro antigo tinham como posse a data da
+criação do cadastro, o que era falso; agora ficam sem data até alguém informar
+a real.
+
+CONTEXTO NO SISTEMA:
+Tabela rh_ocupacoes; telas de cargos e pessoal do RH
+(app/api/routes/rh_cargos.py e rh_pessoal.py). Aplicada com 'alembic upgrade
+head' (o instalador e a atualização do sistema rodam esse comando).
 
 Revision ID: f9a5b1c7d3e6
 Revises: a1c5e9b3d7f4
 Create Date: 2026-10-23
+
+===============================================================================
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -18,6 +41,8 @@ down_revision: str | Sequence[str] | None = "a1c5e9b3d7f4"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# Texto do campo "ato" que identifica as ocupações criadas automaticamente na migração
+# do cadastro anterior (essas não têm data de posse verdadeira)
 ATO_AUTOMATICO = "Vínculo do cadastro anterior"
 
 

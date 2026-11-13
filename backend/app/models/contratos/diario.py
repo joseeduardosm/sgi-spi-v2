@@ -50,6 +50,10 @@ class OcorrenciaDiario(Base):
     email_ok: Mapped[bool | None] = mapped_column(Boolean)
     email_destinatarios: Mapped[list[Any]] = mapped_column(TipoJson, default=list)
     email_erro: Mapped[str | None] = mapped_column(Text)
+    # Escolha de quem recebe, gravada para o reenvio repetir exatamente o registro:
+    # ids dos prepostos escolhidos (texto; nulo = todos os ativos, como nos registros antigos) e os e-mails adicionais desta ocorrência
+    email_prepostos_ids: Mapped[list[Any] | None] = mapped_column(TipoJson)
+    email_adicionais: Mapped[list[Any] | None] = mapped_column(TipoJson)
 
     contrato: Mapped[Contrato] = relationship(back_populates="ocorrencias")
     glosas: Mapped[list["GlosaOcorrencia"]] = relationship(
@@ -109,3 +113,21 @@ class ItemAvaliacaoOcorrencia(Base):
     grupo_nome: Mapped[str] = mapped_column(String(500), default="")
 
     ocorrencia: Mapped[OcorrenciaDiario] = relationship(back_populates="itens_avaliacao")
+
+
+class EmailSalvoDiario(Base):
+    """E-mail adicional já usado numa ocorrência do contrato, guardado para ser escolhido (desmarcado) nas próximas.
+
+    Vale só para o contrato em que foi digitado. Remover daqui não muda o histórico das ocorrências já registradas.
+    """
+
+    __tablename__ = "contratos_diario_emails_salvos"
+    __table_args__ = (UniqueConstraint("contrato_id", "email", name="contratos_diario_emails_salvos_contrato_email_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    # Sempre em minúsculas (a chave única não diferencia maiúsculas)
+    email: Mapped[str] = mapped_column(String(250))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    contrato: Mapped[Contrato] = relationship(back_populates="emails_salvos_diario")

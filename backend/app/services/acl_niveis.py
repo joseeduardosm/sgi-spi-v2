@@ -1,33 +1,67 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para dizer, em cada módulo (recurso da ACL), o que cada nível de acesso libera.
-"""Textos dos níveis de acesso por recurso da ACL.
+"""
+===============================================================================
+ARQUIVO: acl_niveis.py
+AUTOR: José Eduardo Santana Martins
 
-Os valores gravados continuam sendo `LEITURA`, `MODIFICACAO` e `CONTROLE_TOTAL` (hierárquicos: o maior inclui o menor).
-Aqui cada recurso diz, em linguagem de quem configura a regra, **o que cada nível libera naquele módulo**:
-`rotulo` é o nome curto (selo e seletor) e `descricao`, a frase completa.
+FINALIDADE:
+Dizer, em cada módulo (recurso da ACL), o que cada nível de acesso libera,
+em linguagem de quem configura as permissões.
 
-**Todo recurso novo da ACL precisa de uma entrada aqui**, escrita a partir do que as rotas do módulo realmente exigem
-(o teste `test_acl_niveis.py` falha se faltar). Nível que o módulo não diferencia diz isso no texto.
+RESUMO TÉCNICO:
+Os valores gravados continuam sendo `LEITURA`, `MODIFICACAO` e
+`CONTROLE_TOTAL` (hierárquicos: o maior inclui o menor). NIVEIS_POR_RECURSO
+mapeia o slug do módulo para os três textos: `rotulo` é o nome curto (selo e
+seletor) e `descricao`, a frase completa. GENERICOS cobre um slug sem
+entrada, e textos_do_recurso() devolve sempre os três níveis.
+
+FINALIDADE DE NEGÓCIO:
+Quem monta os perfis de acesso precisa saber exatamente o que está liberando
+(ex.: "Reservar números de documentos" no Protocolo), e não apenas "Leitura"
+ou "Modificação". Nível que o módulo não diferencia diz isso no texto.
+
+CONTEXTO NO SISTEMA:
+Todo recurso novo da ACL precisa de uma entrada aqui, escrita a partir do que
+as rotas do módulo realmente exigem com `exigir_acl` (o teste
+`test_acl_niveis.py` falha se faltar). `acl_acoes.py` usa estes textos para
+montar as ações de cada módulo nos perfis; a tela de ACL os exibe.
+
+===============================================================================
 """
 
 from typing import TypedDict
 
 
 class TextoNivel(TypedDict):
+    """Texto de um nível em um módulo.
+
+    `TypedDict` é um dicionário comum em tempo de execução; a classe só
+    documenta (para o editor e o verificador de tipos) quais chaves ele tem.
+    """
     rotulo: str
     descricao: str
 
 
 def _n(rotulo: str, descricao: str) -> TextoNivel:
+    """Atalho para escrever as entradas da tabela abaixo com menos ruído.
+
+    Recebe o rótulo curto e a frase completa e devolve o dicionário TextoNivel.
+    """
     return {"rotulo": rotulo, "descricao": descricao}
 
 
+# Textos padrão, usados só se um slug não tiver entrada em NIVEIS_POR_RECURSO
+# (o teste impede que isso aconteça em produção).
 GENERICOS: dict[str, TextoNivel] = {
     "LEITURA": _n("Leitura", "Consulta o módulo."),
     "MODIFICACAO": _n("Modificação", "Consulta e altera dados do módulo."),
     "CONTROLE_TOTAL": _n("Controle total", "Faz tudo no módulo, inclusive administrar."),
 }
 
+# Tabela principal: slug do módulo -> nível -> textos. O slug é o mesmo usado
+# em `exigir_acl("slug", nivel)` nas rotas e na tabela `acl_recursos`.
+# Convenção: descrição começando com "Igual a ..." ou rótulo começando com
+# "Sem ..." indica um nível que o módulo não diferencia (acl_acoes.py usa isso
+# para não oferecer esse nível como ação separada no perfil).
 NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
     "protocolo": {
         "LEITURA": _n("Consultar números", "Vê a grade de números, o histórico, o painel e baixa os documentos que não são sigilosos."),
@@ -131,8 +165,8 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
     },
     "rede": {
         "LEITURA": _n("Ver o plano de face", "Vê os switches, patch panels, a face de cada um, a configuração das portas, as VLANs, o que está ligado em cada porta, os pontos de rede e os chamados de cada porta (só os que já vê nos Chamados). Não muda nada."),
-        "MODIFICACAO": _n("Editar portas e pontos", "Além de ver, configura as portas (descrição, access/trunk, VLANs, velocidade, status), liga e desliga conexões e cadastra, altera e exclui pontos de rede."),
-        "CONTROLE_TOTAL": _n("Administrar a rede", "Faz tudo e ainda cria, altera e exclui modelos de face, equipamentos (com a função na topologia e o IP de gerência) e VLANs, e ajusta o intervalo do ping dos equipamentos. Sem nenhuma regra, o módulo fica fechado: só o SuperRoot entra."),
+        "MODIFICACAO": _n("Editar portas e pontos", "Além de ver, configura as portas (access/trunk, VLANs, velocidade, situação e observação), liga, troca e desliga conexões (inclusive fundo e frente do patch panel) e cadastra, altera e exclui pontos de rede."),
+        "CONTROLE_TOTAL": _n("Administrar a rede", "Faz tudo e ainda cria, altera e exclui modelos de face, equipamentos (com a função na topologia, o IP de gerência e o acesso SSH só leitura) e VLANs, lê o equipamento por SSH e aplica o que foi lido, e ajusta o intervalo do ping dos equipamentos. Sem nenhuma regra, o módulo fica fechado: só o SuperRoot entra."),
     },
     "reserva-espacos": {
         "LEITURA": _n("Solicitar reservas", "Vê a agenda, solicita reservas e altera ou cancela as próprias. Só isso: não aprova nada."),
@@ -143,5 +177,10 @@ NIVEIS_POR_RECURSO: dict[str, dict[str, TextoNivel]] = {
 
 
 def textos_do_recurso(slug: str) -> dict[str, TextoNivel]:
-    """Textos dos três níveis do recurso (os genéricos para um slug sem entrada, o que o teste impede)."""
+    """Textos dos três níveis do recurso (os genéricos para um slug sem entrada, o que o teste impede).
+
+    Parâmetro: `slug` do recurso da ACL (ex.: "contratos").
+    Retorno: dicionário {"LEITURA": ..., "MODIFICACAO": ..., "CONTROLE_TOTAL": ...};
+    cada nível ausente na tabela do módulo cai no texto genérico.
+    """
     return {nivel: NIVEIS_POR_RECURSO.get(slug, {}).get(nivel, GENERICOS[nivel]) for nivel in GENERICOS}

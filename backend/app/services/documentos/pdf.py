@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 from pypdf import PdfReader, PdfWriter, Transformation
 from pypdf.annotations import Link
+from pypdf.generic import ArrayObject, NameObject
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
@@ -80,6 +81,8 @@ class DocumentoPdf:
     blocos: list[Flowable] = field(default_factory=list)
     # Texto grande, em cinza claro e na diagonal, atrás do conteúdo de todas as páginas (ex.: "MINUTA"); vazio = sem marca
     marca_dagua: str = ""
+    # Texto do rodapé no lugar de "Gerado em … por …" (ex.: a RDM: "Preenchido via SGI SPI - Aprovado por …"); vazio = o padrão
+    rodape: str = ""
 
     def secao(self, titulo: str) -> "DocumentoPdf":
         """Título de seção em vermelho. Os métodos devolvem o próprio documento para encadear chamadas."""
@@ -215,7 +218,7 @@ class DocumentoPdf:
         agora = datetime.now(FUSO_SAO_PAULO).strftime("%d/%m/%Y %H:%M")
         tela.setFont("Helvetica", 7.5)
         tela.setFillColor(APAGADO)
-        rodape = f"Gerado em {agora}" + (f" por {self.autor}" if self.autor else "")
+        rodape = self.rodape or (f"Gerado em {agora}" + (f" por {self.autor}" if self.autor else ""))
         tela.drawString(15 * mm, 9 * mm, rodape)
         tela.drawRightString(largura - 15 * mm, 9 * mm, f"Página {documento.page}")
         tela.restoreState()
@@ -350,6 +353,33 @@ def _selo_pagina(largura: float, altura: float, texto_pagina: str, gerado: bool)
     return PdfReader(BytesIO(saida.getvalue()))
 
 
+def _normalizar_procset(pagina) -> None:
+    """Deixa o /ProcSet dos recursos da página só com nomes diretos, antes de carimbar o selo.
+
+    Alguns PDFs (ex.: faturas detalhadas da Vivo) trazem o /ProcSet com referências indiretas no lugar
+    dos nomes (/PDF, /Text…). Ao juntar o selo, o pypdf ordena essa lista e quebra com "'<' not supported
+    between instances of 'NameObject' and 'IndirectObject'". O /ProcSet é metadado obsoleto (os leitores
+    ignoram), então resolver as referências não altera nada do que aparece no documento enviado.
+    """
+    recursos = pagina.get("/Resources")
+    if recursos is None:
+        return
+    recursos = recursos.get_object()
+    procset = recursos.get("/ProcSet")
+    if procset is None:
+        return
+    procset = procset.get_object()
+    nomes: list[NameObject] = []
+    # Cada item pode ser um nome, uma referência a um nome ou (raro) uma referência a outra lista de nomes
+    for item in procset if isinstance(procset, ArrayObject) else [procset]:
+        valor = item.get_object()
+        for nome in valor if isinstance(valor, ArrayObject) else [valor]:
+            nome = nome.get_object()
+            if isinstance(nome, NameObject) and nome not in nomes:
+                nomes.append(NameObject(nome))
+    recursos[NameObject("/ProcSet")] = ArrayObject(nomes)
+
+
 def montar_consolidado(
     partes: Iterable[tuple[bytes | Path, bool]], links: Sequence[AlvoLink] = (), marcadores: Sequence[tuple[str, int]] = ()
 ) -> bytes:
@@ -392,6 +422,7 @@ def montar_consolidado(
             if rotacao % 180:
                 largura, altura = altura, largura
         selo = _selo_pagina(largura, altura, f"Página {numero} de {total}", gerado)
+        _normalizar_procset(pagina)
         # A caixa da página pode não começar em (0, 0): o selo é deslocado para a origem dela
         pagina.merge_transformed_page(selo.pages[0], Transformation().translate(esquerda, base))
     saida = BytesIO()

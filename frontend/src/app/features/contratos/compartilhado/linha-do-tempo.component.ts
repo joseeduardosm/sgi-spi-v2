@@ -1,5 +1,29 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para desenhar a linha do tempo do contrato (vigências, termos aditivos, reajustes, hoje e máximo).
+/**
+ * =============================================================================
+ * ARQUIVO: linha-do-tempo.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Desenhar a linha do tempo da vigência do contrato, com um traço por mês e
+ * os marcos: início, termos aditivos (TAs), reajustes, hoje e prazo máximo.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone (OnPush) com template embutido. A partir dos marcos
+ * recebidos calcula com computed() os limites em milissegundos (UTC), a
+ * posição de cada mês e de cada marco em % do trilho e distribui os rótulos
+ * em faixas acima e abaixo para não se sobreporem.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dá ao gestor uma visão rápida de quanto da vigência já passou e de quando
+ * ocorreram ou ocorrerão os eventos do contrato, ajudando a planejar
+ * prorrogações e reajustes dentro do prazo.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Usado na tela de detalhe do contrato; o tipo Marco vem de
+ * contratos.models.ts e as datas são formatadas por formatadores.ts.
+ *
+ * =============================================================================
+ */
 
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
@@ -54,6 +78,7 @@ export class LinhaDoTempoComponent {
     const { inicio, fim } = this.limites();
     const posicoes: number[] = [];
     const cursor = new Date(inicio);
+    // Parte do dia 1º do mês inicial e avança mês a mês; só as viradas internas viram traço
     cursor.setUTCDate(1);
     while (cursor.getTime() <= fim) {
       cursor.setUTCMonth(cursor.getUTCMonth() + 1);
@@ -62,6 +87,11 @@ export class LinhaDoTempoComponent {
     return posicoes;
   });
 
+  /**
+   * Marcos com posição e faixa do rótulo. Algoritmo guloso: percorre os marcos em ordem e coloca cada
+   * rótulo na primeira faixa (abaixo nível 0, acima nível 0, abaixo nível 1...) cujo último rótulo esteja
+   * a pelo menos LARGURA_ROTULO % de distância.
+   */
   protected readonly marcosPosicionados = computed<MarcoPosicionado[]>(() => {
     // Acrescenta o marco "Hoje" e descarta os que caem fora da linha
     const todos = [...this.marcos(), { data: this.hoje(), tipo: 'hoje', rotulo: 'Hoje' } as unknown as Marco];

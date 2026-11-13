@@ -1,12 +1,31 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar o limbo dos meses medidos antes do mes_referencia do reajuste.
-"""Reajuste: só meses a partir do mes_referencia entram na diferença, e os cobertos ficam marcados.
+"""
+===============================================================================
+ARQUIVO: test_contratos_reajuste_limbo.py
+AUTOR: José Eduardo Santana Martins
 
-Cenário: contrato inicia em janeiro/2026, HOJE = 15/03/2026.
-  - Meses janeiro e fevereiro são medidos ANTES de aplicar o reajuste de março.
-  - O reajuste tem mes_referencia = março/2026 (meses jan e fev estão ANTES da referência).
-  - Com o antigo filtro `competencia >= mes_referencia`, jan e fev ficavam em "limbo".
-  - Com o novo código, todos os meses medidos da mesma vigência entram na diferença.
+FINALIDADE:
+Testar o "limbo" do reajuste: o que acontece com os meses medidos antes do
+mês de referência (mes_referencia) quando o reajuste é aplicado depois.
+
+RESUMO TÉCNICO:
+Congela a data em 15/03/2026, gera a execução de um contrato iniciado em
+janeiro/2026, mede janeiro e fevereiro e abre um reajuste com referência em
+fevereiro. Confere pela API que só um mês entra na diferença retroativa e,
+direto no banco (Competencia), que só o mês coberto fica marcado com o
+reajuste em diferenca_coberta_por_reajuste_id.
+
+FINALIDADE DE NEGÓCIO:
+Protege a regra de que o reajuste só cobra diferença de preço dos meses a
+partir da referência: o mês anterior (faturado com o preço antigo e fora do
+alcance do índice) não é cobrado, e o mês coberto fica marcado para não ser
+cobrado de novo por outro reajuste.
+
+CONTEXTO NO SISTEMA:
+Usa o roteiro de execução de test_contratos_execucao.py e os apoios de
+tests/apoio_contratos.py. Exercita as rotas de reajustes e competências e
+os serviços servico_reajuste e servico_competencias.
+
+===============================================================================
 """
 
 from datetime import date
@@ -22,6 +41,8 @@ HOJE = date(2026, 3, 15)
 @pytest.fixture(autouse=True)
 def _hoje(monkeypatch):
     """Congela a data para que janeiro e fevereiro sejam meses passados (medíveis)."""
+    # monkeypatch (fixture do pytest) troca a função "hoje" dos serviços só durante
+    # o teste e a restaura sozinho no fim.
     monkeypatch.setattr("app.services.contratos.servico_contratos.hoje", lambda: HOJE)
     monkeypatch.setattr("app.services.contratos.servico_competencias.hoje", lambda: HOJE)
 
@@ -78,6 +99,7 @@ def _concluir_reajuste(cliente, h, url):
 
 def test_mes_antes_da_referencia_nao_entra_e_o_coberto_fica_marcado(cliente, cenario):
     """Janeiro (antes da referência de fevereiro) fica fora da diferença; fevereiro entra e, concluído, fica marcado."""
+    # Imports locais: só este teste lê o banco direto para conferir a marcação.
     import uuid
     from app.core.banco import FabricaSessao
     from app.models.contratos.execucao import Competencia
@@ -86,12 +108,16 @@ def test_mes_antes_da_referencia_nao_entra_e_o_coberto_fica_marcado(cliente, cen
     jan = _medir(cliente, contrato, h, notas, "2026-01")
     fev = _medir(cliente, contrato, h, notas, "2026-02")
 
+    # Referência em fevereiro: janeiro fica antes dela e não deve entrar na diferença
+    # (daí competencias_com_diferenca == 1).
     url, reajuste_id = _abrir_reajuste(cliente, contrato, h, "2026-02-01", percentual="10")
     em_andamento = cliente.get(_url(contrato, "/reajustes"), headers=h).json()["em_andamento"]
     assert em_andamento["competencias_com_diferenca"] == 1
     assert float(em_andamento["diferenca_retroativa"]) > 0
 
     _concluir_reajuste(cliente, h, url)
+    # Confere no banco: só fevereiro aponta para o reajuste concluído; janeiro
+    # continua sem marcação (ficou fora da diferença).
     with FabricaSessao() as sessao:
         assert sessao.get(Competencia, uuid.UUID(jan)).diferenca_coberta_por_reajuste_id is None
         assert sessao.get(Competencia, uuid.UUID(fev)).diferenca_coberta_por_reajuste_id == uuid.UUID(reajuste_id)

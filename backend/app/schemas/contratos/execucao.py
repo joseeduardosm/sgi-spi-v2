@@ -544,10 +544,14 @@ class LeituraAvaliacao(BaseModel):
 
 
 class DescontoReajuste(BaseModel):
-    """Parte do crédito de um reajuste ou de uma repactuação com desconto retroativo, abatida nesta competência."""
+    """Crédito de um reajuste ou de uma repactuação com desconto retroativo: aplicado nesta competência ou ainda no fundo do contrato."""
+    id: uuid.UUID = Field(..., description="Identificador do crédito (para aplicar ou retirar).")
     reajuste_id: uuid.UUID | None = Field(None, description="Reajuste que gerou o crédito (vazio quando veio de uma repactuação).")
     repactuacao_id: uuid.UUID | None = Field(None, description="Repactuação que gerou o crédito (vazio quando veio de um reajuste).")
     mes_referencia: date = Field(..., description="Mês de referência do reajuste ou da repactuação que gerou o crédito.")
+    rotulo: str = Field(..., description="Texto da origem, como sai nos documentos: \"Crédito de Reajuste (ref. MM/AAAA)\" ou \"Crédito de Repactuação (CCT MM/AAAA, …)\".")
+    manual: bool = Field(False, description="`true` quando o crédito veio de uma diferença retroativa informada manualmente.")
+    observacao: str = Field("", description="Observação da diferença manual (quem informou, quando, meses e justificativa); vazia no crédito calculado pelo sistema.")
     valor: ValorMonetario
 
 
@@ -596,9 +600,15 @@ class DetalheCompetencia(ResumoCompetencia):
         ..., description="Total medido × % liberado pela avaliação − desconto de reajuste (sugestão do valor da NF; nunca negativo)."
     )
     desconto_reajuste: ValorMonetario = Field(
-        Decimal(0), description="Crédito de desconto de reajuste retroativo abatido nesta competência (0 quando não há)."
+        Decimal(0), description="Soma dos créditos de reajuste/repactuação aplicados pelo gestor nesta competência (0 quando não há)."
     )
-    descontos_reajuste: list[DescontoReajuste] = Field(default_factory=list, description="Origem de cada desconto abatido.")
+    descontos_reajuste: list[DescontoReajuste] = Field(default_factory=list, description="Créditos aplicados nesta competência (origem e valor de cada um).")
+    diferenca_manual: bool = Field(False, description="Competência complementar gerada por uma diferença retroativa informada manualmente (uma linha só, com o valor informado).")
+    observacoes_manuais: list[str] = Field(
+        default_factory=list, description="Observações das diferenças informadas manualmente que esta competência cita (a da complementar manual e as dos créditos manuais aplicados): quem informou, quando, meses e justificativa.")
+    creditos_disponiveis: list[DescontoReajuste] = Field(
+        default_factory=list, description="Créditos no fundo do contrato, ainda não aplicados em nenhuma medição: o gestor pode aplicar cada um, inteiro, "
+        "enquanto esta medição (regular ou adicional) estiver aberta.")
     valor_a_pagar: ValorMonetario = Field(
         ..., description="Valor que a OB debita nas NEs apontadas: soma das NFs (brutos) depois da etapa da NF; antes, o valor autorizado."
     )

@@ -5,6 +5,9 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+
+import { SITUACOES_RDM } from '../tarefas/rdm.models';
 import { debounceTime, Subject } from 'rxjs';
 
 import { AcessoService } from '../../core/acesso/acesso.service';
@@ -28,7 +31,7 @@ type AcaoMotivo = 'liberar' | 'anular' | 'concluir';
  */
 @Component({
   selector: 'app-numeracao',
-  imports: [TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, CabecalhoProtocoloComponent],
+  imports: [TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, FormsModule, DatePipe, RouterLink, CabecalhoProtocoloComponent],
   template: `
     <app-cabecalho-protocolo titulo="Protocolo" descricao="Reserve o próximo número de ofícios, portarias e resoluções e anexe o documento." />
     <section class="painel-gestao protocolo">
@@ -62,6 +65,8 @@ type AcaoMotivo = 'liberar' | 'anular' | 'concluir';
               <button type="button" [class]="'numero ' + n.estado" [title]="n.estado === 'livre' ? 'Número livre' : n.estado === 'reservado_cgi' ? 'Reservado a Coordenadoria de Gestão e Infraestrutura' : n.finalidade" (click)="clicarNumero(n)">
                 <strong>{{ n.numero }}</strong>
                 <small>{{ rotulos[n.estado] }}@if (n.sigiloso) { <span aria-label="Documento sigiloso" title="Documento sigiloso"> 🔒</span> }</small>
+                <!-- RDM SGI: a situação da RDM na cor dela (amarela, vermelha, laranja, verde) -->
+                @if (n.rdm_situacao) { <span class="selo-status" [attr.data-chamado]="situacoesRdm[n.rdm_situacao].cor">{{ situacoesRdm[n.rdm_situacao].rotulo }}</span> }
               </button>
             }
           </div>
@@ -115,6 +120,10 @@ type AcaoMotivo = 'liberar' | 'anular' | 'concluir';
             <div><dt>Reservado por</dt><dd>{{ n.reservado_por_nome || '—' }}</dd></div>
             <div><dt>Reservado em</dt><dd>{{ n.reservado_em ? (n.reservado_em | date: 'dd/MM/yyyy HH:mm') : '—' }}</dd></div>
             @if (n.contrato_numero) { <div><dt>Contrato</dt><dd>{{ n.contrato_numero }}</dd></div> }
+            @if (n.rdm_situacao && n.tarefa_numero) {
+              <div><dt>RDM</dt><dd><span class="selo-status" [attr.data-chamado]="situacoesRdm[n.rdm_situacao].cor">{{ situacoesRdm[n.rdm_situacao].rotulo }}</span>
+                <a [routerLink]="['/tarefas', n.tarefa_numero, 'rdm']">Abrir a RDM da tarefa #{{ n.tarefa_numero }}</a></dd></div>
+            }
             @if (n.estado === 'anulado') { <div class="inteira"><dt>Anulado</dt><dd>{{ n.anulado_em | date: 'dd/MM/yyyy HH:mm' }} · {{ n.motivo_anulacao }}</dd></div> }
           </dl>
 
@@ -169,6 +178,8 @@ export class NumeracaoComponent implements OnInit {
   private readonly destruir = inject(DestroyRef);
 
   protected readonly rotulos = ROTULOS_ESTADO;
+  /** Rótulo e cor da situação da RDM (tipo "RDM SGI"). */
+  protected readonly situacoesRdm = SITUACOES_RDM;
   protected readonly eventos = ROTULOS_EVENTO;
   protected readonly carregado = signal(false);
   protected readonly tipos = signal<TipoProtocolo[]>([]);

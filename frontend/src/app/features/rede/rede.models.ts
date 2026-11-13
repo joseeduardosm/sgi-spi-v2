@@ -6,6 +6,9 @@ export type TipoEquipamento = 'switch' | 'patch_panel' | 'roteador' | 'access_po
 export type FuncaoEquipamento = 'core_primario' | 'core_secundario' | 'distribuicao' | 'acesso';
 export type SituacaoPing = 'no_ar' | 'fora';
 export type StatusPorta = 'up' | 'down' | 'desativada';
+/** Lado físico da porta do patch panel: cada porta tem um cabo no fundo e outro na frente (decisão do usuário). */
+export type LadoPatch = 'fundo' | 'frente';
+export const LADOS_PATCH: { valor: LadoPatch; rotulo: string }[] = [{ valor: 'fundo', rotulo: 'Fundo' }, { valor: 'frente', rotulo: 'Frente' }];
 
 export const ROTULOS_TIPO_EQUIPAMENTO: Record<TipoEquipamento, string> = {
   switch: 'Switch', patch_panel: 'Patch panel', roteador: 'Roteador', access_point: 'Access point', outro: 'Outro',
@@ -14,7 +17,7 @@ export const ROTULOS_FUNCAO_EQUIPAMENTO: Record<FuncaoEquipamento, string> = {
   core_primario: 'Core primário', core_secundario: 'Core secundário', distribuicao: 'Distribuição', acesso: 'Acesso',
 };
 export const ROTULOS_PING: Record<SituacaoPing, string> = { no_ar: 'No ar', fora: 'Fora do ar' };
-/** Patch panel é passivo: o único tipo sem IP de gerência e sem função (as duas coisas são obrigatórias nos outros). */
+/** Patch panel é passivo: o único tipo sem IP de gerência. A função (core, distribuição, acesso) é só do switch. */
 export function ehPassivo(tipo: TipoEquipamento): boolean {
   return tipo === 'patch_panel';
 }
@@ -29,19 +32,30 @@ export interface ModeloFace extends GravacaoModelo { id: string; equipamentos: n
 export interface GravacaoEquipamento {
   nome: string; tipo: TipoEquipamento; modelo_face_id: string | null; bem_id: string | null; localizacao_id: string | null; rack_id: string | null;
   posicao_u: number | null; ip_gerencia: string; numero_serie: string; observacao: string; ativo: boolean; funcao: FuncaoEquipamento | null;
+  /** Acesso SSH só leitura para a carga do equipamento (vazio = sem acesso). A senha só vai na gravação e nunca volta. */
+  acesso_usuario?: string; acesso_porta?: number; acesso_senha?: string | null;
 }
 export interface EquipamentoResumo extends GravacaoEquipamento {
   id: string; modelo_nome: string; altura_u: number; rack_nome: string; sala: string; portas_total: number; portas_up: number; portas_down: number; portas_desativadas: number;
   /** Ping do IP de gerência: `fora` só depois de 3 falhas seguidas; null = sem teste. */
   ping_situacao: SituacaoPing | null; ping_verificado_em: string | null; ping_mudou_em: string | null;
-  /** Sem IP ou sem função (cadastro de antes da regra): a próxima edição exige os dois. */
+  /** Sem IP (ou switch sem função): cadastro de antes da regra, que a próxima edição completa. */
   cadastro_incompleto: boolean;
+  /** Tem usuário e senha SSH gravados; e quando foi a última leitura do equipamento. */
+  tem_acesso?: boolean; leitura_em?: string | null;
 }
+/** O cabo informado no cadastro (em cadeia): esta porta (número lógico) ligada na porta de destino (e no lado, se for patch panel). */
+export interface LigacaoCadastro {
+  porta_numero: number; destino_porta_id: string; destino_lado: LadoPatch | null; config: GravacaoPorta | null; config_destino: GravacaoPorta | null;
+}
+export interface CriacaoEquipamento extends GravacaoEquipamento { ligacao: LigacaoCadastro | null }
 export interface ParametrosRede { ping_intervalo_min: number }
 /** Dispositivo atrás do primeiro na mesma porta (ex.: o PC ligado no telefone IP). */
 export interface DispositivoAtras { id: string; ordem: number; texto: string; bem_id: string | null }
 export interface Conexao {
-  tipo: 'porta' | 'bem' | 'descricao'; texto: string; porta_id: string | null; equipamento_id: string | null; bem_id: string | null;
+  tipo: 'porta' | 'bem' | 'descricao'; texto: string;
+  /** Lado desta porta e da outra, quando são de patch panel. */
+  lado?: LadoPatch | null; outro_lado?: LadoPatch | null; porta_id: string | null; equipamento_id: string | null; bem_id: string | null;
   /** Em cascata, na ordem: switch → primeiro (telefone IP) → estes (PC...). */
   atras?: DispositivoAtras[];
 }
@@ -90,6 +104,10 @@ export interface Porta {
   status: StatusPorta | null; modo: ModoPorta; vlan_nativa_id: string | null; vlan_nativa: number | null; vlans_tag: number[]; vlans_tag_ids: string[];
   vlans_sem_tag: number[]; vlans_sem_tag_ids: string[]; vlan_voz_id: string | null; vlan_voz: number | null; ip_interface: string;
   ultima_mudanca: string | null; erros_entrada: number; erros_saida: number; conexao: Conexao | null; ponto: string; chamados_abertos: number;
+  /** Patch panel: o que está ligado no fundo e na frente da porta. */
+  fundo?: Conexao | null; frente?: Conexao | null;
+  /** Anotação livre. A descrição é gerada pelo sistema a partir das ligações ("Desligado" sem nada). */
+  observacao?: string;
 }
 export interface EquipamentoDetalhe extends EquipamentoResumo {
   modelo: ModeloFace | null; posicoes: Record<string, [number, number]>; portas: Porta[];
@@ -103,7 +121,7 @@ export interface PortaDetalhe extends Porta {
   chamados: { numero: number; titulo: string; status_base: string; aberto_em: string }[];
 }
 export interface GravacaoPorta {
-  descricao: string; modo: ModoPorta; vlan_nativa_id: string | null; vlans_tag: string[]; vlans_sem_tag: string[]; vlan_voz_id: string | null;
+  observacao: string; modo: ModoPorta; vlan_nativa_id: string | null; vlans_tag: string[]; vlans_sem_tag: string[]; vlan_voz_id: string | null;
   ip_interface: string; velocidade_mbps: number | null;
   duplex: 'full' | 'half' | null; status: StatusPorta | null;
 }
@@ -124,7 +142,7 @@ export interface GravacaoRack { nome: string; cor: CorRack; localizacao_id: stri
 export interface Rack extends GravacaoRack { id: string; sala: string; equipamentos: number }
 export interface SalaResumo { id: string; codigo: string; nome: string; rotulo: string; andar: number | null }
 export interface BemResumo { id: string; chapa: string; descricao: string; sala: string }
-export interface PortaDoBem { porta_id: string; porta_nome: string; equipamento_id: string; equipamento_nome: string; /** Vazio = direto na porta. */ atras_de?: string; /** Atrás de outro: tirar só este. */ dispositivo_id?: string | null }
+export interface PortaDoBem { porta_id: string; porta_nome: string; equipamento_id: string; equipamento_nome: string; lado?: LadoPatch | null; /** Vazio = direto na porta. */ atras_de?: string; /** Atrás de outro: tirar só este. */ dispositivo_id?: string | null }
 
 /** Um equipamento na árvore da topologia (filhos = os que se ligam a ele por cabo). */
 export interface NoTopologia {
@@ -142,13 +160,57 @@ export interface EtapaCaminho {
   funcao: FuncaoEquipamento | null; ping_situacao: SituacaoPing | null;
   /** Portas dos quadradinhos: a que sobe (canto de cima) e a que desce (canto de baixo), com a configuração completa para a dica. */
   porta_entrada: Porta | null; porta_saida: Porta | null;
+  /** Patch panel: o lado da porta por onde o cabo chega e por onde segue. */
+  lado_entrada?: LadoPatch | null; lado_saida?: LadoPatch | null;
 }
 export interface CaminhoRede { etapas: EtapaCaminho[]; dispositivos: { texto: string; bem_id: string | null }[]; cabo_dispositivos: string; aviso: string }
 
 /** Números dos cards do topo da Rede. */
-export interface IndicadoresRede { portas_alteradas: number; portas_ativas_sem_descricao: number }
+export interface IndicadoresRede { portas_alteradas: number; portas_patch_um_lado: number }
 /** Linha das listas dos indicadores: equipamento | porta | descrição | quem alterou e quando (a última alteração). */
 export interface PortaListada {
   porta_id: string; equipamento_id: string; equipamento_nome: string; porta: string; numero_logico: number; descricao: string;
   alterado_por: string | null; alterado_em: string | null;
 }
+
+/** As portas que um modelo de face cria (número lógico e nome), para escolher a porta do cabo no cadastro antes de o equipamento existir. */
+export function portasDoModelo(m: ModeloFace | null | undefined): { numero: number; nome: string }[] {
+  if (!m) return [];
+  const grade = Array.from({ length: m.linhas * m.colunas }, (_, i) => ({ numero: i + 1, nome: String(i + 1) }));
+  const extras = (m.portas_extras ?? []).map((e) => ({ numero: e.numero, nome: e.rotulo || String(e.numero) }));
+  return [...grade, ...extras].sort((a, b) => a.numero - b.numero);
+}
+
+/** Uma porta de patch panel está livre naquele lado? (fora do patch panel, se a porta está livre). */
+export function ladoLivre(p: Porta, lado: LadoPatch | null): boolean {
+  if (!lado) return !p.conexao;
+  return !(lado === 'fundo' ? p.fundo : p.frente);
+}
+
+/**
+ * Leitura do equipamento por SSH desligada por enquanto (decisão do usuário, 13/11/2026: vai ser lapidada antes de voltar). O código fica;
+ * com false, o cadastro não pede usuário e senha e a tela do equipamento não mostra "Recarregar do equipamento" nem o resumo.
+ * Para religar: true aqui e LEITURA_SSH_ATIVA = True em backend/app/services/rede/servico_leitura.py.
+ */
+export const LEITURA_SSH_ATIVA = false;
+
+/** Resultado de "Testar e ler o equipamento" (cadastro): nada é gravado. */
+export interface ResultadoTesteLeitura {
+  tipo_acesso: string; nome: string; modelo: string; serie: string; versao: string; portas: number; vlans: number;
+  vizinhos: { interface_local: string; vizinho_nome: string; vizinho_interface: string }[]; avisos: string[];
+  /** Cabo de subida sugerido pelos vizinhos LLDP (vizinho já cadastrado que pode ficar acima, com a porta livre). */
+  sugestao: { porta_numero: number; destino_equipamento_id: string; destino_porta_id: string; texto: string } | null;
+}
+/** Resumo da última leitura do equipamento: o que dá para aplicar, em grupos. */
+export interface ResumoLeitura {
+  id: string; lido_em: string; lido_por: string; aplicada_em: string | null; tipo_acesso: string;
+  equipamento: { serie_lida: string; serie_cadastro: string; modelo: string; versao: string; nome_lido: string };
+  vlans_novas: { numero: number; nome: string }[];
+  lldp: { interface_local: string; vizinho_nome: string; vizinho_interface: string; situacao: 'ligada' | 'ja_estava' | 'nao_ligou'; motivo: string }[];
+  descricoes: { interface: string; porta_id: string; porta: string; descricao: string }[];
+  configuracao: { interface: string; porta_id: string; porta: string; atual: string; lida: string; ligada: boolean }[];
+  /** Portas com configuração lida, mas sem ligação no SGI nem descrição no switch: não entram na lista (só contadas). */
+  portas_sem_ligacao: number;
+  avisos: string[];
+}
+export interface AplicacaoLeitura { equipamento: boolean; vlans: number[]; descricoes: string[]; configuracao: string[] }

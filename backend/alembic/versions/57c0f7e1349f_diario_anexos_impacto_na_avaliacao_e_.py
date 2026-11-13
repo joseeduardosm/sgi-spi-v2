@@ -1,11 +1,35 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para acrescentar anexos e impacto na avaliação às ocorrências do diário e o resultado do e-mail da avaliação.
-"""diário: anexos e itens de avaliação impactados; avaliação: resultado do e-mail à contratada
+"""
+===============================================================================
+ARQUIVO: 57c0f7e1349f_diario_anexos_impacto_na_avaliacao_e_.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Acrescentar anexos e impacto na avaliação às ocorrências do diário de bordo e
+registrar o resultado do e-mail da avaliação enviado à contratada.
+
+RESUMO TÉCNICO:
+- `contratos_diario_anexos`: arquivos de cada ocorrência (RESTRICT no anexo).
+- `contratos_diario_itens_avaliacao`: itens do formulário de avaliação que a
+  ocorrência afeta (cópia do nome do item e do grupo; um por ocorrência).
+- `contratos_diario_ocorrencias.impacta_avaliacao` (padrão falso).
+- `contratos_competencias_avaliacoes`: data, sucesso, destinatários e erro do
+  e-mail enviado à contratada.
+
+FINALIDADE DE NEGÓCIO:
+O diário de bordo é o registro das ocorrências do contrato pela fiscalização.
+Ligar a ocorrência aos itens da avaliação dá base documental para a nota da
+empresa no mês, e o registro do e-mail comprova a ciência.
+
+CONTEXTO NO SISTEMA:
+Tabelas do diário (`contratos_diario_ocorrencias`, criada em `7566f71dd5a5`) e
+da avaliação por competência; serviço
+`app/services/contratos/servico_diario.py`.
 
 Revision ID: 57c0f7e1349f
 Revises: aef1af3a69ff
 Create Date: 2026-09-30 21:07:18.519506
 
+===============================================================================
 """
 from typing import Sequence, Union
 
@@ -13,14 +37,32 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-# revision identifiers, used by Alembic.
+# Identificação da migração: esta revisão (revision) e a anterior (down_revision)
 revision: str = '57c0f7e1349f'
 down_revision: Union[str, Sequence[str], None] = 'aef1af3a69ff'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# upgrade() aplica esta mudança no banco (alembic upgrade) e downgrade() a
+# desfaz (alembic downgrade), voltando à revisão anterior.
+#
+# As funções op.* do Alembic executam comandos de estrutura (DDL) no banco:
+# create_table, add_column, alter_column, create_index, drop_* etc.
+#
+# op.f(nome) marca o nome do índice/restrição como definitivo, sem aplicar a
+# convenção automática de nomes.
+#
+# server_default é o valor padrão gravado pelo próprio banco; serve também para
+# preencher as linhas que já existiam quando a coluna é criada.
+#
+# sa.JSON().with_variant(JSONB, 'postgresql') usa o tipo JSONB (binário e
+# indexável) no PostgreSQL e JSON comum nos demais bancos, como o SQLite dos
+# testes.
 def upgrade() -> None:
+    """Cria as tabelas de anexos e de itens de avaliação do diário e as colunas
+    novas da ocorrência e da avaliação.
+    """
     op.create_table('contratos_diario_anexos',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('ocorrencia_id', sa.Uuid(), nullable=False),
@@ -50,6 +92,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Remove as colunas e as tabelas criadas; anexos vinculados e itens
+    impactados se perdem.
+    """
     op.drop_column('contratos_diario_ocorrencias', 'impacta_avaliacao')
     op.drop_column('contratos_competencias_avaliacoes', 'email_erro')
     op.drop_column('contratos_competencias_avaliacoes', 'email_destinatarios')

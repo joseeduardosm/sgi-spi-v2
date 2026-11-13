@@ -1,5 +1,5 @@
 # Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar o reajuste com percentuais por item, o desconto e o crédito abatido nas medições.
+# Este arquivo serve para testar o reajuste com percentuais por item, o desconto e o crédito no fundo, aplicado pelo gestor nas medições.
 """Reajuste com desconto: percentuais positivos e negativos por item e crédito retroativo da SPI.
 
 Contrato de apoio: item 1 contínuo (2 × R$ 1.000,00/mês) e item 2 sob demanda (R$ 10,50, 10 em janeiro).
@@ -89,58 +89,86 @@ def test_percentuais_por_item_positivo_negativo_e_limite(cliente, cenario):
     assert cliente.put(f"{url}/memoria", json={"itens": itens}, headers=h).status_code == 422
 
 
-def test_desconto_retroativo_vira_credito_abatido_na_proxima_medicao(cliente, cenario):
-    """Janeiro medido; desconto de 10% desde janeiro: sem competência de diferença, crédito abatido em fevereiro."""
+def _aplicar(cliente, contrato, h, identificador, indice=0):
+    """O gestor aplica o crédito do fundo (o `indice`-ésimo disponível) na medição da competência."""
+    competencia = _competencia(cliente, contrato, h, identificador)
+    credito = competencia["creditos_disponiveis"][indice]
+    r = cliente.post(_url(contrato, f"/competencias/{competencia['id']}/creditos/{credito['id']}"), headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_desconto_retroativo_vira_credito_no_fundo_e_o_gestor_aplica(cliente, cenario):
+    """Janeiro medido; desconto de 10% desde janeiro: sem competência de diferença, crédito no fundo; o gestor aplica em fevereiro."""
     contrato, h, notas = cenario
     _medir(cliente, contrato, h, notas, "2026-01")
     url, r = _abrir(cliente, contrato, h, "2026-01-01", ["-10", "0"])
     reajuste = r.json()["em_andamento"]
-    # 2 postos medidos em janeiro × (900 − 1000)
-    assert reajuste["diferenca_retroativa"] == "-200.00" and reajuste["competencia_credito"] == "02/2026"
+    # 2 postos medidos em janeiro × (900 − 1000); o crédito não tem destino definido: vai para o fundo
+    assert reajuste["diferenca_retroativa"] == "-200.00" and reajuste["competencia_credito"] is None
     painel = _concluir(cliente, h, url)
     historico = painel["historico"][0]
     assert historico["diferenca_retroativa"] == "-200.00" and historico["competencia_diferenca"] is None
-    assert historico["abatimentos"] == [{"competencia": "02/2026", "identificador": "2026-02", "medida": False, "valor": "200.00"}]
+    assert historico["abatimentos"] == [] and historico["credito_pendente"] == "200.00"
     assert cliente.get(_url(contrato, "/competencias/identificador/2026-01-dif"), headers=h).status_code == 404
 
+    # Nada é abatido sozinho: fevereiro mostra o crédito disponível, sem desconto
     fevereiro = _competencia(cliente, contrato, h, "2026-02")
-    assert fevereiro["itens"][0]["valor_unitario"] == "900.0000"
+    assert fevereiro["itens"][0]["valor_unitario"] == "900.0000" and fevereiro["desconto_reajuste"] == "0.00"
+    assert [(c["rotulo"], c["valor"], c["manual"]) for c in fevereiro["creditos_disponiveis"]] == [("Crédito de Reajuste (ref. 01/2026)", "200.00", False)]
+    fevereiro = _aplicar(cliente, contrato, h, "2026-02")
     assert fevereiro["desconto_reajuste"] == "200.00" and fevereiro["descontos_reajuste"][0]["mes_referencia"] == "2026-01-01"
+    assert fevereiro["creditos_disponiveis"] == []
     medida = _medir(cliente, contrato, h, notas, "2026-02")
     # 2 × 900 = 1.800 medidos − 200 de crédito
     assert medida["total_medido"] == "1800.00" and medida["valor_autorizado"] == "1600.00" and medida["valor_a_pagar"] == "1600.00"
+    abatimentos = cliente.get(_url(contrato, "/reajustes"), headers=h).json()["historico"][0]["abatimentos"]
+    assert abatimentos == [{"competencia": "02/2026", "identificador": "2026-02", "medida": True, "valor": "200.00"}]
+    # Medição concluída: o crédito não sai mais dela
+    credito = medida["descontos_reajuste"][0]["id"]
+    assert cliente.delete(_url(contrato, f"/competencias/{medida['id']}/creditos/{credito}"), headers=h).status_code == 400
 
 
-def test_credito_maior_que_a_medicao_passa_adiante_e_volta_na_reabertura(cliente, cenario):
-    """Crédito de 200 com fevereiro medido em 90: abate 90, os 110 seguem para março; reabrir devolve."""
+def test_credito_maior_que_a_medicao_sobra_volta_ao_fundo_e_volta_na_reabertura(cliente, cenario):
+    """Crédito de 200 aplicado inteiro em fevereiro medido em 90: abate 90 e os 110 voltam ao fundo; reabrir devolve."""
     contrato, h, notas = cenario
     _medir(cliente, contrato, h, notas, "2026-01")
     url, _ = _abrir(cliente, contrato, h, "2026-01-01", ["-10", "0"])
     _concluir(cliente, h, url)
+    _aplicar(cliente, contrato, h, "2026-02")
     fevereiro = _medir(cliente, contrato, h, notas, "2026-02", ["0.1", "0"])
     assert fevereiro["total_medido"] == "90.00" and fevereiro["desconto_reajuste"] == "90.00" and fevereiro["valor_autorizado"] == "0.00"
-    assert _competencia(cliente, contrato, h, "2026-03")["desconto_reajuste"] == "110.00"
-    abatimentos = cliente.get(_url(contrato, "/reajustes"), headers=h).json()["historico"][0]["abatimentos"]
-    assert [(a["competencia"], a["medida"], a["valor"]) for a in abatimentos] == [("02/2026", True, "90.00"), ("03/2026", False, "110.00")]
+    marco = _competencia(cliente, contrato, h, "2026-03")
+    assert marco["desconto_reajuste"] == "0.00" and [c["valor"] for c in marco["creditos_disponiveis"]] == ["110.00"]
+    historico = cliente.get(_url(contrato, "/reajustes"), headers=h).json()["historico"][0]
+    assert [(a["competencia"], a["medida"], a["valor"]) for a in historico["abatimentos"]] == [("02/2026", True, "90.00")]
+    assert historico["credito_pendente"] == "110.00"
 
     r = cliente.post(_url(contrato, f"/competencias/{fevereiro['id']}/reabrir"), json={"etapa": "medicao", "justificativa": "Corrigir"}, headers=h)
     assert r.status_code == 200, r.text
     assert r.json()["desconto_reajuste"] == "200.00"
-    assert _competencia(cliente, contrato, h, "2026-03")["desconto_reajuste"] == "0.00"
+    assert _competencia(cliente, contrato, h, "2026-03")["creditos_disponiveis"] == []
 
 
-def test_credito_pendente_vai_para_a_proxima_competencia_gerada(cliente, cenario):
-    """Crédito sem competência a medir (pendente) é vinculado quando a execução é gerada de novo."""
+def test_credito_nunca_e_aplicado_sozinho_e_pode_ser_retirado(cliente, cenario):
+    """Gerar a execução de novo não aplica o crédito; o gestor aplica e retira (volta ao fundo); crédito de outro contrato dá 404."""
     contrato, h, notas = cenario
     _medir(cliente, contrato, h, notas, "2026-01")
     url, _ = _abrir(cliente, contrato, h, "2026-01-01", ["-10", "0"])
     _concluir(cliente, h, url)
-    with FabricaSessao() as sessao:
-        sessao.query(AbatimentoReajuste).update({"competencia_id": None})
-        sessao.commit()
-    assert cliente.get(_url(contrato, "/reajustes"), headers=h).json()["historico"][0]["credito_pendente"] == "200.00"
     cliente.post(_url(contrato, "/execucao/gerar"), headers=h)
-    assert _competencia(cliente, contrato, h, "2026-02")["desconto_reajuste"] == "200.00"
+    assert _competencia(cliente, contrato, h, "2026-02")["desconto_reajuste"] == "0.00"
+    fevereiro = _aplicar(cliente, contrato, h, "2026-02")
+    credito = fevereiro["descontos_reajuste"][0]["id"]
+    # Já aplicado: não pode ir para outra medição
+    marco = _competencia(cliente, contrato, h, "2026-03")
+    assert marco["creditos_disponiveis"] == []
+    assert cliente.post(_url(contrato, f"/competencias/{marco['id']}/creditos/{credito}"), headers=h).status_code == 400
+    r = cliente.delete(_url(contrato, f"/competencias/{fevereiro['id']}/creditos/{credito}"), headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["desconto_reajuste"] == "0.00" and [c["id"] for c in r.json()["creditos_disponiveis"]] == [credito]
+    with FabricaSessao() as sessao:
+        assert sessao.get(AbatimentoReajuste, __import__("uuid").UUID(credito)).competencia_id is None
 
 
 def test_reajuste_misto_com_diferenca_liquida_positiva_gera_competencia_de_diferenca(cliente, cenario):

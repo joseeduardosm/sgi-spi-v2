@@ -67,3 +67,22 @@ def test_indice_longo_ocupa_varias_paginas_e_os_destinos_acompanham():
     # O link do último documento cai na página dele, já deslocada pelas páginas do índice
     ultimo = entradas[-1].pagina_inicial
     assert ultimo == 2 * 39 + 1 + deslocamento and "Documento 40" in leitor.pages[ultimo - 1].extract_text()
+
+
+def test_pdf_enviado_com_procset_por_referencia_recebe_o_selo():
+    """Faturas da Vivo trazem o /ProcSet com referências indiretas: o selo da página não pode quebrar a montagem."""
+    from pypdf import PdfWriter
+    from pypdf.generic import ArrayObject, NameObject
+
+    # Monta um PDF "enviado" cujo /ProcSet é uma lista de referências indiretas a nomes (como nas faturas)
+    escritor = PdfWriter()
+    for pagina in PdfReader(BytesIO(_documento("Fatura", 1))).pages:
+        escritor.add_page(pagina)
+    recursos = escritor.pages[0]["/Resources"].get_object()
+    recursos[NameObject("/ProcSet")] = ArrayObject([escritor._add_object(NameObject("/PDF")), escritor._add_object(NameObject("/Text"))])
+    saida = BytesIO()
+    escritor.write(saida)
+
+    final = PdfReader(BytesIO(montar_consolidado([(_documento("Índice", 1), True), (saida.getvalue(), False)])))
+    assert len(final.pages) == 2
+    assert "Página 2 de 2" in final.pages[1].extract_text()

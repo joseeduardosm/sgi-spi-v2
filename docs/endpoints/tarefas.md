@@ -159,6 +159,44 @@ Quem não tem relação com a tarefa recebe **404** (o sistema não revela que e
 - Tipos: `criada`, `editada`, `status`, `entregue`, `validada`, `devolvida`, `reaberta`, `prazo`, `transferida`, `comentario`, `checklist`, `removido`.
 - `dados` traz `de`/`para` (status ou nomes), `para` do prazo e `campos` da edição.
 
+## RDM — Requisição de Mudança
+
+Implementação: `app/services/tarefas/servico_rdm.py` (regras), `app/services/tarefas/pdf_rdm.py` (PDF), `app/schemas/tarefas_rdm.py`, modelo `RdmTarefa`
+(`tarefas_rdms`, migração `d1f3a5b7c9e2`). Telas: `/tarefas/:numero/rdm` (formulário e decisão) e `/tarefas/rdms` (lista).
+
+O formulário segue a matriz da Prodesp **FORM_RDM-V2.2_CAS1** (`apoio/rdm/RDM - SPI - Modelo.xlsx`): identificação, objetivo, justificativa,
+categorização, abrangência, cronograma, janela de implantação, plano de execução e validação, comunicação, remediação (rollback) e gestão do
+conhecimento, com as listas de opções da planilha. O que só existe no formulário de inspiração (`SPI - Formulário de RDM-modelo.pdf`) fica em
+`complementares` e vai no **anexo "Informações complementares"** do PDF: categoria, descrição técnica/escopo, responsável pela execução, equipes
+envolvidas, impacto previsto (com "Crítico"), riscos, medidas preventivas, procedimentos de validação, critérios de sucesso, pré-requisitos e
+responsável pela análise técnica.
+
+| Situação da tarefa | Ação | Quem | Efeito |
+|---|---|---|---|
+| Em andamento (tarefa com equipe) | salvar rascunho / **enviar** | responsáveis e liderança | Enviar exige título, tipo, objetivo, justificativa, janela (início e fim), 1 atividade de execução e 1 de rollback. No 1º envio reserva o número no **Protocolo** (tipo "RDM SGI", criado no primeiro uso; `RDM SGI 00001/AAAA`, reinicia a cada ano); a RDM fica **pendente** e a tarefa vai a Em validação pelo pipeline normal (aviso de validação à liderança) |
+| Em validação, RDM pendente | **aprovar** | liderança | RDM **aprovada**; PDF gerado (rodapé "Preenchido via SGI SPI - Aprovado por [nome] - [cargo] - [setor] - dd/mm/aaaa hh:mm:ss"), anexado ao evento da tarefa e ao número do Protocolo (que passa a utilizado); e-mail **"RDM Tarefa #N - aprovada"** com o PDF para responsáveis, seguidores e quem aprovou; a tarefa **volta a Em andamento** para a execução |
+| Em validação, RDM pendente | **reprovar** (motivo) | liderança | RDM **reprovada**, sem PDF; a tarefa volta a Em andamento com o motivo no histórico e no aviso |
+| Em andamento, RDM reprovada | corrigir e reenviar | responsáveis | **Mesmo número**; volta a pendente |
+| Tarefa concluída | — | — | RDM aprovada vira **concluída e implantada**; reabrir a tarefa a devolve a aprovada |
+
+- Uma RDM por tarefa. Com a RDM pendente, `acoes` traz `aprovar_rdm`/`reprovar_rdm` em vez de `validar`/`devolver` (o `POST /mover` com essas
+  ações dá 403). Em andamento, `acoes` traz `gerar_rdm` para quem executa (tarefa com equipe, sem RDM, em rascunho ou reprovada).
+- Cores (`.selo-status`): rascunho neutro, **pendente amarela** (`alerta`), **reprovada vermelha** (`perigo`), **aprovada laranja** (`atencao`),
+  **concluída verde** (`sucesso`). O selo aparece no detalhe da tarefa, no cartão do quadro ("RDM"), na lista de RDMs e na grade do Protocolo.
+- Auditoria: `tarefas.rdm.enviar`, `tarefas.rdm.aprovar` (com o resultado do e-mail) e `tarefas.rdm.reprovar`.
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/api/tarefas/rdms?situacao=` | RDMs enviadas das tarefas que a pessoa enxerga (`RdmListada[]`: `numero`, `titulo`, `rotulo`, `situacao`, `tarefa_numero`, `tarefa_titulo`, `equipe`, `enviada_em/por`, `decidida_em/por`) |
+| `GET` | `/api/tarefas/{numero}/rdm` | `RdmLeitura`: `existe`, `numero`, `rotulo` ("RDM SGI 00001/2026 - Título"), `situacao`, `formulario` (ou os valores iniciais), envio, decisão, `motivo_reprovacao`, `tem_pdf`, `pode_editar`, `pode_decidir` |
+| `PUT` | `/api/tarefas/{numero}/rdm` | Salva o rascunho (`FormularioRdm`); `403` fora das condições de edição |
+| `POST` | `/api/tarefas/{numero}/rdm/enviar` | Salva, confere e envia (`400` com os campos que faltam; `403` sem permissão ou tarefa sem equipe) |
+| `POST` | `/api/tarefas/{numero}/rdm/aprovar` | Liderança; `409` sem RDM pendente |
+| `POST` | `/api/tarefas/{numero}/rdm/reprovar` | `{motivo}` obrigatório; liderança |
+| `GET` | `/api/tarefas/{numero}/rdm/pdf` | O PDF da aprovação (`404` antes dela) |
+
+A leitura das tarefas (`TarefaResumo`/`TarefaDetalhe`) ganhou `rdm {rotulo, situacao}`.
+
 ## Migração do 10.23.1.220
 
 Scripts em `scripts/` (o 10.23.1.220 só é lido, numa transação read only):

@@ -24,7 +24,8 @@ export function posicaoDaDica(alvo: HTMLElement): { x: number; y: number } {
         <strong>Porta <span class="texto-codigo">{{ porta().nome || porta().numero_logico }}</span></strong>
         <span class="selo-status" [attr.data-chamado]="corStatus()">{{ textoStatus() }}</span>
       </header>
-      @if (porta().descricao) { <p class="descricao-dica-porta">{{ porta().descricao }}</p> }
+      <!-- A descrição é gerada pelo "Ligado a" e repetiria as linhas abaixo: no lugar dela, só a observação (anotação livre), se houver -->
+      @if (porta().observacao) { <p class="descricao-dica-porta">{{ porta().observacao }}</p> }
       <dl>
         <!-- Patch panel não tem parte lógica: sem modo, VLAN, IP e velocidade -->
         @if (!passiva()) {
@@ -35,7 +36,13 @@ export function posicaoDaDica(alvo: HTMLElement): { x: number; y: number } {
             <dt>VLANs</dt><dd>{{ vlans(porta()) }}</dd>
           }
         }
-        <dt>Ligada a</dt><dd>{{ porta().conexao?.texto || 'Nada cadastrado' }}</dd>
+        @if (passiva()) {
+          <!-- Patch panel: o cabo de cada lado, um por linha -->
+          <dt>Fundo</dt><dd>{{ porta().fundo?.texto || 'Nada ligado' }}</dd>
+          <dt>Frente</dt><dd>{{ porta().frente?.texto || 'Nada ligado' }}</dd>
+        } @else {
+          <dt>Ligada a</dt><dd>{{ porta().conexao?.texto || 'Nada ligado' }}</dd>
+        }
         @if (porta().ponto) { <dt>Ponto</dt><dd class="texto-codigo">{{ porta().ponto }}</dd> }
         @if (porta().velocidade_mbps && !passiva()) { <dt>Velocidade</dt><dd>{{ vel(porta().velocidade_mbps) }}@if (porta().duplex) { · {{ porta().duplex === 'full' ? 'full duplex' : 'half duplex' }} }</dd> }
         @if (porta().mac) { <dt>MAC</dt><dd class="texto-codigo">{{ porta().mac }}</dd> }

@@ -1,5 +1,34 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para montar, justificar, enviar e aprovar uma lista de inservíveis ou extraviados.
+/**
+ * =============================================================================
+ * ARQUIVO: lista-classificacao.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Página de uma lista de inservíveis ou de extraviados do Patrimônio: incluir
+ * bens (chapa, câmera, busca ou sala inteira), justificar, anexar, compartilhar,
+ * enviar para aprovação, decidir item a item e iniciar a baixa.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline e muitos signals/computed: pesquisa
+ * dentro da lista sem acento, seleção em lote (por sala ou visíveis), modal de
+ * justificativa com editor rico (mínimo e máximo de caracteres), decisão com
+ * conjunto de aprovados. Sem sinal, a inclusão de chapa vai para a fila offline
+ * (FilaOfflineService). As ações chamam PatrimonioApiService.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Inservível é o bem sem condição de uso; extraviado é o bem não localizado.
+ * A lista reúne esses bens com justificativa e categoria, passa pela aprovação
+ * de quem tem controle total (nunca o próprio solicitante) e os aprovados
+ * seguem para a baixa, que formaliza a saída do acervo.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rotas /patrimonio/inserviveis/:id e /patrimonio/extraviados/:id
+ * (patrimonio.routes.ts). Usa leitor-codigo, busca-bem, relacionar-sala,
+ * editor rico das Contratações, seletor de usuários e a trilha de etapas.
+ * A baixa criada aqui abre em lista-baixa.component.ts.
+ *
+ * =============================================================================
+ */
 import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { trilhaClassificacao } from './trilhas-patrimonio';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
@@ -184,6 +213,11 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
     } @else { <app-esqueleto tipo="lista" [linhas]="4" /> }
   `,
 })
+/**
+ * Página da lista de classificação (inservíveis ou extraviados). O que cada
+ * pessoa vê depende do status da lista e de ela ser dona, colaboradora ou
+ * aprovadora (controle total em Patrimônio).
+ */
 export class ListaClassificacaoComponent implements OnInit {
   protected readonly trilha = trilhaClassificacao;
   private readonly api = inject(PatrimonioApiService);
@@ -193,14 +227,21 @@ export class ListaClassificacaoComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   protected readonly estado = inject(PatrimonioEstadoService);
 
+  /** Id da lista, vindo do parâmetro da rota. */
   readonly classificacaoId = input.required<string>();
+  /** Lista exibida; null enquanto carrega. */
   protected readonly lista = signal<Classificacao | null>(null);
   /** Tela de origem da lista: extraviados ou inservíveis (pelo tipo da lista; antes de carregar, pela rota). */
   protected readonly base = computed(() => ((this.lista()?.tipo ?? this.rota.snapshot.data['tipo']) === 'extraviado' ? '/patrimonio/extraviados' : '/patrimonio/inserviveis'));
+  /** Leitor de código pela câmera aberto. */
   protected readonly lendo = signal(false);
+  /** Aviso de inclusão recusada (bem inativo, já em outra lista...), sem interromper a leitura. */
   protected readonly aviso = signal('');
+  /** Itens marcados para ações em lote (justificar, excluir justificativa). */
   protected readonly marcados = signal<Set<string>>(new Set());
+  /** Na decisão: itens que o aprovador vai aprovar (começa com todos). */
   protected readonly aprovados = signal<Set<string>>(new Set());
+  /** Chapas guardadas na fila do aparelho por falta de sinal, ainda não enviadas. */
   protected readonly locais = signal<string[]>([]);
   // Edita a lista (rascunho) quem a montou e quem recebeu a lista compartilhada: os poderes são os mesmos
   protected readonly rascunho = computed(() => {
@@ -210,21 +251,26 @@ export class ListaClassificacaoComponent implements OnInit {
   });
   /** Só quem montou a lista escolhe com quem compartilhá-la. */
   protected readonly souDono = computed(() => this.lista()?.status === 'rascunho' && this.lista()?.solicitante_id === this.estado.acesso()?.usuario_id);
+  /** Modal de compartilhamento aberto e pessoas escolhidas nele. */
   protected readonly compartilhando = signal(false);
   protected readonly colaboradoresEscolhidos = signal<OpcaoUsuario[]>([]);
   protected readonly fonteUsuarios = (busca: string) => this.api.opcoesUsuarios(busca);
+  /** Mostra o painel de decisão: lista pendente, usuário com controle total e que não seja o solicitante. */
   protected readonly decidindo = computed(() => this.lista()?.status === 'pendente' && this.estado.podeAdministrar() && !this.souSolicitante(this.lista()!));
+  /** Chapa digitada no campo e texto da justificativa do modal (ngModel). */
   protected chapa = '';
   protected justificativa = '';
   /** Pesquisa só dentro dos bens já incluídos (ajuda a marcar bens iguais entre vários). */
   private readonly buscaListaSinal = signal('');
   protected get buscaLista(): string { return this.buscaListaSinal(); }
   protected set buscaLista(valor: string) { this.buscaListaSinal.set(valor ?? ''); }
+  /** Modal de justificativa aberto. */
   protected readonly justificando = signal(false);
   /** Categorias do inservível e a escolhida no modal. */
   protected readonly categorias = CATEGORIAS_INSERVIVEL;
   protected readonly rotuloCategoria = rotuloCategoria;
   protected categoria: CategoriaInservivel | '' = '';
+  /** Limites de caracteres da justificativa (texto puro, sem as tags do editor). */
   protected readonly minimoJustificativa = 10;
   protected readonly maximoJustificativa = 2000;
   /** Bens da lista que combinam com a pesquisa (sem acento nem maiúsculas); sem pesquisa, todos. */
@@ -245,6 +291,7 @@ export class ListaClassificacaoComponent implements OnInit {
     for (const i of this.lista()?.itens ?? []) contagem.set(i.sala_rotulo, (contagem.get(i.sala_rotulo) ?? 0) + 1);
     return [...contagem.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR', { numeric: true })).map(([rotulo, total]) => ({ rotulo, total }));
   });
+  /** Estado da caixa "marcar todos" no cabeçalho: todos os visíveis marcados, ou só alguns (indeterminado). */
   protected readonly todosVisiveisMarcados = computed(() => this.visiveis().length > 0 && this.visiveis().every((i) => this.marcados().has(i.id)));
   protected readonly algunsVisiveisMarcados = computed(() => !this.todosVisiveisMarcados() && this.visiveis().some((i) => this.marcados().has(i.id)));
   protected motivoRecusa = '';
@@ -252,11 +299,16 @@ export class ListaClassificacaoComponent implements OnInit {
   protected readonly cores = COR_STATUS;
   protected readonly rotulos = ROTULOS_STATUS;
 
+  /** Carrega o acesso do usuário e a lista. */
   ngOnInit(): void {
     void this.estado.carregar();
     this.carregar();
   }
 
+  /**
+   * Busca a lista no servidor. Na abertura, todos os itens começam como
+   * aprovados (o aprovador desmarca os que recusa). Se der erro, volta para a tela da lista.
+   */
   private carregar(): void {
     this.api.classificacao(this.classificacaoId()).subscribe({
       next: (c) => { this.definir(c); this.aprovados.set(new Set(c.itens.map((i) => i.id))); },
@@ -264,6 +316,7 @@ export class ListaClassificacaoComponent implements OnInit {
     });
   }
 
+  /** Troca a lista exibida pela versão devolvida pela API e limpa o aviso. */
   private definir(c: Classificacao): void {
     this.lista.set(c);
     // Link antigo (/inserviveis/id) de uma lista de extraviados (ou o contrário): vai para a tela certa sem empilhar histórico
@@ -271,10 +324,12 @@ export class ListaClassificacaoComponent implements OnInit {
     this.aviso.set('');
   }
 
+  /** Diz se o usuário logado é quem montou a lista. */
   protected souSolicitante(c: Classificacao): boolean {
     return c.solicitante_id === this.estado.acesso()?.usuario_id;
   }
 
+  /** Quantos bens ainda estão sem justificativa (o envio exige zero). */
   protected semJustificar(c: Classificacao): number {
     return c.itens.filter((i) => !i.justificativa).length;
   }
@@ -297,11 +352,13 @@ export class ListaClassificacaoComponent implements OnInit {
     this.api.criarBaixa(c.id, crypto.randomUUID()).subscribe({ next: (b) => void this.roteador.navigate(['/patrimonio/baixas', b.id]), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível começar a baixa') });
   }
 
+  /** Gera o relatório da lista em PDF ou Excel, com o aviso de andamento. */
   protected relatorio(c: Classificacao, formato: 'pdf' | 'xlsx'): void {
     this.dialogos.executar(this.api.relatorioClassificacao(c.id, formato, c.tipo === 'extraviado' ? 'extraviados' : 'inserviveis'), 'Gerando o relatório…')
       .subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível gerar o relatório') });
   }
 
+  /** Inclui o bem escolhido na busca pelo id (vale para bem sem chapa ou com série repetida). */
   protected incluirBem(b: Bem): void {
     this.api.incluirNaClassificacao(this.classificacaoId(), { bem_id: b.id }).subscribe({ next: (x) => this.definir(x), error: (e) => this.aviso.set(e?.error?.detalhe ?? `Não foi possível incluir ${b.chapa}.`) });
   }
@@ -315,18 +372,25 @@ export class ListaClassificacaoComponent implements OnInit {
     this.aviso.set(recusados ? `${bens.length - recusados} de ${bens.length} bem(ns) incluídos; ${recusados} não puderam entrar (já em outra lista ou situação inválida).` : '');
   }
 
+  /** Tira um bem do rascunho da lista. */
   protected tirar(id: string, itemId: string): void {
     this.api.tirarDaClassificacao(id, itemId).subscribe({ next: (x) => this.definir(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível tirar o bem') });
   }
 
+  /**
+   * Marca ou desmarca um item. Cria um Set novo para o signal perceber a
+   * mudança (alterar o Set atual não atualizaria a tela).
+   */
   protected alternar(id: string): void {
     this.marcados.update((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
+  /** Na decisão, alterna se o item será aprovado ou recusado. */
   protected alternarAprovado(id: string): void {
     this.aprovados.update((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
+  /** Marca todos os itens da lista. */
   protected marcarTodos(c: Classificacao): void {
     this.marcados.set(new Set(c.itens.map((i) => i.id)));
   }
@@ -344,6 +408,7 @@ export class ListaClassificacaoComponent implements OnInit {
 
   /** Caracteres da justificativa digitada (sem as tags), que valem para o mínimo e o máximo. */
   protected readonly tamanhoJustificativa = () => this.textoPuro(this.justificativa).length;
+  /** A justificativa só pode ser gravada entre o mínimo e o máximo de caracteres. */
   protected justificativaValida(): boolean {
     const n = this.tamanhoJustificativa();
     return n >= this.minimoJustificativa && n <= this.maximoJustificativa;
@@ -358,15 +423,18 @@ export class ListaClassificacaoComponent implements OnInit {
     });
   }
 
+  /** Nomes de quem recebeu a lista compartilhada, separados por vírgula. */
   protected nomesColaboradores(c: Classificacao): string {
     return (c.colaboradores ?? []).map((x) => x.nome).join(', ');
   }
 
+  /** Abre o modal de compartilhamento com as pessoas atuais pré-selecionadas. */
   protected abrirCompartilhar(c: Classificacao): void {
     this.colaboradoresEscolhidos.set((c.colaboradores ?? []).map((x) => ({ id: x.id, login: '', nome_completo: x.nome, cargo: '', ativo: true })));
     this.compartilhando.set(true);
   }
 
+  /** Grava a nova lista de colaboradores (substitui a anterior). */
   protected salvarCompartilhamento(c: Classificacao): void {
     this.api.compartilharClassificacao(c.id, this.colaboradoresEscolhidos().map((u) => u.id)).subscribe({
       next: (x) => { this.definir(x); this.compartilhando.set(false); },
@@ -418,6 +486,7 @@ export class ListaClassificacaoComponent implements OnInit {
     });
   }
 
+  /** Fecha o modal de justificativa sem gravar. */
   protected fecharJustificativa(): void {
     this.editandoItem.set(null);
     this.justificando.set(false);
@@ -429,26 +498,37 @@ export class ListaClassificacaoComponent implements OnInit {
     this.justificar(c);
   }
 
+  /**
+   * Envia a justificativa (e, no inservível, a categoria) para os bens-alvo.
+   * Ao criar para os selecionados, limpa a seleção; em qualquer caso fecha o modal.
+   */
   protected justificar(c: Classificacao): void {
     this.api.justificar(c.id, this.alvos(), this.justificativa.trim(), c.tipo === 'inservivel' ? (this.categoria || null) : null).subscribe({
       next: (x) => { this.definir(x); if (!this.editandoItem()) this.marcados.set(new Set()); this.justificativa = ''; this.editandoItem.set(null); this.justificando.set(false); }, error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível justificar'),
     });
   }
 
+  /**
+   * Anexa um arquivo ao item (ex.: foto, laudo). Limpa o campo para permitir
+   * escolher o mesmo arquivo de novo depois.
+   */
   protected anexar(c: Classificacao, itemId: string, evento: Event): void {
     const arquivo = (evento.target as HTMLInputElement).files?.[0];
     (evento.target as HTMLInputElement).value = '';
     if (arquivo) this.api.anexarNaClassificacao(c.id, itemId, arquivo).subscribe({ next: (x) => this.definir(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível anexar') });
   }
 
+  /** Baixa o anexo de um item. */
   protected baixarAnexo(id: string, itemId: string): void {
     this.api.baixarAnexoClassificacao(id, itemId).subscribe({ error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível baixar o anexo') });
   }
 
+  /** Envia a lista para aprovação (sai do rascunho e fica pendente). */
   protected enviar(c: Classificacao): void {
     this.api.enviarClassificacao(c.id).subscribe({ next: (x) => this.definir(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível enviar') });
   }
 
+  /** Apaga o rascunho depois de confirmar e volta para a tela das listas. */
   protected async descartar(): Promise<void> {
     if (!(await this.dialogos.confirmar({ titulo: 'Descartar o rascunho?', mensagem: 'A lista e as justificativas serão apagadas.', rotuloConfirmar: 'Descartar', segundos: 2 }))) return;
     this.api.descartarClassificacao(this.classificacaoId()).subscribe({ next: () => void this.roteador.navigate([this.base()]), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível descartar') });
@@ -459,6 +539,10 @@ export class ListaClassificacaoComponent implements OnInit {
     this.api.decidirClassificacao(c.id, [], this.motivoRecusa.trim()).subscribe({ next: (x) => this.definir(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível recusar') });
   }
 
+  /**
+   * Registra a decisão: os itens em "aprovados" são aprovados e os demais
+   * recusados; o motivo de recusa é opcional nesse caso.
+   */
   protected decidir(c: Classificacao): void {
     this.api.decidirClassificacao(c.id, [...this.aprovados()], this.motivoRecusa.trim() || undefined).subscribe({ next: (x) => this.definir(x), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível decidir') });
   }

@@ -1,5 +1,36 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para controlar a tela de prorrogação: meses, meses quebrados, itens sob demanda, memória de cálculo, checklist e registro do termo.
+/**
+ * =============================================================================
+ * ARQUIVO: prorrogacao.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Controla a tela de prorrogação do contrato (para frente): prazo em meses,
+ * meses quebrados, itens sob demanda, memória de cálculo, checklist, termo e
+ * registro, além do cadastro de vigência retroativa.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template em prorrogacao.component.html. Carrega
+ * contrato, rascunho e vigências retroativas com forkJoin; o rascunho é salvo
+ * na API (AlteracoesApiService) e a resposta reaplicada na tela pelo método
+ * aplicar. Os valores decimais circulam com vírgula na tela e ponto na API
+ * (paraDecimalTela/paraDecimalApi). A trilha de etapas é montada por trilha().
+ * Ações críticas usam confirmações com contagem regressiva.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Conduz o gestor pelo processo de prorrogação do contrato com segurança:
+ * calcula os valores da nova vigência, gera a memória de cálculo em PDF e XLSX,
+ * garante que os documentos obrigatórios estejam anexados e registra o termo
+ * aditivo, criando a nova vigência. A vigência retroativa cobre períodos já
+ * executados sem contrato formalizado.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota /contratos/:id/prorrogacao. Usa AlteracoesApiService, ContratosApiService,
+ * DialogosService, TrilhaEtapasComponent, EnvioPdfComponent e
+ * PosAssinaturaProrrogacaoComponent (etapa depois da assinatura). As máscaras
+ * dos documentos vêm de Contratos > Modelos.
+ *
+ * =============================================================================
+ */
 
 import { EtapaTrilha, TrilhaEtapasComponent } from '../../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { DatePipe } from '@angular/common';
@@ -31,7 +62,16 @@ import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esquel
   templateUrl: './prorrogacao.component.html',
 })
 export class ProrrogacaoComponent implements OnInit {
-  /** Etapas na trilha comum; meses quebrados e sob demanda só aparecem quando existem. */
+  /**
+   * Etapas na trilha comum; meses quebrados e sob demanda só aparecem quando existem.
+   * Estados de cada etapa (usados pelo app-trilha-etapas):
+   * - Meses: concluída quando o prazo foi informado.
+   * - Meses quebrados: concluída quando a escolha pro rata × integral já foi feita.
+   * - Memória: concluída quando a versão gerada corresponde ao rascunho atual.
+   * - Checklist: concluída quando não falta documento obrigatório.
+   * - Termo e registro: só fica "atual" quando tudo acima está pronto e a data de
+   *   assinatura e o PDF do termo foram informados; antes disso aparece bloqueada.
+   */
   protected trilha(p: ProcessoProrrogacao): EtapaTrilha[] {
     const prazo = !!p.meses;
     const quebrados = !!p.memoria?.meses_quebrados.length;
@@ -55,6 +95,7 @@ export class ProrrogacaoComponent implements OnInit {
     return ordem.indexOf(etapa) + 1;
   }
 
+  /** Id do contrato, vindo do parâmetro da rota (`input` = entrada do componente). */
   readonly id = input.required<string>();
 
   private readonly api = inject(AlteracoesApiService);
@@ -97,6 +138,11 @@ export class ProrrogacaoComponent implements OnInit {
     this.carregar();
   }
 
+  /**
+   * Busca as três informações ao mesmo tempo. `forkJoin` (RxJS) espera todas as
+   * requisições terminarem e entrega um objeto com as três respostas; se uma falhar,
+   * cai no `error`.
+   */
   private carregar(): void {
     forkJoin({ contrato: this.contratos.consultar(this.id()), processo: this.api.prorrogacao(this.id()), retroativas: this.api.vigenciasRetroativas(this.id()) }).subscribe({
       next: ({ contrato, processo, retroativas }) => {
@@ -186,7 +232,11 @@ export class ProrrogacaoComponent implements OnInit {
     return limite - Object.values(this.grade[itemId] ?? {}).reduce((t, q) => t + (Number(paraDecimalApi(q)) || 0), 0);
   }
 
-  /** Ao trocar a regra, recalcula os limites sugeridos (na regra manual, mantém o digitado). */
+  /**
+   * Ao trocar a regra, recalcula os limites sugeridos (na regra manual, mantém o digitado).
+   * Itens sob demanda são os pagos conforme o uso (não todo mês igual): o limite da nova
+   * vigência pode ser o saldo que sobrou ou repetir a quantidade inicial do contrato.
+   */
   protected aoMudarRegra(): void {
     const p = this.processo();
     if (!p) return;
@@ -210,7 +260,10 @@ export class ProrrogacaoComponent implements OnInit {
     };
   }
 
-  /** Salva o rascunho (com a escolha dos meses quebrados, se informada); devolve true se deu certo. */
+  /**
+   * Salva o rascunho (com a escolha dos meses quebrados, se informada); devolve true se deu certo.
+   * `firstValueFrom` transforma o Observable da API numa Promise, para usar com `await`.
+   */
   protected async salvar(calculo?: CalculoMesQuebrado): Promise<boolean> {
     try {
       this.aplicar(await firstValueFrom(this.api.salvarProrrogacao(this.id(), this.corpo(calculo))));
@@ -221,7 +274,11 @@ export class ProrrogacaoComponent implements OnInit {
     }
   }
 
-  /** Escolhe o cálculo dos meses quebrados (vale para todos), gera a memória e baixa o PDF e o XLSX. */
+  /**
+   * Escolhe o cálculo dos meses quebrados (vale para todos), gera a memória e baixa o PDF e o XLSX.
+   * Mês quebrado é o mês que a vigência pega só em parte: pro rata cobra pelos dias, integral cobra o mês cheio.
+   * O signal `escolhendo` impede dois cliques seguidos e mostra o carregando no botão certo.
+   */
   protected async escolherCalculo(calculo: CalculoMesQuebrado): Promise<void> {
     if (this.escolhendo()) return;
     this.escolhendo.set(calculo);
@@ -262,6 +319,7 @@ export class ProrrogacaoComponent implements OnInit {
     });
   }
 
+  /** Abre a janela de inclusão de documento com os campos limpos. */
   protected abrirInclusao(): void {
     this.novoDocumentoNome = '';
     this.novoDocumentoDescricao = '';
@@ -297,7 +355,11 @@ export class ProrrogacaoComponent implements OnInit {
     this.api.baixarProrrogacao(this.id(), anexoId).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }
 
-  /** Salva o rascunho, gera a memória se estiver desatualizada, confirma e registra a prorrogação com o Termo Aditivo. */
+  /**
+   * Salva o rascunho, gera a memória se estiver desatualizada, confirma e registra a prorrogação com o Termo Aditivo.
+   * Ordem das checagens (cada uma interrompe com um aviso): escolha dos meses quebrados, memória
+   * atualizada e checklist sem obrigatórios pendentes. Depois do registro, volta para o contrato.
+   */
   protected async registrar(): Promise<void> {
     if (!(await this.salvar())) return;
     let p = this.processo()!;

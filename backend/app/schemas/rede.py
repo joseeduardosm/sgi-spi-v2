@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 TipoEquipamento = Literal["switch", "patch_panel", "roteador", "access_point", "outro"]
 FuncaoEquipamento = Literal["core_primario", "core_secundario", "distribuicao", "acesso"]
 SituacaoPing = Literal["no_ar", "fora"]
+# Lado físico da porta do patch panel: cada porta tem um cabo no fundo e outro na frente
+LadoPatch = Literal["fundo", "frente"]
 
 
 class PapeisRede(BaseModel):
@@ -40,6 +42,15 @@ class ModeloLeitura(GravacaoModelo):
     equipamentos: int
 
 
+class LigacaoCadastro(BaseModel):
+    """O cabo informado no cadastro (cadastro em cadeia): "este equipamento, na porta X, está conectado no equipamento Y, na porta Y"."""
+    porta_numero: int = Field(ge=1, description="Número lógico da porta **deste** equipamento (do modelo de face).")
+    destino_porta_id: uuid.UUID = Field(description="Porta do equipamento de cima, ou de um patch panel no caminho.")
+    destino_lado: LadoPatch | None = Field(None, description="Lado da porta de destino quando ela é de patch panel; o outro lado precisa levar a quem fica acima.")
+    config: "GravacaoPorta | None" = Field(None, description="Configuração da porta deste equipamento (o status é sempre `up`).")
+    config_destino: "GravacaoPorta | None" = Field(None, description="Configuração da porta de destino (ignorada em patch panel).")
+
+
 class GravacaoEquipamento(BaseModel):
     nome: str = Field(min_length=2, max_length=150)
     tipo: TipoEquipamento = "switch"
@@ -52,7 +63,20 @@ class GravacaoEquipamento(BaseModel):
     numero_serie: str = Field("", max_length=120)
     observacao: str = Field("", max_length=4000)
     ativo: bool = True
-    funcao: FuncaoEquipamento | None = Field(None, description="Função na topologia; obrigatória em todo tipo menos `patch_panel` (no patch panel é ignorada).")
+    funcao: FuncaoEquipamento | None = Field(None, description="Função do **switch** na topologia (obrigatória nele). Nos demais tipos é ignorada. Não muda depois de criado (`409 funcao_travada`).")
+    acesso_usuario: str = Field("", max_length=120, description="Usuário SSH só leitura para a carga do equipamento (vazio = sem acesso). Patch panel não tem.")
+    acesso_porta: int = Field(22, ge=1, le=65535, description="Porta SSH do equipamento.")
+
+
+class EscritaEquipamento(GravacaoEquipamento):
+    """Gravação do equipamento com a senha do acesso SSH (só na escrita: a senha nunca volta na API)."""
+    acesso_senha: str | None = Field(None, max_length=200, description="Senha SSH em texto (cifrada ao gravar). Vazia ou ausente mantém a gravada.")
+
+
+class CriacaoEquipamento(EscritaEquipamento):
+    """Cadastro de equipamento novo: os dados e o cabo para quem fica acima dele."""
+    ligacao: LigacaoCadastro | None = Field(None, description="Obrigatória em todo equipamento menos core primário e patch panel (`400 sem_ligacao`). "
+                                             "Fora da cadeia: `409 cadeia_incompleta` (falta o core, a distribuição ou o acesso) ou `409 cadeia_invalida`.")
 
 
 class EquipamentoResumo(GravacaoEquipamento):
@@ -69,6 +93,8 @@ class EquipamentoResumo(GravacaoEquipamento):
     ping_verificado_em: datetime | None = None
     ping_mudou_em: datetime | None = Field(None, description="Quando passou a estar na situação atual.")
     cadastro_incompleto: bool = Field(False, description="Sem IP de gerência ou sem função (cadastro de antes da regra): a próxima edição exige os dois.")
+    tem_acesso: bool = Field(False, description="Tem usuário e senha SSH gravados (a senha nunca volta na API).")
+    leitura_em: datetime | None = Field(None, description="Quando o equipamento foi lido por SSH pela última vez.")
 
 
 class ParametrosRede(BaseModel):
@@ -84,13 +110,16 @@ class DispositivoAtrasLeitura(BaseModel):
 
 
 class GravacaoDispositivoAtras(BaseModel):
+    lado: LadoPatch | None = Field(None, description="Lado da porta, quando ela é de patch panel (`fundo` ou `frente`).")
     bem_id: uuid.UUID | None = Field(None, description="Bem do Patrimônio (ex.: o PC).")
     descricao: str = Field("", max_length=250, description="Ou só uma descrição (ex.: \"Notebook do visitante\").")
 
 
 class ConexaoLeitura(BaseModel):
-    """O outro lado da porta."""
+    """O outro lado da porta (no patch panel, de um dos lados dela)."""
     tipo: Literal["porta", "bem", "descricao"]
+    lado: LadoPatch | None = Field(None, description="Lado desta porta nesta ligação (só patch panel).")
+    outro_lado: LadoPatch | None = Field(None, description="Lado da outra porta, quando ela é de patch panel.")
     texto: str = Field(description="Ex.: \"Patch panel 3A · porta 12\", \"Impressora (chapa 012345)\".")
     porta_id: uuid.UUID | None = None
     equipamento_id: uuid.UUID | None = None
@@ -120,7 +149,10 @@ class PortaLeitura(BaseModel):
     ultima_mudanca: datetime | None
     erros_entrada: int
     erros_saida: int
-    conexao: ConexaoLeitura | None
+    conexao: ConexaoLeitura | None = Field(description="O que está ligado (fora do patch panel). No patch panel, a primeira ligação que houver (fundo, depois frente).")
+    fundo: ConexaoLeitura | None = Field(None, description="Patch panel: o que está ligado no fundo da porta.")
+    frente: ConexaoLeitura | None = Field(None, description="Patch panel: o que está ligado na frente da porta.")
+    observacao: str = Field("", description="Anotação livre da porta. A `descricao` é gerada pelo sistema a partir das ligações (\"Desligado\" sem nada).")
     ponto: str = Field(description="Código do ponto de rede que chega nesta porta (vazio se nenhum).")
     chamados_abertos: int
 
@@ -152,7 +184,7 @@ class PortaDetalhe(PortaLeitura):
 
 
 class GravacaoPorta(BaseModel):
-    descricao: str = Field("", max_length=250)
+    observacao: str = Field("", max_length=4000, description="Anotação livre (opcional). A descrição não é gravada: o sistema a gera pelas ligações.")
     modo: Literal["access", "trunk", "hybrid", "dot1q_tunnel", "dinamico_auto", "dinamico_desejavel", "roteada"] = Field(
         "access", description="access, trunk, hybrid (Huawei/3Com), dot1q_tunnel (QinQ), dinamico_auto/dinamico_desejavel (DTP Cisco) ou roteada (L3).")
     vlan_nativa_id: uuid.UUID | None = Field(None, description="VLAN access, nativa (trunk), PVID (hybrid) ou externa (QinQ); a roteada não tem.")
@@ -166,10 +198,17 @@ class GravacaoPorta(BaseModel):
 
 
 class GravacaoConexao(BaseModel):
+    lado: LadoPatch | None = Field(None, description="Lado desta porta, obrigatório quando ela é de patch panel (`fundo` ou `frente`).")
     porta_id: uuid.UUID | None = Field(None, description="Outra porta (de patch panel ou de outro equipamento).")
+    outro_lado: LadoPatch | None = Field(None, description="Lado da outra porta, obrigatório quando ela é de patch panel.")
     bem_id: uuid.UUID | None = Field(None, description="Bem do Patrimônio ligado na porta.")
-    descricao: str = Field("", max_length=250)
-    forcar: bool = Field(False, description="Liga mesmo com porta descrita no switch (dispositivo provável), depois da confirmação na tela.")
+    descricao: str = Field("", max_length=250, description="Ou só uma descrição do que está ligado (ex.: \"Telefone da recepção\").")
+
+
+class TrocaConexao(GravacaoConexao):
+    """Troca o que está ligado na porta (ou no lado dela) por outra coisa, numa operação só."""
+    religar_antigo: bool = Field(False, description="Quando o novo destino é um lado de patch panel e o antigo era outra porta: liga o outro lado "
+                                                    "daquela porta do patch panel no destino antigo (pôr um patch panel no meio do cabo).")
 
 
 class GravacaoVlan(BaseModel):
@@ -212,6 +251,7 @@ class PortaDoBem(BaseModel):
     porta_nome: str
     equipamento_id: uuid.UUID
     equipamento_nome: str
+    lado: LadoPatch | None = Field(None, description="Lado da porta, quando ela é de patch panel.")
     atras_de: str = Field("", description="Quando o bem está atrás de outro dispositivo na porta (ex.: \"Telefone IP (chapa 012345)\"); vazio = direto na porta.")
     dispositivo_id: uuid.UUID | None = Field(None, description="Atrás de outro: o registro dele (para tirar só este bem, sem desligar a porta).")
 
@@ -281,6 +321,8 @@ class EtapaCaminho(BaseModel):
     ping_situacao: SituacaoPing | None = None
     porta_entrada: "PortaLeitura | None" = Field(None, description="Porta deste equipamento no cabo que sobe (o quadradinho de cima, com a configuração completa).")
     porta_saida: "PortaLeitura | None" = Field(None, description="Porta deste equipamento no cabo que desce para o próximo degrau (o quadradinho de baixo).")
+    lado_entrada: LadoPatch | None = Field(None, description="Patch panel: lado da porta por onde o cabo chega de cima.")
+    lado_saida: LadoPatch | None = Field(None, description="Patch panel: lado da porta por onde o cabo segue para baixo.")
 
 
 class DispositivoCaminho(BaseModel):
@@ -298,7 +340,7 @@ class CaminhoRede(BaseModel):
 class IndicadoresRede(BaseModel):
     """Números dos cards do topo da tela da Rede."""
     portas_alteradas: int = Field(description="Portas com qualquer alteração (configuração, ligação, dispositivo atrás, ponto ou carga LLDP) nos últimos 7 dias.")
-    portas_ativas_sem_descricao: int = Field(description="Portas ligadas (status `up`) sem descrição.")
+    portas_patch_um_lado: int = Field(description="Portas de patch panel com um lado ligado e o outro vazio (o cabo para no meio do caminho).")
 
 
 class PortaListada(BaseModel):
@@ -311,3 +353,56 @@ class PortaListada(BaseModel):
     descricao: str
     alterado_por: str | None = Field(description="Nome de quem fez a última alteração (ou o autor técnico, ex.: `sistema:carga-lldp`); nulo se nunca foi alterada.")
     alterado_em: datetime | None
+
+
+class TesteLeitura(BaseModel):
+    """Testar e ler um equipamento ainda não cadastrado (passo Dados do cadastro)."""
+    ip: str = Field(min_length=3, max_length=45)
+    usuario: str = Field(min_length=1, max_length=120)
+    senha: str = Field(min_length=1, max_length=200)
+    porta: int = Field(22, ge=1, le=65535)
+    modelo_face_id: uuid.UUID | None = Field(None, description="Modelo escolhido: traduz o nome das interfaces para as portas da face.")
+    tipo: TipoEquipamento = "switch"
+    funcao: FuncaoEquipamento | None = None
+
+
+class ResultadoTesteLeitura(BaseModel):
+    tipo_acesso: str = Field("", description="Tipo de equipamento que funcionou (ex.: huawei_vrpv8).")
+    nome: str = ""
+    modelo: str = ""
+    serie: str = ""
+    versao: str = ""
+    portas: int = 0
+    vlans: int = 0
+    vizinhos: list[dict] = Field(default_factory=list, description="Vizinhos LLDP: `{interface_local, vizinho_nome, vizinho_interface}`.")
+    avisos: list[str] = Field(default_factory=list)
+    sugestao: dict | None = Field(None, description="Cabo de subida sugerido: `{porta_numero, destino_equipamento_id, destino_porta_id, texto}`.")
+
+
+class ResumoLeitura(BaseModel):
+    """O que a leitura do equipamento traz de diferente do cadastro, em grupos."""
+    id: uuid.UUID
+    lido_em: datetime
+    lido_por: str
+    aplicada_em: datetime | None = None
+    tipo_acesso: str = ""
+    equipamento: dict = Field(description="`{serie_lida, serie_cadastro, modelo, versao, nome_lido}`.")
+    vlans_novas: list[dict] = Field(description="VLANs do equipamento que o SGI não tem: `{numero, nome}`.")
+    lldp: list[dict] = Field(description="Vizinhos LLDP e o que aconteceu: `situacao` = `ligada` (ligada agora), `ja_estava` ou `nao_ligou` (com `motivo`).")
+    descricoes: list[dict] = Field(description="Portas com link e descrição no switch, sem nada em \"Ligado a\": `{interface, porta_id, porta, descricao}`.")
+    configuracao: list[dict] = Field(description="Portas com configuração lida diferente da cadastrada: `{interface, porta_id, porta, atual, lida, ligada}`.")
+    portas_sem_ligacao: int = Field(0, description="Portas com configuração lida, mas sem ligação no SGI nem descrição no switch: não entram na lista (configuração só em porta ligada).")
+    avisos: list[str] = Field(default_factory=list)
+
+
+class AplicacaoLeitura(BaseModel):
+    """Itens do resumo marcados para aplicar."""
+    equipamento: bool = Field(False, description="Gravar o número de série (e modelo/versão na observação).")
+    vlans: list[int] = Field(default_factory=list, description="VLANs novas para cadastrar.")
+    descricoes: list[str] = Field(default_factory=list, description="Interfaces para ligar como descrição (o texto configurado no switch).")
+    configuracao: list[str] = Field(default_factory=list, description="Interfaces para aplicar a configuração lida (só portas ligadas).")
+
+
+# Referências adiantadas (a ligação do cadastro usa a gravação de porta, definida mais abaixo)
+LigacaoCadastro.model_rebuild()
+CriacaoEquipamento.model_rebuild()

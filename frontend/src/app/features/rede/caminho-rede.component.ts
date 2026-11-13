@@ -35,6 +35,10 @@ import { CaminhoRede, EtapaCaminho, Porta, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_P
               @if (e.ping_situacao) {
                 <span class="selo-status" [attr.data-chamado]="e.ping_situacao === 'no_ar' ? 'sucesso' : 'perigo'">{{ ping(e) }}</span>
               }
+              <!-- Patch panel: o cabo atravessa a porta, entrando por um lado (fundo ou frente) e saindo pelo outro -->
+              @if (e.lado_entrada || e.lado_saida) {
+                <small>Porta {{ e.porta_entrada?.nome || e.porta_saida?.nome }}: {{ e.lado_entrada ? 'entra pelo ' + e.lado_entrada : '' }}{{ e.lado_entrada && e.lado_saida ? ', ' : '' }}{{ e.lado_saida ? 'sai pelo ' + e.lado_saida : '' }}</small>
+              }
               @if (e.porta_saida; as p) { <ng-container [ngTemplateOutlet]="quadradinho" [ngTemplateOutletContext]="{ $implicit: p, lado: 'porta-baixo' }" /> }
             </div>
           </li>

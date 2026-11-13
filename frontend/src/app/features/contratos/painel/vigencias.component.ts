@@ -1,5 +1,33 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para exibir a aba "Vigências": uma linha do tempo de vigência por contrato vigente.
+/**
+ * =============================================================================
+ * ARQUIVO: vigencias.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Tela "Vigências" do módulo Contratos: uma linha do tempo por contrato
+ * vigente, do que vence primeiro ao último, com prorrogações, marcas de
+ * reajuste e a cor de urgência do vencimento.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido e detecção de mudanças OnPush
+ * (só redesenha quando signals ou entradas mudam). Busca o painel de vigências
+ * na API e, num computed, transforma cada contrato em LinhaPrazo pela função
+ * exportada montarLinha (posições em % do trilho). Os limites de dias crítico
+ * e de atenção vêm do ParametrosContratosService (90 e 180 por padrão).
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Mostra de relance quais contratos estão perto de expirar e quanto ainda
+ * podem ser prorrogados, para que a SPI inicie a prorrogação ou uma nova
+ * contratação a tempo, sem deixar serviço essencial descoberto.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota do módulo Contratos. Usa ContratosApiService.painelVigencias,
+ * ParametrosContratosService, formatarData e os tipos PainelVigencias e
+ * VigenciaContratoPainel. Os limites são os mesmos editados em
+ * parametros.component.ts.
+ *
+ * =============================================================================
+ */
 
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -102,6 +130,7 @@ export class VigenciasComponent implements OnInit {
   protected empresaId = '';
   protected readonly data = formatarData;
   private readonly parametros = inject(ParametrosContratosService);
+  // Limites vêm dos parâmetros de Contratos (tela Parâmetros), não fixos no código
   protected readonly limites = computed<Limites>(() => ({ critico: this.parametros.valores().dias_vigencia_a_vencer, atencao: this.parametros.valores().dias_vigencia_atencao }));
 
   /** Linhas calculadas a partir do painel e dos limites (refaz sozinha quando os parâmetros chegam). */
@@ -110,6 +139,7 @@ export class VigenciasComponent implements OnInit {
     return p ? p.contratos.map((c) => montarLinha(c, p.hoje, this.limites())) : [];
   });
 
+  /** Pede os parâmetros do módulo (limites de dias) e carrega as vigências. */
   ngOnInit(): void {
     this.parametros.carregar();
     this.carregar();
@@ -131,7 +161,17 @@ function dia(texto: string): number {
   return Date.parse(`${texto}T00:00:00Z`);
 }
 
-/** Posições da linha na escala do próprio contrato: do início ao fim da vigência atual (inclusive). */
+/**
+ * Posições da linha na escala do próprio contrato: do início ao fim da vigência atual (inclusive).
+ * - `total` soma um dia ao fim para que o último dia conte inteiro no trilho.
+ * - `posicao` converte uma data em % do trilho, com uma casa decimal, presa entre 0 e 100.
+ * - Cada vigência (inicial e prorrogações) vira um segmento; a sequência 1 é a vigência inicial.
+ * - A urgência compara os dias restantes com os limites (vermelho, âmbar ou normal).
+ * Exportada para poder ser testada sem montar o componente.
+ * @param c contrato vigente como veio da API.
+ * @param hoje data de hoje (AAAA-MM-DD) informada pelo servidor, para não depender do relógio do navegador.
+ * @param limites cortes de dias; sem parâmetros carregados usa 90 e 180.
+ */
 export function montarLinha(c: VigenciaContratoPainel, hoje: string, limites: Limites = LIMITES_DE_FABRICA): LinhaPrazo {
   const inicio = dia(c.data_inicio);
   const total = dia(c.data_fim) + DIA_MS - inicio;

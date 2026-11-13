@@ -1,20 +1,46 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para aplicar as regras da portaria de designação dos contratos: nomeações, ciência, autoridade, aceite e publicação.
-"""Portaria de designação de gestão e fiscalização do contrato (único caminho para mudar a equipe, além do SuperRoot).
+"""
+===============================================================================
+ARQUIVO: servico_portaria.py
+AUTOR: José Eduardo Santana Martins
 
-Ciclo:
-1. **Nomeações** (1 a 6 funções, gestor obrigatório; quem cria é a equipe do contrato, o cadastrante (quem criou o contrato) ou quem tem controle total em Contratos). Cada nomeado precisa ter
-   RS/PV, RG/CIN e cargo preenchidos (o RH atualiza); enquanto faltar, a nomeação fica com o marcador de pendência e o RH é avisado.
-2. **Ciência**: com os dados completos, cada nomeado vê um modal e confirma que está ciente.
-3. **Autoridade**: com todos cientes, escolhe-se a autoridade competente. Só aqui o texto é gerado (HTML da máscara, para copiar) e o número é
-   **reservado** no Protocolo ("Portaria SPI SSGC"), ainda pendente.
-4. **Aceite** da autoridade (que pode **devolver**, liberando o número). Ao aceitar sai o **PDF de evidência** (ciências e aceite) para o SEI.
-5. **Publicação**: quando o PDF do D.O.E. é anexado ao número reservado (pelo Protocolo ou, para quem só tem o Contratos, pela própria aba Equipe), a portaria vira publicada, a nova equipe passa a valer (as funções que
-   a portaria não cita ficam sem designado, pois ela revoga a anterior) e o documento entra em "Documentos Importantes" (tipo 16).
-**Cancelar** libera o número reservado. Há uma portaria em andamento por contrato.
+FINALIDADE:
+Aplicar as regras da portaria de designação de gestão e fiscalização do
+contrato: nomeações, ciência, autoridade, aceite, publicação e cancelamento.
+É o único caminho para mudar a equipe do contrato (além do SuperRoot, o
+papel administrativo máximo do sistema).
 
-O Art. 5º cita a portaria anterior do contrato (as publicadas pelo sistema ou, na falta, um número de "Portaria" do Protocolo já vinculado ao contrato);
-sem anterior, revoga genericamente. O RS vem do RH (restrito à CGP) e nunca é exposto.
+RESUMO TÉCNICO:
+Ciclo (campo status da PortariaContrato):
+1. Nomeações (1 a 6 funções, gestor obrigatório). Cada nomeado precisa de
+   RS/PV (matrícula), RG/CIN e cargo; enquanto faltar, fica "nomeacao" e o RH
+   (CGP, Coordenadoria de Gestão de Pessoas) é avisado.
+2. Ciência: com os dados completos, cada nomeado confirma que está ciente.
+3. Autoridade: com todos cientes, escolhe-se a autoridade; só aqui o texto é
+   gerado (HTML da máscara) e o número é reservado no Protocolo.
+4. Aceite da autoridade (ou devolução, que libera o número); ao aceitar sai o
+   PDF de evidência (ciências e aceite) para o SEI.
+5. Publicação: o PDF do D.O.E. anexado ao número reservado (pelo Protocolo ou
+   pela aba Equipe) torna a portaria publicada, aplica a nova equipe (funções
+   não citadas ficam sem designado) e guarda o documento (tipo 16).
+Cancelar libera o número. Só há uma portaria em andamento por contrato.
+O Art. 5º cita a portaria anterior (publicada no sistema ou número de
+"Portaria" do Protocolo já vinculado); sem anterior, revoga genericamente.
+
+FINALIDADE DE NEGÓCIO:
+Formaliza quem é gestor e fiscal de cada contrato com a trilha exigida
+(ciência dos nomeados, aceite da autoridade e publicação no Diário Oficial),
+evitando equipe informal e garantindo que o acesso ao contrato no sistema
+só mude depois do ato publicado. O RS vem do RH e nunca é exposto na API.
+
+CONTEXTO NO SISTEMA:
+Usado pelas rotas da aba Equipe do contrato e pelo Protocolo
+(servico_protocolo chama validar_anexo_no_numero e publicar_pelo_protocolo).
+Usa portaria_mascara/portaria_documento (texto e PDFs), servico_contratos
+(equipe e permissões), setor_equipes, notificacoes, servico_smtp,
+modelo_email, servico_anexos e servico_auditoria. Tabelas: portarias,
+nomeações e autoridades da portaria; DadosFuncionais (RH).
+
+===============================================================================
 """
 
 import uuid
@@ -42,9 +68,13 @@ from app.services.contratos.servico_contratos import (aplicar_equipe_por_ids, de
 from app.services.documentos.pdf import FUSO_SAO_PAULO
 from app.services.servico_auditoria import auditar
 
+# Tipo 16 de "Documentos Importantes" do contrato: onde a portaria publicada é guardada
 CODIGO_DOCUMENTO = 16
+# Nome (minúsculo) do tipo de numeração do Protocolo usado para reservar o número da portaria
 NOME_TIPO_PROTOCOLO = "portaria spi ssgc"
+# Situações em que a portaria ainda não tem autoridade escolhida (as nomeações ainda podem mudar)
 ANTES_DA_AUTORIDADE = ("nomeacao", "aguardando_ciencia", "aguardando_autoridade")
+# Situações que contam como "em andamento" (só pode haver uma por contrato)
 EM_ANDAMENTO = (*ANTES_DA_AUTORIDADE, "aguardando_aceite", "aceita")
 ROTULOS_STATUS = {
     "nomeacao": "Nomeações: dados do RH pendentes", "aguardando_ciencia": "Aguardando ciência dos nomeados", "aguardando_autoridade": "Aguardando a escolha da autoridade",
@@ -54,14 +84,17 @@ MAXIMO_NOMEACOES = 6
 
 
 def _nome(usuario: Usuario) -> str:
+    """Nome para exibir: o nome completo ou, na falta, o login."""
     return usuario.nome_completo or usuario.login
 
 
 def _local(instante: datetime) -> datetime:
+    """Converte um instante (UTC, com ou sem fuso) para o horário de São Paulo."""
     return (instante if instante.tzinfo else instante.replace(tzinfo=UTC)).astimezone(FUSO_SAO_PAULO)
 
 
 def _cnpj(valor: str) -> str:
+    """Formata o CNPJ como 00.000.000/0000-00; se não tiver 14 dígitos, devolve como veio."""
     d = "".join(c for c in valor or "" if c.isdigit())
     return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}" if len(d) == 14 else valor or ""
 
@@ -72,6 +105,7 @@ def pode_gerir_autoridades(sessao: Session, usuario: Usuario) -> bool:
     """SuperRoot, controle total em Contratos, ou gestor/gestor suplente vigente de algum contrato."""
     if eh_administrador(sessao, usuario):
         return True
+    # Conta designações de gestor/suplente ainda vigentes (sem fim ou com fim no futuro)
     agora = agora_utc()
     return sessao.scalar(select(func.count(DesignacaoEquipe.id)).where(
         DesignacaoEquipe.usuario_id == usuario.id, DesignacaoEquipe.papel.in_(("gestor", "gestor_suplente")),
@@ -79,11 +113,13 @@ def pode_gerir_autoridades(sessao: Session, usuario: Usuario) -> bool:
 
 
 def exigir_gestao_autoridades(sessao: Session, usuario: Usuario) -> None:
+    """Levanta SemPermissaoContrato (403) se o usuário não pode cadastrar autoridades."""
     if not pode_gerir_autoridades(sessao, usuario):
         raise SemPermissaoContrato("Somente o SuperRoot, quem tem controle total em Contratos ou o gestor (ou suplente) de um contrato cadastra as autoridades.")
 
 
 def listar_autoridades(sessao: Session, somente_ativas: bool = False) -> list[AutoridadePortaria]:
+    """Autoridades em ordem de sigla e nome; com `somente_ativas`, só as que podem ser escolhidas."""
     consulta = select(AutoridadePortaria).order_by(func.lower(AutoridadePortaria.sigla), func.lower(AutoridadePortaria.nome))
     if somente_ativas:
         consulta = consulta.where(AutoridadePortaria.ativa.is_(True))
@@ -91,6 +127,7 @@ def listar_autoridades(sessao: Session, somente_ativas: bool = False) -> list[Au
 
 
 def _autoridade(sessao: Session, autoridade_id: uuid.UUID) -> AutoridadePortaria:
+    """Autoridade pelo id, ou RegistroNaoEncontrado (404)."""
     autoridade = sessao.get(AutoridadePortaria, autoridade_id)
     if autoridade is None:
         raise RegistroNaoEncontrado("Autoridade")
@@ -123,6 +160,7 @@ def buscar_usuarios(sessao: Session, busca: str, limite: int = 20) -> list[Usuar
 
 
 def criar_autoridade(sessao: Session, dados, autor: Usuario) -> AutoridadePortaria:
+    """Cadastra a autoridade (dados validados por _validar_autoridade), audita e grava."""
     autoridade = AutoridadePortaria(**_validar_autoridade(sessao, dados))
     sessao.add(autoridade)
     sessao.flush()
@@ -132,6 +170,7 @@ def criar_autoridade(sessao: Session, dados, autor: Usuario) -> AutoridadePortar
 
 
 def alterar_autoridade(sessao: Session, autoridade_id: uuid.UUID, dados, autor: Usuario) -> AutoridadePortaria:
+    """Atualiza todos os campos da autoridade com os dados validados, audita e grava."""
     autoridade = _autoridade(sessao, autoridade_id)
     for campo, valor in _validar_autoridade(sessao, dados).items():
         setattr(autoridade, campo, valor)
@@ -213,6 +252,7 @@ def _mascara(sessao: Session, variante: str) -> str:
 def _valores(dados: dict) -> dict[str, str]:
     """Valor de cada placeholder da máscara."""
     por_papel = {p["papel"]: p for p in dados["equipe"]}
+    # "nomefiscal"/"rsfiscal": o fiscal técnico ou, na falta, o administrativo
     fiscal = por_papel.get("fiscal_tecnico") or por_papel.get("fiscal_administrativo") or {}
     valores = {
         "numeroportaria": f"{dados['numero']:03d}", "anoportaria": str(dados["exercicio"]), "numerodocontrato": dados["contrato_numero"],
@@ -224,6 +264,7 @@ def _valores(dados: dict) -> dict[str, str]:
                          ("fiscaladministrativosuplente", "fiscal_administrativo_suplente"), ("fiscaltecnico", "fiscal_tecnico"),
                          ("fiscaltecnicosuplente", "fiscal_tecnico_suplente")):
         valores[f"nome{chave}"], valores[f"rs{chave}"] = por_papel.get(papel, {}).get("nome", ""), por_papel.get(papel, {}).get("rs", "")
+    # Os campos da portaria anterior só existem na máscara "com_anterior"
     anterior = dados.get("anterior")
     if anterior:
         valores |= {"nomedocumento": anterior["sigla"], "numeroportariaanterior": f"{anterior['numero']:03d}", "diaportariaanterior": str(anterior["dia"]),
@@ -256,6 +297,7 @@ def pendencias(dados: dict) -> list[str]:
     """O que impede o aceite: RS ausente de quem aparece na máscara, processo SEI ou objeto em branco."""
     usados = set(dados.get("placeholders") or [])
     faltas = []
+    # O RS só é exigido de quem aparece na máscara (placeholder usado), para não travar por campo que nem é impresso
     for p in dados["equipe"]:
         chaves = {f"rs{p['papel'].replace('_', '')}"}
         if p["papel"] in ("fiscal_tecnico", "fiscal_administrativo"):
@@ -272,6 +314,7 @@ def pendencias(dados: dict) -> list[str]:
 # --- Consulta e permissões ----------------------------------------------------------------------
 
 def _portaria(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID) -> PortariaContrato:
+    """Portaria pelo id, desde que seja do contrato informado (senão 404)."""
     portaria = sessao.get(PortariaContrato, portaria_id)
     if portaria is None or portaria.contrato_id != contrato_id:
         raise RegistroNaoEncontrado("Portaria")
@@ -279,6 +322,7 @@ def _portaria(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID) -
 
 
 def listar(sessao: Session, contrato_id: uuid.UUID) -> list[PortariaContrato]:
+    """Portarias do contrato, da mais recente para a mais antiga (valida antes que o contrato existe)."""
     obter_contrato(sessao, contrato_id)
     return list(sessao.scalars(select(PortariaContrato).where(PortariaContrato.contrato_id == contrato_id).order_by(PortariaContrato.solicitada_em.desc())))
 
@@ -289,6 +333,7 @@ def pode_criar_portaria(sessao: Session, contrato: Contrato, usuario: Usuario) -
 
 
 def exigir_criacao(sessao: Session, contrato: Contrato, usuario: Usuario) -> None:
+    """Levanta SemPermissaoContrato (403) se o usuário não pode criar nem conduzir a portaria."""
     if not pode_criar_portaria(sessao, contrato, usuario):
         raise SemPermissaoContrato("Somente a equipe do contrato, quem cadastrou o contrato ou quem tem controle total em Contratos (Administrador de Contratos) cria e conduz a portaria de designação.")
 
@@ -300,6 +345,7 @@ def pode_decidir(sessao: Session, portaria: PortariaContrato, usuario: Usuario) 
 
 
 def _sequencia_do_ano(sessao: Session) -> SequenciaProtocolo:
+    """Faixa de numeração "Portaria SPI SSGC" do ano corrente no Protocolo; sem ela, não há como reservar número."""
     exercicio = hoje_sao_paulo().year
     sequencia = sessao.scalar(select(SequenciaProtocolo).join(TipoProtocolo).where(TipoProtocolo.nome_chave == NOME_TIPO_PROTOCOLO, SequenciaProtocolo.exercicio == exercicio))
     if sequencia is None:
@@ -308,17 +354,24 @@ def _sequencia_do_ano(sessao: Session) -> SequenciaProtocolo:
 
 
 def _rotulo(portaria: PortariaContrato) -> str:
+    """Nome da portaria para avisos e auditoria ("Portaria SPI SSGC nº 007/2026" ou "em elaboração")."""
     if portaria.numero is None:
         return "Portaria de designação (em elaboração)"
     return f"Portaria {portaria.sigla} nº {portaria.numero:03d}/{portaria.exercicio}"
 
 
 def _identificacao(contrato: Contrato) -> str:
+    """Número do contrato, com o apelido quando houver."""
     return f"{contrato.numero} – {contrato.apelido}" if contrato.apelido else contrato.numero
 
 
 def _avisar(sessao: Session, portaria: PortariaContrato, destinatarios: list[int | None], assunto: str, corpo: str, autor: Usuario | None, categoria: str = "comunicado",
             evento: str = "contratos.portaria", chave: str | None = None, link: str | None = None, forcar_email: bool = False) -> None:
+    """Cria a notificação da portaria para os destinatários (ignora ids vazios).
+
+    A `chave` evita aviso repetido; sem ela, usa portaria + status + instante. O link padrão abre a aba Equipe do contrato.
+    `forcar_email` manda e-mail mesmo que o usuário não tenha escolhido esse canal para o evento.
+    """
     notificacoes.notificar(sessao, [d for d in destinatarios if d], assunto, corpo, chave=chave or f"portaria:{portaria.id}:{portaria.status}:{agora_utc().timestamp()}",
                            categoria=categoria, link=link or f"/contratos/{portaria.contrato_id}?aba=equipe", contrato_id=portaria.contrato_id, autor=autor, evento=evento, forcar_email=forcar_email)
 
@@ -326,6 +379,7 @@ def _avisar(sessao: Session, portaria: PortariaContrato, destinatarios: list[int
 # --- Nomeações, dados do RH e ciência -----------------------------------------------------------
 
 def _validar_nomeacoes(sessao: Session, entradas: list[NomeacaoEntrada]) -> list[tuple[str, Usuario]]:
+    """Confere as nomeações (1 a 6, sem função repetida, gestor obrigatório, usuários ativos) e devolve [(papel, usuário)]."""
     if not 1 <= len(entradas) <= MAXIMO_NOMEACOES:
         raise ErroRegraContrato(f"A portaria nomeia de 1 a {MAXIMO_NOMEACOES} funções.")
     papeis = [e.papel for e in entradas]
@@ -347,6 +401,7 @@ def _validar_nomeacoes(sessao: Session, entradas: list[NomeacaoEntrada]) -> list
 def _sincronizar_nomeacoes(portaria: PortariaContrato, escolhidos: list[tuple[str, Usuario]]) -> None:
     """Grava as nomeações. Quem continua na mesma função mantém a ciência; trocar o nomeado de uma função (a linha é reaproveitada, pois
     há uma só por função) ou incluir função nova zera a ciência."""
+    # Remove as funções que saíram; depois inclui as novas ou atualiza as que continuam
     atuais = {n.papel: n for n in portaria.nomeacoes}
     papeis_novos = {p for p, _ in escolhidos}
     for papel, n in atuais.items():
@@ -372,6 +427,7 @@ def _avancar(sessao: Session, portaria: PortariaContrato, autor: Usuario | None 
     identificacao = _identificacao(contrato)
     pendentes = {n.id: dados_pendentes(sessao, n.usuario_id) for n in portaria.nomeacoes}
     antes = portaria.status
+    # Ordem das etapas: primeiro dados do RH completos, depois a ciência de todos, por fim a escolha da autoridade
     if any(pendentes.values()):
         portaria.status = "nomeacao"
         # Avisa o RH (CGP) de cada pendência; a chave inclui o que falta, então só repete se o problema mudar
@@ -413,6 +469,7 @@ def criar(sessao: Session, contrato_id: uuid.UUID, entradas: list[NomeacaoEntrad
     if sessao.scalar(select(func.count(PortariaContrato.id)).where(PortariaContrato.contrato_id == contrato.id, PortariaContrato.status.in_(EM_ANDAMENTO))):
         raise ErroRegraContrato("Este contrato já tem uma portaria em andamento: conclua ou cancele-a antes de criar outra.", conflito=True)
     escolhidos = _validar_nomeacoes(sessao, entradas)
+    # Nasce em "nomeacao"; _avancar logo abaixo a leva para a etapa certa conforme os dados dos nomeados
     portaria = PortariaContrato(contrato_id=contrato.id, status="nomeacao", solicitada_por_id=autor.id, solicitada_por_nome=_nome(autor), dados={})
     sessao.add(portaria)
     _sincronizar_nomeacoes(portaria, escolhidos)
@@ -431,6 +488,7 @@ def definir_nomeacoes(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid
     if portaria.status not in ANTES_DA_AUTORIDADE:
         raise ErroRegraContrato("As nomeações só mudam antes de escolher a autoridade; devolva ou cancele a portaria.", conflito=True)
     _sincronizar_nomeacoes(portaria, _validar_nomeacoes(sessao, entradas))
+    # flush envia as mudanças ao banco e refresh relê a portaria (com a lista de nomeações atualizada) antes de recalcular a etapa
     sessao.flush()
     sessao.refresh(portaria)
     _avancar(sessao, portaria, autor)
@@ -462,6 +520,7 @@ def registrar_ciencia(sessao: Session, portaria_id: uuid.UUID, autor: Usuario) -
     if portaria.status != "aguardando_ciencia":
         raise ErroRegraContrato("Esta portaria não está aguardando ciência.", conflito=True)
     agora = agora_utc()
+    # Marca a ciência em todas as funções do usuário (mantém a data se já tinha) e encerra o aviso no sino
     for n in minhas:
         n.ciente_em = n.ciente_em or agora
         notificacoes.encerrar(sessao, prefixo=f"portaria-nomeacao:{n.id}")
@@ -489,6 +548,7 @@ def escolher_autoridade(sessao: Session, contrato_id: uuid.UUID, portaria_id: uu
     faltas = pendencias(teste)
     if faltas:
         raise ErroRegraContrato("Não é possível gerar a portaria: falta " + "; ".join(faltas) + ".")
+    # Reserva o próximo número da faixa no Protocolo (fica pendente até o D.O.E. ser anexado)
     try:
         numero = servico_protocolo.proximo(sessao, sequencia.id, f"Portaria de designação de gestão e fiscalização do Contrato {contrato.numero}", contrato.id, autor,
                                            fora_da_reserva=True)
@@ -509,6 +569,7 @@ def escolher_autoridade(sessao: Session, contrato_id: uuid.UUID, portaria_id: uu
 def montar_email_autoridade(sessao: Session, portaria: PortariaContrato, contrato: Contrato) -> tuple[str, str, str, list[AnexoEmail]]:
     """E-mail que avisa a autoridade da portaria aguardando o aceite: contrato, equipe (nome, cargo e ciência), minuta em PDF e o pedido para entrar no sistema."""
     identificacao = _identificacao(contrato)
+    # Uma linha por nomeado: função, nome, cargo e quando deu ciência
     linhas = []
     for n in portaria.nomeacoes:
         usuario = sessao.get(Usuario, n.usuario_id) if n.usuario_id else None
@@ -524,6 +585,7 @@ def montar_email_autoridade(sessao: Session, portaria: PortariaContrato, contrat
               "A minuta segue em anexo, em PDF com a marca d'água MINUTA: ela não substitui o aceite no sistema.")
     texto = "\n".join([abertura, "", "Equipe designada (função — nome — cargo — ciente em):",
                        *[f"  - {f} — {nome} — {cargo} — {ciente}" for f, nome, cargo, ciente in linhas], "", pedido, "", f"Acessar: {link}"])
+    # Tabela em HTML com estilo inline (clientes de e-mail ignoram CSS externo); os textos passam por escape
     tabela = ('<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13px">'
               '<tr style="background:#f1f2f4;text-align:left"><th style="padding:8px">Função</th><th style="padding:8px">Nome</th><th style="padding:8px">Cargo</th>'
               '<th style="padding:8px">Ciente em</th></tr>'
@@ -541,6 +603,7 @@ def notificar_autoridade_por_email(portaria_id: uuid.UUID) -> None:
     """Segundo plano: manda à autoridade escolhida o e-mail com a equipe, a minuta (PDF com marca d'água) e o pedido para dar a ciência e o aceite no sistema.
 
     Não falha a operação: o resultado (enviado ou erro) vai para a auditoria."""
+    # Roda fora da requisição (tarefa em segundo plano): abre a própria sessão de banco
     with FabricaSessao() as sessao:
         portaria = sessao.get(PortariaContrato, portaria_id)
         if portaria is None or portaria.status != "aguardando_aceite" or portaria.autoridade_id is None:
@@ -571,6 +634,7 @@ def aceitar(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, aut
         raise ErroRegraContrato("Esta portaria não está aguardando aceite.", conflito=True)
     contrato = obter_contrato(sessao, contrato_id)
     autoridade = _autoridade(sessao, portaria.autoridade_id)
+    # Remonta o texto no aceite: algum dado (ex.: RS vindo do RH) pode ter mudado desde a escolha da autoridade
     portaria.dados = montar_dados(sessao, portaria, contrato, autoridade, portaria.numero, portaria.exercicio, excluir_numero_id=portaria.numero_protocolo_id)
     faltas = pendencias(portaria.dados)
     if faltas:
@@ -660,6 +724,7 @@ def publicar(sessao: Session, contrato_id: uuid.UUID, portaria_id: uuid.UUID, or
         raise ErroRegraContrato("Só é possível anexar o D.O.E. depois do aceite da autoridade e enquanto a portaria não foi publicada.", conflito=True)
     if portaria.numero_protocolo_id is None:
         raise ErroRegraContrato("Esta portaria não tem número reservado no Protocolo.", conflito=True)
+    # Reaproveita o mesmo ato do Protocolo: ao anexar, o Protocolo chama publicar_pelo_protocolo
     try:
         servico_protocolo.anexar(sessao, portaria.numero_protocolo_id, origem, nome_arquivo, autor, ignorar_dono=True)
     except servico_protocolo.ErroProtocolo as erro:
@@ -701,6 +766,7 @@ def publicar_pelo_protocolo(sessao: Session, numero: NumeroProtocolo, autor: Usu
     if portaria is None or portaria.status != "aceita" or numero.anexo is None:
         return None
     contrato = obter_contrato(sessao, portaria.contrato_id)
+    # Copia o PDF do D.O.E. do Protocolo para um anexo próprio do contrato (Documentos Importantes)
     conteudo = servico_anexos.caminho(numero.anexo).read_bytes()
     anexo = servico_anexos.guardar_pdf_gerado(sessao, conteudo, numero.anexo.nome_original or "portaria.pdf", "contrato-documento", autor.id, contrato_id=contrato.id)
     agora = agora_utc()
@@ -709,8 +775,10 @@ def publicar_pelo_protocolo(sessao: Session, numero: NumeroProtocolo, autor: Usu
     mudancas = aplicar_equipe_por_ids(sessao, contrato, {papel: nomeados.get(papel) for papel in PAPEIS_EQUIPE}, agora)
     contrato.versao += 1
     sessao.flush()
+    # Atualiza o setor sistêmico "Equipes de contratos" com a nova equipe
     setor_equipes.sincronizar(sessao)
     titulo = f"Portaria {portaria.sigla} nº {portaria.numero:03d}/{portaria.exercicio}"
+    # Há um documento tipo 16 por contrato: substitui o arquivo anterior (descartado) pelo novo
     documento = next((d for d in contrato.documentos if d.codigo_tipo == CODIGO_DOCUMENTO), None)
     if documento is None:
         documento = DocumentoContrato(codigo_tipo=CODIGO_DOCUMENTO, titulo=titulo)
@@ -737,6 +805,7 @@ def publicar_pelo_protocolo(sessao: Session, numero: NumeroProtocolo, autor: Usu
 # --- Painel -------------------------------------------------------------------------------------
 
 def _rotulo_anterior(dados: dict) -> str | None:
+    """Texto da portaria anterior citada no Art. 5º (ex.: "Portaria SPI SSGC nº 003, de 5 de março de 2026"), ou None."""
     anterior = dados.get("anterior")
     if not anterior:
         return None
@@ -744,6 +813,7 @@ def _rotulo_anterior(dados: dict) -> str | None:
 
 
 def _leitura(sessao: Session, portaria: PortariaContrato, usuario: Usuario, pode_criar: bool) -> LeituraPortaria:
+    """Monta a resposta da API para uma portaria: dados, nomeações, texto (só depois de gerado) e o que o usuário pode fazer."""
     autoridade = sessao.get(AutoridadePortaria, portaria.autoridade_id) if portaria.autoridade_id else None
     dados = portaria.dados or {}
     em_aberto = portaria.status in EM_ANDAMENTO
@@ -776,6 +846,7 @@ def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelP
     contrato = obter_contrato(sessao, contrato_id)
     pode_criar = pode_criar_portaria(sessao, contrato, usuario)
     portarias = listar(sessao, contrato_id)
+    # Abrir a aba também recalcula a etapa (ex.: o RH completou os dados) e só grava se algo mudou
     if any(_avancar(sessao, p) for p in portarias):
         sessao.commit()
     nomes = {u.id: _nome(u) for u in sessao.scalars(select(Usuario).where(Usuario.id.in_([a.usuario_id for a in listar_autoridades(sessao) if a.usuario_id])))}
@@ -789,11 +860,13 @@ def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelP
 
 
 def leitura_autoridade(autoridade: AutoridadePortaria, nomes: dict[int, str]) -> LeituraAutoridade:
+    """Converte a autoridade no schema da API; `nomes` traz o nome do usuário vinculado (por id)."""
     return LeituraAutoridade(id=autoridade.id, sigla=autoridade.sigla, nome=autoridade.nome, cargo=autoridade.cargo, setor=autoridade.setor,
                              usuario_id=autoridade.usuario_id, ativa=autoridade.ativa, usuario_nome=nomes.get(autoridade.usuario_id))
 
 
 def autoridades_com_nomes(sessao: Session) -> list[LeituraAutoridade]:
+    """Todas as autoridades (ativas e inativas) com o nome do usuário vinculado, para a tela de cadastro."""
     autoridades = listar_autoridades(sessao)
     nomes = {u.id: _nome(u) for u in sessao.scalars(select(Usuario).where(Usuario.id.in_([a.usuario_id for a in autoridades if a.usuario_id])))}
     return [leitura_autoridade(a, nomes) for a in autoridades]

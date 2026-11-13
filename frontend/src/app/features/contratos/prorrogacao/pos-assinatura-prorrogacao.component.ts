@@ -1,5 +1,33 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para acompanhar o que vem depois da assinatura da prorrogação: PNCP, DOE, garantia (com a planilha para a DOF) e Contratos.gov.
+/**
+ * =============================================================================
+ * ARQUIVO: pos-assinatura-prorrogacao.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Acompanha o que vem depois da assinatura da prorrogação: divulgação no
+ * PNCP, extrato no DOE, comprovação da garantia (com a planilha para a DOF) e
+ * atualização do Contratos.gov.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido, sem rota própria: recebe o id
+ * do contrato e a permissão de edição como inputs. Lista as prorrogações
+ * (mais recente no topo), cada uma com um formulário próprio. Mostra a
+ * situação do PNCP (publicado, no prazo, vencido ou sem prazo) calculada pela
+ * API e salva as datas e os dados da garantia por AlteracoesApiService.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * A divulgação do aditivo no PNCP (Portal Nacional de Contratações Públicas)
+ * é condição de eficácia pela Lei 14.133; a tela ajuda a equipe a cumprir esse
+ * prazo em dias úteis e a não esquecer a publicação no Diário Oficial (DOE), a
+ * garantia contratual e o registro no Contratos.gov.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Usado dentro da tela de prorrogação (prorrogacao.component.html). Depende
+ * de AlteracoesApiService (prorrogacoes, salvarPosAssinatura,
+ * baixarPlanilhaGarantia), do tipo Prorrogacao e dos pipes de formatação.
+ *
+ * =============================================================================
+ */
 
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -9,7 +37,9 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { Prorrogacao } from '../compartilhado/contratos.models';
 
-// Dados digitados das planilhas de garantia (as mesmas chaves da API)
+// Dados digitados das planilhas de garantia (as mesmas chaves da API).
+// NL = Nota de Lançamento no SIAFEM (sistema financeiro do Estado); DARE = guia de recolhimento estadual;
+// caução, seguro-garantia e fiança são as formas de garantia previstas no contrato.
 const CAMPOS_GARANTIA: { chave: string; rotulo: string }[] = [
   { chave: 'responsavel_nome', rotulo: 'Responsável pelas informações: nome completo' },
   { chave: 'responsavel_email', rotulo: 'Responsável: e-mail' },
@@ -80,6 +110,7 @@ const CAMPOS_GARANTIA: { chave: string; rotulo: string }[] = [
   `,
 })
 export class PosAssinaturaProrrogacaoComponent implements OnInit {
+  // Entradas do componente (`input`): o id do contrato é obrigatório; `podeEditar` libera os campos e o botão salvar
   readonly contratoId = input.required<string>();
   readonly podeEditar = input(false);
 
@@ -88,13 +119,16 @@ export class PosAssinaturaProrrogacaoComponent implements OnInit {
 
   protected readonly lista = signal<Prorrogacao[]>([]);
   protected readonly salvando = signal<string | null>(null);
+  // Um formulário por prorrogação, indexado pelo id dela (cada cartão edita o seu)
   protected formularios: Record<string, { pncp_publicado_em: string | null; pncp_numero: string; doe_publicado_em: string | null; garantia_comprovada_em: string | null; garantia_enviada_dof_em: string | null; contratos_gov_atualizado_em: string | null; dados_garantia: Record<string, string> }> = {};
   protected readonly campos = signal(CAMPOS_GARANTIA);
 
+  /** Carrega as prorrogações já registradas do contrato. */
   ngOnInit(): void {
     this.api.prorrogacoes(this.contratoId()).subscribe({ next: (l) => this.aplicar(l), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar as prorrogações registradas') });
   }
 
+  /** Exibe a lista recebida e recria os formulários com os valores salvos (cópia, para não alterar o objeto da API). */
   private aplicar(lista: Prorrogacao[]): void {
     // Da mais recente para a mais antiga: a que está em andamento fica no topo
     this.lista.set([...lista].reverse());
@@ -104,6 +138,11 @@ export class PosAssinaturaProrrogacaoComponent implements OnInit {
     }]));
   }
 
+  /**
+   * Salva os dados de pós-assinatura de uma prorrogação.
+   * Datas deixadas em branco viram null (o campo date devolve texto vazio), que a API entende como
+   * "não informado". A API devolve a lista atualizada (prazo e situação do PNCP recalculados).
+   */
   protected salvar(p: Prorrogacao): void {
     this.salvando.set(p.id);
     const f = this.formularios[p.id];
@@ -116,6 +155,7 @@ export class PosAssinaturaProrrogacaoComponent implements OnInit {
     });
   }
 
+  /** Baixa a planilha XLSX com os dados da garantia, no formato que a DOF (Diretoria de Orçamento e Finanças) recebe. */
   protected baixarGarantia(p: Prorrogacao): void {
     this.api.baixarPlanilhaGarantia(this.contratoId(), p.id).subscribe({ error: (e) => this.dialogos.mostrarErro(e) });
   }

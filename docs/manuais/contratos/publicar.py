@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # Criado por José Eduardo Santana Martins
-# Este arquivo serve para publicar o manual do Módulo Contratos (Processo Financeiro, prorrogação, reajuste e as versões retroativas) no BookStack (capítulo, páginas e imagens), pela API.
-"""Publica (ou atualiza) as páginas novas do Módulo RH no BookStack, no capítulo que já existe.
+# Este arquivo serve para publicar o manual do Módulo Contratos (Processo Financeiro, prorrogação, reajuste, as versões retroativas e a repactuação) no BookStack (capítulo, páginas e imagens), pela API.
+"""Publica (ou atualiza) as páginas novas do Módulo Contratos no BookStack, no capítulo que já existe.
 
 Uso:
     python3 publicar.py --verificar     # confere que todo [[marcador]] tem imagem e legenda, sem acessar o BookStack
     python3 publicar.py                 # cria (ou atualiza) as páginas no capítulo "Módulo Contratos" do livro "sgi-spi", com as imagens
+    python3 publicar.py --paginas 3 6   # só as páginas cujos arquivos começam com "3" e "6" (reajuste e repactuação)
 
 Credencial: um token de API do BookStack de um usuário que possa criar e editar páginas (Meu perfil › Tokens de API; o perfil precisa da
 permissão "Acessar a API do sistema"). Guarde `ID:SEGREDO` na primeira linha de `~/.bookstack-token` (ou aponte a variável
@@ -38,6 +39,7 @@ PAGINAS = [
     ("3-reajuste.html", "Reajuste do contrato"),
     ("4-vigencia-retroativa.html", "Vigência retroativa: voltar o contrato no tempo"),
     ("5-reajuste-retroativo.html", "Reajuste retroativo"),
+    ("6-repactuacao.html", "Repactuação do contrato (CCT)"),
 ]
 PRIORIDADE_INICIAL = 20  # depois das páginas que já existem no capítulo
 LEGENDAS = {}
@@ -123,6 +125,7 @@ def main() -> None:
     parser.add_argument("--livro-slug", default="sgi-spi")
     parser.add_argument("--capitulo", default="Módulo Contratos")
     parser.add_argument("--verificar", action="store_true")
+    parser.add_argument("--paginas", nargs="*", help="Publica só estas páginas (arquivo ou prefixo, ex.: 3 6); sem a opção, todas")
     args = parser.parse_args()
     if args.verificar:
         verificar()
@@ -143,6 +146,8 @@ def main() -> None:
         existentes = {p["name"]: p for p in chamar("GET", f"/chapters/{capitulo['id']}").get("pages", [])}
     print("capítulo", capitulo["id"], capitulo["slug"])
     for indice, (arquivo, nome) in enumerate(PAGINAS):
+        if args.paginas and not any(arquivo.startswith(f) for f in args.paginas):
+            continue
         fonte = (AQUI / "paginas" / arquivo).read_text(encoding="utf-8")
         pagina = existentes.get(nome) or chamar("POST", "/pages", {"chapter_id": capitulo["id"], "name": nome, "html": "<p>Em elaboração.</p>", "priority": PRIORIDADE_INICIAL + indice})
         imagens = {}

@@ -1,8 +1,38 @@
-/* ==========================================================================
- * Módulo Patrimônio (bens móveis do prédio SPI). Identidade de styles.scss, mobile-first:
- * campos e botões grandes no celular, ações principais ao alcance do polegar (barra inferior fixa).
- * Todas as classes próprias começam com `pat-` (ou ficam dentro de `.patrimonio`) para não colidir com outros módulos.
- * ========================================================================== */
+/**
+ * =============================================================================
+ * ARQUIVO: _patrimonio.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do Módulo Patrimônio (bens móveis do prédio SPI): listas de bens
+ * em cartões ou tabela, filtros, cadastro (inclusive o formulário compacto e
+ * o cadastro em lote), detalhe do bem com abas, fotos e linha do tempo,
+ * painel, árvore de locais, leitor de código pela câmera, listas de
+ * inservíveis, extraviados e baixa, e os comboboxes de sala e de bem.
+ *
+ * RESUMO TÉCNICO:
+ * Identidade de styles.scss, mobile-first: campos e botões grandes no
+ * celular (fonte de 16 px para o iOS não dar zoom) e ações principais numa
+ * barra inferior fixa (position: sticky) ao alcance do polegar. Todas as
+ * classes próprias começam com pat- (ou ficam dentro de .patrimonio) para
+ * não colidir com outros módulos. O leitor de código ocupa a tela toda com
+ * uma mira; os modais de colunas, relacionar e justificativa alargam o
+ * .modal-portal padrão. .pat-seletor-sala e .pat-opcoes-bem ficam fora de
+ * .patrimonio porque Chamados e Rede também usam esses campos.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Apoia o controle patrimonial da SPI: localizar cada bem pela chapa ou
+ * número de série, registrar movimentações entre salas, fazer o inventário
+ * pelo celular lendo códigos de barras e montar as listas de bens
+ * inservíveis, extraviados e para baixa com a justificativa exigida.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelas telas de frontend/src/app/features
+ * do Patrimônio, pelos componentes app-seletor-sala e app-busca-bem e pelo
+ * leitor de código; reaproveitado na abertura de chamado e na Rede.
+ *
+ * =============================================================================
+ */
 
 .patrimonio {
   padding: 18px 20px 12px;
@@ -230,6 +260,7 @@
     list-style: none;
 
     li { position: relative; padding: 0 0 16px 16px; }
+    /* ::before desenha a bolinha de cada evento sobre a linha vertical (border-left da lista) */
     li::before { content: ''; position: absolute; left: -26px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--spi-vermelho); }
     li span { display: block; color: var(--spi-apagado); font-size: 12px; }
     li p { margin: 4px 0 0; font-size: 13px; }
@@ -318,6 +349,7 @@
   background: #000;
 
   video { width: 100%; height: 100%; object-fit: cover; }
+  /* A sombra enorme (100vmax) escurece tudo em volta da mira, destacando onde posicionar o código */
   .mira { position: absolute; inset: 22% 12%; border: 3px solid #ffffffcc; border-radius: var(--spi-raio-gg); box-shadow: 0 0 0 100vmax #00000066; pointer-events: none; }
   .erro-leitor { position: absolute; top: 24px; left: 16px; right: 16px; margin: 0; padding: 12px; border-radius: var(--spi-raio-m); color: #fff; background: #b3262fe6; font-size: 14px; }
   .barra-leitor {
@@ -329,6 +361,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    /* env(safe-area-inset-bottom) soma a área da barra de gestos do celular para o botão não ficar escondido */
     padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
     color: #fff;
     background: #000000b3;
@@ -457,6 +490,7 @@
   /* Botão da câmera dentro do campo da sala (lê o código ou QR da porta); com ele, o "×" de limpar passa para a esquerda dele */
   .pat-leitor-sala { position: absolute; top: 4px; right: 6px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: var(--spi-raio-p); color: var(--spi-vermelho); background: transparent; cursor: pointer;
     svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } &:active { background: var(--cor-eef0f3); } }
+  /* :has() detecta se o botão da câmera existe e abre espaço para ele e para o "×" no campo */
   &:has(.pat-leitor-sala) input { padding-right: 76px; }
   &:has(.pat-leitor-sala) .pat-limpar-sala { right: 42px; }
   .pat-limpar-sala { position: absolute; top: 4px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: var(--spi-raio-p); color: var(--spi-apagado); background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }

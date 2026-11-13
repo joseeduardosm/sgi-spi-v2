@@ -1,5 +1,35 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para o painel de férias e licença-prêmio da CGP e dos autorizadores (calendário, filtros, alertas e aprovação).
+/**
+ * =============================================================================
+ * ARQUIVO: painel-afastamentos.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Painel de férias e licença-prêmio da CGP e dos autorizadores: calendário
+ * em faixas (visão mensal ou anual), filtros, alertas de afastamentos
+ * simultâneos, férias a vencer e a fila de ciente/aprovação.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone (template em painel-afastamentos.component.html).
+ * Guarda o painel e a fila de aprovações em signals; computeds montam o eixo
+ * do calendário (dias ou meses, com fins de semana e feriados), a posição de
+ * hoje e a série do gráfico anual. Métodos calculam a faixa de cada período
+ * em % da largura e chamam a API para ciente, aprovar, recusar, exportar e
+ * gerar o relatório de saldos.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dá a quem decide os afastamentos a visão do setor no tempo, para evitar
+ * que muitas pessoas saiam juntas, e organiza o fluxo em duas etapas: o
+ * superior imediato dá o "ciente e de acordo" e o autorizador aprova ou
+ * recusa (com justificativa). A CGP vê todos e lança afastamentos.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota /rh/painel-afastamentos (rh.routes.ts). Usa RhApiService (painel,
+ * aprovacoes, darCiencia, aprovar, recusarAfastamento, exportar,
+ * relatorioSaldos), os tipos de rh.models.ts, trilha-afastamento.ts,
+ * app-grafico e lancamento-afastamento.component.ts.
+ *
+ * =============================================================================
+ */
 
 import { TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { trilhaAfastamento } from './trilha-afastamento';
@@ -16,13 +46,17 @@ import { Afastamento, PainelAfastamentos, ROTULOS_STATUS, ROTULOS_TIPO, SIGLAS_T
 import { LinkificarPipe } from '../../shared/utilitarios/linkificar.pipe';
 
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
+/** Milissegundos em um dia (24 × 60 × 60 × 1000). */
 const DIA_MS = 86_400_000;
+/** Abreviações dos meses para o eixo, o combo e o gráfico. */
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
+/** Converte "AAAA-MM-DD" em milissegundos à meia-noite UTC (evita deslocamento por fuso). */
 function dia(texto: string): number {
   return Date.parse(`${texto}T00:00:00Z`);
 }
 
+/** "AAAA-MM-DD" para "DD/MM/AAAA". */
 function dataBr(texto: string): string {
   return texto.split('-').reverse().join('/');
 }
@@ -41,6 +75,7 @@ function dataBr(texto: string): string {
 })
 export class PainelAfastamentosComponent implements OnInit {
   protected readonly trilha = trilhaAfastamento;
+  // inject() obtém os serviços pela injeção de dependência do Angular.
   private readonly api = inject(RhApiService);
   private readonly dialogos = inject(DialogosService);
 
@@ -48,7 +83,9 @@ export class PainelAfastamentosComponent implements OnInit {
   protected readonly siglas = SIGLAS_TIPO;
   protected readonly status = ROTULOS_STATUS;
   protected readonly meses = MESES;
+  /** Filtros enviados à API; começam no mês e ano atuais, sem pessoa, setor ou tipo. */
   protected filtros: FiltrosPainel = { visao: 'mensal', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, pessoa_id: null, setor_id: null, tipo: '' };
+  // signal(): estado reativo; computed(): valor derivado que se recalcula quando os signals lidos mudam
   protected readonly painel = signal<PainelAfastamentos | null>(null);
   // Gráfico anual: pessoas distintas afastadas em cada mês (férias × licença-prêmio), a partir dos períodos que o painel já devolve
   protected readonly serieAnual = computed<SerieGrafico[]>(() => {
@@ -64,14 +101,17 @@ export class PainelAfastamentosComponent implements OnInit {
     });
     return [{ nome: 'Férias', dados: contar('ferias'), cor: '#2f9e6b' }, { nome: 'Licença-prêmio', dados: contar('licenca_premio'), cor: '#2f5d8a' }];
   });
+  /** Pedidos que esperam a ação do usuário logado (ciente ou aprovação). */
   protected readonly aprovacoes = signal<Afastamento[]>([]);
   protected readonly hoje = new Date().toISOString().slice(0, 10);
+  /** Anos do combo: do ano passado até três à frente. */
   protected readonly anos = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i);
 
   /** Marcas do eixo: dias do mês (visão mensal) ou meses (visão anual), em % da largura. */
   protected readonly eixo = computed(() => {
     const p = this.painel();
     if (!p) return [];
+    // Janela exibida em ms; o fim soma um dia porque o último dia também ocupa espaço
     const inicio = dia(p.inicio);
     const total = dia(p.fim) + DIA_MS - inicio;
     if (p.visao === 'anual') {
@@ -100,10 +140,12 @@ export class PainelAfastamentosComponent implements OnInit {
     return hoje >= inicio && hoje < inicio + total ? ((hoje - inicio) / total) * 100 : null;
   });
 
+  /** Carrega o painel e a fila de aprovações ao abrir a tela. */
   ngOnInit(): void {
     this.carregar();
   }
 
+  /** Busca o painel com os filtros atuais e a fila de aprovações (falha na fila é ignorada). */
   protected carregar(): void {
     this.api.painel(this.filtros).subscribe({
       next: (p) => this.painel.set(p),
@@ -117,15 +159,18 @@ export class PainelAfastamentosComponent implements OnInit {
     const p = this.painel()!;
     const inicio = dia(p.inicio);
     const total = dia(p.fim) + DIA_MS - inicio;
+    // Recorta o período à janela (pode começar antes ou terminar depois) e garante largura mínima visível
     const de = Math.max(dia(a.inicio), inicio);
     const ate = Math.min(dia(a.fim) + DIA_MS, dia(p.fim) + DIA_MS);
     return { esquerda: ((de - inicio) / total) * 100, largura: Math.max(((ate - de) / total) * 100, 0.6) };
   }
 
+  /** Atalho para o template formatar AAAA-MM-DD como DD/MM/AAAA. */
   protected data(texto: string): string {
     return dataBr(texto);
   }
 
+  /** Abre a janela de lançamento de afastamento pela CGP. */
   protected readonly lancando = signal(false);
 
   /** CGP: relatório de saldos de férias e LP de todos os servidores. */
@@ -135,6 +180,7 @@ export class PainelAfastamentosComponent implements OnInit {
     });
   }
 
+  /** Exporta os períodos com os filtros atuais em PDF ou Excel (download feito pelo serviço). */
   protected exportar(formato: 'pdf' | 'xlsx'): void {
     this.dialogos.executar(this.api.exportar(this.filtros, formato), 'Gerando o arquivo…').subscribe({
       error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível exportar'),
@@ -155,6 +201,7 @@ export class PainelAfastamentosComponent implements OnInit {
     });
   }
 
+  /** Ciente a partir do detalhe do período: a própria janela já serve de confirmação. */
   protected darCienciaDoDetalhe(a: Afastamento): void {
     this.dialogos.executar(this.api.darCiencia(a.id), 'Registrando…').subscribe({
       next: () => {
@@ -165,6 +212,7 @@ export class PainelAfastamentosComponent implements OnInit {
     });
   }
 
+  /** Etapa 2: o autorizador aprova o pedido, após confirmação (o servidor recebe e-mail pelo backend). */
   protected async aprovar(a: Afastamento): Promise<void> {
     const ok = await this.dialogos.confirmar({
       titulo: 'Aprovar pedido?',
@@ -196,6 +244,7 @@ export class PainelAfastamentosComponent implements OnInit {
   protected readonly recusando = signal<Afastamento | null>(null);
   protected justificativa = '';
 
+  /** Recusa o pedido em análise com a justificativa digitada (obrigatória) e recarrega. */
   protected recusar(): void {
     const a = this.recusando();
     if (!a || !this.justificativa.trim()) return;

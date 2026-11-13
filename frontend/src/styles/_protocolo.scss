@@ -1,4 +1,38 @@
-/* Módulo Protocolo: grade de números, painel e administração (identidade do SGI SPI). */
+/**
+ * =============================================================================
+ * ARQUIVO: _protocolo.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do Módulo Protocolo (identidade do SGI SPI): barra de filtros,
+ * legenda e grade de números de protocolo, painel com gráfico mensal e
+ * ranking por pessoa, administração das sequências e os modais de reserva
+ * e de detalhe do número (documento, sigilo, motivo e linha do tempo).
+ *
+ * RESUMO TÉCNICO:
+ * Variáveis Sass ($livre, $reservado, $utilizado, $anulado) definem a cor de
+ * cada situação do número; a grade de números (auto-fill de 86 px) pinta cada
+ * botão pela classe da situação (livre, reservado_cgi, reservado, utilizado,
+ * anulado). O gráfico mensal é feito só com CSS: 12 colunas com barras de
+ * altura proporcional e uma grade de fundo em linear-gradient. .barra-
+ * protocolo + .campo (rótulo acima do campo) é o padrão de filtros copiado
+ * por outros módulos.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Organiza a numeração oficial de documentos da SPI: quem reserva cada
+ * número, quais já foram usados ou anulados e quanto cada pessoa reservou e
+ * utilizou ao longo do ano, evitando números repetidos ou perdidos.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelas telas do módulo Protocolo
+ * (frontend/src/app/features/protocolo) e pelos modais .form-protocolo e
+ * .corpo-numero, que ficam fora da seção .protocolo. Referência de layout de
+ * filtros citada no CLAUDE.md e no DESIGN.md.
+ *
+ * =============================================================================
+ */
+// Variáveis Sass ($nome) só existem na compilação: viram valores fixos no CSS final.
+// Uma cor por situação do número de protocolo, usada na legenda, na grade e no gráfico.
 $livre: #e8eaec;
 $reservado: #f0b429;
 $utilizado: #2e9d5b;
@@ -53,6 +87,7 @@ $anulado: #9aa4af;
     color: var(--cor-5a6673);
     font-size: 12px;
 
+    /* Quadradinho colorido antes de cada item da legenda, na cor da situação */
     span::before {
       content: '';
       display: inline-block;
@@ -131,6 +166,7 @@ $anulado: #9aa4af;
       background: linear-gradient(to top, var(--cor-e8ebef) 1px, transparent 1px) 0 0 / 100% 25%;
       border-bottom: 1px solid var(--cor-b9c2cc);
       align-items: center;
+      /* Cada <i> é uma barra (utilizados e reservados empilhados); a altura em % é calculada pelo componente */
       i { display: block; width: 70%; max-width: 38px; min-height: 0; border-radius: 3px 3px 0 0; }
     }
     .reservado { background: $reservado; }

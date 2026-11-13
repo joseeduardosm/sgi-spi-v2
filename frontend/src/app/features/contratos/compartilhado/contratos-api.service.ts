@@ -355,6 +355,11 @@ export class ContratosApiService {
     return this.http.post<OcorrenciaDiario>(`${this.base}/${id}/diario`, corpo);
   }
 
+  /** Tira um e-mail da lista de "outros e-mails" salvos do diário do contrato (as ocorrências já registradas não mudam). */
+  removerEmailSalvoDiario(id: string, emailId: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${id}/diario/emails-salvos/${emailId}`);
+  }
+
   baixarAnexoOcorrencia(id: string, ocorrenciaId: string, anexo: { id: string; nome: string }) {
     return baixarArquivo(this.http, `${this.base}/${id}/diario/${ocorrenciaId}/anexos/${anexo.id}`, anexo.nome);
   }

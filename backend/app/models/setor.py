@@ -1,6 +1,30 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para definir as tabelas de setores e de seus membros.
-"""Setores: unidades institucionais e grupos sistêmicos. Funcionam como grupos de acesso na ACL."""
+"""
+===============================================================================
+ARQUIVO: setor.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Definir as tabelas de setores e de membros de setor.
+
+RESUMO TÉCNICO:
+- Setor: unidade institucional ou grupo sistêmico, com hierarquia opcional
+  (setor_pai_id), líder, sigla e tipo da unidade (rótulo do organograma).
+- Índice único em lower(nome): "TI" e "ti" são o mesmo setor.
+- MembroSetor: tabela de ligação muitos-para-muitos usuário x setor, com
+  chave primária composta (o mesmo usuário não entra duas vezes).
+
+FINALIDADE DE NEGÓCIO:
+Representar a estrutura da SPI (secretaria, subsecretarias, diretorias,
+coordenadorias) e grupos de trabalho. Os setores funcionam como grupos de
+acesso na ACL (lista de controle de acesso), definindo quem vê o quê.
+
+CONTEXTO NO SISTEMA:
+Usado pela ACL (models/acl), pelo RH (cargos pertencem a um setor e o
+organograma), pelo módulo Setores (schemas/setores.py) e por vários módulos
+que filtram dados por setor. Ligado à tabela usuarios.
+
+===============================================================================
+"""
 
 from datetime import datetime
 
@@ -11,7 +35,12 @@ from app.core.banco import Base, agora_utc
 
 
 class Setor(Base):
-    """Setor institucional ou grupo sistêmico, com hierarquia opcional (setor pai) e líder."""
+    """Setor institucional ou grupo sistêmico, com hierarquia opcional (setor pai) e líder.
+
+    Cada classe que herda de `Base` vira uma tabela. `Mapped[...]` declara o tipo da coluna em
+    Python e `mapped_column(...)` os detalhes no banco (tipo SQL, chave estrangeira, padrão).
+    `ativo = False` desativa o setor sem apagar o histórico ligado a ele.
+    """
     __tablename__ = "setores"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -30,12 +59,17 @@ class Setor(Base):
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
 
 
+# Índice funcional criado fora da classe porque usa uma expressão (lower) e não uma coluna simples.
 # Nome único sem diferenciar maiúsculas/minúsculas ("TI" e "ti" seriam o mesmo setor)
 Index("ux_setores_nome_minusculo", func.lower(Setor.nome), unique=True)
 
 
 class MembroSetor(Base):
-    """Associação usuário ↔ setor (tabela de ligação muitos-para-muitos)."""
+    """Associação usuário ↔ setor (tabela de ligação muitos-para-muitos).
+
+    Uma pessoa pode estar em vários setores (ex.: no seu setor institucional e num grupo
+    sistêmico) e um setor tem várias pessoas. Excluir o setor ou o usuário apaga o vínculo (CASCADE).
+    """
     __tablename__ = "membros_setor"
 
     # Chave primária composta: o mesmo usuário não entra duas vezes no mesmo setor

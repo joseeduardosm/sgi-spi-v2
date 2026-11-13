@@ -6,6 +6,59 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-11-13
+
+Migração nova (cabeça `c3e5a7b9d1f2`): Rede `c3e5a7b9d1f2` (acesso SSH do equipamento e tabela `rede_leituras`). Nova dependência: `netmiko==4.4.0`.
+
+### Adicionado
+- **Rede — trocar a ligação** numa operação só (`POST /api/rede/portas/{id}/conexao/trocar`, `{lado?, porta_id | bem_id | descricao, outro_lado?, religar_antigo?}`): muda o destino sem passar por "sem cabo para cima"; com `religar_antigo`, põe um patch panel no meio de um cabo existente (o outro lado da porta do patch panel fica com o destino antigo). A cadeia é conferida no fim (`409 unica_ligacao_para_cima`, nada muda).
+- **Rede — leitura do equipamento por SSH** (DESATIVADA por enquanto: `LEITURA_SSH_ATIVA = False` no backend e no frontend; as rotas respondem `409 leitura_desativada`). Leitor genérico com Netmiko (`services/rede/leitura_ssh.py`): detecta o fabricante e tenta Huawei VRP/YunShan, Dell OS6, H3C Comware e Cisco IOS; só comandos `display`/`show` (trava em `_so_consulta`), várias tentativas por informação, prazo de 45 s. `services/rede/servico_leitura.py`: testar no cadastro (sugere o cabo de subida pelo LLDP), ler e guardar (liga sozinho os vizinhos LLDP), resumo e aplicar. Rotas `POST /api/rede/leitura/testar`, `POST|GET /api/rede/equipamentos/{id}/leitura`, `POST …/leitura/aplicar`. Acesso por equipamento (`acesso_usuario`, `acesso_senha` cifrada com Fernet, `acesso_porta`, `acesso_tipo`). Saídas reais do Huawei S5755 em `tests/dados_rede/`.
+- **Changelog — só os módulos da pessoa**: a tela e a bolinha do menu mostram só as novidades dos módulos a que a pessoa tem acesso (`core/changelog/visibilidade-novidades.ts`; SuperRoot vê tudo).
+
+### Alterado
+- **Rede — tela da porta**: no patch panel, Fundo e Frente em cartões lado a lado, com o formulário de ligar aberto só no lado escolhido; "O que está ligado" em botões (`.seletor-segmentado`; no patch panel só bem ou equipamento de rede); o que está ligado num cartão com "Abrir porta", "Trocar" e "Desligar"; lado do patch panel em botões Fundo | Frente com o lado ocupado bloqueado e legendado. Configuração em **modo leitura** com "Editar configuração", campos em duas colunas, velocidade e duplex em botões e **"Copiar da outra ponta"** (segue o cabo pelos patch panels até a porta de switch do outro lado). "Última alteração" foi para a lateral. Dica da porta no patch panel mostra Fundo e Frente.
+- **Rede — equipamento**: dados em pares rótulo/valor (função, ping, IP, série, rack, sala, última alteração com botão da porta); lista de portas sem link solto (a porta e o "Ligado a" viram botões) e com a Observação no lugar da Descrição.
+- **Changelog**: a lista lateral de dias deu lugar a setas (← dia anterior · próximo dia →) e à lista "Ir para o dia", no topo e no fim do dia.
+- `.seletor-segmentado` (global): aparência de opção desabilitada.
+
+## 2026-11-12
+
+Migração nova: Rede `f7a1c3e5b9d2` (lados `lado_a`/`lado_b` nas ligações, índices únicos por porta e lado, `rede_portas.observacao`, descrição padrão "Desligado"). A Rede de produção foi recomeçada: `backend/scripts_manutencao/recomecar_rede.py` apagou equipamentos, portas, ligações, pontos e racks (ficaram as VLANs e os modelos de face).
+
+### Adicionado
+- **Rede — cadastro em cadeia**: sem core não entra distribuição, sem core e distribuição não entra acesso, sem acesso não entra AP/roteador/outro (`409 cadeia_incompleta`); todo equipamento, menos core primário e patch panel, entra com o cabo para quem fica acima (`ligacao` no `POST /api/rede/equipamentos`, `400 sem_ligacao`, `409 cadeia_invalida`), inclusive atravessando um lado de patch panel. Página própria de cadastro em passos (Dados → Conexão → Revisão, `/rede/equipamentos/novo`) e de edição (`/rede/equipamentos/:id/editar`, botão vermelho "Editar").
+- **Rede — fundo e frente do patch panel**: cada porta de patch panel tem duas ligações (`lado` e `outro_lado` em ligar, desligar e dispositivos atrás).
+- **Rede — indicador "Patch panel com um lado só"** (`GET /api/rede/portas-patch-um-lado`), no lugar de "Portas ativas sem descrição".
+
+### Alterado
+- **Rede — descrição gerada pelo sistema** a partir do "Ligado a" ("Desligado" sem nada); o texto livre da porta é a `observacao`. Porta sem nada ligado fica `down`/`desativada` e em branco (`409 porta_sem_ligacao`); configuração só em porta ligada.
+- **Rede — desligar e excluir** não deixam equipamento sem cabo para cima (`409 unica_ligacao_para_cima`); a ponta que fica sem nada passa a desligada e em branco.
+- **Rede — topologia por camadas** (core → distribuição → acesso → demais; patch panel nunca no topo) e **caminho que segue o fio de cada porta** (`lado_entrada`/`lado_saida` nas etapas).
+- **Rede — modelo, tipo e função travados** depois de criado (`409 funcao_travada`); a função é só do switch.
+
+### Removido
+- Rede: "Salto: …" gravado na descrição, descrição obrigatória e o `forcar`/`409 porta_com_dispositivo` da ligação; rota `/api/rede/portas-sem-descricao`.
+- Rede: cargas automáticas por LLDP e pelo GLPI desativadas (`carga_desativada`).
+
+## 2026-11-11
+
+Migração nova: Contratos `a3c5e7f9b1d4` (`contratos_diario_emails_salvos`; `email_prepostos_ids` e `email_adicionais` nas ocorrências).
+
+### Adicionado
+- **Contratos — diário de bordo**: outros e-mails além dos prepostos em cada ocorrência, guardados no contrato e oferecidos nas próximas (`DELETE /api/contratos/{id}/diario/emails-salvos/{email_id}`); o reenvio repete os destinatários escolhidos.
+
+## 2026-11-10
+
+Migrações novas: Tarefas `d1f3a5b7c9e2` (`tarefas_rdms`) e Contratos `e2a4c6e8f0b1` (`contratos_diferencas_manuais`, `…_competencias`; créditos voltam ao fundo do contrato).
+
+### Adicionado
+- **Tarefas — RDM** (Requisição de Mudança) dentro da tarefa de equipe, numerada no Protocolo ("RDM SGI"), com aprovação, PDF e lista de RDMs (`/api/tarefas/rdms`, `/api/tarefas/{numero}/rdm[/enviar|/aprovar|/reprovar|/pdf]`).
+- **Changelog do usuário final** (tela `/changelog`, `features/changelog/novidades.ts`, bolinha no menu com `core/changelog/ultima-novidade.ts`).
+- **Contratos — diferença do reajuste/repactuação informada à mão** para meses pagos fora do sistema (valor, justificativa e PDF; positiva vira competência complementar, negativa vira crédito).
+
+### Alterado
+- **Contratos — créditos de reajuste e repactuação** ficam no fundo do contrato e o gestor aplica cada um numa medição (`POST`/`DELETE /api/contratos/{id}/competencias/{cid}/creditos/{credito_id}`).
+
 ## 2026-11-06
 
 Migrações novas (aplicar com `alembic upgrade head`; cabeça `c8e0a2b4d6f9`): Rede `b7d9f1a3c5e8` (liga à porta as auditorias antigas de configuração) e `c8e0a2b4d6f9` (cor das VLANs).

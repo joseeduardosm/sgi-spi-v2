@@ -18,6 +18,66 @@ Nos códigos **Angular (TypeScript, HTML, SCSS)** e **Python (FastAPI)**:
 - Termos técnicos consagrados mantêm a forma original: LDAP, Base DN, Bind DN, JWT, Bearer, slug, URL, SuperRoot e os níveis `LEITURA`/`MODIFICACAO`/`CONTROLE_TOTAL`.
 - Mensagens exibidas ao usuário e mensagens de erro da API também em pt-BR.
 
+## Cabeçalho obrigatório e comentários didáticos
+
+**Todo arquivo de programação** do projeto começa com o bloco de cabeçalho abaixo: `.py` (backend, scripts e laboratórios dos manuais), `.ts`, `.html` e `.scss` do frontend e os scripts `.sh`, `.mjs` e `.js`. Arquivos gerados por build ficam de fora. O teste `backend/tests/test_cabecalho_arquivos.py` falha se faltar o bloco ou alguma seção.
+
+- As quatro seções são escritas **para aquele arquivo**, nunca com texto genérico. **FINALIDADE** diz para que o arquivo existe. **RESUMO TÉCNICO** cita as principais classes, funções, endpoints, validações e integrações. **FINALIDADE DE NEGÓCIO** diz que processo do órgão o arquivo atende e que valor entrega. **CONTEXTO NO SISTEMA** diz com quais módulos, serviços, rotas e tabelas ele se relaciona.
+- Python: o bloco **é a docstring do módulo** (uma só). O conteúdo de uma docstring que já existia é incorporado às seções. Se houver *shebang* ou `# -*- coding`, o bloco vem logo depois. Nas migrações do Alembic, as linhas `Revision ID`, `Revises` e `Create Date` ficam no fim do bloco.
+- TypeScript, SCSS, `.mjs` e `.js` usam `/** … */`. HTML usa `<!-- … -->`; no `index.html`, o bloco vem depois do `<!doctype html>`. Shell usa `#` em todas as linhas, depois do *shebang*.
+
+```python
+"""
+===============================================================================
+ARQUIVO: nome_do_arquivo.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+...
+
+RESUMO TÉCNICO:
+...
+
+FINALIDADE DE NEGÓCIO:
+...
+
+CONTEXTO NO SISTEMA:
+...
+
+===============================================================================
+"""
+```
+
+```ts
+/**
+ * =============================================================================
+ * ARQUIVO: nome-do-arquivo.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * ...
+ *
+ * RESUMO TÉCNICO:
+ * ...
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * ...
+ *
+ * CONTEXTO NO SISTEMA:
+ * ...
+ *
+ * =============================================================================
+ */
+```
+
+**Comentários didáticos (nível estagiário):** o código precisa ser entendido e mantido por um estagiário de desenvolvimento.
+
+- Toda classe, função e método tem docstring ou JSDoc: o que faz, os parâmetros importantes, o retorno, os efeitos (banco, e-mail, arquivos) e a regra de negócio envolvida.
+- Antes de cada bloco não trivial (validação, cálculo, consulta, laço, condição de negócio), um comentário explica **o porquê**, não só o quê.
+- Recursos do framework que um iniciante pode não conhecer são explicados na primeira vez que aparecem no arquivo: `signal`/`computed`/`effect`, `Depends`, `relationship`, `BackgroundTasks`, Alembic etc.
+- Siglas e termos do órgão (NE, OB, CADIN, glosa, preposto, competência) ganham uma explicação curta.
+- Comentário errado é pior que nenhum: descreva o que o código realmente faz e não invente regra.
+
 ## Documentação da API (obrigatória)
 
 Qualquer criação, alteração ou remoção de endpoint, parâmetro, schema, resposta, código HTTP, autenticação ou autorização deve atualizar `docs/` **na mesma alteração**, seguindo o modelo de `docs/endpoints/autenticacao.md` e o índice de `docs/api.md`. O OpenAPI do FastAPI deve permanecer completo e consistente. O teste `test_openapi_documenta_endpoints` precisa ser atualizado junto.

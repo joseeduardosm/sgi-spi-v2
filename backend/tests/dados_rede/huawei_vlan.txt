@@ -1,0 +1,103 @@
+The total number of vlans is : 24
+--------------------------------------------------------------------------------
+U: Up;         D: Down;         TG: Tagged;         UT: Untagged;
+MP: Vlan-mapping;               ST: Vlan-stacking;
+#: ProtocolTransparent-vlan;    *: Management-vlan;
+MAC-LRN: MAC-address learning;  STAT: Statistic;
+BC: Broadcast; MC: Multicast;   UC: Unknown-unicast;
+FWD: Forward;  DSD: Discard;
+--------------------------------------------------------------------------------
+
+VID          Ports                                                          
+--------------------------------------------------------------------------------
+   1         UT:Eth-Trunk1(U)   Eth-Trunk2(U)   Eth-Trunk100(D) 100GE1/0/1(D)   
+                100GE1/0/2(D)   25GE1/0/1(D)    25GE1/0/2(D)    25GE1/0/3(D)    
+                25GE1/0/4(D)    MultiGE1/0/5(D) MultiGE1/0/6(D) MultiGE1/0/7(D) 
+                MultiGE1/0/8(D) MultiGE1/0/9(D) MultiGE1/0/12(D)                
+                MultiGE1/0/13(D) MultiGE1/0/14(D) MultiGE1/0/15(D)              
+                MultiGE1/0/16(D) MultiGE1/0/17(D) MultiGE1/0/18(D)              
+                MultiGE1/0/19(D) MultiGE1/0/20(D) MultiGE1/0/21(D)              
+                MultiGE1/0/22(D) MultiGE1/0/23(D) MultiGE1/0/24(D)              
+                MultiGE1/0/25(D) MultiGE1/0/26(D) MultiGE1/0/27(D)              
+                MultiGE1/0/28(D) MultiGE1/0/29(D) MultiGE1/0/30(D)              
+                MultiGE1/0/31(D) MultiGE1/0/32(D) MultiGE1/0/33(D)              
+                MultiGE1/0/34(D) MultiGE1/0/35(D) MultiGE1/0/36(D)              
+                MultiGE1/0/37(D) MultiGE1/0/38(D) MultiGE1/0/39(D)              
+                MultiGE1/0/40(D) MultiGE1/0/41(D) MultiGE1/0/42(D)              
+                MultiGE1/0/43(D) MultiGE1/0/44(D) MultiGE1/0/45(D)              
+                MultiGE1/0/46(D) MultiGE1/0/47(D) MultiGE1/0/48(U)              
+ 172         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/10(D)                
+                MultiGE1/0/47(D) MultiGE1/0/48(U)                               
+ 300         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+ 301         TG:Eth-Trunk1(U)   Eth-Trunk2(U)   25GE1/0/1(D)    25GE1/0/2(D)    
+                MultiGE1/0/47(D) MultiGE1/0/48(U)                               
+ 400         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+ 410         UT:MultiGE1/0/11(U)                                                
+             TG:Eth-Trunk1(U)   Eth-Trunk2(U)   25GE1/0/1(D)                    
+                MultiGE1/0/47(D) MultiGE1/0/48(U)                               
+ 500         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+ 555         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2468         UT:MultiGE1/0/10(D)                                                
+             TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2469         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2470         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2471         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2472         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2473         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2474         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2475         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2476         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2477         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2478         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2479         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2480         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2481         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2482         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+2483         TG:25GE1/0/1(D)    25GE1/0/2(D)    MultiGE1/0/47(D)                
+                MultiGE1/0/48(U)                                                
+                                                                                
+VID  Type     Status  Property  MAC-LRN STAT    BC  MC  UC  Description
+--------------------------------------------------------------------------------
+   1 common   enable  default   enable  disable FWD FWD FWD VLAN 0001           
+ 172 common   enable  default   enable  disable FWD FWD FWD REDE-VOIP           
+ 300 common   enable  default   enable  disable FWD FWD FWD MPLS-Intravoip      
+ 301 common   enable  default   enable  disable FWD FWD FWD INSIDE              
+ 400 common   enable  default   enable  disable FWD FWD FWD INTERNET-FIREWALL...
+ 410 common   enable  default   enable  disable FWD FWD FWD SAI_BL              
+ 500 common   enable  default   enable  disable FWD FWD FWD REDE-INTRAVOIP      
+ 555 common   enable  default   enable  disable FWD FWD FWD Rede CFTV           
+2468 common   enable  default   enable  disable FWD FWD FWD REDE SPI            
+2469 common   enable  default   enable  disable FWD FWD FWD REDE SLT            
+2470 common   enable  default   enable  disable FWD FWD FWD VLAN 2470           
+2471 common   enable  default   enable  disable FWD FWD FWD VLAN 2471           
+2472 common   enable  default   enable  disable FWD FWD FWD VLAN 2472           
+2473 common   enable  default   enable  disable FWD FWD FWD VLAN 2473           
+2474 common   enable  default   enable  disable FWD FWD FWD VLAN 2474           
+2475 common   enable  default   enable  disable FWD FWD FWD VLAN 2475           
+2476 common   enable  default   enable  disable FWD FWD FWD VLAN 2476           
+2477 common   enable  default   enable  disable FWD FWD FWD VLAN 2477           
+2478 common   enable  default   enable  disable FWD FWD FWD VLAN 2478           
+2479 common   enable  default   enable  disable FWD FWD FWD REDE SPM            
+2480 common   enable  default   enable  disable FWD FWD FWD VLAN 2480           
+2481 common   enable  default   enable  disable FWD FWD FWD VLAN 2481           
+2482 common   enable  default   enable  disable FWD FWD FWD VLAN 2482           
+2483 common   enable  default   enable  disable FWD FWD FWD VLAN 2483           

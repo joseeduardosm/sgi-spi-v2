@@ -1,5 +1,32 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a aba "Histórico" da pessoa: linha do tempo funcional (cadastro, cargos e setores, férias, licença-prêmio, exoneração) com exportação em PDF.
+/**
+ * =============================================================================
+ * ARQUIVO: historico-usuario.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Aba "Histórico" da pessoa: a linha do tempo funcional (cadastro, cargos e
+ * setores, férias, licença-prêmio, exoneração), com filtros e exportação em
+ * PDF.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline. Lê o id da pessoa na URL, busca
+ * o histórico na RhCargosApiService com filtros de período (de/até) e de tipo
+ * de fato (chips), mostra a tabela de cargos ocupados e a de eventos, e baixa o
+ * mesmo conteúdo em PDF.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Dá ao RH e ao próprio servidor uma visão única e auditável da vida
+ * funcional: cada fato com data, hora e quem registrou. O RH vê qualquer
+ * pessoa; cada servidor vê o seu.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota do Módulo RH (rh.routes.ts) com o id do usuário. Usa os tipos de
+ * rh-cargos.models.ts (HistoricoUsuario), o cabeçalho app-cabecalho-rh e
+ * app-esqueleto. Os fatos são gravados pelo backend do RH (cargos, férias,
+ * validação de ficha, admissão).
+ *
+ * =============================================================================
+ */
 
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -77,25 +104,30 @@ import { HistoricoUsuario } from './rh-cargos.models';
   `,
 })
 export class HistoricoUsuarioComponent implements OnInit {
+  // inject() obtém os serviços pela injeção de dependência do Angular.
   private readonly rota = inject(ActivatedRoute);
   private readonly api = inject(RhCargosApiService);
   private readonly dialogos = inject(DialogosService);
 
+  // signal(): estado reativo da tela; quando muda, o template é redesenhado.
   protected readonly historico = signal<HistoricoUsuario | null>(null);
   protected readonly carregando = signal(true);
   protected readonly baixando = signal(false);
   protected readonly tiposMarcados = signal<string[]>([]);
+  /** Filtro de período (AAAA-MM-DD), ligado aos campos De e Até por ngModel. */
   protected de = '';
   protected ate = '';
   private usuarioId = 0;
   /** Tipos já vistos: os chips não somem quando o filtro esvazia a lista. */
   private tiposConhecidos: [string, string][] = [];
 
+  /** Lê o id da pessoa na URL e carrega o histórico. */
   ngOnInit(): void {
     this.usuarioId = Number(this.rota.snapshot.paramMap.get('id'));
     this.carregar();
   }
 
+  /** Busca o histórico com os filtros atuais; na primeira resposta guarda a lista de tipos para os chips. */
   protected carregar(): void {
     this.api.historico(this.usuarioId, { tipos: this.tiposMarcados(), de: this.de, ate: this.ate }).subscribe({
       next: (h) => {
@@ -107,16 +139,19 @@ export class HistoricoUsuarioComponent implements OnInit {
     });
   }
 
+  /** Pares [código, rótulo] dos tipos de fato para os chips de filtro. */
   protected tiposDisponiveis(h: HistoricoUsuario): [string, string][] {
     return this.tiposConhecidos.length ? this.tiposConhecidos : Object.entries(h.tipos);
   }
 
+  /** Marca ou desmarca um tipo de fato no filtro e recarrega. */
   protected alternarTipo(tipo: string): void {
     const atual = this.tiposMarcados();
     this.tiposMarcados.set(atual.includes(tipo) ? atual.filter((t) => t !== tipo) : [...atual, tipo]);
     this.carregar();
   }
 
+  /** Baixa o PDF do histórico com os mesmos filtros da tela (o login entra no nome do arquivo). */
   protected exportar(h: HistoricoUsuario): void {
     this.baixando.set(true);
     this.api.baixarHistoricoPdf(this.usuarioId, h.login, { tipos: this.tiposMarcados(), de: this.de, ate: this.ate }).subscribe({
@@ -125,10 +160,12 @@ export class HistoricoUsuarioComponent implements OnInit {
     });
   }
 
+  /** "AAAA-MM-DD" para "DD/MM/AAAA" (vazio quando nulo). */
   protected dataBr(iso: string | null): string {
     return iso ? iso.split('-').reverse().join('/') : '';
   }
 
+  /** Data e hora ISO para "DD/MM/AAAA HH:MM" no fuso do navegador. */
   protected dataHoraBr(iso: string): string {
     const d = new Date(iso);
     const p = (n: number) => String(n).padStart(2, '0');

@@ -1,5 +1,28 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para a tela "Meu cadastro funcional": a bio opcional (com a opção de liberá-la na busca) e a ficha cadastral que o RH valida.
+/**
+ * =============================================================================
+ * ARQUIVO: meu-cadastro.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Tela "Meu cadastro funcional": a bio opcional da pessoa (com a opção de
+ * mostrá-la aos colegas) e a ficha cadastral que o RH valida.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline. Carrega e salva a bio pela
+ * RhAdmissaoApiService (minhaBio, salvarBio) com ngModel; a ficha cadastral é
+ * o próprio FichaPreCadastroComponent em modo [minha]="true".
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Mantém os dados cadastrais em dia pelo próprio servidor, com validação do
+ * RH, e permite que ele se apresente aos colegas (a bio aparece na busca de
+ * usuários e no cartão de contato só se for liberada).
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota /rh/meu-cadastro (rh.routes.ts), visível a todos no menu-rh.ts.
+ * Reaproveita ficha-pre-cadastro.component.ts e app-cabecalho-rh.
+ *
+ * =============================================================================
+ */
 
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -35,17 +58,21 @@ import { RhAdmissaoApiService } from './rh-admissao-api.service';
   `,
 })
 export class MeuCadastroComponent implements OnInit {
+  // inject() obtém os serviços pela injeção de dependência do Angular.
   private readonly api = inject(RhAdmissaoApiService);
   private readonly dialogos = inject(DialogosService);
 
   protected readonly salvando = signal(false);
+  /** Texto e liberação da bio, ligados ao formulário por [(ngModel)]. */
   protected texto = '';
   protected visivel = false;
 
+  /** Carrega a bio atual da pessoa logada. */
   ngOnInit(): void {
     this.api.minhaBio().subscribe({ next: (b) => { this.texto = b.bio_texto; this.visivel = b.bio_visivel; }, error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível carregar a sua bio') });
   }
 
+  /** Grava a bio e a liberação na API e confirma ao usuário quem passa a vê-la. */
   protected salvar(): void {
     this.salvando.set(true);
     this.api.salvarBio({ bio_texto: this.texto, bio_visivel: this.visivel }).subscribe({

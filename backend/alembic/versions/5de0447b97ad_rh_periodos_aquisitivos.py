@@ -1,15 +1,37 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para criar os períodos aquisitivos de férias (crédito automático e expiração) no Módulo RH.
-"""rh: períodos aquisitivos de férias
+"""
+===============================================================================
+ARQUIVO: 5de0447b97ad_rh_periodos_aquisitivos.py
+AUTOR: José Eduardo Santana Martins
 
-- `rh_dados_funcionais.inicio_aquisitivo_dia`/`_mes`: início do período aquisitivo (só dia e mês; repete todo ano).
-- `rh_periodos_aquisitivos`: um registro por período de 12 meses, com os dias creditados e a expiração.
-- `rh_afastamentos.periodo_aquisitivo_id`: período cujo saldo as férias debitam.
-- `rh_parametros`: dias creditados por período (30), folga do aviso de expiração (15) e aviso ativo.
+FINALIDADE:
+Criar no Módulo RH os períodos aquisitivos de férias, com crédito automático de
+dias e expiração.
+
+RESUMO TÉCNICO:
+- `rh_dados_funcionais.inicio_aquisitivo_dia`/`_mes`: início do período
+  aquisitivo (só dia e mês; repete todo ano), validado por CHECK.
+- `rh_periodos_aquisitivos`: um registro por período de 12 meses, com dias
+  creditados, origem (automático ou ajuste da CGP) e expiração.
+- `rh_afastamentos.periodo_aquisitivo_id`: período cujo saldo as férias
+  debitam.
+- `rh_parametros`: dias por período (30), folga do aviso de expiração (15) e
+  aviso ativo.
+
+FINALIDADE DE NEGÓCIO:
+Período aquisitivo é o ciclo de 12 meses de trabalho que dá direito a dias de
+férias. O controle automático mostra o saldo de cada servidor e avisa antes de
+os dias expirarem; a CGP (Coordenadoria de Gestão de Pessoas) pode ajustar.
+
+CONTEXTO NO SISTEMA:
+Tabelas do Módulo RH (`rh_dados_funcionais`, `rh_afastamentos`,
+`rh_parametros`, criadas em `6be74b4141cb`) e `usuarios`; serviços de férias em
+`app/services/rh/`.
 
 Revision ID: 5de0447b97ad
 Revises: 6be74b4141cb
 Create Date: 2026-09-29 15:00:00
+
+===============================================================================
 """
 
 from collections.abc import Sequence
@@ -23,6 +45,8 @@ down_revision: str | Sequence[str] | None = "6be74b4141cb"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# CHECK do início do período: dia e mês ficam ambos nulos ou formam uma data
+# possível (fevereiro aceita 29 porque o dia se repete em anos bissextos).
 CK_INICIO = (
     "(inicio_aquisitivo_dia IS NULL AND inicio_aquisitivo_mes IS NULL) OR "
     "(inicio_aquisitivo_mes BETWEEN 1 AND 12 AND inicio_aquisitivo_dia BETWEEN 1 AND "
@@ -30,8 +54,18 @@ CK_INICIO = (
 )
 
 
+# upgrade() aplica esta mudança no banco (alembic upgrade) e downgrade() a
+# desfaz (alembic downgrade), voltando à revisão anterior.
+#
+# As funções op.* do Alembic executam comandos de estrutura (DDL) no banco:
+# create_table, add_column, alter_column, create_index, drop_* etc.
+#
+# server_default é o valor padrão gravado pelo próprio banco; serve também para
+# preencher as linhas que já existiam quando a coluna é criada.
 def upgrade() -> None:
-    """Cria a tabela de períodos, as colunas novas e os parâmetros (com os valores iniciais)."""
+    """Cria a tabela de períodos, as colunas novas (com FK e CHECK) e os
+    parâmetros, já com os valores iniciais via server_default.
+    """
     op.create_table(
         "rh_periodos_aquisitivos",
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -64,7 +98,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove as colunas, a tabela de períodos e os parâmetros novos."""
+    """Remove parâmetros, restrições, colunas e a tabela de períodos. Os saldos
+    de férias calculados se perdem.
+    """
     op.drop_column("rh_parametros", "aviso_ferias_ativo")
     op.drop_column("rh_parametros", "folga_aviso_ferias_dias")
     op.drop_column("rh_parametros", "dias_ferias_por_periodo")

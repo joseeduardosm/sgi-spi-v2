@@ -1,13 +1,36 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para remover, uma única vez, o segundo "CEEP" (TR 8.3.5, 8.3.6 e 8.3.7) do checklist ativo do contrato 018/2024 e das competências.
-"""Remove o item duplicado do checklist ativo e os documentos dele nas competências (só os que não têm arquivo anexado).
+"""
+===============================================================================
+ARQUIVO: remover_ceep_duplicado_018_2024.py
+AUTOR: José Eduardo Santana Martins
 
-Por padrão é um ENSAIO (mostra e desfaz). Para valer: `--aplicar`.
+FINALIDADE:
+Script de manutenção, de uso único, que remove o segundo "CEEP" (TR 8.3.5,
+8.3.6 e 8.3.7) do checklist ativo do contrato 018/2024 e os documentos dele
+nas competências (só os que não têm arquivo anexado).
+
+RESUMO TÉCNICO:
+Executa SQL direto (sqlalchemy.text): confere se o item existe e é o esperado
+(nome e observação), lista os documentos das competências gerados a partir
+dele e aborta se algum já tiver anexo. Apaga os documentos e o item, registra
+auditoria e, por padrão, faz rollback (ENSAIO). Com --aplicar faz commit.
 Uso: cd backend && .venv/bin/python scripts_manutencao/remover_ceep_duplicado_018_2024.py [--aplicar]
+
+FINALIDADE DE NEGÓCIO:
+Corrige um item duplicado no checklist de documentos que a empresa precisa
+entregar a cada competência (mês de execução), para que ela não seja cobrada
+duas vezes pelo mesmo documento.
+
+CONTEXTO NO SISTEMA:
+Tabelas contratos_checklists, contratos_checklists_itens,
+contratos_competencias e contratos_competencias_documentos; serviço de
+auditoria (auditar).
+
+===============================================================================
 """
 import sys
 from pathlib import Path
 
+# Coloca a pasta backend/ no caminho de import, para "app" ser encontrado ao rodar o script direto.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import text  # noqa: E402
@@ -18,11 +41,13 @@ from app.services.servico_auditoria import auditar  # noqa: E402
 CONTRATO = "46eed7d0-a346-46da-baad-4ea5febc407b"
 ITEM = "f5f4a6c4-c7dd-42af-a899-264989919189"
 TRECHO = "TR 8.3.5, 8.3.6 e 8.3.7%"
+# Sem --aplicar o script só mostra o que faria e desfaz tudo (rollback) no fim.
 APLICAR = "--aplicar" in sys.argv
 
 with FabricaSessao() as s:
     item = s.execute(text("select i.nome, i.observacao, c.ativo from contratos_checklists_itens i join contratos_checklists c on c.id = i.checklist_id "
                           "where i.id = :i and c.contrato_id = :c"), {"i": ITEM, "c": CONTRATO}).one_or_none()
+    # Confere se o item é mesmo o CEEP duplicado antes de apagar qualquer coisa.
     if item is None or not item.observacao.startswith("TR 8.3.5, 8.3.6 e 8.3.7") or not item.nome.startswith("CEEP"):
         sys.exit("Item não encontrado ou diferente do esperado: nada foi feito.")
     print("Item do checklist:", item.nome, "|", item.observacao[:60], "| ativo:", item.ativo)
@@ -30,6 +55,7 @@ with FabricaSessao() as s:
                           "where c.contrato_id = :c and d.nome like 'CEEP%' and d.observacao like :t"), {"c": CONTRATO, "t": TRECHO}).all()
     for d in docs:
         print("  competência", d.competencia, "| documento", d.id, "| anexado:", d.anexado)
+    # Documento com arquivo anexado é trabalho já feito: nesse caso o script não apaga nada.
     anexados = [d for d in docs if d.anexado]
     if anexados:
         sys.exit("Há documento com arquivo anexado: nada foi feito.")
@@ -37,6 +63,7 @@ with FabricaSessao() as s:
         s.execute(text("delete from contratos_competencias_documentos where id = :i"), {"i": d.id})
     s.execute(text("delete from contratos_checklists_itens where id = :i"), {"i": ITEM})
     auditar(s, "manutencao", "contrato.checklist.remover_item", "Contrato 018/2024", f"CEEP duplicado (TR 8.3.5, 8.3.6 e 8.3.7): item do checklist ativo e {len(docs)} documento(s) de competência", alvo_tipo="contrato")
+    # Só grava de verdade quando pedido; caso contrário desfaz as exclusões feitas na sessão.
     if APLICAR:
         s.commit()
         print("Aplicado.")

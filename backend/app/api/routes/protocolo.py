@@ -1,9 +1,40 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para expor as rotas do Protocolo (/api/protocolo): tipos, sequências por exercício, números e painel.
-"""Rotas `/api/protocolo`.
+"""
+===============================================================================
+ARQUIVO: protocolo.py
+AUTOR: José Eduardo Santana Martins
 
-Níveis do recurso ACL `protocolo`: **LEITURA** vê a numeração, o painel, a linha do tempo e exporta; **MODIFICACAO** reserva o **próximo
-número**, anexa o documento do que reservou, libera a própria reserva, marca sigilo e vincula contrato. Só **CONTROLE_TOTAL** (ou o SuperRoot) cadastra tipos, cria e amplia sequências, lança um número específico e anula.
+FINALIDADE:
+Expor a API do Protocolo (/api/protocolo): tipos de documento, sequências de
+numeração por exercício (ano), reserva e uso de números, anexação do
+documento, sigilo, vínculo com contrato, painel e exportação.
+
+RESUMO TÉCNICO:
+Camada HTTP fina sobre app/services/servico_protocolo.py. Cada rota exige um
+nível do recurso `protocolo` da ACL (lista de controle de acesso):
+- LEITURA vê a numeração, o painel e a linha do tempo, e exporta;
+- MODIFICACAO reserva o próximo número, anexa o documento do que reservou,
+  libera a própria reserva, marca sigilo e vincula contrato;
+- CONTROLE_TOTAL (ou o SuperRoot) cadastra tipos, cria e amplia sequências,
+  lança um número específico e anula.
+Erros do serviço (ErroProtocolo) viram a resposta padrão {detalhe, codigo}
+pelo gerenciador de contexto _traduzir. _numero monta a leitura de um número
+com as permissões de cada ação já calculadas para a tela.
+
+FINALIDADE DE NEGÓCIO:
+Substitui o caderno/planilha de numeração de documentos oficiais da SPI
+(ofícios, portarias etc.): cada número é reservado por uma pessoa, com
+finalidade, sem duplicidade, e fica registrado quem usou, quando e com qual
+documento. A faixa "Reservado CGI" guarda o início da numeração para a
+Coordenadoria de Gestão e Infraestrutura.
+
+CONTEXTO NO SISTEMA:
+Modelos em app/models/protocolo.py, schemas em app/schemas/protocolo.py,
+anexos em app/services/servico_anexos.py. Números de RDM (requisição de
+mudança) gerados pelas Tarefas usam um tipo "sistêmico" e consultam
+app/services/tarefas/servico_rdm.py. Documentação em
+docs/endpoints/protocolo.md; tela Protocolo no frontend.
+
+===============================================================================
 """
 
 import uuid
@@ -30,6 +61,9 @@ from app.services import servico_anexos
 from app.services import servico_protocolo as servico
 from app.services.servico_protocolo import ErroProtocolo, formatar_numero
 
+# APIRouter agrupa as rotas sob /protocolo. As três dependências abaixo (ver, operar, administrar)
+# são criadas por exigir_acl: usadas em Depends(...), devolvem o usuário logado ou respondem 403 se
+# ele não tiver o nível pedido no recurso `protocolo`.
 roteador = APIRouter(prefix="/protocolo", tags=["Protocolo"], responses=VALIDACAO)
 ver = exigir_acl(servico.RECURSO, NivelAcl.LEITURA)
 operar = exigir_acl(servico.RECURSO, NivelAcl.MODIFICACAO)
@@ -40,7 +74,14 @@ NUMERO_NAO_ENCONTRADO = resposta_nao_encontrado("Número")
 
 @contextmanager
 def _traduzir(sessao: Session | None = None):
-    """Erros do serviço viram a resposta padrão `{"detalhe", "codigo"}`."""
+    """
+    Gerenciador de contexto (usado com `with`) que converte erros do serviço em resposta
+    HTTP.
+
+    Quando o serviço levanta ErroProtocolo, desfaz a transação (rollback) se uma sessão
+    foi passada e relança como ErroApi com o status e o código do erro, gerando o corpo
+    padrão `{"detalhe", "codigo"}`. Rotas só de leitura chamam sem sessão.
+    """
     try:
         yield
     except ErroProtocolo as erro:
@@ -50,14 +91,45 @@ def _traduzir(sessao: Session | None = None):
 
 
 def _sequencia(s) -> SequenciaLeitura:
+    """
+    Converte a sequência (faixa de números de um tipo num exercício) para o schema de
+    resposta.
+    """
     return SequenciaLeitura(id=s.id, exercicio=s.exercicio, inicio=s.inicio, fim=s.fim, liberar_a_partir_de=s.liberar_a_partir_de)
 
 
 def _tipo(t: TipoProtocolo, pode_consumir: bool = True) -> TipoLeitura:
+    """
+    Converte um tipo de documento para o schema de resposta, com as sequências de todos
+    os exercícios.
+
+    `pode_consumir` diz se o usuário pode reservar números deste tipo (tipos restritos a
+    um setor só aceitam reserva desse setor e da administração).
+    """
     return TipoLeitura(id=t.id, nome=t.nome, setor_id=t.setor_id, setor_nome=t.setor.nome if t.setor else None, pode_consumir=pode_consumir, sequencias=[_sequencia(s) for s in t.sequencias])
 
 
-def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, eventos: bool = False, contratos: dict | None = None, cgi: bool = False) -> NumeroLeitura:
+def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, eventos: bool = False, contratos: dict | None = None, cgi: bool = False,
+            rdms: dict | None = None) -> NumeroLeitura:
+    """
+    Monta a leitura completa de um número para a tela, já com as permissões de cada
+    ação.
+
+    Parâmetros: `admin` indica CONTROLE_TOTAL; `eventos` inclui a linha do tempo;
+    `contratos` e `rdms` são caches (id -> dado) para a grade não fazer uma consulta por
+    número; `cgi` indica que o usuário pode usar a faixa "Reservado CGI".
+
+    Regras refletidas nos campos `pode_*`: tipo sistêmico (RDM SGI) não tem ação manual;
+    anexar, liberar e concluir sem documento cabem a quem reservou ou à administração;
+    sigilo cabe a quem reservou ou ao SuperRoot; o arquivo só pode ser baixado por quem
+    tem permissão de ver documento sigiloso. Pode consultar o banco (contrato e RDM)
+    quando os caches não vierem.
+    """
+    from app.services.tarefas import servico_rdm
+
+    # Tipo numerado só pelo sistema (RDM SGI): sem ações manuais; mostra a situação da RDM e a tarefa
+    sistemico = n.sequencia.tipo.nome_chave in servico.TIPOS_SISTEMICOS
+    rdm = ((rdms if rdms is not None else servico_rdm.por_numero_protocolo(sessao, [n.id])).get(n.id)) if sistemico else None
     arquivo = None
     if n.anexo is not None and n.anexo.excluido_em is None:
         arquivo = ArquivoLeitura(id=n.anexo.id, nome=n.anexo.nome_original, tamanho=n.anexo.tamanho, pode_baixar=servico.pode_ver_documento(n, usuario))
@@ -69,26 +141,30 @@ def _numero(sessao: Session, n: NumeroProtocolo, usuario: Usuario, admin: bool, 
         contrato_numero = contrato.numero if contrato else None
     return NumeroLeitura(
         id=n.id, sequencia_id=n.sequencia_id, tipo_id=n.sequencia.tipo_id, tipo_nome=n.sequencia.tipo.nome, exercicio=n.sequencia.exercicio, numero=n.numero,
-        numero_formatado=formatar_numero(n.numero, n.sequencia.exercicio), estado=n.estado, finalidade=n.finalidade, reservado_por_id=n.reservado_por_id,
+        numero_formatado=servico_rdm.formatar(n.numero, n.sequencia.exercicio) if sistemico else formatar_numero(n.numero, n.sequencia.exercicio), estado=n.estado, finalidade=n.finalidade, reservado_por_id=n.reservado_por_id,
         reservado_por_nome=n.reservado_por_nome, reservado_em=n.reservado_em, usado_em=n.usado_em, contrato_id=n.contrato_id, contrato_numero=contrato_numero,
         sigiloso=n.sigiloso, anulado_em=n.anulado_em, motivo_anulacao=n.motivo_anulacao, arquivo=arquivo,
-        pode_anexar=ativo and n.reservado_em is not None and n.anexo_id is None and (dono or admin),
-        pode_liberar=n.estado == "reservado" and (dono or admin),
-        pode_concluir_sem_documento=n.estado == "reservado" and (dono or admin),
+        pode_anexar=not sistemico and ativo and n.reservado_em is not None and n.anexo_id is None and (dono or admin),
+        pode_liberar=not sistemico and n.estado == "reservado" and (dono or admin),
+        pode_concluir_sem_documento=not sistemico and n.estado == "reservado" and (dono or admin),
         pode_alterar_sigilo=ativo and n.reservado_em is not None and (dono or usuario.superusuario),
-        pode_reservar=n.estado in ("livre", "reservado_cgi") and (admin or (n.estado == "reservado_cgi" and cgi)),
+        pode_reservar=not sistemico and n.estado in ("livre", "reservado_cgi") and (admin or (n.estado == "reservado_cgi" and cgi)),
+        rdm_situacao=rdm[0] if rdm else None, tarefa_numero=rdm[1] if rdm else None,
         eventos=[EventoLeitura(tipo=e.tipo, autor_nome=e.autor_nome, texto=e.texto, ocorrido_em=e.ocorrido_em) for e in n.eventos] if eventos else [],
     )
 
 
 # --- Tipos e sequências ---------------------------------------------------------------------
 
+# Lista só os tipos que o usuário pode ver (pode_ver_tipo) e informa, por tipo, se ele pode reservar
+# números (pode_consumir_tipo).
 @roteador.get("/tipos", response_model=ListaTipos, summary="Tipos de documento e suas sequências",
               description="Os tipos que o usuário pode ver, com a sequência de cada exercício (tipo restrito a um setor só aparece para o setor, para a administração e para o Serviço de Apoio Administrativo). `pode_administrar` indica CONTROLE_TOTAL (ou SuperRoot).")
 def listar_tipos(sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> ListaTipos:
     return ListaTipos(pode_administrar=servico.controle_total(sessao, usuario), itens=[_tipo(t, servico.pode_consumir_tipo(sessao, t, usuario)) for t in servico.listar_tipos(sessao) if servico.pode_ver_tipo(sessao, t, usuario)])
 
 
+# Cria o tipo e, opcionalmente, a sequência do primeiro exercício na mesma transação.
 @roteador.post("/tipos", response_model=TipoLeitura, status_code=status.HTTP_201_CREATED, summary="Criar tipo de documento",
                description="Só CONTROLE_TOTAL. Nome único (sem diferenciar maiúsculas): `409` se já existir. Com `sequencia`, cria também a faixa do primeiro exercício (com \"liberar a partir de\") na mesma transação. Com `setor_id`, só esse setor (e seus filhos) e a administração reservam números do tipo (`403` nos demais); sem setor, todos reservam.", responses={**SEM_ADMIN, **CONFLITO, **INVALIDO})
 def criar_tipo(dados: GravacaoTipo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> TipoLeitura:
@@ -97,6 +173,8 @@ def criar_tipo(dados: GravacaoTipo, sessao: Session = Depends(obter_sessao), usu
         return _tipo(servico.criar_tipo(sessao, dados.nome, usuario, sequencia, dados.setor_id))
 
 
+# Sem description= no decorador: não colocar docstring aqui, pois ela viraria a descrição da rota no
+# OpenAPI. Troca só o nome do tipo (o serviço confere duplicidade).
 @roteador.put("/tipos/{tipo_id}", response_model=TipoLeitura, summary="Renomear tipo de documento", responses={**SEM_ADMIN, **CONFLITO, **resposta_nao_encontrado("Tipo")})
 def renomear_tipo(tipo_id: uuid.UUID, dados: GravacaoTipo, sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(administrar)) -> TipoLeitura:
     with _traduzir(sessao):
@@ -111,6 +189,8 @@ def excluir_tipo(tipo_id: uuid.UUID, sessao: Session = Depends(obter_sessao), us
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# Uma sequência é a faixa de números de um tipo em um exercício (ano). O serviço cria uma linha por
+# número da faixa.
 @roteador.post("/tipos/{tipo_id}/sequencias", response_model=SequenciaLeitura, status_code=status.HTTP_201_CREATED, summary="Criar a sequência de um exercício",
                description="Só CONTROLE_TOTAL. Cria os números da faixa (até 10.000); `liberar_a_partir_de` opcional reserva à CGI o início da faixa. Uma sequência por tipo e exercício (`409`).",
                responses={**SEM_ADMIN, **CONFLITO, **INVALIDO, **resposta_nao_encontrado("Tipo")})
@@ -145,14 +225,22 @@ def numeros(sequencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), us
         sequencia, itens = servico.numeros_da_sequencia(sessao, sequencia_id, usuario)
     admin = servico.controle_total(sessao, usuario)
     cgi = servico.pode_usar_reserva_cgi(sessao, usuario)
+    # Busca de uma vez o número de todos os contratos vinculados na grade (evita uma consulta por
+    # linha).
     contratos = {c.id: c.numero for c in sessao.query(Contrato).filter(Contrato.id.in_({n.contrato_id for n in itens if n.contrato_id}))} if any(n.contrato_id for n in itens) else {}
     for n in itens:
         n.sequencia = sequencia
+    # RDM SGI: situação de todas as RDMs da grade numa consulta só
+    from app.services.tarefas import servico_rdm
+
+    rdms = servico_rdm.por_numero_protocolo(sessao, [n.id for n in itens]) if sequencia.tipo.nome_chave in servico.TIPOS_SISTEMICOS else None
     return ListaNumeros(sequencia=_sequencia(sequencia), tipo_id=sequencia.tipo_id, tipo_nome=sequencia.tipo.nome, pode_consumir=servico.pode_consumir_tipo(sessao, sequencia.tipo, usuario), pode_administrar=admin, usuario_id=usuario.id,
                         livres=sum(1 for n in itens if n.estado == "livre"), reservados_cgi=sum(1 for n in itens if n.estado == "reservado_cgi"), pode_usar_reserva_cgi=cgi,
-                        itens=[_numero(sessao, n, usuario, admin, contratos=contratos, cgi=cgi) for n in itens])
+                        itens=[_numero(sessao, n, usuario, admin, contratos=contratos, cgi=cgi, rdms=rdms) for n in itens])
 
 
+# Rota mais usada do módulo: o serviço trava a sequência e pega o menor número livre, então duas
+# pessoas nunca recebem o mesmo número.
 @roteador.post("/sequencias/{sequencia_id}/proximo", response_model=NumeroLeitura, status_code=status.HTTP_201_CREATED, summary="Reservar o próximo número",
                description="Reserva o **menor número livre** da sequência, com a finalidade (e o contrato, se houver). Atômico: duas pessoas nunca recebem o mesmo. "
                "A faixa \"Reservado CGI\" só entra para quem é da Coordenadoria de Gestão e Infraestrutura, que começa por ela; os demais (inclusive a administração) recebem a partir do ponto de liberação. "
@@ -217,6 +305,8 @@ def anexar(numero_id: uuid.UUID, arquivo: UploadFile = File(...), sessao: Sessio
     return _numero(sessao, n, usuario, servico.controle_total(sessao, usuario), eventos=True)
 
 
+# Download do documento anexado: confere se existe arquivo ativo e se o usuário pode ver documento
+# sigiloso antes de enviar o arquivo do disco.
 @roteador.get("/numeros/{numero_id}/anexo", response_class=FileResponse, summary="Baixar o documento",
               description="**Documento sigiloso:** só quem reservou o número e o SuperRoot (`403 documento_sigiloso` para os demais).",
               responses={**NUMERO_NAO_ENCONTRADO, status.HTTP_403_FORBIDDEN: {"description": "Documento sigiloso (`documento_sigiloso`)."}})
@@ -260,6 +350,8 @@ def do_contrato(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
 
 # --- Painel e exportação -----------------------------------------------------------------
 
+# Painel anual de um tipo: o serviço devolve um dicionário com meses, ranking de pessoas e
+# pendências, convertido aqui para os schemas de resposta.
 @roteador.get("/painel", response_model=PainelProtocolo, summary="Painel do Protocolo",
               description="Reservas e utilizações por mês, top 10 pessoas e reservados sem documento, de um tipo e exercício.", responses={**INVALIDO, **resposta_nao_encontrado("Tipo")})
 def painel(tipo_id: uuid.UUID = Query(...), ano: int = Query(..., ge=2000, le=2200), sessao: Session = Depends(obter_sessao), usuario: Usuario = Depends(ver)) -> PainelProtocolo:
@@ -274,6 +366,8 @@ def painel(tipo_id: uuid.UUID = Query(...), ano: int = Query(..., ge=2000, le=22
     )
 
 
+# Gera a planilha (XLSX) ou o PDF no serviço e devolve como anexo (Content-Disposition: attachment
+# faz o navegador baixar o arquivo).
 @roteador.get("/exportar", response_class=Response, summary="Exportar o controle (XLSX ou PDF)",
               description="Números com movimento (reservados, utilizados e anulados), com filtros opcionais por tipo e exercício. Não inclui o conteúdo dos documentos.",
               responses={200: {"content": {"application/pdf": {}, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}}, **INVALIDO})

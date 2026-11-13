@@ -1,15 +1,40 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar, pela API, a escolha única do cálculo dos meses quebrados do reajuste.
-"""Reajuste: o gestor escolhe pro rata ou integral para os meses quebrados pela data de efeito.
+"""
+===============================================================================
+ARQUIVO: test_contratos_reajuste_mes_integral_api.py
+AUTOR: José Eduardo Santana Martins
 
-A tela recebe as duas opções já calculadas, período a período, e a memória (PDF/XLSX) só é gerada depois
-da escolha, que vale para todos os meses quebrados e para todos os itens do reajuste.
+FINALIDADE:
+Testar, pela API, a escolha única do cálculo dos meses quebrados do
+reajuste: o gestor escolhe pro rata ou integral.
+
+RESUMO TÉCNICO:
+Abre um reajuste com data de efeito no meio da competência 01/2026 já
+medida e salva a memória (PUT /memoria) com e sem calculo_mes_quebrado.
+Confere o resumo_meses (as duas opções calculadas período a período), o
+bloqueio da geração dos arquivos (POST /memoria/arquivos) sem escolha, a
+recusa da escolha quando não há mês quebrado e a prévia que não grava.
+
+FINALIDADE DE NEGÓCIO:
+A tela mostra as duas opções já calculadas e a memória de cálculo (PDF e
+XLSX) só sai depois da escolha, que vale para todos os meses quebrados e
+todos os itens. Isso evita memória gerada com critério indefinido e deixa o
+gestor comparar o valor antes de decidir.
+
+CONTEXTO NO SISTEMA:
+Rotas de reajustes do contrato e servico_reajuste. Reaproveita o cenário de
+test_contratos_retencao.py e os apoios de tests/apoio_contratos.py. As
+funções de fração são testadas isoladamente em
+test_contratos_reajuste_mes_cortado.py.
+
+===============================================================================
 """
 
 from datetime import date
 from decimal import Decimal
 
 from tests.apoio_contratos import definir_parametros, juntar_nf
+# Fixtures importadas de outro arquivo de teste; o pytest as injeta pelo nome dos
+# parâmetros (por isso os noqa F811).
 from tests.test_contratos_retencao import _ambiente, cenario  # noqa: F401 - fixtures (competência 01/2026 medida, hoje = 15/03/2026)
 from tests.test_contratos_execucao import _url
 
@@ -22,6 +47,10 @@ def _abrir(cliente, contrato, h, data_efeito="2026-01-15"):
 
 
 def _corpo(reajuste, calculo=None):
+    """Monta o corpo do PUT /memoria com 10% em todos os itens.
+
+    Só inclui calculo_mes_quebrado quando informado (None = sem escolha).
+    """
     corpo = {"itens": [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]}
     if calculo is not None:
         corpo["calculo_mes_quebrado"] = calculo
@@ -36,6 +65,10 @@ def _memoria(cliente, url, h, reajuste, calculo=None):
 
 
 def _preparar(cliente, cenario, data_efeito="2026-01-15"):  # noqa: F811
+    """Prepara o cenário comum: parâmetros com corte de alertas, NF juntada e reajuste aberto.
+
+    Devolve (contrato, cabeçalho da gestora, url do reajuste, dados do reajuste).
+    """
     contrato, base, gestora = cenario
     definir_parametros(corte_alertas_a_partir_de=date(2026, 9, 1))
     juntar_nf(cliente, base, gestora, "2105.00", "123")
@@ -44,6 +77,7 @@ def _preparar(cliente, cenario, data_efeito="2026-01-15"):  # noqa: F811
 
 
 def test_mes_quebrado_traz_as_duas_opcoes_periodo_a_periodo(cliente, cenario):  # noqa: F811
+    """Sem escolha, o resumo pede a decisão e traz pro rata (dois trechos) e integral (um trecho)."""
     contrato, gestora, url, reajuste = _preparar(cliente, cenario)
     resumo = _memoria(cliente, url, gestora, reajuste)["resumo_meses"]
 
@@ -60,6 +94,7 @@ def test_mes_quebrado_traz_as_duas_opcoes_periodo_a_periodo(cliente, cenario):  
 
 
 def test_escolher_integral_grava_e_muda_a_diferenca(cliente, cenario):  # noqa: F811
+    """Gravar integral faz a diferença retroativa ser a da opção integral e encerra a pendência de escolha."""
     contrato, gestora, url, reajuste = _preparar(cliente, cenario)
     antes = _memoria(cliente, url, gestora, reajuste)
     depois = _memoria(cliente, url, gestora, reajuste, "integral")
@@ -70,6 +105,7 @@ def test_escolher_integral_grava_e_muda_a_diferenca(cliente, cenario):  # noqa: 
 
 
 def test_memoria_so_e_gerada_depois_da_escolha(cliente, cenario):  # noqa: F811
+    """Gerar os arquivos da memória sem a escolha dá 400; depois de escolher, dá 200."""
     contrato, gestora, url, reajuste = _preparar(cliente, cenario)
     _memoria(cliente, url, gestora, reajuste)
     sem_escolha = cliente.post(f"{url}/memoria/arquivos", headers=gestora)
@@ -88,6 +124,7 @@ def test_escolha_sem_mes_quebrado_e_recusada(cliente, cenario):  # noqa: F811
 
 
 def test_previa_mostra_a_escolha_sem_gravar(cliente, cenario):  # noqa: F811
+    """A prévia com integral mostra diferença maior, mas o reajuste salvo continua sem escolha."""
     contrato, gestora, url, reajuste = _preparar(cliente, cenario)
     salvo = _memoria(cliente, url, gestora, reajuste)
     previa = cliente.post(f"{url}/memoria/previa", json=_corpo(reajuste, "integral"), headers=gestora)

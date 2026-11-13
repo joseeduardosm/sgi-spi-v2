@@ -1,5 +1,30 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para dar as boas-vindas no primeiro acesso (modal com o texto do modelo do RH) e levar a pessoa ao cadastro.
+/**
+ * =============================================================================
+ * ARQUIVO: janela-boas-vindas.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Modal de boas-vindas mostrado no primeiro acesso de quem acabou de ser
+ * admitido, com o texto do modelo do RH e um botão que leva ao cadastro.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline. Ao iniciar, pergunta à API se há
+ * boas-vindas pendentes para o usuário; se houver, mostra o HTML do modelo.
+ * Ao clicar em "Completar meu cadastro", confirma a leitura na API (o aviso não
+ * volta) e navega para /perfil.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Recebe o novo servidor no sistema e o conduz a completar o cadastro, passo
+ * necessário para o RH validar os dados. Quem já usava o sistema antes do
+ * módulo nunca vê o aviso.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Incluído no layout autenticado. Usa RhAdmissaoApiService (boasVindas e
+ * confirmarBoasVindas) e o tipo BoasVindas de rh-admissao.models.ts. O texto é
+ * editado em RH > Modelos (modelos.component.ts).
+ *
+ * =============================================================================
+ */
 
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { Router } from '@angular/router';
@@ -29,16 +54,20 @@ import { BoasVindas } from './rh-admissao.models';
   `,
 })
 export class JanelaBoasVindasComponent implements OnInit {
+  // inject() obtém os serviços pela injeção de dependência do Angular.
   private readonly api = inject(RhAdmissaoApiService);
   private readonly roteador = inject(Router);
 
+  /** Boas-vindas pendentes (null = nada a mostrar); signal() redesenha o modal quando muda. */
   protected readonly aviso = signal<BoasVindas | null>(null);
   protected readonly ocupado = signal(false);
 
+  /** Consulta se há boas-vindas pendentes; erro é ignorado (o modal simplesmente não aparece). */
   ngOnInit(): void {
     this.api.boasVindas().subscribe({ next: (b) => this.aviso.set(b.pendente ? b : null), error: () => undefined });
   }
 
+  /** Registra na API que a pessoa leu as boas-vindas, fecha o modal e vai para o perfil. */
   protected continuar(): void {
     this.ocupado.set(true);
     this.api.confirmarBoasVindas().subscribe({

@@ -167,12 +167,41 @@ Depois do registro, a tela da prorrogação acompanha o que falta para o aditivo
     - **Positiva:** é gerada uma competência `diferenca_reajuste` (identificador `AAAA-MM-dif`) com a medição já preenchida e o checklist copiado.
       - Por item, entra a quantidade medida e o preço unitário da diferença; num reajuste misto, os itens com desconto entram com preço negativo, e o total é o líquido.
       - Ela segue o fluxo normal da execução (NEs, NF, OB), sem avaliação.
-    - **Negativa (desconto):** não há competência de diferença. O valor vira um **crédito da SPI**, abatido no valor autorizado da **próxima competência regular com a medição aberta** (tabela `contratos_abatimentos_reajuste`).
-      - Se o crédito passar do valor da medição (medido × % da avaliação), abate o que cabe, e o restante segue para a competência seguinte. O ajuste é feito ao concluir a medição e de novo ao concluir a avaliação.
-      - Reabrir a medição devolve as sobras ainda não usadas.
-      - Sem competência a medir, o crédito fica **pendente** e é vinculado à primeira competência criada depois (por exemplo, ao gerar a execução de uma prorrogação).
-      - Na execução, o desconto aparece em `desconto_reajuste` / `descontos_reajuste` (ver [contratos-execucao.md](contratos-execucao.md)).
+    - **Negativa (desconto):** não há competência de diferença. O valor vira um **crédito da SPI no fundo do contrato** (tabela `contratos_abatimentos_reajuste`, sem competência).
+      - **Nada é abatido sozinho:** o gestor aplica cada crédito, **inteiro** e independente dos outros, numa medição regular ou adicional ainda aberta (ver "Créditos de reajuste/repactuação" em [contratos-execucao.md](contratos-execucao.md)), ou o retira dela.
+      - Se o crédito passar do valor da medição (medido × % da avaliação), abate o que cabe, e **a sobra volta ao fundo**. O ajuste é feito ao concluir a medição e de novo ao concluir a avaliação.
+      - Reabrir a medição devolve as sobras ainda não usadas ao crédito de origem.
+      - Na execução, o crédito aparece em `creditos_disponiveis` (fundo) e, depois de aplicado, em `desconto_reajuste` / `descontos_reajuste`.
     - **Zero:** nada é gerado.
+
+### Diferença retroativa informada manualmente (reajuste e repactuação)
+
+O cálculo automático só enxerga meses com **medição concluída** no SGI. Meses pagos fora do sistema (antes da implantação, por exemplo)
+não têm medição e ficariam sem a diferença. Para eles, o gestor informa a diferença à mão.
+
+- **Pergunta:** em elaboração, `meses_sem_medicao[]` (`competencia_id`, `identificador`, `rotulo`, `periodo_inicio`, `periodo_fim`, `coberta_por_outra`) lista as
+  competências **regulares já encerradas**, que terminam na data de efeito ou depois, **sem medição concluída** (no reajuste, só da vigência dele e sem diferença
+  já acertada). Mês já coberto pela diferença manual de outro procedimento continua na lista (`coberta_por_outra: true`). A tela pergunta
+  "Identifiquei que X meses do período de dd/mm/aaaa a dd/mm/aaaa não possuem medições finalizadas. Deseja inserir o valor da diferença manualmente?".
+  Reajuste retroativo não tem a pergunta (lista vazia).
+- **Preenchimento** (`PUT …/diferenca-manual`, `multipart/form-data`): o gestor **marca os meses** pagos fora do sistema (`competencias_ids`, repetido),
+  informa o **valor total** deles (`valor`; negativo = crédito da SPI), a **justificativa** e o **PDF** da memória feita fora do sistema (`arquivo`), todos obrigatórios.
+  `400` com valor zero, justificativa vazia ou mês fora da lista; `422` sem meses ou sem PDF. Substitui a anterior; `DELETE …/diferenca-manual` remove.
+- **Meses travados:** ao gravar, os itens dos meses marcados são copiados **no preço de antes** e deixam de acompanhar o cadastro: não recebem o preço novo na conclusão
+  (nem de procedimentos seguintes), e se forem medidos depois, são medidos no preço antigo (o que foi pago de fato). Também saem do **cálculo automático** de qualquer
+  procedimento. Cancelar o procedimento destrava os meses.
+- **Memória e consolidado:** o PDF e o XLSX ganham a seção/aba **"Diferença retroativa informada manualmente"** (meses, valor, destino e a observação), e o hash da memória
+  muda com ela. Na repactuação, o consolidado traz a observação na capa e o PDF externo no fim. Concluir exige a memória (reajuste) ou o consolidado (repactuação) gerados
+  **depois** da diferença manual (`400`). Se um mês marcado tiver sido medido no sistema nesse meio-tempo, a conclusão pede revisão (`400`).
+- **Conclusão** (independente da diferença automática):
+  - **positivo:** competência complementar de **uma linha** ("Diferença retroativa de reajuste informada manualmente (03/2025 e 04/2025)", quantidade 1 × valor),
+    identificador `AAAA-MM-dif-manual` (reajuste) ou `AAAA-MM-dif-repactuacao-manual` (repactuação), com o fluxo normal (NEs, NF, consolidado, OB, sem avaliação);
+  - **negativo:** crédito no fundo do contrato, marcado como manual (`manual: true` em `creditos_disponiveis`/`descontos_reajuste`, rótulo "… · valor manual").
+- **Observação:** em todo documento que cita o valor (memórias, complementar, consolidado da competência e medição em que o crédito manual foi aplicado):
+  "O valor de R$ X foi inserido manualmente por [nome] em dd/mm/aaaa às hh:mm:ss devido à falta de medições de mm/aaaa, … e mm/aaaa, não tendo sido utilizada
+  a função do sistema para cálculo automático. Justificativa: …" (horário de Brasília).
+- `diferenca_manual` em `LeituraReajuste` e `LeituraRepactuacao`: `valor`, `justificativa`, `meses[]`, `arquivo`, `informado_por`, `informado_em`, `observacao` e
+  `competencia_diferenca` (identificador da complementar, depois de concluído). O PDF externo é baixado por `GET …/arquivos/{anexo_id}` do próprio procedimento.
 
 ### Reajuste retroativo
 
@@ -195,7 +224,9 @@ Volta no tempo: define os preços de uma **vigência retroativa** a partir dos d
 
 Os arquivos só criam **versão nova** quando muda algo da memória (itens, índices, meses pagos) ou o **formato** do arquivo (`FORMATO_MEMORIA`): mudou o layout, a próxima geração sai com o layout novo.
 | `POST /reajustes/{id}/concluir` | `multipart` `arquivo` (apostilamento) |
-| `POST /reajustes/{id}/cancelar` | Cancela |
+| `PUT /reajustes/{id}/diferenca-manual` | `multipart`: `valor`, `competencias_ids` (repetido), `justificativa`, `arquivo` (PDF). Ver "Diferença retroativa informada manualmente" |
+| `DELETE /reajustes/{id}/diferenca-manual` | Remove a diferença manual (só em elaboração; `400` se não há) |
+| `POST /reajustes/{id}/cancelar` | Cancela (destrava os meses da diferença manual) |
 | `GET /reajustes/{id}/arquivos/{anexo_id}` | Download |
 
 `LeituraReajuste` traz:
@@ -206,9 +237,10 @@ Os arquivos só criam **versão nova** quando muda algo da memória (itens, índ
   - `competencia_diferenca` (`identificador` `AAAA-MM-dif` da competência gerada, após a conclusão);
 - **Diferença retroativa:**
   - `diferenca_retroativa` (string decimal com sinal: prévia no rascunho, valor gravado depois de concluído);
-  - `competencia_credito` (rascunho com desconto: rótulo `MM/AAAA` da competência que receberá o crédito, ou nulo);
-  - `abatimentos[]` (`competencia`, `identificador`, `medida`, `valor`: onde o crédito foi ou será abatido);
-  - `credito_pendente` (parte ainda sem competência);
+  - `competencia_credito` (sempre nulo: o crédito vai para o fundo e o gestor escolhe a medição; mantido por compatibilidade);
+  - `abatimentos[]` (`competencia`, `identificador`, `medida`, `valor`: medições em que o gestor aplicou o crédito);
+  - `credito_pendente` (parte ainda no fundo);
+  - `meses_sem_medicao[]` e `diferenca_manual` (ver "Diferença retroativa informada manualmente");
 - **Itens:** `itens[]` (atual, índice, referencial, reajustado, subtotal);
 - **Totais:** `base_atual`, `base_reajustada`, `valor_global_atual`, `valor_global_reajustado`;
 - **Arquivos:** `evidencia`, `apostilamento` e `memorias[]` (`versao`, `pdf`, `xlsx`).
@@ -237,8 +269,10 @@ Regras:
 - **Finalizar** (apostilamento assinado): exige cadastro finalizado, memória atualizada, obrigatórios do checklist e consolidado. Soma as
   diferenças no preço do cadastro dos itens vinculados, refaz as competências não medidas, e o retroativo positivo vira competência
   `diferenca_repactuacao` (`AAAA-MM-dif-repactuacao`, mesmo fluxo da diferença de reajuste). **Cada repactuação gera a sua**: a 2ª no mesmo
-  período fica `AAAA-MM-dif-repactuacao-2` ("Diferença de repactuação (2ª) …"); o negativo vira crédito abatido na próxima
-  medição (`descontos_reajuste[].repactuacao_id`). Cancelar não muda preços (a CCT fica nos Documentos importantes).
+  período fica `AAAA-MM-dif-repactuacao-2` ("Diferença de repactuação (2ª) …"); o negativo vira crédito no fundo do contrato, que o gestor
+  aplica numa medição (`creditos_disponiveis[].repactuacao_id`). Cancelar não muda preços (a CCT fica nos Documentos importantes).
+- **Diferença manual**: meses pagos fora do sistema, como no reajuste (ver "Diferença retroativa informada manualmente"); os meses travados não aparecem em
+  `competencias[]` como "recebem o novo preço".
 
 | Método e caminho | Quem | Descrição |
 |---|---|---|
@@ -251,6 +285,7 @@ Regras:
 | `POST …/repactuacoes/{rid}/checklist/incluir` · `POST`/`DELETE …/checklist/{doc}` | pode editar | Checklist (igual ao da prorrogação) |
 | `POST …/repactuacoes/{rid}/consolidado` | pode editar | Gera o consolidado (`400` sem memória atualizada) |
 | `POST …/repactuacoes/{rid}/finalizar` | pode editar | multipart `arquivo` (apostilamento); aplica a repactuação |
+| `PUT`/`DELETE …/repactuacoes/{rid}/diferenca-manual` | pode editar | Diferença retroativa informada manualmente (mesmo corpo do reajuste) |
 | `POST …/repactuacoes/{rid}/cancelar` · `GET …/arquivos/{anexo_id}` | pode editar / LEITURA | Cancelar / baixar arquivo da repactuação |
 
 `LeituraRepactuacao`: `data_base_cct`, `data_efeito`, `cadastro_concluido`, `linhas[{ordem, descricao, valor_vigente, valor_repactuado, diferenca,
@@ -258,7 +293,7 @@ diferenca_percentual, itens_ids}]`, `itens[{item_id, descricao, valor_unitario_a
 impacto_mensal}]`, `base_atual`, `total_diferencas`, `base_repactuada`, `calculo_mes_quebrado`, `opcoes_mes_quebrado[{calculo, total_diferenca}]`,
 `competencias[{identificador, competencia, medida, paga, situacao, quebrada, valor_pago, valor_repactuado, diferenca}]`, `total_retroativo_pagas`,
 `total_retroativo`, `memorias[]`, `memoria_atualizada`, `checklist[]`, `obrigatorios_pendentes`, `cct`, `consolidado`, `consolidado_atualizado`,
-`apostilamento`, `diferenca_retroativa`, `competencia_diferenca`.
+`apostilamento`, `diferenca_retroativa`, `competencia_diferenca`, `meses_sem_medicao[]`, `diferenca_manual`.
 
 ## Aditamento / supressão
 

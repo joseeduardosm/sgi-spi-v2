@@ -1,6 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar as tarefas recorrentes: datas da regra, criação da série, geração diária, gestão e permissões.
-"""Tarefas recorrentes (`/api/tarefas/recorrencias` e `recorrencia` na criação)."""
+"""
+===============================================================================
+ARQUIVO: test_tarefas_recorrencia.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar as tarefas recorrentes: cálculo das datas de cada regra, prévia,
+criação da série, geração diária das ocorrências, término, gestão (pausar,
+retomar, editar, excluir) e pausa automática por erro.
+
+RESUMO TÉCNICO:
+Testa direto as funções puras de `servico_recorrencias` (`datas`,
+`descrever`, `RegraRecorrencia`) e, pela API, `/api/tarefas/recorrencias` e
+o campo `recorrencia` na criação de tarefa. A geração é chamada com
+`sr.gerar_ocorrencias(sessao, data)` simulando o job diário em datas
+escolhidas. O SMTP é simulado pela fixture automática `_smtp`.
+
+FINALIDADE DE NEGÓCIO:
+Protege as rotinas que se repetem (relatórios semanais, conferências
+mensais): a tarefa nasce sozinha na data certa, pula fim de semana e
+feriado quando pedido, não duplica, não cria uma avalanche depois de uma
+parada longa e avisa quem criou quando a série precisa ser pausada.
+
+CONTEXTO NO SISTEMA:
+Usa o modelo `Feriado` (RH), `RecorrenciaTarefa` e `Tarefa`
+(`app/models/tarefas.py`), o serviço
+`app/services/tarefas/servico_recorrencias.py` e a fixture `equipe` de
+`tests/test_tarefas.py`.
+
+===============================================================================
+"""
 
 from datetime import date, datetime, time, timezone
 
@@ -18,10 +46,15 @@ from tests.test_tarefas import URL, equipe  # noqa: F401  (fixture da equipe)
 
 @pytest.fixture(autouse=True)
 def _smtp(monkeypatch):
+    """Fixture automática: em todos os testes do arquivo o e-mail é simulado (via `monkeypatch`)."""
     simular_smtp(monkeypatch)
 
 
 def _lista(inicio: date, regra: sr.RegraRecorrencia, n: int, feriados: set[date] | None = None) -> list[date]:
+    """Pega as `n` primeiras datas geradas pela regra a partir de `inicio`.
+
+    `sr.datas` é um gerador (pode ser infinito), por isso o laço para assim que junta `n` datas.
+    """
     saida = []
     for data in sr.datas(inicio, regra, feriados or set()):
         saida.append(data)
@@ -31,6 +64,7 @@ def _lista(inicio: date, regra: sr.RegraRecorrencia, n: int, feriados: set[date]
 
 
 def test_datas_de_cada_frequencia():
+    """Cada frequência (diária, semanal, mensal, anual) com intervalo, inclusive meses curtos e ano bissexto."""
     # Diária a cada 2 dias; semanal em segunda e quinta; mensal no dia 31; anual em 29/02
     assert _lista(date(2026, 11, 2), sr.RegraRecorrencia("diaria", 2), 3) == [date(2026, 11, 2), date(2026, 11, 4), date(2026, 11, 6)]
     assert _lista(date(2026, 11, 2), sr.RegraRecorrencia("semanal", 1, (0, 3)), 4) == [date(2026, 11, 2), date(2026, 11, 5), date(2026, 11, 9), date(2026, 11, 12)]
@@ -42,6 +76,7 @@ def test_datas_de_cada_frequencia():
 
 
 def test_somente_dias_uteis_pula_fim_de_semana_e_feriado():
+    """Com "só dias úteis", a data que cai em sábado, domingo ou feriado vai para o próximo dia útil."""
     regra = sr.RegraRecorrencia("diaria", 1, somente_dias_uteis=True)
     # 06/11/2026 é sexta; sábado e domingo vão para segunda 09/11; a segunda é feriado → terça 10/11
     assert _lista(date(2026, 11, 6), regra, 3, {date(2026, 11, 9)}) == [date(2026, 11, 6), date(2026, 11, 10), date(2026, 11, 11)]
@@ -50,6 +85,7 @@ def test_somente_dias_uteis_pula_fim_de_semana_e_feriado():
 
 
 def test_descrever_a_regra():
+    """O texto em português que resume a regra para o usuário."""
     inicio = date(2026, 11, 2)
     assert sr.descrever(sr.RegraRecorrencia("semanal", 1, (0, 3), True, 1, date(2026, 12, 31)), inicio) == \
         "Toda semana, segunda-feira e quinta-feira, só em dias úteis, até 31/12/2026, criada 1 dia(s) antes do prazo"
@@ -57,11 +93,13 @@ def test_descrever_a_regra():
 
 
 def _corpo(equipe_id, ids, regra, prazo="2026-11-02T18:00:00-03:00", **extra):
+    """Corpo de criação de tarefa com recorrência (responsáveis Ana e Beto); `extra` sobrescreve campos."""
     return {"titulo": "Relatório semanal", "descricao": "Fechar o relatório", "prazo": prazo, "equipe_id": equipe_id,
             "responsaveis_ids": [ids["ana"], ids["beto"]], "recorrencia": regra, **extra}
 
 
 def test_previa_da_regra(cliente, equipe):
+    """A prévia mostra as próximas datas e o resumo; regra incompleta ou incoerente dá 400, valor fora do domínio dá 422."""
     ids, h, equipe_id = equipe
     r = cliente.post(f"{URL}/recorrencias/previa", json={"prazo": "2026-11-02T18:00:00-03:00", "regra": {"frequencia": "semanal", "dias_semana": [0, 3]}}, headers=h["ana"])
     assert r.status_code == 200 and r.json()["proximas"] == ["2026-11-05", "2026-11-09", "2026-11-12"] and r.json()["resumo"].startswith("Toda semana")
@@ -71,6 +109,7 @@ def test_previa_da_regra(cliente, equipe):
 
 
 def test_cria_serie_e_gera_as_ocorrencias_pelo_calendario(cliente, equipe):
+    """A série nasce com a primeira tarefa; as seguintes são criadas pela geração diária na antecedência pedida."""
     ids, h, equipe_id = equipe
     regra = {"frequencia": "semanal", "dias_semana": [0], "antecedencia_dias": 1}
     r = cliente.post(URL, json=_corpo(equipe_id, ids, regra), headers=h["lia"])
@@ -99,6 +138,7 @@ def test_cria_serie_e_gera_as_ocorrencias_pelo_calendario(cliente, equipe):
 
 
 def test_termina_pelo_numero_de_ocorrencias_e_pela_data(cliente, equipe):
+    """A série acaba ao atingir `max_ocorrencias` ou a data `fim` (sem próxima data)."""
     ids, h, equipe_id = equipe
     r = cliente.post(URL, json=_corpo(equipe_id, ids, {"frequencia": "diaria", "max_ocorrencias": 2}), headers=h["lia"])
     assert r.json()["recorrencia"]["proxima_data"] == "2026-11-03"
@@ -112,6 +152,7 @@ def test_termina_pelo_numero_de_ocorrencias_e_pela_data(cliente, equipe):
 
 
 def test_pausar_retomar_editar_e_excluir_com_permissoes(cliente, equipe):
+    """Gestão da série por quem criou ou pela liderança; demais membros só consultam."""
     ids, h, equipe_id = equipe
     r = cliente.post(URL, json=_corpo(equipe_id, ids, {"frequencia": "diaria"}, prazo=datetime.now(timezone.utc).isoformat()), headers=h["ana"])
     rec_id = r.json()["recorrencia"]["id"]
@@ -139,6 +180,7 @@ def test_pausar_retomar_editar_e_excluir_com_permissoes(cliente, equipe):
 
 
 def test_serie_pausada_por_erro_avisa_quem_criou(cliente, equipe):
+    """Se a geração falha (responsável inativo), a série é pausada e o erro fica registrado."""
     ids, h, equipe_id = equipe
     cliente.post(URL, json=_corpo(equipe_id, ids, {"frequencia": "diaria"}), headers=h["lia"])
     # O responsável sai da equipe (fica inativo): a geração não consegue atribuir e pausa a série

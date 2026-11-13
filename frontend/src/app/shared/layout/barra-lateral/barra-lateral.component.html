@@ -81,6 +81,7 @@
           <a class="nav-item" [routerLink]="caminho(item)" [queryParams]="parametros(item.destino ?? item.rota)" routerLinkActive="ativo" ariaCurrentWhenActive="page"
              [routerLinkActiveOptions]="{ exact: !!item.exata }" [title]="item.rotulo">
             <app-icone [nome]="item.icone ?? 'arquivo'" /><span>{{ item.rotulo }}</span>
+            @if (item.novidades && novidadesVistas.temNova()) { <i class="ponto-novidade" role="status" aria-label="Há novidades que você ainda não viu"></i> }
           </a>
         } @else {
           <a class="nav-item" [href]="item.href" [attr.target]="item.novaAba ? '_blank' : null"

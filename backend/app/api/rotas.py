@@ -1,9 +1,29 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para reunir todos os roteadores da API sob o prefixo /api.
-"""Roteador principal: junta os roteadores de cada assunto (um arquivo por assunto em `routes/`).
+"""
+===============================================================================
+ARQUIVO: rotas.py
+AUTOR: José Eduardo Santana Martins
 
-O `main.py` inclui este roteador com o prefixo /api. A ordem de inclusão importa quando dois
-caminhos podem coincidir (ver comentário abaixo).
+FINALIDADE:
+Roteador principal: reúne os roteadores de cada assunto (um arquivo por assunto
+em routes/) num único APIRouter.
+
+RESUMO TÉCNICO:
+Importa os módulos de app/api/routes e de app/api/routes/contratos e inclui o
+roteador de cada um em roteador_api. A ordem de inclusão importa quando dois
+caminhos podem coincidir: caminhos fixos (ex.: /contratos/empresas,
+/chamados/painel) vêm antes dos que têm parâmetro (/contratos/{contrato_id},
+/chamados/{numero}).
+
+FINALIDADE DE NEGÓCIO:
+É o mapa de todos os módulos que o SGI SPI expõe: portal, RH, tarefas,
+protocolo, patrimônio, chamados, rede, contratos e integrações. Módulo novo só
+fica acessível depois de incluído aqui.
+
+CONTEXTO NO SISTEMA:
+O app/main.py inclui roteador_api com o prefixo /api. O teste
+test_openapi_documenta_endpoints confere a documentação das rotas reunidas.
+
+===============================================================================
 """
 
 from fastapi import APIRouter
@@ -11,6 +31,9 @@ from fastapi import APIRouter
 from app.api.routes import acl, assinatura_email, backup, autenticacao, atalhos, menu, busca, chamados, chamados_glpi, chamados_migracao, chamados_painel, chamados_qualidade, contratacoes, documentacao, diretorio, favoritos, integracao_bookstack, integracao_glpi, integracao_sigeo, ldap, manuais, melhorias, sla, painel_executivo, notificacoes, notificacoes_changelog, notificacoes_cliente_windows, notificacoes_preferencias, noticias, patrimonio, preferencias, protocolo, rede, reserva_espacos, rh, rh_admissao, rh_cargos, rh_pessoal, rh_pre_cadastro, tarefas, saude, setores, smtp, usuarios, versoes
 from app.api.routes.contratos import alteracoes, portarias, contratos, correcoes, diario, empresas, execucao, exportacao, importacao, importacao_modelos, migracao, modelos, orcamento, parametros as parametros_contratos, rascunhos, relatorios
 
+# APIRouter é um "grupo de rotas" do FastAPI; include_router copia as rotas de cada
+# arquivo para este grupo. O FastAPI testa as rotas na ordem em que foram incluídas,
+# por isso caminhos fixos precisam vir antes dos que têm parâmetro ({id}).
 roteador_api = APIRouter()
 # Módulos do portal: saúde, autenticação, usuários, setores, ACL, diretórios LDAP e servidores SMTP
 roteador_api.include_router(saude.roteador)

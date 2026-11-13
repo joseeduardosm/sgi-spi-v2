@@ -1,5 +1,31 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para exibir a página dedicada "Alertas de risco" do painel, com filtros e cartões por contrato.
+/**
+ * =============================================================================
+ * ARQUIVO: alertas-de-risco.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Página dedicada "Alertas de risco" do painel de contratos: lista os
+ * contratos em risco, um grupo por contrato, com um cartão por risco que leva
+ * direto à tela onde ele se resolve.
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template embutido. Lê exercício, empresa e
+ * contrato da query string, chama ContratosApiService.painel e usa a parte
+ * "alertas" da resposta. Os filtros atualizam a URL com replaceUrl (sem
+ * poluir o histórico) e recarregam. Contadores (total e altos) são computed.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Ajuda gestores e fiscais a enxergar o que pode dar errado nos contratos
+ * (vencimento de vigência, reajuste, empenho, pagamento ou execução atrasada)
+ * antes que vire problema, priorizando os de gravidade alta.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rota filha do painel de contratos (/contratos/painel). Reaproveita
+ * listaExercicios de painel.component.ts, ROTULOS_RISCO de compartilhado/rotulos,
+ * os pipes de formatação (dataBr, moeda) e o endpoint do painel da API.
+ *
+ * =============================================================================
+ */
 
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -14,7 +40,11 @@ import { ROTULOS_RISCO } from '../compartilhado/rotulos';
 import { listaExercicios } from './painel.component';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
-/** Tela dedicada "Alertas de risco": os riscos agrupados por contrato, cada um num cartão que leva à ação. */
+/**
+ * Tela dedicada "Alertas de risco": os riscos agrupados por contrato, cada um num cartão que leva à ação.
+ * A gravidade (alta ou média) e a lista de riscos vêm prontas da API do painel; a tela só filtra e exibe.
+ * O filtro "Só gravidade alta" é aplicado localmente, sem nova consulta.
+ */
 @Component({
   selector: 'app-alertas-de-risco',
   imports: [EsqueletoComponent, FormsModule, RouterLink, CabecalhoModuloComponent, ...PIPES_FORMATACAO],
@@ -96,12 +126,13 @@ export class AlertasDeRiscoComponent implements OnInit {
   protected contratoId = '';
   protected soAltos = false;
 
-  // Contadores exibidos na barra superior
+  // Contadores exibidos na barra superior. `computed` recalcula sozinho quando o
+  // signal `painel` muda; `reduce` soma os riscos de todos os contratos.
   protected readonly totalRiscos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.length, 0) ?? 0);
   protected readonly altos = computed(() => this.painel()?.alertas.reduce((t, c) => t + c.riscos.filter((r) => r.gravidade === 'alta').length, 0) ?? 0);
-  // Filtros atuais, repassados ao link "← Painel" para manter a mesma seleção
-  // Mesma lista fixa de exercícios do painel
+  // Mesma lista fixa de exercícios do painel (anos que aparecem no seletor)
   protected readonly exercicios = computed(() => listaExercicios(this.painel()?.contratos.map((c) => c.rotulo) ?? [], this.exercicio));
+  // Filtros atuais, repassados ao link "← Painel" para manter a mesma seleção
   protected readonly filtrosUrl = signal<Record<string, string | number>>({});
 
   /** Lê os filtros da URL (vindos do painel) e carrega os alertas. */

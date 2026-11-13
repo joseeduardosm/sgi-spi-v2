@@ -41,8 +41,8 @@ avaliação ativo e pesa na avaliação da competência da data (ver
   medição dela já foi concluída quando a glosa é registrada, a glosa só é aplicada se a medição for reaberta
   (a leitura traz `medicao_ja_concluida = true` e o e-mail avisa).
 - **E-mail** (em segundo plano, pelo [servidor SMTP](smtp.md) ativo):
-  - destinatários: e-mails dos integrantes vigentes da equipe (perfil do usuário) e dos prepostos **ativos**
-    da empresa contratada, sem repetição;
+  - destinatários: e-mails dos integrantes vigentes da equipe (perfil do usuário), dos prepostos **ativos**
+    escolhidos (`prepostos_ids`; `null` = todos) e os **e-mails adicionais** da ocorrência (`emails_adicionais`), sem repetição;
   - "Responder para": a equipe vigente, para que as respostas não voltem à caixa de envio;
   - assunto `[Diário de bordo] Contrato NNN/AAAA — ocorrência de dd/mm/aaaa`; corpo com contrato, contratada,
     data, quem registrou, relato, "Haverá glosa:" com os itens e quantidades e "Impacta a avaliação da
@@ -51,7 +51,15 @@ avaliação ativo e pesa na avaliação da competência da data (ver
     disponíveis no sistema;
   - o resultado (destinatários, sucesso ou erro) fica em `email`. Sem servidor SMTP ativo ou sem destinatário
     com e-mail, a ocorrência é salva e o erro fica registrado; use o reenvio.
-- **Auditoria:** `contrato.diario.registrar`.
+  - **o reenvio repete a escolha do registro:** os prepostos escolhidos e os e-mails adicionais ficam gravados na
+    ocorrência. Ocorrências registradas antes desta gravação (sem escolha guardada) vão a todos os prepostos ativos.
+- **E-mails adicionais:** além da equipe e dos prepostos, a ocorrência pode ir a até **20 e-mails digitados**
+  (formato `algo@dominio.ext`; guardados em minúsculas, sem repetição; inválido → `422`). Só valem com
+  `enviar_email = true` (sem envio, são descartados). Todo e-mail adicional usado fica **salvo no contrato**
+  (`DiarioContrato.emails_salvos`, só daquele contrato) e é oferecido, **desmarcado**, nas próximas ocorrências.
+  Quem pode editar o contrato remove um e-mail da lista (`DELETE …/diario/emails-salvos/{email_id}`); as
+  ocorrências já registradas continuam com os destinatários que tinham.
+- **Auditoria:** `contrato.diario.registrar` (com `emails_adicionais`) e `contrato.diario.remover_email_salvo`.
 
 ## Schemas
 
@@ -69,6 +77,9 @@ JSON inválido ou fora das regras → `422 validacao`.
 | `glosas` | `[{item_id, quantidade}]` | Só com `possui_glosa`; item do contrato; quantidade > 0; sem repetir item |
 | `impacta_avaliacao` | boolean | A ocorrência impacta a avaliação da qualidade? (padrão `false`) |
 | `itens_avaliacao` | `string[]` | Ids de itens do formulário ativo (`DiarioContrato.itens_avaliacao`). Obrigatório com impacto; vazio sem impacto; até 50 |
+| `enviar_email` | boolean | Envia o e-mail da ocorrência (padrão `false`) |
+| `prepostos_ids` | `uuid[]` \| null | Prepostos que recebem (só com `enviar_email`). `null` = todos os ativos; `[]` = nenhum. Fica gravado para o reenvio |
+| `emails_adicionais` | `string[]` | Outros e-mails que recebem (só com `enviar_email`; até 20; formato validado). Salvos no contrato para as próximas ocorrências |
 
 ### `LeituraOcorrencia` (resposta)
 
@@ -77,14 +88,15 @@ JSON inválido ou fora das regras → `422 validacao`.
 `criado_em` (data e hora do registro), `competencia_rotulo` (competência da data, se houver),
 `medicao_ja_concluida` (glosa registrada depois de concluída a medição da competência), `anexos[]` (`id`,
 `nome`, `tamanho` em bytes, `tipo`), `impacta_avaliacao`, `itens_avaliacao[]` (`item_id`, `item_nome`,
-`grupo_nome`) e `email` (`enviado_em`, `ok`, `destinatarios[]`, `erro`; `enviado_em` nulo enquanto o
+`grupo_nome`), `emails_adicionais[]` (escolhidos no registro) e `email` (`enviado_em`, `ok`, `destinatarios[]`, `erro`; `enviado_em` nulo enquanto o
 envio em segundo plano não terminou).
 
 ### `DiarioContrato` (resposta do `GET`)
 
 `ocorrencias[]` (em ordem de registro, a mais antiga primeiro), `pode_registrar` e `itens[]` (`id`, `ordem`,
 `descricao`, `tipo`) para o combobox da glosa e `itens_avaliacao[]` (`id`, `nome`, `grupo`): itens do formulário
-de avaliação ativo, para marcar o impacto (vazio sem formulário ativo).
+de avaliação ativo, para marcar o impacto (vazio sem formulário ativo), e `emails_salvos[]` (`id`, `email`): e-mails
+adicionais já usados nas ocorrências deste contrato, em ordem alfabética.
 
 ## Endpoints
 
@@ -93,7 +105,8 @@ de avaliação ativo, para marcar o impacto (vazio sem formulário ativo).
 | `GET /api/contratos/{contrato_id}/diario` | Diário completo | `200` `DiarioContrato`, `404` |
 | `POST /api/contratos/{contrato_id}/diario` | `multipart/form-data` (`dados` + `arquivos`). Registra a ocorrência e agenda o e-mail | `201` `LeituraOcorrencia`, `400 invalido`, `403`, `404`, `422` |
 | `GET /api/contratos/{contrato_id}/diario/{ocorrencia_id}/anexos/{anexo_id}` | Baixa um anexo da ocorrência (ACL LEITURA) | `200` arquivo, `404` |
-| `POST /api/contratos/{contrato_id}/diario/{ocorrencia_id}/reenviar` | Reenvia o e-mail (síncrono) e devolve a ocorrência com o novo resultado | `200`, `403`, `404` |
+| `POST /api/contratos/{contrato_id}/diario/{ocorrencia_id}/reenviar` | Reenvia o e-mail (síncrono) aos mesmos destinatários escolhidos no registro e devolve a ocorrência com o novo resultado | `200`, `403`, `404` |
+| `DELETE /api/contratos/{contrato_id}/diario/emails-salvos/{email_id}` | Tira um e-mail adicional da lista de salvos do contrato (quem pode editar o contrato) | `204`, `403`, `404` |
 | `GET /api/contratos/{contrato_id}/diario/pdf?inicio=&fim=` | Diário em PDF (A4 paisagem) em formato de diário: **uma página por dia com ocorrência**, com todas as ocorrências do dia (quem registrou e quando, relato em texto puro, competência afetada, glosa, impacto na avaliação e anexos); dias sem ocorrência não geram página e um dia com muito texto continua nas páginas seguintes. Período: limites inclusivos, sem período = todo o contrato. Depois, uma página com as glosas por item e, se houver anexos nas ocorrências, a **lista de anexos** (nº, data da ocorrência, arquivo e páginas): os arquivos são **juntados ao fim do PDF**, cada um precedido de uma folha de rosto (PDF entra como está, PNG/JPG vira uma página; Office, TXT e CSV não cabem no PDF e ficam só com a folha de rosto avisando para baixar no sistema). Todas as páginas saem numeradas em sequência ("Página X de N"). Nome `DIARIO_DE_BORDO_SPI_NNN_AAAA.pdf` | `200` `application/pdf`, `404` |
 
 Exemplo de registro com glosa, impacto e uma foto:
@@ -101,7 +114,7 @@ Exemplo de registro com glosa, impacto e uma foto:
 ```bash
 curl -X POST .../api/contratos/{contrato_id}/diario \
   -H "Authorization: Bearer <token>" \
-  -F 'dados={"data_ocorrencia":"2026-01-10","descricao":"Posto de limpeza descoberto das 8h às 12h.","possui_glosa":true,"glosas":[{"item_id":"8f1c…","quantidade":"0.5"}],"impacta_avaliacao":true,"itens_avaliacao":["pontualidade"]}' \
+  -F 'dados={"data_ocorrencia":"2026-01-10","descricao":"Posto de limpeza descoberto das 8h às 12h.","possui_glosa":true,"glosas":[{"item_id":"8f1c…","quantidade":"0.5"}],"impacta_avaliacao":true,"itens_avaliacao":["pontualidade"],"enviar_email":true,"prepostos_ids":null,"emails_adicionais":["obra@empresa.com.br"]}' \
   -F 'arquivos=@posto.jpg'
 ```
 
@@ -120,6 +133,8 @@ curl -X POST .../api/contratos/{contrato_id}/diario \
 
 
 **E-mail da ocorrência:** o envio por e-mail à equipe e aos prepostos só acontece com `enviar_email = true` em `dados` (padrão `false`); o reenvio manual continua disponível.
+
+**Outros e-mails:** com "Enviar por e-mail" marcado, abaixo da lista de prepostos fica o campo "Outros e-mails desta ocorrência": digita-se o e-mail e Enter (ou vírgula, ou o botão "Adicionar") e ele vira uma pílula com ×. Abaixo, "Usados antes neste contrato" mostra os `emails_salvos` como pílulas desmarcadas: clicar inclui na ocorrência; o × da pílula salva remove da lista do contrato (`ContratosApiService.removerEmailSalvoDiario`). No histórico, a ocorrência mostra os destinatários do envio.
 
 
 ## Competência afetada

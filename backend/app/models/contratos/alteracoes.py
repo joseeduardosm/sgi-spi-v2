@@ -6,11 +6,12 @@ Cada processo em andamento é um rascunho; somente a conclusão aplica o efeito 
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, Uuid, text
+from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Table, Text, UniqueConstraint, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.banco import Base, agora_utc
@@ -273,6 +274,8 @@ class Reajuste(Base):
     )
     evidencia_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[evidencia_anexo_id])
     apostilamento_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[apostilamento_anexo_id])
+    # Diferença retroativa informada manualmente (meses pagos fora do sistema), se houver
+    diferenca_manual: Mapped["DiferencaManual | None"] = relationship(back_populates="reajuste", cascade="all, delete-orphan", uselist=False)
 
 
 # No máximo um reajuste em elaboração por contrato
@@ -328,12 +331,13 @@ class MemoriaReajuste(Base):
 
 
 class AbatimentoReajuste(Base):
-    """Parte do crédito de um desconto retroativo, abatida no valor autorizado de uma competência.
+    """Crédito de um desconto retroativo (reajuste ou repactuação) e onde ele foi abatido.
 
-    Na conclusão de um reajuste com diferença retroativa negativa nasce um abatimento na próxima
-    competência regular ainda não medida (sem nenhuma, fica pendente: `competencia_id` nulo). Se o
-    crédito passar do valor da medição, o que sobra vira outro abatimento (`origem_id` aponta o
-    original) na competência seguinte.
+    Na conclusão de um procedimento com diferença retroativa negativa (calculada ou informada à mão) nasce
+    um crédito no **fundo** do contrato (`competencia_id` nulo). Nada é abatido sozinho: o gestor aplica o
+    crédito inteiro numa medição ainda aberta (`competencia_id` passa a apontá-la) ou o retira dela. Se o
+    crédito passar do valor da medição, o que sobra vira outro crédito no fundo (`origem_id` aponta o
+    original), devolvido ao original se a medição for reaberta.
     """
     __tablename__ = "contratos_abatimentos_reajuste"
     __table_args__ = (CheckConstraint("valor >= 0", name="ck_contratos_abatimentos_reajuste_valor"),)
@@ -348,11 +352,14 @@ class AbatimentoReajuste(Base):
     # Abatimento de onde veio esta sobra (para devolvê-la se a medição for reaberta)
     origem_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_abatimentos_reajuste.id", ondelete="SET NULL"))
     valor: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    # Crédito que veio de uma diferença retroativa informada manualmente (nulo = calculado pelo sistema)
+    diferenca_manual_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_diferencas_manuais.id", ondelete="SET NULL"))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     reajuste: Mapped[Reajuste | None] = relationship(back_populates="abatimentos")
     repactuacao: Mapped["Repactuacao | None"] = relationship(back_populates="abatimentos")
     competencia: Mapped["Competencia | None"] = relationship(back_populates="abatimentos_reajuste")  # noqa: F821
+    diferenca_manual: Mapped["DiferencaManual | None"] = relationship(foreign_keys=[diferenca_manual_id])
 
     @property
     def mes_referencia_origem(self) -> date:
@@ -361,10 +368,93 @@ class AbatimentoReajuste(Base):
 
     @property
     def rotulo_origem(self) -> str:
-        """Texto da origem do crédito no PDF da medição."""
+        """Texto da origem do crédito nos documentos e na tela: "Crédito de Reajuste (ref. MM/AAAA)" ou "Crédito de Repactuação (CCT MM/AAAA)".
+
+        O crédito que veio de uma diferença informada manualmente ganha " · valor manual" no fim."""
         if self.reajuste is not None:
-            return f"Reajuste com referência {self.reajuste.mes_referencia:%m/%Y}"
-        return f"Repactuação (CCT {self.repactuacao.data_base_cct:%m/%Y}) a partir de {self.repactuacao.efeito:%d/%m/%Y}"
+            texto = f"Crédito de Reajuste (ref. {self.reajuste.mes_referencia:%m/%Y})"
+        else:
+            texto = f"Crédito de Repactuação (CCT {self.repactuacao.data_base_cct:%m/%Y}, a partir de {self.repactuacao.efeito:%d/%m/%Y})"
+        return texto + (" · valor manual" if self.diferenca_manual_id is not None else "")
+
+
+# Competências (meses) cobertas por uma diferença retroativa informada manualmente
+diferencas_manuais_competencias = Table(
+    "contratos_diferencas_manuais_competencias",
+    Base.metadata,
+    Column("diferenca_manual_id", ForeignKey("contratos_diferencas_manuais.id", ondelete="CASCADE"), primary_key=True),
+    Column("competencia_id", ForeignKey("contratos_competencias.id", ondelete="CASCADE"), primary_key=True, index=True),
+)
+
+
+class DiferencaManual(Base):
+    """Diferença retroativa informada à mão num reajuste ou numa repactuação, para meses pagos fora do sistema.
+
+    Muitos contratos não têm no SGI as medições anteriores à implantação: esses meses foram pagos no preço antigo
+    e o cálculo automático não os enxerga. O gestor marca os meses (competências encerradas sem medição concluída),
+    informa o valor total da diferença deles (pode ser negativo = crédito da SPI), a justificativa e a memória feita
+    fora do sistema (PDF). Na conclusão do procedimento:
+    - os meses marcados ficam **travados** no preço de antes (não recebem o preço novo e saem do cálculo automático);
+    - valor positivo vira uma competência complementar de uma linha; negativo vira crédito no fundo do contrato.
+    """
+    __tablename__ = "contratos_diferencas_manuais"
+    __table_args__ = (
+        CheckConstraint("(reajuste_id IS NULL) <> (repactuacao_id IS NULL)", name="ck_contratos_diferencas_manuais_origem"),
+        CheckConstraint("valor <> 0", name="ck_contratos_diferencas_manuais_valor"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    # Origem: um reajuste ou uma repactuação (um dos dois; no máximo uma diferença manual por procedimento)
+    reajuste_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_reajustes.id", ondelete="CASCADE"), unique=True)
+    repactuacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_repactuacoes.id", ondelete="CASCADE"), unique=True)
+    # Valor total da diferença dos meses marcados: > 0 a pagar à contratada; < 0 crédito da SPI
+    valor: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    justificativa: Mapped[str] = mapped_column(Text)
+    # Memória de cálculo feita fora do sistema (PDF)
+    anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
+    # Quem informou e quando (o nome é fotografado para a observação dos documentos)
+    informado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    informado_por_nome: Mapped[str] = mapped_column(String(250))
+    informado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    anexo: Mapped[Anexo] = relationship(foreign_keys=[anexo_id])
+    reajuste: Mapped[Reajuste | None] = relationship(back_populates="diferenca_manual")
+    repactuacao: Mapped["Repactuacao | None"] = relationship(back_populates="diferenca_manual")
+    competencias: Mapped[list["Competencia"]] = relationship(  # noqa: F821
+        secondary=diferencas_manuais_competencias, back_populates="diferencas_manuais", order_by="Competencia.periodo_inicio"
+    )
+
+    @property
+    def rotulos_meses(self) -> list[str]:
+        """Meses cobertos como MM/AAAA, em ordem (um mês dividido em partes aparece uma vez só)."""
+        return list(dict.fromkeys(f"{c.competencia:%m/%Y}" for c in self.competencias))
+
+    @property
+    def texto_meses(self) -> str:
+        """"03/2025, 04/2025 e 05/2025" (para a observação e os rótulos)."""
+        meses = self.rotulos_meses
+        if len(meses) <= 1:
+            return meses[0] if meses else "—"  # sem meses: procedimento cancelado (os meses destravaram)
+        return ", ".join(meses[:-1]) + " e " + meses[-1]
+
+    @property
+    def informado_em_local(self) -> datetime:
+        """Quando foi informada, no horário de Brasília."""
+        quando = self.informado_em if self.informado_em.tzinfo else self.informado_em.replace(tzinfo=timezone.utc)
+        return quando.astimezone(ZoneInfo("America/Sao_Paulo"))
+
+    @property
+    def texto_observacao(self) -> str:
+        """Observação que acompanha o valor em todo documento que o cita (memórias, complementar, consolidado e medição com o crédito)."""
+        # Moeda no padrão brasileiro com sinal (R$ -1.234,56 vira "-R$ 1.234,56")
+        valor = f"{abs(self.valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        sinal = "-" if self.valor < 0 else ""
+        quando = self.informado_em_local
+        plural = "medições" if len(self.rotulos_meses) > 1 else "medição"
+        return (f"O valor de {sinal}R$ {valor} foi inserido manualmente por {self.informado_por_nome} em {quando:%d/%m/%Y} às {quando:%H:%M:%S} "
+                f"devido à falta de {plural} de {self.texto_meses}, não tendo sido utilizada a função do sistema para cálculo automático. "
+                f"Justificativa: {self.justificativa}")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -410,6 +500,8 @@ class Repactuacao(Base):
     memorias: Mapped[list["MemoriaRepactuacao"]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan", order_by="MemoriaRepactuacao.versao")
     documentos: Mapped[list["DocumentoRepactuacao"]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan", order_by="DocumentoRepactuacao.ordem")
     abatimentos: Mapped[list[AbatimentoReajuste]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan")
+    # Diferença retroativa informada manualmente (meses pagos fora do sistema), se houver
+    diferenca_manual: Mapped[DiferencaManual | None] = relationship(back_populates="repactuacao", cascade="all, delete-orphan", uselist=False)
     cct_anexo: Mapped[Anexo] = relationship(foreign_keys=[cct_anexo_id])
     consolidado_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[consolidado_anexo_id])
     apostilamento_anexo: Mapped[Anexo | None] = relationship(foreign_keys=[apostilamento_anexo_id])

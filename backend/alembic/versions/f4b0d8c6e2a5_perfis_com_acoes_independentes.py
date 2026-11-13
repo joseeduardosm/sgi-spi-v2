@@ -1,14 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para passar os direitos dos perfis de um nível por módulo para ações independentes (uma linha por ação).
-"""perfis com ações independentes
+"""
+===============================================================================
+ARQUIVO: f4b0d8c6e2a5_perfis_com_acoes_independentes.py
+AUTOR: José Eduardo Santana Martins
 
-Os direitos do perfil deixam de ser um nível hierárquico por módulo e passam a ser um conjunto de ações independentes:
-a chave de `acl_perfis_direitos` ganha a coluna `nivel` (uma linha por ação). Os direitos antigos são expandidos para as ações
-equivalentes (CONTROLE_TOTAL = as ações de todos os níveis até ele que o módulo oferece), então ninguém perde nem ganha acesso.
+FINALIDADE:
+Migração Alembic que passa os direitos dos perfis da ACL de um nível por módulo
+para um conjunto de ações independentes (uma linha por ação).
+
+RESUMO TÉCNICO:
+A chave primária de acl_perfis_direitos ganha a coluna nivel. Cada direito
+antigo é expandido nas ações equivalentes que o módulo oferece
+(codigos_do_recurso), ou seja, CONTROLE_TOTAL vira as ações de todos os níveis
+até ele; se o nível antigo não for uma ação do módulo, a linha original sai. O
+downgrade deixa só a maior ação por módulo e volta a chave antiga.
+
+FINALIDADE DE NEGÓCIO:
+O SuperRoot pode dar a um perfil, por exemplo, só a ação de controle total sem
+a de modificação. A conversão garante que ninguém perde nem ganha acesso na
+troca.
+
+CONTEXTO NO SISTEMA:
+Tabelas acl_perfis_direitos e acl_recursos; usa app/services/acl_acoes.py e
+afeta app/api/routes/acl.py e a checagem exigir_acl. Aplicada com 'alembic
+upgrade head' (o instalador e a atualização do sistema rodam esse comando).
 
 Revision ID: f4b0d8c6e2a5
 Revises: e3a9c7b5d1f4
 Create Date: 2026-10-16
+
+===============================================================================
 """
 
 import sqlalchemy as sa
@@ -21,14 +41,18 @@ down_revision = "e3a9c7b5d1f4"
 branch_labels = None
 depends_on = None
 
+# Peso de cada nível antigo, para comparar "até qual nível" o perfil tinha direito
 ORDEM = {"LEITURA": 1, "MODIFICACAO": 2, "CONTROLE_TOTAL": 3}
 
 
 def upgrade() -> None:
+    """Troca a chave primária para incluir o nível e expande cada direito em ações."""
     conexao = op.get_bind()
     # Expande cada direito hierárquico nas ações do módulo até aquele nível (a ação que a porta do nível usa também entra)
     antigos = list(conexao.execute(sa.text(
         "SELECT d.perfil_id, d.recurso_id, d.nivel, r.slug FROM acl_perfis_direitos d JOIN acl_recursos r ON r.id = d.recurso_id")))
+    # A chave primária passa a ser (perfil, recurso, nível): só assim cabe mais de
+    # uma linha (uma por ação) para o mesmo perfil no mesmo módulo
     op.drop_constraint("acl_perfis_direitos_pkey", "acl_perfis_direitos", type_="primary")
     op.create_primary_key("acl_perfis_direitos_pkey", "acl_perfis_direitos", ["perfil_id", "recurso_id", "nivel"])
     for perfil_id, recurso_id, nivel, slug in antigos:
@@ -47,6 +71,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Deixa só a maior ação de cada perfil por módulo e volta a chave antiga."""
     conexao = op.get_bind()
     # Volta a um nível por módulo: o maior das ações marcadas
     conexao.execute(sa.text(

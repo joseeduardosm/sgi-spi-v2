@@ -309,51 +309,95 @@ def total_bruto_notas(competencia: Competencia) -> Decimal:
 
 
 # ---------------------------------------------------------------------------------------------
-# Crédito de desconto de reajuste (abatido nas próximas medições)
+# Crédito de desconto de reajuste/repactuação: fica no fundo do contrato até o gestor aplicá-lo numa medição
 # ---------------------------------------------------------------------------------------------
 
-def proxima_competencia_a_medir(contrato: Contrato, depois_de: Competencia | None = None) -> Competencia | None:
-    """Primeira competência regular com a medição ainda aberta (depois de `depois_de`, se informada)."""
-    candidatas = sorted(
-        (c for c in contrato.competencias
-         if c.tipo == "regular" and c.medicao_concluida_em is None and c is not depois_de
-         and (depois_de is None or c.periodo_inicio > depois_de.periodo_inicio)),
-        key=lambda c: c.periodo_inicio,
-    )
-    return candidatas[0] if candidatas else None
+def registrar_credito_reajuste(sessao: Session, contrato: Contrato, reajuste, valor: Decimal, repactuacao=None, diferenca_manual=None) -> AbatimentoReajuste:
+    """Crédito de um desconto retroativo (de um reajuste ou de uma repactuação, calculado ou informado à mão).
 
-
-def registrar_credito_reajuste(sessao: Session, contrato: Contrato, reajuste, valor: Decimal, repactuacao=None) -> AbatimentoReajuste:
-    """Crédito de um desconto retroativo (de um reajuste ou de uma repactuação): vai para a próxima competência a medir (ou fica pendente)."""
+    Nasce no **fundo** do contrato (sem competência): nunca é abatido sozinho; o gestor o aplica numa medição (`aplicar_credito`)."""
     abatimento = AbatimentoReajuste(contrato_id=contrato.id, reajuste_id=reajuste.id if reajuste else None,
-                                    repactuacao_id=repactuacao.id if repactuacao else None, valor=valor,
-                                    competencia=proxima_competencia_a_medir(contrato), criado_em=agora_utc())
+                                    repactuacao_id=repactuacao.id if repactuacao else None, valor=valor, competencia=None,
+                                    diferenca_manual_id=diferenca_manual.id if diferenca_manual is not None else None, criado_em=agora_utc())
     sessao.add(abatimento)
     return abatimento
 
 
-def vincular_creditos_pendentes(sessao: Session, contrato: Contrato) -> None:
-    """Créditos sem competência (não havia o que medir) vão para a próxima competência a medir."""
-    destino = proxima_competencia_a_medir(contrato)
-    if destino is None:
-        return
-    for abatimento in sessao.scalars(select(AbatimentoReajuste).where(
-        AbatimentoReajuste.contrato_id == contrato.id, AbatimentoReajuste.competencia_id.is_(None)
-    )):
-        abatimento.competencia = destino
+def leitura_credito(abatimento: AbatimentoReajuste) -> DescontoReajuste:
+    """Crédito no formato da tela: origem, valor e, se veio de diferença manual, a observação."""
+    manual = abatimento.diferenca_manual
+    return DescontoReajuste(id=abatimento.id, reajuste_id=abatimento.reajuste_id, repactuacao_id=abatimento.repactuacao_id,
+                            mes_referencia=abatimento.mes_referencia_origem, rotulo=abatimento.rotulo_origem, manual=abatimento.diferenca_manual_id is not None,
+                            observacao=manual.texto_observacao if manual is not None else "", valor=abatimento.valor)
+
+
+def creditos_no_fundo(sessao: Session, contrato: Contrato) -> list[AbatimentoReajuste]:
+    """Créditos ainda não aplicados em nenhuma medição (o fundo do contrato), do mais antigo para o mais recente."""
+    return list(sessao.scalars(
+        select(AbatimentoReajuste)
+        .where(AbatimentoReajuste.contrato_id == contrato.id, AbatimentoReajuste.competencia_id.is_(None), AbatimentoReajuste.valor > 0)
+        .order_by(AbatimentoReajuste.criado_em)
+    ))
+
+
+def _exigir_medicao_para_credito(competencia: Competencia) -> None:
+    """Crédito só entra ou sai de medição regular ou adicional ainda aberta (depois de concluída, o valor autorizado fica fixo)."""
+    if competencia.tipo not in ("regular", "adicional"):
+        raise ErroRegraContrato("O crédito só pode ser aplicado numa medição regular ou adicional.")
+    _exigir_etapa(competencia, "medicao", "A medição")
+
+
+def aplicar_credito(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, abatimento_id: uuid.UUID, autor: Usuario) -> None:
+    """O gestor aplica um crédito do fundo, **inteiro**, nesta medição (cada crédito é independente dos outros).
+
+    Se o crédito passar do valor da medição, a sobra volta ao fundo na conclusão da medição (`ajustar_abatimentos`).
+    Muda o valor autorizado: as ciências já registradas deixam de valer."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    _exigir_medicao_para_credito(competencia)
+    abatimento = sessao.get(AbatimentoReajuste, abatimento_id)
+    if abatimento is None or abatimento.contrato_id != contrato.id:
+        raise RegistroNaoEncontrado("Crédito")
+    if abatimento.competencia_id is not None:
+        raise ErroRegraContrato("Este crédito já está aplicado numa medição.")
+    if abatimento.valor <= 0:
+        raise ErroRegraContrato("Este crédito não tem saldo.")
+    abatimento.competencia = competencia
+    if competencia.ciencias:
+        competencia.ciencias.clear()
+    _auditar(sessao, autor, "contrato.execucao.credito.aplicar", contrato, competencia, credito=abatimento.rotulo_origem, valor=abatimento.valor)
+    sessao.commit()
+
+
+def retirar_credito(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID, abatimento_id: uuid.UUID, autor: Usuario) -> None:
+    """Devolve ao fundo um crédito aplicado nesta medição ainda aberta."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    competencia = _carregar_competencia(sessao, contrato, competencia_id)
+    _exigir_medicao_para_credito(competencia)
+    abatimento = next((a for a in competencia.abatimentos_reajuste if a.id == abatimento_id), None)
+    if abatimento is None:
+        raise RegistroNaoEncontrado("Crédito")
+    competencia.abatimentos_reajuste.remove(abatimento)
+    abatimento.competencia = None
+    if competencia.ciencias:
+        competencia.ciencias.clear()
+    _auditar(sessao, autor, "contrato.execucao.credito.retirar", contrato, competencia, credito=abatimento.rotulo_origem, valor=abatimento.valor)
+    sessao.commit()
 
 
 def ajustar_abatimentos(sessao: Session, contrato: Contrato, competencia: Competencia) -> None:
-    """Se o desconto passar do valor autorizado bruto, a sobra segue para a próxima competência a medir.
+    """Se o crédito aplicado passar do valor autorizado bruto, a sobra volta ao fundo do contrato.
 
     Chamado ao concluir a medição e a avaliação (quando o % liberado fica definitivo). O abatimento
-    reduzido continua na competência (mesmo zerado) e a sobra aponta para ele em `origem_id`, para que
-    uma reabertura da medição possa devolvê-la (`recolher_sobras`).
+    reduzido continua na competência (mesmo zerado) e a sobra (no fundo, sem competência) aponta para
+    ele em `origem_id`, para que uma reabertura da medição possa devolvê-la (`recolher_sobras`).
     """
     excesso = desconto_reajuste(competencia) - valor_autorizado_bruto(competencia)
     if excesso <= 0:
         return
-    destino = proxima_competencia_a_medir(contrato, depois_de=competencia)
+    destino = None  # a sobra volta ao fundo: o gestor decide se e onde aplicá-la
     # Reduz os abatimentos mais recentes primeiro
     for abatimento in reversed(list(competencia.abatimentos_reajuste)):
         parte = min(excesso, abatimento.valor)
@@ -361,7 +405,7 @@ def ajustar_abatimentos(sessao: Session, contrato: Contrato, competencia: Compet
             continue
         abatimento.valor -= parte
         sessao.add(AbatimentoReajuste(contrato_id=contrato.id, reajuste_id=abatimento.reajuste_id, repactuacao_id=abatimento.repactuacao_id, origem_id=abatimento.id,
-                                      valor=parte, competencia=destino, criado_em=agora_utc()))
+                                      diferenca_manual_id=abatimento.diferenca_manual_id, valor=parte, competencia=destino, criado_em=agora_utc()))
         excesso -= parte
         if excesso <= 0:
             break
@@ -661,6 +705,9 @@ def sincronizar_competencia(contrato: Contrato, competencia: Competencia, period
     medido nele). Competência fora do calendário atual (migrada do SGI) não é tocada (`None`). Com `aplicar=False` só calcula (prévia).
     Devolve `{"alteradas": [...], "incluidas": [...], "removidas": [...], "valor_antes", "valor_depois"}`.
     """
+    # Mês pago fora do sistema e coberto por diferença retroativa manual: travado no preço de antes, não acompanha o cadastro
+    if competencia.diferencas_manuais:
+        return None
     periodos = periodos if periodos is not None else _periodos_por_inicio(contrato)
     periodo = periodos.get(competencia.periodo_inicio)
     if periodo is None:
@@ -767,6 +814,8 @@ def realinhar_ao_calendario(contrato: Contrato) -> list[Competencia]:
             competencia.tipo == "regular" and competencia.etapa_atual == "medicao" and competencia.medicao_iniciada_em is None
             and competencia.medicao_concluida_em is None and competencia.carga_historica_em is None
             and all(i.quantidade_medida == ZERO for i in competencia.itens)
+            # Mês travado por diferença retroativa manual: os itens (no preço de antes) não podem ser recopiados
+            and not competencia.diferencas_manuais
         )
         periodo = por_mes.get(competencia.competencia)
         if not sem_medicao or periodo is None:
@@ -802,8 +851,6 @@ def gerar_competencias(sessao: Session, contrato_id: uuid.UUID, autor: Usuario) 
         )
         contrato.competencias.append(competencia)
         geradas += 1
-    # Crédito de desconto de reajuste sem competência a medir: vai para a primeira nova
-    vincular_creditos_pendentes(sessao, contrato)
     auditar(sessao, autor.login, "contrato.execucao.gerar", f"Contrato {contrato.numero}", autor_id=autor.id,
             alvo_tipo="contrato", alvo_id=contrato.id, dados={"geradas": geradas})
     sessao.commit()
@@ -949,10 +996,12 @@ def detalhar(sessao: Session, contrato_id: uuid.UUID, competencia_id: uuid.UUID,
         percentual_autorizado=percentual,
         valor_autorizado=valor_autorizado(competencia),
         desconto_reajuste=desconto_reajuste(competencia),
-        descontos_reajuste=[
-            DescontoReajuste(reajuste_id=a.reajuste_id, repactuacao_id=a.repactuacao_id, mes_referencia=a.mes_referencia_origem, valor=a.valor)
-            for a in competencia.abatimentos_reajuste if a.valor > 0
-        ],
+        descontos_reajuste=[leitura_credito(a) for a in competencia.abatimentos_reajuste if a.valor > 0],
+        diferenca_manual=competencia.diferenca_manual_id is not None,
+        observacoes_manuais=documentos_execucao.observacoes_diferenca_manual(competencia),
+        # O fundo só interessa enquanto a medição (regular ou adicional) está aberta: é quando o gestor pode aplicar
+        creditos_disponiveis=[leitura_credito(a) for a in creditos_no_fundo(sessao, contrato)]
+        if competencia.tipo in ("regular", "adicional") and competencia.medicao_concluida_em is None else [],
         valor_a_pagar=valor_a_pagar(competencia),
         avisos=(excedentes_da_medicao(contrato, competencia) if competencia.medicao_concluida_em is None else [])
         + avisos_de_impacto_tardio(contrato, competencia) + avisos_da_medicao_adicional(contrato, competencia),
@@ -2472,7 +2521,8 @@ def zerar(sessao: Session, contrato_id, competencia_id, autor: Usuario) -> None:
     for anexo in arquivos:
         servico_anexos.descartar(anexo)
     # Na regular os itens saem junto: a medição recomeça e copia o cadastro de novo no próximo acesso
-    if competencia.tipo == "adicional":
+    if competencia.tipo == "adicional" or competencia.diferencas_manuais:
+        # Mês travado por diferença retroativa manual também fica com os itens (no preço de antes): recopiar daria o preço novo.
         # A adicional não recopia o cadastro sozinha (`garantir_itens` só atende a regular): os itens ficam e só as quantidades voltam a zero
         for item in competencia.itens:
             item.quantidade_medida = ZERO

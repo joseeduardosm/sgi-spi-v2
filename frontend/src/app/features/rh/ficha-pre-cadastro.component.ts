@@ -1,5 +1,34 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para o formulário da ficha de pré-cadastro do RH: seções de dados pessoais, documentos, contato, endereço, vínculo, formações e experiências.
+/**
+ * =============================================================================
+ * ARQUIVO: ficha-pre-cadastro.component.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Formulário da ficha de pré-cadastro do RH: dados pessoais, documentos,
+ * contato, endereço, vínculo, formações, experiências e login proposto. Serve
+ * tanto ao RH (ficha de quem vai entrar na SPI) quanto à própria pessoa
+ * ("minha ficha", para quem já tinha conta antes do módulo).
+ *
+ * RESUMO TÉCNICO:
+ * Componente standalone com template inline. As seções e campos simples vêm
+ * das constantes SECOES e COLUNAS (grade de 12 colunas) e são desenhados por
+ * @for. O login proposto é conferido no SGI e no AD com debounce (RxJS). Grava
+ * pela RhPreCadastroApiService (RH) ou RhAdmissaoApiService (minha ficha) e
+ * permite validar a ficha, cancelar e iniciar a admissão.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Centraliza os dados de admissão que antes circulavam em papel/planilha,
+ * protegendo dados pessoais sensíveis (só o RH e a pessoa veem). A ficha pronta
+ * alimenta o chamado de criação da conta na TI e o processo de admissão.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Rotas /rh/pre-cadastros/:id e "meu cadastro" (rh.routes.ts e
+ * meu-cadastro.component.ts). Usa os tipos de rh-pre-cadastro.models.ts, as
+ * vagas de RH > Cargos (rh-cargos-api.service.ts), a importação por planilha
+ * (importacao-fichas.component.ts) e segue para /rh/admissoes/:id.
+ *
+ * =============================================================================
+ */
 
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
@@ -20,8 +49,10 @@ import { CamposFicha, fichaVazia, GravacaoFicha, LeituraFicha, LoginDisponivel, 
 
 /** Um campo do formulário: chave em `CamposFicha`, rótulo e tipo do controle. */
 interface CampoForm { chave: keyof CamposFicha; rotulo: string; tipo?: 'text' | 'date' | 'select'; opcoes?: string[]; maximo?: number; ajuda?: string; largo?: boolean }
+/** Uma seção (cartão) do formulário com os seus campos simples. */
 interface Secao { id: string; titulo: string; campos: CampoForm[] }
 
+/** Siglas das 27 unidades da federação, usadas nos combos de UF. */
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 
 /** Largura de cada campo na grade de 12 colunas (o que não está aqui ocupa 4). As linhas fecham em 12 para o formulário ficar alinhado. */
@@ -33,6 +64,10 @@ const COLUNAS: Partial<Record<keyof CamposFicha, number>> = {
   vinculo_tipo: 4, orgao_origem: 4, cargo_origem: 4, rs_pv: 4, inicio_previsto: 4, observacoes: 12,
 };
 
+/**
+ * Seções e campos simples da ficha, na ordem da tela. Formação, experiências e login
+ * têm marcação própria no template porque não são campos de texto únicos.
+ */
 const SECOES: Secao[] = [
   { id: 'identificacao', titulo: 'Identificação', campos: [
     { chave: 'nome_completo', rotulo: 'Nome completo *', largo: true, maximo: 200 },
@@ -241,6 +276,7 @@ const SECOES: Secao[] = [
   `,
 })
 export class FichaPreCadastroComponent implements OnInit {
+  // inject() obtém os serviços pela injeção de dependência do Angular, sem construtor.
   private readonly rota = inject(ActivatedRoute);
   private readonly roteador = inject(Router);
   private readonly api = inject(RhPreCadastroApiService);
@@ -250,15 +286,19 @@ export class FichaPreCadastroComponent implements OnInit {
   private readonly autenticacao = inject(AutenticacaoService);
 
   /** Modo "minha ficha": a própria pessoa (legados) preenche e o RH valida; sem login proposto, cargo pretendido nem RS/PV. */
+  // input() declara uma entrada do componente (atributo [minha] de quem o usa), lida como signal: this.minha().
   readonly minha = input(false);
 
   protected readonly secoes = SECOES;
   protected readonly niveis = ['Ensino médio', 'Técnico', 'Graduação', 'Pós-graduação', 'Mestrado', 'Doutorado'];
+  // signal(): valor reativo; ao mudar com set(), o template que o lê é atualizado.
+  // ficha = dados em edição (formato de gravação); lida = como a API devolveu (com status e datas).
   protected readonly ficha = signal<GravacaoFicha | null>(null);
   protected readonly lida = signal<LeituraFicha | null>(null);
   protected readonly vagas = signal<Cargo[]>([]);
   /** Setor escolhido antes do cargo: filtra as vagas do combo seguinte. */
   protected readonly setorPretendido = signal<number | null>(null);
+  /** Setores que têm ao menos uma vaga, sem repetição e em ordem alfabética (computed recalcula quando vagas muda). */
   protected readonly setoresComVagas = computed(() => {
     const unicos = new Map<number, string>();
     for (const v of this.vagas()) unicos.set(v.setor_id, v.setor_nome);
@@ -269,22 +309,32 @@ export class FichaPreCadastroComponent implements OnInit {
   protected readonly importacaoAberta = signal(false);
   protected readonly checando = signal(false);
   protected readonly situacaoLogin = signal<LoginDisponivel | null>(null);
+  /** Fluxo (Subject do RxJS) com cada login digitado; alimenta a checagem com pausa em ngOnInit. */
   private readonly digitado = new Subject<string>();
 
+  /** Título do cabeçalho: nome da pessoa na ficha existente ou "Nova ficha". */
   protected titulo = () => (this.lida() ? this.lida()!.nome_completo : 'Nova ficha');
   /** Ficha de quem já tinha conta (sem login proposto) continua editável: a pessoa e o RH podem corrigir antes de validar. */
   protected ehLegadoEditavel = () => this.lida()?.status === 'vinculado' && !this.lida()?.login_proposto;
+  /** Ficha vinculada a uma conta ou cancelada não muda mais (exceto a de legado, ver acima). */
   protected somenteLeitura = () => ['vinculado', 'cancelado'].includes(this.lida()?.status ?? '') && !this.ehLegadoEditavel();
   protected rotuloStatus = () => (this.lida() ? ROTULOS_STATUS_FICHA[this.lida()!.status].toLowerCase() : '');
 
+  /**
+   * Carrega as vagas (cargos em situação "vago"), liga a checagem do login e abre a ficha:
+   * a da própria pessoa (modo minha), uma ficha existente (id na URL) ou uma em branco.
+   */
   ngOnInit(): void {
     this.cargosApi.cargos({ situacao: 'vago' }).subscribe({ next: (v) => { this.vagas.set(v); this.deduzirSetor(); }, error: () => undefined });
     // Confere o login depois de uma pausa na digitação, para não consultar o AD a cada tecla
     this.digitado.pipe(
+      // debounceTime espera 500 ms sem digitação; distinctUntilChanged ignora o mesmo valor repetido;
+      // switchMap cancela a consulta anterior se chegar um login novo antes da resposta.
       debounceTime(500), distinctUntilChanged(),
       switchMap((login) => { this.checando.set(true); return this.api.loginDisponivel(login, this.lida()?.id ?? null); }),
     ).subscribe({ next: (r) => { this.situacaoLogin.set(r); this.checando.set(false); }, error: () => this.checando.set(false) });
 
+    // Modo "minha ficha": sem ficha ainda, começa em branco com o nome da conta logada
     const id = this.rota.snapshot.paramMap.get('id');
     if (this.minha()) {
       this.admissoes.minhaFicha().subscribe({ next: (l) => (l ? this.carregarLida(l) : this.ficha.set({ ...fichaVazia(), nome_completo: this.autenticacao.usuario()?.nome_completo ?? '' })), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível abrir a sua ficha') });
@@ -294,6 +344,10 @@ export class FichaPreCadastroComponent implements OnInit {
     this.api.obter(Number(id)).subscribe({ next: (l) => this.carregarLida(l), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível abrir a ficha') });
   }
 
+  /**
+   * Guarda a ficha lida e monta a versão editável, tirando os campos que só a API controla
+   * (ids, datas, nomes). O status volta a "rascunho" salvo se a ficha já estava pronta.
+   */
   private carregarLida(l: LeituraFicha): void {
     this.lida.set(l);
     const { id: _i, usuario_id: _u, usuario_nome: _n, vinculado_em: _v, enviada_em: _e, validado_em: _va, cargo_rotulo: _c, criado_em: _ce, atualizado_em: _a, ...dados } = l;
@@ -308,11 +362,13 @@ export class FichaPreCadastroComponent implements OnInit {
     if (vaga) this.setorPretendido.set(vaga.setor_id);
   }
 
+  /** Troca o setor pretendido e limpa o cargo, pois a vaga anterior pode não ser do novo setor. */
   protected escolherSetor(f: GravacaoFicha, setorId: number | null): void {
     this.setorPretendido.set(setorId);
     f.cargo_id = null;
   }
 
+  /** Largura do campo na grade de 12 colunas (padrão 4). */
   protected colunas(chave: keyof CamposFicha): number {
     return COLUNAS[chave] ?? 4;
   }
@@ -320,28 +376,37 @@ export class FichaPreCadastroComponent implements OnInit {
   /** Depois de importar, ao fechar a janela a pessoa vai para a lista de fichas (a ficha em branco não faz mais sentido). */
   protected importou = false;
 
+  /** Recebe o abre/fecha da janela de importação; fechada após importar, volta para a lista. */
   protected fecharImportacao(aberta: boolean): void {
     this.importacaoAberta.set(aberta);
     if (!aberta && this.importou) this.voltar();
   }
 
+  /** Valor de um campo simples como texto (vazio quando nulo), para o ngModel do template. */
   protected valor(f: GravacaoFicha, chave: keyof CamposFicha): string {
     return (f[chave] as string | null) ?? '';
   }
 
+  /** Grava o valor digitado no campo da ficha (acesso genérico por chave). */
   protected definir(f: GravacaoFicha, chave: keyof CamposFicha, valor: string | null): void {
     (f as unknown as Record<string, unknown>)[chave] = valor;
   }
 
+  /** Normaliza o login (sem espaços, minúsculo), apaga a situação anterior e agenda nova checagem. */
   protected mudarLogin(f: GravacaoFicha, valor: string): void {
     f.login_proposto = valor.trim() ? valor.trim().toLowerCase() : null;
     this.situacaoLogin.set(null);
     if (f.login_proposto) this.digitado.next(f.login_proposto);
   }
 
+  /** Linhas em branco para os botões "+ Formação" e "+ Experiência". */
   protected novaFormacao() { return { nivel: '', curso: '', instituicao: '', ano_conclusao: null, em_andamento: false }; }
   protected novaExperiencia() { return { empresa: '', cargo: '', inicio: null, fim: null, descricao: '' }; }
 
+  /**
+   * Grava a ficha: no modo minha, envia para validação do RH; no RH, cria ou altera.
+   * Ficha nova criada pelo RH troca a URL para a do id gerado (replaceUrl evita voltar ao formulário vazio).
+   */
   protected salvar(f: GravacaoFicha): void {
     this.salvando.set(true);
     const id = this.lida()?.id;
@@ -359,12 +424,14 @@ export class FichaPreCadastroComponent implements OnInit {
     });
   }
 
+  /** Após confirmação, cancela a ficha na API (libera o login proposto) e volta para a lista. */
   protected async cancelar(): Promise<void> {
     const l = this.lida();
     if (!l || !(await this.dialogos.confirmar({ titulo: 'Cancelar esta ficha?', mensagem: 'O login proposto fica livre para outra ficha. A ficha continua na lista como cancelada.', rotuloConfirmar: 'Cancelar ficha', perigo: true }))) return;
     this.api.cancelar(l.id).subscribe({ next: () => this.voltar(), error: (e) => this.dialogos.mostrarErro(e, 'Não foi possível cancelar a ficha') });
   }
 
+  /** Marca a ficha enviada pela própria pessoa como validada pelo RH (gera registro no histórico funcional). */
   protected validar(): void {
     const l = this.lida();
     if (!l) return;
@@ -374,6 +441,7 @@ export class FichaPreCadastroComponent implements OnInit {
     });
   }
 
+  /** Abre o processo de admissão a partir da ficha e navega para a tela dele. */
   protected iniciarAdmissao(): void {
     const l = this.lida();
     if (!l) return;
@@ -383,6 +451,7 @@ export class FichaPreCadastroComponent implements OnInit {
     });
   }
 
+  /** Volta para a lista de fichas de pré-cadastro. */
   protected voltar(): void {
     void this.roteador.navigate(['/rh/pre-cadastros']);
   }

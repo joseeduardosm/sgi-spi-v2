@@ -1,0 +1,9 @@
+Number of static VLAN: 24
+VLAN ID: 1 172 300 to 301 400 410 500 555 2468
+         to 2483 
+
+Number of dynamic VLAN: 0
+VLAN ID: 
+
+Number of service VLAN: 0
+VLAN ID: 

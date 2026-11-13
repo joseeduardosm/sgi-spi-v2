@@ -1,5 +1,28 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para testar a fila offline do Patrimônio: guarda no aparelho, envia em ordem quando volta o sinal e para no problema de conexão.
+/**
+ * =============================================================================
+ * ARQUIVO: fila-offline.service.spec.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Testes unitários da fila offline do Patrimônio (FilaOfflineService).
+ *
+ * RESUMO TÉCNICO:
+ * Usa fake-indexeddb para simular o IndexedDB (o jsdom não tem) e um dublê do
+ * PatrimonioApiService com vi.fn(). Alterna navigator.onLine para simular a
+ * queda e a volta do sinal e confere ordem de envio, retenção na fila,
+ * marcação de erro e o mapa id_cliente -> id do servidor.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Protege o inventário feito em campo sem internet: nada do que foi lido ou
+ * cadastrado no aparelho pode se perder, duplicar ou ser enviado fora de
+ * ordem, e o item recusado pela regra precisa mostrar o motivo.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Cobre fila-offline.service.ts, usado pelas telas de cadastro de bem,
+ * movimentação e listas de classificação/baixa do Patrimônio.
+ *
+ * =============================================================================
+ */
 import { IDBFactory } from 'fake-indexeddb';
 
 import { HttpErrorResponse } from '@angular/common/http';
@@ -9,17 +32,23 @@ import { of, throwError } from 'rxjs';
 import { FilaOfflineService } from './fila-offline.service';
 import { PatrimonioApiService } from './patrimonio-api.service';
 
+/** Monta uma ação de cadastro de bem com a chapa informada (id_cliente derivado da chapa). */
 const BEM = (chapa: string) => ({ tipo: 'cadastro_bem' as const, corpo: { id_cliente: `id-${chapa}`, chapa, descricao: 'Cadeira', localizacao_id: 's', conservacao: 4, situacao: 'ativo' as const, origem: 'proprio' as const } });
 
 describe('FilaOfflineService', () => {
   let api: { cadastrarBem: ReturnType<typeof vi.fn>; criarClassificacao: ReturnType<typeof vi.fn>; incluirNaClassificacao: ReturnType<typeof vi.fn> };
 
+  /**
+   * Cria o serviço com um dublê da API (vi.fn registra as chamadas e devolve
+   * respostas de sucesso por padrão). O TestBed é o injetor de testes do Angular.
+   */
   function criar() {
     api = { cadastrarBem: vi.fn(() => of({})), criarClassificacao: vi.fn(() => of({ id: 'servidor-1' })), incluirNaClassificacao: vi.fn(() => of({})) };
     TestBed.configureTestingModule({ providers: [{ provide: PatrimonioApiService, useValue: api }] });
     return TestBed.inject(FilaOfflineService);
   }
 
+  // Antes de cada teste: começa sem sinal, para que nada seja enviado sozinho
   beforeEach(() => {
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
     // Banco novo e vazio a cada teste (o jsdom não traz IndexedDB)

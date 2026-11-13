@@ -1,0 +1,29 @@
+// Criado por José Eduardo Santana Martins
+// Este arquivo serve para os detalhes da tela Changelog (novidades): o dia aberto, com setas para o dia anterior e o próximo e a lista para pular a uma data.
+
+.changelog {
+  // Uma coluna só: a navegação entre os dias em cima (e embaixo) e o dia aberto com a largura toda
+  .changelog-leitura { display: grid; gap: 16px; }
+  // Setas nas pontas e, no meio, a lista para pular direto a uma data
+  .changelog-navegacao { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+  .changelog-escolha { display: grid; gap: 4px; max-width: 520px; width: 100%; justify-self: center;
+    label { margin: 0; } select { width: 100%; margin: 0; } }
+  .manuais-artigo .changelog-navegacao { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--spi-borda); }
+
+  // Cada novidade: selo do módulo, título e texto, separadas por um filete
+  .changelog-novidade {
+    padding: 18px 0;
+    border-top: 1px solid var(--spi-borda);
+    &:first-of-type { padding-top: 4px; border-top: 0; }
+    h3 { margin: 8px 0 6px; }
+  }
+}
+
+@media (max-width: 600px) {
+  // No celular: a lista ocupa a linha de cima e as setas ficam embaixo, uma em cada ponta
+  .changelog .changelog-navegacao { grid-template-columns: 1fr 1fr; }
+  .changelog .changelog-escolha { grid-column: 1 / -1; grid-row: 1; max-width: none; }
+  .changelog .changelog-navegacao > a:last-child { justify-self: end; }
+  // No rodapé não há a lista: o espaço do meio some para as setas ficarem na mesma linha
+  .changelog .changelog-navegacao > span:nth-child(2) { display: none; }
+}

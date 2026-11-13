@@ -109,7 +109,7 @@
             <dl class="resumo-reajuste">
               <div><dt>Diferença das competências pagas</dt><dd>{{ v.total_retroativo_pagas | moeda }}</dd></div>
               <div><dt>Diferença total das medidas</dt><dd><strong>{{ v.total_retroativo | moeda }}</strong></dd></div>
-              <div><dt>Ao finalizar</dt><dd>{{ +v.total_retroativo > 0 ? 'Competência de diferença a pagar' : +v.total_retroativo < 0 ? 'Crédito abatido na próxima medição' : 'Nada a acertar' }}</dd></div>
+              <div><dt>Ao finalizar</dt><dd>{{ +v.total_retroativo > 0 ? 'Competência de diferença a pagar' : +v.total_retroativo < 0 ? 'Crédito no fundo do contrato (o gestor aplica numa medição)' : 'Nada a acertar' }}</dd></div>
             </dl>
           </div>
         } @else {
@@ -131,6 +131,13 @@
                 </section>
               }
             </div>
+          </div>
+        }
+        <!-- Meses encerrados sem medição concluída (pagos fora do sistema): pergunta e diferença informada manualmente -->
+        @if (temDiferencaManual(r)) {
+          <div class="corpo">
+            <app-diferenca-manual [meses]="r.meses_sem_medicao" [diferenca]="r.diferenca_manual" [podeEditar]="p.pode_editar" [ocupado]="salvandoManual()"
+                                  (salvar)="salvarDiferencaManual(r, $event)" (remover)="removerDiferencaManual(r)" (baixar)="baixar(r, $event)" />
           </div>
         }
         @if (p.pode_editar) {
@@ -262,7 +269,8 @@
                   <td class="num">{{ h.base_atual | moeda }} → {{ h.base_repactuada | moeda }}</td>
                   <td>@if (h.diferenca_retroativa !== null && +h.diferenca_retroativa > 0) { {{ h.diferenca_retroativa | moeda }} a pagar }
                     @else if (h.diferenca_retroativa !== null && +h.diferenca_retroativa < 0) { Crédito de {{ -h.diferenca_retroativa | moeda }} }
-                    @else { — }</td>
+                    @else if (!h.diferenca_manual) { — }
+                    @if (h.diferenca_manual; as dm) { @if (h.diferenca_retroativa !== null && +h.diferenca_retroativa !== 0) { <br /> }<small><span class="selo-situacao">Valor manual</span> {{ +dm.valor > 0 ? (dm.valor | moeda) + ' a pagar' : 'crédito de ' + (-dm.valor | moeda) }}</small> }</td>
                   <td><div class="acoes-linha">
                     @if (h.memorias.at(-1); as m) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(h, m.pdf.anexo_id)">Memória</button> }
                     @if (h.consolidado) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(h, h.consolidado.anexo_id)">Consolidado</button> }

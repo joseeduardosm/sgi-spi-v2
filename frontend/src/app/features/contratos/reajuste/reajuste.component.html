@@ -27,7 +27,7 @@
             @if (dif > 0) {
               <p class="aviso-bloco informativo">Reajuste retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.data_efeito | dataBr }} mantêm o preço pago. Ao concluir, será gerada uma <strong>competência de diferença de reajuste</strong> de {{ r.diferenca_retroativa | moeda }} (quantidades medidas × (preço novo − preço pago)), paga pelo fluxo normal da execução.</p>
             } @else if (dif < 0) {
-              <p class="aviso-bloco informativo">Desconto retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.data_efeito | dataBr }} foram pagas com o preço anterior. Ao concluir, o <strong>crédito de {{ -dif | moeda }}</strong> da SPI será abatido do valor autorizado {{ r.competencia_credito ? 'na medição de ' + r.competencia_credito : 'na próxima competência gerada' }} (e, se não couber, nas seguintes).</p>
+              <p class="aviso-bloco informativo">Desconto retroativo: {{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir de {{ r.data_efeito | dataBr }} foram pagas com o preço anterior. Ao concluir, o <strong>crédito de {{ -dif | moeda }}</strong> da SPI vai para o fundo do contrato: o gestor escolhe em qual medição aplicá-lo.</p>
             } @else {
               <p class="dica-formulario">{{ r.competencias_com_diferenca }} competência(s) já medida(s) a partir da referência: com os percentuais salvos, não há diferença a acertar.</p>
             }
@@ -162,6 +162,9 @@
               </div>
             }
           }
+          <!-- Meses encerrados sem medição concluída (pagos fora do sistema): pergunta e diferença informada manualmente -->
+          <app-diferenca-manual [meses]="r.meses_sem_medicao" [diferenca]="r.diferenca_manual" [podeEditar]="p.pode_editar" [ocupado]="salvandoManual()"
+                                (salvar)="salvarDiferencaManual(r, $event)" (remover)="removerDiferencaManual(r)" (baixar)="baixar(r, $event)" />
           @if (alteradoSemSalvar(r)) { <p class="aviso-bloco informativo">Prévia: os valores acima já refletem o que você digitou. Clique em "Salvar memória" para gravar e poder gerar o PDF e o XLSX.</p> }
           @if (p.pode_editar) {
             <div class="acoes-cartao">
@@ -241,10 +244,11 @@
                     @else if (+r.diferenca_retroativa < 0) {
                       Crédito de {{ -r.diferenca_retroativa | moeda }}:
                       @for (a of r.abatimentos; track a.identificador) {
-                        <a class="link-arquivo" [routerLink]="['/contratos', id(), 'execucao', a.identificador]">{{ a.valor | moeda }} {{ a.medida ? 'abatido em' : 'a abater em' }} {{ a.competencia }}</a>@if (!$last) { · }
+                        <a class="link-arquivo" [routerLink]="['/contratos', id(), 'execucao', a.identificador]">{{ a.valor | moeda }} {{ a.medida ? 'abatido em' : 'aplicado em' }} {{ a.competencia }}</a>@if (!$last) { · }
                       }
-                      @if (+r.credito_pendente > 0) { <span class="texto-erro">{{ r.credito_pendente | moeda }} pendente (sem competência a medir)</span> }
-                    } @else { — }
+                      @if (+r.credito_pendente > 0) { <span>{{ r.credito_pendente | moeda }} no fundo do contrato (aplicar numa medição)</span> }
+                    } @else if (!r.diferenca_manual) { — }
+                    @if (r.diferenca_manual; as dm) { @if (+r.diferenca_retroativa !== 0) { <br /> }<small><span class="selo-situacao">Valor manual</span> {{ +dm.valor > 0 ? (dm.valor | moeda) + ' a pagar' : 'crédito de ' + (-dm.valor | moeda) }}</small> }
                   </td>
                   <td>
                     @if (r.memorias.at(-1); as m) { <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, m.pdf.anexo_id)">Baixar memória</button> }

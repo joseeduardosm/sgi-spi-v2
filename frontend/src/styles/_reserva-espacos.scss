@@ -1,4 +1,35 @@
-/* Módulo Reserva de Espaços: agenda mensal, selos de situação, linha do tempo e painel (identidade do SGI SPI). */
+/**
+ * =============================================================================
+ * ARQUIVO: _reserva-espacos.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do Módulo Reserva de Espaços (identidade do SGI SPI): agenda
+ * mensal, legenda e chips dos espaços, lista do dia escolhido, selos de
+ * situação da reserva, detalhe com série e linha do tempo, fila de
+ * aprovação, busca de fiscais e o painel com indicadores e gráficos.
+ *
+ * RESUMO TÉCNICO:
+ * Variáveis Sass ($deferida, $aguardando, $indeferida, $cancelada) dão a cor
+ * de cada situação; .selo-reserva usa como classe o próprio valor da API
+ * (DEFERIDA, AGUARDANDO_APROVACAO...). A agenda é uma grade de 7 colunas com
+ * gap de 1 px sobre fundo cinza (as linhas da grade). Cada chip recebe a cor
+ * do espaço pela variável --cor; reservas pendentes ganham fundo listrado
+ * (repeating-linear-gradient). O gráfico mensal é feito só com CSS.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite agendar auditórios, salas e outros espaços da SPI, ver a ocupação
+ * do mês, aprovar ou recusar pedidos e acompanhar o uso dos espaços,
+ * evitando choque de horários.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelas telas de
+ * frontend/src/app/features/reserva-espacos (agenda, detalhe, fila e painel
+ * de reservas). Segue o mesmo padrão visual do Protocolo.
+ *
+ * =============================================================================
+ */
+// Variáveis Sass (só existem na compilação): uma cor por situação da reserva
 $deferida: #2e9d5b;
 $aguardando: #f0b429;
 $indeferida: #c82331;
@@ -16,6 +47,7 @@ $cancelada: #9aa4af;
     i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: var(--spi-raio-p); vertical-align: -1px;
       &.pendente { background: repeating-linear-gradient(45deg, #f0b429, #f0b429 3px, #fff 3px, #fff 6px); border: 1px solid #f0b429; } } }
 
+  // Calendário: 7 colunas (dias da semana); o gap de 1 px deixa aparecer o fundo cinza e forma as linhas da grade
   .grade-agenda { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; margin-bottom: 20px; border: 1px solid var(--cor-e8eaec); background: var(--cor-e8eaec); border-radius: var(--spi-raio-g); overflow: hidden;
     .cab-dia { padding: 8px; color: var(--cor-5a6673); background: var(--cor-f7f8f9); font-size: 12px; text-align: center; }
     .celula { min-height: 96px; padding: 6px; background: #fff; cursor: pointer; overflow: hidden;
@@ -33,6 +65,7 @@ $cancelada: #9aa4af;
     .barra-cor { align-self: stretch; border-radius: var(--spi-raio-p); } small { display: block; color: var(--cor-5a6673); } .horas { font-weight: 700; } }
 
   .selo-reserva { display: inline-block; padding: 4px 9px; border-radius: var(--spi-raio-g); color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap;
+    // As classes são os valores da situação vindos da API, em maiúsculas
     &.DEFERIDA { background: $deferida; } &.AGUARDANDO_APROVACAO { color: #5c4300; background: $aguardando; }
     &.INDEFERIDA { background: $indeferida; } &.CANCELADA { background: $cancelada; } }
 

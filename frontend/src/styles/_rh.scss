@@ -1,3 +1,37 @@
+/**
+ * =============================================================================
+ * ARQUIVO: _rh.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Estilos do Módulo RH: tela de Parâmetros, organograma, telas de gestão,
+ * ficha de pré-cadastro, checklist por classificação, etapas da admissão
+ * (foto, comprovante, aviso de e-mail) e o painel de entrada do RH com a
+ * sub-navegação do cabeçalho.
+ *
+ * RESUMO TÉCNICO:
+ * Parâmetros: grupos de campos com larguras proporcionais, dias da semana
+ * como botões de alternar, opções em caixas (:has(input:checked) destaca a
+ * marcada) e rodapé fixo (sticky) com o botão de salvar. Organograma: árvore
+ * com conectores desenhados por ::before/::after, numa "lona" que o
+ * componente move e amplia (transform); abaixo de 900 px, ou com
+ * .organograma-vertical-ativo, o mixin organograma-vertical vira lista com
+ * linha-guia. A ficha usa grade de 12 colunas e cada campo declara a
+ * largura na variável --col.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Apoia o RH da SPI na configuração das regras (férias, dias úteis), na
+ * visão da estrutura de unidades e cargos, e no fluxo de admissão de novos
+ * servidores, do pré-cadastro à nomeação.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Usado pelas telas de frontend/src/app/features
+ * do RH (parâmetros, organograma, admissão, ficha). Reaproveita
+ * .avatar-diretorio do Diretório e ajusta .chips-filtro e .tabela-gestao
+ * globais nas telas de gestão.
+ *
+ * =============================================================================
+ */
 /* Tela de Parâmetros do RH: grupos de campos com larguras proporcionais, opções em caixas e rodapé fixo com o botão de salvar. */
 .parametros-rh {
   .grade-parametros {
@@ -73,6 +107,7 @@
       user-select: none;
       transition: background 0.15s, border-color 0.15s;
 
+      /* A caixa de seleção real fica invisível por cima do botão: o clique marca/desmarca e o teclado continua funcionando */
       input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
       &:hover { border-color: #bc3843; }
       &.marcado { border-color: #bc3843; color: #8d1f2b; background: var(--cor-fcf0f1); }
@@ -162,6 +197,8 @@
   &::before { content: ''; position: absolute; top: 0; left: 50%; height: 24px; border-left: 1px solid var(--spi-borda-campo); }
 }
 .no-org { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; padding: 0 8px; }
+// Conectores da árvore: ::before e ::after de cada filho desenham a metade esquerda e a direita da barra
+// horizontal; o primeiro e o último filho apagam a ponta que sobraria, e o filho único não tem barra.
 .org-filhos > .no-org { padding-top: 24px; margin-top: 0;
   &::before, &::after { content: ''; position: absolute; top: 0; width: 50%; height: 24px; border-top: 1px solid var(--spi-borda-campo); }
   &::before { right: 50%; }
@@ -197,6 +234,7 @@
     &:focus-visible { outline: none; box-shadow: var(--spi-anel-foco); border-radius: var(--spi-raio-p); } }
 }
 
+// Mixin reutilizado em dois casos: telas estreitas (@media) e quando o usuário escolhe a visão em lista
 @mixin organograma-vertical {
   .organograma-palco { display: flex; flex-direction: column; height: auto; overflow: visible; cursor: auto; touch-action: auto; user-select: auto; padding-bottom: 24px; }
   .organograma-lona { position: static; transform: none !important; width: auto; }

@@ -1,12 +1,42 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para entregar às telas de contratos os parâmetros do módulo (prazos, cortes e limites), lidos uma vez da API.
+/**
+ * =============================================================================
+ * ARQUIVO: parametros-contratos.service.ts
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Entregar às telas de contratos os parâmetros do módulo (prazos, cortes,
+ * limites e signatários), lidos uma única vez da API.
+ *
+ * RESUMO TÉCNICO:
+ * Serviço Angular (providedIn root, uma instância para todo o sistema) com o
+ * signal valores(), iniciado com PARAMETROS_DE_FABRICA. carregar() faz a
+ * leitura uma vez só (refaz apenas se falhar); atualizar() troca os valores
+ * depois que a tela de parâmetros salva.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite que o administrador ajuste prazos (atraso de pagamento, vigência a
+ * vencer, documentos), limites (aditamento, acerto em centavos, anexos) e
+ * dados de autoridades sem mudar código, e que todas as telas usem os mesmos
+ * valores.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Lido por várias telas do módulo de contratos (painel, vigências, execução,
+ * portarias). Busca via ContratosApiService.parametros(); os tipos estão em
+ * contratos.models.ts.
+ *
+ * =============================================================================
+ */
 
 import { inject, Injectable, signal } from '@angular/core';
 
 import { ContratosApiService } from './contratos-api.service';
 import { ParametrosContratos, ValoresParametrosContratos } from './contratos.models';
 
-/** Valores de fábrica: valem até a leitura chegar (e se ela falhar), os mesmos que a API devolve em `padroes`. */
+/**
+ * Valores de fábrica: valem até a leitura chegar (e se ela falhar), os mesmos que a API devolve em `padroes`.
+ * Se mudar um padrão no backend, mantenha este objeto igual para as telas não divergirem antes da leitura.
+ * (SSGC = Subsecretaria de Gestão Corporativa; PNCP = Portal Nacional de Contratações Públicas.)
+ */
 export const PARAMETROS_DE_FABRICA: ValoresParametrosContratos = {
   corte_alertas_a_partir_de: '2026-09-01',
   corte_marcadores_a_partir_de: '2026-08-01',
@@ -47,7 +77,9 @@ export const PARAMETROS_DE_FABRICA: ValoresParametrosContratos = {
 @Injectable({ providedIn: 'root' })
 export class ParametrosContratosService {
   private readonly api = inject(ContratosApiService);
+  /** Valores em uso; começam com os de fábrica e são trocados quando a API responde. */
   readonly valores = signal<ValoresParametrosContratos>(PARAMETROS_DE_FABRICA);
+  // Marca que a leitura já foi pedida, para não repetir a requisição a cada tela
   private pedido = false;
 
   /** Lê da API uma única vez (as chamadas seguintes não fazem nada). */

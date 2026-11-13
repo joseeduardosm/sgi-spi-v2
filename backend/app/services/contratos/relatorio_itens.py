@@ -1,9 +1,30 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para gerar o relatório em PDF dos itens financeiros do contrato (aba Itens).
-"""Relatório dos itens financeiros do contrato (A4 paisagem, no padrão visual dos demais PDFs).
+"""
+===============================================================================
+ARQUIVO: relatorio_itens.py
+AUTOR: José Eduardo Santana Martins
 
-Usa os mesmos números da aba Itens (`servico_contratos.detalhar_contrato`): quantidades da vigência
-atual, executado, disponível, valor unitário vigente, subtotal mensal, base mensal e valor global.
+FINALIDADE:
+Gerar o relatório em PDF dos itens financeiros do contrato (aba Itens), em
+A4 paisagem, no padrão visual dos demais PDFs do sistema.
+
+RESUMO TÉCNICO:
+`relatorio_itens` usa os mesmos números da aba Itens
+(`servico_contratos.detalhar_contrato`): quantidades da vigência atual,
+executado, disponível, valor unitário vigente, subtotal mensal, base mensal
+e valor global. Monta identificação, totais e a tabela de itens com
+`DocumentoPdf` e devolve os bytes e o nome do arquivo.
+
+FINALIDADE DE NEGÓCIO:
+Permite imprimir ou anexar ao processo a situação financeira dos itens do
+contrato (quanto foi contratado, executado e ainda disponível), com os
+códigos orçamentários (classe, natureza de despesa, SIAFÍSICO, CATMAT/CATSER).
+
+CONTEXTO NO SISTEMA:
+Chamado pela rota de download do relatório de itens do contrato. Reaproveita
+os formatadores de `documentos_execucao` (moeda, quantidade). O acesso ao
+contrato é checado dentro de `detalhar_contrato`.
+
+===============================================================================
 """
 
 import re
@@ -16,7 +37,9 @@ from app.services.contratos.documentos_execucao import moeda, moeda_unitaria, qu
 from app.services.contratos.servico_contratos import detalhar_contrato
 from app.services.documentos.pdf import DocumentoPdf
 
+# Situação técnica do contrato → rótulo do PDF
 SITUACOES = {"ativo": "Ativo", "a_vencer": "A vencer", "encerrado": "Encerrado", "suspenso": "Suspenso"}
+# Periodicidade de faturamento em meses → nome
 PERIODICIDADES = {1: "Mensal", 2: "Bimestral", 3: "Trimestral", 6: "Semestral", 12: "Anual"}
 
 
@@ -27,12 +50,18 @@ def _cnpj(valor: str) -> str:
 
 
 def _percentual(valor) -> str:
+    """Percentual com 2 casas e vírgula decimal (ex.: 12,50%)."""
     return f"{valor:.2f}%".replace(".", ",")
 
 
 def relatorio_itens(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> tuple[bytes, str]:
-    """PDF da aba Itens e o nome do arquivo (`ITENS_SPI_NNN_AAAA.pdf`)."""
+    """PDF da aba Itens e o nome do arquivo (`ITENS_SPI_NNN_AAAA.pdf`).
+
+    Parâmetros: `sessao` (banco), `contrato_id` e `usuario` (quem pede; seu nome
+    vai como autor do PDF). Não grava nada.
+    """
     c = detalhar_contrato(sessao, contrato_id, usuario)
+    # A última vigência da lista é a atual
     vigencia = c.vigencias[-1]
     documento = DocumentoPdf("Itens financeiros do contrato", f"Contrato {c.numero} · {c.apelido or c.empresa.razao_social}",
                              paisagem=True, autor=usuario.nome_completo or usuario.login)
@@ -51,6 +80,7 @@ def relatorio_itens(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -
         ("Aditamentos acumulados", _percentual(c.aditamento_acumulado_percentual)),
         ("Supressões acumuladas", _percentual(c.supressao_acumulada_percentual)),
     ])
+    # Uma linha por item; subtotal mensal só existe para itens contínuos
     linhas = [
         [
             str(i.ordem),
@@ -75,5 +105,6 @@ def relatorio_itens(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -
         larguras=[0.5, 2.95, 0.85, 1.2, 2.2, 0.95, 0.95, 0.9, 0.9, 1.15, 1.25, 0.85],
         alinhar_direita=[5, 6, 7, 8, 9, 10, 11],
     )
+    # Nome do arquivo: número do contrato com tudo que não é letra/dígito trocado por "_"
     arquivo = re.sub(r"[^0-9A-Za-z]+", "_", c.numero).strip("_") or "SEM_NUMERO"
     return documento.gerar(), f"ITENS_SPI_{arquivo}.pdf"

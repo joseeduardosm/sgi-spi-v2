@@ -23,6 +23,7 @@ from app.core.banco import FUSO_SAO_PAULO
 from app.models.patrimonio import Bem, Localizacao
 from app.models.rede import ConexaoRede, EquipamentoRede, ModeloFaceRede, PortaRede, PortaVlanRede, VlanRede
 from app.services.chamados.importacao_glpi import Relatorio
+from app.services.rede import servico
 
 TABELAS_REDE = {
     "glpi_configs", "glpi_networkequipments", "glpi_networkequipmentmodels", "glpi_networkports", "glpi_vlans", "glpi_networkports_vlans",
@@ -51,6 +52,9 @@ def _int(valor) -> int:
 
 def carregar(sessao: Session, dados: dict[str, list[dict]]) -> Relatorio:
     rel = Relatorio()
+    # Desativada (decisão do usuário, 12/11/2026): a rede passou a ser cadastrada só pela tela, em cadeia (core → distribuição → acesso → APs),
+    # com o lado do patch panel e a configuração das portas; esta carga criaria equipamentos e cabos fora dessa regra.
+    raise servico.ErroRede("A carga da Rede pelo GLPI está desativada: a rede é cadastrada pela tela, em cadeia (core, distribuição, acesso, APs).", 409, "carga_desativada")
     rel.versao = next((str(c["value"]) for c in dados.get("glpi_configs", []) if c.get("context") == "core" and c.get("name") == "version"), "desconhecida")
     portas_glpi = [p for p in dados.get("glpi_networkports", []) if p.get("itemtype") == "NetworkEquipment" and not p.get("is_deleted")]
     portas_por_equip = defaultdict(list)

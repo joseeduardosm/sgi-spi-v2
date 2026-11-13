@@ -1,14 +1,41 @@
-// Criado por José Eduardo Santana Martins
-// Este arquivo serve para definir o tema claro e o tema escuro da interface (variáveis de cor).
-//
-// Como funciona:
-// - As cores neutras que antes eram fixas nos estilos (#fff, cinzas de borda, fundo e texto) viram variáveis
-//   "--cor-<hex do tema claro>": no tema claro valem exatamente o hex do nome; no escuro, o par definido abaixo.
-//   Não mude o nome de uma variável: ele é o hex original do tema claro.
-// - As variáveis "--spi-*" são as de identidade visual (fundo, texto, borda...) e também mudam no escuro.
-// - O tema é escolhido em core/tema/tema.service.ts, que põe data-tema="escuro" no <html>.
-// - Vermelhos de marca, barra lateral e cores de destaque não mudam entre os temas.
-// - Cores novas: use var(--spi-*) ou uma "--cor-*" existente em vez de hex fixo, para valerem nos dois temas.
+/**
+ * =============================================================================
+ * ARQUIVO: _tema.scss
+ * AUTOR: José Eduardo Santana Martins
+ *
+ * FINALIDADE:
+ * Definir o tema claro e o tema escuro da interface (variáveis de cor) e os
+ * tokens do DESIGN.md: superfícies, cores de status, tipografia,
+ * espaçamento, raios e sombras.
+ *
+ * RESUMO TÉCNICO:
+ * Como funciona:
+ * - As cores neutras que antes eram fixas nos estilos (#fff, cinzas de
+ *   borda, fundo e texto) viram variáveis "--cor-<hex do tema claro>": no
+ *   tema claro valem exatamente o hex do nome; no escuro, o par definido
+ *   em :root[data-tema='escuro']. Não mude o nome de uma variável: ele é o
+ *   hex original do tema claro.
+ * - As variáveis "--spi-*" são as de identidade visual (fundo, texto,
+ *   borda...) e também mudam no escuro.
+ * - O tema é escolhido em core/tema/tema.service.ts, que põe
+ *   data-tema="escuro" no <html>.
+ * - Vermelhos de marca, barra lateral e cores de destaque não mudam.
+ * - Cores novas: use var(--spi-*) ou uma "--cor-*" existente em vez de hex
+ *   fixo, para valerem nos dois temas.
+ * - Na impressão (@media print) tudo volta ao tema claro.
+ *
+ * FINALIDADE DE NEGÓCIO:
+ * Permite que cada servidor trabalhe no tema que preferir (o escuro cansa
+ * menos a vista em longos períodos) sem perder legibilidade, e garante que
+ * documentos impressos ou em PDF saiam sempre no padrão claro.
+ *
+ * CONTEXTO NO SISTEMA:
+ * Importado por styles.scss. Todas as folhas de estilo e componentes usam
+ * estas variáveis; a escolha do tema fica em core/tema/tema.service.ts e as
+ * regras de uso estão no DESIGN.md (vocabulário fechado de cores e raios).
+ *
+ * =============================================================================
+ */
 
 :root {
   --botao-copiar-cor: #0a0a0a;

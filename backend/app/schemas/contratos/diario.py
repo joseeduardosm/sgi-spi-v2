@@ -2,6 +2,7 @@
 # Este arquivo serve para definir o formato dos dados do diário de bordo do contrato.
 """Diário de bordo (`/api/contratos/{contrato_id}/diario`): ocorrências e glosas."""
 
+import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -11,6 +12,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.contratos.tipos import ValorQuantidade
 from app.services.tarefas.descricao import sanitizar_descricao  # HTML do editor rico, o mesmo das tarefas
+
+# Formato de e-mail aceito nos adicionais: algo@dominio.ext, sem espaços
+EMAIL_VALIDO = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
 
 class GravacaoGlosa(BaseModel):
@@ -28,9 +32,24 @@ class GravacaoOcorrencia(BaseModel):
     glosas: list[GravacaoGlosa] = Field(default_factory=list, description="Itens e quantidades a glosar (só com `possui_glosa`).")
     impacta_avaliacao: bool = Field(False, description="A ocorrência impacta a avaliação da qualidade?")
     enviar_email: bool = Field(False, description="Envia o e-mail desta etapa (equipe, prepostos ou Financeiro). Padrão `false`: só envia quem marcar.")
-    prepostos_ids: list[uuid.UUID] | None = Field(None, description="Prepostos que recebem o e-mail (só com `enviar_email`). `null` = todos os ativos; lista vazia = nenhum (só a equipe).")
+    prepostos_ids: list[uuid.UUID] | None = Field(None, description="Prepostos que recebem o e-mail (só com `enviar_email`). `null` = todos os ativos; lista vazia = nenhum. A escolha fica gravada e o reenvio a repete.")
     itens_avaliacao: list[str] = Field(default_factory=list, max_length=50,
                                        description="Ids dos itens do formulário de avaliação ativo impactados (só com `impacta_avaliacao`).")
+    emails_adicionais: list[str] = Field(default_factory=list, max_length=20,
+                                         description="E-mails além da equipe e dos prepostos que recebem esta ocorrência (só com `enviar_email`; até 20). "
+                                         "Ficam salvos no contrato e aparecem, desmarcados, nas próximas ocorrências.")
+
+    @field_validator("emails_adicionais")
+    @classmethod
+    def _emails(cls, valores: list[str]) -> list[str]:
+        """Apara, passa para minúsculas, confere o formato e tira os repetidos (mantendo a ordem)."""
+        limpos = []
+        for valor in valores:
+            email = valor.strip().lower()
+            if not EMAIL_VALIDO.fullmatch(email) or len(email) > 250:
+                raise ValueError(f"e-mail adicional inválido: {valor.strip() or '(vazio)'}")
+            limpos.append(email)
+        return list(dict.fromkeys(limpos))
 
     @field_validator("descricao")
     @classmethod
@@ -55,6 +74,9 @@ class GravacaoOcorrencia(BaseModel):
         if not self.impacta_avaliacao and self.itens_avaliacao:
             raise ValueError("itens de avaliação só podem ser informados quando a ocorrência impactar a avaliação")
         self.itens_avaliacao = list(dict.fromkeys(self.itens_avaliacao))
+        if not self.enviar_email:
+            # Sem e-mail, não há destinatário a gravar nem e-mail adicional a salvar no contrato
+            self.prepostos_ids, self.emails_adicionais = None, []
         return self
 
 
@@ -102,6 +124,7 @@ class LeituraOcorrencia(BaseModel):
     anexos: list[LeituraAnexoOcorrencia] = []
     impacta_avaliacao: bool = False
     itens_avaliacao: list[LeituraItemAvaliacao] = []
+    emails_adicionais: list[str] = Field(default_factory=list, description="E-mails adicionais escolhidos no registro (o reenvio repete a escolha).")
     medicao_ja_concluida: bool = Field(False, description="A glosa foi registrada depois de concluída a medição dessa competência: só vale se a medição for reaberta.")
     email: EnvioEmail
 
@@ -130,6 +153,12 @@ class OpcaoCompetenciaDiario(BaseModel):
     medicao_concluida: bool = Field(False, description="A medição dessa competência já foi concluída (a glosa só vale se ela for reaberta).")
 
 
+class EmailSalvoDiario(BaseModel):
+    """E-mail adicional já usado numa ocorrência do contrato (oferecido, desmarcado, nas próximas)."""
+    id: int
+    email: str
+
+
 class DiarioContrato(BaseModel):
     ocorrencias: list[LeituraOcorrencia] = Field(..., description="Em ordem cronológica de registro (mais antiga primeiro).")
     pode_registrar: bool
@@ -137,3 +166,5 @@ class DiarioContrato(BaseModel):
     competencias: list[OpcaoCompetenciaDiario] = Field(default_factory=list, description="Competências regulares do contrato (mais recente primeiro), para escolher a afetada.")
     itens_avaliacao: list[OpcaoItemAvaliacao] = Field(default_factory=list,
                                                       description="Itens do formulário de avaliação ativo (vazio sem formulário ativo).")
+    emails_salvos: list[EmailSalvoDiario] = Field(default_factory=list,
+                                                  description="E-mails adicionais já usados nas ocorrências deste contrato, em ordem alfabética.")

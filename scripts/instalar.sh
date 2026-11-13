@@ -64,6 +64,11 @@ done
 
 [[ $EUID -eq 0 ]] || { echo "Execute com sudo." >&2; exit 1; }
 USUARIO="${SUDO_USER:?Execute via sudo a partir do usuário do projeto}"
+# Logado como root e rodando "sudo …", o SUDO_USER vira "root": a API e a atualização rodariam como root e os arquivos passariam a ser dele
+if [[ "$USUARIO" == "root" ]]; then
+  echo "ERRO: rode a partir do usuário do projeto, não do root (ex.: su - administrador; cd ~/projeto; sudo scripts/instalar.sh …)." >&2
+  exit 1
+fi
 como_usuario() { sudo -u "$USUARIO" -H "$@"; }
 # Homologação apontando para o domínio de produção redirecionaria tudo para produção
 if (( HOMOLOGACAO )) && [[ "$DOMINIO" == "$DOMINIO_PRODUCAO" ]]; then
@@ -306,7 +311,8 @@ systemctl reload nginx
 # 8. Verificação
 # ---------------------------------------------------------------------------------------------
 echo "==> Verificação"
-sleep 2
+# A API (dois workers) leva alguns segundos para subir depois do restart: espera até 60 s antes de conferir (antes dava 502 falso)
+for _ in $(seq 1 30); do curl -fsS -o /dev/null "http://127.0.0.1:$PORTA/api/saude" 2>/dev/null && break; sleep 2; done
 curl -fsS "http://127.0.0.1:$PORTA/api/saude" && echo
 curl -fsS -o /dev/null "http://127.0.0.1:$PORTA/" && echo "frontend OK"
 curl -fsS -o /dev/null --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/api/saude" --cacert "$CERT" && echo "HTTPS OK" \

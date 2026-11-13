@@ -1,6 +1,37 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para testar a repactuação pela CCT: linhas e vínculos, memória, retroativo, checklist, consolidado e finalização.
-"""Repactuação: a diferença de cada componente de custo soma no preço dos itens vinculados, a partir da data de vigência da CCT."""
+"""
+===============================================================================
+ARQUIVO: test_contratos_repactuacao.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Testar a repactuação de contrato pela CCT: linhas de componentes de custo e
+vínculos com itens, memória de cálculo, retroativo, checklist, consolidado,
+finalização e crédito quando a diferença é negativa.
+
+RESUMO TÉCNICO:
+Fixa a data em 15/03/2026, mede janeiro e abre repactuações pela API
+(/repactuacoes). Confere: a diferença de cada componente soma no preço dos
+itens vinculados (um item pode estar em várias linhas); o mês quebrado pela
+data de efeito pede a escolha pro rata/integral; a finalização exige
+checklist e consolidado e cria a competência de diferença; diferença
+negativa vira crédito que o gestor aplica; repactuações seguidas não cobram
+de novo o que a anterior já cobrou.
+
+FINALIDADE DE NEGÓCIO:
+Repactuação é o reequilíbrio do preço de contratos com mão de obra quando
+muda a CCT (Convenção Coletiva de Trabalho da categoria). O teste protege o
+novo preço dos itens, o valor retroativo pago (ou o crédito descontado) e o
+registro de documentos (CCT em Documentos importantes, memória, consolidado).
+
+CONTEXTO NO SISTEMA:
+Rotas de alterações do contrato (repactuações) e servico_repactuacao,
+competências de diferença (servico_competencias) e créditos aplicados nas
+medições. Usa a fixture equipe de test_contratos_alteracoes.py e o roteiro
+de execução de test_contratos_execucao.py.
+
+===============================================================================
+"""
+
 from datetime import date
 from decimal import Decimal
 
@@ -15,6 +46,10 @@ HOJE = date(2026, 3, 15)
 
 @pytest.fixture(autouse=True)
 def _hoje(monkeypatch):
+    """Fixa "hoje" em 15/03/2026 nos serviços de contratos (autouse = vale para todos os testes do arquivo).
+
+    monkeypatch é a fixture do pytest que troca atributos só durante o teste.
+    """
     monkeypatch.setattr("app.services.contratos.servico_contratos.hoje", lambda: HOJE)
     monkeypatch.setattr("app.services.contratos.servico_competencias.hoje", lambda: HOJE)
 
@@ -34,6 +69,11 @@ def _medir_janeiro(cliente, contrato, gestora, fiscal):
 
 
 def _abrir(cliente, contrato, h, efeito="2026-01-16", base_cct="2026-01-01"):
+    """Abre uma repactuação enviando a CCT em PDF, com data-base e data de efeito.
+
+    Devolve a resposta HTTP (201 ao abrir, 409 se já há uma em andamento ou se o
+    efeito é anterior a uma repactuação concluída).
+    """
     return cliente.post(_url(contrato, "/repactuacoes"), data={"data_base_cct": base_cct, "data_efeito": efeito}, files={"arquivo": ("cct.pdf", PDF)}, headers=h)
 
 
@@ -62,6 +102,7 @@ def test_repactuacao_completa(cliente, admin, equipe):  # noqa: F811
         {"descricao": "Vale-transporte", "valor_vigente": "198", "valor_repactuado": "220", "itens_ids": [continuo["id"]]},
         {"descricao": "Uniforme", "valor_vigente": "10", "valor_repactuado": "15", "itens_ids": todos},
     ]}
+    # Duas linhas: vale-transporte (+22) só no item contínuo e uniforme (+5) em todos.
     rep = cliente.put(f"{url}/linhas", json=linhas, headers=gestora).json()["em_andamento"]
     novos = {i["item_id"]: Decimal(i["valor_unitario_repactuado"]) - Decimal(i["valor_unitario_atual"]) for i in rep["itens"]}
     assert novos[continuo["id"]] == Decimal("27")  # 22 + 5: o item vinculado às duas linhas soma as duas diferenças
@@ -110,7 +151,7 @@ def test_repactuacao_completa(cliente, admin, equipe):  # noqa: F811
 
 
 def test_repactuacao_com_desconto_vira_credito(cliente, admin, equipe):  # noqa: F811
-    """Componente que diminui: a diferença negativa das medidas vira crédito abatido na próxima medição."""
+    """Componente que diminui: a diferença negativa das medidas vira crédito no fundo, que o gestor aplica numa medição."""
     contrato, gestora, fiscal = equipe
     _medir_janeiro(cliente, contrato, gestora, fiscal)
     painel = _abrir(cliente, contrato, gestora, efeito="2026-01-01").json()
@@ -124,6 +165,11 @@ def test_repactuacao_com_desconto_vira_credito(cliente, admin, equipe):  # noqa:
     final = cliente.post(f"{url}/finalizar", files={"arquivo": ("ap.pdf", PDF)}, headers=gestora).json()["historico"][0]
     assert final["competencia_diferenca"] is None and Decimal(final["diferenca_retroativa"]) < 0
     fevereiro = cliente.get(_url(contrato, "/competencias/identificador/2026-02"), headers=gestora).json()
+    # Nada é abatido sozinho: o crédito fica disponível e o gestor aplica
+    assert fevereiro["desconto_reajuste"] == "0.00"
+    credito = fevereiro["creditos_disponiveis"][0]
+    assert credito["repactuacao_id"] == final["id"] and credito["rotulo"].startswith("Crédito de Repactuação (CCT ")
+    fevereiro = cliente.post(_url(contrato, f"/competencias/{fevereiro['id']}/creditos/{credito['id']}"), headers=gestora).json()
     assert Decimal(fevereiro["desconto_reajuste"]) == -Decimal(final["diferenca_retroativa"])
     assert fevereiro["descontos_reajuste"][0]["repactuacao_id"] == final["id"]
 
@@ -134,6 +180,10 @@ def test_cada_repactuacao_gera_a_sua_competencia_de_diferenca(cliente, admin, eq
     _medir_janeiro(cliente, contrato, gestora, fiscal)
 
     def repactuar(descricao, vigente, repactuado):
+        """Abre, preenche uma linha ligada ao item contínuo, gera memória e consolidado e finaliza.
+
+        Devolve (item contínuo, registro da repactuação finalizada no histórico).
+        """
         painel = _abrir(cliente, contrato, gestora, efeito="2026-01-01").json()
         continuo = next(i for i in painel["itens_contrato"] if i["tipo"] == "continuo")
         url = _url(contrato, f"/repactuacoes/{painel['em_andamento']['id']}")

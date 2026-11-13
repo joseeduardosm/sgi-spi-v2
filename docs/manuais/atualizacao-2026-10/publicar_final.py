@@ -1,15 +1,52 @@
+"""
+===============================================================================
+ARQUIVO: publicar_final.py
+AUTOR: José Eduardo Santana Martins
+
+FINALIDADE:
+Publicar no BookStack a atualização de outubro de 2026 dos manuais do SGI
+SPI: ajusta páginas existentes e cria as páginas novas, já com os prints.
+
+RESUMO TÉCNICO:
+Carrega com exec() as funções de cabecalho_pub.py e os textos de
+textos_novos.py. Cada [[nome]] no HTML vira a imagem lab/imgs/<nome>.png
+(enviada à galeria do BookStack por multipart) seguida da lista numerada das
+setas, lida de lab/legendas.json. Depois edita, por id fixo, as páginas de
+Contratos (visão geral, cadastro, trilha de execução com a troca de ordem
+entre Checklist e CADIN, diário), Protocolo, Patrimônio e Tarefas, e cria a
+página da portaria e o capítulo de controle de acesso. Roda uma vez, na
+pasta deste arquivo; tem efeito real no BookStack.
+
+FINALIDADE DE NEGÓCIO:
+Mantém os manuais consultados pelos servidores da SPI iguais ao que o
+sistema faz depois das mudanças de outubro (portaria de designação, CADIN
+como última etapa, diário em PDF, perfis de acesso etc.).
+
+CONTEXTO NO SISTEMA:
+Ferramenta de documentação, fora do sistema. Depende de cabecalho_pub.py,
+textos_novos.py, do token.txt e dos prints gerados pelo laboratório
+(pasta laboratorio/, copiada para lab/).
+
+===============================================================================
+"""
+
 import json, os, re, sys, uuid, html as htmlmod, urllib.request
+# exec() roda os dois arquivos aqui mesmo: traz api, pagina, inserir_*, BASE, TOKEN,
+# PORTARIA e ACESSO para este escopo.
 exec(open("cabecalho_pub.py").read())
 exec(open("textos_novos.py").read())
+# Legendas das setas numeradas de cada print (geradas pelo cap.py do laboratório).
 LAB = "lab"
 LEG = json.load(open(f"{LAB}/legendas.json"))
 LEGENDA_PADRAO = "Tela do SGI SPI"
 
 
 def enviar_imagem(pagina_id, nome):
+    """Envia o print `<nome>.png` à galeria do BookStack, ligado à página; devolve os dados da imagem (url e miniaturas)."""
     arq = f"{LAB}/imgs/{nome}.png"
     limite = uuid.uuid4().hex
     campos = {"type": "gallery", "uploaded_to": str(pagina_id), "name": nome + ".png"}
+    # Monta o corpo multipart/form-data na mão (urllib não tem isso pronto).
     partes = [f'--{limite}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode() for k, v in campos.items()]
     partes.append(f'--{limite}\r\nContent-Disposition: form-data; name="image"; filename="{nome}.png"\r\nContent-Type: image/png\r\n\r\n'.encode() + open(arq, "rb").read() + b"\r\n")
     corpo = b"".join(partes) + f"--{limite}--\r\n".encode()
@@ -21,7 +58,9 @@ def enviar_imagem(pagina_id, nome):
 
 def com_imagens(h, pagina_id):
     """Cada [[nome]] vira a imagem (com link para ampliar) e a lista numerada que explica as setas."""
+    # Expressão regular: [[nome]] com letras, números, _ e -.
     def trocar(m):
+        """Troca um [[nome]] pela imagem com link e a lista de legendas."""
         nome = m.group(1)
         img = enviar_imagem(pagina_id, nome)
         itens = "".join(f'<li value="{i["n"]}">{htmlmod.escape(i["texto"])}</li>' for i in LEG.get(nome, []))
@@ -32,6 +71,7 @@ def com_imagens(h, pagina_id):
 
 
 def salvar_com_imagens(i, h, nota):
+    """Grava a página `i` no BookStack depois de trocar os [[marcadores]] pelas imagens."""
     api("PUT", f"/pages/{i}", {"html": com_imagens(h, i)})
     print("atualizada", i, nota)
 
@@ -67,16 +107,20 @@ h = pagina(158)["html"]
 h = substituir_bloco(h, "Depois da nota fiscal, as etapas",
     '<p>Depois da nota fiscal, a <strong>retenção de tributos</strong> e o <strong>checklist</strong> ficam abertos ao mesmo tempo: o Financeiro confere a retenção enquanto a equipe monta o checklist. '
     'A <strong>consulta ao CADIN é a última etapa</strong> antes do download e só abre quando todas as anteriores estiverem concluídas. O documento consolidado exige as cinco etapas concluídas.</p>\n[[g03-trilha-etapas]]')
+# Troca a ordem das linhas da tabela: Checklist passa a 5 e CADIN a 6.
 m5 = re.search(r"<tr>(?:(?!</tr>).)*?5\. CADIN.*?</tr>", h, re.S); m6 = re.search(r"<tr>(?:(?!</tr>).)*?6\. Checklist.*?</tr>", h, re.S)
 assert m5 and m6
 linha5, linha6 = m5.group(0), m6.group(0); entre = h[m5.end():m6.start()]
 h = h[:m5.start()] + linha6.replace("6. Checklist", "5. Checklist") + entre + linha5.replace("5. CADIN", "6. CADIN") + h[m6.end():]
+# Reordena também as seções de texto e acrescenta o parágrafo do e-mail de CADIN.
+# CADIN: cadastro estadual de devedores; com pendência, a contratada é avisada.
 a = h.rfind("<h2", 0, h.index("5. Consulta ao CADIN")); b = h.rfind("<h2", 0, h.index("6. Documentos mensais do checklist")); c = h.rfind("<h2", 0, h.index("7. Download: documento consolidado"))
 bloco_cadin = h[a:b].replace("5. Consulta ao CADIN", "6. Consulta ao CADIN (última etapa antes do download)").rstrip() + (
     '\n<p>Com pendência, o sistema <strong>registra sozinho uma ocorrência no diário de bordo</strong> e <strong>envia o e-mail de CADIN</strong> (texto da máscara cadastrada em Contratos › Modelos) a todos os prepostos ativos da contratada, com a equipe em cópia. '
     'O resultado do envio aparece na consulta, com o botão <strong>Reenviar e-mail</strong> para tentar de novo.</p>\n')
 bloco_check = h[b:c].replace("6. Documentos mensais do checklist", "5. Documentos mensais do checklist")
 h = h[:a] + bloco_check + bloco_cadin + h[c:]
+# Acrescenta, depois da seção da Ordem Bancária (OB), o parágrafo do e-mail de pagamento.
 k = h.index("8. Ordem Bancária</h2>"); k = h.rfind("<h2", 0, k); prox = h.index("<h2", k + 5)
 h = h[:prox] + ('<p>Ao anexar a OB, o sistema envia à contratada o <strong>e-mail de pagamento</strong> (texto da máscara <em>E-mail de pagamento</em>, em Contratos › Modelos) e mostra na competência se o envio deu certo, com o botão <strong>Reenviar e-mail</strong>. '
     'Quem tem no perfil de acesso a ação <strong>Lançar ordem bancária</strong> anexa a OB em qualquer contrato, mesmo sem integrar a equipe (e só isso). '
@@ -119,12 +163,14 @@ h = inserir_antes(h, "Aprovar (Controle total)",
 salvar_com_imagens(193, h, "baixa")
 
 h = pagina(173)["html"]
+# Subtarefas: troca o parágrafo por dois itens de lista com as regras novas.
 k = inicio_do_paragrafo(h, "A tarefa principal não vai para validação"); f = fim_do_bloco(h, k)
 h = h[:k] + ("<li>Quem <strong>entra ou sai da tarefa principal</strong> entra ou sai das subtarefas ainda abertas; a subtarefa pode ter responsáveis além dos da principal, mas não pode retirar os dela.</li>"
              "<li>Quando a <strong>tarefa principal é validada ou concluída, as subtarefas que ainda estavam abertas são concluídas junto</strong>.</li>") + h[f:]
 salvar_com_imagens(173, h, "subtarefas")
 
 # ================================================================ Novas páginas
+# Cria a página nova no capítulo de Contratos e insere os prints depois de cada título.
 cap_contratos = 154
 nova = api("POST", "/pages", {"chapter_id": cap_contratos, "name": "Equipe e portaria de designação", "html": "<p>Em elaboração.</p>", "priority": 3})
 P = PORTARIA
@@ -135,6 +181,7 @@ for titulo, marc in (("1. Nomeações", ["e01-equipe-nova-portaria", "e02-nomeac
     P = marcar(P, titulo, marc)
 salvar_com_imagens(nova["id"], P, "NOVA página portaria")
 
+# Cria o capítulo e a página de controle de acesso no livro do SGI SPI.
 cap = api("POST", "/chapters", {"book_id": 147, "name": "Controle de acesso (administração)", "priority": 9, "description": "Perfis de acesso, setores e personificação."})
 pa = api("POST", "/pages", {"chapter_id": cap["id"], "name": "Perfis de acesso", "html": "<p>Em elaboração.</p>", "priority": 1})
 A = marcar(ACESSO, "Perfis e ações", ["a01-perfil-modulos"])

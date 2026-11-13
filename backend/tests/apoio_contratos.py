@@ -1,7 +1,34 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para oferecer dados e funções de apoio aos testes do módulo de contratos.
-"""Apoio aos testes do módulo de contratos: documentos válidos, empresa, contrato e ACL."""
+"""
+===============================================================================
+ARQUIVO: apoio_contratos.py
+AUTOR: José Eduardo Santana Martins
 
+FINALIDADE:
+Oferece dados e funções de apoio aos testes do módulo de contratos:
+documentos válidos (CNPJ, CPF, PDF, XML de NF-e), empresa, contrato, ACL e
+atalhos para avançar etapas da execução mensal e da prorrogação.
+
+RESUMO TÉCNICO:
+Funções puras (gerar_cnpj, gerar_cpf, item, dados_contrato, xml_nfe) montam
+dados; outras chamam a API pelo TestClient (criar_empresa, criar_contrato,
+restringir_contratos, juntar_nf, conferir_retencao,
+preparar_registro_prorrogacao) e outras gravam direto no banco com
+FabricaSessao (trocar_equipe_pela_portaria, corpo_conclusao,
+definir_parametros), para encurtar cenários longos.
+
+FINALIDADE DE NEGÓCIO:
+Deixa os testes curtos e fiéis ao uso real: o contrato padrão é de limpeza
+com um item contínuo e um sob demanda, a nota fiscal segue o layout da SEFAZ
+e a retenção de tributos usa o mesmo endpoint da tela.
+
+CONTEXTO NO SISTEMA:
+Usado pelos test_contratos_*.py e outros testes. Depende de
+schemas/contratos/validadores (_digito), services/documentos/pdf
+(DocumentoPdf), serviços de contratos, parâmetros e auditoria, e das rotas
+/api/contratos e /api/acl.
+
+===============================================================================
+"""
 import json
 from datetime import date
 
@@ -17,6 +44,7 @@ PDF = DocumentoPdf("Documento de teste").paragrafo("conteúdo").gerar()
 def gerar_cnpj(base: str) -> str:
     """CNPJ válido a partir de uma base (completa com zeros e calcula os dígitos verificadores)."""
     base = base.rjust(12, "0")[:12]
+    # Pesos oficiais do 1º dígito verificador do CNPJ; o 2º usa os mesmos com 6 na frente.
     pesos = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     primeiro = _digito(base, pesos)
     return base + primeiro + _digito(base + primeiro, [6, *pesos])
@@ -24,6 +52,7 @@ def gerar_cnpj(base: str) -> str:
 
 def gerar_cpf(base: str) -> str:
     """CPF válido a partir de uma base (completa com zeros e calcula os dígitos verificadores)."""
+    # CPF: 9 dígitos de base; os pesos vão de 10 a 2 (1º dígito) e de 11 a 2 (2º dígito).
     base = base.rjust(9, "0")[:9]
     primeiro = _digito(base, list(range(10, 1, -1)))
     return base + primeiro + _digito(base + primeiro, list(range(11, 1, -1)))
@@ -92,6 +121,8 @@ def criar_contrato(cliente: TestClient, cabecalho: dict, **extras) -> dict:
 
 def restringir_contratos(cliente: TestClient, admin: dict, niveis: dict[int, str]) -> None:
     """Cadastra o recurso `contratos` com uma regra por usuário (ex.: {id: "MODIFICACAO"})."""
+    # Cadastrar o recurso fecha o módulo (lista positiva): só quem tiver regra passa a acessar.
+    # ACL = lista de controle de acesso por módulo (Leitura, Modificação, Controle total).
     r = cliente.post("/api/acl/recursos", json={"nome": "Contratos", "slug": "contratos"}, headers=admin)
     assert r.status_code == 201, r.text
     for usuario_id, nivel in niveis.items():
@@ -101,6 +132,7 @@ def restringir_contratos(cliente: TestClient, admin: dict, niveis: dict[int, str
 
 # --- Nota fiscal (PDF + XML) e retenção de tributos ------------------------------------------------
 
+# CNPJs de emitente (empresa contratada) e tomador (SPI) usados por padrão no XML da nota.
 CNPJ_CONTRATADA = gerar_cnpj("112223330001")  # empresa padrão de `criar_empresa`
 CNPJ_SPI = "96480850000103"
 
@@ -108,6 +140,8 @@ CNPJ_SPI = "96480850000103"
 def xml_nfe(valor: str, numero: str = "1", cnpj_emitente: str = CNPJ_CONTRATADA, cnpj_tomador: str = CNPJ_SPI,
             retencoes: dict | None = None, chave: str | None = None) -> bytes:
     """XML de NF-e (modelo 55) mínimo e autorizado, no layout da SEFAZ, para os testes."""
+    # Chave de acesso de 44 dígitos montada a partir de UF, ano/mês, CNPJ e número (só precisa ter o formato certo).
+    # retTrib traz os tributos retidos na nota (IRRF, previdência, PIS, COFINS, CSLL).
     chave = chave or f"35260{cnpj_emitente}55001{int(numero):09d}1{int(numero):08d}1"[:44].ljust(44, "0")
     r = {"vIRRF": "0.00", "vRetPrev": "0.00", "vRetPIS": "0.00", "vRetCOFINS": "0.00", "vRetCSLL": "0.00", **(retencoes or {})}
     ret = "".join(f"<{k}>{v}</{k}>" for k, v in r.items())
@@ -124,6 +158,7 @@ def xml_nfe(valor: str, numero: str = "1", cnpj_emitente: str = CNPJ_CONTRATADA,
 def juntar_nf(cliente, base: str, h: dict, valor: str, numero: str = "1", adicional: tuple[str, str] | None = None,
               recebida_em: str = "2026-02-05", prazo: str = "30", extras: tuple[tuple[str, str], ...] = (), despesas: tuple[tuple[str, str], ...] = (), **xml_extras):
     """Etapa 3: envia PDF + XML da nota e, se houver, de outras notas (`adicional=(valor, numero)` e `extras=[(valor, numero), …]`)."""
+    # Lista de notas: a principal (com os extras do XML), a adicional e as demais; cada uma vira um par PDF + XML.
     notas = [(valor, numero, xml_extras)] + ([(*adicional, {})] if adicional else []) + [(v, n, {}) for v, n in extras]
     arquivos = []
     for i, (v, n, extra) in enumerate(notas):
@@ -146,6 +181,7 @@ def conferir_retencao(cliente, base: str, h: dict, principal: dict | None = None
     Uma nota para a qual não se informou retenção (ex.: `adicional=None` com duas notas) fica de fora da gravação.
     """
     notas = cliente.get(base, headers=h).json()["notas_fiscais"]
+    # Casa cada nota juntada com a retenção informada, na mesma ordem; None deixa a nota de fora.
     informadas = [principal or {}, adicional, *outras]
     corpo = {"notas": [{"nota_id": n["id"], **r} for n, r in zip(notas, informadas) if r is not None], "discriminacao_conferida": discriminacao, "enviar_email": email}
     return cliente.put(f"{base}/retencao", json=corpo, headers=h)
@@ -164,6 +200,7 @@ def trocar_equipe_pela_portaria(contrato_id: str, equipe: dict[str, int]) -> Non
 
     with FabricaSessao() as sessao:
         contrato = servico_contratos.obter_contrato(sessao, uuid.UUID(str(contrato_id)))
+        # Aplica a equipe nova, grava (flush) e ressincroniza os setores de equipe, como faria a publicação da portaria.
         mudancas = servico_contratos.aplicar_equipe_por_ids(sessao, contrato, {papel: equipe.get(papel) for papel in PAPEIS_EQUIPE})
         sessao.flush()
         setor_equipes.sincronizar(sessao)
@@ -184,6 +221,7 @@ def corpo_conclusao(base: str, notas: list[str], prazo: int = 3) -> dict:
     from app.models.contratos import Contrato
     from app.models.contratos.empresa import PrepostoEmpresa
 
+    # Extrai o id do contrato da URL da competência (/api/contratos/{id}/competencias/...).
     contrato_id = uuid.UUID(base.split("/competencias/")[0].rsplit("/", 1)[1])
     with FabricaSessao() as sessao:
         empresa_id = sessao.get(Contrato, contrato_id).empresa_id
@@ -207,6 +245,7 @@ def definir_parametros(**campos) -> None:
         for campo, valor in campos.items():
             setattr(linha, campo, valor)
         sessao.commit()
+    # Os parâmetros ficam em cache na memória: sem limpar, o teste continuaria vendo os valores antigos.
     servico_parametros.limpar_cache()
 
 
@@ -215,6 +254,7 @@ def preparar_registro_prorrogacao(cliente, base: str, h: dict, calculo: str = "p
 
     `base` é a URL do contrato (`/api/contratos/{id}`). Devolve o rascunho atualizado."""
     p = cliente.get(f"{base}/prorrogacao", headers=h).json()
+    # Meses quebrados (vigência que não começa no dia 1) exigem escolher entre pro rata e integral antes de gerar a memória.
     if p["memoria"] and p["memoria"]["precisa_escolher"]:
         corpo = {"meses": p["meses"], "regra_sob_demanda": p["regra_sob_demanda"], "calculo_mes_quebrado": calculo,
                  "plano_sob_demanda": [{"item_id": i["item_id"], "limite": i["limite"], "apontamentos": i["apontamentos"]} for i in p["itens_sob_demanda"]]}

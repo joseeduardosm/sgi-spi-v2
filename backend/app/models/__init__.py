@@ -57,7 +57,7 @@ from app.models.servidor_smtp import ServidorSmtp
 from app.models.setor import MembroSetor, Setor
 from app.models.tarefas import (
     AnexoEventoTarefa, AtividadeTarefa, AtualizacaoStatusEquipe, DependenciaTarefa, EquipeTarefas, EstagioTarefa, EventoTarefa, ItemChecklistTarefa, LiderEquipeTarefas, MarcadorTarefa, MarcoTarefa, MembroEquipeTarefas,
-    RecorrenciaTarefa, ResponsavelRecorrencia, ResponsavelTarefa, SeguidorTarefa, Tarefa, VinculoMarcadorRecorrencia, VinculoMarcadorTarefa,
+    RdmTarefa, RecorrenciaTarefa, ResponsavelRecorrencia, ResponsavelTarefa, SeguidorTarefa, Tarefa, VinculoMarcadorRecorrencia, VinculoMarcadorTarefa,
 )
 from app.models.usuario import OrigemUsuario, Papel, Usuario
 
@@ -128,6 +128,7 @@ __all__ = [
     "DependenciaTarefa",
     "SeguidorTarefa",
     "EstagioTarefa",
+    "RdmTarefa",
     "RecorrenciaTarefa",
     "ResponsavelRecorrencia",
     "ResponsavelTarefa",

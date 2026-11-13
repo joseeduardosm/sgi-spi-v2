@@ -1,0 +1,63 @@
+Port                    Link Type    PVID  Trunk VLAN List                      Port Description
+---------------------------------------------------------------------------------------------------------------
+Eth-Trunk1              trunk           1  1 301 410                            LINK FW-A                       
+Eth-Trunk2              trunk           1  1 301 410                            LINK FW-B                       
+Eth-Trunk100            access          1  --                                                                   
+100GE1/0/1              desirable       1  1-4094                                                               
+100GE1/0/2              desirable       1  1-4094                                                               
+25GE1/0/1               trunk           1  1 172 300-301 303 400 410 500 555    UPLINK SPI-SWAC-13B             
+                                           2468-2483                                                            
+25GE1/0/2               trunk           1  1 172 300-301 303 400 500 555                                        
+                                           2468-2483                                                            
+25GE1/0/3               desirable       1  1-4094                                                               
+25GE1/0/4               desirable       1  1-4094                                                               
+MultiGE1/0/1            --              0  --                                   FW-A PORTA 1                    
+MultiGE1/0/2            --              0  --                                   FW-A PORTA 2                    
+MultiGE1/0/3            --              0  --                                   FW-B PORTA 1                    
+MultiGE1/0/4            --              0  --                                   FW-B PORTA 2                    
+MultiGE1/0/5            desirable       1  1-4094                                                               
+MultiGE1/0/6            desirable       1  1-4094                                                               
+MultiGE1/0/7            desirable       1  1-4094                                                               
+MultiGE1/0/8            desirable       1  1-4094                                                               
+MultiGE1/0/9            desirable       1  1-4094                                                               
+MultiGE1/0/10           hybrid       2468  172                                  Porta de Acesso                 
+MultiGE1/0/11           access        410  --                                   LINK SAI_BL                     
+MultiGE1/0/12           desirable       1  1-4094                                                               
+MultiGE1/0/13           desirable       1  1-4094                                                               
+MultiGE1/0/14           desirable       1  1-4094                                                               
+MultiGE1/0/15           desirable       1  1-4094                                                               
+MultiGE1/0/16           desirable       1  1-4094                                                               
+MultiGE1/0/17           desirable       1  1-4094                                                               
+MultiGE1/0/18           desirable       1  1-4094                                                               
+MultiGE1/0/19           desirable       1  1-4094                                                               
+MultiGE1/0/20           desirable       1  1-4094                                                               
+MultiGE1/0/21           desirable       1  1-4094                                                               
+MultiGE1/0/22           desirable       1  1-4094                                                               
+MultiGE1/0/23           desirable       1  1-4094                                                               
+MultiGE1/0/24           desirable       1  1-4094                                                               
+MultiGE1/0/25           desirable       1  1-4094                                                               
+MultiGE1/0/26           desirable       1  1-4094                                                               
+MultiGE1/0/27           desirable       1  1-4094                                                               
+MultiGE1/0/28           desirable       1  1-4094                                                               
+MultiGE1/0/29           desirable       1  1-4094                                                               
+MultiGE1/0/30           desirable       1  1-4094                                                               
+MultiGE1/0/31           desirable       1  1-4094                                                               
+MultiGE1/0/32           desirable       1  1-4094                                                               
+MultiGE1/0/33           desirable       1  1-4094                                                               
+MultiGE1/0/34           desirable       1  1-4094                                                               
+MultiGE1/0/35           desirable       1  1-4094                                                               
+MultiGE1/0/36           desirable       1  1-4094                                                               
+MultiGE1/0/37           desirable       1  1-4094                                                               
+MultiGE1/0/38           desirable       1  1-4094                                                               
+MultiGE1/0/39           desirable       1  1-4094                                                               
+MultiGE1/0/40           desirable       1  1-4094                                                               
+MultiGE1/0/41           desirable       1  1-4094                                                               
+MultiGE1/0/42           desirable       1  1-4094                                                               
+MultiGE1/0/43           desirable       1  1-4094                                                               
+MultiGE1/0/44           desirable       1  1-4094                                                               
+MultiGE1/0/45           desirable       1  1-4094                                                               
+MultiGE1/0/46           desirable       1  1-4094                                                               
+MultiGE1/0/47           trunk           1  1 172 300-301 303 400 410 500 555    SPI-SWDIST-06                   
+                                           2468-2483                                                            
+MultiGE1/0/48           trunk           1  1 172 300-301 303 400 410 500 555    UPLINK SPI-SWDIST-01            
+                                           2468-2483                                                            

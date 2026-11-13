@@ -1,17 +1,32 @@
-# Criado por José Eduardo Santana Martins
-# Este arquivo serve para gerar a assinatura de e-mail institucional (PNG em alta resolução e HTML copiável).
-"""Assinatura de e-mail institucional (padrão GOV SP 2023).
+"""
+===============================================================================
+ARQUIVO: assinatura_email.py
+AUTOR: José Eduardo Santana Martins
 
-O desenho vem de um modelo PowerPoint (`recursos/assinatura/modelo-assinatura.pptx`, o `GOV_ASSINATURA-DE-EMAIL_2023.pptx`):
-`assinatura_pptx` preenche os textos do modelo e desenha a imagem **no pixel original do fundo** (sem reamostrar), então a
-nitidez é a do arquivo do Governo. Para mudar o visual, basta trocar o PPTX (sem alterar código).
+FINALIDADE:
+Gerar a assinatura de e-mail institucional (padrão GOV SP 2023) como PNG em
+alta resolução e como HTML copiável para o cliente de e-mail.
 
-- Texto longo **encolhe até 80%** e, se ainda não couber, é **abreviado com "…"**, sempre com aviso.
-- Celular e andar/lado são opcionais e saem numa linha a mais; o departamento vem acima da Secretaria.
-- A versão em **HTML** leva a mesma imagem (o fundo do Governo é uma figura única), com o texto alternativo completo.
-- Os dados institucionais (secretaria, endereço, prefixo do telefone) ficam na configuração.
+RESUMO TÉCNICO:
+O desenho vem de um modelo PowerPoint (`recursos/assinatura/modelo-
+assinatura.pptx`, o `GOV_ASSINATURA-DE-EMAIL_2023.pptx`): `assinatura_pptx`
+preenche os textos e desenha a imagem no pixel original do fundo (sem
+reamostrar). Texto longo encolhe até 80% e, se ainda não couber, é abreviado
+com "…", sempre com aviso. Celular e andar/lado são opcionais e saem numa
+linha a mais. O HTML leva a mesma imagem em base64 com texto alternativo.
 
-Nada aqui grava no perfil: os dados do perfil só pré-preenchem o formulário.
+FINALIDADE DE NEGÓCIO:
+Padronizar a identidade visual dos e-mails da SPI conforme o manual do
+Governo, sem que cada servidor precise montar a assinatura à mão. Para mudar
+o visual basta trocar o PPTX. Nada aqui grava no perfil: os dados do perfil
+só pré-preenchem o formulário.
+
+CONTEXTO NO SISTEMA:
+Chamado pela rota da assinatura de e-mail (tela do perfil). Lê os dados do
+modelo `Usuario` e os textos institucionais (secretaria, endereço, prefixo
+do telefone) da configuração (`obter_configuracao`).
+
+===============================================================================
 """
 
 import base64
@@ -29,6 +44,7 @@ MODELO = Path(__file__).resolve().parents[1] / "recursos" / "assinatura" / "mode
 LIMITE_INFERIOR = 0.75  # o texto termina até 75% da altura do slide: abaixo ficam as redes sociais e os filetes do modelo
 EMU_POR_PIXEL = 9525  # largura de exibição: o slide a 96 dpi (o modelo oficial tem 564 px)
 
+# Campo do perfil -> rótulo usado na mensagem de erro quando estiver vazio
 OBRIGATORIOS = {"nome_completo": "nome", "cargo": "cargo", "email": "e-mail"}
 
 
@@ -36,14 +52,17 @@ class ErroAssinatura(Exception):
     """Dados insuficientes para montar a assinatura (vira 400)."""
 
 
+# @dataclass gera automaticamente o __init__ a partir dos atributos declarados.
 @dataclass
 class OpcoesAssinatura:
+    """Escolhas da pessoa no formulário: incluir ou não celular e andar/lado."""
     incluir_celular: bool = False
     incluir_andar_lado: bool = False
 
 
 @dataclass
 class Resultado:
+    """Saída completa da geração: imagem PNG, HTML pronto e avisos para a tela."""
     png: bytes
     html: str
     avisos: list[str] = field(default_factory=list)
@@ -93,6 +112,7 @@ def localizacao(dados: dict[str, str]) -> str:
 
 
 def _exigir(dados: dict[str, str]) -> None:
+    """Levanta ErroAssinatura (vira 400) se faltar nome, cargo ou e-mail."""
     faltam = campos_faltando(dados)
     if faltam:
         raise ErroAssinatura("Informe " + ", ".join(faltam) + " para gerar a assinatura.")
@@ -101,7 +121,13 @@ def _exigir(dados: dict[str, str]) -> None:
 # --- Imagem -------------------------------------------------------------------------------------
 
 def _campos(dados: dict[str, str], endereco_em_duas_linhas: bool, avisos: list[str]) -> dict[str, str]:
-    """Textos que entram no modelo."""
+    """Textos que entram no modelo.
+
+    `endereco_em_duas_linhas` decide se cidade fica numa linha própria.
+    Acrescenta em `avisos` (lista recebida e modificada) quando falta ramal.
+    Devolve os textos por nome de caixa do modelo; as chaves do fim servem
+    para modelos novos que usem fichas {{campo}}.
+    """
     cfg = obter_configuracao()
     telefone = telefone_ramal(dados.get("ramal", ""))
     if not telefone:
@@ -144,6 +170,10 @@ def renderizar_png(dados: dict[str, str], opcoes: OpcoesAssinatura | None = None
     _exigir(dados)
     opcoes = opcoes or OpcoesAssinatura()
     try:
+        # Cada tentativa é (endereço em duas linhas?, com linhas extras?). O
+        # modelo é recarregado a cada tentativa porque preencher/compactar
+        # alteram o objeto. Para na primeira que couber ou, se nenhuma couber,
+        # na última (com avisos explicando o que ficou de fora).
         tentativas = [(True, True), (False, True), (True, False), (False, False)]
         for duas_linhas, com_extras in tentativas:
             avisos: list[str] = []
@@ -165,17 +195,27 @@ def renderizar_png(dados: dict[str, str], opcoes: OpcoesAssinatura | None = None
         imagem = assinatura_pptx.desenhar(modelo, avisos)
     except assinatura_pptx.ErroModelo as erro:
         raise ErroAssinatura(str(erro)) from erro
+    # EMU (English Metric Unit) é a unidade interna do PowerPoint:
+    # 914400 EMU = 1 polegada. Daí saem a largura em pixels de tela e o DPI
+    # gravado no PNG (para que o arquivo "saiba" seu tamanho físico).
     largura_exibicao = round(modelo.largura / EMU_POR_PIXEL)
     dpi = round(imagem.width / (modelo.largura / 914400))
     saida = io.BytesIO()
     imagem.save(saida, format="PNG", optimize=True, dpi=(dpi, dpi))
+    # dict.fromkeys remove avisos repetidos mantendo a ordem original
     return saida.getvalue(), list(dict.fromkeys(avisos)), largura_exibicao
 
 
 # --- HTML ---------------------------------------------------------------------------------------
 
 def html_assinatura(dados: dict[str, str], png: bytes, largura_exibicao: int, opcoes: OpcoesAssinatura | None = None) -> str:
-    """Assinatura em HTML: a imagem do Governo (exibida em `largura_exibicao` px) com o texto alternativo completo."""
+    """Assinatura em HTML: a imagem do Governo (exibida em `largura_exibicao` px) com o texto alternativo completo.
+
+    A imagem vai embutida em base64 (data URI) para funcionar ao colar no
+    cliente de e-mail sem depender de servidor. A tabela e os estilos inline
+    são o formato que os clientes de e-mail (Outlook etc.) respeitam. O texto
+    alternativo é escapado com `escape` para não quebrar o HTML.
+    """
     cfg = obter_configuracao()
     partes = [dados["nome_completo"], dados["cargo"], (dados.get("departamento") or "").strip(), cfg.assinatura_secretaria, dados["email"],
               telefone_ramal(dados.get("ramal", "")), cfg.assinatura_endereco, cfg.assinatura_cidade]

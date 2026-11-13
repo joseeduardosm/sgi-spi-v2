@@ -263,3 +263,12 @@ def preparar_registro_prorrogacao(cliente, base: str, h: dict, calculo: str = "p
     r = cliente.post(f"{base}/prorrogacao/memoria/arquivos", headers=h)
     assert r.status_code == 200, r.text
     return r.json()
+
+
+def escolher_calculo(cliente, url: str, h: dict, modo: str = "automatico") -> dict:
+    """Responde "Cálculo manual ou automático?" do reajuste ou da repactuação (`url` = URL do procedimento).
+
+    A memória e a conclusão só andam depois dessa escolha. Devolve o painel atualizado."""
+    r = cliente.put(f"{url}/modo-retroativo", json={"modo": modo}, headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()

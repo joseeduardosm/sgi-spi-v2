@@ -166,7 +166,7 @@ def test_cadastro_atravessando_o_patch_panel(cliente, admin):
     # Fundo da porta 1 do patch panel ligado na porta 2 da distribuição
     r = cliente.post(f"{BASE}/portas/{pp[0]['id']}/conexao", json={"lado": "fundo", "porta_id": c["dist"]["portas"][1]["id"]}, headers=cab)
     assert r.status_code == 201, r.text
-    assert r.json()["descricao"] == "Fundo: SW-DIST · 2" and r.json()["fundo"]["texto"] == "SW-DIST · porta 2" and r.json()["frente"] is None
+    assert r.json()["descricao"] == "Terminal Punch Down: SW-DIST · 2" and r.json()["fundo"]["texto"] == "SW-DIST · porta 2" and r.json()["frente"] is None
     # Lado obrigatório no patch panel; lado já ocupado; o outro lado vazio não leva a ninguém
     assert _novo(cliente, admin, "SW-6A", m, "acesso", ligacao=_lig(9, pp[0]["id"])).status_code == 400
     assert _novo(cliente, admin, "SW-6A", m, "acesso", ligacao=_lig(9, pp[0]["id"], "fundo")).json()["codigo"] == "porta_ocupada"
@@ -175,8 +175,8 @@ def test_cadastro_atravessando_o_patch_panel(cliente, admin):
     novo = _novo(cliente, admin, "SW-6A", m, "acesso", ligacao=_lig(9, pp[0]["id"], "frente", config=c["trunk"]))
     assert novo.status_code == 201, novo.text
     porta_pp = _porta(cliente, admin, pp[0]["id"])
-    assert porta_pp["descricao"] == "Fundo: SW-DIST · 2 · Frente: SW-6A · SFP 1" and porta_pp["status"] == "up"
-    assert novo.json()["portas"][8]["descricao"] == "PP-5A · 1 (frente)"
+    assert porta_pp["descricao"] == "Terminal Punch Down: SW-DIST · 2 · Conector RJ45: SW-6A · SFP 1" and porta_pp["status"] == "up"
+    assert novo.json()["portas"][8]["descricao"] == "PP-5A · 1 (Conector RJ45)"
     # Uma distribuição não pode chegar por um patch panel que leva a um acesso
     cliente.post(f"{BASE}/portas/{pp[2]['id']}/conexao", json={"lado": "fundo", "porta_id": c["switch"]["portas"][2]["id"]}, headers=cab)
     assert _novo(cliente, admin, "SW-DIST2", m, "distribuicao", ligacao=_lig(9, pp[2]["id"], "frente")).json()["codigo"] == "cadeia_invalida"
@@ -258,15 +258,15 @@ def test_patch_panel_tem_fundo_e_frente(cliente, admin):
     assert cliente.post(f"{BASE}/portas/{pp}/conexao", json={"porta_id": sw}, headers=cab).status_code == 400
     assert cliente.post(f"{BASE}/portas/{sw}/conexao", json={"lado": "fundo", "descricao": "X"}, headers=cab).status_code == 400
     r = cliente.post(f"{BASE}/portas/{pp}/conexao", json={"lado": "frente", "porta_id": sw}, headers=cab)
-    assert r.status_code == 201 and r.json()["frente"]["texto"] == "SW-5A · porta 7" and r.json()["descricao"] == "Frente: SW-5A · 7"
-    assert _porta(cliente, cab, sw)["descricao"] == "PP-5A · 3 (frente)"
+    assert r.status_code == 201 and r.json()["frente"]["texto"] == "SW-5A · porta 7" and r.json()["descricao"] == "Conector RJ45: SW-5A · 7"
+    assert _porta(cliente, cab, sw)["descricao"] == "PP-5A · 3 (Conector RJ45)"
     # O outro lado da mesma porta é outra ligação; o mesmo lado não liga duas vezes
     assert cliente.post(f"{BASE}/portas/{pp}/conexao", json={"lado": "frente", "descricao": "Y"}, headers=cab).json()["codigo"] == "porta_ocupada"
     r = cliente.post(f"{BASE}/portas/{pp}/conexao", json={"lado": "fundo", "descricao": "Tomada 5A-12"}, headers=cab)
-    assert r.json()["descricao"] == "Fundo: Tomada 5A-12 · Frente: SW-5A · 7"
+    assert r.json()["descricao"] == "Terminal Punch Down: Tomada 5A-12 · Conector RJ45: SW-5A · 7"
     # Desligar um lado: a porta continua ligada pelo outro; desligar o segundo: desligada e em branco
     r = cliente.delete(f"{BASE}/portas/{pp}/conexao", params={"lado": "fundo"}, headers=cab)
-    assert (r.json()["status"], r.json()["descricao"], r.json()["fundo"]) == ("up", "Frente: SW-5A · 7", None)
+    assert (r.json()["status"], r.json()["descricao"], r.json()["fundo"]) == ("up", "Conector RJ45: SW-5A · 7", None)
     r = cliente.delete(f"{BASE}/portas/{pp}/conexao", params={"lado": "frente"}, headers=cab)
     assert (r.json()["status"], r.json()["descricao"]) == ("down", "Desligado")
     assert (_porta(cliente, cab, sw)["status"], _porta(cliente, cab, sw)["descricao"]) == ("down", "Desligado")
@@ -324,7 +324,7 @@ def test_bem_do_patrimonio_e_dispositivos_atras(cliente, admin):
     pp, cab = c["patch"]["portas"][4]["id"], c["cab"]["analista"]
     assert cliente.post(f"{BASE}/portas/{pp}/conexao/atras", json={"lado": "fundo", "bem_id": pc_id}, headers=cab).json()["codigo"] == "sem_dispositivo"
     r = cliente.post(f"{BASE}/portas/{pp}/conexao", json={"lado": "fundo", "bem_id": tel_id}, headers=cab)
-    assert r.json()["descricao"] == "Fundo: Telefone IP (chapa 012345)"
+    assert r.json()["descricao"] == "Terminal Punch Down: Telefone IP (chapa 012345)"
     r = cliente.post(f"{BASE}/portas/{pp}/conexao/atras", json={"lado": "fundo", "bem_id": pc_id}, headers=cab)
     assert r.status_code == 201, r.text
     assert [x["texto"] for x in r.json()["fundo"]["atras"]] == ["Computador (chapa 067890)"]
@@ -359,8 +359,8 @@ def test_caminho_segue_o_fio_de_cada_porta(cliente, admin):
     for p in (pp[2]["id"], sw[6]["id"]):
         x = cliente.get(f"{BASE}/portas/{p}/caminho", headers=leitor).json()
         assert [e["nome"] for e in x["etapas"]] == ["SW-CORE", "SW-DIST", "SW-5A", "PP-5A"]
-        assert (x["etapas"][3]["cabo"], x["etapas"][3]["lado_entrada"], x["etapas"][3]["lado_saida"]) == ("7 ↔ 3 (frente)", "frente", "fundo")
-        assert [d["texto"] for d in x["dispositivos"]] == ["Tomada 5A-12"] and x["cabo_dispositivos"] == "3 (fundo)"
+        assert (x["etapas"][3]["cabo"], x["etapas"][3]["lado_entrada"], x["etapas"][3]["lado_saida"]) == ("7 ↔ 3 (Conector RJ45)", "frente", "fundo")
+        assert [d["texto"] for d in x["dispositivos"]] == ["Tomada 5A-12"] and x["cabo_dispositivos"] == "3 (Terminal Punch Down)"
     # Outra porta do mesmo patch panel, só com o telefone no fundo: não usa o cabo da porta 3
     cliente.post(f"{BASE}/portas/{pp[5]['id']}/conexao", json={"lado": "fundo", "descricao": "VOIP 08395"}, headers=cab)
     x = cliente.get(f"{BASE}/portas/{pp[5]['id']}/caminho", headers=leitor).json()
@@ -439,7 +439,7 @@ def test_indicadores_portas_alteradas_e_patch_panel_com_um_lado(cliente, admin):
     ind = cliente.get(f"{BASE}/indicadores", headers=cab).json()
     assert ind["portas_patch_um_lado"] == 1 and ind["portas_alteradas"] >= 3
     um_lado = cliente.get(f"{BASE}/portas-patch-um-lado", headers=c["cab"]["leitor"]).json()
-    assert [(x["equipamento_nome"], x["numero_logico"], x["descricao"]) for x in um_lado] == [("PP-5A", 1, "Fundo: Tomada 5A-01")]
+    assert [(x["equipamento_nome"], x["numero_logico"], x["descricao"]) for x in um_lado] == [("PP-5A", 1, "Terminal Punch Down: Tomada 5A-01")]
     alteradas = {(x["equipamento_nome"], x["numero_logico"]) for x in cliente.get(f"{BASE}/portas-alteradas", headers=cab).json()}
     assert {("PP-5A", 1), ("PP-5A", 2), ("SW-5A", 2)} <= alteradas
 
@@ -531,9 +531,9 @@ def test_trocar_ligacao_poe_patch_panel_no_meio_do_cabo(cliente, admin):
     # Religando o antigo no outro lado (frente), o cabo passa pelo patch panel e a configuração da porta fica
     r = cliente.post(f"{BASE}/portas/{dist_subida}/conexao/trocar", json={"porta_id": pp, "outro_lado": "fundo", "religar_antigo": True}, headers=cab)
     assert r.status_code == 200, r.text
-    assert (r.json()["descricao"], r.json()["modo"], r.json()["vlans_tag"]) == ("PP-5A · 5 (fundo)", "trunk", [20])
-    assert _porta(cliente, cab, pp)["descricao"] == "Fundo: SW-DIST · SFP 1 · Frente: SW-CORE · 1"
-    assert _porta(cliente, cab, core_1)["descricao"] == "PP-5A · 5 (frente)"
+    assert (r.json()["descricao"], r.json()["modo"], r.json()["vlans_tag"]) == ("PP-5A · 5 (Terminal Punch Down)", "trunk", [20])
+    assert _porta(cliente, cab, pp)["descricao"] == "Terminal Punch Down: SW-DIST · SFP 1 · Conector RJ45: SW-CORE · 1"
+    assert _porta(cliente, cab, core_1)["descricao"] == "PP-5A · 5 (Conector RJ45)"
     caminho = cliente.get(f"{BASE}/portas/{c['switch']['portas'][3]['id']}/caminho", headers=cab).json()
     assert [e["nome"] for e in caminho["etapas"]][:3] == ["SW-CORE", "PP-5A", "SW-DIST"]
     # Troca para um dispositivo: a ponta antiga (o patch panel, lado fundo) perde só aquele lado

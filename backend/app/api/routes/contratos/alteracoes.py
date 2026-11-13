@@ -18,7 +18,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -45,11 +45,15 @@ from app.schemas.contratos.alteracoes import (
     PainelAlteracao,
     PainelReajuste,
     EscolhaMesQuebradoRepactuacao,
+    EscolhaModoRetroativo,
+    GravacaoSemEfeito,
     GravacaoLinhasRepactuacao,
     LeituraRepactuacao,
     PainelRepactuacao,
 )
-from app.services.contratos import servico_alteracao, servico_pos_assinatura, servico_prorrogacao, servico_reajuste, servico_repactuacao, servico_vigencia_retroativa
+from app.services.contratos import (
+    servico_alteracao, servico_pos_assinatura, servico_prorrogacao, servico_reajuste, servico_repactuacao, servico_sem_efeito, servico_vigencia_retroativa,
+)
 
 # As tags ficam em cada rota (e não no roteador) para separar os três grupos na documentação
 roteador = APIRouter(prefix="/contratos/{contrato_id}", responses=RESPOSTAS_AUTENTICADAS)
@@ -60,6 +64,29 @@ UPLOAD = {**NAO_ENCONTRADO, **ARQUIVO_RECUSADO, **SEM_VINCULO}
 PDF = {status.HTTP_200_OK: {"content": {"application/pdf": {}}}, **resposta_nao_encontrado("Arquivo")}
 PRORROGACAO, REAJUSTE, ALTERACAO = ["Contratos: prorrogação"], ["Contratos: reajuste"], ["Contratos: aditamento e supressão"]
 REPACTUACAO = ["Contratos: repactuação"]
+SEM_EFEITO = ["Contratos: tornar sem efeito"]
+
+
+# ---------------------------------------------------------------------------------------------
+# Tornar sem efeito (qualquer evento concluído)
+# ---------------------------------------------------------------------------------------------
+
+@roteador.post("/{tipo}/{registro_id}/sem-efeito", status_code=status.HTTP_204_NO_CONTENT, tags=SEM_EFEITO,
+               summary="Tornar um evento concluído sem efeito",
+               description="`tipo`: `reajustes`, `repactuacoes`, `alteracoes` (aditamento/supressão), `prorrogacoes` ou `vigencias-retroativas`. "
+               "Corpo `{motivo}` (10 a 4000 caracteres). Desfaz o que o evento aplicou (preços, quantidades, competência de diferença, crédito no fundo, "
+               "valor global reajustado; na prorrogação e na vigência retroativa, a vigência criada) e grava a situação `sem_efeito` com quem, quando e o "
+               "motivo, mais a auditoria `contrato.<tipo>.sem_efeito`. Só a equipe do contrato (quem edita). `409` quando algo depende do evento "
+               "(evento concluído depois, prorrogação ou correção de itens posterior, competência de diferença com medição ou NF, crédito já aplicado, "
+               "mês medido com o preço/quantidade nova), com o motivo em `detalhe`; `400` (prorrogação e vigência retroativa) quando as regras de "
+               "desfazer delas impedem; `422` sem motivo.",
+               responses={**ESCRITA, **CONFLITO})
+def tornar_sem_efeito(contrato_id: uuid.UUID, tipo: Literal["reajustes", "repactuacoes", "alteracoes", "prorrogacoes", "vigencias-retroativas"],
+                      registro_id: uuid.UUID, dados: GravacaoSemEfeito, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Torna o evento concluído sem efeito (a tela recarrega o painel do evento depois)."""
+    with traduzir_erros(sessao):
+        servico_sem_efeito.tornar_sem_efeito(sessao, contrato_id, tipo, registro_id, dados.motivo, autor)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -98,11 +125,14 @@ def cadastrar_vigencia_retroativa(
 @roteador.delete("/vigencias-retroativas/{vigencia_id}", response_model=list[LeituraVigenciaRetroativa], tags=PRORROGACAO,
                  summary="Desfazer vigência retroativa",
                  description="Só a mais antiga e sem medição, reajuste ou aditamento/supressão. Devolve o início anterior ao contrato, apaga as "
-                 "competências e a previsão da vigência e renumera as demais.", responses=ESCRITA)
-def desfazer_vigencia_retroativa(contrato_id: uuid.UUID, vigencia_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
-    """Desfaz a vigência retroativa mais antiga."""
+                 "competências e a previsão da vigência e renumera as demais. Exige `motivo` (query, 10+ caracteres), gravado na auditoria; "
+                 "`422` sem ele.", responses=ESCRITA)
+def desfazer_vigencia_retroativa(contrato_id: uuid.UUID, vigencia_id: uuid.UUID,
+                                 motivo: str = Query(..., min_length=10, max_length=4000, description="Por que a vigência retroativa perde o efeito."),
+                                 sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Desfaz a vigência retroativa mais antiga (o mesmo que `POST …/vigencias-retroativas/{id}/sem-efeito`)."""
     with traduzir_erros(sessao):
-        servico_vigencia_retroativa.desfazer(sessao, contrato_id, vigencia_id, autor)
+        servico_sem_efeito.tornar_sem_efeito(sessao, contrato_id, "vigencias-retroativas", vigencia_id, motivo, autor)
         return servico_vigencia_retroativa.listar(sessao, contrato_id, autor)
 
 
@@ -308,12 +338,15 @@ def planilha_garantia_prorrogacao(contrato_id: uuid.UUID, prorrogacao_id: uuid.U
 
 
 @roteador.delete("/prorrogacoes/{prorrogacao_id}", response_model=list[LeituraProrrogacao], tags=PRORROGACAO, summary="Desfazer última prorrogação",
-                 description="Só a mais recente. Depois de gerada a execução da nova vigência, só o SuperRoot (e sem medição registrada).",
+                 description="Só a mais recente. Depois de gerada a execução da nova vigência, só o SuperRoot (e sem medição registrada). Exige `motivo` "
+                 "(query, 10+ caracteres): o processo fica com a situação `sem_efeito`, quem, quando e o motivo. `422` sem ele.",
                  responses=ESCRITA)
-def desfazer_prorrogacao(contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
-    """Desfaz a última prorrogação (só a mais recente, para não deixar buracos entre vigências)."""
+def desfazer_prorrogacao(contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID,
+                         motivo: str = Query(..., min_length=10, max_length=4000, description="Por que a prorrogação perde o efeito."),
+                         sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
+    """Desfaz a última prorrogação (o mesmo que `POST …/prorrogacoes/{id}/sem-efeito`; só a mais recente, para não deixar buracos)."""
     with traduzir_erros(sessao):
-        servico_prorrogacao.desfazer(sessao, contrato_id, prorrogacao_id, autor)
+        servico_sem_efeito.tornar_sem_efeito(sessao, contrato_id, "prorrogacoes", prorrogacao_id, motivo, autor)
         return servico_prorrogacao.listar(sessao, contrato_id, autor)
 
 
@@ -395,25 +428,41 @@ def concluir_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, arquivo: U
         return servico_reajuste.painel(sessao, contrato_id, autor)
 
 
+@roteador.put("/reajustes/{reajuste_id}/modo-retroativo", response_model=PainelReajuste, tags=REAJUSTE,
+              summary="Escolher o cálculo da diferença retroativa (manual ou automático)",
+              description="Resposta de \"Cálculo manual ou automático?\", a primeira pergunta da memória retroativa. `automatico`: o sistema calcula a diferença "
+              "pelas medições concluídas no SGI. `manual`: o sistema não calcula nada sozinho e o gestor informa a diferença mês a mês "
+              "(`PUT …/diferenca-manual`). A memória e a conclusão exigem a escolha. Trocar de modo apaga a diferença manual informada e exige gerar a "
+              "memória de novo. `400` fora da elaboração ou no reajuste retroativo (que não tem diferença a acertar).", responses=ESCRITA)
+def modo_retroativo_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, dados: EscolhaModoRetroativo, sessao: Session = Depends(obter_sessao),
+                             autor: Usuario = Depends(pode_modificar)):
+    """Grava a escolha entre cálculo manual e automático do reajuste."""
+    with traduzir_erros(sessao):
+        servico_reajuste.escolher_modo_retroativo(sessao, contrato_id, reajuste_id, dados.modo, autor)
+        return servico_reajuste.painel(sessao, contrato_id, autor)
+
+
 @roteador.put("/reajustes/{reajuste_id}/diferenca-manual", response_model=PainelReajuste, tags=REAJUSTE,
-              summary="Informar a diferença retroativa manualmente (meses pagos fora do sistema)",
-              description="`multipart/form-data`: `valor` (total da diferença dos meses marcados; negativo = crédito da SPI), `competencias_ids` (repetido, um por mês), "
-               "`justificativa` e `arquivo` (PDF da memória feita fora do sistema). Só meses **encerrados**, a partir da data de efeito, **sem medição "
-               "concluída** no sistema (os de `meses_sem_medicao`). Substitui a anterior. Os meses marcados ficam travados no preço de antes e saem do "
-               "cálculo automático; na conclusão, valor positivo vira competência complementar de uma linha (`AAAA-MM-dif-manual`) e negativo, crédito "
-               "no fundo do contrato. `400` sem meses, sem justificativa, com valor zero ou com mês fora da lista.",
+              summary="Informar a diferença retroativa mês a mês (cálculo manual)",
+              description="Só no **cálculo manual** (`modo_retroativo = manual`). `multipart/form-data`: `competencias_ids` e `valores` (repetidos, na mesma ordem: "
+               "a diferença de cada mês; negativo = crédito da SPI), `justificativa` e `arquivo` (PDF da memória feita fora do sistema). Meses aceitos: os de "
+               "`meses_sem_medicao`, da data de efeito **até o mês em andamento (inclusive)**, medidos ou não no SGI. O total é a soma dos meses. Substitui a "
+               "anterior. Os meses informados ficam travados no preço de antes; no cálculo manual o sistema não calcula a diferença dos meses medidos. Na "
+               "conclusão, total positivo vira competência complementar com uma linha por mês (`AAAA-MM-dif-manual`) e negativo, crédito no fundo do contrato. "
+               "`400` fora do cálculo manual, sem meses, com quantidade de valores diferente da de meses, sem justificativa, com valor zero (num mês ou no "
+               "total) ou com mês fora da lista.",
               responses={**ESCRITA, **ARQUIVO_RECUSADO})
-def diferenca_manual_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, valor: Decimal = Form(...), competencias_ids: list[uuid.UUID] = Form(...),
+def diferenca_manual_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, competencias_ids: list[uuid.UUID] = Form(...), valores: list[Decimal] = Form(...),
                               justificativa: str = Form(..., max_length=4000), arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
                               autor: Usuario = Depends(pode_modificar)):
     """Grava a diferença manual do reajuste em elaboração."""
     with traduzir_erros(sessao):
-        servico_reajuste.gravar_diferenca_manual(sessao, contrato_id, reajuste_id, valor, competencias_ids, justificativa, *arquivo_pdf(arquivo), autor)
+        servico_reajuste.gravar_diferenca_manual(sessao, contrato_id, reajuste_id, competencias_ids, valores, justificativa, *arquivo_pdf(arquivo), autor)
         return servico_reajuste.painel(sessao, contrato_id, autor)
 
 
 @roteador.delete("/reajustes/{reajuste_id}/diferenca-manual", response_model=PainelReajuste, tags=REAJUSTE, summary="Remover a diferença retroativa manual",
-                 description="Só com o reajuste em elaboração; os meses marcados destravam e voltam ao cálculo automático. `400` se não há diferença manual.",
+                 description="Só com o reajuste em elaboração; os meses informados destravam (o cálculo continua manual até o gestor trocar). `400` se não há diferença manual.",
                  responses=ESCRITA)
 def remover_diferenca_manual_reajuste(contrato_id: uuid.UUID, reajuste_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Remove a diferença manual do reajuste em elaboração."""
@@ -484,6 +533,20 @@ def previa_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, dados:
         return servico_repactuacao.previa(sessao, contrato_id, repactuacao_id, dados, autor)
 
 
+@roteador.put("/repactuacoes/{repactuacao_id}/modo-retroativo", response_model=PainelRepactuacao, tags=REPACTUACAO,
+              summary="Escolher o cálculo da diferença retroativa (manual ou automático)",
+              description="Resposta de \"Cálculo manual ou automático?\", a primeira pergunta da memória retroativa. `automatico`: o sistema calcula a diferença "
+              "pelas medições concluídas no SGI. `manual`: o sistema não calcula nada sozinho e o gestor informa a diferença mês a mês "
+              "(`PUT …/diferenca-manual`). A memória e a conclusão exigem a escolha. Trocar de modo apaga a diferença manual informada e exige gerar a "
+              "memória de novo. `400` fora da elaboração.", responses=ESCRITA)
+def modo_retroativo_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, dados: EscolhaModoRetroativo, sessao: Session = Depends(obter_sessao),
+                                autor: Usuario = Depends(pode_modificar)):
+    """Grava a escolha entre cálculo manual e automático da repactuação."""
+    with traduzir_erros(sessao):
+        servico_repactuacao.escolher_modo_retroativo(sessao, contrato_id, repactuacao_id, dados.modo, autor)
+        return servico_repactuacao.painel(sessao, contrato_id, autor)
+
+
 @roteador.put("/repactuacoes/{repactuacao_id}/mes-quebrado", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Escolher o cálculo dos meses quebrados",
               description="`pro_rata` (dias antes da data de vigência sem a repactuação, a partir dela com) ou `integral` (mês inteiro repactuado), uma escolha "
               "para todos os meses medidos que contêm a data de vigência.", responses=ESCRITA)
@@ -542,7 +605,8 @@ def excluir_documento_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.U
 
 
 @roteador.post("/repactuacoes/{repactuacao_id}/consolidado", response_model=PainelRepactuacao, tags=REPACTUACAO, summary="Gerar documento consolidado",
-               description="PDF único: capa (contrato e repactuação), CCT, documentos do checklist e memória de cálculo. `400` sem a memória atualizada.",
+               description="PDF único: capa (contrato e repactuação), CCT, documentos do checklist (cada um precedido de uma contracapa com o nome do item, "
+               "o arquivo e quem enviou) e memória de cálculo. `400` sem a memória atualizada.",
                responses=ESCRITA)
 def consolidado_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, sessao: Session = Depends(obter_sessao), autor: Usuario = Depends(pode_modificar)):
     """Gera o consolidado."""
@@ -565,25 +629,27 @@ def finalizar_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, arq
 
 
 @roteador.put("/repactuacoes/{repactuacao_id}/diferenca-manual", response_model=PainelRepactuacao, tags=REPACTUACAO,
-              summary="Informar a diferença retroativa manualmente (meses pagos fora do sistema)",
-              description="`multipart/form-data`: `valor` (total da diferença dos meses marcados; negativo = crédito da SPI), `competencias_ids` (repetido, um por mês), "
-               "`justificativa` e `arquivo` (PDF da memória feita fora do sistema). Só meses **encerrados**, a partir da data de efeito, **sem medição "
-               "concluída** no sistema (os de `meses_sem_medicao`). Substitui a anterior. Os meses marcados ficam travados no preço de antes e saem do "
-               "cálculo automático; na conclusão, valor positivo vira competência complementar de uma linha (`AAAA-MM-dif-repactuacao-manual`) e negativo, crédito "
-               "no fundo do contrato. `400` sem meses, sem justificativa, com valor zero ou com mês fora da lista.",
+              summary="Informar a diferença retroativa mês a mês (cálculo manual)",
+              description="Só no **cálculo manual** (`modo_retroativo = manual`). `multipart/form-data`: `competencias_ids` e `valores` (repetidos, na mesma ordem: "
+               "a diferença de cada mês; negativo = crédito da SPI), `justificativa` e `arquivo` (PDF da memória feita fora do sistema). Meses aceitos: os de "
+               "`meses_sem_medicao`, da data de efeito **até o mês em andamento (inclusive)**, medidos ou não no SGI. O total é a soma dos meses. Substitui a "
+               "anterior. Os meses informados ficam travados no preço de antes; no cálculo manual o sistema não calcula a diferença dos meses medidos. Na "
+               "conclusão, total positivo vira competência complementar com uma linha por mês (`AAAA-MM-dif-repactuacao-manual`) e negativo, crédito no fundo do contrato. "
+               "`400` fora do cálculo manual, sem meses, com quantidade de valores diferente da de meses, sem justificativa, com valor zero (num mês ou no "
+               "total) ou com mês fora da lista.",
               responses={**ESCRITA, **ARQUIVO_RECUSADO})
-def diferenca_manual_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, valor: Decimal = Form(...), competencias_ids: list[uuid.UUID] = Form(...),
+def diferenca_manual_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, competencias_ids: list[uuid.UUID] = Form(...), valores: list[Decimal] = Form(...),
                                  justificativa: str = Form(..., max_length=4000), arquivo: UploadFile = File(...), sessao: Session = Depends(obter_sessao),
                                  autor: Usuario = Depends(pode_modificar)):
     """Grava a diferença manual da repactuação em elaboração."""
     with traduzir_erros(sessao):
-        servico_repactuacao.gravar_diferenca_manual(sessao, contrato_id, repactuacao_id, valor, competencias_ids, justificativa, *arquivo_pdf(arquivo), autor)
+        servico_repactuacao.gravar_diferenca_manual(sessao, contrato_id, repactuacao_id, competencias_ids, valores, justificativa, *arquivo_pdf(arquivo), autor)
         return servico_repactuacao.painel(sessao, contrato_id, autor)
 
 
 @roteador.delete("/repactuacoes/{repactuacao_id}/diferenca-manual", response_model=PainelRepactuacao, tags=REPACTUACAO,
                  summary="Remover a diferença retroativa manual",
-                 description="Só com a repactuação em elaboração; os meses marcados destravam e voltam ao cálculo automático. `400` se não há diferença manual.",
+                 description="Só com a repactuação em elaboração; os meses informados destravam (o cálculo continua manual até o gestor trocar). `400` se não há diferença manual.",
                  responses=ESCRITA)
 def remover_diferenca_manual_repactuacao(contrato_id: uuid.UUID, repactuacao_id: uuid.UUID, sessao: Session = Depends(obter_sessao),
                                          autor: Usuario = Depends(pode_modificar)):

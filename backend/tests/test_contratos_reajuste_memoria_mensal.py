@@ -36,7 +36,7 @@ from decimal import Decimal
 
 import openpyxl
 
-from tests.apoio_contratos import PDF, definir_parametros, juntar_nf
+from tests.apoio_contratos import PDF, definir_parametros, juntar_nf, escolher_calculo
 # Fixtures importadas de outro arquivo de teste: o pytest as encontra pelo nome
 # nos parâmetros dos testes (por isso o noqa F811 nos testes abaixo).
 from tests.test_contratos_retencao import _ambiente, cenario  # noqa: F401 - fixtures (competência 01/2026 com medição concluída, data fixa de 15/03/2026)
@@ -51,6 +51,7 @@ def _reajustar(cliente, contrato, h):
     painel = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": "2026-01-01"}, headers=h).json()
     reajuste = painel["em_andamento"]
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, h)
     itens = [{"item_id": i["item_id"], "indice_percentual": "5"} for i in reajuste["itens"]]
     return url, cliente.put(f"{url}/memoria", json={"itens": itens}, headers=h).json()["em_andamento"]
 
@@ -141,6 +142,7 @@ def test_calculadora_ao_vivo_nao_grava_nada(cliente, cenario):  # noqa: F811
     painel = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": "2026-01-01"}, headers=gestora).json()
     reajuste = painel["em_andamento"]
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, gestora)
     itens = [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]
     previa = cliente.post(f"{url}/memoria/previa", json={"itens": itens}, headers=gestora)
     assert previa.status_code == 200, previa.text

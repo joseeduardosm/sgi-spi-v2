@@ -162,6 +162,7 @@ export const ROTULOS_PENDENCIA: Record<string, string> = {
   base_execucao: 'Gerar competências',
   prorrogacao: 'Prorrogação',
   reajuste: 'Reajuste',
+  repactuacao: 'Repactuação',
   alteracao: 'Aditamento/supressão',
   ciencia_alteracao: 'Ciência no aditamento/supressão',
 };

@@ -73,8 +73,43 @@ export interface DiaNovidades {
 export const NOVIDADES: DiaNovidades[] = [
   {
     data: '2026-11-13',
-    resumo: 'Rede: trocar a ligação de uma porta e tela da porta mais simples; Changelog só com os seus módulos',
+    resumo: 'Contratos: tornar sem efeito e aba Eventos; cálculo manual ou automático na memória retroativa; Rede: Conector RJ45 e Terminal Punch Down',
     novidades: [
+      {
+        modulo: 'Contratos',
+        titulo: 'Tornar sem efeito reajuste, repactuação, aditamento e prorrogação',
+        texto: 'Um reajuste, uma repactuação, um aditamento ou supressão, uma prorrogação ou uma vigência retroativa já concluídos agora podem ser tornados sem efeito pelo botão "Tornar sem efeito", no histórico de cada tela. O sistema desfaz o que o evento aplicou: os preços e as quantidades voltam ao que eram, e a competência de diferença e o crédito que ele gerou saem. O motivo é obrigatório, e o evento continua no histórico com o selo "Sem efeito", com o seu nome, a data e o motivo.',
+        itens: [
+          'O botão fica desativado, com o motivo à vista, quando algo depende do evento. Por exemplo: um mês já foi medido com o preço novo, a competência de diferença já foi medida, o crédito já foi aplicado numa medição ou há outro reajuste concluído depois. Nesses casos, é preciso reabrir ou desfazer antes.',
+          'Pode usar o botão quem é da equipe do contrato.',
+        ],
+      },
+      {
+        modulo: 'Contratos',
+        titulo: 'Aba Eventos no contrato',
+        texto: 'Quem administra contratos (Controle total) ganhou a aba "Eventos" no contrato. Ela mostra tudo o que aconteceu nele, com data, quem fez e o detalhe, separado em Alteram o contrato, Execução, Documentos, Equipe e cadastro e Sem efeito, com barra de pesquisa e colunas ordenáveis. Nas conclusões, o botão "Tornar sem efeito" também aparece por ali.',
+      },
+      {
+        modulo: 'Contratos',
+        titulo: 'Repactuação e reajuste: cálculo manual ou automático',
+        texto: 'A memória retroativa da repactuação e do reajuste agora começa com a pergunta "Cálculo manual ou automático?". No automático, nada muda: o sistema calcula a diferença dos meses já medidos. No manual, o sistema não calcula nada sozinho: você informa a diferença de cada mês, e o total é a soma deles.',
+        itens: [
+          'No manual dá para informar qualquer mês da data de vigência até o mês atual, inclusive os já medidos no sistema e o mês em andamento.',
+          'Cada mês mostra a situação: "Medido no SGI", "Sem medição no SGI" ou "Em andamento".',
+          'Os meses informados ficam no preço antigo. Se o total for positivo, vira uma competência de diferença com uma linha por mês. Se for negativo, vira crédito da SPI.',
+          'Justificativa e a memória feita fora do sistema (PDF) continuam obrigatórias. Trocar de manual para automático apaga os valores informados.',
+        ],
+      },
+      {
+        modulo: 'Contratos',
+        titulo: 'Consolidado da repactuação com contracapa em cada documento',
+        texto: 'No documento consolidado da repactuação, cada documento do checklist agora vem depois de uma contracapa. Ela mostra qual é o documento (por exemplo, "Documento 2 de 9"), o nome do item, o arquivo e quem enviou, como já acontece no consolidado da competência. Para ter as contracapas numa repactuação em andamento, gere o consolidado de novo.',
+      },
+      {
+        modulo: 'Rede',
+        titulo: 'Patch panel: Conector RJ45 e Terminal Punch Down',
+        texto: 'Os dois lados da porta do patch panel mudaram de nome: a Frente agora se chama Conector RJ45 e o Fundo, Terminal Punch Down. Os nomes novos aparecem na tela da porta, na descrição automática e no caminho até o core. As ligações já cadastradas continuam as mesmas.',
+      },
       {
         modulo: 'Rede',
         titulo: 'Trocar a ligação sem desligar antes',

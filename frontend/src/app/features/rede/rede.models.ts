@@ -8,7 +8,13 @@ export type SituacaoPing = 'no_ar' | 'fora';
 export type StatusPorta = 'up' | 'down' | 'desativada';
 /** Lado físico da porta do patch panel: cada porta tem um cabo no fundo e outro na frente (decisão do usuário). */
 export type LadoPatch = 'fundo' | 'frente';
-export const LADOS_PATCH: { valor: LadoPatch; rotulo: string }[] = [{ valor: 'fundo', rotulo: 'Fundo' }, { valor: 'frente', rotulo: 'Frente' }];
+// Nomes na tela (decisão do usuário, 13/11/2026): fundo = Terminal Punch Down; frente = Conector RJ45. O valor gravado continua 'fundo'/'frente'.
+export const LADOS_PATCH: { valor: LadoPatch; rotulo: string }[] = [{ valor: 'fundo', rotulo: 'Terminal Punch Down' }, { valor: 'frente', rotulo: 'Conector RJ45' }];
+
+/** Nome do lado para a tela ('frente' → 'Conector RJ45'; 'fundo' → 'Terminal Punch Down'). */
+export function rotuloLado(lado: LadoPatch | null | undefined): string {
+  return LADOS_PATCH.find((l) => l.valor === lado)?.rotulo ?? '';
+}
 
 export const ROTULOS_TIPO_EQUIPAMENTO: Record<TipoEquipamento, string> = {
   switch: 'Switch', patch_panel: 'Patch panel', roteador: 'Roteador', access_point: 'Access point', outro: 'Outro',

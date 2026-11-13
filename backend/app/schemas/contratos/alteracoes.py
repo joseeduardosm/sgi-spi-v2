@@ -271,6 +271,7 @@ class LeituraProrrogacao(BaseModel):
     termo: LeituraArquivo | None
     relatorio: LeituraArquivo | None
     pode_desfazer: bool
+    motivo_bloqueio: str = Field("", description="Por que esta prorrogação não pode ser tornada sem efeito agora (vazio se pode, ou se não é a última).")
 
 
 class LeituraVigenciaRetroativa(BaseModel):
@@ -429,20 +430,33 @@ class ResumoMesesReajuste(BaseModel):
 
 
 class MesSemMedicao(BaseModel):
-    """Competência encerrada, a partir da data de efeito, sem medição concluída no sistema (candidata à diferença manual)."""
+    """Mês da data de efeito até o mês em andamento (medido ou não no SGI), candidato à diferença manual do cálculo manual."""
     competencia_id: uuid.UUID
     identificador: str = Field(..., description="Identificador da rota da execução (`AAAA-MM`).")
     rotulo: str = Field(..., description="Competência por extenso (ex.: `03/2025`).")
     periodo_inicio: date
     periodo_fim: date
     coberta_por_outra: bool = Field(False, description="`true` quando o mês já está coberto pela diferença manual de outro reajuste/repactuação (continua candidato a esta).")
+    medida: bool = Field(False, description="`true` quando o mês já tem medição concluída no SGI.")
+    em_andamento: bool = Field(False, description="`true` para o mês em andamento (o período ainda não terminou).")
+    valor: ValorMonetario | None = Field(None, description="Diferença já informada para o mês (nula se ainda não informada ou em diferença antiga, só com o total).")
+
+
+class GravacaoSemEfeito(BaseModel):
+    """Pedido para tornar um evento concluído sem efeito."""
+    motivo: str = Field(..., min_length=10, max_length=4000, description="Por que o evento perde o efeito (vai para o histórico e para a auditoria).")
+
+
+class EscolhaModoRetroativo(BaseModel):
+    """Resposta de "Cálculo manual ou automático?" na memória retroativa."""
+    modo: Literal["automatico", "manual"] = Field(..., description="`automatico`: o sistema calcula pelas medições do SGI; `manual`: o gestor informa a diferença mês a mês.")
 
 
 class DiferencaManualLeitura(BaseModel):
-    """Diferença retroativa informada manualmente para meses pagos fora do sistema."""
-    valor: ValorMonetario = Field(..., description="Valor total dos meses marcados: > 0 a pagar à contratada; < 0 crédito da SPI.")
+    """Diferença retroativa informada manualmente (cálculo manual), mês a mês."""
+    valor: ValorMonetario = Field(..., description="Soma das diferenças dos meses: > 0 a pagar à contratada; < 0 crédito da SPI.")
     justificativa: str
-    meses: list[MesSemMedicao] = Field(..., description="Meses cobertos (ficam travados no preço de antes).")
+    meses: list[MesSemMedicao] = Field(..., description="Meses informados, com o valor de cada um (ficam travados no preço de antes).")
     arquivo: LeituraArquivo = Field(..., description="Memória de cálculo feita fora do sistema (PDF).")
     informado_por: str
     informado_em: datetime
@@ -454,7 +468,12 @@ class LeituraReajuste(BaseModel):
     """Reajuste completo, em elaboração ou já encerrado."""
     resumo_meses: ResumoMesesReajuste | None = Field(None, description="Memória mês a mês resumida (só em elaboração).")
     id: uuid.UUID
-    situacao: Literal["rascunho", "concluido", "cancelado"]
+    situacao: Literal["rascunho", "concluido", "cancelado", "sem_efeito"]
+    sem_efeito_em: datetime | None = Field(None, description="Quando foi tornado sem efeito (situação `sem_efeito`).")
+    sem_efeito_por: str = Field("", description="Quem tornou sem efeito.")
+    sem_efeito_motivo: str = Field("", description="Motivo informado ao tornar sem efeito.")
+    pode_tornar_sem_efeito: bool = Field(False, description="Concluído, da equipe e sem nada que dependa dele: o botão \"Tornar sem efeito\" fica ativo.")
+    motivo_bloqueio: str = Field("", description="Concluído mas bloqueado: o motivo (ex.: competência já medida com o preço novo).")
     retroativo: bool = Field(False, description="Reajuste retroativo (volta no tempo): o preço novo é o da vigência retroativa e o piso é o valor referencial.")
     sequencia_vigencia: int
     vigencia_inicio: date
@@ -477,9 +496,11 @@ class LeituraReajuste(BaseModel):
     competencia_diferenca: str | None = Field(
         None, description="Identificador (`AAAA-MM-dif`) da competência complementar gerada na conclusão, se houver."
     )
+    modo_retroativo: Literal["automatico", "manual"] | None = Field(
+        None, description="Resposta de \"Cálculo manual ou automático?\" (nulo = ainda não escolhido; a memória só é gerada depois da escolha).")
     meses_sem_medicao: list[MesSemMedicao] = Field(
-        default_factory=list, description="Em elaboração: competências encerradas desde a data de efeito sem medição concluída, para a pergunta "
-        "\"Deseja inserir o valor da diferença manualmente?\" (vazia no reajuste retroativo e depois de concluído).")
+        default_factory=list, description="Em elaboração e no cálculo manual: meses da data de efeito até o mês em andamento (medidos ou não no SGI), "
+        "para informar a diferença mês a mês (vazia no cálculo automático, no reajuste retroativo e depois de concluído).")
     diferenca_manual: DiferencaManualLeitura | None = Field(None, description="Diferença retroativa informada manualmente, se houver.")
     itens: list[ItemReajusteLeitura]
     base_atual: ValorMonetario
@@ -551,7 +572,12 @@ class LeituraAlteracao(BaseModel):
     """Alteração completa, com percentuais, documentos e ciências."""
     id: uuid.UUID
     tipo: Literal["aditamento", "supressao"]
-    situacao: Literal["rascunho", "aguardando_ciencias", "concluida", "cancelada"]
+    situacao: Literal["rascunho", "aguardando_ciencias", "concluida", "cancelada", "sem_efeito"]
+    sem_efeito_em: datetime | None = Field(None, description="Quando foi tornado sem efeito (situação `sem_efeito`).")
+    sem_efeito_por: str = Field("", description="Quem tornou sem efeito.")
+    sem_efeito_motivo: str = Field("", description="Motivo informado ao tornar sem efeito.")
+    pode_tornar_sem_efeito: bool = Field(False, description="Concluído, da equipe e sem nada que dependa dele: o botão \"Tornar sem efeito\" fica ativo.")
+    motivo_bloqueio: str = Field("", description="Concluído mas bloqueado: o motivo (ex.: competência já medida com o preço novo).")
     sequencia_vigencia: int
     vigencia_inicio: date
     vigencia_fim: date
@@ -654,7 +680,12 @@ class OpcaoMesQuebradoRepactuacao(BaseModel):
 
 class LeituraRepactuacao(BaseModel):
     id: uuid.UUID
-    situacao: Literal["rascunho", "concluido", "cancelado"]
+    situacao: Literal["rascunho", "concluido", "cancelado", "sem_efeito"]
+    sem_efeito_em: datetime | None = Field(None, description="Quando foi tornado sem efeito (situação `sem_efeito`).")
+    sem_efeito_por: str = Field("", description="Quem tornou sem efeito.")
+    sem_efeito_motivo: str = Field("", description="Motivo informado ao tornar sem efeito.")
+    pode_tornar_sem_efeito: bool = Field(False, description="Concluído, da equipe e sem nada que dependa dele: o botão \"Tornar sem efeito\" fica ativo.")
+    motivo_bloqueio: str = Field("", description="Concluído mas bloqueado: o motivo (ex.: competência já medida com o preço novo).")
     data_base_cct: date
     mes_referencia: date
     data_efeito: date
@@ -679,8 +710,11 @@ class LeituraRepactuacao(BaseModel):
     apostilamento: LeituraArquivo | None
     diferenca_retroativa: ValorMonetario | None = Field(None, description="Gravada na conclusão.")
     competencia_diferenca: str | None = Field(None, description="Identificador da competência de diferença gerada na conclusão.")
+    modo_retroativo: Literal["automatico", "manual"] | None = Field(
+        None, description="Resposta de \"Cálculo manual ou automático?\" (nulo = ainda não escolhido; a memória só é gerada depois da escolha).")
     meses_sem_medicao: list[MesSemMedicao] = Field(
-        default_factory=list, description="Em elaboração: competências encerradas desde a data de efeito sem medição concluída (candidatas à diferença manual).")
+        default_factory=list, description="Em elaboração e no cálculo manual: meses da data de efeito até o mês em andamento (medidos ou não no SGI), "
+        "para informar a diferença mês a mês.")
     diferenca_manual: DiferencaManualLeitura | None = Field(None, description="Diferença retroativa informada manualmente, se houver.")
     criado_em: datetime
     concluido_em: datetime | None

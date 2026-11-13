@@ -38,8 +38,8 @@ export function posicaoDaDica(alvo: HTMLElement): { x: number; y: number } {
         }
         @if (passiva()) {
           <!-- Patch panel: o cabo de cada lado, um por linha -->
-          <dt>Fundo</dt><dd>{{ porta().fundo?.texto || 'Nada ligado' }}</dd>
-          <dt>Frente</dt><dd>{{ porta().frente?.texto || 'Nada ligado' }}</dd>
+          <dt>Terminal Punch Down</dt><dd>{{ porta().fundo?.texto || 'Nada ligado' }}</dd>
+          <dt>Conector RJ45</dt><dd>{{ porta().frente?.texto || 'Nada ligado' }}</dd>
         } @else {
           <dt>Ligada a</dt><dd>{{ porta().conexao?.texto || 'Nada ligado' }}</dd>
         }

@@ -53,8 +53,8 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
   | `roteada` (L3: `no switchport` / `undo portswitch`) | Cisco, Huawei | não tem | não | não | não | sim (`10.23.0.1/30`, validado) |
 
   **Descrição gerada pelo sistema** (decisão do usuário, 12/11/2026): ninguém digita a descrição da porta. Ela diz o que está ligado
-  (ex.: "SW-DIST · 1", "Impressora (chapa 012345)", "Telefone da recepção"); no patch panel, os dois lados ("Fundo: VOIP 08395 · Frente:
-  SW-5A · 7"); sem nada ligado, **"Desligado"**. É refeita a cada ligar e desligar. O texto livre da porta é a **`observacao`** (opcional).
+  (ex.: "SW-DIST · 1", "Impressora (chapa 012345)", "Telefone da recepção"); no patch panel, os dois lados ("Terminal Punch Down: VOIP 08395 ·
+  Conector RJ45: SW-5A · 7"; na API os lados continuam `fundo` = Terminal Punch Down e `frente` = Conector RJ45, nomes de tela decididos em 13/11/2026); sem nada ligado, **"Desligado"**. É refeita a cada ligar e desligar. O texto livre da porta é a **`observacao`** (opcional).
   **Porta sem nada ligado fica em branco**: só `down` ou `desativada` (outro status: `409 porta_sem_ligacao`), sem configuração (modo `access`,
   sem VLAN, voz, IP, velocidade e duplex); só a situação e a observação mudam. **Porta com algo ligado fica `up`** (outro status:
   `409 porta_com_equipamento`) e é aí que a configuração vale. **Porta de patch panel não tem parte lógica**: só a observação (modo diferente de
@@ -209,7 +209,7 @@ coisa no SGI não é mexida: vira aviso no relatório.
 - **Porta** (`/rede/portas/:id`): primeiro o cartão **Ligado a** (no patch panel, dois blocos: **Fundo** e **Frente**, cada um com o que está
   ligado e o Desligar, ou o formulário para ligar; ligando em outro patch panel, escolhe-se também o lado da porta dele). Depois a configuração:
   a **descrição é só leitura** (gerada pelo sistema), a **observação** é livre, e modo/VLANs/IP/velocidade só aparecem com algo ligado (sem
-  nada, só a situação Desligada ou Desativada). No patch panel, Fundo e Frente ficam lado a lado e o formulário só abre no lado escolhido
+  nada, só a situação Desligada ou Desativada). No patch panel, Terminal Punch Down (`fundo`) e Conector RJ45 (`frente`) ficam lado a lado e o formulário só abre no lado escolhido
   ("Ligar"); "O que está ligado" é escolhido em botões (no patch panel, só bem ou equipamento de rede). O que está ligado aparece num cartão com
   "Abrir porta", "Trocar" e "Desligar"; "Trocar" abre o mesmo formulário e, indo para um lado de patch panel, oferece religar o outro lado no
   destino de hoje. No patch panel, a lateral não mostra velocidade e erros, e o cartão de configuração vira só a observação. VLANs com tag e sem tag em dois campos de busca com selos, como os

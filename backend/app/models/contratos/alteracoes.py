@@ -133,6 +133,11 @@ class ProcessoProrrogacao(Base):
     # Como calcular os meses quebrados da nova vigência na memória e no valor: "pro_rata" (pelos dias) ou "integral" (mês
     # cheio), uma escolha para todos; nulo = ainda não escolhido. Não muda a execução (que segue o faturamento de cada item).
     calculo_mes_quebrado: Mapped[str | None] = mapped_column(String(10))
+    # Prorrogação registrada e depois tornada sem efeito (situação "sem_efeito"): quando, quem (o nome é fotografado) e o motivo (obrigatório)
+    sem_efeito_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sem_efeito_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    sem_efeito_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
+    sem_efeito_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
     # Prorrogação criada a partir deste rascunho, depois de registrada
     prorrogacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_prorrogacoes.id", ondelete="SET NULL"))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
@@ -222,7 +227,7 @@ class CienciaProrrogacao(Base):
 class Reajuste(Base):
     """Reajuste de preços de uma vigência pelo índice contratual (apostilamento)."""
     __tablename__ = "contratos_reajustes"
-    __table_args__ = (CheckConstraint("situacao IN ('rascunho', 'concluido', 'cancelado')", name="ck_contratos_reajustes_situacao"),)
+    __table_args__ = (CheckConstraint("situacao IN ('rascunho', 'concluido', 'cancelado', 'sem_efeito')", name="ck_contratos_reajustes_situacao"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
@@ -250,12 +255,22 @@ class Reajuste(Base):
     # "pro_rata" (dias antes do efeito sem reajuste, a partir dele reajustados) ou "integral" (mês inteiro
     # reajustado). Nulo = ainda não escolhido; a memória só é gerada depois da escolha.
     calculo_mes_quebrado: Mapped[str | None] = mapped_column(String(10))
+    # Como calcular a diferença retroativa (pergunta do início da memória): "automatico" (o sistema calcula pelas medições do SGI)
+    # ou "manual" (o gestor informa a diferença mês a mês e o sistema não calcula nada sozinho). Nulo = ainda não escolhido.
+    modo_retroativo: Mapped[str | None] = mapped_column(String(12))
+    # Quando o modo foi escolhido (memória gerada antes disso não vale para concluir)
+    modo_retroativo_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # PDF que comprova o índice e o apostilamento assinado
     evidencia_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     apostilamento_anexo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Tornado sem efeito depois de concluído: quando, quem (o nome é fotografado) e o motivo (obrigatório)
+    sem_efeito_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sem_efeito_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    sem_efeito_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
+    sem_efeito_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     contrato: Mapped[Contrato] = relationship(back_populates="reajustes")
@@ -390,10 +405,9 @@ diferencas_manuais_competencias = Table(
 class DiferencaManual(Base):
     """Diferença retroativa informada à mão num reajuste ou numa repactuação, para meses pagos fora do sistema.
 
-    Muitos contratos não têm no SGI as medições anteriores à implantação: esses meses foram pagos no preço antigo
-    e o cálculo automático não os enxerga. O gestor marca os meses (competências encerradas sem medição concluída),
-    informa o valor total da diferença deles (pode ser negativo = crédito da SPI), a justificativa e a memória feita
-    fora do sistema (PDF). Na conclusão do procedimento:
+    Usada quando o gestor escolhe o cálculo **manual** da memória retroativa: o sistema não calcula nada sozinho e o gestor
+    informa a diferença de cada mês (da data de efeito até o mês em andamento, medido ou não no SGI; pode ser negativa =
+    crédito da SPI), a justificativa e a memória feita fora do sistema (PDF). O total é a soma dos meses. Na conclusão:
     - os meses marcados ficam **travados** no preço de antes (não recebem o preço novo e saem do cálculo automático);
     - valor positivo vira uma competência complementar de uma linha; negativo vira crédito no fundo do contrato.
     """
@@ -410,6 +424,9 @@ class DiferencaManual(Base):
     repactuacao_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("contratos_repactuacoes.id", ondelete="CASCADE"), unique=True)
     # Valor total da diferença dos meses marcados: > 0 a pagar à contratada; < 0 crédito da SPI
     valor: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    # Diferença de cada mês informada pelo gestor: {"<id da competência>": "1234.56"}. O total (`valor`) é a soma deles.
+    # Vazio nas diferenças antigas, em que só o total era informado.
+    valores_meses: Mapped[dict[str, Any]] = mapped_column(TipoJson, default=dict)
     justificativa: Mapped[str] = mapped_column(Text)
     # Memória de cálculo feita fora do sistema (PDF)
     anexo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("anexos.id", ondelete="RESTRICT"))
@@ -451,9 +468,10 @@ class DiferencaManual(Base):
         valor = f"{abs(self.valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         sinal = "-" if self.valor < 0 else ""
         quando = self.informado_em_local
-        plural = "medições" if len(self.rotulos_meses) > 1 else "medição"
-        return (f"O valor de {sinal}R$ {valor} foi inserido manualmente por {self.informado_por_nome} em {quando:%d/%m/%Y} às {quando:%H:%M:%S} "
-                f"devido à falta de {plural} de {self.texto_meses}, não tendo sido utilizada a função do sistema para cálculo automático. "
+        # Cálculo manual: vale para meses medidos ou não no SGI, então o texto não fala em "falta de medição"
+        referente = "aos meses" if len(self.rotulos_meses) > 1 else "ao mês"
+        return (f"O valor de {sinal}R$ {valor} foi inserido manualmente por {self.informado_por_nome} em {quando:%d/%m/%Y} às {quando:%H:%M:%S}, "
+                f"referente {referente} {self.texto_meses}, no cálculo manual, não tendo sido utilizada a função do sistema para cálculo automático. "
                 f"Justificativa: {self.justificativa}")
 
 
@@ -469,7 +487,7 @@ class Repactuacao(Base):
     várias linhas soma todas). Vale a partir de `efeito` (data de vigência da CCT), com o mês quebrado em pro rata ou integral, como no reajuste.
     """
     __tablename__ = "contratos_repactuacoes"
-    __table_args__ = (CheckConstraint("situacao IN ('rascunho', 'concluido', 'cancelado')", name="ck_contratos_repactuacoes_situacao"),)
+    __table_args__ = (CheckConstraint("situacao IN ('rascunho', 'concluido', 'cancelado', 'sem_efeito')", name="ck_contratos_repactuacoes_situacao"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contrato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
@@ -482,6 +500,10 @@ class Repactuacao(Base):
     # Cadastro das linhas concluído ("Finalizar" do passo 1): libera a memória
     cadastro_concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     calculo_mes_quebrado: Mapped[str | None] = mapped_column(String(10))
+    # Como calcular a diferença retroativa: "automatico" (pelas medições do SGI) ou "manual" (o gestor informa mês a mês). Nulo = não escolhido
+    modo_retroativo: Mapped[str | None] = mapped_column(String(12))
+    # Quando o modo foi escolhido (memória gerada antes disso não vale para concluir)
+    modo_retroativo_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     base_atual: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     base_repactuada: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal(0))
     # Diferença das competências já medidas, gravada na conclusão (> 0 vira competência de diferença; < 0, crédito)
@@ -493,6 +515,11 @@ class Repactuacao(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Tornado sem efeito depois de concluído: quando, quem (o nome é fotografado) e o motivo (obrigatório)
+    sem_efeito_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sem_efeito_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    sem_efeito_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
+    sem_efeito_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
     contrato: Mapped[Contrato] = relationship(back_populates="repactuacoes")
     linhas: Mapped[list["LinhaRepactuacao"]] = relationship(back_populates="repactuacao", cascade="all, delete-orphan", order_by="LinhaRepactuacao.ordem")
@@ -631,11 +658,11 @@ class DocumentoRepactuacao(Base):
 class AlteracaoQuantidade(Base):
     """Aditamento (aumento) ou supressão (redução) das quantidades dos itens de uma vigência."""
     __tablename__ = "contratos_alteracoes"
-    # Situações: rascunho → aguardando ciências → concluída (ou cancelada a qualquer momento antes)
+    # Situações: rascunho → aguardando ciências → concluída (ou cancelada a qualquer momento antes); concluída → sem efeito
     __table_args__ = (
         CheckConstraint("tipo IN ('aditamento', 'supressao')", name="ck_contratos_alteracoes_tipo"),
         CheckConstraint(
-            "situacao IN ('rascunho', 'aguardando_ciencias', 'concluida', 'cancelada')", name="ck_contratos_alteracoes_situacao"
+            "situacao IN ('rascunho', 'aguardando_ciencias', 'concluida', 'cancelada', 'sem_efeito')", name="ck_contratos_alteracoes_situacao"
         ),
     )
 
@@ -665,6 +692,11 @@ class AlteracaoQuantidade(Base):
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Tornado sem efeito depois de concluído: quando, quem (o nome é fotografado) e o motivo (obrigatório)
+    sem_efeito_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sem_efeito_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    sem_efeito_por_nome: Mapped[str] = mapped_column(String(250), default="", server_default="")
+    sem_efeito_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     contrato: Mapped[Contrato] = relationship(back_populates="alteracoes")

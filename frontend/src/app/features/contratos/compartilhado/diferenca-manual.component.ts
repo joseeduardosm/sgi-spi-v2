@@ -4,26 +4,27 @@
  * AUTOR: José Eduardo Santana Martins
  *
  * FINALIDADE:
- * Perguntar e registrar a diferença retroativa informada manualmente, isto é,
- * o valor de meses que foram pagos fora do sistema, no reajuste e na
- * repactuação de contratos.
+ * Registrar a diferença retroativa do cálculo manual, mês a mês, no reajuste e
+ * na repactuação de contratos.
  *
  * RESUMO TÉCNICO:
  * Componente standalone (OnPush) com template embutido. Recebe por input() os
- * meses sem medição e a diferença já gravada; guarda em signal() a resposta à
- * pergunta e os campos do formulário; valida valor, justificativa e PDF e
- * emite os outputs salvar, remover e baixar. Não chama a API diretamente.
+ * meses que podem ser informados (da data de efeito até o mês em andamento) e a
+ * diferença já gravada; guarda em signal() o valor digitado em cada mês, a
+ * justificativa e o PDF; soma o total na tela e emite os outputs salvar,
+ * remover e baixar. Não chama a API diretamente.
  *
  * FINALIDADE DE NEGÓCIO:
- * O cálculo automático só considera meses com medição concluída no SGI. Para
- * meses pagos antes da implantação ou fora do sistema, o gestor informa o
- * valor total da diferença (negativo = crédito da SPI), justifica e anexa a
- * memória de cálculo, garantindo rastreabilidade do valor.
+ * Quando o gestor escolhe o cálculo manual, o sistema não calcula nada sozinho
+ * (nem a diferença dos meses medidos no SGI): vale só a diferença informada em
+ * cada mês (negativa = crédito da SPI), com justificativa e a memória feita
+ * fora do sistema, garantindo rastreabilidade do valor.
  *
  * CONTEXTO NO SISTEMA:
- * Usado pelas telas de reajuste e de repactuação, que fazem a chamada à API.
- * Tipos em contratos.models.ts; conversão de números em rotulos.ts; envio do
- * arquivo pelo componente compartilhado app-envio-pdf.
+ * Usado pelas telas de reajuste e de repactuação (passo da memória de cálculo,
+ * depois da pergunta "Cálculo manual ou automático?"), que fazem a chamada à
+ * API. Tipos em contratos.models.ts; conversão de números em rotulos.ts; envio
+ * do arquivo pelo componente compartilhado app-envio-pdf.
  *
  * =============================================================================
  */
@@ -43,12 +44,11 @@ import { paraDecimalApi, paraDecimalTela } from './rotulos';
 const VALOR = /^-?\d+(\.\d{1,2})?$/;
 
 /**
- * Diferença retroativa informada manualmente (reajuste e repactuação).
+ * Diferença retroativa do cálculo manual (reajuste e repactuação), informada mês a mês.
  *
- * O cálculo automático só enxerga meses com medição concluída no SGI. Quando há meses encerrados sem medição (pagos fora do
- * sistema), a tela pergunta: "Identifiquei que X meses do período de … a … não possuem medições finalizadas. Deseja inserir o
- * valor da diferença manualmente?". No "Sim", o gestor marca os meses, informa o valor total (negativo = crédito da SPI), a
- * justificativa e o PDF da memória feita fora do sistema. Quem usa o componente faz a chamada à API (`salvar`/`remover`).
+ * A tela pai já perguntou "Cálculo manual ou automático?" e só mostra este componente no manual. Aqui o gestor vê os meses da
+ * data de efeito até o mês em andamento (com o selo "Medido no SGI" ou "Em andamento"), digita a diferença dos meses que quiser
+ * (mês em branco = sem diferença), e a tela soma o total. Justificativa e PDF são obrigatórios.
  *
  * Recursos do Angular usados aqui: `input()` declara uma entrada vinda do componente pai (lida como função,
  * ex.: `meses()`); `output()` declara um evento que o pai escuta; `signal()` guarda um estado que, ao mudar,
@@ -60,12 +60,25 @@ const VALOR = /^-?\d+(\.\d{1,2})?$/;
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let atual = diferenca();
-    @if (atual) {
-      <!-- Já informada: o resumo com a observação que sai nos documentos -->
-      <p class="secao-formulario">Diferença informada manualmente <span class="selo-situacao">Valor manual</span></p>
+    @if (atual && !editando()) {
+      <!-- Já informada: o resumo mês a mês com a observação que sai nos documentos -->
+      <p class="secao-formulario">Diferença informada mês a mês <span class="selo-situacao">Valor manual</span></p>
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao">
+          <thead><tr><th scope="col">Mês</th><th scope="col">Situação no SGI</th><th scope="col" class="num">Diferença</th></tr></thead>
+          <tbody>
+            @for (m of atual.meses; track m.competencia_id) {
+              <tr>
+                <td class="texto-codigo">{{ m.rotulo }}</td>
+                <td><span class="selo-situacao" [class.info]="m.medida" [class.alerta]="m.em_andamento" [class.inativo]="!m.medida && !m.em_andamento">{{ situacao(m) }}</span></td>
+                <td class="num">{{ m.valor !== null && m.valor !== undefined ? (m.valor | moeda) : '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
       <dl class="resumo-reajuste">
-        <div><dt>Meses pagos fora do sistema</dt><dd class="texto-codigo">{{ rotulos(atual.meses) }}</dd></div>
-        <div><dt>Valor informado</dt><dd>{{ atual.valor | moeda }} <small class="dica-formulario">{{ +atual.valor < 0 ? '(crédito da SPI, vai para o fundo do contrato)' : '(competência complementar a pagar)' }}</small></dd></div>
+        <div><dt>Total informado</dt><dd><strong>{{ atual.valor | moeda }}</strong> <small class="dica-formulario">{{ +atual.valor < 0 ? '(crédito da SPI, vai para o fundo do contrato)' : '(competência complementar a pagar)' }}</small></dd></div>
       </dl>
       <p class="aviso-bloco informativo">{{ atual.observacao }}</p>
       <div class="acoes-cartao esquerda">
@@ -75,64 +88,55 @@ const VALOR = /^-?\d+(\.\d{1,2})?$/;
           <button type="button" class="acao-perigo acao-pequena" [class.carregando]="ocupado()" [disabled]="ocupado()" (click)="remover.emit()">Remover diferença manual</button>
         }
       </div>
-    }
-    @if (meses().length && podeEditar() && (!atual || editando())) {
-      @if (!atual && resposta() === null) {
-        <!-- A pergunta, com Sim (verde) e Não (vermelho) separados -->
-        <p class="aviso-bloco informativo">
-          Identifiquei que {{ meses().length }} {{ meses().length === 1 ? 'mês' : 'meses' }} do período de
-          <span class="texto-codigo">{{ meses()[0].periodo_inicio | dataBr }}</span> a <span class="texto-codigo">{{ meses()[meses().length - 1].periodo_fim | dataBr }}</span>
-          {{ meses().length === 1 ? 'não possui medição finalizada' : 'não possuem medições finalizadas' }}. Deseja inserir o valor da diferença manualmente?
-        </p>
-        <div class="acoes-cartao esquerda">
-          <button type="button" class="acao-positiva" (click)="resposta.set(true)">Sim, inserir manualmente</button>
-          <button type="button" class="acao-recusar" (click)="resposta.set(false)">Não</button>
+    } @else if (podeEditar() && meses().length) {
+      <!-- Formulário: a diferença de cada mês, o total, a justificativa e o PDF -->
+      <p class="secao-formulario">Diferença mês a mês</p>
+      <p class="dica-formulario">Informe a diferença de cada mês (deixe em branco o mês sem diferença; negativo = crédito da SPI). Os meses informados ficam
+        no preço de antes, inclusive o mês em andamento.</p>
+      <div class="tabela-gestao-envoltorio">
+        <table class="tabela-gestao">
+          <thead><tr><th scope="col">Mês</th><th scope="col">Situação no SGI</th><th scope="col" class="num">Diferença (R$)</th></tr></thead>
+          <tbody>
+            @for (m of meses(); track m.competencia_id) {
+              <tr>
+                <td class="texto-codigo">{{ m.rotulo }}
+                  @if (m.coberta_por_outra) { <small class="dica-formulario">(já tem diferença manual de outro procedimento)</small> }</td>
+                <td><span class="selo-situacao" [class.info]="m.medida" [class.alerta]="m.em_andamento" [class.inativo]="!m.medida && !m.em_andamento">{{ situacao(m) }}</span></td>
+                <td class="num">
+                  <input type="text" inputmode="decimal" [attr.aria-label]="'Diferença de ' + m.rotulo" [ngModel]="valores()[m.competencia_id] ?? ''"
+                         (ngModelChange)="digitar(m.competencia_id, $event)" [attr.aria-invalid]="!valorValido(valores()[m.competencia_id])" />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <dl class="resumo-reajuste">
+        <div><dt>Total ({{ preenchidos().length }} {{ preenchidos().length === 1 ? 'mês' : 'meses' }})</dt><dd><strong>{{ total() | moeda }}</strong>
+          <small class="dica-formulario">{{ total() < 0 ? '(crédito da SPI, vai para o fundo do contrato)' : total() > 0 ? '(competência complementar a pagar)' : '' }}</small></dd></div>
+      </dl>
+      <div class="grade-formulario">
+        <div>
+          <span class="rotulo-campo">Memória feita fora do sistema (PDF) *</span>
+          <app-envio-pdf rotulo="Selecionar PDF" (selecionado)="arquivo.set($event)" />
+          @if (atual && !arquivo()) { <small class="dica-formulario">Ao alterar, envie o PDF de novo.</small> }
         </div>
-      } @else if (!atual && resposta() === false) {
-        <p class="dica-formulario">
-          Sem diferença manual: {{ meses().length === 1 ? 'o mês sem medição recebe' : 'os meses sem medição recebem' }} o preço novo e
-          {{ meses().length === 1 ? 'entra' : 'entram' }} na medição normalmente.
-          @if (podeEditar()) { <button type="button" class="acao-secundaria acao-pequena" (click)="resposta.set(null)">Rever</button> }
-        </p>
-      } @else {
-        <!-- Formulário: meses pagos fora do sistema, valor total, justificativa e PDF -->
-        <p class="secao-formulario">Diferença informada manualmente</p>
-        <p class="dica-formulario">Marque os meses pagos fora do sistema. Eles ficam no preço de antes (o que foi pago de fato) e saem do cálculo automático.</p>
-        <div class="linha-caixas">
-          @for (m of meses(); track m.competencia_id) {
-            <label>
-              <input type="checkbox" [checked]="marcados()[m.competencia_id]" (change)="marcar(m.competencia_id, $any($event.target).checked)" />
-              <span class="texto-codigo">{{ m.rotulo }}</span>
-              @if (m.coberta_por_outra) { <small class="dica-formulario">(já tem diferença manual de outro procedimento)</small> }
-            </label>
-          }
+        <div class="ocupa-duas">
+          <label for="diferenca-manual-justificativa">Justificativa *</label>
+          <textarea id="diferenca-manual-justificativa" rows="3" maxlength="4000" [(ngModel)]="justificativa"></textarea>
         </div>
-        <div class="grade-formulario">
-          <div>
-            <label for="diferenca-manual-valor">Valor total da diferença (R$) *</label>
-            <input id="diferenca-manual-valor" type="text" inputmode="decimal" [(ngModel)]="valor" [attr.aria-invalid]="valor && !valorValido()" />
-            <small class="dica-formulario">Negativo = crédito da SPI (vai para o fundo do contrato).</small>
-          </div>
-          <div>
-            <span class="rotulo-campo">Memória feita fora do sistema (PDF) *</span>
-            <app-envio-pdf rotulo="Selecionar PDF" (selecionado)="arquivo.set($event)" />
-            @if (atual && !arquivo()) { <small class="dica-formulario">Ao alterar, envie o PDF de novo.</small> }
-          </div>
-          <div class="ocupa-duas">
-            <label for="diferenca-manual-justificativa">Justificativa *</label>
-            <textarea id="diferenca-manual-justificativa" rows="3" maxlength="4000" [(ngModel)]="justificativa"></textarea>
-          </div>
-        </div>
-        <div class="acoes-cartao esquerda">
-          <button type="button" class="acao-primaria" [class.carregando]="ocupado()" [disabled]="!pronto() || ocupado()" (click)="enviar()">Salvar diferença manual</button>
-          <button type="button" class="acao-secundaria" (click)="cancelarEdicao()">Cancelar</button>
-        </div>
-      }
+      </div>
+      <div class="acoes-cartao esquerda">
+        <button type="button" class="acao-primaria" [class.carregando]="ocupado()" [disabled]="!pronto() || ocupado()" (click)="enviar()">Salvar diferença mês a mês</button>
+        @if (atual) { <button type="button" class="acao-secundaria" (click)="editando.set(false)">Cancelar</button> }
+      </div>
+    } @else if (!atual) {
+      <p class="dica-formulario">Não há meses da data de efeito até hoje para informar.</p>
     }
   `,
 })
 export class DiferencaManualComponent {
-  /** Meses encerrados sem medição concluída (candidatos), vindos da API. */
+  /** Meses que podem ser informados (da data de efeito até o mês em andamento), vindos da API. */
   // `transform`: aceita a resposta de uma API ainda sem esses campos (vazio/nulo), sem quebrar a tela
   readonly meses = input<MesSemMedicao[], MesSemMedicao[] | null | undefined>([], { transform: (v) => v ?? [] });
   /** Diferença já informada, se houver. */
@@ -141,64 +145,72 @@ export class DiferencaManualComponent {
   readonly podeEditar = input(false);
   /** Chamada em andamento (o pai liga e desliga). */
   readonly ocupado = input(false);
-  /** Emitido com os dados validados (valor no formato da API, meses marcados, justificativa e PDF). */
+  /** Emitido com os dados validados (meses e valores no formato da API, justificativa e PDF). */
   readonly salvar = output<GravacaoDiferencaManual>();
   /** Emitido quando o usuário pede para apagar a diferença manual já gravada. */
   readonly remover = output<void>();
   /** Emitido com o id do anexo da memória externa, para o pai fazer o download. */
   readonly baixar = output<string>();
 
-  // Resposta à pergunta (null = ainda não respondeu) e edição de uma diferença já gravada
-  protected readonly resposta = signal<boolean | null>(null);
+  // Edição de uma diferença já gravada (sem gravada, o formulário aparece direto)
   protected readonly editando = signal(false);
-  // Campos do formulário
-  protected readonly marcados = signal<Record<string, boolean>>({});
-  protected valor = '';
+  // Valor digitado em cada mês: { id da competência: texto como o usuário digitou }
+  protected readonly valores = signal<Record<string, string>>({});
   protected justificativa = '';
   protected readonly arquivo = signal<File | null>(null);
 
-  /** Quantos meses estão marcados; o formulário só libera o salvar com pelo menos um. */
-  protected readonly quantidadeMarcada = computed(() => Object.values(this.marcados()).filter(Boolean).length);
+  /** Meses com valor digitado (em branco = sem diferença naquele mês), na ordem da lista. */
+  protected readonly preenchidos = computed(() =>
+    this.meses().filter((m) => (this.valores()[m.competencia_id] ?? '').trim() !== ''),
+  );
 
-  /** Junta os rótulos dos meses (ex.: "01/2026, 02/2026") para o resumo. */
-  protected rotulos(meses: MesSemMedicao[]): string {
-    return meses.map((m) => m.rotulo).join(', ');
+  /** Soma dos valores válidos digitados (o texto inválido não entra na soma). */
+  protected readonly total = computed(() =>
+    this.preenchidos().reduce((soma, m) => {
+      const texto = paraDecimalApi((this.valores()[m.competencia_id] ?? '').trim());
+      return VALOR.test(texto) ? soma + Number(texto) : soma;
+    }, 0),
+  );
+
+  /** Texto do selo de situação do mês no SGI. */
+  protected situacao(m: MesSemMedicao): string {
+    if (m.medida) return 'Medido no SGI';
+    if (m.em_andamento) return 'Em andamento';
+    return 'Sem medição no SGI';
   }
 
   /**
-   * Marca ou desmarca um mês. Cria um objeto novo (em vez de alterar o atual) para o signal perceber a mudança.
-   * @param id Id da competência (mês) clicada.
-   * @param marcado Estado novo da caixa.
+   * Guarda o valor digitado num mês. Cria um objeto novo (em vez de alterar o atual) para o signal perceber a mudança.
+   * @param id Id da competência (mês).
+   * @param texto Texto digitado.
    */
-  protected marcar(id: string, marcado: boolean): void {
-    this.marcados.update((atual) => ({ ...atual, [id]: marcado }));
+  protected digitar(id: string, texto: string): void {
+    this.valores.update((atual) => ({ ...atual, [id]: texto }));
   }
 
-  /** Valor preenchido, numérico e diferente de zero. */
-  protected valorValido(): boolean {
+  /** Campo vazio (mês sem diferença) ou número diferente de zero. */
+  protected valorValido(texto: string | undefined): boolean {
+    const limpo = (texto ?? '').trim();
+    if (!limpo) return true;
     // Converte "1.234,56" (tela) para "1234.56" (API) antes de validar; zero não faz sentido como diferença
-    const texto = paraDecimalApi(this.valor.trim());
-    return VALOR.test(texto) && Number(texto) !== 0;
+    const api = paraDecimalApi(limpo);
+    return VALOR.test(api) && Number(api) !== 0;
   }
 
-  /** Formulário completo: ao menos um mês, valor válido, justificativa e PDF (todos obrigatórios). */
+  /** Formulário completo: ao menos um mês, todos os valores válidos, total diferente de zero, justificativa e PDF. */
   protected pronto(): boolean {
-    return this.quantidadeMarcada() > 0 && this.valorValido() && !!this.justificativa.trim() && !!this.arquivo();
+    const meses = this.preenchidos();
+    return meses.length > 0 && meses.every((m) => this.valorValido(this.valores()[m.competencia_id]))
+      && Math.round(this.total() * 100) !== 0 && !!this.justificativa.trim() && !!this.arquivo();
   }
 
   /** Abre o formulário com o que já está gravado (o PDF precisa ser enviado de novo). */
   protected editar(atual: DiferencaManual): void {
-    this.marcados.set(Object.fromEntries(atual.meses.map((m) => [m.competencia_id, true])));
-    this.valor = paraDecimalTela(atual.valor);
+    this.valores.set(Object.fromEntries(atual.meses.filter((m) => m.valor !== null && m.valor !== undefined)
+      .map((m) => [m.competencia_id, paraDecimalTela(String(m.valor))])));
     this.justificativa = atual.justificativa;
     this.arquivo.set(null);
     this.editando.set(true);
-  }
-
-  /** Fecha o formulário e volta à pergunta inicial (ou ao resumo, se já houver diferença gravada). */
-  protected cancelarEdicao(): void {
-    this.editando.set(false);
-    this.resposta.set(null);
   }
 
   /**
@@ -208,9 +220,10 @@ export class DiferencaManualComponent {
   protected enviar(): void {
     const arquivo = this.arquivo();
     if (!this.pronto() || !arquivo) return;
+    const meses = this.preenchidos();
     this.salvar.emit({
-      valor: paraDecimalApi(this.valor.trim()),
-      competencias_ids: this.meses().filter((m) => this.marcados()[m.competencia_id]).map((m) => m.competencia_id),
+      competencias_ids: meses.map((m) => m.competencia_id),
+      valores: meses.map((m) => paraDecimalApi((this.valores()[m.competencia_id] ?? '').trim())),
       justificativa: this.justificativa.trim(),
       arquivo,
     });

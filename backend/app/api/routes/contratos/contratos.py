@@ -39,9 +39,11 @@ from app.schemas.contratos.contratos import (
     VizinhosContrato,
     ProximoNumero,
 )
+from app.schemas.contratos.eventos import PaginaEventosContrato
 from app.schemas.usuarios import OpcaoUsuario
 from app.services import servico_admin_usuarios
 from app.services.contratos import servico_contratos as servico
+from app.services.contratos import servico_eventos
 from app.services.contratos.relatorio_itens import relatorio_itens as relatorio_itens_pdf
 
 roteador = APIRouter(prefix="/contratos", tags=["Contratos"], responses=RESPOSTAS_AUTENTICADAS)
@@ -194,6 +196,34 @@ def historico(contrato_id: uuid.UUID, sessao: Session = Depends(obter_sessao), _
     """Histórico campo a campo, lido da auditoria estruturada."""
     with traduzir_erros():
         return servico.historico(sessao, contrato_id)
+
+
+@roteador.get(
+    "/{contrato_id}/eventos",
+    response_model=PaginaEventosContrato,
+    summary="Eventos do contrato (aba Eventos)",
+    description="Tudo o que a auditoria registrou sobre o contrato, com nome em linguagem de usuário e categoria (`altera_contrato`, `execucao`, "
+    "`documentos`, `equipe_cadastro`, `sem_efeito`). Filtros: `categoria`, `busca` (sem acento, em evento, autor, detalhe e conteúdo gravado). "
+    "Ordem: `ordem` (`ocorrido_em`, `evento`, `autor`, `detalhe`) e `sentido` (`asc`/`desc`; padrão: mais recentes primeiro). Paginação: `pagina` "
+    "e `por_pagina` (1 a 200; padrão 50). `por_categoria` traz a contagem de cada categoria com a busca atual. Nas conclusões de reajuste, "
+    "repactuação, aditamento/supressão, prorrogação e vigência retroativa, a linha traz `registro_tipo`, `registro_id`, `sem_efeito`, "
+    "`pode_tornar_sem_efeito` e `motivo_bloqueio`. Exige ACL `contratos` = CONTROLE_TOTAL.",
+    responses=NAO_ENCONTRADO,
+)
+def eventos(
+    contrato_id: uuid.UUID,
+    categoria: Literal["altera_contrato", "execucao", "documentos", "equipe_cadastro", "sem_efeito"] | None = Query(None, description="Categoria (chip)."),
+    busca: str = Query("", max_length=200, description="Texto a procurar."),
+    ordem: Literal["ocorrido_em", "evento", "autor", "detalhe"] = Query("ocorrido_em"),
+    sentido: Literal["asc", "desc"] = Query("desc"),
+    pagina: int = Query(1, ge=1),
+    por_pagina: int = Query(50, ge=1, le=200),
+    sessao: Session = Depends(obter_sessao),
+    usuario: Usuario = Depends(controle_total),
+) -> PaginaEventosContrato:
+    """Lista os eventos do contrato para quem administra contratos."""
+    with traduzir_erros():
+        return servico_eventos.listar(sessao, contrato_id, usuario, categoria, busca, ordem, sentido, pagina, por_pagina)
 
 
 @roteador.put(

@@ -32,7 +32,7 @@ test_contratos_reajuste_mes_cortado.py.
 from datetime import date
 from decimal import Decimal
 
-from tests.apoio_contratos import definir_parametros, juntar_nf
+from tests.apoio_contratos import definir_parametros, escolher_calculo, juntar_nf
 # Fixtures importadas de outro arquivo de teste; o pytest as injeta pelo nome dos
 # parâmetros (por isso os noqa F811).
 from tests.test_contratos_retencao import _ambiente, cenario  # noqa: F401 - fixtures (competência 01/2026 medida, hoje = 15/03/2026)
@@ -43,7 +43,9 @@ def _abrir(cliente, contrato, h, data_efeito="2026-01-15"):
     """Abre reajuste cuja data de efeito cai no meio da competência já medida (01/2026)."""
     painel = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "data_efeito": data_efeito}, headers=h).json()
     reajuste = painel["em_andamento"]
-    return _url(contrato, f"/reajustes/{reajuste['id']}"), reajuste
+    url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, h)
+    return url, reajuste
 
 
 def _corpo(reajuste, calculo=None):

@@ -173,7 +173,7 @@ function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null,
 
           @if (passo() === 'conexao') {
             @if (!precisaLigacao()) {
-              <p class="dica-formulario">{{ passivo(dados.tipo) ? 'O patch panel não precisa de conexão no cadastro: os cabos do fundo e da frente de cada porta são ligados depois, na tela da porta.' : 'O core primário é o topo da rede: não fica ligado a ninguém acima dele.' }}</p>
+              <p class="dica-formulario">{{ passivo(dados.tipo) ? 'O patch panel não precisa de conexão no cadastro: os cabos do Terminal Punch Down e do Conector RJ45 de cada porta são ligados depois, na tela da porta.' : 'O core primário é o topo da rede: não fica ligado a ninguém acima dele.' }}</p>
               <div class="acoes-formulario">
                 <button type="button" class="acao-secundaria" (click)="passo.set('dados')">Voltar</button>
                 <button type="button" class="acao-primaria" (click)="passo.set('revisao')">Avançar</button>

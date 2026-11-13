@@ -166,8 +166,8 @@ import {
                     <td data-rotulo="Ligado a">
                       <!-- O que está ligado: outra porta vira botão (abre a porta de lá), sem link solto. No patch panel, fundo e frente -->
                       @if (passivo(e.tipo)) {
-                        @if (p.fundo; as c) { <ng-container *ngTemplateOutlet="ligado; context: { $implicit: c, lado: 'Fundo' }" /> }
-                        @if (p.frente; as c) { <ng-container *ngTemplateOutlet="ligado; context: { $implicit: c, lado: 'Frente' }" /> }
+                        @if (p.fundo; as c) { <ng-container *ngTemplateOutlet="ligado; context: { $implicit: c, lado: 'Terminal Punch Down' }" /> }
+                        @if (p.frente; as c) { <ng-container *ngTemplateOutlet="ligado; context: { $implicit: c, lado: 'Conector RJ45' }" /> }
                         @if (!p.fundo && !p.frente) { — }
                       } @else if (p.conexao; as c) { <ng-container *ngTemplateOutlet="ligado; context: { $implicit: c, lado: '' }" /> }
                       @else { — }</td>

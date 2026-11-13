@@ -15,17 +15,18 @@ import { PIPES_FORMATACAO } from '../../../shared/utilitarios/formatadores.pipes
 import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
-import { CalculoMesQuebrado, DetalheContrato, GravacaoDiferencaManual, ItemReajuste, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
+import { CalculoMesQuebrado, DetalheContrato, GravacaoDiferencaManual, ModoRetroativo, ItemReajuste, PainelReajuste, Reajuste } from '../compartilhado/contratos.models';
 import { MESES, paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
+import { TornarSemEfeitoComponent } from '../compartilhado/tornar-sem-efeito.component';
 /** Percentual aceito pela API: maior que −100 (o preço não pode zerar) e até 1000. */
 const INDICE = /^-?\d+(\.\d{1,8})?$/;
 
 /** Tela 6: reajuste (evidência do índice, memória, apostilamento e conclusão). Percentual por item: positivo reajusta, negativo dá desconto. */
 @Component({
   selector: 'app-reajuste',
-  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, DiferencaManualComponent, ...PIPES_FORMATACAO],
+  imports: [TrilhaEtapasComponent, TornarSemEfeitoComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, DiferencaManualComponent, ...PIPES_FORMATACAO],
   templateUrl: './reajuste.component.html',
 })
 export class ReajusteComponent implements OnInit {
@@ -71,8 +72,22 @@ export class ReajusteComponent implements OnInit {
   protected apostilamento: File | null = null;
   // Diferença retroativa manual sendo gravada ou removida (botão com o indicador de carregando)
   protected readonly salvandoManual = signal(false);
+  protected readonly escolhendoModo = signal<ModoRetroativo | null>(null);
+  /** As duas respostas de "Cálculo manual ou automático?", com a explicação que aparece em cada cartão. */
+  protected readonly modos: { modo: ModoRetroativo; rotulo: string; explicacao: string }[] = [
+    { modo: 'automatico', rotulo: 'Automático', explicacao: 'O sistema calcula a diferença dos meses já medidos no SGI (quantidade medida × diferença de preço).' },
+    { modo: 'manual', rotulo: 'Manual', explicacao: 'Você informa a diferença mês a mês, da data de efeito até o mês atual. O sistema não calcula nada sozinho.' },
+  ];
 
   /** Carrega o contrato e o painel de reajuste em paralelo. */
+  /** Nome de cada situação no selo do histórico. */
+  protected readonly rotulosSituacao: Record<string, string> = { rascunho: 'Em elaboração', concluido: 'Concluído', cancelado: 'Cancelado', sem_efeito: 'Sem efeito' };
+
+  /** Depois de tornar um evento sem efeito: recarrega o contrato (preços e quantidades mudaram) e o painel. */
+  protected recarregar(): void {
+    this.ngOnInit();
+  }
+
   ngOnInit(): void {
     forkJoin({ contrato: this.contratos.consultar(this.id()), painel: this.api.reajustes(this.id()) }).subscribe({
       next: ({ contrato, painel }) => {
@@ -293,6 +308,19 @@ export class ReajusteComponent implements OnInit {
   }
 
   /** Grava a diferença informada manualmente (meses pagos fora do sistema). A memória precisa ser gerada de novo depois. */
+  /** Responde "Cálculo manual ou automático?". Trocar apaga a diferença manual informada (por isso pede confirmação). */
+  protected async escolherModo(r: Reajuste, modo: ModoRetroativo): Promise<void> {
+    if (r.diferenca_manual && !(await this.dialogos.confirmar({
+      titulo: 'Trocar para o cálculo automático?', mensagem: 'A diferença informada mês a mês será apagada e a memória precisará ser gerada de novo.',
+      rotuloConfirmar: 'Trocar', perigo: true,
+    }))) return;
+    this.escolhendoModo.set(modo);
+    this.api.escolherModoRetroativo<PainelReajuste>(this.id(), 'reajustes', r.id, modo).subscribe({
+      next: (p) => { this.escolhendoModo.set(null); this.aplicar(p); },
+      error: (e) => { this.escolhendoModo.set(null); this.dialogos.mostrarErro(e); },
+    });
+  }
+
   protected salvarDiferencaManual(r: Reajuste, dados: GravacaoDiferencaManual): void {
     this.salvandoManual.set(true);
     this.api.salvarDiferencaManual<PainelReajuste>(this.id(), 'reajustes', r.id, dados).subscribe({

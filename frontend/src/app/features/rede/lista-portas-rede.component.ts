@@ -36,7 +36,7 @@ const TEXTOS: Record<FiltroLista, { titulo: string; descricao: string; vazio: st
   },
   'patch-um-lado': {
     titulo: 'Patch panel com um lado só',
-    descricao: 'Portas de patch panel com o fundo ou a frente ligado e o outro lado vazio: o cabo para no meio do caminho. Abra a porta para ligar o outro lado.',
+    descricao: 'Portas de patch panel com o Terminal Punch Down ou o Conector RJ45 ligado e o outro lado vazio: o cabo para no meio do caminho. Abra a porta para ligar o outro lado.',
     vazio: 'Nenhuma porta de patch panel com um lado só.',
   },
 };

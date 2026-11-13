@@ -773,19 +773,29 @@ def _conferir_lado(porta: PortaRede, lado: str | None) -> str | None:
     """Porta de patch panel precisa do lado (fundo ou frente); nas demais, o lado não existe."""
     if _eh_patch(porta):
         if lado not in LADOS_PATCH:
-            raise ErroRede(f"Diga o lado da porta {_nome_porta(porta)}: fundo ou frente.")
+            raise ErroRede(f"Diga o lado da porta {_nome_porta(porta)}: Terminal Punch Down ou Conector RJ45.")
         return lado
     if lado:
-        raise ErroRede(f"Só a porta de patch panel tem fundo e frente; a porta {_nome_porta(porta)} tem uma ligação só.")
+        raise ErroRede(f"Só a porta de patch panel tem Terminal Punch Down e Conector RJ45; a porta {_nome_porta(porta)} tem uma ligação só.")
     return None
 
 
+# Nome que aparece para cada lado da porta do patch panel (decisão do usuário, 13/11/2026). O valor gravado continua "fundo"/"frente".
+ROTULOS_LADO = {"frente": "Conector RJ45", "fundo": "Terminal Punch Down"}
+
+
+def rotulo_lado(lado: str | None) -> str:
+    """Nome do lado para o usuário: "frente" vira "Conector RJ45" e "fundo", "Terminal Punch Down"."""
+    return ROTULOS_LADO.get(lado or "", lado or "")
+
+
 def _rotulo_lado(lado: str | None) -> str:
-    return f" ({lado})" if lado else ""
+    """Sufixo com o lado, para o texto da ponta: " (Conector RJ45)"."""
+    return f" ({rotulo_lado(lado)})" if lado else ""
 
 
 def texto_da_ponta(sessao: Session, c: ConexaoRede, porta_id: uuid.UUID, lado: str | None = None) -> str:
-    """O que está na outra ponta da ligação, em texto: "SPI-SWAC-05A · 1/0/6", "PP-5A · 6 (fundo)", "Impressora (chapa 0123)" ou a descrição."""
+    """O que está na outra ponta da ligação, em texto: "SPI-SWAC-05A · 1/0/6", "PP-5A · 6 (Terminal Punch Down)", "Impressora (chapa 0123)" ou a descrição."""
     outra_id, outro_lado = outra_ponta(c, porta_id, lado)
     if outra_id is not None:
         outra = obter_porta(sessao, outra_id)
@@ -796,14 +806,14 @@ def texto_da_ponta(sessao: Session, c: ConexaoRede, porta_id: uuid.UUID, lado: s
 def descrever_porta(sessao: Session, porta: PortaRede) -> str:
     """Descrição gerada pelo sistema (decisão do usuário): o que está ligado na porta; "Desligado" se não houver nada.
 
-    No patch panel, os dois lados: "Fundo: VOIP 08395 · Frente: SPI-SWAC-05A · 1/0/6" (lado vazio não aparece).
+    No patch panel, os dois lados: "Terminal Punch Down: VOIP 08395 · Conector RJ45: SPI-SWAC-05A · 1/0/6" (lado vazio não aparece).
     """
     ligacoes = ligacoes_da_porta(sessao, porta.id)
     if not ligacoes:
         return DESCRICAO_DESLIGADA
     if _eh_patch(porta):
         por_lado = {lado_na_conexao(c, porta.id): c for c in ligacoes}
-        partes = [f"{lado.capitalize()}: {texto_da_ponta(sessao, por_lado[lado], porta.id, lado)}" for lado in LADOS_PATCH if lado in por_lado]
+        partes = [f"{rotulo_lado(lado)}: {texto_da_ponta(sessao, por_lado[lado], porta.id, lado)}" for lado in LADOS_PATCH if lado in por_lado]
         return " · ".join(partes)[:250]
     return texto_da_ponta(sessao, ligacoes[0], porta.id)[:250]
 

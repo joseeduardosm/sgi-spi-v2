@@ -76,7 +76,7 @@ def _eventos_do_contrato(contrato: Contrato, referencia: date) -> list[EventoCal
     if contrato.mes_reajuste:
         for ano in range(aniversario.year, max(contrato.data_fim.year, referencia.year) + 1):
             mes = date(ano, contrato.mes_reajuste, 1)
-            if mes >= aniversario and mes <= contrato.data_fim and not any(r.situacao != "cancelado" and r.mes_referencia >= mes for r in contrato.reajustes):
+            if mes >= aniversario and mes <= contrato.data_fim and not any(r.situacao not in ("cancelado", "sem_efeito") and r.mes_referencia >= mes for r in contrato.reajustes):
                 novo(mes, "reajuste", f"Reajuste de {mes:%m/%Y}", f"{base}/reajuste", "media" if mes < referencia else "info")
     abertas = [c for c in contrato.competencias if c.etapa_atual != "concluida" and not anterior_ao_corte(c)]
     for competencia in abertas:

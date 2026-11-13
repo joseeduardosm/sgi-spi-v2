@@ -42,7 +42,7 @@ from types import SimpleNamespace
 from app.models.contratos import Competencia, Contrato, ItemMedicao, VigenciaRetroativa
 from app.services.contratos import calculos
 from app.services.contratos.servico_competencias import maximo_de_notas_minimas_por_grupo, nota_final, percentual_da_nota
-from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, juntar_nf
+from tests.apoio_contratos import corpo_conclusao, PDF, conferir_retencao, juntar_nf, escolher_calculo
 # Fixtures de outro arquivo: o pytest injeta pelo nome (equipe devolve contrato,
 # gestora e fiscal); _hoje fixa a data. Por isso os noqa F811 nos testes.
 from tests.test_contratos_execucao import _hoje, _preparar_execucao, _url, equipe  # noqa: F401 (fixtures)
@@ -322,6 +322,7 @@ def test_reajuste_retroativo_gera_competencia_de_diferenca(cliente, admin, equip
     reajuste = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": "2026-01-01"}, headers=gestora).json()["em_andamento"]
     assert reajuste["competencias_com_diferenca"] == 1
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, gestora)
     cliente.put(f"{url}/memoria", json={"itens": [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]}, headers=gestora)
     cliente.post(f"{url}/evidencia", files={"arquivo": ("e.pdf", PDF)}, headers=gestora)
     cliente.post(f"{url}/memoria/arquivos", headers=gestora)

@@ -43,7 +43,7 @@
   </div>
 
   <nav class="abas abas-rolagem" role="tablist" aria-label="Seções do contrato">
-    @for (a of abas; track a.id) {
+    @for (a of abasVisiveis(); track a.id) {
       <button type="button" role="tab" [class.ativa]="aba() === a.id" [attr.aria-selected]="aba() === a.id" (click)="escolher(a.id)">{{ a.rotulo }}</button>
     }
   </nav>
@@ -136,9 +136,6 @@
           <div><h2 id="titulo-vigencia">Vigência e linha do tempo</h2><small>{{ c.vigencias.length }} vigência(s) · limite máximo {{ c.data_limite_maxima | dataBr }}</small></div>
           <div class="acoes-formulario">
             @if (podeProrrogar()) { <a class="acao-primaria" [routerLink]="['/contratos', c.id, 'prorrogacao']">Prorrogar</a> }
-            @if (prorrogacoes().at(-1); as ultima) {
-              @if (ultima.pode_desfazer) { <button type="button" class="acao-perigo" (click)="desfazer(ultima)">Desfazer última prorrogação</button> }
-            }
           </div>
         </header>
         <div class="corpo">
@@ -154,7 +151,10 @@
                   <small>Vigência anterior: até {{ p.fim_anterior | dataBr }} · nova: {{ p.data_inicio | dataBr }} a {{ p.data_fim | dataBr }}</small>
                   <div class="acoes-cartao esquerda">
                     <button type="button" class="acao-secundaria acao-pequena" (click)="baixarTermo(p)">Baixar termo assinado</button>
-                    @if (ultimo && p.pode_desfazer) { <button type="button" class="acao-perigo acao-pequena" (click)="desfazer(p)">Desfazer</button> }
+                    @if (ultimo && c.permissoes.pode_editar) {
+                      <app-tornar-sem-efeito [contratoId]="c.id" tipo="prorrogacoes" [registroId]="p.id" [pode]="p.pode_desfazer" [motivoBloqueio]="p.motivo_bloqueio || ''"
+                                             [titulo]="'Tornar sem efeito a prorrogação' + (p.numero_termo ? ' (TA nº ' + p.numero_termo + ')' : '') + '?'" (concluido)="carregar()" />
+                    }
                   </div>
                 </div>
               }
@@ -270,6 +270,7 @@
     @case ('notas') { <app-aba-notas [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" /> }
     @case ('diario') { <app-aba-diario [contratoId]="c.id" [usuarioId]="usuarioId()" /> }
     @case ('execucao') { <app-aba-execucao [contratoId]="c.id" [podeEditar]="c.permissoes.pode_editar" (alterado)="carregar()" /> }
+    @case ('eventos') { @if (c.permissoes.pode_administrar) { <app-aba-eventos [contratoId]="c.id" (alterado)="carregar()" /> } }
   }
 } @else {
   <app-esqueleto tipo="formulario" [linhas]="5" />

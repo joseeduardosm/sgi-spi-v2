@@ -19,6 +19,7 @@ import { Alteracao, DetalheContrato, PainelAlteracao } from '../compartilhado/co
 import { paraDecimalApi, paraDecimalTela, ROTULOS_PAPEL, ROTULOS_TIPO_ITEM } from '../compartilhado/rotulos';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
+import { TornarSemEfeitoComponent } from '../compartilhado/tornar-sem-efeito.component';
 /** Abas do processo, na ordem do fluxo. */
 type Aba = 'justificativa' | 'quantitativos' | 'memoria' | 'formalizacao';
 /** Documentos que podem ser anexados na alteração. */
@@ -27,7 +28,7 @@ type Documento = 'justificativa' | 'autorizacao' | 'de_acordo' | 'termo';
 /** Tela 7: aditamento ou supressão (justificativa → quantitativos → memória e ciências → formalização). */
 @Component({
   selector: 'app-alteracao',
-  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [TrilhaEtapasComponent, TornarSemEfeitoComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './alteracao.component.html',
 })
 export class AlteracaoComponent implements OnInit {
@@ -78,6 +79,14 @@ export class AlteracaoComponent implements OnInit {
   protected readonly jaRegistrei = computed(() => (this.andamento()?.ciencias ?? []).some((c) => c.usuario_id === this.autenticacao.usuario()?.id));
 
   /** Carrega o contrato e o painel da alteração em paralelo. */
+  /** Nome de cada situação no selo do histórico. */
+  protected readonly rotulosSituacao: Record<string, string> = { rascunho: 'Em elaboração', aguardando_ciencias: 'Aguardando ciências', concluida: 'Concluída', cancelada: 'Cancelada', sem_efeito: 'Sem efeito' };
+
+  /** Depois de tornar um evento sem efeito: recarrega o contrato (preços e quantidades mudaram) e o painel. */
+  protected recarregar(): void {
+    this.ngOnInit();
+  }
+
   ngOnInit(): void {
     forkJoin({ contrato: this.contratos.consultar(this.id()), painel: this.api.alteracoes(this.id()) }).subscribe({
       next: ({ contrato, painel }) => {

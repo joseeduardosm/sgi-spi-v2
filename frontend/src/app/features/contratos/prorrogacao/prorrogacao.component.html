@@ -243,8 +243,10 @@
                     <td>{{ v.numero_termo || '—' }}@if (v.termo) { · <button type="button" class="acao-secundaria acao-pequena" (click)="baixarTermo(v.termo.anexo_id)">Baixar termo</button> }</td>
                     <td>{{ v.reajustada ? 'Concluído' : 'Pendente' }}</td>
                     <td>
-                      @if (p.pode_editar && v.pode_desfazer) { <button type="button" class="acao-perigo acao-pequena" (click)="desfazerRetroativa(v)">Desfazer</button> }
-                      @else if (v.motivo_bloqueio) { <small>{{ v.motivo_bloqueio }}</small> }
+                      @if (p.pode_editar && (v.pode_desfazer || v.motivo_bloqueio)) {
+                        <app-tornar-sem-efeito [contratoId]="id()" tipo="vigencias-retroativas" [registroId]="v.id" [pode]="v.pode_desfazer" [motivoBloqueio]="v.motivo_bloqueio"
+                                               titulo="Tornar sem efeito a vigência retroativa?" (concluido)="carregar()" />
+                      } @else if (v.motivo_bloqueio) { <small>{{ v.motivo_bloqueio }}</small> }
                     </td>
                   </tr>
                 }

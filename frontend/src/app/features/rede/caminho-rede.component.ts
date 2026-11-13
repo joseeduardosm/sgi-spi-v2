@@ -8,7 +8,7 @@ import { RouterLink } from '@angular/router';
 import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto.component';
 import { DicaPortaComponent, posicaoDaDica } from './dica-porta.component';
 import { RedeApiService } from './rede-api.service';
-import { CaminhoRede, EtapaCaminho, Porta, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_PING, ROTULOS_TIPO_EQUIPAMENTO } from './rede.models';
+import { CaminhoRede, EtapaCaminho, Porta, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_PING, ROTULOS_TIPO_EQUIPAMENTO, rotuloLado } from './rede.models';
 
 /**
  * Cascata de caixas, de cima (core) para baixo: cada caixa é um equipamento (ou o ponto de rede no fim), com o tipo, a função e o ping.
@@ -37,7 +37,7 @@ import { CaminhoRede, EtapaCaminho, Porta, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_P
               }
               <!-- Patch panel: o cabo atravessa a porta, entrando por um lado (fundo ou frente) e saindo pelo outro -->
               @if (e.lado_entrada || e.lado_saida) {
-                <small>Porta {{ e.porta_entrada?.nome || e.porta_saida?.nome }}: {{ e.lado_entrada ? 'entra pelo ' + e.lado_entrada : '' }}{{ e.lado_entrada && e.lado_saida ? ', ' : '' }}{{ e.lado_saida ? 'sai pelo ' + e.lado_saida : '' }}</small>
+                <small>Porta {{ e.porta_entrada?.nome || e.porta_saida?.nome }}: {{ e.lado_entrada ? 'entra pelo ' + rotuloLado(e.lado_entrada) : '' }}{{ e.lado_entrada && e.lado_saida ? ', ' : '' }}{{ e.lado_saida ? 'sai pelo ' + rotuloLado(e.lado_saida) : '' }}</small>
               }
               @if (e.porta_saida; as p) { <ng-container [ngTemplateOutlet]="quadradinho" [ngTemplateOutletContext]="{ $implicit: p, lado: 'porta-baixo' }" /> }
             </div>
@@ -83,6 +83,8 @@ export class CaminhoRedeComponent {
   private static sequencia = 0;
   protected readonly idDica = `dica-caminho-${++CaminhoRedeComponent.sequencia}`;
   protected readonly caminho = signal<CaminhoRede | null>(null);
+  /** Nome do lado da porta do patch panel na tela (Terminal Punch Down / Conector RJ45). */
+  protected readonly rotuloLado = rotuloLado;
   /** Porta sob o mouse e onde a dica aparece. */
   protected readonly dica = signal<{ porta: Porta; x: number; y: number } | null>(null);
   protected readonly erro = signal(false);

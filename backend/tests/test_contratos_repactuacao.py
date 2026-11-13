@@ -37,7 +37,7 @@ from decimal import Decimal
 
 import pytest
 
-from tests.apoio_contratos import PDF, corpo_conclusao
+from tests.apoio_contratos import PDF, corpo_conclusao, escolher_calculo
 from tests.test_contratos_alteracoes import equipe  # noqa: F401 (fixture)
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -74,7 +74,11 @@ def _abrir(cliente, contrato, h, efeito="2026-01-16", base_cct="2026-01-01"):
     Devolve a resposta HTTP (201 ao abrir, 409 se já há uma em andamento ou se o
     efeito é anterior a uma repactuação concluída).
     """
-    return cliente.post(_url(contrato, "/repactuacoes"), data={"data_base_cct": base_cct, "data_efeito": efeito}, files={"arquivo": ("cct.pdf", PDF)}, headers=h)
+    r = cliente.post(_url(contrato, "/repactuacoes"), data={"data_base_cct": base_cct, "data_efeito": efeito}, files={"arquivo": ("cct.pdf", PDF)}, headers=h)
+    if r.status_code == 201:
+        # Primeira pergunta da memória: cálculo automático (a resposta devolvida continua a da abertura)
+        escolher_calculo(cliente, _url(contrato, f"/repactuacoes/{r.json()['em_andamento']['id']}"), h)
+    return r
 
 
 def test_repactuacao_completa(cliente, admin, equipe):  # noqa: F811
@@ -90,6 +94,11 @@ def test_repactuacao_completa(cliente, admin, equipe):  # noqa: F811
     rep = painel["em_andamento"]
     assert rep["data_base_cct"] == "2026-01-01" and len(rep["checklist"]) == 1 and rep["obrigatorios_pendentes"] == 1
     assert _abrir(cliente, contrato, gestora).status_code == 409
+    # Com a repactuação em andamento, o painel de contratos abre (antes dava erro 500)
+    # e mostra a tarefa "Repactuação em elaboração" para a gestora.
+    inicio = cliente.get("/api/contratos/painel", headers=gestora)
+    assert inicio.status_code == 200, inicio.text
+    assert any(p["tipo"] == "repactuacao" for p in inicio.json()["minhas_pendencias"])
     # A CCT entra nos Documentos importantes
     documentos = cliente.get(_url(contrato, "/documentos"), headers=gestora).json()
     assert any(d["titulo"] == "CCT 01/2026" for d in (documentos if isinstance(documentos, list) else documentos.get("documentos", [])))
@@ -129,6 +138,13 @@ def test_repactuacao_completa(cliente, admin, equipe):  # noqa: F811
     cliente.post(f"{url}/checklist/{rep['checklist'][0]['id']}", files={"arquivo": ("p.pdf", PDF)}, headers=gestora)
     rep = cliente.post(f"{url}/consolidado", headers=gestora).json()["em_andamento"]
     assert rep["consolidado"] is not None and rep["consolidado_atualizado"]
+    # Cada documento do checklist vem precedido da sua contracapa ("Documento 1 de 1 · Checklist de repactuação" + o nome do item)
+    import io
+
+    from pypdf import PdfReader
+    consolidado = cliente.get(f"{url}/arquivos/{rep['consolidado']['anexo_id']}", headers=gestora).content
+    texto = " ".join(" ".join((p.extract_text() or "").split()) for p in PdfReader(io.BytesIO(consolidado)).pages)
+    assert "Documento 1 de 1 · Checklist de repactuação" in texto and "Pedido da contratada" in texto
     painel = cliente.post(f"{url}/finalizar", files={"arquivo": ("ap.pdf", PDF)}, headers=gestora).json()
     assert painel["em_andamento"] is None and painel["historico"][0]["situacao"] == "concluido"
     final = painel["historico"][0]

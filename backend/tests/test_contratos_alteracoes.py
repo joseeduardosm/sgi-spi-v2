@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from tests.apoio_contratos import corpo_conclusao, definir_parametros, PDF, conferir_retencao, criar_contrato, criar_empresa, item, juntar_nf, restringir_contratos, preparar_registro_prorrogacao
+from tests.apoio_contratos import corpo_conclusao, definir_parametros, PDF, conferir_retencao, criar_contrato, criar_empresa, item, juntar_nf, restringir_contratos, preparar_registro_prorrogacao, escolher_calculo
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -59,7 +59,7 @@ def test_prorrogar_so_com_prazo_e_termo_nao_gera_parecer(cliente, admin, equipe)
     assert cliente.get(_url(contrato, "/prorrogacao"), headers=gestora).json()["meses_disponiveis"] == 0
 
     # Desfazer
-    r = cliente.delete(_url(contrato, f"/prorrogacoes/{prorrogacao['id']}"), headers=gestora)
+    r = cliente.delete(_url(contrato, f"/prorrogacoes/{prorrogacao['id']}"), params={"motivo": "Termo registrado por engano"}, headers=gestora)
     assert r.status_code == 200 and r.json() == []
     assert cliente.get(_url(contrato), headers=gestora).json()["data_fim"] == "2026-12-31"
 
@@ -120,6 +120,7 @@ def test_reajuste_de_5_por_cento_mantem_competencias_medidas(cliente, admin, equ
     assert reajuste["competencias_recalculadas"] == 11
     assert cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": "2026-01-01"}, headers=gestora).status_code == 409
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, gestora)
     itens = [{"item_id": i["item_id"], "indice_percentual": "5"} for i in reajuste["itens"]]
     reajuste = cliente.put(f"{url}/memoria", json={"itens": itens}, headers=gestora).json()["em_andamento"]
     assert [i["valor_unitario_reajustado"] for i in reajuste["itens"]] == ["1050.0000", "11.0250"]  # 10,50 × 1,05 com 4 casas (antes arredondava para 11,03)
@@ -335,6 +336,7 @@ def test_aditamento_apos_reajuste_soma_ao_valor_global_e_contrato_completo_pode_
     # Reajuste de 10% a partir de fevereiro
     reajuste = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": "2026-02-01"}, headers=gestora).json()["em_andamento"]
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, gestora)
     cliente.put(f"{url}/memoria", json={"itens": [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]}, headers=gestora)
     cliente.post(f"{url}/evidencia", files={"arquivo": ("e.pdf", PDF)}, headers=gestora)
     cliente.post(f"{url}/memoria/arquivos", headers=gestora)
@@ -382,6 +384,7 @@ def test_reajuste_a_partir_de_20_do_mes_gera_uma_competencia_com_dois_trechos(cl
     reajuste = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 2, "data_efeito": "2027-01-20"}, headers=h).json()["em_andamento"]
     assert reajuste["data_efeito"] == "2027-01-20" and reajuste["mes_referencia"] == "2027-01-01"
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, h)
     itens = [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]
     assert cliente.put(f"{url}/memoria", json={"itens": itens}, headers=h).status_code == 200
     cliente.post(f"{url}/evidencia", files={"arquivo": ("ev.pdf", PDF)}, headers=h)
@@ -437,6 +440,7 @@ def test_trimestral_prorrogado_tem_uma_competencia_so_atravessando_as_vigencias(
     reajuste = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 2, "data_efeito": "2027-01-20"}, headers=h).json()["em_andamento"]
     assert reajuste["data_efeito"] == "2027-01-20" and reajuste["mes_referencia"] == "2027-01-01"
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, h)
     itens = [{"item_id": i["item_id"], "indice_percentual": "10"} for i in reajuste["itens"]]
     assert cliente.put(f"{url}/memoria", json={"itens": itens}, headers=h).status_code == 200
     cliente.post(f"{url}/evidencia", files={"arquivo": ("ev.pdf", PDF)}, headers=h)
@@ -542,7 +546,7 @@ def test_vigencia_retroativa_recua_inicio_renumera_e_desfaz(cliente, admin, equi
     cliente.post(_url(contrato, "/execucao/gerar"), headers=gestora)
     assert cliente.get(_url(contrato, "/competencias/identificador/2025-06"), headers=gestora).status_code == 200
 
-    desfeita = cliente.delete(_url(contrato, f"/vigencias-retroativas/{retroativa['id']}"), headers=gestora)
+    desfeita = cliente.delete(_url(contrato, f"/vigencias-retroativas/{retroativa['id']}"), params={"motivo": "Termo registrado por engano"}, headers=gestora)
     assert desfeita.status_code == 200, desfeita.text
     assert desfeita.json() == []
     detalhe = cliente.get(_url(contrato), headers=gestora).json()
@@ -589,7 +593,7 @@ def test_mes_da_virada_sem_interrupcao_e_cheio_e_a_competencia_ja_gerada_se_ajus
     continuos = [i for i in janeiro["itens"] if i["tipo"] == "continuo"]
     assert [(i["segmento"], i["periodo_rotulo"], i["quantidade_prevista"]) for i in continuos] == [(1, "", "2.0000")]
     # Desfazer a retroativa devolve o mês parcial
-    cliente.delete(_url(contrato, f"/vigencias-retroativas/{r.json()[0]['id']}"), headers=h)
+    cliente.delete(_url(contrato, f"/vigencias-retroativas/{r.json()[0]['id']}"), params={"motivo": "Termo registrado por engano"}, headers=h)
     assert _periodo(cliente, contrato, h, "2026-01") == ("2026-01-20", "2026-01-31")
 
     # Prorrogação a partir de 20/01/2027: o último mês (01 a 19/01) passa a ser cheio, na vigência nova
@@ -599,7 +603,7 @@ def test_mes_da_virada_sem_interrupcao_e_cheio_e_a_competencia_ja_gerada_se_ajus
     assert r.status_code == 200, r.text
     assert _periodo(cliente, contrato, h, "2027-01") == ("2027-01-01", "2027-01-31")
     # Desfazer a prorrogação mantém a competência do mês da virada, de novo só até o fim anterior
-    assert cliente.delete(_url(contrato, f"/prorrogacoes/{r.json()[0]['id']}"), headers=h).status_code == 200
+    assert cliente.delete(_url(contrato, f"/prorrogacoes/{r.json()[0]['id']}"), params={"motivo": "Termo registrado por engano"}, headers=h).status_code == 200
     assert _periodo(cliente, contrato, h, "2027-01") == ("2027-01-01", "2027-01-19")
 
 

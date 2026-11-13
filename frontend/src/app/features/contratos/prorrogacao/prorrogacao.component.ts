@@ -51,6 +51,7 @@ import { PosAssinaturaProrrogacaoComponent } from './pos-assinatura-prorrogacao.
 import { LinkificarPipe } from '../../../shared/utilitarios/linkificar.pipe';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
+import { TornarSemEfeitoComponent } from '../compartilhado/tornar-sem-efeito.component';
 
 /**
  * Tela 4: prorrogação (para frente). Meses → meses quebrados (pro rata × integral, uma escolha para todos) → itens sob demanda →
@@ -58,7 +59,7 @@ import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esquel
  */
 @Component({
   selector: 'app-prorrogacao',
-  imports: [PosAssinaturaProrrogacaoComponent, TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
+  imports: [PosAssinaturaProrrogacaoComponent, TornarSemEfeitoComponent, TrilhaEtapasComponent, EsqueletoComponent, LinkificarPipe, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, ...PIPES_FORMATACAO],
   templateUrl: './prorrogacao.component.html',
 })
 export class ProrrogacaoComponent implements OnInit {
@@ -199,16 +200,6 @@ export class ProrrogacaoComponent implements OnInit {
     });
   }
 
-  /** Pede confirmação e desfaz a vigência retroativa mais antiga. */
-  protected async desfazerRetroativa(v: VigenciaRetroativa): Promise<void> {
-    const ok = await this.dialogos.confirmar({
-      titulo: 'Desfazer a vigência retroativa?',
-      mensagem: 'As competências e a previsão dela serão apagadas, o início do contrato volta ao que era e as vigências serão renumeradas.',
-      rotuloConfirmar: 'Desfazer',
-      segundos: 5,
-    });
-    if (ok) this.api.desfazerVigenciaRetroativa(this.id(), v.id).subscribe({ next: () => this.carregar(), error: (e) => this.dialogos.mostrarErro(e) });
-  }
 
   /** Baixa o termo de uma vigência retroativa. */
   protected baixarTermo(anexoId: string): void {

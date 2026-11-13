@@ -20,9 +20,10 @@ import { AlteracoesApiService } from '../compartilhado/alteracoes-api.service';
 import { CabecalhoModuloComponent } from '../compartilhado/cabecalho-modulo.component';
 import { ContratosApiService } from '../compartilhado/contratos-api.service';
 import {
-  CalculoMesQuebrado, DetalheContrato, DocumentoProrrogacao, GravacaoDiferencaManual, GravacaoLinhaRepactuacao, PainelRepactuacao, Repactuacao,
+  CalculoMesQuebrado, DetalheContrato, ModoRetroativo, DocumentoProrrogacao, GravacaoDiferencaManual, GravacaoLinhaRepactuacao, PainelRepactuacao, Repactuacao,
 } from '../compartilhado/contratos.models';
 import { paraDecimalApi, paraDecimalTela } from '../compartilhado/rotulos';
+import { TornarSemEfeitoComponent } from '../compartilhado/tornar-sem-efeito.component';
 
 /** Valor digitado aceito (R$ com vírgula ou ponto, até 4 casas). */
 const VALOR = /^\d{1,14}([.,]\d{1,4})?$/;
@@ -37,7 +38,7 @@ interface LinhaEdicao { descricao: string; vigente: string; repactuado: string; 
  */
 @Component({
   selector: 'app-repactuacao',
-  imports: [TrilhaEtapasComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, LinkificarPipe,
+  imports: [TrilhaEtapasComponent, TornarSemEfeitoComponent, EsqueletoComponent, FormsModule, RouterLink, DatePipe, CabecalhoModuloComponent, EnvioPdfComponent, LinkificarPipe,
     DiferencaManualComponent, ...PIPES_FORMATACAO],
   templateUrl: './repactuacao.component.html',
 })
@@ -56,6 +57,12 @@ export class RepactuacaoComponent implements OnInit {
   protected readonly escolhendo = signal<CalculoMesQuebrado | null>(null);
   // Diferença retroativa manual sendo gravada ou removida (botão com o indicador de carregando)
   protected readonly salvandoManual = signal(false);
+  protected readonly escolhendoModo = signal<ModoRetroativo | null>(null);
+  /** As duas respostas de "Cálculo manual ou automático?", com a explicação que aparece em cada cartão. */
+  protected readonly modos: { modo: ModoRetroativo; rotulo: string; explicacao: string }[] = [
+    { modo: 'automatico', rotulo: 'Automático', explicacao: 'O sistema calcula a diferença dos meses já medidos no SGI (pago × repactuado).' },
+    { modo: 'manual', rotulo: 'Manual', explicacao: 'Você informa a diferença mês a mês, da data de vigência até o mês atual. O sistema não calcula nada sozinho.' },
+  ];
   protected readonly incluindoDocumento = signal(false);
   protected readonly enviandoInclusao = signal(false);
   protected readonly calculos: CalculoMesQuebrado[] = ['pro_rata', 'integral'];
@@ -85,6 +92,14 @@ export class RepactuacaoComponent implements OnInit {
       }),
       takeUntilDestroyed(this.destruir),
     ).subscribe({ next: (r) => this.previa.set(r), error: () => this.previa.set(null) });
+  }
+
+  /** Nome de cada situação no selo do histórico. */
+  protected readonly rotulosSituacao: Record<string, string> = { rascunho: 'Em elaboração', concluido: 'Concluída', cancelado: 'Cancelada', sem_efeito: 'Sem efeito' };
+
+  /** Depois de tornar um evento sem efeito: recarrega o contrato (preços e quantidades mudaram) e o painel. */
+  protected recarregar(): void {
+    this.ngOnInit();
   }
 
   ngOnInit(): void {
@@ -197,9 +212,17 @@ export class RepactuacaoComponent implements OnInit {
     });
   }
 
-  /** Há meses sem medição para perguntar ou uma diferença manual já informada? (`?? []`: tolera API ainda sem os campos) */
-  protected temDiferencaManual(r: Repactuacao): boolean {
-    return (r.meses_sem_medicao ?? []).length > 0 || !!r.diferenca_manual;
+  /** Responde "Cálculo manual ou automático?". Trocar apaga a diferença manual informada (por isso pede confirmação). */
+  protected async escolherModo(r: Repactuacao, modo: ModoRetroativo): Promise<void> {
+    if (r.diferenca_manual && !(await this.dialogos.confirmar({
+      titulo: 'Trocar para o cálculo automático?', mensagem: 'A diferença informada mês a mês será apagada e a memória precisará ser gerada de novo.',
+      rotuloConfirmar: 'Trocar', perigo: true,
+    }))) return;
+    this.escolhendoModo.set(modo);
+    this.api.escolherModoRetroativo<PainelRepactuacao>(this.id(), 'repactuacoes', r.id, modo).subscribe({
+      next: (p) => { this.escolhendoModo.set(null); this.aplicar(p); },
+      error: (e) => { this.escolhendoModo.set(null); this.dialogos.mostrarErro(e); },
+    });
   }
 
   /** Grava a diferença informada manualmente (meses pagos fora do sistema). A memória e o consolidado precisam ser gerados de novo depois. */

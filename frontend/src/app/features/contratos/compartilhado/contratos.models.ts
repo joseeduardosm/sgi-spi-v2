@@ -994,7 +994,12 @@ export interface DocumentoProrrogacao {
 }
 
 /** Prorrogação registrada (histórico). */
+/** Tipo do evento na URL de `POST …/{tipo}/{id}/sem-efeito`. */
+export type TipoEventoSemEfeito = 'reajustes' | 'repactuacoes' | 'alteracoes' | 'prorrogacoes' | 'vigencias-retroativas';
+
 export interface Prorrogacao {
+  /** Só a última: por que não pode ser tornada sem efeito agora (vazio se pode). */
+  motivo_bloqueio?: string;
   id: string;
   meses: number;
   assinada_em: string;
@@ -1139,7 +1144,16 @@ export interface MesSemMedicao {
   periodo_fim: string;
   /** Já coberta pela diferença manual de outro reajuste/repactuação (continua candidata a esta). */
   coberta_por_outra: boolean;
+  /** O mês já tem medição concluída no SGI. */
+  medida?: boolean;
+  /** Mês em andamento (o período ainda não terminou). */
+  em_andamento?: boolean;
+  /** Diferença já informada para o mês (nula se ainda não informada). */
+  valor?: Decimal | null;
 }
+
+/** Resposta de "Cálculo manual ou automático?" da memória retroativa (nulo = ainda não escolhido). */
+export type ModoRetroativo = 'automatico' | 'manual';
 
 /** Diferença retroativa informada manualmente para meses pagos fora do sistema (reajuste ou repactuação). */
 export interface DiferencaManual {
@@ -1158,8 +1172,9 @@ export interface DiferencaManual {
 
 /** Dados enviados ao gravar a diferença manual. */
 export interface GravacaoDiferencaManual {
-  valor: string;
+  /** Meses informados e a diferença de cada um (mesma ordem), já no formato da API. */
   competencias_ids: string[];
+  valores: string[];
   justificativa: string;
   arquivo: File;
 }
@@ -1168,7 +1183,11 @@ export interface Reajuste {
   id: string;
   /** Só em elaboração: a memória mês a mês resumida (os arquivos PDF/XLSX trazem o detalhe item a item). */
   resumo_meses: ResumoMesesReajuste | null;
-  situacao: 'rascunho' | 'concluido' | 'cancelado';
+  situacao: 'rascunho' | 'concluido' | 'cancelado' | 'sem_efeito';
+  /** Tornado sem efeito: quando, quem e o motivo. */
+  sem_efeito_em?: string | null; sem_efeito_por?: string; sem_efeito_motivo?: string;
+  /** Concluído: se o botão "Tornar sem efeito" fica ativo e, se não, por quê. */
+  pode_tornar_sem_efeito?: boolean; motivo_bloqueio?: string;
   /** Reajuste retroativo (volta no tempo): o preço novo é o da vigência retroativa e o referencial é piso. */
   retroativo: boolean;
   sequencia_vigencia: number;
@@ -1189,6 +1208,7 @@ export interface Reajuste {
   /** Parte do crédito ainda no fundo do contrato. */
   credito_pendente: Decimal;
   /** Em elaboração: meses encerrados sem medição concluída (para a pergunta da diferença manual). */
+  modo_retroativo?: ModoRetroativo | null;
   meses_sem_medicao: MesSemMedicao[];
   diferenca_manual: DiferencaManual | null;
   itens: ItemReajuste[];
@@ -1227,13 +1247,18 @@ export interface CompetenciaRetroativa {
   valor_pago: string | null; valor_repactuado: string | null; diferenca: string | null;
 }
 export interface Repactuacao {
-  id: string; situacao: 'rascunho' | 'concluido' | 'cancelado'; data_base_cct: string; mes_referencia: string; data_efeito: string; cadastro_concluido: boolean;
+  /** Tornado sem efeito: quando, quem e o motivo. */
+  sem_efeito_em?: string | null; sem_efeito_por?: string; sem_efeito_motivo?: string;
+  /** Concluído: se o botão "Tornar sem efeito" fica ativo e, se não, por quê. */
+  pode_tornar_sem_efeito?: boolean; motivo_bloqueio?: string;
+  id: string; situacao: 'rascunho' | 'concluido' | 'cancelado' | 'sem_efeito'; data_base_cct: string; mes_referencia: string; data_efeito: string; cadastro_concluido: boolean;
   linhas: LinhaRepactuacao[]; itens: ItemRepactuacao[]; base_atual: string; total_diferencas: string; base_repactuada: string;
   calculo_mes_quebrado: CalculoMesQuebrado | null; opcoes_mes_quebrado: { calculo: CalculoMesQuebrado; total_diferenca: string }[];
   competencias: CompetenciaRetroativa[]; total_retroativo_pagas: string; total_retroativo: string;
   memorias: { versao: number; criada_em: string; pdf: Arquivo; xlsx: Arquivo }[]; memoria_atualizada: boolean;
   checklist: DocumentoProrrogacao[]; obrigatorios_pendentes: number; cct: Arquivo; consolidado: Arquivo | null; consolidado_atualizado: boolean;
   apostilamento: Arquivo | null; diferenca_retroativa: string | null; competencia_diferenca: string | null;
+  modo_retroativo?: ModoRetroativo | null;
   meses_sem_medicao: MesSemMedicao[]; diferenca_manual: DiferencaManual | null;
   criado_em: string; concluido_em: string | null; cancelado_em: string | null;
 }
@@ -1273,7 +1298,11 @@ export interface ItemAlteracao {
 export interface Alteracao {
   id: string;
   tipo: 'aditamento' | 'supressao';
-  situacao: 'rascunho' | 'aguardando_ciencias' | 'concluida' | 'cancelada';
+  situacao: 'rascunho' | 'aguardando_ciencias' | 'concluida' | 'cancelada' | 'sem_efeito';
+  /** Tornado sem efeito: quando, quem e o motivo. */
+  sem_efeito_em?: string | null; sem_efeito_por?: string; sem_efeito_motivo?: string;
+  /** Concluído: se o botão "Tornar sem efeito" fica ativo e, se não, por quê. */
+  pode_tornar_sem_efeito?: boolean; motivo_bloqueio?: string;
   sequencia_vigencia: number;
   vigencia_inicio: string;
   vigencia_fim: string;
@@ -1879,4 +1908,32 @@ export interface ParametrosContratos extends ValoresParametrosContratos {
 export interface ResultadoBuscaObSigeo {
   concluida: boolean;
   mensagem: string;
+}
+
+/** Categorias da aba Eventos (chips). */
+export type CategoriaEvento = 'altera_contrato' | 'execucao' | 'documentos' | 'equipe_cadastro' | 'sem_efeito';
+
+/** Uma linha da aba Eventos do contrato (lida da auditoria). */
+export interface EventoContrato {
+  id: number;
+  ocorrido_em: string;
+  acao: string;
+  evento: string;
+  categoria: CategoriaEvento;
+  autor: string;
+  detalhe: string;
+  registro_tipo: TipoEventoSemEfeito | null;
+  registro_id: string | null;
+  sem_efeito: boolean;
+  pode_tornar_sem_efeito: boolean;
+  motivo_bloqueio: string;
+}
+
+/** Página da aba Eventos. */
+export interface PaginaEventosContrato {
+  itens: EventoContrato[];
+  total: number;
+  pagina: number;
+  por_pagina: number;
+  por_categoria: Record<string, number>;
 }

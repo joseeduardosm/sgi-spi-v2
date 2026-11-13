@@ -32,13 +32,15 @@ import { AbaNotasComponent } from './aba-notas.component';
 import { AbaPrevisaoComponent } from './aba-previsao.component';
 
 import { EsqueletoComponent } from '../../../shared/componentes/esqueleto/esqueleto.component';
+import { TornarSemEfeitoComponent } from '../compartilhado/tornar-sem-efeito.component';
+import { AbaEventosComponent } from './aba-eventos.component';
 /** Abas da tela de detalhe. */
-type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'correcoes' | 'notas' | 'diario' | 'execucao';
+type Aba = 'principal' | 'itens' | 'previsao' | 'processos' | 'equipe' | 'documentos' | 'checklists' | 'formularios' | 'correcoes' | 'notas' | 'diario' | 'execucao' | 'eventos';
 
 /** Tela 3: detalhe do contrato com abas. */
 @Component({
   selector: 'app-detalhe-contrato',
-  imports: [EsqueletoComponent, 
+  imports: [AbaEventosComponent, EsqueletoComponent, TornarSemEfeitoComponent, 
     RouterLink, AvatarComponent, BotaoCopiarComponent, CabecalhoModuloComponent, HistoricoCampoComponent, LinhaDoTempoComponent, AbaPrevisaoComponent, AbaDocumentosComponent,
     AbaChecklistsComponent, AbaCorrecoesComponent, AbaFormulariosComponent, AbaNotasComponent, AbaDiarioComponent, AbaExecucaoComponent, PortariasEquipeComponent, ...PIPES_FORMATACAO,
   ],
@@ -74,7 +76,11 @@ export class DetalheContratoComponent {
     { id: 'notas', rotulo: 'Notas de Empenho' },
     { id: 'diario', rotulo: 'Diário de bordo' },
     { id: 'execucao', rotulo: 'Execução' },
+    { id: 'eventos', rotulo: 'Eventos' },
   ];
+  /** Abas que o usuário vê: "Eventos" só para quem administra contratos (Controle total ou SuperRoot). */
+  protected readonly abasVisiveis = computed(() =>
+    this.abas.filter((a) => a.id !== 'eventos' || !!this.contrato()?.permissoes.pode_administrar));
   // Estado: aba aberta, contrato, histórico de campos e prorrogações
   protected readonly aba = signal<Aba>('principal');
   protected readonly contrato = signal<DetalheContrato | null>(null);
@@ -244,17 +250,6 @@ export class DetalheContratoComponent {
   // Traduz o id da empresa no histórico para a razão social
   protected nomeEmpresa = (valor: unknown): string => (valor === this.contrato()?.empresa.id ? this.contrato()!.empresa.razao_social : '');
 
-  /** Pede confirmação e desfaz a última prorrogação. */
-  protected async desfazer(prorrogacao: Prorrogacao): Promise<void> {
-    const confirmado = await this.dialogos.confirmar({
-      titulo: 'Desfazer a última prorrogação?',
-      mensagem: `A vigência volta a terminar em ${prorrogacao.fim_anterior.split('-').reverse().join('/')}. O termo aditivo sai dos documentos importantes e a previsão da vigência é removida.`,
-      rotuloConfirmar: 'Desfazer prorrogação',
-      segundos: 5,
-    });
-    if (!confirmado) return;
-    this.alteracoes.desfazerProrrogacao(this.id(), prorrogacao.id).subscribe({ next: () => this.carregar(), error: (e) => this.dialogos.mostrarErro(e) });
-  }
 
   /** Baixa o Termo Aditivo da prorrogação (guardado como documento importante). */
   /** Gera e baixa o relatório da aba Itens (PDF). */

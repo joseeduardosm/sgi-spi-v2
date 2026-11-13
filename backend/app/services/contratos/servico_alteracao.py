@@ -130,13 +130,15 @@ def leitura(sessao: Session, contrato: Contrato, alteracao: AlteracaoQuantidade,
 
 def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelAlteracao:
     """Alteração em andamento (se houver), vigências e histórico."""
+    from app.services.contratos.servico_sem_efeito import completar_leitura  # local: evita importação circular
+
     contrato = obter_contrato(sessao, contrato_id)
     alteracoes = _carregar(sessao, contrato)
     andamento = next((a for a in alteracoes if a.situacao in ("rascunho", "aguardando_ciencias")), None)
     return PainelAlteracao(
         em_andamento=leitura(sessao, contrato, andamento, alteracoes) if andamento else None,
         vigencias=[VigenciaDisponivel(sequencia=v.sequencia, inicio=v.inicio, fim=v.fim) for v in vigencias(contrato)],
-        historico=[leitura(sessao, contrato, a, alteracoes) for a in alteracoes if a is not andamento],
+        historico=[completar_leitura(sessao, contrato, a, leitura(sessao, contrato, a, alteracoes), usuario) for a in alteracoes if a is not andamento],
         pode_editar=pode_editar(sessao, contrato, usuario), integra_equipe=pode_dar_ciencia(sessao, contrato, usuario),
     )
 
@@ -380,7 +382,7 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, alteracao_id: uuid.UUID, a
     _recalcular_previstas(contrato, alteracao)
     contrato.versao += 1
     auditar(sessao, autor.login, f"contrato.{alteracao.tipo}.concluir", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
-            alvo_id=contrato.id, dados={"impacto": alteracao.impacto_valor, "percentual": alteracao.impacto_percentual})
+            alvo_id=contrato.id, dados={"registro_id": str(alteracao.id), "impacto": alteracao.impacto_valor, "percentual": alteracao.impacto_percentual})
     from app.services.contratos import avisos
     avisos.alteracao_concluida(sessao, contrato, "alteracao", alteracao.id,
                                f"{'aditamento' if alteracao.tipo == 'aditamento' else 'supressão'} concluído "

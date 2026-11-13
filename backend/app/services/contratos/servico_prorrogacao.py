@@ -528,7 +528,7 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, assinada_em: date, numero
     sessao.flush()
     processo.prorrogacao_id = prorrogacao.id
     auditar(sessao, autor.login, "contrato.prorrogacao.registrar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
-            alvo_id=contrato.id, dados={"campos": {"data_fim": {"de": prorrogacao.fim_anterior, "para": fim}}, "meses": processo.meses,
+            alvo_id=contrato.id, dados={"registro_id": str(prorrogacao.id), "campos": {"data_fim": {"de": prorrogacao.fim_anterior, "para": fim}}, "meses": processo.meses,
                                         "termo": numero, "com_parecer": relatorio is not None,
                                         "precisa_analise_juridica": prorrogacao.enquadramento["precisa_juridico"],
                                         "competencias_realinhadas": realinhadas})
@@ -555,6 +555,7 @@ def listar(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> list[Le
             garantia_enviada_dof_em=p.garantia_enviada_dof_em, garantia_pendente=contrato.exige_garantia and p.garantia_comprovada_em is None,
             dados_garantia=p.dados_garantia or {}, contratos_gov_atualizado_em=p.contratos_gov_atualizado_em, termo=_arquivo(anexos.get(p.anexo_id)),
             relatorio=_arquivo(anexos.get(p.relatorio_anexo_id)), pode_desfazer=p is ultima and pode_desfazer(sessao, contrato, p, usuario)[0],
+            motivo_bloqueio=pode_desfazer(sessao, contrato, p, usuario)[1] if p is ultima else "",
         )
         for p, situacao in ((p, servico_pos_assinatura.situacao_pncp(sessao, p, hoje, feriados)) for p in contrato.prorrogacoes)
     ]
@@ -569,18 +570,20 @@ def pode_desfazer(sessao: Session, contrato: Contrato, prorrogacao: Prorrogacao,
     competencias = [c for c in contrato.competencias if c.sequencia_vigencia == sequencia]
     if any(c.medicao_iniciada_em or c.etapa_atual != "medicao" for c in competencias):
         return False, "Há medição registrada na nova vigência. Reabra ou desfaça a execução antes."
-    if any(r.sequencia_vigencia == sequencia and r.situacao != "cancelado" for r in contrato.reajustes) or any(
-        a.sequencia_vigencia == sequencia and a.situacao != "cancelada" for a in contrato.alteracoes
+    if any(r.sequencia_vigencia == sequencia and r.situacao not in ("cancelado", "sem_efeito") for r in contrato.reajustes) or any(
+        a.sequencia_vigencia == sequencia and a.situacao not in ("cancelada", "sem_efeito") for a in contrato.alteracoes
     ):
         return False, "Há reajuste ou aditamento/supressão na nova vigência. Cancele-os antes."
     vigencia = next((v for v in vigencias(contrato) if v.sequencia == sequencia), None)
-    if vigencia and any(r.situacao != "cancelado" and vigencia.inicio <= r.efeito <= vigencia.fim for r in contrato.repactuacoes):
+    if vigencia and any(r.situacao not in ("cancelado", "sem_efeito") and vigencia.inicio <= r.efeito <= vigencia.fim for r in contrato.repactuacoes):
         return False, "Há repactuação valendo a partir da nova vigência. Cancele-a antes."
     return True, ""
 
 
-def desfazer(sessao: Session, contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID, autor: Usuario) -> None:
-    """Desfaz a última prorrogação: apaga a vigência criada e devolve o fim anterior ao contrato."""
+def desfazer(sessao: Session, contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID, autor: Usuario, motivo: str = "") -> None:
+    """Torna a última prorrogação sem efeito: apaga a vigência criada e devolve o fim anterior ao contrato.
+
+    O processo (rascunho) que a originou fica com a situação "sem_efeito", quem, quando e o `motivo` (histórico)."""
     contrato = obter_contrato(sessao, contrato_id)
     prorrogacao = next((p for p in contrato.prorrogacoes if p.id == prorrogacao_id), None)
     if prorrogacao is None:
@@ -602,10 +605,12 @@ def desfazer(sessao: Session, contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID,
         contrato.documentos.remove(documento)
     anexo = sessao.get(Anexo, prorrogacao.anexo_id)
     servico_anexos.descartar(anexo)
-    # O rascunho que originou a prorrogação fica marcado como desfeito (histórico)
+    # O rascunho que originou a prorrogação fica como "sem efeito", com quem, quando e o motivo (histórico)
     processo = sessao.scalar(select(ProcessoProrrogacao).where(ProcessoProrrogacao.prorrogacao_id == prorrogacao.id))
     if processo:
-        processo.situacao = "desfeito"
+        processo.situacao = "sem_efeito"
+        processo.sem_efeito_em, processo.sem_efeito_por_id = agora_utc(), autor.id
+        processo.sem_efeito_por_nome, processo.sem_efeito_motivo = autor.nome_completo or autor.login, motivo
     contrato.data_fim = prorrogacao.fim_anterior
     contrato.versao += 1
     contrato.prorrogacoes.remove(prorrogacao)
@@ -613,7 +618,7 @@ def desfazer(sessao: Session, contrato_id: uuid.UUID, prorrogacao_id: uuid.UUID,
     realinhadas = _realinhar(contrato)
     auditar(sessao, autor.login, "contrato.prorrogacao.desfazer", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
             alvo_id=contrato.id, dados={"campos": {"data_fim": {"de": prorrogacao.data_fim, "para": prorrogacao.fim_anterior}}, "termo": prorrogacao.numero_termo,
-                                        "competencias_realinhadas": realinhadas})
+                                        "competencias_realinhadas": realinhadas, "registro_id": str(prorrogacao_id), "motivo": motivo})
     sessao.commit()
 
 

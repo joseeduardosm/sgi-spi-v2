@@ -126,12 +126,17 @@
         <header><h2 id="titulo-historico-alteracao">Histórico de aditamentos e supressões</h2></header>
         <div class="tabela-gestao-envoltorio">
           <table class="tabela-gestao">
-            <thead><tr><th>Tipo</th><th>Vigência</th><th>Efeito</th><th>Situação</th><th class="num">Impacto</th><th class="num">%</th></tr></thead>
+            <thead><tr><th>Tipo</th><th>Vigência</th><th>Efeito</th><th>Situação</th><th class="num">Impacto</th><th class="num">%</th><th>Ação</th></tr></thead>
             <tbody>
               @for (h of p.historico; track h.id) {
                 <tr><td>{{ h.tipo === 'aditamento' ? 'Aditamento' : 'Supressão' }}</td><td>{{ h.sequencia_vigencia }}ª</td><td>{{ h.mes_efeito | competencia }}</td>
-                  <td><span class="selo-situacao" [class.inativo]="h.situacao === 'cancelada'">{{ h.situacao === 'concluida' ? 'Concluída' : 'Cancelada' }}</span></td>
-                  <td class="num">{{ h.impacto_valor | moeda }}</td><td class="num">{{ h.impacto_percentual | percentual }}</td></tr>
+                  <td><span class="selo-situacao" [class.inativo]="h.situacao === 'cancelada'" [class.perigo]="h.situacao === 'sem_efeito'">{{ rotulosSituacao[h.situacao] }}</span>
+                    @if (h.situacao === 'sem_efeito') { <small class="dica-formulario">por {{ h.sem_efeito_por }} em {{ h.sem_efeito_em | date: 'dd/MM/yyyy HH:mm' }}: {{ h.sem_efeito_motivo }}</small> }</td>
+                  <td class="num">{{ h.impacto_valor | moeda }}</td><td class="num">{{ h.impacto_percentual | percentual }}</td>
+                  <td>@if (h.situacao === 'concluida' && p.pode_editar) {
+                    <app-tornar-sem-efeito [contratoId]="id()" tipo="alteracoes" [registroId]="h.id" [pode]="!!h.pode_tornar_sem_efeito" [motivoBloqueio]="h.motivo_bloqueio || ''"
+                                           [titulo]="'Tornar sem efeito ' + (h.tipo === 'aditamento' ? 'o aditamento' : 'a supressão') + '?'" (concluido)="recarregar()" />
+                  } @else { — }</td></tr>
               }
             </tbody>
           </table>

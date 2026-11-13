@@ -77,11 +77,11 @@ def _bloqueio_para_desfazer(sessao: Session, contrato: Contrato, usuario: Usuari
         return "Sem permissão para alterar o contrato."
     if any(c.sequencia_vigencia == 1 and (c.medicao_iniciada_em or c.etapa_atual != "medicao") for c in contrato.competencias):
         return "Há medição registrada nessa vigência. Reabra ou desfaça a execução antes."
-    if any(r.sequencia_vigencia == 1 and r.situacao != "cancelado" for r in contrato.reajustes) or any(
-        a.sequencia_vigencia == 1 and a.situacao != "cancelada" for a in contrato.alteracoes
+    if any(r.sequencia_vigencia == 1 and r.situacao not in ("cancelado", "sem_efeito") for r in contrato.reajustes) or any(
+        a.sequencia_vigencia == 1 and a.situacao not in ("cancelada", "sem_efeito") for a in contrato.alteracoes
     ):
         return "Há reajuste ou aditamento/supressão nessa vigência. Cancele-os antes."
-    if contrato.vigencias_retroativas and any(r.situacao != "cancelado" and r.efeito < contrato.vigencias_retroativas[0].data_fim for r in contrato.repactuacoes):
+    if contrato.vigencias_retroativas and any(r.situacao not in ("cancelado", "sem_efeito") and r.efeito < contrato.vigencias_retroativas[0].data_fim for r in contrato.repactuacoes):
         return "Há repactuação valendo nessa vigência. Cancele-a antes."
     return ""
 
@@ -133,15 +133,18 @@ def registrar(sessao: Session, contrato_id: uuid.UUID, meses: int, assinada_em: 
     # O mês da virada (o do início antigo) passa a ser cheio na vigência que já existia: a competência dele, se ainda sem
     # medição, é ajustada ao calendário novo (ex.: "06/08 a 31/08" → "01/08 a 31/08")
     realinhadas = _realinhar(contrato)
+    sessao.flush()  # o id da vigência nasce no flush e vai para a auditoria (aba Eventos)
     auditar(sessao, autor.login, "contrato.vigencia_retroativa.registrar", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
-            alvo_id=contrato.id, dados={"campos": {"data_inicio": {"de": inicio_anterior, "para": inicio}}, "meses": meses, "termo": numero,
+            alvo_id=contrato.id, dados={"registro_id": str(retroativa.id), "campos": {"data_inicio": {"de": inicio_anterior, "para": inicio}}, "meses": meses, "termo": numero,
                                         "competencias_realinhadas": realinhadas})
     sessao.commit()
     return retroativa
 
 
-def desfazer(sessao: Session, contrato_id: uuid.UUID, vigencia_id: uuid.UUID, autor: Usuario) -> None:
-    """Desfaz a vigência retroativa mais antiga: apaga o que ela criou, devolve o início do contrato e renumera as demais."""
+def desfazer(sessao: Session, contrato_id: uuid.UUID, vigencia_id: uuid.UUID, autor: Usuario, motivo: str = "") -> None:
+    """Torna sem efeito a vigência retroativa mais antiga: apaga o que ela criou, devolve o início do contrato e renumera as demais.
+
+    O `motivo` fica na auditoria (a vigência some da lista; o registro do que foi feito é a auditoria / aba Eventos)."""
     contrato = obter_contrato(sessao, contrato_id)
     retroativa = next((v for v in contrato.vigencias_retroativas if v.id == vigencia_id), None)
     if retroativa is None:
@@ -172,7 +175,7 @@ def desfazer(sessao: Session, contrato_id: uuid.UUID, vigencia_id: uuid.UUID, au
     realinhadas = _realinhar(contrato)
     auditar(sessao, autor.login, "contrato.vigencia_retroativa.desfazer", f"Contrato {contrato.numero}", autor_id=autor.id, alvo_tipo="contrato",
             alvo_id=contrato.id, dados={"campos": {"data_inicio": {"de": inicio_atual, "para": inicio_anterior}}, "termo": termo,
-                                        "competencias_realinhadas": realinhadas})
+                                        "competencias_realinhadas": realinhadas, "registro_id": str(vigencia_id), "motivo": motivo})
     sessao.commit()
 
 

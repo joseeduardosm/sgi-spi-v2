@@ -162,15 +162,33 @@
               </div>
             }
           }
-          <!-- Meses encerrados sem medição concluída (pagos fora do sistema): pergunta e diferença informada manualmente -->
-          <app-diferenca-manual [meses]="r.meses_sem_medicao" [diferenca]="r.diferenca_manual" [podeEditar]="p.pode_editar" [ocupado]="salvandoManual()"
-                                (salvar)="salvarDiferencaManual(r, $event)" (remover)="removerDiferencaManual(r)" (baixar)="baixar(r, $event)" />
+          <!-- Cálculo manual ou automático da diferença retroativa (o reajuste retroativo não tem diferença a acertar) -->
+          @if (!r.retroativo) {
+            <p class="secao-formulario">Cálculo manual ou automático?</p>
+            @if (!r.modo_retroativo) { <p class="aviso-bloco informativo">Escolha como calcular a diferença retroativa. A memória só é gerada depois da escolha.</p> }
+            <div class="opcoes-mes-quebrado">
+              @for (o of modos; track o.modo) {
+                <section class="opcao-mes-quebrado" [class.escolhida]="r.modo_retroativo === o.modo" [attr.aria-labelledby]="'reaj-modo-' + o.modo">
+                  <header><h3 [id]="'reaj-modo-' + o.modo">{{ o.rotulo }}</h3>@if (r.modo_retroativo === o.modo) { <span class="selo-situacao">Escolhida</span> }</header>
+                  <small class="dica-formulario">{{ o.explicacao }}</small>
+                  @if (p.pode_editar && r.modo_retroativo !== o.modo) {
+                    <button type="button" class="acao-secundaria acao-pequena" [class.carregando]="escolhendoModo() === o.modo" [disabled]="!!escolhendoModo()" (click)="escolherModo(r, o.modo)">Escolher esta opção</button>
+                  }
+                </section>
+              }
+            </div>
+            @if (r.modo_retroativo === 'manual') {
+              <p class="aviso-bloco informativo">Cálculo manual: o sistema não calcula a diferença dos meses já medidos no SGI. Vale só a diferença informada abaixo.</p>
+              <app-diferenca-manual [meses]="r.meses_sem_medicao" [diferenca]="r.diferenca_manual" [podeEditar]="p.pode_editar" [ocupado]="salvandoManual()"
+                                    (salvar)="salvarDiferencaManual(r, $event)" (remover)="removerDiferencaManual(r)" (baixar)="baixar(r, $event)" />
+            }
+          }
           @if (alteradoSemSalvar(r)) { <p class="aviso-bloco informativo">Prévia: os valores acima já refletem o que você digitou. Clique em "Salvar memória" para gravar e poder gerar o PDF e o XLSX.</p> }
           @if (p.pode_editar) {
             <div class="acoes-cartao">
               <button type="button" class="acao-secundaria" [disabled]="!todosValidos(r)" (click)="salvarMemoria(r)">Salvar memória</button>
               @if (!v.resumo_meses?.meses_quebrados?.length) {
-                <button type="button" class="acao-secundaria" [disabled]="alteradoSemSalvar(r)" (click)="gerarArquivos(r)">Gerar e baixar PDF e XLSX</button>
+                <button type="button" class="acao-secundaria" [disabled]="alteradoSemSalvar(r) || (!r.retroativo && !r.modo_retroativo)" (click)="gerarArquivos(r)">Gerar e baixar PDF e XLSX</button>
               }
             </div>
           }
@@ -231,12 +249,13 @@
         <header><h2 id="titulo-historico-reajuste">Histórico</h2></header>
         <div class="tabela-gestao-envoltorio">
           <table class="tabela-gestao">
-            <thead><tr><th>Referência</th><th>Vigência</th><th>Situação</th><th class="num">Base</th><th class="num">Valor global</th><th>Competências já medidas</th><th>Arquivos</th></tr></thead>
+            <thead><tr><th>Referência</th><th>Vigência</th><th>Situação</th><th class="num">Base</th><th class="num">Valor global</th><th>Competências já medidas</th><th>Arquivos</th><th>Ação</th></tr></thead>
             <tbody>
               @for (r of p.historico; track r.id) {
                 <tr>
                   <td>{{ r.data_efeito | dataBr }}</td><td>{{ r.sequencia_vigencia }}ª{{ r.retroativo ? ' (retroativo)' : '' }}</td>
-                  <td><span class="selo-situacao" [class.inativo]="r.situacao === 'cancelado'">{{ r.situacao === 'concluido' ? 'Concluído' : 'Cancelado' }}</span></td>
+                  <td><span class="selo-situacao" [class.inativo]="r.situacao === 'cancelado'" [class.perigo]="r.situacao === 'sem_efeito'">{{ rotulosSituacao[r.situacao] }}</span>
+                    @if (r.situacao === 'sem_efeito') { <small class="dica-formulario">por {{ r.sem_efeito_por }} em {{ r.sem_efeito_em | date: 'dd/MM/yyyy HH:mm' }}: {{ r.sem_efeito_motivo }}</small> }</td>
                   <td class="num">{{ r.base_atual | moeda }} → {{ r.base_reajustada | moeda }}</td>
                   <td class="num">{{ r.valor_global_atual | moeda }} → {{ r.valor_global_reajustado | moeda }}</td>
                   <td>
@@ -255,6 +274,10 @@
                     @if (r.apostilamento) { · <button type="button" class="acao-secundaria acao-pequena" (click)="baixar(r, r.apostilamento.anexo_id)">Baixar apostilamento</button> }
                     @if (r.competencia_diferenca) { · <a class="link-arquivo" [routerLink]="['/contratos', id(), 'execucao', r.competencia_diferenca]">Competência de diferença</a> }
                   </td>
+                  <td>@if (r.situacao === 'concluido' && p.pode_editar) {
+                    <app-tornar-sem-efeito [contratoId]="id()" tipo="reajustes" [registroId]="r.id" [pode]="!!r.pode_tornar_sem_efeito" [motivoBloqueio]="r.motivo_bloqueio || ''"
+                                           [titulo]="'Tornar sem efeito o reajuste de ' + (r.data_efeito | dataBr) + '?'" (concluido)="recarregar()" />
+                  } @else { — }</td>
                 </tr>
               }
             </tbody>

@@ -249,7 +249,7 @@ def alertas_da_carteira(sessao: Session, contratos: list[Contrato], usuario: Usu
             if mes_reajuste > referencia:
                 mes_reajuste = date(referencia.year - 1, contrato.mes_reajuste, 1)
             if mes_reajuste >= calculos.primeiro_dia(aniversario) and not any(
-                r.situacao != "cancelado" and r.mes_referencia >= mes_reajuste for r in contrato.reajustes
+                r.situacao not in ("cancelado", "sem_efeito") and r.mes_referencia >= mes_reajuste for r in contrato.reajustes
             ):
                 risco("reajuste_pendente", "media", f"Mês de reajuste ({mes_reajuste:%m/%Y}) passou sem reajuste aberto",
                       f"/contratos/{contrato.id}/reajuste", mes_reajuste)

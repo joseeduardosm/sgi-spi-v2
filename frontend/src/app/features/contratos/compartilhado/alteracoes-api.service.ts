@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 
 import { ambiente } from '../../../../environments/ambiente';
 import { baixarArquivo } from '../../../shared/utilitarios/download';
-import { CalculoMesQuebrado, GravacaoDiferencaManual, GravacaoLinhaRepactuacao, GravacaoPosAssinatura, PainelAlteracao, PainelReajuste, PainelRepactuacao, Repactuacao, ProcessoProrrogacao, Prorrogacao, Reajuste, RegraSobDemanda, VigenciaRetroativa } from './contratos.models';
+import { CalculoMesQuebrado, CategoriaEvento, GravacaoDiferencaManual, ModoRetroativo, PaginaEventosContrato, TipoEventoSemEfeito, GravacaoLinhaRepactuacao, GravacaoPosAssinatura, PainelAlteracao, PainelReajuste, PainelRepactuacao, Repactuacao, ProcessoProrrogacao, Prorrogacao, Reajuste, RegraSobDemanda, VigenciaRetroativa } from './contratos.models';
 
 /** Corpo do rascunho da prorrogação (prazo, plano dos itens sob demanda e o cálculo dos meses quebrados; nulo mantém a escolha). */
 export interface GravacaoProrrogacao {
@@ -77,9 +77,24 @@ export class AlteracoesApiService {
     return this.http.get<Prorrogacao[]>(`${this.base}/${id}/prorrogacoes`);
   }
 
-  /** Desfaz a última prorrogação. */
-  desfazerProrrogacao(id: string, prorrogacaoId: string): Observable<Prorrogacao[]> {
-    return this.http.delete<Prorrogacao[]>(`${this.base}/${id}/prorrogacoes/${prorrogacaoId}`);
+  /**
+   * Torna um evento concluído sem efeito (reajuste, repactuação, aditamento/supressão, prorrogação ou vigência retroativa),
+   * com o motivo. A API responde 204; a tela recarrega o painel do evento.
+   */
+  tornarSemEfeito(id: string, tipo: TipoEventoSemEfeito, registroId: string, motivo: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/${id}/${tipo}/${registroId}/sem-efeito`, { motivo });
+  }
+
+  /** Eventos do contrato (aba Eventos, só Controle total), com filtro, busca, ordem e página. */
+  eventos(id: string, filtro: { categoria?: CategoriaEvento | null; busca?: string; ordem?: string; sentido?: 'asc' | 'desc'; pagina?: number }):
+    Observable<PaginaEventosContrato> {
+    const params: Record<string, string> = {};
+    if (filtro.categoria) params['categoria'] = filtro.categoria;
+    if (filtro.busca?.trim()) params['busca'] = filtro.busca.trim();
+    if (filtro.ordem) params['ordem'] = filtro.ordem;
+    if (filtro.sentido) params['sentido'] = filtro.sentido;
+    if (filtro.pagina) params['pagina'] = String(filtro.pagina);
+    return this.http.get<PaginaEventosContrato>(`${this.base}/${id}/eventos`, { params });
   }
 
   /** Grava o pós-assinatura (PNCP, DOE, garantia, Contratos.gov) de uma prorrogação registrada. */
@@ -109,10 +124,6 @@ export class AlteracoesApiService {
       this.arquivo({ meses: String(meses), assinada_em: assinadaEm, numero_termo: numeroTermo, termo }));
   }
 
-  /** Desfaz a vigência retroativa mais antiga. */
-  desfazerVigenciaRetroativa(id: string, vigenciaId: string): Observable<VigenciaRetroativa[]> {
-    return this.http.delete<VigenciaRetroativa[]>(`${this.base}/${id}/vigencias-retroativas/${vigenciaId}`);
-  }
 
   // --- Reajuste ---
   /** Reajuste em elaboração, vigências disponíveis e histórico. */
@@ -152,16 +163,26 @@ export class AlteracoesApiService {
   }
 
   /**
-   * Grava (ou substitui) a diferença retroativa informada manualmente de um reajuste ou de uma repactuação em elaboração
-   * (meses pagos fora do sistema): valor total, meses marcados (um campo por mês), justificativa e o PDF da memória externa.
+   * Grava (ou substitui) a diferença retroativa do cálculo manual de um reajuste ou de uma repactuação em elaboração:
+   * a diferença de cada mês (um par mês/valor por campo, na mesma ordem), justificativa e o PDF da memória externa.
    */
   salvarDiferencaManual<T>(id: string, procedimento: 'reajustes' | 'repactuacoes', procedimentoId: string, dados: GravacaoDiferencaManual): Observable<T> {
     const corpo = new FormData();
-    corpo.append('valor', dados.valor);
-    for (const competencia of dados.competencias_ids) corpo.append('competencias_ids', competencia);
+    dados.competencias_ids.forEach((competencia, i) => {
+      corpo.append('competencias_ids', competencia);
+      corpo.append('valores', dados.valores[i]);
+    });
     corpo.append('justificativa', dados.justificativa);
     corpo.append('arquivo', dados.arquivo);
     return this.http.put<T>(`${this.base}/${id}/${procedimento}/${procedimentoId}/diferenca-manual`, corpo);
+  }
+
+  /**
+   * Responde "Cálculo manual ou automático?" da memória retroativa. Trocar apaga a diferença manual informada
+   * e exige gerar a memória de novo.
+   */
+  escolherModoRetroativo<T>(id: string, procedimento: 'reajustes' | 'repactuacoes', procedimentoId: string, modo: ModoRetroativo): Observable<T> {
+    return this.http.put<T>(`${this.base}/${id}/${procedimento}/${procedimentoId}/modo-retroativo`, { modo });
   }
 
   /** Remove a diferença manual (os meses destravam). */

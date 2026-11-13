@@ -130,7 +130,8 @@ def _competencias_medidas(contrato: Contrato, reajuste: Reajuste) -> list[Compet
 
     O reajuste retroativo não tem diferença a acertar: ele exige que a vigência retroativa ainda não tenha medição concluída.
     """
-    if reajuste.retroativo:
+    # Cálculo manual: o sistema não calcula nada sozinho (vale só a diferença informada mês a mês)
+    if reajuste.retroativo or diferenca_manual.manual(reajuste):
         return []
     return sorted(
         (
@@ -432,7 +433,7 @@ def leitura(contrato: Contrato, reajuste: Reajuste, anexos: dict) -> LeituraReaj
         competencia_diferenca=next(
             (c.identificador for c in contrato.competencias if c.tipo == "diferenca_reajuste" and c.reajuste_id == reajuste.id and c.diferenca_manual_id is None), None
         ),
-        meses_sem_medicao=diferenca_manual.meses_sem_medicao(contrato, reajuste),
+        modo_retroativo=reajuste.modo_retroativo, meses_sem_medicao=diferenca_manual.meses_sem_medicao(contrato, reajuste),
         diferenca_manual=diferenca_manual.leitura(contrato, reajuste),
         itens=[
             ItemReajusteLeitura(
@@ -453,6 +454,8 @@ def leitura(contrato: Contrato, reajuste: Reajuste, anexos: dict) -> LeituraReaj
 
 def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelReajuste:
     """Reajuste em elaboração, vigências que ainda podem ser reajustadas e o histórico."""
+    from app.services.contratos.servico_sem_efeito import completar_leitura  # local: evita importação circular
+
     contrato = obter_contrato(sessao, contrato_id)
     reajustes = _carregar(sessao, contrato)
     # Anexos (evidência e apostilamento) de todos os reajustes em uma consulta
@@ -469,7 +472,7 @@ def painel(sessao: Session, contrato_id: uuid.UUID, usuario: Usuario) -> PainelR
         vigencias_retroativas_disponiveis=[
             VigenciaDisponivel(sequencia=v.sequencia, inicio=v.inicio, fim=v.fim) for v in [_proxima_retroativa(contrato, reajustes)] if v is not None
         ],
-        historico=[leitura(contrato, r, anexos) for r in reajustes if r.situacao != "rascunho"],
+        historico=[completar_leitura(sessao, contrato, r, leitura(contrato, r, anexos), usuario) for r in reajustes if r.situacao != "rascunho"],
         pode_editar=pode_editar(sessao, contrato, usuario),
     )
 
@@ -639,6 +642,7 @@ def gerar_arquivos_memoria(sessao: Session, contrato_id: uuid.UUID, reajuste_id:
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
+    diferenca_manual.exigir_modo(reajuste)
     if reajuste.calculo_mes_quebrado is None and meses_quebrados(contrato, reajuste):
         raise ErroRegraContrato("Escolha como calcular os meses quebrados (pro rata ou integral) antes de gerar a memória.")
     # Hash dos dados da memória: se nada mudou desde a última versão, não gera arquivos novos
@@ -882,6 +886,7 @@ def concluir(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ar
     # A diferença manual precisa estar na memória: memória gerada antes dela (ou da última troca) não vale
     if reajuste.diferenca_manual is not None and reajuste.memorias[-1].criado_em < reajuste.diferenca_manual.informado_em:
         raise ErroRegraContrato("Gere a memória de cálculo de novo: a diferença informada manualmente ainda não está nela.")
+    diferenca_manual.exigir_pronto_para_concluir(reajuste, reajuste.memorias[-1].criado_em)
     diferenca_manual.conferir_antes_de_concluir(contrato, reajuste)
     anexo = servico_anexos.guardar_pdf(sessao, arquivo, nome, "contrato-reajuste-apostilamento", autor.id, contrato_id=contrato.id)
     sessao.flush()
@@ -955,13 +960,24 @@ def arquivo(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, ane
     return servico_anexos.resposta_download(sessao.get(Anexo, anexo_id))
 
 
-def gravar_diferenca_manual(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, valor: Decimal, competencias_ids: list[uuid.UUID],
-                            justificativa: str, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
-    """Grava (ou substitui) a diferença retroativa informada manualmente para meses pagos fora do sistema."""
+def escolher_modo_retroativo(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, modo: str, autor: Usuario) -> None:
+    """Grava a resposta de "Cálculo manual ou automático?" (trocar apaga a diferença manual; a memória precisa ser gerada de novo)."""
     contrato = obter_contrato(sessao, contrato_id)
     exigir_edicao(sessao, contrato, autor)
     reajuste = _em_andamento(sessao, contrato, reajuste_id)
-    diferenca_manual.gravar(sessao, contrato, reajuste, valor, competencias_ids, justificativa, arquivo, nome, autor)
+    if reajuste.retroativo:
+        raise ErroRegraContrato("O reajuste retroativo não tem diferença a acertar: não há cálculo manual ou automático a escolher.")
+    diferenca_manual.escolher_modo(sessao, contrato, reajuste, modo, autor)
+    sessao.commit()
+
+
+def gravar_diferenca_manual(sessao: Session, contrato_id: uuid.UUID, reajuste_id: uuid.UUID, competencias_ids: list[uuid.UUID], valores: list[Decimal],
+                            justificativa: str, arquivo: BinaryIO, nome: str, autor: Usuario) -> None:
+    """Grava (ou substitui) a diferença retroativa do cálculo manual: a diferença de cada mês, a justificativa e o PDF."""
+    contrato = obter_contrato(sessao, contrato_id)
+    exigir_edicao(sessao, contrato, autor)
+    reajuste = _em_andamento(sessao, contrato, reajuste_id)
+    diferenca_manual.gravar(sessao, contrato, reajuste, competencias_ids, valores, justificativa, arquivo, nome, autor)
     sessao.commit()
 
 

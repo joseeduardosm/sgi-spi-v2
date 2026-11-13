@@ -31,7 +31,7 @@ os serviços servico_reajuste e servico_competencias.
 from datetime import date
 import pytest
 
-from tests.apoio_contratos import PDF, corpo_conclusao, criar_contrato, restringir_contratos
+from tests.apoio_contratos import PDF, corpo_conclusao, criar_contrato, escolher_calculo, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -83,6 +83,7 @@ def _abrir_reajuste(cliente, contrato, h, referencia, percentual="5"):
         headers=h,
     ).json()["em_andamento"]
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    escolher_calculo(cliente, url, h)
     itens = [{"item_id": i["item_id"], "indice_percentual": percentual} for i in reajuste["itens"]]
     cliente.put(f"{url}/memoria", json={"itens": itens}, headers=h)
     return url, reajuste["id"]

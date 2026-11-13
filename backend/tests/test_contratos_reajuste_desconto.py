@@ -11,7 +11,7 @@ import pytest
 
 from app.core.banco import FabricaSessao
 from app.models.contratos import AbatimentoReajuste
-from tests.apoio_contratos import corpo_conclusao, PDF, criar_contrato, restringir_contratos
+from tests.apoio_contratos import corpo_conclusao, PDF, criar_contrato, escolher_calculo, restringir_contratos
 from tests.conftest import cabecalho, criar_usuario
 from tests.test_contratos_execucao import _preparar_execucao, _url
 
@@ -56,10 +56,12 @@ def _medir(cliente, contrato, h, notas, identificador, quantidades=None):
     return r.json()
 
 
-def _abrir(cliente, contrato, h, referencia, indices):
-    """Abre o reajuste e grava os percentuais (um por item, na ordem)."""
+def _abrir(cliente, contrato, h, referencia, indices, modo="automatico"):
+    """Abre o reajuste, escolhe o cálculo (automático ou manual) e grava os percentuais (um por item, na ordem)."""
     reajuste = cliente.post(_url(contrato, "/reajustes"), json={"sequencia_vigencia": 1, "mes_referencia": referencia}, headers=h).json()["em_andamento"]
     url = _url(contrato, f"/reajustes/{reajuste['id']}")
+    # Primeira pergunta da memória: cálculo automático (os testes da diferença manual trocam para o manual)
+    escolher_calculo(cliente, url, h, modo)
     itens = [{"item_id": i["item_id"], "indice_percentual": p} for i, p in zip(reajuste["itens"], indices, strict=True)]
     r = cliente.put(f"{url}/memoria", json={"itens": itens}, headers=h)
     return url, r

@@ -10,7 +10,7 @@
  * RESUMO TÉCNICO:
  * Componente standalone (rota /rede/portas/:id). O cartão "Ligado a" vem
  * primeiro: numa porta comum há um bloco; na porta de patch panel há dois
- * (Fundo e Frente), montados pelo mesmo ng-template com o lado no contexto e
+ * (Terminal Punch Down e Conector RJ45), montados pelo mesmo ng-template com o lado no contexto e
  * um formulário por bloco (`forms`). A descrição é só leitura (o sistema a
  * gera pelas ligações). A configuração (modo, VLANs, IP, velocidade) só
  * aparece com algo ligado; sem nada, a porta fica Desligada ou Desativada.
@@ -120,7 +120,7 @@ function formVazio(chave: ChaveBloco = 'unico'): FormLigacao {
             <!-- "Ligado a" vem primeiro (decisão do usuário): o que está em cada ponta do cabo; a descrição da porta sai daqui -->
             <section class="cartao-chamado" aria-labelledby="rp-ligado">
               <header><h2 id="rp-ligado">Ligado a</h2>
-                <small>{{ passiva() ? 'Cada porta do patch panel tem um cabo no fundo e outro na frente.' : 'O que está na outra ponta do cabo desta porta.' }}</small></header>
+                <small>{{ passiva() ? 'Cada porta do patch panel tem um cabo no Terminal Punch Down e outro no Conector RJ45.' : 'O que está na outra ponta do cabo desta porta.' }}</small></header>
               @if (passiva()) {
                 <!-- Fundo e Frente lado a lado; o formulário de ligar só abre no lado escolhido (decisão do usuário) -->
                 <div class="lados-patch">
@@ -437,7 +437,7 @@ export class PortaRedeComponent implements OnInit {
     const x = this.p();
     if (!x) return '';
     if (x.equipamento_tipo !== 'patch_panel') return x.descricao;
-    return `Fundo: ${x.fundo?.texto ?? '—'} · Frente: ${x.frente?.texto ?? '—'}`;
+    return `Terminal Punch Down: ${x.fundo?.texto ?? '—'} · Conector RJ45: ${x.frente?.texto ?? '—'}`;
   });
   protected cfg: GravacaoPorta = { observacao: '', modo: 'access', vlan_nativa_id: null, vlans_tag: [], vlans_sem_tag: [], vlan_voz_id: null, ip_interface: '',
     velocidade_mbps: null, duplex: null, status: 'down' };

@@ -9,13 +9,20 @@ import { ambiente } from '../../../environments/ambiente';
 import {
   BemResumo, CaminhoRede, EquipamentoDetalhe, EquipamentoResumo, GravacaoEquipamento, GravacaoModelo, GravacaoPonto, GravacaoPorta, GravacaoRack, ModeloFace, PontoRede, PortaDetalhe,
   ParametrosRede, PortaDoBem, Rack, SalaResumo, TopologiaRede, Vlan,
-  AplicacaoLeitura, CriacaoEquipamento, IndicadoresRede, LadoPatch, PortaListada, ResultadoTesteLeitura, ResumoLeitura,
+  AplicacaoLeitura, CriacaoEquipamento, DestinoCadastro, FuncaoEquipamento, IndicadoresRede, LadoPatch, PortaListada, ResultadoTesteLeitura, ResumoLeitura, TipoEquipamento,
 } from './rede.models';
 
 @Injectable({ providedIn: 'root' })
 export class RedeApiService {
   private readonly http = inject(HttpClient);
   private readonly base = `${ambiente.urlApi}/rede`;
+
+  /** Passo Conexão do cadastro: só os equipamentos (e as portas) elegíveis para ficar acima de um novo deste tipo e função. */
+  destinosCadastro(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null): Observable<DestinoCadastro[]> {
+    let params = new HttpParams().set('tipo', tipo);
+    if (funcao) params = params.set('funcao', funcao);
+    return this.http.get<DestinoCadastro[]>(`${this.base}/equipamentos/destinos-cadastro`, { params });
+  }
 
   equipamentos(busca = '', tipo = ''): Observable<EquipamentoResumo[]> {
     let params = new HttpParams().set('busca', busca);

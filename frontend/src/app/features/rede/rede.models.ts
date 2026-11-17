@@ -54,6 +54,8 @@ export interface EquipamentoResumo extends GravacaoEquipamento {
 export interface LigacaoCadastro {
   porta_numero: number; destino_porta_id: string; destino_lado: LadoPatch | null; config: GravacaoPorta | null; config_destino: GravacaoPorta | null;
 }
+/** Onde o equipamento novo pode ser ligado (passo Conexão): equipamento elegível e as portas livres que servem (com o lado, no patch panel). */
+export interface DestinoCadastro { equipamento_id: string; portas: { porta_id: string; lado: LadoPatch | null }[] }
 export interface CriacaoEquipamento extends GravacaoEquipamento { ligacao: LigacaoCadastro | null }
 export interface ParametrosRede { ping_intervalo_min: number }
 /** Dispositivo atrás do primeiro na mesma porta (ex.: o PC ligado no telefone IP). */

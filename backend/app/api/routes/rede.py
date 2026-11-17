@@ -55,7 +55,7 @@ from app.models.rede import ConexaoRede, LeituraRede, DispositivoAtrasRede, Equi
 from app.models.usuario import Usuario
 from app.schemas.comum import RespostaErro
 from app.schemas.rede import (
-    AplicacaoLeitura, BemResumo, CaminhoRede, CriacaoEquipamento, EscritaEquipamento, ResultadoTesteLeitura, ResumoLeitura, TesteLeitura, TrocaConexao, ChamadoDaPorta, DispositivoCaminho, EtapaCaminho, ParametrosRede, ConexaoLeitura, DispositivoAtrasLeitura, GravacaoDispositivoAtras, GravacaoRack, PortaDoBem, RackLeitura, SalaResumo, EquipamentoDetalhe, EquipamentoResumo, GravacaoConexao, GravacaoModelo, GravacaoPonto,
+    AplicacaoLeitura, BemResumo, CaminhoRede, CriacaoEquipamento, DestinoCadastro, PortaElegivel, FuncaoEquipamento, TipoEquipamento, EscritaEquipamento, ResultadoTesteLeitura, ResumoLeitura, TesteLeitura, TrocaConexao, ChamadoDaPorta, DispositivoCaminho, EtapaCaminho, ParametrosRede, ConexaoLeitura, DispositivoAtrasLeitura, GravacaoDispositivoAtras, GravacaoRack, PortaDoBem, RackLeitura, SalaResumo, EquipamentoDetalhe, EquipamentoResumo, GravacaoConexao, GravacaoModelo, GravacaoPonto,
     GravacaoPorta, GravacaoVlan, IndicadoresRede, ModeloLeitura, NoTopologia, PapeisRede, PontoLeitura, PortaDetalhe, PortaLeitura, PortaListada, TopologiaRede, VlanLeitura,
 )
 from app.services.chamados import acesso as acesso_chamados
@@ -358,6 +358,18 @@ def _dados_porta(g: GravacaoPorta | None) -> DadosPorta | None:
         return None
     return DadosPorta(observacao=g.observacao, modo=g.modo, vlan_nativa_id=g.vlan_nativa_id, vlans_tag=g.vlans_tag, vlans_sem_tag=g.vlans_sem_tag,
                       vlan_voz_id=g.vlan_voz_id, ip_interface=g.ip_interface, velocidade_mbps=g.velocidade_mbps, duplex=g.duplex, status=g.status)
+
+
+@roteador.get("/equipamentos/destinos-cadastro", response_model=list[DestinoCadastro], summary="Onde o equipamento novo pode ser ligado",
+              description="Para o passo Conexão do cadastro em cadeia: os equipamentos elegíveis para ficar acima de um equipamento novo deste tipo e "
+                          "função (switch que pode ficar acima e chega ao core; patch panel com uma porta cujo outro lado leva a ele) e, de cada um, as "
+                          "portas livres que servem (com o lado, no patch panel). Só leitura; as mesmas regras são conferidas de novo ao cadastrar.",
+              responses={**SEM_ACESSO})
+def destinos_cadastro(tipo: TipoEquipamento, funcao: FuncaoEquipamento | None = None, _: Usuario = Depends(_exigir("administrar")),
+                      sessao: Session = Depends(obter_sessao)) -> list[DestinoCadastro]:
+    with _traduzir(sessao):
+        return [DestinoCadastro(equipamento_id=e.id, portas=[PortaElegivel(porta_id=p.id, lado=lado) for p, lado in portas])
+                for e, portas in servico.destinos_do_cadastro(sessao, tipo, funcao)]
 
 
 @roteador.post("/equipamentos", response_model=EquipamentoDetalhe, status_code=status.HTTP_201_CREATED, summary="Cadastrar equipamento",

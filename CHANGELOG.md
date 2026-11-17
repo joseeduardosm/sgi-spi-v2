@@ -10,6 +10,13 @@ Informe também migrações do banco e endpoints novos ou alterados.
 
 ### Alterado
 - **Rede — acesso em cascata**: switch de acesso pode ser cadastrado ligado a outro switch de acesso (`pode_ficar_acima`). A cadeia passa a ser conferida pelo caminho até o core (`chega_ao_topo`) no cadastro (o de cima precisa chegar ao core, `409 cadeia_invalida`), no desligar, no excluir e no trocar (`409 unica_ligacao_para_cima`): dois acessos ligados só um no outro não contam como ligados para cima.
+- **Rede — distribuição em cascata**: switch de distribuição pode ser cadastrado ligado a outra distribuição, além do core primário e do secundário (`pode_ficar_acima`, `ROTULO_ACIMA` e o filtro do cadastro na tela), com a mesma conferência do caminho até o core.
+- **Rede — rack e U obrigatórios** (menos access point): `400 sem_rack` no `POST` e no `PUT` de equipamento (`_validar_equipamento`); a importação LLDP não exige (`exigir_rack=False`). Testes usam um rack por equipamento (`_rack`).
+- **Rede — cadastro do equipamento**: rack desenhado ao escolher (`app-rack-rede` com modo escolha) e U por clique com confirmação Sim/Não (opção `simNao` nova no `DialogosService`); `*` nos obrigatórios; no passo Conexão, portas escolhidas pela face (`app-seletor-porta-face`, novo), velocidade em fichas e "Copiar da porta …".
+
+### Adicionado
+- `GET /api/rede/equipamentos/destinos-cadastro?tipo=&funcao=` (Controle total): equipamentos e portas elegíveis para a ligação do cadastro (`servico.destinos_do_cadastro`), usado em "Conectado em".
+
 
 ## 2026-11-13
 

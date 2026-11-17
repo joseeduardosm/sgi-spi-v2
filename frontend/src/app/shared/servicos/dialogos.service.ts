@@ -15,6 +15,8 @@ export interface OpcoesConfirmacao {
   segundos?: number;
   /** Botão Confirmar em vermelho com letras brancas (ações destrutivas). */
   perigo?: boolean;
+  /** Pergunta de sim ou não: botões "Sim" (verde, acao-positiva) e "Não" (vermelho, acao-recusar) no lugar de Cancelar/Confirmar. */
+  simNao?: boolean;
 }
 
 /** Confirmação em exibição, com a função que entrega a resposta a quem pediu. */
@@ -52,6 +54,7 @@ export class DialogosService {
       this.confirmacao.set({
         rotuloConfirmar: 'Confirmar',
         perigo: false,
+        simNao: false,
         ...opcoes,
         segundos,
         responder: resolver,

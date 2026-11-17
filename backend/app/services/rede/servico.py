@@ -211,7 +211,7 @@ def obter_equipamento(sessao: Session, equipamento_id: uuid.UUID) -> Equipamento
     return item
 
 
-def _validar_equipamento(sessao: Session, d: DadosEquipamento, equipamento_id: uuid.UUID | None = None) -> None:
+def _validar_equipamento(sessao: Session, d: DadosEquipamento, equipamento_id: uuid.UUID | None = None, exigir_rack: bool = True) -> None:
     if not 2 <= len(d.nome.strip()) <= 150:
         raise ErroRede("O nome precisa ter de 2 a 150 caracteres.")
     if d.tipo not in TIPOS_EQUIPAMENTO:
@@ -235,6 +235,10 @@ def _validar_equipamento(sessao: Session, d: DadosEquipamento, equipamento_id: u
         raise ErroRede("Bem do Patrimônio não encontrado.")
     if d.localizacao_id and sessao.get(Localizacao, d.localizacao_id) is None:
         raise ErroRede("Sala não encontrada.")
+    # Rack e U obrigatórios (decisão do usuário de 17/11/2026), menos no access point, que costuma ficar no teto.
+    # `exigir_rack=False` só na importação do inventário, que não sabe onde o equipamento está montado.
+    if exigir_rack and d.tipo != "access_point" and (d.rack_id is None or not d.posicao_u):
+        raise ErroRede("Escolha o rack e a posição (U) do equipamento: só o access point pode ficar fora de rack.", 400, "sem_rack")
     if d.rack_id is None:
         if d.posicao_u:
             raise ErroRede("Escolha o rack antes da posição (U).")
@@ -313,14 +317,56 @@ def _conferir_destino(sessao: Session, novo: EquipamentoRede, lig: DadosLigacaoC
     return destino
 
 
-def salvar_equipamento(sessao: Session, equipamento_id: uuid.UUID | None, d: DadosEquipamento) -> EquipamentoRede:
+def destinos_do_cadastro(sessao: Session, tipo: str, funcao: str | None) -> list[tuple[EquipamentoRede, list[tuple[PortaRede, str | None]]]]:
+    """Onde o equipamento novo (deste tipo e função) pode ser ligado no cadastro em cadeia, porta a porta.
+
+    Decisão do usuário (17/11/2026): a lista "Conectado em" do cadastro só mostra quem é elegível. Usa as mesmas regras do
+    `_conferir_destino`, sem gravar nada:
+    - switch: pode ficar acima do novo (`pode_ficar_acima`), tem caminho até o core e tem porta livre;
+    - patch panel: tem uma porta com um lado livre cujo **outro lado da mesma porta** leva (atravessando outros patch panels) a quem pode
+      ficar acima e chega ao core. Cada porta do patch panel é um cabo independente.
+    Devolve, por equipamento elegível, as portas que servem (com o lado, no patch panel), na ordem das portas.
+    """
+    # Equipamento "de mentira" só para as regras (não é adicionado à sessão, nada é gravado)
+    novo = EquipamentoRede(tipo=tipo, funcao=funcao if tipo == "switch" else None)
+    # Guarda o "chega ao core?" de cada equipamento já conferido, para não refazer a subida a cada porta de patch panel
+    chega: dict[uuid.UUID, bool] = {}
+
+    def serve(acima: EquipamentoRede) -> bool:
+        if not pode_ficar_acima(novo, acima):
+            return False
+        if acima.id not in chega:
+            chega[acima.id] = chega_ao_topo(sessao, acima)
+        return chega[acima.id]
+
+    resultado = []
+    for e in sessao.scalars(select(EquipamentoRede).where(EquipamentoRede.ativo.is_(True)).order_by(EquipamentoRede.nome)):
+        portas = sorted(e.portas, key=lambda p: p.numero_logico)
+        livres: list[tuple[PortaRede, str | None]] = []
+        if e.tipo == "patch_panel":
+            for p in portas:
+                for lado in ("fundo", "frente"):
+                    if conexao_da_porta(sessao, p.id, lado) is not None:
+                        continue
+                    # O que vale é o que está do outro lado da mesma porta
+                    fio = seguir_fio(sessao, p, oposto(lado))
+                    if fio.fim is not None and serve(fio.fim.equipamento):
+                        livres.append((p, lado))
+        elif serve(e):
+            livres = [(p, None) for p in portas if conexao_da_porta(sessao, p.id) is None]
+        if livres:
+            resultado.append((e, livres))
+    return resultado
+
+
+def salvar_equipamento(sessao: Session, equipamento_id: uuid.UUID | None, d: DadosEquipamento, exigir_rack: bool = True) -> EquipamentoRede:
     """Cria ou altera um equipamento.
 
     Na criação (decisões do usuário): a rede é cadastrada em cadeia (`_exigencias_da_cadeia`) e todo equipamento, menos o core primário e o
     patch panel, já entra com o cabo para quem está acima dele (porta deste, porta do outro e a configuração das duas). As demais portas
     nascem desligadas e em branco. Na edição, o modelo de face, o tipo e a função não mudam (exclui e cadastra de novo).
     """
-    _validar_equipamento(sessao, d, equipamento_id)
+    _validar_equipamento(sessao, d, equipamento_id, exigir_rack)
     item = obter_equipamento(sessao, equipamento_id) if equipamento_id else EquipamentoRede(portas=[])
     novo = equipamento_id is None
     # Regra (decisão do usuário): o modelo de face é escolhido na criação e não muda mais; para trocar, exclui-se o equipamento e
@@ -875,18 +921,18 @@ def posto(e: EquipamentoRede) -> int | None:
 def pode_ficar_acima(de: EquipamentoRede, acima: EquipamentoRede) -> bool:
     """Se `acima` pode ser o equipamento de cima de `de` (cadastro em cadeia, decisão do usuário).
 
-    Core secundário → core primário; distribuição → um core; acesso → distribuição, core ou outro acesso (switch de acesso em cascata,
-    decisão do usuário de 17/11/2026); access point, roteador e "outro" → switch de acesso.
+    Core secundário → core primário; distribuição → um core ou outra distribuição; acesso → distribuição, core ou outro acesso
+    (switches em cascata, decisões do usuário de 17/11/2026: o `chega_ao_topo` confere que a cadeia chega ao core); access point, roteador e "outro" → switch de acesso.
     """
     if acima.tipo != "switch":
         return False
     if de.tipo == "switch":
-        permitidas = {"core_secundario": ("core_primario",), "distribuicao": FUNCOES_CORE, "acesso": FUNCOES_CORE + ("distribuicao", "acesso")}
+        permitidas = {"core_secundario": ("core_primario",), "distribuicao": FUNCOES_CORE + ("distribuicao",), "acesso": FUNCOES_CORE + ("distribuicao", "acesso")}
         return acima.funcao in permitidas.get(de.funcao or "", ())
     return de.tipo not in TIPOS_PASSIVOS and acima.funcao == "acesso"
 
 
-ROTULO_ACIMA = {"core_secundario": "o core primário", "distribuicao": "um core", "acesso": "uma distribuição, um core ou outro switch de acesso"}
+ROTULO_ACIMA = {"core_secundario": "o core primário", "distribuicao": "um core ou outra distribuição", "acesso": "uma distribuição, um core ou outro switch de acesso"}
 
 
 def rotulo_acima(e: EquipamentoRede) -> str:

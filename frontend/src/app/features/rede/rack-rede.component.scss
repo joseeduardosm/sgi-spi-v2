@@ -73,3 +73,43 @@
 }
 
 .rack-acoes { display: flex; justify-content: flex-end; margin-top: 10px; &:empty { display: none; } }
+
+/* ----- Modo escolha (cadastro do equipamento): cada U livre é uma linha inteira clicável ----- */
+
+/* Equipamento já montado: bloco apagado, sem clique */
+.rack-equipamento.ocupado { cursor: default; color: var(--spi-apagado); background: var(--spi-superficie-alt);
+  &:hover { border-color: var(--spi-borda-campo); } }
+
+/* O equipamento novo no U escolhido: vermelho do sistema (item ativo) */
+.rack-equipamento.novo { color: var(--spi-superficie); background: var(--spi-vermelho); border-color: var(--spi-vermelho);
+  small { color: var(--spi-superficie); } }
+
+.rack-livre {
+  grid-column: 2;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin: 1px 0;
+  padding: 0 10px;
+  color: var(--spi-apagado);
+  font-size: var(--spi-texto-legenda);
+  font-weight: 600;
+  background: var(--spi-superficie);
+  border: 1px dashed var(--spi-borda-campo);
+  border-radius: var(--spi-raio-p);
+  cursor: pointer;
+
+  small { font-weight: 400; opacity: 0; }
+  &:hover { color: var(--spi-vermelho); border-style: solid; border-color: var(--spi-vermelho); small { opacity: 1; } }
+  &:has(input:focus-visible) { color: var(--spi-vermelho); border-color: var(--spi-vermelho); box-shadow: var(--spi-anel-foco); small { opacity: 1; } }
+
+  /* O radio fica escondido (a linha inteira é o alvo do clique); continua no teclado e no leitor de tela */
+  input { position: absolute; width: 1px; height: 1px; min-height: 0; margin: 0; padding: 0; opacity: 0; pointer-events: none; }
+
+  /* U livre onde o equipamento não cabe inteiro: sem clique */
+  &.nao-cabe { cursor: not-allowed; background: var(--spi-superficie-alt); opacity: .6;
+    &:hover { color: var(--spi-apagado); border-style: dashed; border-color: var(--spi-borda-campo); } }
+}

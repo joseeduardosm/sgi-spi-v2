@@ -10,10 +10,16 @@
  * Componente standalone em duas rotas: /rede/equipamentos/novo (trilha
  * Dados → Conexão → Revisão, com app-trilha-etapas) e
  * /rede/equipamentos/:id/editar (só os dados; tipo, função e modelo travados,
- * e o botão Excluir). Na Conexão, a pessoa diz "este equipamento, na porta X,
- * está conectado no equipamento Y, na porta Y" e configura as duas portas
- * (o mesmo bloco de configuração, montado por ng-template). Se Y for patch
- * panel, escolhe o lado e vê o que está do outro lado daquela porta.
+ * e o botão Excluir). Nos Dados, rack e U são obrigatórios (menos no access
+ * point): o rack escolhido é desenhado (app-rack-rede em modo escolha) e o U
+ * é escolhido clicando num espaço livre, com confirmação Sim/Não. Na Conexão,
+ * a porta deste equipamento e a do outro são escolhidas pela face
+ * (app-seletor-porta-face); "Conectado em" só lista os elegíveis
+ * (GET /rede/equipamentos/destinos-cadastro), e a face do outro só deixa
+ * clicar nas portas que servem. As duas portas são configuradas no mesmo
+ * bloco (ng-template), com a velocidade em fichas e o botão "Copiar da porta
+ * …" para repetir a configuração da outra. Se Y for patch panel, escolhe o
+ * lado (só os que levam acima) e vê o que está do outro lado daquela porta.
  *
  * FINALIDADE DE NEGÓCIO:
  * Força o desenho da rede de cima para baixo (decisão do usuário): todo
@@ -29,7 +35,7 @@
  */
 
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
@@ -38,14 +44,22 @@ import { EsqueletoComponent } from '../../shared/componentes/esqueleto/esqueleto
 import { EtapaTrilha, TrilhaEtapasComponent } from '../../shared/componentes/trilha-etapas/trilha-etapas.component';
 import { DialogosService } from '../../shared/servicos/dialogos.service';
 import { CabecalhoRedeComponent } from './cabecalho-rede.component';
+import { RackRedeComponent } from './rack-rede.component';
 import { RedeApiService } from './rede-api.service';
+import { OpcaoPortaFace, posicoesDoModelo, SeletorPortaFaceComponent } from './seletor-porta-face.component';
 import { SeletorVlansComponent } from './seletor-vlans.component';
 import {
-  ehPassivo, EquipamentoDetalhe, LEITURA_SSH_ATIVA, EquipamentoResumo, FuncaoEquipamento, GravacaoEquipamento, GravacaoPorta, LADOS_PATCH, LadoPatch, ladoLivre, MODOS_PORTA,
+  DestinoCadastro, ehPassivo, EquipamentoDetalhe, rotuloLado, LEITURA_SSH_ATIVA, EquipamentoResumo, FuncaoEquipamento, GravacaoEquipamento, GravacaoPorta, LADOS_PATCH, LadoPatch, MODOS_PORTA,
   ModeloFace, modoPorta, Porta, portasDoModelo, Rack, ResultadoTesteLeitura, ROTULOS_FUNCAO_EQUIPAMENTO, ROTULOS_TIPO_EQUIPAMENTO, textoVlanPorta, TipoEquipamento, Vlan,
 } from './rede.models';
 
 type Passo = 'dados' | 'conexao' | 'revisao';
+
+/** Velocidades da porta para escolher com um clique (Mb/s), no lugar de digitar (pedido do usuário, 17/11/2026). */
+const VELOCIDADES: { valor: number; rotulo: string }[] = [
+  { valor: 10, rotulo: '10 Mb' }, { valor: 100, rotulo: '100 Mb' }, { valor: 1000, rotulo: '1 Gb' }, { valor: 2500, rotulo: '2,5 Gb' },
+  { valor: 10000, rotulo: '10 Gb' }, { valor: 25000, rotulo: '25 Gb' }, { valor: 40000, rotulo: '40 Gb' }, { valor: 100000, rotulo: '100 Gb' },
+];
 
 function dadosVazios(): GravacaoEquipamento {
   return { nome: '', tipo: 'switch', modelo_face_id: null, bem_id: null, localizacao_id: null, rack_id: null, posicao_u: null, ip_gerencia: '', funcao: null,
@@ -57,27 +71,39 @@ function configVazia(): GravacaoPorta {
     duplex: null, status: 'up' };
 }
 
-/** Quem pode ficar acima do equipamento novo (a mesma regra do backend, para filtrar a lista): core secundário → primário; distribuição → core;
- *  acesso → distribuição, core ou outro acesso (cascata); access point, roteador e "outro" → switch de acesso. */
+/** Quem pode ficar acima do equipamento novo (a mesma regra do backend, para filtrar a lista): core secundário → primário; distribuição → core ou
+ *  outra distribuição (cascata); acesso → distribuição, core ou outro acesso (cascata); access point, roteador e "outro" → switch de acesso. */
 function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null, acima: EquipamentoResumo): boolean {
   if (acima.tipo !== 'switch') return false;
   if (tipo !== 'switch') return acima.funcao === 'acesso';
   const permitidas: Partial<Record<FuncaoEquipamento, FuncaoEquipamento[]>> = {
-    core_secundario: ['core_primario'], distribuicao: ['core_primario', 'core_secundario'], acesso: ['core_primario', 'core_secundario', 'distribuicao', 'acesso'],
+    core_secundario: ['core_primario'], distribuicao: ['core_primario', 'core_secundario', 'distribuicao'], acesso: ['core_primario', 'core_secundario', 'distribuicao', 'acesso'],
   };
   return !!acima.funcao && (permitidas[funcao ?? 'core_primario'] ?? []).includes(acima.funcao);
 }
 
 @Component({
   selector: 'app-cadastro-equipamento-rede',
-  imports: [FormsModule, NgTemplateOutlet, RouterLink, CabecalhoRedeComponent, EsqueletoComponent, SeletorVlansComponent, TrilhaEtapasComponent],
+  imports: [FormsModule, NgTemplateOutlet, RouterLink, CabecalhoRedeComponent, EsqueletoComponent, RackRedeComponent, SeletorPortaFaceComponent, SeletorVlansComponent,
+    TrilhaEtapasComponent],
   styles: [`
     /* A frase da conexão: "Este switch, na porta X, está conectado em Y, na porta Y" */
     .frase-conexao { margin: 0 0 var(--spi-espaco-16); color: var(--spi-texto); }
     /* As duas portas lado a lado (empilham no celular), cada uma num cartão com borda de 1px */
     .portas-conexao { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--spi-espaco-16); margin-top: var(--spi-espaco-16); }
     .portas-conexao > section { padding: var(--spi-espaco-16); border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); }
-    .portas-conexao h3 { margin: 0 0 var(--spi-espaco-12); font-size: var(--spi-texto-compacto); font-weight: 700; }
+    .portas-conexao h3 { margin: 0; font-size: var(--spi-texto-compacto); font-weight: 700; }
+    /* Cabeçalho do cartão: título à esquerda e "Copiar da porta…" no canto superior direito */
+    .cabecalho-porta { display: flex; align-items: center; justify-content: space-between; gap: var(--spi-espaco-8); flex-wrap: wrap; margin-bottom: var(--spi-espaco-12); }
+    /* Blocos de escolha da porta pela face (deste equipamento e do outro), um embaixo do outro */
+    .bloco-face { margin-bottom: var(--spi-espaco-16); padding: var(--spi-espaco-16); border: 1px solid var(--spi-borda); border-radius: var(--spi-raio-g); }
+    .bloco-face h3 { margin: 0 0 var(--spi-espaco-12); font-size: var(--spi-texto-compacto); font-weight: 700; }
+    .bloco-face .grade-formulario { margin-top: var(--spi-espaco-12); }
+    /* O rack desenhado na largura de um rack (não a da tela inteira), alinhado à esquerda */
+    .rack-escolha { max-width: 520px; margin-bottom: var(--spi-espaco-8); }
+    /* Respiro entre o campo de VLANs e as fichas de velocidade */
+    .campo-velocidade { margin-top: var(--spi-espaco-8); }
+    .rack-escolha > small { display: block; margin-top: var(--spi-espaco-8); }
     .revisao dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--spi-espaco-8) var(--spi-espaco-16); margin: 0; }
     .revisao dt { color: var(--spi-apagado); font-weight: 600; }
     .revisao dd { margin: 0; }
@@ -97,21 +123,21 @@ function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null,
 
           @if (passo() === 'dados') {
             <form class="grade-formulario" (ngSubmit)="avancar()" #fd="ngForm">
-              <div><label for="ce-nome">Nome</label>
+              <div><label for="ce-nome">Nome *</label>
                 <input id="ce-nome" name="nome" required minlength="2" maxlength="150" placeholder="Ex.: SPI-SWAC-05A" [(ngModel)]="dados.nome" /></div>
-              <div><label for="ce-tipo">Tipo</label>
+              <div><label for="ce-tipo">Tipo *</label>
                 <select id="ce-tipo" name="tipo" [disabled]="editando()" [(ngModel)]="dados.tipo" (ngModelChange)="trocouTipo()">
                   @for (t of tipos; track t[0]) { <option [value]="t[0]">{{ t[1] }}</option> }
                 </select></div>
               @if (dados.tipo === 'switch') {
-                <div><label for="ce-funcao">Função na topologia</label>
+                <div><label for="ce-funcao">Função na topologia *</label>
                   <select id="ce-funcao" name="funcao" required [disabled]="editando()" [(ngModel)]="dados.funcao">
                     <option [ngValue]="null" disabled>Escolha</option>
                     @for (f of funcoes; track f[0]) { <option [ngValue]="f[0]">{{ f[1] }}</option> }
                   </select>
                   <small class="dica-formulario">Core no topo, depois distribuição e acesso. AP, roteador e "outro" ficam abaixo do acesso.</small></div>
               }
-              <div><label for="ce-modelo">Modelo de face</label>
+              <div><label for="ce-modelo">Modelo de face *</label>
                 <select id="ce-modelo" name="modelo" required [disabled]="editando()" [(ngModel)]="dados.modelo_face_id" (ngModelChange)="ligacao.porta = null">
                   <option [ngValue]="null" disabled>Escolha</option>
                   @for (m of modelos(); track m.id) { <option [ngValue]="m.id">{{ m.nome }} ({{ m.linhas * m.colunas + m.portas_extras.length }} portas, {{ m.altura_u }}U)</option> }
@@ -147,13 +173,22 @@ function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null,
                   }
                 }
               }
-              <div><label for="ce-rack">Rack</label>
-                <select id="ce-rack" name="rack" [(ngModel)]="dados.rack_id">
-                  <option [ngValue]="null">Fora de rack</option>
+              <!-- Rack e U obrigatórios, menos no access point (decisão do usuário, 17/11/2026) -->
+              <div><label for="ce-rack">Rack{{ rackObrigatorio() ? ' *' : '' }}</label>
+                <select id="ce-rack" name="rack" [required]="rackObrigatorio()" [(ngModel)]="dados.rack_id" (ngModelChange)="trocouRack()">
+                  <option [ngValue]="null" [disabled]="rackObrigatorio()">{{ rackObrigatorio() ? 'Escolha' : 'Fora de rack' }}</option>
                   @for (r of racks(); track r.id) { <option [ngValue]="r.id">{{ r.nome }} ({{ r.altura_u }}U)</option> }
                 </select></div>
-              <div><label for="ce-u">Posição no rack (U)</label>
-                <input id="ce-u" name="u" type="number" min="1" max="60" [disabled]="!dados.rack_id" placeholder="U mais baixo que ocupa (U1 = embaixo)" [(ngModel)]="dados.posicao_u" /></div>
+              <div><label for="ce-u">Posição no rack (U){{ rackObrigatorio() ? ' *' : '' }}</label>
+                <input id="ce-u" name="u" type="number" min="1" max="60" [required]="!!dados.rack_id" [disabled]="!dados.rack_id" placeholder="Clique num U livre no rack abaixo" [(ngModel)]="dados.posicao_u" /></div>
+              @if (rackEscolhido(); as r) {
+                <!-- O rack escolhido, com o que já está montado: clicar num U livre pergunta Sim/Não e preenche a posição -->
+                <div class="ocupa-duas rack-escolha">
+                  <app-rack-rede [rack]="r" [equipamentos]="doRack(r.id)" [escolha]="true" [alturaNova]="alturaModelo()" [uEscolhido]="dados.posicao_u"
+                    [nomeNovo]="dados.nome" [ignorarId]="idEditado" (pedirU)="pedirU($event)" />
+                  <small class="dica-formulario">Clique num U livre para colocar o equipamento ({{ alturaModelo() }}U{{ dados.modelo_face_id ? ', pelo modelo' : '; escolha o modelo para saber a altura' }}).</small>
+                </div>
+              }
               <div><label for="ce-serie">Número de série</label><input id="ce-serie" name="serie" maxlength="120" [(ngModel)]="dados.numero_serie" /></div>
               @if (editando()) { <div><label class="linha-caixa"><input type="checkbox" name="ativo" [(ngModel)]="dados.ativo" /> Ativo</label></div> }
               <div class="ocupa-duas"><label for="ce-obs">Observação <small>(opcional)</small></label>
@@ -182,39 +217,56 @@ function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null,
               <form (ngSubmit)="avancar()" #fc="ngForm">
                 <p class="frase-conexao">Este {{ rotuloTipo(dados.tipo).toLowerCase() }} <strong>{{ dados.nome }}</strong>, na porta escolhida abaixo, está conectado
                   em {{ rotuloAcima() }} (direto ou passando por um patch panel).</p>
+                <!-- Porta deste equipamento: escolhida na face (desenhada pelo modelo; todas livres, o equipamento ainda não existe) -->
+                <section class="bloco-face" aria-labelledby="cc-face-propria">
+                  <h3 id="cc-face-propria">Porta deste equipamento ({{ dados.nome }}) *</h3>
+                  <app-seletor-porta-face nome="cc-porta" rotulo="Porta deste equipamento" [modelo]="modeloEscolhido()" [posicoes]="posicoesProprias()"
+                    [opcoes]="opcoesProprias()" [valor]="ligacao.porta === null ? null : '' + ligacao.porta" (valorChange)="ligacao.porta = +$event" />
+                </section>
                 <div class="grade-formulario">
-                  <div><label for="cc-porta">Porta deste equipamento</label>
-                    <select id="cc-porta" name="porta" required [(ngModel)]="ligacao.porta">
-                      <option [ngValue]="null" disabled>Escolha</option>
-                      @for (x of portasDoModelo(); track x.numero) { <option [ngValue]="x.numero">{{ x.nome }}</option> }
-                    </select></div>
-                  <div><label for="cc-equip">Conectado em</label>
+                  <div class="ocupa-duas"><label for="cc-equip">Conectado em *</label>
                     <select id="cc-equip" name="equip" required [(ngModel)]="ligacao.equipamento" (ngModelChange)="escolheuDestino($event)">
                       <option [ngValue]="null" disabled>Escolha</option>
                       @for (e of candidatos(); track e.id) { <option [ngValue]="e.id">{{ e.nome }} · {{ e.tipo === 'patch_panel' ? 'Patch panel' : rotuloFuncao(e.funcao) }}</option> }
                     </select>
-                    @if (!candidatos().length) { <small class="dica-formulario">Nenhum equipamento acima cadastrado ainda: cadastre antes {{ rotuloAcima() }}.</small> }</div>
-                  <div><label for="cc-destino">Porta do outro equipamento</label>
-                    <select id="cc-destino" name="destino" required [disabled]="!ligacao.equipamento" [(ngModel)]="ligacao.destino" (ngModelChange)="escolheuPortaDestino()">
-                      <option [ngValue]="null" disabled>{{ ligacao.equipamento ? 'Escolha' : 'Escolha o equipamento antes' }}</option>
-                      @for (x of portasDestino(); track x.id) { <option [ngValue]="x.id" [disabled]="destinoOcupado(x)">{{ x.nome || x.numero_logico }}{{ destinoOcupado(x) ? ' (ocupada)' : '' }}</option> }
-                    </select></div>
-                  @if (destinoEhPatch()) {
-                    <div><label for="cc-lado">Lado da porta do patch panel</label>
-                      <select id="cc-lado" name="lado" required [disabled]="!ligacao.destino" [(ngModel)]="ligacao.lado">
-                        <option [ngValue]="null" disabled>Escolha</option>
-                        @for (l of lados; track l.valor) { <option [ngValue]="l.valor" [disabled]="!ladoLivreDestino(l.valor)">{{ l.rotulo }}{{ ladoLivreDestino(l.valor) ? '' : ' (ocupado)' }}</option> }
-                      </select>
-                      @if (ligacao.lado) {
-                        <small class="dica-formulario">Do outro lado desta porta: {{ outroLadoTexto() || 'nada ligado (ligue antes o outro lado a ' + rotuloAcima() + ')' }}</small>
-                      }</div>
-                  }
+                    @if (destinos() !== null && !candidatos().length) { <small class="dica-formulario">Nenhum equipamento com porta livre que leve a {{ rotuloAcima() }}: cadastre ou ligue antes {{ rotuloAcima() }}.</small> }
+                    @else { <small class="dica-formulario">Só aparecem os equipamentos com porta livre que serve: {{ rotuloAcima() }}, ou um patch panel cuja porta leva até ele.</small> }</div>
                 </div>
+                @if (destinoDetalhe(); as d) {
+                  <!-- Porta do outro equipamento: a face dele; só as portas que servem ficam clicáveis -->
+                  <section class="bloco-face" aria-labelledby="cc-face-destino">
+                    <h3 id="cc-face-destino">{{ d.nome }} · {{ d.tipo === 'patch_panel' ? 'Patch panel' : rotuloFuncao(d.funcao) }}: porta *</h3>
+                    <app-seletor-porta-face nome="cc-destino" [rotulo]="'Porta de ' + d.nome" [modelo]="d.modelo" [posicoes]="d.posicoes"
+                      [opcoes]="opcoesDestino()" [valor]="ligacao.destino" (valorChange)="ligacao.destino = $event; escolheuPortaDestino()" />
+                    @if (destinoEhPatch() && ligacao.destino) {
+                      <div class="grade-formulario">
+                        <div><label for="cc-lado">Lado da porta do patch panel *</label>
+                          <select id="cc-lado" name="lado" required [(ngModel)]="ligacao.lado">
+                            <option [ngValue]="null" disabled>Escolha</option>
+                            @for (l of lados; track l.valor) { <option [ngValue]="l.valor" [disabled]="!ladoElegivel(l.valor)">{{ l.rotulo }}{{ ladoElegivel(l.valor) ? '' : ' (ocupado ou não leva acima)' }}</option> }
+                          </select>
+                          @if (ligacao.lado) {
+                            <small class="dica-formulario">Do outro lado desta porta: {{ outroLadoTexto() || 'nada ligado' }}</small>
+                          }</div>
+                      </div>
+                    }
+                  </section>
+                }
                 <div class="portas-conexao">
-                  <section aria-labelledby="cc-cfg-propria"><h3 id="cc-cfg-propria">Porta {{ nomePortaPropria() || '—' }} (este equipamento)</h3>
+                  <section aria-labelledby="cc-cfg-propria">
+                    <header class="cabecalho-porta"><h3 id="cc-cfg-propria">Porta {{ nomePortaPropria() || '—' }} (este equipamento)</h3>
+                      @if (ligacao.destino && !destinoEhPatch() && podeCopiar(cfgDestino, cfgPropria)) {
+                        <button type="button" class="acao-secundaria acao-pequena" (click)="cfgPropria = copiaConfig(cfgDestino)">Copiar da porta {{ nomePortaDestino() }}</button>
+                      }
+                    </header>
                     <ng-container *ngTemplateOutlet="configPorta; context: { $implicit: cfgPropria, chave: 'propria' }" /></section>
                   @if (ligacao.destino && !destinoEhPatch()) {
-                    <section aria-labelledby="cc-cfg-destino"><h3 id="cc-cfg-destino">Porta {{ nomePortaDestino() }} ({{ nomeDestino() }})</h3>
+                    <section aria-labelledby="cc-cfg-destino">
+                      <header class="cabecalho-porta"><h3 id="cc-cfg-destino">Porta {{ nomePortaDestino() }} ({{ nomeDestino() }})</h3>
+                        @if (podeCopiar(cfgPropria, cfgDestino)) {
+                          <button type="button" class="acao-secundaria acao-pequena" (click)="cfgDestino = copiaConfig(cfgPropria)">Copiar da porta {{ nomePortaPropria() || 'deste equipamento' }}</button>
+                        }
+                      </header>
                       @if (destinoConfigurado()) { <p class="dica-formulario">Esta porta já tinha configuração: ela aparece abaixo e pode ser ajustada.</p> }
                       <ng-container *ngTemplateOutlet="configPorta; context: { $implicit: cfgDestino, chave: 'destino' }" /></section>
                   }
@@ -280,8 +332,14 @@ function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null,
                   rotulo="Adicionar VLAN com tag" [vlans]="vlans()" [valor]="cfg.vlans_tag" [excluir]="cfg.vlans_sem_tag" [podeGerir]="!!papeis()?.administrar"
                   (valorChange)="cfg.vlans_tag = $event" (vlanAlterada)="atualizarVlan($event)" /></div>
             }
-            <div><label [for]="'cfg-vel-' + chave">Velocidade (Mb/s)</label>
-              <input [id]="'cfg-vel-' + chave" [name]="'vel-' + chave" type="number" min="1" placeholder="Ex.: 10000" [(ngModel)]="cfg.velocidade_mbps" /></div>
+            <!-- Velocidade com um clique (clicar de novo na escolhida desmarca) -->
+            <div class="ocupa-duas campo-velocidade"><label [id]="'cfg-vel-' + chave">Velocidade</label>
+              <div class="chips-filtro" role="group" [attr.aria-labelledby]="'cfg-vel-' + chave">
+                @for (v of velocidades; track v.valor) {
+                  <button type="button" [class.ativo]="cfg.velocidade_mbps === v.valor" [attr.aria-pressed]="cfg.velocidade_mbps === v.valor"
+                    (click)="cfg.velocidade_mbps = cfg.velocidade_mbps === v.valor ? null : v.valor">{{ v.rotulo }}</button>
+                }
+              </div></div>
           </div>
         </ng-template>
       } @else {
@@ -293,8 +351,10 @@ function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null,
 export class CadastroEquipamentoRedeComponent implements OnInit {
   private readonly api = inject(RedeApiService);
   private readonly dialogos = inject(DialogosService);
+  /** O app roda sem zone.js: depois de uma resposta assíncrona (a confirmação Sim/Não) é preciso avisar que a tela mudou. */
+  private readonly deteccao = inject(ChangeDetectorRef);
   private readonly roteador = inject(Router);
-  private readonly idEditado = inject(ActivatedRoute).snapshot.paramMap.get('id');
+  protected readonly idEditado = inject(ActivatedRoute).snapshot.paramMap.get('id');
   protected readonly papeis = inject(AcessoService).rede;
 
   protected readonly editando = signal(!!this.idEditado);
@@ -305,6 +365,11 @@ export class CadastroEquipamentoRedeComponent implements OnInit {
   protected readonly equipamentos = signal<EquipamentoResumo[]>([]);
   /** Portas do equipamento escolhido em "Conectado em" (com o que já está ligado nelas). */
   protected readonly portasDestino = signal<Porta[]>([]);
+  /** O equipamento escolhido em "Conectado em", com o modelo e as posições (para desenhar a face). */
+  protected readonly destinoDetalhe = signal<EquipamentoDetalhe | null>(null);
+  /** Equipamentos e portas elegíveis para a ligação (null = ainda carregando). */
+  protected readonly destinos = signal<DestinoCadastro[] | null>(null);
+  protected readonly velocidades = VELOCIDADES;
   protected readonly salvando = signal(false);
   protected readonly pronto = signal(!this.idEditado);
   /** Senha SSH digitada (só vai na gravação; em branco na edição mantém a gravada). */
@@ -398,9 +463,104 @@ export class CadastroEquipamentoRedeComponent implements OnInit {
     return (this.dados.funcao && rotulos[this.dados.funcao]) || 'quem fica acima';
   }
 
-  /** Lista de "Conectado em": quem pode ficar acima, e os patch panels (o lado escolhido precisa levar a quem pode ficar acima). */
+  /**
+   * Lista de "Conectado em" (pedido do usuário, 17/11/2026): só os elegíveis, que a API calcula com as regras da cadeia (switch que pode
+   * ficar acima e chega ao core, com porta livre; patch panel com uma porta cujo outro lado leva a ele). Antes de a API responder, usa a
+   * regra local (sem os patch panels) para a lista não ficar vazia.
+   */
   protected candidatos(): EquipamentoResumo[] {
-    return this.equipamentos().filter((e) => e.tipo === 'patch_panel' || podeFicarAcima(this.dados.tipo, this.dados.funcao, e));
+    const destinos = this.destinos();
+    if (destinos === null) return this.equipamentos().filter((e) => podeFicarAcima(this.dados.tipo, this.dados.funcao, e));
+    const ids = new Set(destinos.map((d) => d.equipamento_id));
+    return this.equipamentos().filter((e) => ids.has(e.id));
+  }
+
+  /** Portas (e lados) que servem no equipamento escolhido em "Conectado em". */
+  private elegiveisDoDestino(): { porta_id: string; lado: LadoPatch | null }[] {
+    return this.destinos()?.find((d) => d.equipamento_id === this.ligacao.equipamento)?.portas ?? [];
+  }
+
+  // ----- Rack e U (passo Dados) -----
+
+  /** Rack e U obrigatórios em todo equipamento, menos no access point (decisão do usuário, 17/11/2026). */
+  protected rackObrigatorio(): boolean {
+    return this.dados.tipo !== 'access_point';
+  }
+
+  protected rackEscolhido(): Rack | null {
+    return this.racks().find((r) => r.id === this.dados.rack_id) ?? null;
+  }
+
+  protected doRack(rackId: string): EquipamentoResumo[] {
+    return this.equipamentos().filter((e) => e.rack_id === rackId);
+  }
+
+  protected modeloEscolhido(): ModeloFace | null {
+    return this.modelos().find((m) => m.id === this.dados.modelo_face_id) ?? null;
+  }
+
+  /** Quantos U o equipamento ocupa (do modelo; 1 enquanto não há modelo). */
+  protected alturaModelo(): number {
+    return Math.max(1, this.modeloEscolhido()?.altura_u ?? 1);
+  }
+
+  /** Trocou o rack: a posição de antes era de outro rack (na edição, voltar ao rack original devolve a posição original). */
+  protected trocouRack(): void {
+    this.dados.posicao_u = this.idEditado && this.dados.rack_id === this.original()?.rack_id ? this.original()!.posicao_u : null;
+  }
+
+  /** Clicou num U livre do desenho do rack: pergunta Sim/Não e, se sim, preenche a posição. */
+  protected async pedirU(u: number): Promise<void> {
+    const altura = this.alturaModelo();
+    const ok = await this.dialogos.confirmar({ titulo: `Colocar no U${u}?`, simNao: true,
+      mensagem: `${this.dados.nome || 'O equipamento'} vai ocupar ${altura > 1 ? `do U${u} ao U${u + altura - 1}` : `o U${u}`} do rack ${this.rackEscolhido()?.nome ?? ''}.` });
+    if (!ok) return;
+    this.dados.posicao_u = u;
+    this.deteccao.markForCheck();
+  }
+
+  // ----- Portas pela face (passo Conexão) -----
+
+  /** Posições das portas do equipamento novo (ele ainda não existe: vêm do modelo). */
+  protected posicoesProprias(): Record<string, [number, number]> {
+    return posicoesDoModelo(this.modeloEscolhido());
+  }
+
+  /** Portas deste equipamento: todas livres (as portas nascem no cadastro). */
+  protected opcoesProprias(): OpcaoPortaFace[] {
+    return this.portasDoModelo().map((x) => ({ id: String(x.numero), numero: x.numero, nome: x.nome, livre: true, dica: `Porta ${x.nome}` }));
+  }
+
+  /** Portas do outro equipamento: clicáveis só as que servem; nas outras, o que está ligado (ou por que não serve). */
+  protected opcoesDestino(): OpcaoPortaFace[] {
+    const elegiveis = this.elegiveisDoDestino();
+    return this.portasDestino().map((p) => {
+      const lados = elegiveis.filter((x) => x.porta_id === p.id);
+      const nome = p.nome || String(p.numero_logico);
+      const dica = lados.length ? (this.destinoEhPatch() ? `Livre: ${lados.map((x) => rotuloLado(x.lado)).join(' ou ')}` : 'Livre')
+        : p.conexao?.texto || (this.destinoEhPatch() ? 'O outro lado desta porta não leva acima' : 'Não serve');
+      return { id: p.id, numero: p.numero_logico, nome, livre: lados.length > 0, dica };
+    });
+  }
+
+  /** O lado da porta do patch panel serve? (livre e o outro lado da mesma porta leva acima) */
+  protected ladoElegivel(lado: LadoPatch): boolean {
+    return this.elegiveisDoDestino().some((x) => x.porta_id === this.ligacao.destino && x.lado === lado);
+  }
+
+  // ----- Copiar a configuração de uma porta para a outra -----
+
+  /** "Copiar da porta…" aparece quando a outra porta já tem algo preenchido e é diferente desta. */
+  protected podeCopiar(origem: GravacaoPorta, alvo: GravacaoPorta): boolean {
+    const preenchida = !!origem.vlan_nativa_id || origem.vlans_tag.length > 0 || origem.vlans_sem_tag.length > 0 || !!origem.vlan_voz_id
+      || !!origem.ip_interface.trim() || origem.velocidade_mbps !== null || origem.modo !== configVazia().modo;
+    return preenchida && JSON.stringify(this.copiaConfig(origem)) !== JSON.stringify(this.copiaConfig(alvo));
+  }
+
+  /** Cópia da configuração (modo, VLANs, IP e velocidade), com listas novas para uma não mexer na outra. */
+  protected copiaConfig(c: GravacaoPorta): GravacaoPorta {
+    return { observacao: '', modo: c.modo, vlan_nativa_id: c.vlan_nativa_id, vlans_tag: [...c.vlans_tag], vlans_sem_tag: [...c.vlans_sem_tag], vlan_voz_id: c.vlan_voz_id,
+      ip_interface: c.ip_interface, velocidade_mbps: c.velocidade_mbps, duplex: c.duplex, status: 'up' };
   }
 
   protected portasDoModelo(): { numero: number; nome: string }[] {
@@ -412,10 +572,12 @@ export class CadastroEquipamentoRedeComponent implements OnInit {
     this.ligacao.destino = null;
     this.ligacao.lado = null;
     this.portasDestino.set([]);
+    this.destinoDetalhe.set(null);
     if (!id) return;
     this.api.equipamento(id).subscribe({
       next: (e) => {
         this.portasDestino.set(e.portas);
+        this.destinoDetalhe.set(e);
         if (portaPendente && e.portas.some((x) => x.id === portaPendente)) {
           this.ligacao.destino = portaPendente;
           this.escolheuPortaDestino();
@@ -428,6 +590,9 @@ export class CadastroEquipamentoRedeComponent implements OnInit {
   /** Porta de switch já usada: se ela tinha configuração (cadastro antigo), começa por ela; senão, pela configuração desta porta. */
   protected escolheuPortaDestino(): void {
     this.ligacao.lado = null;
+    // Patch panel com um só lado que serve: já fica escolhido
+    const lados = this.elegiveisDoDestino().filter((x) => x.porta_id === this.ligacao.destino);
+    if (this.destinoEhPatch() && lados.length === 1) this.ligacao.lado = lados[0].lado;
     const p = this.portaDestino();
     if (!p || this.destinoEhPatch()) return;
     this.cfgDestino = this.destinoConfigurado()
@@ -444,14 +609,7 @@ export class CadastroEquipamentoRedeComponent implements OnInit {
     return this.equipamentos().find((e) => e.id === this.ligacao.equipamento)?.tipo === 'patch_panel';
   }
 
-  protected destinoOcupado(x: Porta): boolean {
-    return this.destinoEhPatch() ? !!(x.fundo && x.frente) : !!x.conexao;
-  }
 
-  protected ladoLivreDestino(lado: LadoPatch): boolean {
-    const p = this.portaDestino();
-    return !p || ladoLivre(p, lado);
-  }
 
   /** O que está do outro lado da porta do patch panel escolhida (é o que vale para a regra da cadeia). */
   protected outroLadoTexto(): string {
@@ -474,7 +632,29 @@ export class CadastroEquipamentoRedeComponent implements OnInit {
       this.salvarEdicao();
       return;
     }
-    this.passo.set(this.passo() === 'dados' ? 'conexao' : 'revisao');
+    if (this.passo() === 'dados') {
+      this.passo.set('conexao');
+      this.carregarDestinos();
+    } else {
+      this.passo.set('revisao');
+    }
+  }
+
+  /** Busca os elegíveis para o tipo e a função do passo Dados (podem ter mudado ao voltar). */
+  private carregarDestinos(): void {
+    if (!this.precisaLigacao()) return;
+    this.destinos.set(null);
+    this.api.destinosCadastro(this.dados.tipo, this.dados.funcao).subscribe({
+      next: (d) => {
+        this.destinos.set(d);
+        // O que estava escolhido deixou de servir (voltou e trocou a função): limpa
+        if (this.ligacao.equipamento && !d.some((x) => x.equipamento_id === this.ligacao.equipamento)) {
+          this.ligacao.equipamento = null;
+          this.escolheuDestino(null);
+        }
+      },
+      error: (e) => { this.destinos.set([]); this.dialogos.mostrarErro(e, 'Não foi possível listar onde o equipamento pode ser ligado'); },
+    });
   }
 
   /** Só o que o modo aceita vai para a API (o que ficou marcado de outro modo é descartado). */

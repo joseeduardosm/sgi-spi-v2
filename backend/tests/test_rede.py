@@ -52,8 +52,20 @@ def _lig(numero: int, destino: str, lado: str | None = None, config: dict | None
     return {"porta_numero": numero, "destino_porta_id": destino, "destino_lado": lado, "config": config, "config_destino": config_destino}
 
 
+_RACKS = count(1)
+
+
+def _rack(cliente, admin) -> str:
+    """Rack novo de 42U só para o equipamento do teste (rack e U são obrigatórios, menos no access point)."""
+    r = cliente.post(f"{BASE}/racks", json={"nome": f"Rack de teste {next(_RACKS)}", "altura_u": 42}, headers=admin)
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
 def _novo(cliente, admin, nome: str, modelo: str, funcao: str | None = None, tipo: str = "switch", ligacao: dict | None = None):
     corpo = {"nome": nome, "tipo": tipo, "modelo_face_id": modelo, "funcao": funcao, "ligacao": ligacao}
+    if tipo != "access_point":
+        corpo |= {"rack_id": _rack(cliente, admin), "posicao_u": 1}
     if tipo != "patch_panel":
         corpo["ip_gerencia"] = f"10.23.9.{next(_IPS) % 250 + 1}"
     return cliente.post(f"{BASE}/equipamentos", json=corpo, headers=admin)
@@ -146,12 +158,14 @@ def test_cadastro_em_cadeia_de_cima_para_baixo(cliente, admin):
     acesso = _novo(cliente, admin, "A1", modelo, "acesso", ligacao=_lig(4, dist["portas"][0]["id"])).json()
     assert _novo(cliente, admin, "A2", modelo, "acesso", ligacao=_lig(4, acesso["portas"][0]["id"])).status_code == 201
     assert _novo(cliente, admin, "A3", modelo, "acesso", ligacao=_lig(4, core["portas"][1]["id"])).status_code == 201
-    # Distribuição só em core; AP só em acesso (e fica sem função); core secundário só no primário
-    assert _novo(cliente, admin, "D2", modelo, "distribuicao", ligacao=_lig(4, dist["portas"][1]["id"])).json()["codigo"] == "cadeia_invalida"
+    # AP só em acesso (e fica sem função); core secundário só no primário.
+    # Distribuição em distribuição vale (cascata, 17/11/2026); distribuição embaixo de acesso, não
+    assert _novo(cliente, admin, "D2", modelo, "distribuicao", ligacao=_lig(4, dist["portas"][2]["id"])).status_code == 201
+    assert _novo(cliente, admin, "D3", modelo, "distribuicao", ligacao=_lig(4, acesso["portas"][2]["id"])).json()["codigo"] == "cadeia_invalida"
     assert _novo(cliente, admin, "AP1", modelo, tipo="access_point", ligacao=_lig(1, dist["portas"][1]["id"])).json()["codigo"] == "cadeia_invalida"
     ap = _novo(cliente, admin, "AP1", modelo, "acesso", tipo="access_point", ligacao=_lig(1, acesso["portas"][1]["id"]))
     assert ap.status_code == 201 and ap.json()["funcao"] is None
-    assert _novo(cliente, admin, "C2", modelo, "core_secundario", ligacao=_lig(4, dist["portas"][2]["id"])).json()["codigo"] == "cadeia_invalida"
+    assert _novo(cliente, admin, "C2", modelo, "core_secundario", ligacao=_lig(4, dist["portas"][1]["id"])).json()["codigo"] == "cadeia_invalida"
     assert _novo(cliente, admin, "C2", modelo, "core_secundario", ligacao=_lig(4, core["portas"][2]["id"])).status_code == 201
     # Patch panel e core primário não pedem ligação
     painel = cliente.post(f"{BASE}/modelos", json={"nome": "PP 4", "linhas": 1, "colunas": 4}, headers=admin).json()["id"]
@@ -311,6 +325,46 @@ def test_acesso_em_cascata_precisa_chegar_ao_core(cliente, admin):
     assert cliente.delete(f"{BASE}/portas/{b.json()['portas'][8]['id']}/conexao", headers=cab).json()["codigo"] == "unica_ligacao_para_cima"
 
 
+def test_distribuicao_em_cascata(cliente, admin):
+    """Distribuição ligada em outra distribuição (decisão do usuário de 17/11/2026): vale, e a de cima precisa chegar ao core."""
+    c = _cenario(cliente, admin)
+    m, cab = c["modelo"]["id"], c["cab"]["analista"]
+    # SW-DIST2 fica embaixo da SW-DIST (distribuição em distribuição)
+    d2 = _novo(cliente, admin, "SW-DIST2", m, "distribuicao", ligacao=_lig(9, c["dist"]["portas"][3]["id"]))
+    assert d2.status_code == 201, d2.text
+    # A SW-DIST2 sustenta um acesso
+    a2 = _novo(cliente, admin, "SW-5C", m, "acesso", ligacao=_lig(9, d2.json()["portas"][0]["id"]))
+    assert a2.status_code == 201, a2.text
+    # Distribuição não fica embaixo de um acesso
+    r = _novo(cliente, admin, "SW-DIST3", m, "distribuicao", ligacao=_lig(9, c["switch"]["portas"][3]["id"]))
+    assert (r.status_code, r.json()["codigo"]) == (409, "cadeia_invalida")
+    # O cabo da SW-DIST2 para a SW-DIST é o único caminho até o core: não sai
+    r = cliente.delete(f"{BASE}/portas/{d2.json()['portas'][8]['id']}/conexao", headers=cab)
+    assert (r.status_code, r.json()["codigo"]) == (409, "unica_ligacao_para_cima")
+
+
+def test_destinos_do_cadastro_so_elegiveis(cliente, admin):
+    """"Conectado em" só com quem serve para a função escolhida (17/11/2026), porta a porta; patch panel só pela porta que leva acima."""
+    c = _cenario(cliente, admin)
+    pp = c["patch"]["portas"]
+    # Fundo da porta 1 do patch panel na distribuição: a frente da porta 1 serve para um acesso; a porta 2 (nada ligado) não
+    cliente.post(f"{BASE}/portas/{pp[0]['id']}/conexao", json={"lado": "fundo", "porta_id": c["dist"]["portas"][1]["id"]}, headers=admin)
+    r = cliente.get(f"{BASE}/equipamentos/destinos-cadastro", params={"tipo": "switch", "funcao": "acesso"}, headers=admin)
+    assert r.status_code == 200, r.text
+    por_id = {d["equipamento_id"]: d["portas"] for d in r.json()}
+    assert set(por_id) == {c["core"]["id"], c["dist"]["id"], c["switch"]["id"], c["patch"]["id"]}
+    assert por_id[c["patch"]["id"]] == [{"porta_id": pp[0]["id"], "lado": "frente"}]
+    # Porta já ocupada não aparece
+    assert c["dist"]["portas"][0]["id"] not in {p["porta_id"] for p in por_id[c["dist"]["id"]]}
+    # Distribuição: core e outra distribuição servem; acesso não, e o patch panel leva a uma distribuição (serve)
+    dist = {d["equipamento_id"] for d in cliente.get(f"{BASE}/equipamentos/destinos-cadastro", params={"tipo": "switch", "funcao": "distribuicao"}, headers=admin).json()}
+    assert dist == {c["core"]["id"], c["dist"]["id"], c["patch"]["id"]}
+    # Access point: só switch de acesso; quem só vê não consulta
+    ap = {d["equipamento_id"] for d in cliente.get(f"{BASE}/equipamentos/destinos-cadastro", params={"tipo": "access_point"}, headers=admin).json()}
+    assert ap == {c["switch"]["id"]}
+    assert cliente.get(f"{BASE}/equipamentos/destinos-cadastro", params={"tipo": "switch"}, headers=c["cab"]["leitor"]).status_code == 403
+
+
 def test_excluir_equipamento_nao_quebra_a_cadeia(cliente, admin):
     c = _cenario(cliente, admin)
     # A distribuição sustenta o SW-5A: não sai; o SW-5A (folha) sai e a porta do outro lado fica em branco
@@ -406,7 +460,8 @@ def test_nucleo_pela_funcao_com_alta_disponibilidade(cliente, admin):
     from app.services.rede import ping
     modelo = cliente.post(f"{BASE}/modelos", json={"nome": "Switch 10", "linhas": 2, "colunas": 5}, headers=admin).json()["id"]
     novo = lambda nome, ip, funcao, ligacao=None: cliente.post(f"{BASE}/equipamentos", json={
-        "nome": nome, "modelo_face_id": modelo, "ip_gerencia": ip, "funcao": funcao, "ligacao": ligacao}, headers=admin).json()
+        "nome": nome, "modelo_face_id": modelo, "ip_gerencia": ip, "funcao": funcao, "ligacao": ligacao, "rack_id": _rack(cliente, admin), "posicao_u": 1},
+        headers=admin).json()
     primario = novo("Z-CORE-1", "10.23.1.1", "core_primario")
     secundario = novo("Y-CORE-2", "10.23.1.2", "core_secundario", _lig(9, primario["portas"][8]["id"]))
     dist = novo("A-DIST", "10.23.2.1", "distribuicao", _lig(1, primario["portas"][0]["id"]))
@@ -490,8 +545,12 @@ def test_racks_e_posicao_dos_equipamentos(cliente, admin):
     assert cliente.put(f"{BASE}/equipamentos/{pp['id']}", json={**corpo_pp, "posicao_u": 11}, headers=admin).status_code == 200
     assert cliente.put(f"{BASE}/racks/{rack}", json={"nome": "Rack do 5º andar", "cor": "cinza", "altura_u": 10}, headers=admin).json()["codigo"] == "em_uso"
     assert cliente.delete(f"{BASE}/racks/{rack}", headers=admin).json()["codigo"] == "em_uso"
-    lista = cliente.get(f"{BASE}/racks", headers=c["cab"]["leitor"]).json()
+    lista = [x for x in cliente.get(f"{BASE}/racks", headers=c["cab"]["leitor"]).json() if x["nome"] == "Rack do 5º andar"]
     assert lista[0]["equipamentos"] == 2 and lista[0]["cor"] == "cinza"
+    # Rack e U obrigatórios (17/11/2026), menos no access point
+    r = cliente.put(f"{BASE}/equipamentos/{pp['id']}", json={**corpo_pp, "rack_id": None, "posicao_u": None}, headers=admin)
+    assert (r.status_code, r.json()["codigo"]) == (400, "sem_rack")
+    assert cliente.put(f"{BASE}/equipamentos/{pp['id']}", json={**corpo_pp, "posicao_u": None}, headers=admin).json()["codigo"] == "sem_rack"
     from app.models.patrimonio import Localizacao
     with FabricaSessao() as sessao:
         sessao.add_all([Localizacao(tipo="sala", nome="Sala 05A03", codigo="05A03", andar=5, lado="A"),

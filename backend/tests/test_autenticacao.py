@@ -424,6 +424,7 @@ def test_openapi_documenta_endpoints(cliente, admin):
         "/api/rede/portas-alteradas",
         "/api/rede/portas-patch-um-lado",
         "/api/rede/equipamentos",
+        "/api/rede/equipamentos/destinos-cadastro",
         "/api/rede/equipamentos/{equipamento_id}",
         "/api/rede/portas/{porta_id}",
         "/api/rede/portas/{porta_id}/conexao",

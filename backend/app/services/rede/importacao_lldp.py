@@ -118,7 +118,7 @@ def carregar(sessao: Session, inventario: dict) -> Relatorio:
                                      numero_serie=atual.numero_serie, observacao=atual.observacao, ativo=atual.ativo, funcao=item["funcao"])
             r.contagem["atualizado"] += 1
         try:
-            e = servico.salvar_equipamento(sessao, atual.id if atual else None, dados)
+            e = servico.salvar_equipamento(sessao, atual.id if atual else None, dados, exigir_rack=False)
         except ErroRede as erro:
             r.avisos.append(f"{item['nome']}: não gravado ({erro})")
             continue

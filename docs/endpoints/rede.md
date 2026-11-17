@@ -32,7 +32,10 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
   (`rede.equipamento.alterar`).
 - **Equipamento**: ao criar, as portas são criadas pelo modelo. IP de gerência
   validado. Bem do Patrimônio e sala opcionais. Fica num **rack já cadastrado** (`rack_id`) e numa posição U (`posicao_u`, o U mais baixo; a
-  altura vem do modelo): precisa caber no rack (400) e não pode sobrepor outro equipamento (`409 posicao_ocupada`).
+  altura vem do modelo): precisa caber no rack (400) e não pode sobrepor outro equipamento (`409 posicao_ocupada`). **Rack e U são obrigatórios**
+  (decisão do usuário, 17/11/2026) em todo equipamento, menos o **access point** (que costuma ficar no teto): `400 sem_rack`, na criação e na
+  edição. A importação do inventário LLDP não exige (não sabe onde o equipamento está montado). No cadastro, ao escolher o rack, a tela desenha o
+  rack com os equipamentos e os U livres: clicar num U livre (onde o equipamento cabe inteiro) pergunta "Sim/Não" e preenche a posição.
   Tipos: `switch`, `roteador`, `access_point`, `outro` e `patch_panel`. **Todo tipo menos o patch panel exige o IP de gerência e a função na
   topologia** (`core_primario`, `core_secundario`, `distribuicao`, `acesso`; 400 sem um deles); no patch panel a função é ignorada. Os cadastrados
   antes dessa regra continuam valendo e aparecem com `cadastro_incompleto` até a próxima edição, que exige os dois. Trocar o IP zera o resultado
@@ -84,7 +87,7 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
   distribuição, não entra acesso; sem acesso, não entram access point, roteador e "outro"; o core secundário pede o primário
   (`409 cadeia_incompleta`). Todo equipamento, menos o **core primário** (o topo) e o **patch panel**, já entra com o cabo para quem fica acima
   dele (`ligacao`, `400 sem_ligacao` se faltar): a porta dele, a porta do outro e a configuração das duas. Quem pode ficar acima: core secundário →
-  core primário; distribuição → um core; acesso → distribuição, core ou **outro acesso** (cascata, decisão do usuário de 17/11/2026); access point,
+  core primário; distribuição → um core ou **outra distribuição** (cascata, decisão do usuário de 17/11/2026); acesso → distribuição, core ou **outro acesso** (cascata, decisão do usuário de 17/11/2026); access point,
   roteador e "outro" → switch de acesso (`409 cadeia_invalida`). O equipamento de cima precisa ter caminho até o core (`409 cadeia_invalida`).
   O cabo pode chegar num **lado de patch panel**, desde que o **outro lado daquela mesma porta** leve (atravessando quantos patch panels houver) a
   quem pode ficar acima: cada porta do patch panel é um cabo independente (a porta 1 com o Terminal Punch Down no core só leva ao core pelo Conector
@@ -134,7 +137,8 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
 | `GET /api/rede/indicadores` | Leitura | Cards do topo: `{portas_alteradas, portas_patch_um_lado}` (portas de patch panel com um lado ligado e o outro vazio) |
 | `GET /api/rede/portas-alteradas` · `GET /api/rede/portas-patch-um-lado` | Leitura | Listas dos cards: `[{porta_id, equipamento_id, equipamento_nome, porta, numero_logico, descricao, alterado_por, alterado_em}]` (a última alteração de cada porta; da mais recente para a mais antiga) |
 | `GET /api/rede/equipamentos?busca=&tipo=` | Leitura | `[{id, nome, tipo, modelo_face_id, modelo_nome, altura_u, bem_id, localizacao_id, sala, rack_id, rack_nome, posicao_u, ip_gerencia, numero_serie, observacao, ativo, funcao, portas_total, portas_up, portas_down, portas_desativadas, ping_situacao, ping_verificado_em, ping_mudou_em, cadastro_incompleto}]` |
-| `POST /api/rede/equipamentos` | Controle total | `{nome, tipo, funcao, modelo_face_id, bem_id, localizacao_id, rack_id, posicao_u, ip_gerencia, numero_serie, observacao, ativo, acesso_usuario, acesso_senha, acesso_porta, ligacao}` (`acesso_senha` só na escrita; vazia na edição mantém a gravada) → `201` com a face. **Cadastro em cadeia**: `ligacao = {porta_numero, destino_porta_id, destino_lado, config, config_destino}` (obrigatória menos no core primário e no patch panel: `400 sem_ligacao`); `config`/`config_destino` no formato do `PUT` da porta. Fora da cadeia: `409 cadeia_incompleta` / `409 cadeia_invalida`; porta ou lado ocupado: `409 porta_ocupada`. Sem IP (menos patch panel) ou switch sem função: 400 |
+| `POST /api/rede/equipamentos` | Controle total | `{nome, tipo, funcao, modelo_face_id, bem_id, localizacao_id, rack_id, posicao_u, ip_gerencia, numero_serie, observacao, ativo, acesso_usuario, acesso_senha, acesso_porta, ligacao}` (`acesso_senha` só na escrita; vazia na edição mantém a gravada) → `201` com a face. **Cadastro em cadeia**: `ligacao = {porta_numero, destino_porta_id, destino_lado, config, config_destino}` (obrigatória menos no core primário e no patch panel: `400 sem_ligacao`); `config`/`config_destino` no formato do `PUT` da porta. Fora da cadeia: `409 cadeia_incompleta` / `409 cadeia_invalida`; porta ou lado ocupado: `409 porta_ocupada`. Sem IP (menos patch panel) ou switch sem função: 400. Sem rack e U (menos access point): `400 sem_rack` (vale também no `PUT`) |
+| `GET /api/rede/equipamentos/destinos-cadastro?tipo=&funcao=` | Controle total | Passo Conexão do cadastro (decisão do usuário, 17/11/2026: "Conectado em" só com os elegíveis): `[{equipamento_id, portas[{porta_id, lado}]}]`, os equipamentos que podem ficar acima de um novo deste tipo e função e, de cada um, as portas livres que servem. Switch: `pode_ficar_acima` + caminho até o core + porta livre. Patch panel: o lado livre de uma porta cujo **outro lado da mesma porta** leva (atravessando patch panels) a quem pode ficar acima e chega ao core. Só leitura; o `POST` confere tudo de novo |
 | `POST /api/rede/leitura/testar` | Controle total | `{ip, usuario, senha, porta, modelo_face_id, tipo, funcao}` → `{tipo_acesso, nome, modelo, serie, versao, portas, vlans, vizinhos[], avisos[], sugestao{porta_numero, destino_equipamento_id, destino_porta_id, texto}}`, sem gravar nada. Acesso recusado ou sem resposta: `409 leitura_falhou` |
 | `POST` · `GET /api/rede/equipamentos/{id}/leitura` | Controle total / Leitura | Lê agora (liga sozinho os vizinhos LLDP e guarda a leitura; `400 sem_acesso`, `409 leitura_falhou`) / a última leitura (nula se nunca lido). Respondem o resumo `{id, lido_em, lido_por, aplicada_em, tipo_acesso, equipamento{serie_lida, serie_cadastro, modelo, versao, nome_lido}, vlans_novas[], lldp[{…, situacao, motivo}], descricoes[], configuracao[{interface, porta, atual, lida, ligada}], avisos[]}` |
 | `POST /api/rede/equipamentos/{id}/leitura/aplicar` | Controle total | `{equipamento, vlans[], descricoes[], configuracao[]}` → grava os marcados da última leitura e responde a face |
@@ -191,10 +195,14 @@ coisa no SGI não é mexida: vira aviso no relatório.
   Patrimônio, buscando por `/api/rede/bens`).
 - **Pontos, VLANs e modelos** (`/rede/cadastros`), aba **Monitoramento** (só Controle total): o intervalo entre os pings.
 - **Cadastro do equipamento** (`/rede/equipamentos/novo`, página própria, decisão do usuário): passo a passo com a trilha **Dados → Conexão →
-  Revisão**. Em Dados: nome, tipo, **função** (só switch), modelo de face, IP de gerência (menos patch panel), rack e posição. Em Conexão: "este
-  equipamento, na porta X, está conectado em Y, na porta Y" — a lista de "Conectado em" mostra só quem pode ficar acima e os patch panels; no
-  patch panel escolhe-se o lado e aparece o que está do outro lado daquela porta; as duas portas são configuradas na mesma tela (a de Y vem
-  com a configuração que já tiver). Core primário e patch panel pulam a conexão. **Edição** em `/rede/equipamentos/:id/editar` (botão vermelho
+  Revisão**. Em Dados: nome, tipo, **função** (só switch), modelo de face, IP de gerência (menos patch panel), rack e posição, com `*` nos
+  obrigatórios (nome, tipo, função, modelo, rack e U; rack e U não no access point). Ao escolher o rack, ele é desenhado logo abaixo com os
+  equipamentos montados e os U livres: clicar num U onde o equipamento cabe inteiro abre a pergunta **Sim/Não** e preenche a posição. Em
+  Conexão (pedidos do usuário, 17/11/2026): a **porta deste equipamento** é escolhida clicando na face (desenhada pelo modelo); **"Conectado em"**
+  continua uma lista, só com os elegíveis (`GET /equipamentos/destinos-cadastro`); a **porta do outro equipamento** é escolhida na face dele,
+  com o nome no cabeçalho, e só as portas que servem ficam clicáveis (no patch panel, o lado que leva acima já vem escolhido quando é um só).
+  Embaixo, os dois cartões de configuração das portas (a de Y vem com a configuração que já tiver): velocidade escolhida em fichas (10 Mb a
+  100 Gb) e, quando a outra porta já está preenchida, o botão **"Copiar da porta …"** no canto do cartão repete a configuração dela. Core primário e patch panel pulam a conexão. **Edição** em `/rede/equipamentos/:id/editar` (botão vermelho
   **Editar** na tela do equipamento): os mesmos dados, com tipo, função e modelo travados, e o **Excluir equipamento**. A lista e a tela do
   equipamento mostram a função, o selo **No ar / Fora do ar** e **Cadastro incompleto** nos que ainda não têm IP (ou switch sem função).
 - **Indicadores** (topo de `/rede`, no estilo do Painel de chamados; cada card abre `/rede/portas-lista/alteradas` ou `/rede/portas-lista/patch-um-lado`

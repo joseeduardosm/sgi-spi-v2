@@ -73,7 +73,7 @@ export interface DiaNovidades {
 export const NOVIDADES: DiaNovidades[] = [
   {
     data: '2026-11-17',
-    resumo: 'Rede: switch de acesso ligado em outro switch de acesso',
+    resumo: 'Rede: switches em cascata e cadastro de equipamento com rack e portas clicáveis',
     novidades: [
       {
         modulo: 'Rede',
@@ -81,6 +81,21 @@ export const NOVIDADES: DiaNovidades[] = [
         texto: 'Agora um switch de acesso pode ser cadastrado ligado em outro switch de acesso, e não só numa distribuição ou no core. O sistema confere que o switch de cima tem caminho até o core e, ao desligar ou trocar um cabo, não deixa nenhum switch sem caminho até o core.',
         itens: [
           'No patch panel, cada porta continua sendo um cabo independente: para chegar ao core pela porta 1, o outro lado da própria porta 1 é que precisa estar ligado.',
+        ],
+      },
+      {
+        modulo: 'Rede',
+        titulo: 'Switch de distribuição em cascata',
+        texto: 'Um switch de distribuição agora pode ser cadastrado ligado em outra distribuição, além do core primário e do core secundário. Vale a mesma conferência: a distribuição de cima precisa ter caminho até o core.',
+      },
+      {
+        modulo: 'Rede',
+        titulo: 'Cadastro de equipamento mais visual',
+        texto: 'No cadastro de um equipamento, o rack escolhido aparece desenhado com o que já está montado nele: basta clicar num espaço livre e confirmar para definir a posição. No passo Conexão, as portas são escolhidas clicando no desenho do equipamento, e a lista "Conectado em" mostra só onde ele pode ser ligado.',
+        itens: [
+          'Rack e posição passam a ser obrigatórios, menos no access point. Os campos obrigatórios têm asterisco.',
+          'No desenho do outro equipamento, só as portas que servem podem ser clicadas.',
+          'A velocidade da porta é escolhida com um clique, e o botão "Copiar da porta…" repete a configuração já preenchida na outra porta.',
         ],
       },
     ],

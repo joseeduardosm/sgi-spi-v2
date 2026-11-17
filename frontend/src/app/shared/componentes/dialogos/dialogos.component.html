@@ -11,11 +11,17 @@
     <div class="corpo-dialogo">
       <p id="texto-confirmacao">{{ confirmacao.mensagem }}</p>
       <footer>
+        @if (confirmacao.simNao) {
+          <!-- Sim ou não: não = vermelho, sim = verde (padrão do sistema para decisões) -->
+          <button type="button" class="acao-recusar" (click)="dialogos.responderConfirmacao(false)">Não</button>
+          <button type="button" class="acao-positiva" (click)="dialogos.responderConfirmacao(true)">Sim</button>
+        } @else {
         <button type="button" class="acao-secundaria" (click)="dialogos.responderConfirmacao(false)">Cancelar</button>
         <button type="button" [class]="confirmacao.perigo ? 'acao-perigo-cheio' : 'acao-primaria'" [disabled]="dialogos.segundosRestantes() > 0" (click)="dialogos.responderConfirmacao(true)">
           {{ confirmacao.rotuloConfirmar }}
           @if (dialogos.segundosRestantes() > 0) { <span class="contador">({{ dialogos.segundosRestantes() }})</span> }
         </button>
+        }
       </footer>
     </div>
   </section>

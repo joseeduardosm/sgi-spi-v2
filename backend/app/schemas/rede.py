@@ -79,6 +79,18 @@ class CriacaoEquipamento(EscritaEquipamento):
                                              "Fora da cadeia: `409 cadeia_incompleta` (falta o core, a distribuição ou o acesso) ou `409 cadeia_invalida`.")
 
 
+class PortaElegivel(BaseModel):
+    """Porta (e lado, no patch panel) onde o equipamento novo pode ser ligado no cadastro."""
+    porta_id: uuid.UUID
+    lado: LadoPatch | None = Field(None, description="Lado livre da porta do patch panel; o outro lado da mesma porta leva a quem pode ficar acima.")
+
+
+class DestinoCadastro(BaseModel):
+    """Equipamento elegível em "Conectado em" e as portas dele que servem."""
+    equipamento_id: uuid.UUID
+    portas: list[PortaElegivel]
+
+
 class EquipamentoResumo(GravacaoEquipamento):
     id: uuid.UUID
     modelo_nome: str

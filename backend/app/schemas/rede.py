@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-TipoEquipamento = Literal["switch", "patch_panel", "roteador", "access_point", "outro"]
+TipoEquipamento = Literal["switch", "patch_panel", "roteador", "access_point", "firewall", "servidor", "outro"]
 FuncaoEquipamento = Literal["core_primario", "core_secundario", "distribuicao", "acesso"]
 SituacaoPing = Literal["no_ar", "fora"]
 # Lado físico da porta do patch panel: cada porta tem um cabo no fundo e outro na frente

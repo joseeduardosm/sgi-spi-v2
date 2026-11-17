@@ -21,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.banco import Base, agora_utc
 from app.models.auditoria import TipoJson
 
-TIPOS_EQUIPAMENTO = ("switch", "patch_panel", "roteador", "access_point", "outro")
+TIPOS_EQUIPAMENTO = ("switch", "patch_panel", "roteador", "access_point", "firewall", "servidor", "outro")
 # Patch panel é passivo: o único tipo sem IP de gerência e sem função na topologia (decisão do usuário)
 TIPOS_PASSIVOS = ("patch_panel",)
 # Função na topologia (camadas): o núcleo em alta disponibilidade (primário e secundário), a distribuição e o acesso

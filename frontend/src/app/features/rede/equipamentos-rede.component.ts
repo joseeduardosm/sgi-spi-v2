@@ -148,7 +148,7 @@ export class EquipamentosRedeComponent implements OnInit {
   private readonly dialogos = inject(DialogosService);
   protected readonly papeis = inject(AcessoService).rede;
 
-  protected readonly filtros: [string, string][] = [['', 'Todos'], ['switch', 'Switches'], ['patch_panel', 'Patch panels'], ['roteador', 'Roteadores'], ['outro', 'Outros']];
+  protected readonly filtros: [string, string][] = [['', 'Todos'], ['switch', 'Switches'], ['patch_panel', 'Patch panels'], ['roteador', 'Roteadores'], ['firewall', 'Firewalls'], ['servidor', 'Servidores'], ['outro', 'Outros']];
   protected readonly rotulosFuncao = ROTULOS_FUNCAO_EQUIPAMENTO;
   protected readonly rotulosPing = ROTULOS_PING;
   protected readonly cores = CORES_RACK;

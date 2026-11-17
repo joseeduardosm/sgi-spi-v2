@@ -1,7 +1,7 @@
 // Criado por José Eduardo Santana Martins
 // Este arquivo serve para definir os tipos do plano de face da rede (equipamentos, portas, VLANs, conexões e pontos).
 
-export type TipoEquipamento = 'switch' | 'patch_panel' | 'roteador' | 'access_point' | 'outro';
+export type TipoEquipamento = 'switch' | 'patch_panel' | 'roteador' | 'access_point' | 'firewall' | 'servidor' | 'outro';
 /** Função na topologia (camadas): o núcleo em alta disponibilidade (primário e secundário), a distribuição e o acesso. */
 export type FuncaoEquipamento = 'core_primario' | 'core_secundario' | 'distribuicao' | 'acesso';
 export type SituacaoPing = 'no_ar' | 'fora';
@@ -17,7 +17,7 @@ export function rotuloLado(lado: LadoPatch | null | undefined): string {
 }
 
 export const ROTULOS_TIPO_EQUIPAMENTO: Record<TipoEquipamento, string> = {
-  switch: 'Switch', patch_panel: 'Patch panel', roteador: 'Roteador', access_point: 'Access point', outro: 'Outro',
+  switch: 'Switch', patch_panel: 'Patch panel', roteador: 'Roteador', access_point: 'Access point', firewall: 'Firewall', servidor: 'Servidor', outro: 'Outro',
 };
 export const ROTULOS_FUNCAO_EQUIPAMENTO: Record<FuncaoEquipamento, string> = {
   core_primario: 'Core primário', core_secundario: 'Core secundário', distribuicao: 'Distribuição', acesso: 'Acesso',

@@ -98,6 +98,11 @@ export const NOVIDADES: DiaNovidades[] = [
           'A velocidade da porta é escolhida com um clique, e o botão "Copiar da porta…" repete a configuração já preenchida na outra porta.',
         ],
       },
+      {
+        modulo: 'Rede',
+        titulo: 'Firewall e servidor',
+        texto: 'Firewall e servidor passam a ser tipos de equipamento. Funcionam como o roteador: têm modelo de face, IP de gerência, rack e posição, e ficam ligados abaixo de um switch de acesso. A lista de equipamentos ganhou os filtros Firewalls e Servidores.',
+      },
     ],
   },
   {

@@ -15,6 +15,7 @@ Informe também migrações do banco e endpoints novos ou alterados.
 - **Rede — cadastro do equipamento**: rack desenhado ao escolher (`app-rack-rede` com modo escolha) e U por clique com confirmação Sim/Não (opção `simNao` nova no `DialogosService`); `*` nos obrigatórios; no passo Conexão, portas escolhidas pela face (`app-seletor-porta-face`, novo), velocidade em fichas e "Copiar da porta …".
 
 ### Adicionado
+- **Rede — tipos firewall e servidor**: `TIPOS_EQUIPAMENTO`/`TipoEquipamento` e o CHECK `ck_rede_equipamentos_tipo` (migração `f6b8d0a2c4e5`, nova cabeça); tratados como roteador e "outro" (IP, rack e U, abaixo de switch de acesso, sem função). Filtros "Firewalls" e "Servidores" na lista de equipamentos.
 - `GET /api/rede/equipamentos/destinos-cadastro?tipo=&funcao=` (Controle total): equipamentos e portas elegíveis para a ligação do cadastro (`servico.destinos_do_cadastro`), usado em "Conectado em".
 
 

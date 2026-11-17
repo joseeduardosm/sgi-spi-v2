@@ -365,6 +365,22 @@ def test_destinos_do_cadastro_so_elegiveis(cliente, admin):
     assert cliente.get(f"{BASE}/equipamentos/destinos-cadastro", params={"tipo": "switch"}, headers=c["cab"]["leitor"]).status_code == 403
 
 
+def test_firewall_e_servidor_como_os_demais(cliente, admin):
+    """Firewall e servidor (17/11/2026): tratados como roteador e "outro": IP, rack e U, e ligados abaixo de um switch de acesso."""
+    c = _cenario(cliente, admin)
+    m = c["modelo"]["id"]
+    for i, tipo in enumerate(("firewall", "servidor")):
+        # Na distribuição não serve; no acesso, sim
+        r = _novo(cliente, admin, f"X-{tipo}", m, tipo=tipo, ligacao=_lig(1, c["dist"]["portas"][4 + i]["id"]))
+        assert (r.status_code, r.json()["codigo"]) == (409, "cadeia_invalida")
+        r = _novo(cliente, admin, f"X-{tipo}", m, tipo=tipo, ligacao=_lig(1, c["switch"]["portas"][4 + i]["id"]))
+        assert r.status_code == 201 and r.json()["tipo"] == tipo and r.json()["funcao"] is None
+    # Sem IP de gerência: 400
+    corpo = {"nome": "FW-2", "tipo": "firewall", "modelo_face_id": m, "rack_id": _rack(cliente, admin), "posicao_u": 1,
+             "ligacao": _lig(1, c["switch"]["portas"][6]["id"])}
+    assert cliente.post(f"{BASE}/equipamentos", json=corpo, headers=admin).status_code == 400
+
+
 def test_excluir_equipamento_nao_quebra_a_cadeia(cliente, admin):
     c = _cenario(cliente, admin)
     # A distribuição sustenta o SW-5A: não sai; o SW-5A (folha) sai e a porta do outro lado fica em branco

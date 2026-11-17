@@ -215,7 +215,7 @@ def _validar_equipamento(sessao: Session, d: DadosEquipamento, equipamento_id: u
     if not 2 <= len(d.nome.strip()) <= 150:
         raise ErroRede("O nome precisa ter de 2 a 150 caracteres.")
     if d.tipo not in TIPOS_EQUIPAMENTO:
-        raise ErroRede("Tipo inválido (switch, patch_panel, roteador, access_point ou outro).")
+        raise ErroRede("Tipo inválido (switch, patch_panel, roteador, access_point, firewall, servidor ou outro).")
     # Todo equipamento ativo de rede tem IP de gerência (é o que o ping testa); só o patch panel, passivo, não tem.
     # A função na topologia (core, distribuição, acesso) é só do switch: access point, roteador e "outro" ficam abaixo do acesso (decisão do usuário)
     if d.tipo != "switch":

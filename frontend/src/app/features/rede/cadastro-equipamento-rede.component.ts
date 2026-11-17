@@ -72,7 +72,7 @@ function configVazia(): GravacaoPorta {
 }
 
 /** Quem pode ficar acima do equipamento novo (a mesma regra do backend, para filtrar a lista): core secundário → primário; distribuição → core ou
- *  outra distribuição (cascata); acesso → distribuição, core ou outro acesso (cascata); access point, roteador e "outro" → switch de acesso. */
+ *  outra distribuição (cascata); acesso → distribuição, core ou outro acesso (cascata); access point, roteador, firewall, servidor e "outro" → switch de acesso. */
 function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null, acima: EquipamentoResumo): boolean {
   if (acima.tipo !== 'switch') return false;
   if (tipo !== 'switch') return acima.funcao === 'acesso';
@@ -135,7 +135,7 @@ function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null,
                     <option [ngValue]="null" disabled>Escolha</option>
                     @for (f of funcoes; track f[0]) { <option [ngValue]="f[0]">{{ f[1] }}</option> }
                   </select>
-                  <small class="dica-formulario">Core no topo, depois distribuição e acesso. AP, roteador e "outro" ficam abaixo do acesso.</small></div>
+                  <small class="dica-formulario">Core no topo, depois distribuição e acesso. AP, roteador, firewall, servidor e "outro" ficam abaixo do acesso.</small></div>
               }
               <div><label for="ce-modelo">Modelo de face *</label>
                 <select id="ce-modelo" name="modelo" required [disabled]="editando()" [(ngModel)]="dados.modelo_face_id" (ngModelChange)="ligacao.porta = null">

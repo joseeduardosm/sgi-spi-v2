@@ -7,4 +7,4 @@
  * Fica separada para a barra lateral (carregada em toda tela) não precisar do arquivo inteiro de notícias.
  * Ao acrescentar um dia novo às novidades, atualize esta data: o teste `novidades.spec.ts` falha se as duas não baterem.
  */
-export const ULTIMA_NOVIDADE = '2026-11-13';
+export const ULTIMA_NOVIDADE = '2026-11-17';

@@ -308,6 +308,8 @@ def _conferir_destino(sessao: Session, novo: EquipamentoRede, lig: DadosLigacaoC
         acima = destino.equipamento
     if not pode_ficar_acima(novo, acima):
         raise ErroRede(f"O {novo.nome} precisa estar ligado a {rotulo_acima(novo)}; {acima.nome} não serve.", 409, "cadeia_invalida")
+    if not chega_ao_topo(sessao, acima):
+        raise ErroRede(f"O {acima.nome} não tem caminho até o core: ligue-o antes à rede.", 409, "cadeia_invalida")
     return destino
 
 
@@ -873,17 +875,18 @@ def posto(e: EquipamentoRede) -> int | None:
 def pode_ficar_acima(de: EquipamentoRede, acima: EquipamentoRede) -> bool:
     """Se `acima` pode ser o equipamento de cima de `de` (cadastro em cadeia, decisão do usuário).
 
-    Core secundário → core primário; distribuição → um core; acesso → distribuição ou core; access point, roteador e "outro" → switch de acesso.
+    Core secundário → core primário; distribuição → um core; acesso → distribuição, core ou outro acesso (switch de acesso em cascata,
+    decisão do usuário de 17/11/2026); access point, roteador e "outro" → switch de acesso.
     """
     if acima.tipo != "switch":
         return False
     if de.tipo == "switch":
-        permitidas = {"core_secundario": ("core_primario",), "distribuicao": FUNCOES_CORE, "acesso": FUNCOES_CORE + ("distribuicao",)}
+        permitidas = {"core_secundario": ("core_primario",), "distribuicao": FUNCOES_CORE, "acesso": FUNCOES_CORE + ("distribuicao", "acesso")}
         return acima.funcao in permitidas.get(de.funcao or "", ())
     return de.tipo not in TIPOS_PASSIVOS and acima.funcao == "acesso"
 
 
-ROTULO_ACIMA = {"core_secundario": "o core primário", "distribuicao": "um core", "acesso": "uma distribuição ou um core"}
+ROTULO_ACIMA = {"core_secundario": "o core primário", "distribuicao": "um core", "acesso": "uma distribuição, um core ou outro switch de acesso"}
 
 
 def rotulo_acima(e: EquipamentoRede) -> str:
@@ -902,6 +905,28 @@ def ligacoes_para_cima(sessao: Session, e: EquipamentoRede, ignorar=None) -> int
     return total
 
 
+def chega_ao_topo(sessao: Session, e: EquipamentoRede, ignorar=None, visitados: set[uuid.UUID] | None = None) -> bool:
+    """O equipamento chega ao core primário subindo pelos cabos (direto ou atravessando patch panels)?
+
+    Com o acesso em cascata (acesso ligado em outro acesso), "ter um cabo para cima" não basta: dois switches de acesso ligados só um no
+    outro teriam cabo "para cima" e estariam soltos da rede. Aqui se sobe de verdade, sem passar duas vezes pelo mesmo equipamento.
+    `ignorar(c)`: ligação que conta como inexistente (simula um desligar).
+    """
+    if posto(e) == 0:
+        return True
+    visitados = (visitados or set()) | {e.id}
+    for p in e.portas:
+        if conexao_da_porta(sessao, p.id) is None:
+            continue
+        fio = seguir_fio(sessao, p, None, ignorar)
+        if fio.fim is None or fio.fim.equipamento_id in visitados:
+            continue
+        acima = fio.fim.equipamento
+        if pode_ficar_acima(e, acima) and chega_ao_topo(sessao, acima, ignorar, visitados):
+            return True
+    return False
+
+
 def _conferir_cadeia(sessao: Session, equipamentos: set[uuid.UUID], ignorar) -> None:
     """Recusa a mudança que deixaria algum destes equipamentos sem nenhum cabo para quem está acima dele (decisão do usuário).
 
@@ -911,8 +936,9 @@ def _conferir_cadeia(sessao: Session, equipamentos: set[uuid.UUID], ignorar) -> 
         e = sessao.get(EquipamentoRede, eid)
         if e is None or posto(e) in (None, 0):
             continue
-        if ligacoes_para_cima(sessao, e) > 0 and ligacoes_para_cima(sessao, e, ignorar) == 0:
-            raise ErroRede(f"O {e.nome} ficaria sem nenhum cabo para {rotulo_acima(e)}. Ligue antes outro cabo para cima e depois desligue este.",
+        if chega_ao_topo(sessao, e) and not chega_ao_topo(sessao, e, ignorar):
+            raise ErroRede(f"O {e.nome} ficaria sem caminho até o core (nenhum cabo para {rotulo_acima(e)} que chegue lá). "
+                           "Ligue antes outro cabo para cima e depois desligue este.",
                            409, "unica_ligacao_para_cima")
 
 
@@ -992,7 +1018,7 @@ def trocar_ligacao(sessao: Session, porta_id: uuid.UUID, lado: str | None, outra
                        404, "nao_encontrado")
     # Quem pode ser afetado e quantos cabos para cima cada um tinha antes
     afetados = _equipamentos_nas_pontas(sessao, antiga) | {porta.equipamento_id}
-    antes = {eid: ligacoes_para_cima(sessao, e) for eid in afetados if (e := sessao.get(EquipamentoRede, eid)) is not None and posto(e) not in (None, 0)}
+    antes = {eid: chega_ao_topo(sessao, e) for eid in afetados if (e := sessao.get(EquipamentoRede, eid)) is not None and posto(e) not in (None, 0)}
     antigo_id, antigo_lado = outra_ponta(antiga, porta.id, lado)
     sessao.execute(delete(DispositivoAtrasRede).where(DispositivoAtrasRede.conexao_id == antiga.id))
     sessao.delete(antiga)
@@ -1004,10 +1030,10 @@ def trocar_ligacao(sessao: Session, porta_id: uuid.UUID, lado: str | None, outra
             raise ErroRede("Religar o destino antigo só vale quando o novo destino é um lado de patch panel.")
         conectar(sessao, destino.id, antigo_id, None, "", oposto(outro_lado), antigo_lado)
     # A cadeia continua inteira? (quem tinha cabo para cima continua tendo)
-    for eid, total in antes.items():
+    for eid, chegava in antes.items():
         e = sessao.get(EquipamentoRede, eid)
-        if total > 0 and ligacoes_para_cima(sessao, e) == 0:
-            raise ErroRede(f"Com a troca, o {e.nome} ficaria sem nenhum cabo para {rotulo_acima(e)}. Confira o novo destino "
+        if chegava and not chega_ao_topo(sessao, e):
+            raise ErroRede(f"Com a troca, o {e.nome} ficaria sem caminho até o core (nenhum cabo para {rotulo_acima(e)} que chegue lá). Confira o novo destino "
                            "(no patch panel, o outro lado precisa levar até lá).", 409, "unica_ligacao_para_cima")
     # A ponta antiga que ficou sem nada passa a desligada e em branco; a que ainda tem algo só refaz a descrição
     if antigo_id is not None:

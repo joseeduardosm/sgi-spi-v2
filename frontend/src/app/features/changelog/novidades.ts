@@ -72,6 +72,20 @@ export interface DiaNovidades {
 /** Lista de dias com novidade, do mais recente (primeiro) para o mais antigo. */
 export const NOVIDADES: DiaNovidades[] = [
   {
+    data: '2026-11-17',
+    resumo: 'Rede: switch de acesso ligado em outro switch de acesso',
+    novidades: [
+      {
+        modulo: 'Rede',
+        titulo: 'Switch de acesso em cascata',
+        texto: 'Agora um switch de acesso pode ser cadastrado ligado em outro switch de acesso, e não só numa distribuição ou no core. O sistema confere que o switch de cima tem caminho até o core e, ao desligar ou trocar um cabo, não deixa nenhum switch sem caminho até o core.',
+        itens: [
+          'No patch panel, cada porta continua sendo um cabo independente: para chegar ao core pela porta 1, o outro lado da própria porta 1 é que precisa estar ligado.',
+        ],
+      },
+    ],
+  },
+  {
     data: '2026-11-13',
     resumo: 'Contratos: tornar sem efeito e aba Eventos; cálculo manual ou automático na memória retroativa; Rede: Conector RJ45 e Terminal Punch Down',
     novidades: [

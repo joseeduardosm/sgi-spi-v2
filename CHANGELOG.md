@@ -6,6 +6,11 @@ Toda alteração é registrada aqui assim que é feita; commit e push só quando
 Formato de cada entrada: data, e as seções **Adicionado**, **Alterado**, **Corrigido** e **Removido**, conforme o caso.
 Informe também migrações do banco e endpoints novos ou alterados.
 
+## 2026-11-17
+
+### Alterado
+- **Rede — acesso em cascata**: switch de acesso pode ser cadastrado ligado a outro switch de acesso (`pode_ficar_acima`). A cadeia passa a ser conferida pelo caminho até o core (`chega_ao_topo`) no cadastro (o de cima precisa chegar ao core, `409 cadeia_invalida`), no desligar, no excluir e no trocar (`409 unica_ligacao_para_cima`): dois acessos ligados só um no outro não contam como ligados para cima.
+
 ## 2026-11-13
 
 Migrações novas (cabeça `e5a7c9b1d3f4`): Rede `c3e5a7b9d1f2` (acesso SSH do equipamento e tabela `rede_leituras`); Contratos `d4f6b8a0c2e3` (`modo_retroativo`/`modo_retroativo_em` em reajustes e repactuações, `valores_meses` na diferença manual; quem tinha diferença manual vira `manual`, os encerrados `automatico`) e `e5a7c9b1d3f4` (situação `sem_efeito` em reajustes, repactuações e alterações; colunas `sem_efeito_em/por_id/por_nome/motivo` nelas e no processo de prorrogação; processos `desfeito` viram `sem_efeito`). Nova dependência: `netmiko==4.4.0`.

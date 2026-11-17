@@ -58,12 +58,12 @@ function configVazia(): GravacaoPorta {
 }
 
 /** Quem pode ficar acima do equipamento novo (a mesma regra do backend, para filtrar a lista): core secundário → primário; distribuição → core;
- *  acesso → distribuição ou core; access point, roteador e "outro" → switch de acesso. */
+ *  acesso → distribuição, core ou outro acesso (cascata); access point, roteador e "outro" → switch de acesso. */
 function podeFicarAcima(tipo: TipoEquipamento, funcao: FuncaoEquipamento | null, acima: EquipamentoResumo): boolean {
   if (acima.tipo !== 'switch') return false;
   if (tipo !== 'switch') return acima.funcao === 'acesso';
   const permitidas: Partial<Record<FuncaoEquipamento, FuncaoEquipamento[]>> = {
-    core_secundario: ['core_primario'], distribuicao: ['core_primario', 'core_secundario'], acesso: ['core_primario', 'core_secundario', 'distribuicao'],
+    core_secundario: ['core_primario'], distribuicao: ['core_primario', 'core_secundario'], acesso: ['core_primario', 'core_secundario', 'distribuicao', 'acesso'],
   };
   return !!acima.funcao && (permitidas[funcao ?? 'core_primario'] ?? []).includes(acima.funcao);
 }
@@ -394,7 +394,7 @@ export class CadastroEquipamentoRedeComponent implements OnInit {
 
   protected rotuloAcima(): string {
     if (this.dados.tipo !== 'switch') return 'um switch de acesso';
-    const rotulos: Partial<Record<FuncaoEquipamento, string>> = { core_secundario: 'o core primário', distribuicao: 'um core', acesso: 'uma distribuição ou um core' };
+    const rotulos: Partial<Record<FuncaoEquipamento, string>> = { core_secundario: 'o core primário', distribuicao: 'um core', acesso: 'uma distribuição, um core ou outro switch de acesso' };
     return (this.dados.funcao && rotulos[this.dados.funcao]) || 'quem fica acima';
   }
 

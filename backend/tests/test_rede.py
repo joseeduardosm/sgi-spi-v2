@@ -141,12 +141,11 @@ def test_cadastro_em_cadeia_de_cima_para_baixo(cliente, admin):
     assert _novo(cliente, admin, "A1", modelo, "acesso", ligacao=_lig(1, core["portas"][0]["id"])).json()["codigo"] == "cadeia_incompleta"
     assert _novo(cliente, admin, "AP1", modelo, tipo="access_point", ligacao=_lig(1, core["portas"][0]["id"])).json()["codigo"] == "cadeia_incompleta"
     dist = _novo(cliente, admin, "D1", modelo, "distribuicao", ligacao=_lig(4, core["portas"][0]["id"])).json()
-    # Porta ocupada no destino; acesso ligado em outro acesso não serve; acesso direto no core serve
+    # Porta ocupada no destino; acesso ligado em outro acesso serve (cascata, 17/11/2026); acesso direto no core serve
     assert _novo(cliente, admin, "A1", modelo, "acesso", ligacao=_lig(4, core["portas"][0]["id"])).json()["codigo"] == "porta_ocupada"
     acesso = _novo(cliente, admin, "A1", modelo, "acesso", ligacao=_lig(4, dist["portas"][0]["id"])).json()
-    r = _novo(cliente, admin, "A2", modelo, "acesso", ligacao=_lig(4, acesso["portas"][0]["id"]))
-    assert r.json()["codigo"] == "cadeia_invalida" and "distribuição ou um core" in r.json()["detalhe"]
-    assert _novo(cliente, admin, "A2", modelo, "acesso", ligacao=_lig(4, core["portas"][1]["id"])).status_code == 201
+    assert _novo(cliente, admin, "A2", modelo, "acesso", ligacao=_lig(4, acesso["portas"][0]["id"])).status_code == 201
+    assert _novo(cliente, admin, "A3", modelo, "acesso", ligacao=_lig(4, core["portas"][1]["id"])).status_code == 201
     # Distribuição só em core; AP só em acesso (e fica sem função); core secundário só no primário
     assert _novo(cliente, admin, "D2", modelo, "distribuicao", ligacao=_lig(4, dist["portas"][1]["id"])).json()["codigo"] == "cadeia_invalida"
     assert _novo(cliente, admin, "AP1", modelo, tipo="access_point", ligacao=_lig(1, dist["portas"][1]["id"])).json()["codigo"] == "cadeia_invalida"
@@ -293,6 +292,23 @@ def test_desligar_nao_deixa_equipamento_sem_cabo_para_cima(cliente, admin):
     porta = c["switch"]["portas"][3]["id"]
     cliente.post(f"{BASE}/portas/{porta}/conexao", json={"descricao": "Telefone"}, headers=cab)
     assert cliente.delete(f"{BASE}/portas/{porta}/conexao", headers=cab).status_code == 200
+
+
+def test_acesso_em_cascata_precisa_chegar_ao_core(cliente, admin):
+    """Acesso ligado em outro acesso (cascata): vale, mas a cadeia é conferida até o core, sem laço entre os dois acessos."""
+    c = _cenario(cliente, admin)
+    m, cab = c["modelo"]["id"], c["cab"]["analista"]
+    # SW-5B fica embaixo do SW-5A (acesso em acesso)
+    b = _novo(cliente, admin, "SW-5B", m, "acesso", ligacao=_lig(9, c["switch"]["portas"][1]["id"]))
+    assert b.status_code == 201, b.text
+    # Um segundo cabo entre os dois acessos não é caminho para cima: o SW-5A não pode largar a distribuição
+    cliente.post(f"{BASE}/portas/{c['switch']['portas'][2]['id']}/conexao", json={"porta_id": b.json()["portas"][2]["id"]}, headers=cab)
+    r = cliente.delete(f"{BASE}/portas/{c['switch']['portas'][8]['id']}/conexao", headers=cab)
+    assert (r.status_code, r.json()["codigo"]) == (409, "unica_ligacao_para_cima") and "caminho até o core" in r.json()["detalhe"]
+    # O SW-5B tem dois cabos para o SW-5A: largar um deles pode
+    assert cliente.delete(f"{BASE}/portas/{b.json()['portas'][2]['id']}/conexao", headers=cab).status_code == 200
+    # Mas largar o último, não (ficaria sem caminho até o core)
+    assert cliente.delete(f"{BASE}/portas/{b.json()['portas'][8]['id']}/conexao", headers=cab).json()["codigo"] == "unica_ligacao_para_cima"
 
 
 def test_excluir_equipamento_nao_quebra_a_cadeia(cliente, admin):

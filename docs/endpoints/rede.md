@@ -72,7 +72,8 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
   "atrás de …"; ali, "Desligar" tira só aquele bem. A topologia conta os bens de trás também.
 - **Desligar** (decisão do usuário): a ponta que fica **sem nada ligado** (no patch panel, sem nada nos dois lados) passa a `down` e fica em
   branco; a porta de patch panel com o outro lado ainda ligado continua `up`, só com a descrição refeita. **Nenhum equipamento fica sem cabo para
-  quem está acima dele** (`409 unica_ligacao_para_cima`): para trocar a porta, liga-se a nova antes e depois desliga-se a antiga. Vale também ao
+  quem está acima dele** (`409 unica_ligacao_para_cima`). A conferência segue os cabos para cima **até o core** (`chega_ao_topo`): com acesso
+  em cascata, dois acessos ligados só um no outro não contam como ligados para cima. Para trocar a porta, liga-se a nova antes e depois desliga-se a antiga. Vale também ao
   desligar um dos lados do patch panel por onde passa esse cabo e ao **excluir** um equipamento (ex.: a distribuição com acessos pendurados só nela).
 - **Trocar a ligação** (decisão do usuário, 13/11/2026): `POST /portas/{id}/conexao/trocar` troca o que está ligado na porta (ou no lado do
   patch panel) por outra coisa **numa operação só**, sem passar por um momento sem cabo para cima. Com `religar_antigo`, quando o novo destino é
@@ -83,9 +84,11 @@ Erros: `{"detalhe", "codigo"}`; `403 acesso_negado` sem o nível; `404 nao_encon
   distribuição, não entra acesso; sem acesso, não entram access point, roteador e "outro"; o core secundário pede o primário
   (`409 cadeia_incompleta`). Todo equipamento, menos o **core primário** (o topo) e o **patch panel**, já entra com o cabo para quem fica acima
   dele (`ligacao`, `400 sem_ligacao` se faltar): a porta dele, a porta do outro e a configuração das duas. Quem pode ficar acima: core secundário →
-  core primário; distribuição → um core; acesso → distribuição ou core; access point, roteador e "outro" → switch de acesso (`409 cadeia_invalida`).
-  O cabo pode chegar num **lado de patch panel**, desde que o outro lado daquela porta leve (atravessando quantos patch panels houver) a quem pode
-  ficar acima. As demais portas nascem `down` e "Desligado". A **função** é só do switch (AP, roteador e "outro" ficam sem função) e, com o tipo e o
+  core primário; distribuição → um core; acesso → distribuição, core ou **outro acesso** (cascata, decisão do usuário de 17/11/2026); access point,
+  roteador e "outro" → switch de acesso (`409 cadeia_invalida`). O equipamento de cima precisa ter caminho até o core (`409 cadeia_invalida`).
+  O cabo pode chegar num **lado de patch panel**, desde que o **outro lado daquela mesma porta** leve (atravessando quantos patch panels houver) a
+  quem pode ficar acima: cada porta do patch panel é um cabo independente (a porta 1 com o Terminal Punch Down no core só leva ao core pelo Conector
+  RJ45 da porta 1; a porta 2 não conversa com ela). As demais portas nascem `down` e "Desligado". A **função** é só do switch (AP, roteador e "outro" ficam sem função) e, com o tipo e o
   modelo de face, **não muda depois de criado** (`409 funcao_travada`, `409 tipo_travado`, `409 modelo_travado`).
 - **Leitura do equipamento por SSH — DESATIVADA por enquanto** (decisão do usuário, 13/11/2026: vai ser lapidada). O código fica; a chave
   `LEITURA_SSH_ATIVA` (backend `servico_leitura.py` e frontend `rede.models.ts`) está desligada: as rotas de leitura respondem
